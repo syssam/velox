@@ -30,7 +30,7 @@
 //	func main() {
 //	    ex, err := graphql.NewExtension(
 //	        graphql.WithConfigPath("./gqlgen.yml"),
-//	        graphql.WithSchemaPath("./velox/ent.graphql"),
+//	        graphql.WithSchemaPath("./velox/schema.graphql"),
 //	    )
 //	    if err != nil {
 //	        log.Fatalf("creating graphql extension: %v", err)

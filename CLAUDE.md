@@ -36,7 +36,7 @@ myproject/
 ├── velox/               # Generated code (don't edit)
 │   ├── client.go
 │   ├── user.go
-│   ├── ent.graphql
+│   ├── schema.graphql
 │   └── ...
 ├── generate.go          # Code generation script
 ├── gqlgen.yml           # gqlgen configuration
@@ -61,7 +61,7 @@ import (
 func main() {
     ex, err := graphql.NewExtension(
         graphql.WithConfigPath("./gqlgen.yml"),
-        graphql.WithSchemaPath("./velox/ent.graphql"),
+        graphql.WithSchemaPath("./velox/schema.graphql"),
     )
     if err != nil {
         slog.Error("creating graphql extension", "error", err)

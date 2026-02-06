@@ -34,7 +34,7 @@
 //	func main() {
 //	    ex, err := graphql.NewExtension(
 //	        graphql.WithConfigPath("./gqlgen.yml"),
-//	        graphql.WithSchemaPath("./velox/ent.graphql"),
+//	        graphql.WithSchemaPath("./velox/schema.graphql"),
 //	    )
 //	    if err != nil {
 //	        log.Fatalf("creating graphql extension: %v", err)
@@ -97,7 +97,7 @@
 // # Generated Files
 //
 // The extension generates the following files:
-//   - ent.graphql: GraphQL schema definitions
+//   - schema.graphql: GraphQL schema definitions
 //   - gql_mutation_input.go: Mutation input types and Mutate methods
 //   - gql_where_input.go: WhereInput filter types
 //   - gql_pagination.go: Relay pagination types and methods

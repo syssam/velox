@@ -2,17 +2,32 @@
 
 A type-safe Go ORM framework with integrated code generation for GraphQL services.
 
+> **Note:** This is a personal project. If you're looking for a production-ready Go ORM with code generation, I highly recommend **[Ent](https://entgo.io/)** — it's mature, well-documented, and backed by a strong community. Velox was built to address specific performance bottlenecks I encountered with Ent's template-based code generation in large schemas. Velox uses [Jennifer](https://github.com/dave/jennifer) for programmatic code generation instead of `text/template`, which provides streaming writes, auto-managed imports, and parallel generation — resulting in significantly faster build times for large projects.
+
+## Why Velox?
+
+Velox is **API-compatible with Ent** — same schema definition patterns, same generated query builder API, same hooks/interceptors/privacy model. The key difference is the code generation engine:
+
+| | Ent | Velox |
+|---|---|---|
+| Code generation | `text/template` | [Jennifer](https://github.com/dave/jennifer) (programmatic) |
+| Import management | `goimports` post-process | Auto-tracked at generation time |
+| File writes | Buffer then write | Streaming to disk |
+| Parallel generation | Sequential | `errgroup` + semaphore |
+| Generated predicates | Verbose functions per field | Generic predicates (~97% less code) |
+
+If you have a small-to-medium schema, **use Ent**. Velox only makes sense if you're hitting code generation performance limits with 50+ entity types.
+
 ## Features
 
-- **Type-Safe Query Builders** - Fluent API with compile-time type checking
-- **Code Generation** - Generate ORM models, GraphQL schemas, and migrations
-- **Multi-Database Support** - PostgreSQL, MySQL, SQLite
-- **Relay-Style Pagination** - Cursor-based and offset pagination
-- **Soft Delete** - Built-in soft delete support via mixins
-- **Hooks & Interceptors** - BeforeCreate, AfterCreate, BeforeUpdate, etc.
-- **Eager Loading** - Efficient relationship loading with query options
-- **Retry Logic** - Automatic retry with exponential backoff for transient errors
-- **SQL Error Parsing** - Structured error handling across database dialects
+- **Type-Safe Query Builders** — Fluent API with compile-time type checking
+- **Jennifer Code Generation** — Programmatic codegen with streaming writes and parallel execution
+- **Multi-Database Support** — PostgreSQL, MySQL, SQLite (pure Go, no CGO)
+- **Relay-Style Pagination** — Cursor-based and offset pagination for GraphQL
+- **Privacy Layer** — ORM-level authorization policies with composable rules
+- **Hooks & Interceptors** — Middleware-style mutation hooks and query interceptors
+- **Eager Loading** — Efficient relationship loading with query options
+- **Generic Predicates** — Compact, type-safe predicates (~97% less generated code)
 
 ## Installation
 
@@ -32,272 +47,303 @@ package schema
 
 import (
     "github.com/syssam/velox"
-    "github.com/syssam/velox/schema/field"
+    "github.com/syssam/velox/contrib/mixin"
     "github.com/syssam/velox/schema/edge"
-    "github.com/syssam/velox/schema/mixin"
+    "github.com/syssam/velox/schema/field"
+    "github.com/syssam/velox/schema/index"
 )
 
 type User struct{ velox.Schema }
 
-func (User) Mixins() []velox.Mixin {
+func (User) Mixin() []velox.Mixin {
     return []velox.Mixin{
-        mixin.ID{},
-        mixin.Time{},
+        mixin.Time{}, // Adds created_at and updated_at
     }
 }
 
 func (User) Fields() []velox.Field {
     return []velox.Field{
+        field.String("name").NotEmpty().MaxLen(100),
         field.String("email").Unique().NotEmpty(),
-        field.String("name").MaxLen(100),
-        field.Enum("status").Values("active", "inactive").Default("active"),
+        field.Int("age").Optional().Positive(),
+        field.Enum("role").Values("admin", "user", "guest").Default("user"),
     }
 }
 
 func (User) Edges() []velox.Edge {
     return []velox.Edge{
-        edge.To("posts", Post.Type),          // O2M (default)
-        edge.To("profile", Profile.Type).Unique(), // O2O
+        edge.To("posts", Post{}),                                        // One-to-Many
+        edge.To("profile", Profile{}).Unique(),                           // One-to-One
+        edge.To("groups", Group{}).Through("memberships", Membership{}),  // Many-to-Many
+    }
+}
+
+func (User) Indexes() []velox.Index {
+    return []velox.Index{
+        index.Fields("email").Unique(),
+        index.Fields("role", "created_at"),
     }
 }
 ```
 
-### 2. Register Schemas
+### 2. Generate Code
+
+Create a `generate.go` file:
 
 ```go
-// schema/entities.go
-package schema
+//go:build ignore
 
-import "github.com/syssam/velox"
+package main
 
-func Schemas() []velox.Schema {
-    return []velox.Schema{
-        User{},
-        Post{},
-        Profile{},
+import (
+    "log/slog"
+    "os"
+
+    "github.com/syssam/velox/compiler"
+    "github.com/syssam/velox/compiler/gen"
+)
+
+func main() {
+    cfg, err := gen.NewConfig(
+        gen.WithTarget("./velox"),
+        // Optional features
+        gen.WithFeatures(gen.FeaturePrivacy, gen.FeatureIntercept),
+    )
+    if err != nil {
+        slog.Error("creating config", "error", err)
+        os.Exit(1)
+    }
+
+    if err := compiler.Generate("./schema", cfg); err != nil {
+        slog.Error("running velox codegen", "error", err)
+        os.Exit(1)
     }
 }
 ```
 
-### 3. Generate Code
+Run it:
 
 ```bash
-go run ./cmd/velox generate
+go run generate.go
 ```
 
-### 4. Use Generated Code
+Or use the CLI:
+
+```bash
+velox generate ./schema --target ./velox
+```
+
+### 3. Use Generated Code
 
 ```go
 package main
 
 import (
     "context"
-    "database/sql"
     "log"
 
     _ "github.com/lib/pq"
-    "yourproject/generated/orm"
+    "yourproject/velox"
+    "yourproject/velox/user"
 )
 
 func main() {
-    db, err := sql.Open("postgres", "postgres://localhost/mydb?sslmode=disable")
+    // Open a database connection
+    client, err := velox.Open("postgres", "postgres://localhost/mydb?sslmode=disable")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    // Run auto-migration
+    ctx := context.Background()
+    if err := client.Schema.Create(ctx); err != nil {
+        log.Fatal(err)
+    }
+
+    // Create
+    u, err := client.User.Create().
+        SetName("Alice").
+        SetEmail("alice@example.com").
+        SetRole("user").
+        Save(ctx)
     if err != nil {
         log.Fatal(err)
     }
 
-    client := orm.NewClient(db)
-    ctx := context.Background()
-
-    // Create
-    user, err := client.User.Create().
-        SetEmail("user@example.com").
-        SetName("John Doe").
-        Save(ctx)
-
-    // Query with filters
+    // Query with filtering and eager loading
     users, err := client.User.Query().
-        Where(
-            orm.UserStatusEQ("active"),
-            orm.UserEmailContains("@example.com"),
-        ).
-        WithPosts(func(q *orm.PostQuery) {
-            q.Where(orm.PostPublishedEQ(true))
-        }).
-        OrderBy(orm.UserCreatedAtDesc()).
+        Where(user.RoleField.EQ("admin")).
+        WithPosts().
         Limit(10).
         All(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+    _ = users
 
     // Update
-    user, err = client.User.UpdateOneID(user.ID).
-        SetName("Jane Doe").
+    u, err = client.User.UpdateOneID(u.ID).
+        SetName("Alice Smith").
         Save(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     // Delete
-    err = client.User.DeleteOneID(user.ID).Exec(ctx)
+    if err := client.User.DeleteOneID(u.ID).Exec(ctx); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
 ## Configuration
 
-`velox.yaml`:
+All configuration is done through Go code using functional options:
 
-```yaml
-schema:
-  path: ./schema
-
-database:
-  dialect: postgres  # postgres, mysql, sqlite
-
-output:
-  orm:
-    path: ./generated/orm
-    package: orm
-  graphql:
-    path: ./generated/graphql
-    package: graphql
-  migrations:
-    path: ./migrations
-
-features:
-  softDelete: true
-  timestamps: true
-  hooks: true
-
-graphql:
-  relay: true
-  mutations: true
-  filters: true
-  ordering: true
+```go
+cfg, err := gen.NewConfig(
+    gen.WithTarget("./velox"),                // Output directory (default: parent of schema path)
+    gen.WithIDType("int64"),                  // Default ID type
+    gen.WithFeatures(                         // Enable optional features
+        gen.FeaturePrivacy,
+        gen.FeatureIntercept,
+        gen.FeatureUpsert,
+        gen.FeatureNamedEdges,
+        gen.FeatureVersionedMigration,
+    ),
+)
 ```
 
 ## Field Types
 
 ```go
-field.Int64("id")                   // BIGINT (use field.PrimaryKey annotation)
-field.String("name")                // VARCHAR/TEXT
-field.Text("bio")                   // TEXT (unlimited)
-field.Int64("count")                // BIGINT
-field.Float64("price")              // DOUBLE PRECISION
-field.Bool("active")                // BOOLEAN
-field.Time("created_at")            // TIMESTAMP
-field.Enum("status").Values(...)    // VARCHAR with validation
-field.JSON("metadata")              // JSONB/JSON
-field.UUID("external_id", uuid.UUID{})  // UUID
-field.Bytes("data")                 // BYTEA/BLOB
+field.String("name")                        // VARCHAR/TEXT
+field.Text("bio")                           // TEXT (unlimited)
+field.Int("count")                          // INTEGER
+field.Int64("big_count")                    // BIGINT
+field.Float64("price")                      // DOUBLE PRECISION
+field.Bool("active")                        // BOOLEAN
+field.Time("created_at")                    // TIMESTAMP
+field.Enum("status").Values("a", "b")       // VARCHAR with validation
+field.JSON("metadata")                      // JSONB/JSON
+field.UUID("external_id", uuid.UUID{})      // UUID
+field.Bytes("data")                         // BYTEA/BLOB
 ```
 
 ## Field Modifiers
 
 ```go
 field.String("email").
-    Unique().           // UNIQUE constraint
-    Index().            // Create index
-    NotEmpty().         // Validation
-    MaxLen(255).        // VARCHAR(255)
-    Optional().         // NULL allowed
-    Default("value").   // Default value
-    Immutable().        // Cannot update after create
-    Order()             // Include in ORDER BY options
+    Unique().              // UNIQUE constraint
+    NotEmpty().            // Validation: must not be empty
+    MaxLen(255).           // VARCHAR(255)
+    Optional().            // Not required in create input
+    Nillable().            // Database NULL, Go *string
+    Default("value").      // Default value
+    Immutable()            // Cannot update after create
 ```
 
 ## Relationships
 
 ```go
-// One-to-Many (O2M is the default)
-edge.To("posts", Post.Type)           // User has many Posts
-edge.From("author", User.Type)        // Post belongs to User
+// One-to-Many (default)
+edge.To("posts", Post{})             // User has many Posts
+edge.From("author", User{}).Unique() // Post belongs to one User
 
-// One-to-One (use .Unique())
-edge.To("profile", Profile.Type).Unique()
+// One-to-One
+edge.To("profile", Profile{}).Unique()
 
-// Many-to-Many (use .Through())
-edge.To("tags", Tag.Type).Through(PostTag.Type)
+// Many-to-Many (with join table)
+edge.To("groups", Group{}).Through("memberships", Membership{})
 ```
 
-## Querying
+## Predicates
+
+Velox generates compact, type-safe predicates using generics. All fields use the `Field` suffix:
 
 ```go
-// Predicates
-orm.UserEmailEQ("test@example.com")
-orm.UserEmailNEQ("test@example.com")
-orm.UserEmailIn("a@b.com", "c@d.com")
-orm.UserEmailContains("@example")
-orm.UserEmailHasPrefix("admin")
-orm.UserEmailHasSuffix(".com")
-orm.UserAgeGT(18)
-orm.UserAgeLTE(65)
-orm.UserAgeBetween(18, 65)
-orm.UserDeletedAtIsNil()
+// Entity package-level predicate variables (all use Field suffix)
+user.NameField.EQ("Alice")              // name = 'Alice'
+user.NameField.Contains("ali")          // name LIKE '%ali%'
+user.NameField.HasPrefix("A")           // name LIKE 'A%'
+user.AgeField.GT(18)                    // age > 18
+user.AgeField.In(18, 21, 25)            // age IN (18, 21, 25)
+user.EmailField.IsNil()                 // email IS NULL
+user.RoleField.EQ("admin")              // enum fields
 
-// Combining predicates
-orm.And(orm.UserAgeGT(18), orm.UserStatusEQ("active"))
-orm.Or(orm.UserRoleEQ("admin"), orm.UserRoleEQ("moderator"))
-orm.Not(orm.UserStatusEQ("banned"))
+// Edge predicates (functions, no Field suffix)
+user.HasPosts()                          // EXISTS (SELECT 1 FROM posts ...)
+user.HasPostsWith(post.TitleField.EQ("Hello"))
 
-// Eager loading
+// Combinators
+user.And(user.AgeField.GT(18), user.RoleField.EQ("active"))
+user.Or(user.RoleField.EQ("admin"), user.RoleField.EQ("moderator"))
+user.Not(user.RoleField.EQ("banned"))
+```
+
+## Eager Loading
+
+```go
+// Load all edges
 client.User.Query().
     WithPosts().
     WithProfile().
     All(ctx)
 
-// Eager loading with options
+// Load with filtering
 client.User.Query().
-    WithPosts(func(q *orm.PostQuery) {
-        q.Where(orm.PostPublishedEQ(true)).
-          OrderBy(orm.PostCreatedAtDesc()).
+    WithPosts(func(q *velox.PostQuery) {
+        q.Where(post.PublishedField.EQ(true)).
           Limit(5)
     }).
     All(ctx)
 ```
 
-## Pagination
+## Hooks & Interceptors
 
-### Cursor-based (Relay)
-
-```go
-users, err := client.User.Query().
-    Where(orm.UserStatusEQ("active")).
-    Limit(10).
-    All(ctx)
-```
-
-### Offset-based
+Hooks use a **middleware pattern** wrapping the mutation chain:
 
 ```go
-// Simple offset pagination using Limit and Offset
-page := 2
-perPage := 20
-
-users, err := client.User.Query().
-    Offset((page - 1) * perPage).
-    Limit(perPage).
-    All(ctx)
-```
-
-## Hooks
-
-```go
-// In your entity schema
-func (User) Hooks() []velox.Hook {
-    return []velox.Hook{
-        velox.BeforeCreate(func(ctx context.Context, u *User) error {
-            u.CreatedAt = time.Now()
-            return nil
-        }),
-        velox.AfterCreate(func(ctx context.Context, u *User) error {
-            log.Printf("User created: %d", u.ID)
-            return nil
-        }),
+// Mutation hook - logs all mutations
+func LoggingHook() velox.Hook {
+    return func(next velox.Mutator) velox.Mutator {
+        return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+            slog.Info("mutation", "op", m.Op(), "type", m.Type())
+            v, err := next.Mutate(ctx, m)
+            if err != nil {
+                slog.Error("mutation failed", "op", m.Op(), "error", err)
+            }
+            return v, err
+        })
     }
 }
+
+// Register globally or per-entity
+client.Use(LoggingHook())
+client.User.Use(LoggingHook())
+```
+
+Query interceptors filter or modify all queries (using the generated `intercept` package):
+
+```go
+// import "yourproject/velox/intercept"
+
+// Interceptor - limit all queries to prevent unbounded results
+client.Intercept(intercept.TraverseFunc(func(ctx context.Context, q intercept.Query) error {
+    q.Limit(1000)
+    return nil
+}))
 ```
 
 ## Transactions
 
 ```go
-err := client.WithTx(ctx, func(tx *orm.Tx) error {
+// Using WithTx helper
+err := velox.WithTx(ctx, client, func(tx *velox.Tx) error {
     user, err := tx.User.Create().
         SetEmail("user@example.com").
+        SetName("Alice").
         Save(ctx)
     if err != nil {
         return err // Rollback
@@ -308,20 +354,11 @@ err := client.WithTx(ctx, func(tx *orm.Tx) error {
         Save(ctx)
     return err // Commit on nil, rollback on error
 })
-```
 
-## Client Options
-
-```go
-client := orm.NewClient(db,
-    orm.WithLogger(slog.Default()),
-    orm.WithQueryLogging(true),
-    orm.WithSlowQueryLogging(100*time.Millisecond),
-    orm.WithQueryTimeout(5*time.Second),
-    orm.WithMaxOpenConns(25),
-    orm.WithMaxIdleConns(5),
-    orm.WithConnMaxLifetime(time.Hour),
-)
+// Manual transaction control
+tx, err := client.Tx(ctx)
+// ... use tx.User, tx.Post, etc.
+tx.Commit()  // or tx.Rollback()
 ```
 
 ## Error Handling
@@ -329,15 +366,47 @@ client := orm.NewClient(db,
 ```go
 import "github.com/syssam/velox"
 
-user := &orm.User{Email: "dup@test.com"}
-_, err := client.User.Create(user).Save(ctx)
+_, err := client.User.Create().
+    SetEmail("dup@example.com").
+    Save(ctx)
 if err != nil {
     if velox.IsNotFound(err) {
-        // Handle not found
+        // Entity not found
     }
     if velox.IsConstraintError(err) {
-        // Handle constraint violation (unique, foreign key, etc.)
+        // Unique constraint, foreign key, etc.
     }
+    if velox.IsValidationError(err) {
+        // Field validation failed
+    }
+    if velox.IsNotSingular(err) {
+        // Expected exactly one result
+    }
+}
+```
+
+## Privacy Layer
+
+ORM-level authorization policies evaluated before database access:
+
+```go
+import (
+    "github.com/syssam/velox/privacy"
+    "github.com/syssam/velox/schema/policy"
+)
+
+func (User) Policy() velox.Policy {
+    return policy.Policy(
+        policy.Mutation(
+            privacy.DenyIfNoViewer(),
+            privacy.HasRole("admin"),
+            privacy.IsOwner("user_id"),
+            privacy.AlwaysDenyRule(),
+        ),
+        policy.Query(
+            privacy.AlwaysAllowQueryRule(),
+        ),
+    )
 }
 ```
 
@@ -346,33 +415,50 @@ if err != nil {
 Built-in mixins for common patterns:
 
 ```go
+import "github.com/syssam/velox/contrib/mixin"
+
 mixin.ID{}         // int64 auto-increment primary key
 mixin.Time{}       // created_at, updated_at timestamps
 mixin.SoftDelete{} // deleted_at for soft deletes
 mixin.TenantID{}   // tenant_id for multi-tenancy
 ```
 
-## CLI Commands
-
-```bash
-velox generate ./schema                       # Generate code from schema
-velox generate ./schema --target ./velox       # Specify output directory
-velox generate ./schema --package mymodule/ent # Specify output package
-velox help                                     # Show help
-velox version                                  # Show version
-```
-
 ## Database Support
 
 | Feature | PostgreSQL | MySQL | SQLite |
 |---------|------------|-------|--------|
-| CRUD | ✅ | ✅ | ✅ |
-| Transactions | ✅ | ✅ | ✅ |
-| RETURNING | ✅ | ❌ | ❌ |
-| UUID type | ✅ | ❌ | ❌ |
-| JSONB | ✅ | JSON | JSON |
-| Soft Delete | ✅ | ✅ | ✅ |
+| CRUD | Yes | Yes | Yes |
+| Transactions | Yes | Yes | Yes |
+| RETURNING | Yes | No | No |
+| UUID type | Yes | No | No |
+| JSONB | Yes | JSON | JSON |
+| Upsert | Yes | Yes | Yes |
+
+SQLite uses [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) (pure Go, no CGO required).
+
+## GraphQL Integration
+
+Optional extension for generating GraphQL schemas and resolvers (works with [gqlgen](https://gqlgen.com/)):
+
+```go
+import "github.com/syssam/velox/contrib/graphql"
+
+ex, err := graphql.NewExtension(
+    graphql.WithConfigPath("./gqlgen.yml"),
+    graphql.WithSchemaPath("./velox/schema.graphql"),
+)
+
+cfg, err := gen.NewConfig(gen.WithTarget("./velox"))
+
+compiler.Generate("./schema", cfg, compiler.Extensions(ex))
+```
+
+Generated GraphQL includes types, inputs, connections (Relay), filtering (WhereInput), and mutations (opt-in).
+
+## Acknowledgements
+
+Velox is heavily inspired by [Ent](https://entgo.io/). The schema definition API, hooks/interceptors pattern, privacy layer, and generated query builder design all follow Ent's excellent patterns. If Ent works for your project, use it.
 
 ## License
 
-MIT
+[MIT](LICENSE)

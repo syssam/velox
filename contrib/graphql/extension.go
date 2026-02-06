@@ -29,7 +29,7 @@ type SchemaHook func(g *gen.Graph, schema string) (string, error)
 //
 //	ex, err := graphql.NewExtension(
 //	    graphql.WithConfigPath("./gqlgen.yml"),
-//	    graphql.WithSchemaPath("./velox/ent.graphql"),
+//	    graphql.WithSchemaPath("./velox/schema.graphql"),
 //	)
 //	if err != nil {
 //	    log.Fatal(err)
@@ -201,7 +201,7 @@ func (a *extensionAnnotation) Name() string {
 // WithSchemaPath sets the output path for GraphQL schema files (.graphql).
 // The path can be either a directory or a file path:
 //   - "schema/" or "schema" -> outputs to schema/schema.graphql
-//   - "schema/ent.graphql" -> outputs to schema/ent.graphql
+//   - "schema/custom.graphql" -> outputs to schema/custom.graphql
 //
 // Note: Go files (gql_*.go) always go to the ORM target directory (e.g., velox/),
 // only schema files go to this path.
@@ -338,7 +338,7 @@ func WithConfig(cfg Config) ExtensionOption {
 //
 //	ex, err := graphql.NewExtension(
 //	    graphql.WithConfigPath("./gqlgen.yml"),
-//	    graphql.WithSchemaPath("./ent.graphql"),
+//	    graphql.WithSchemaPath("./schema.graphql"),
 //	)
 func WithConfigPath(path string) ExtensionOption {
 	return func(e *Extension) error {
@@ -361,7 +361,7 @@ func WithConfigPath(path string) ExtensionOption {
 //
 //	ex, err := graphql.NewExtension(
 //	    graphql.WithSchemaGenerator(),
-//	    graphql.WithSchemaPath("./ent.graphql"),
+//	    graphql.WithSchemaPath("./schema.graphql"),
 //	    graphql.WithConfigPath("./gqlgen.yml"),
 //	)
 func WithSchemaGenerator() ExtensionOption {
