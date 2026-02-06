@@ -2,7 +2,6 @@ package internal
 
 import (
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,13 +17,29 @@ import (
 func TestSnapshot_Restore(t *testing.T) {
 	t.Log("Running snapshot-restore integration test")
 
-	// Create a temporary directory for the test to avoid corrupting the real integration test files
+	// Create a temporary directory for the test
 	tempDir := t.TempDir()
 
-	// Copy the schema directory to temp
-	srcSchema := "../integration/privacy/velox/schema"
+	// Create schema directory with a minimal schema file (self-contained, no external deps)
 	dstSchema := filepath.Join(tempDir, "schema")
-	require.NoError(t, copyDir(srcSchema, dstSchema))
+	require.NoError(t, os.MkdirAll(dstSchema, 0o755))
+	schemaFile := filepath.Join(dstSchema, "user.go")
+	require.NoError(t, os.WriteFile(schemaFile, []byte(`package schema
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema/field"
+)
+
+type User struct{ velox.Schema }
+
+func (User) Fields() []velox.Field {
+	return []velox.Field{
+		field.String("name"),
+		field.String("email").Unique(),
+	}
+}
+`), 0o644))
 
 	// Create internal directory with snapshot
 	internalDir := filepath.Join(tempDir, "internal")
@@ -64,45 +79,6 @@ const Schema = "{\"schema\":\"./schema\",\"package\":\"github.com/syssam/velox/c
 
 	// Restore should succeed even with conflict markers
 	require.NoError(t, snap.Restore())
-}
-
-// copyDir recursively copies a directory.
-func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		dstPath := filepath.Join(dst, relPath)
-
-		if info.IsDir() {
-			return os.MkdirAll(dstPath, info.Mode())
-		}
-
-		return copyFile(path, dstPath)
-	})
-}
-
-// copyFile copies a single file.
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
 }
 
 // TestMerge tests the merge function.

@@ -1,5 +1,10 @@
 # Velox
 
+[![CI](https://github.com/syssam/velox/actions/workflows/ci.yml/badge.svg)](https://github.com/syssam/velox/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/syssam/velox)](https://goreportcard.com/report/github.com/syssam/velox)
+[![GoDoc](https://godoc.org/github.com/syssam/velox?status.svg)](https://godoc.org/github.com/syssam/velox)
+[![codecov](https://codecov.io/gh/syssam/velox/graph/badge.svg)](https://codecov.io/gh/syssam/velox)
+
 A type-safe Go ORM framework with integrated code generation for GraphQL services.
 
 > **Note:** This is a personal project. If you're looking for a production-ready Go ORM with code generation, I highly recommend **[Ent](https://entgo.io/)** — it's mature, well-documented, and backed by a strong community. Velox was built to address specific performance bottlenecks I encountered with Ent's template-based code generation in large schemas. Velox uses [Jennifer](https://github.com/dave/jennifer) for programmatic code generation instead of `text/template`, which provides streaming writes, auto-managed imports, and parallel generation — resulting in significantly faster build times for large projects.
