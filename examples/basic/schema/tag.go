@@ -24,7 +24,7 @@ func (Tag) Fields() []velox.Field {
 // Edges of the Tag.
 func (Tag) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.From("posts", Post{}).
+		edge.From("posts", Post.Type).
 			Ref("tags"),
 	}
 }

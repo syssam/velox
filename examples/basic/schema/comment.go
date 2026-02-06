@@ -30,11 +30,11 @@ func (Comment) Fields() []velox.Field {
 // Edges of the Comment.
 func (Comment) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.From("post", Post{}).
+		edge.From("post", Post.Type).
 			Ref("comments").
 			Unique().
 			Required(),
-		edge.From("author", User{}).
+		edge.From("author", User.Type).
 			Unique().
 			Required(),
 	}

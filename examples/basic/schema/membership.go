@@ -32,10 +32,10 @@ func (Membership) Fields() []velox.Field {
 // Edges of the Membership.
 func (Membership) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.To("user", User{}).
+		edge.To("user", User.Type).
 			Unique().
 			Required(),
-		edge.To("group", Group{}).
+		edge.To("group", Group.Type).
 			Unique().
 			Required(),
 	}

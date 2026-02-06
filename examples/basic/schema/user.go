@@ -47,10 +47,10 @@ func (User) Fields() []velox.Field {
 // Edges of the User.
 func (User) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.To("posts", Post{}).
+		edge.To("posts", Post.Type).
 			Comment("Posts written by this user"),
-		edge.To("groups", Group{}).
-			Through("memberships", Membership{}),
+		edge.To("groups", Group.Type).
+			Through("memberships", Membership.Type),
 	}
 }
 

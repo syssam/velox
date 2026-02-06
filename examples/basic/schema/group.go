@@ -33,8 +33,8 @@ func (Group) Fields() []velox.Field {
 // Edges of the Group.
 func (Group) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.From("members", User{}).
+		edge.From("members", User.Type).
 			Ref("groups").
-			Through("memberships", Membership{}),
+			Through("memberships", Membership.Type),
 	}
 }

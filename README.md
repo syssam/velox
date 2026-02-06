@@ -77,9 +77,9 @@ func (User) Fields() []velox.Field {
 
 func (User) Edges() []velox.Edge {
     return []velox.Edge{
-        edge.To("posts", Post{}),                                        // One-to-Many
-        edge.To("profile", Profile{}).Unique(),                           // One-to-One
-        edge.To("groups", Group{}).Through("memberships", Membership{}),  // Many-to-Many
+        edge.To("posts", Post.Type),                                              // One-to-Many
+        edge.To("profile", Profile.Type).Unique(),                                // One-to-One
+        edge.To("groups", Group.Type).Through("memberships", Membership.Type),    // Many-to-Many
     }
 }
 
@@ -253,14 +253,14 @@ field.String("email").
 
 ```go
 // One-to-Many (default)
-edge.To("posts", Post{})             // User has many Posts
-edge.From("author", User{}).Unique() // Post belongs to one User
+edge.To("posts", Post.Type)             // User has many Posts
+edge.From("author", User.Type).Unique() // Post belongs to one User
 
 // One-to-One
-edge.To("profile", Profile{}).Unique()
+edge.To("profile", Profile.Type).Unique()
 
 // Many-to-Many (with join table)
-edge.To("groups", Group{}).Through("memberships", Membership{})
+edge.To("groups", Group.Type).Through("memberships", Membership.Type)
 ```
 
 ## Predicates

@@ -39,11 +39,11 @@ func (Post) Fields() []velox.Field {
 // Edges of the Post.
 func (Post) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.From("author", User{}).
+		edge.From("author", User.Type).
 			Ref("posts").
 			Unique().
 			Required(),
-		edge.To("comments", Comment{}),
-		edge.To("tags", Tag{}),
+		edge.To("comments", Comment.Type),
+		edge.To("tags", Tag.Type),
 	}
 }
