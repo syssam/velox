@@ -1,0 +1,45 @@
+version: 1
+
+schema:
+  path: ./examples/start/schema
+  package: schema
+
+output:
+  orm:
+    path: ./generated/orm
+    package: orm
+    import_path: github.com/syssam/velox/generated/orm
+  graphql:
+    path: ./generated/graphql
+    package: graphql
+  migrations:
+    path: ./migrations
+
+database:
+  dialect: postgres
+
+features:
+  softDelete: true
+  timestamps: true
+  hooks: true
+
+graphql:
+  # Relay-style cursor connections (edges, pageInfo, cursors)
+  relay: true
+  # Offset-based pagination (page, perPage) - alternative to Relay
+  offsetPagination: false
+  # WhereInput types with filter operators (_eq, _in, _gt, etc.)
+  filters: true
+  # Create/update/delete mutations
+  mutations: true
+  # CreateInput and UpdateInput types
+  inputs: true
+  # OrderBy input types for sorting
+  ordering: true
+  # Node interface for Relay global object identification
+  nodeInterface: true
+
+# Code generation configuration (optional features)
+# codegen:
+#   features:
+#     - predicates  # Typed predicate functions (UserNameEQ, etc.)

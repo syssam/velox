@@ -1,0 +1,25 @@
+schema:
+    - graph/*.graphql
+    - graph/ent.graphql
+    - velox/schema.graphql
+exec:
+    filename: graph/generated.go
+    package: graph
+model:
+    filename: graph/model/models_gen.go
+    package: model
+resolver:
+    package: graph
+    layout: follow-schema
+    dir: graph
+    filename_template: '{name}.resolvers.go'
+autobind:
+    - example.com/shop/velox
+    - example.com/shop/graph/model
+models:
+    ID:
+        model: github.com/99designs/gqlgen/graphql.UUID
+    JSON:
+        model: github.com/99designs/gqlgen/graphql.Map
+    UUID:
+        model: github.com/99designs/gqlgen/graphql.UUID

@@ -1,0 +1,40 @@
+{{/* gotype: github.com/syssam/velox/entc/gen.Type */}}
+
+{{/* Templates used by the "sql/lock" feature-flag to add "SELECT ... FOR UPDATE/SHARE" capabilities. */}}
+
+{{ define "dialect/sql/query/additional/locking" }}
+    {{ if $.FeatureEnabled "sql/lock" }}
+        {{ template "helper/sqlock" $ }}
+    {{ end }}
+{{ end }}
+
+{{ define "helper/sqlock" }}
+{{ $builder := pascal $.Scope.Builder }}
+{{ $receiver := $.Scope.Receiver }}
+
+// ForUpdate locks the selected rows against concurrent updates, and prevent them from being
+// updated, deleted or "selected ... for update" by other sessions, until the transaction is
+// either committed or rolled-back.
+func ({{ $receiver }} *{{ $builder }}) ForUpdate(opts ...sql.LockOption) *{{ $builder }} {
+    if {{ $receiver }}.driver.Dialect() == dialect.Postgres {
+        {{ $receiver }}.Unique(false)
+    }
+    {{ $receiver }}.modifiers = append({{ $receiver }}.modifiers, func(s *sql.Selector) {
+        s.ForUpdate(opts...)
+    })
+    return {{ $receiver }}
+}
+
+// ForShare behaves similarly to ForUpdate, except that it acquires a shared mode lock
+// on any rows that are read. Other sessions can read the rows, but cannot modify them
+// until your transaction commits.
+func ({{ $receiver }} *{{ $builder }}) ForShare(opts ...sql.LockOption) *{{ $builder }} {
+    if {{ $receiver }}.driver.Dialect() == dialect.Postgres {
+        {{ $receiver }}.Unique(false)
+    }
+    {{ $receiver }}.modifiers = append({{ $receiver }}.modifiers, func(s *sql.Selector) {
+        s.ForShare(opts...)
+    })
+    return {{ $receiver }}
+}
+{{ end }}

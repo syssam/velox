@@ -1,0 +1,9 @@
+{{/* gotype: github.com/syssam/velox/entc/gen.Graph */}}
+
+{{ define "dialect/sql/client/open" }}
+	drv, err := sql.Open(driverName, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(append(options, Driver(drv))...), nil
+{{ end }}

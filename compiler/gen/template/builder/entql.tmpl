@@ -1,0 +1,8 @@
+{{/* gotype: github.com/syssam/velox/entc/gen.Graph */}}
+
+{{ define "entql" }}
+	{{ $tmpl := printf "dialect/%s/entql" $.Storage }}
+	{{ if hasTemplate $tmpl }}
+		{{ xtemplate $tmpl . }}
+	{{ end }}
+{{ end }}

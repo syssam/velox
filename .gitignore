@@ -1,0 +1,50 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+velox
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE / Editor
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor (use go modules)
+vendor/
+
+# Build output
+dist/
+bin/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Example binaries
+examples/shop/shop_server
+examples/shop/test_*
+
+# Examples not for public distribution
+examples/erp/

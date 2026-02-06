@@ -1,0 +1,214 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    # Default linters
+    - errcheck       # Check for unchecked errors
+    - gosimple       # Simplify code
+    - govet          # Report suspicious constructs
+    - ineffassign    # Detect ineffectual assignments
+    - staticcheck    # Static analysis
+    - unused         # Check for unused code
+
+    # Additional linters (Google/Uber recommended)
+    - gofmt          # Check formatting
+    - goimports      # Check imports
+    - misspell       # Check spelling
+    - gocritic       # Opinionated linter
+    - revive         # Fast, configurable linter
+    - prealloc       # Find slice preallocation opportunities
+    - unconvert      # Remove unnecessary type conversions
+    - unparam        # Report unused function parameters
+    - whitespace     # Check for unnecessary whitespace
+
+  disable:
+    - depguard       # Not needed for this project
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false  # Type assertions in generated code patterns are intentional
+    check-blank: false  # Allow explicit _ = for intentionally ignored errors
+    exclude-functions:
+      - (io.Closer).Close
+      - (net/http.ResponseWriter).Write
+      - (*database/sql.Tx).Rollback  # Rollback in defer is often ignored
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Not always practical
+      - shadow          # Too many false positives with closures and multi-step error handling
+
+  gofmt:
+    simplify: true
+
+  goimports:
+    local-prefixes: github.com/syssam/velox
+
+  misspell:
+    locale: US
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - hugeParam        # Not always practical
+      - rangeValCopy     # Not always practical
+      - unnamedResult    # Named results not always beneficial
+      - paramTypeCombine # Style preference
+      - sloppyReassign   # Often false positive with multi-step error handling
+      - ifElseChain      # Complex codegen logic uses if-else for readability
+      - dupBranchBody    # Intentional in code generation (same output, different conditions)
+      - commentedOutCode # Comments describe generated code patterns
+      - elseif           # Stylistic preference in complex codegen blocks
+      - ptrToRefParam    # Intentional for recover/catch patterns
+      - filepathJoin     # Internal path separators are intentional
+      - equalFold        # Less readable than strings.ToLower comparison
+      - octalLiteral     # Go 1.13 style preference, not required
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  prealloc:
+    simple: true
+    range-loops: false  # Too many false positives
+    for-loops: false    # Too many false positives
+
+issues:
+  exclude-dirs:
+    - generated
+    - migrations
+
+  exclude-rules:
+    # Exclude some linters from running on tests
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gocritic
+        - prealloc
+        - unparam
+
+    # Exclude generated files (stringer, etc.)
+    - path: op_string\.go
+      linters:
+        - revive
+
+    # Exclude generated example/integration code
+    - path: examples/
+      linters:
+        - revive
+        - unparam
+        - staticcheck
+
+    - path: compiler/integration/
+      linters:
+        - revive
+        - unparam
+        - staticcheck
+
+    # Builder pattern: unexported return types are by design for fluent API
+    - path: schema/field/field\.go
+      linters:
+        - revive
+      text: "unexported-return"
+
+    - path: schema/edge/edge\.go
+      linters:
+        - revive
+      text: "unexported-return"
+
+    # Allow fmt.Errorf without %w in some cases
+    - linters:
+        - errorlint
+      text: "non-wrapping format verb"
+
+    # strings.Title is deprecated but works fine for ASCII-only use cases
+    - linters:
+        - staticcheck
+      text: "SA1019.*strings.Title"
+
+    # Deprecated velox.Config is used in snapshot/load code intentionally
+    - linters:
+        - staticcheck
+      text: "SA1019.*velox.Config"
+
+    - linters:
+        - staticcheck
+      text: "SA1019.*schema.Config"
+
+    # Deprecated sqlite.UUIDType used for backwards compatibility
+    - linters:
+        - staticcheck
+      text: "SA1019.*sqlite.UUIDType"
+
+    # Privacy sentinels (Allow, Deny, Skip) follow Ent API naming convention
+    - path: privacy/privacy\.go
+      linters:
+        - revive
+      text: "error-naming"
+
+    # DecisionFromContext returns (error, bool) by design — error IS the decision
+    - path: privacy/privacy\.go
+      linters:
+        - revive
+      text: "error-return"
+
+    # Test file unused params in validator callbacks
+    - path: _test\.go
+      linters:
+        - revive
+      text: "unused-parameter"
+
+    # Code generator functions follow consistent signature pattern (h gen.GeneratorHelper, t *gen.Type)
+    - path: compiler/gen/sql/
+      linters:
+        - revive
+        - unparam
+      text: "unused"
+
+    # Empty block with comment explaining why it's intentionally empty
+    - path: compiler/gen/sql/create\.go
+      linters:
+        - revive
+      text: "empty-block"
+
+  # Maximum issues count per linter
+  max-issues-per-linter: 50
+  max-same-issues: 10
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
