@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/token"
 	"reflect"
+	"slices"
 	"strings"
 
 	"ariga.io/atlas/sql/postgres"
@@ -451,7 +452,7 @@ func (f Field) ScanTypeField(rec string) string {
 
 // standardNullType reports if the field is one of the standard SQL types.
 func (f Field) standardNullType() bool {
-	for _, t := range []reflect.Type{
+	return slices.ContainsFunc([]reflect.Type{
 		nullBoolType,
 		nullBoolPType,
 		nullFloatType,
@@ -464,12 +465,7 @@ func (f Field) standardNullType() bool {
 		nullTimePType,
 		nullStringType,
 		nullStringPType,
-	} {
-		if f.Type.RType.TypeEqual(t) {
-			return true
-		}
-	}
-	return false
+	}, f.Type.RType.TypeEqual)
 }
 
 // Column returns the table column. It sets it as a primary key (auto_increment)
@@ -492,23 +488,8 @@ func (f Field) Column() *schema.Column {
 			c.Default = s
 		}
 	}
-	// Override the default-value defined in the
-	// schema if it was provided by an annotation.
-	// Note: Both Default and DefaultExpr are treated as raw SQL expressions
-	// because sqlschema.Default documentation states "used as-is in the DEFAULT clause".
-	switch ant := f.EntSQL(); {
-	case ant == nil:
-	case ant.Default != "":
-		c.Default = schema.Expr(ant.Default)
-	case ant.DefaultExpr != "":
-		c.Default = schema.Expr(ant.DefaultExpr)
-	case ant.DefaultExprs != nil:
-		x := make(map[string]schema.Expr)
-		for k, v := range ant.DefaultExprs {
-			x[k] = schema.Expr(v)
-		}
-		c.Default = x
-	}
+	// Override with annotation default if present.
+	f.applyEntSQLDefaults(c)
 	// If FeatureAutoDefault is enabled and the field doesn't have an explicit
 	// default, automatically add a zero-value default to ensure safe migrations
 	// on tables with existing data. This applies to ALL NOT NULL fields.
@@ -614,6 +595,24 @@ func (f Field) size() int64 {
 	return 0
 }
 
+// applyEntSQLDefaults overrides the column's default-value if an
+// sqlschema.Default, DefaultExpr, or DefaultExprs annotation is set.
+func (f Field) applyEntSQLDefaults(c *schema.Column) {
+	switch ant := f.EntSQL(); {
+	case ant == nil:
+	case ant.Default != "":
+		c.Default = schema.Expr(ant.Default)
+	case ant.DefaultExpr != "":
+		c.Default = schema.Expr(ant.DefaultExpr)
+	case ant.DefaultExprs != nil:
+		x := make(map[string]schema.Expr)
+		for k, v := range ant.DefaultExprs {
+			x[k] = schema.Expr(v)
+		}
+		c.Default = x
+	}
+}
+
 // PK is like Column, but for table primary key.
 func (f Field) PK() *schema.Column {
 	c := &schema.Column{
@@ -632,27 +631,11 @@ func (f Field) PK() *schema.Column {
 			c.Size = *f.def.Size
 		}
 	}
-	// Override the default-value defined in the
-	// schema if it was provided by an annotation.
-	// Note: Both Default and DefaultExpr are treated as raw SQL expressions
-	// because sqlschema.Default documentation states "used as-is in the DEFAULT clause".
-	ant := f.EntSQL()
-	switch {
-	case ant == nil:
-	case ant.Default != "":
-		c.Default = schema.Expr(ant.Default)
-	case ant.DefaultExpr != "":
-		c.Default = schema.Expr(ant.DefaultExpr)
-	case ant.DefaultExprs != nil:
-		x := make(map[string]schema.Expr)
-		for k, v := range ant.DefaultExprs {
-			x[k] = schema.Expr(v)
-		}
-		c.Default = x
-	}
+	// Override with annotation default if present.
+	f.applyEntSQLDefaults(c)
 
-	// Override collation with annotation value
-	if ant != nil && ant.Collation != "" {
+	// Override collation with annotation value.
+	if ant := f.EntSQL(); ant != nil && ant.Collation != "" {
 		c.Collation = ant.Collation
 	}
 
@@ -751,7 +734,7 @@ func (f Field) implementsAdder() bool {
 	}
 	// If the custom GoType supports the "Add(T) T" interface.
 	m, ok := f.Type.RType.Methods["Add"]
-	if !ok || len(m.In) != 1 && len(m.Out) != 1 {
+	if !ok || len(m.In) != 1 || len(m.Out) != 1 {
 		return false
 	}
 	return rtypeEqual(f.Type.RType, m.In[0]) && rtypeEqual(f.Type.RType, m.Out[0])
@@ -767,18 +750,18 @@ func (f Field) SupportsMutationAppend() bool {
 }
 
 var (
-	nullBoolType    = reflect.TypeOf(sql.NullBool{})
-	nullBoolPType   = reflect.TypeOf((*sql.NullBool)(nil))
-	nullFloatType   = reflect.TypeOf(sql.NullFloat64{})
-	nullFloatPType  = reflect.TypeOf((*sql.NullFloat64)(nil))
-	nullInt32Type   = reflect.TypeOf(sql.NullInt32{})
-	nullInt32PType  = reflect.TypeOf((*sql.NullInt32)(nil))
-	nullInt64Type   = reflect.TypeOf(sql.NullInt64{})
-	nullInt64PType  = reflect.TypeOf((*sql.NullInt64)(nil))
-	nullTimeType    = reflect.TypeOf(sql.NullTime{})
-	nullTimePType   = reflect.TypeOf((*sql.NullTime)(nil))
-	nullStringType  = reflect.TypeOf(sql.NullString{})
-	nullStringPType = reflect.TypeOf((*sql.NullString)(nil))
+	nullBoolType    = reflect.TypeFor[sql.NullBool]()
+	nullBoolPType   = reflect.TypeFor[*sql.NullBool]()
+	nullFloatType   = reflect.TypeFor[sql.NullFloat64]()
+	nullFloatPType  = reflect.TypeFor[*sql.NullFloat64]()
+	nullInt32Type   = reflect.TypeFor[sql.NullInt32]()
+	nullInt32PType  = reflect.TypeFor[*sql.NullInt32]()
+	nullInt64Type   = reflect.TypeFor[sql.NullInt64]()
+	nullInt64PType  = reflect.TypeFor[*sql.NullInt64]()
+	nullTimeType    = reflect.TypeFor[sql.NullTime]()
+	nullTimePType   = reflect.TypeFor[*sql.NullTime]()
+	nullStringType  = reflect.TypeFor[sql.NullString]()
+	nullStringPType = reflect.TypeFor[*sql.NullString]()
 )
 
 // BasicType returns a Go expression for the given identifier

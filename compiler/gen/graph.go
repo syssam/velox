@@ -342,7 +342,10 @@ func (g *Graph) addNode(schema *load.Schema) error {
 
 // addIndexes adds the indexes for the schema type.
 func (g *Graph) addIndexes(schema *load.Schema) error {
-	typ, _ := g.typ(schema.Name)
+	typ, ok := g.typ(schema.Name)
+	if !ok {
+		return fmt.Errorf("type %q not found in graph", schema.Name)
+	}
 	for _, idx := range schema.Indexes {
 		if err := typ.AddIndex(idx); err != nil {
 			return fmt.Errorf("invalid index for schema %q: %w", schema.Name, err)
@@ -353,7 +356,10 @@ func (g *Graph) addIndexes(schema *load.Schema) error {
 
 // addEdges adds the node edges to the graph.
 func (g *Graph) addEdges(schema *load.Schema) error {
-	t, _ := g.typ(schema.Name)
+	t, ok := g.typ(schema.Name)
+	if !ok {
+		return fmt.Errorf("type %q not found in graph", schema.Name)
+	}
 	seen := make(map[string]struct{}, len(schema.Edges))
 	for _, e := range schema.Edges {
 		typ, ok := g.typ(e.Type)
@@ -553,8 +559,10 @@ func (g *Graph) resolve(t *Type) error {
 			}
 		// --- Unidirectional assoc edges: no inverse defined ---
 		case !e.IsInverse() && e.Rel.Type == Unk:
+			// Each case is self-contained: sets Type, Table, and Columns together.
+			// For bidirectional edges, use edge.From(...).Ref(...) instead.
+			column := fmt.Sprintf("%s_%s", t.Label(), snake(e.Name))
 			switch {
-			// --- Self-referencing M2M: entities referencing themselves ---
 			case !e.Unique && e.Type == t:
 				e.Rel.Type = M2M
 				e.Bidi = true
@@ -564,43 +572,15 @@ func (g *Graph) resolve(t *Type) error {
 				e.Rel.Type = O2O
 				e.Bidi = true
 				e.Rel.Table = t.Table()
+				e.Rel.Columns = []string{column}
 			case e.Unique:
 				e.Rel.Type = M2O
 				e.Rel.Table = t.Table()
+				e.Rel.Columns = []string{column}
 			default:
 				e.Rel.Type = O2M
 				e.Rel.Table = e.Type.Table()
-			}
-			// --- O2M backward FK lookup: find existing M2O edge's FK column ---
-			if !e.M2M() {
-				// For O2M edges, check if there's a corresponding M2O edge on the
-				// related type that points back to us. If so, use its FK column.
-				var columnFound bool
-				if e.O2M() {
-					for _, relEdge := range e.Type.Edges {
-						// Look for M2O edge pointing to current type
-						if relEdge.M2O() && relEdge.Type == t {
-							// Check if this edge has an explicit Field association
-							if fkName := relEdge.def.Field; fkName != "" {
-								// Use the explicit FK field's storage key
-								if fkField, ok := e.Type.fields[fkName]; ok {
-									e.Rel.Columns = []string{fkField.StorageKey()}
-									columnFound = true
-									break
-								}
-							}
-							// If no explicit Field, use the relEdge's column if already set
-							if len(relEdge.Rel.Columns) > 0 {
-								e.Rel.Columns = []string{relEdge.Rel.Columns[0]}
-								columnFound = true
-								break
-							}
-						}
-					}
-				}
-				if !columnFound {
-					e.Rel.Columns = []string{fmt.Sprintf("%s_%s", t.Label(), snake(e.Name))}
-				}
+				e.Rel.Columns = []string{column}
 			}
 		}
 	}
@@ -657,42 +637,14 @@ func (g *Graph) edgeSchemas() error {
 			}
 			var ref *Edge
 			for i, c := range e.Rel.Columns {
-				r, ok := func() (*Edge, bool) {
-					// Search first for matching by edge-field.
-					for _, fk := range edgeT.ForeignKeys {
-						if fk.Field.Name == c {
-							return fk.Edge, true
-						}
-					}
-					// In case of no match, search by edge-type. This can happen if the type (edge owner)
-					// is named "T", but the edge-schema "E" names its edge field as "u_id". We consider
-					// it as a match if there is only one usage of "T" in "E".
-					var (
-						matches []*Edge
-						matchOn = n
-					)
-					if i == 0 && e.IsInverse() || i == 1 && !e.IsInverse() {
-						matchOn = e.Type
-					}
-					for _, e2 := range edgeT.Edges {
-						if e2.Type == matchOn && e2.Field() != nil {
-							matches = append(matches, e2)
-						}
-					}
-					if len(matches) == 1 {
-						// Ensure the M2M foreign key is updated accordingly.
-						e.Rel.Columns[i] = matches[0].Field().Name
-						return matches[0], true
-					}
-					return nil, false
-				}()
+				r, ok := resolveEdgeSchemaFK(edgeT, e, n, i, c)
 				if !ok {
 					return fmt.Errorf("missing edge-field %s.%s for edge schema used by %s.%s in Through(%q, %s.Type)", edgeT.Name, c, n.Name, e.Name, e.def.Through.N, edgeT.Name)
 				}
 				if r.Optional {
 					return fmt.Errorf("edge-schema %s is missing a Required() attribute for its reference edge %q", edgeT.Name, e.Name)
 				}
-				if !e.IsInverse() && i == 0 || e.IsInverse() && i == 1 {
+				if (!e.IsInverse() && i == 0) || (e.IsInverse() && i == 1) {
 					ref = r
 				}
 			}
@@ -745,7 +697,7 @@ func (g *Graph) edgeSchemas() error {
 					}
 					c1, c2 := idx.Columns[0], idx.Columns[1]
 					r1, r2 := e.Rel.Columns[0], e.Rel.Columns[1]
-					if c1 == r1 && c2 == r2 || c1 == r2 && c2 == r1 {
+					if (c1 == r1 && c2 == r2) || (c1 == r2 && c2 == r1) {
 						return true
 					}
 				}
@@ -759,6 +711,37 @@ func (g *Graph) edgeSchemas() error {
 		}
 	}
 	return nil
+}
+
+// resolveEdgeSchemaFK resolves the foreign-key edge in an edge-schema that
+// corresponds to the given column name. It first searches by edge-field name,
+// then falls back to matching by edge-type if there's a single match.
+func resolveEdgeSchemaFK(edgeT *Type, e *Edge, n *Type, colIdx int, colName string) (*Edge, bool) {
+	// Search first for matching by edge-field.
+	for _, fk := range edgeT.ForeignKeys {
+		if fk.Field.Name == colName {
+			return fk.Edge, true
+		}
+	}
+	// In case of no match, search by edge-type. This can happen if the type (edge owner)
+	// is named "T", but the edge-schema "E" names its edge field as "u_id". We consider
+	// it as a match if there is only one usage of "T" in "E".
+	matchOn := n
+	if (colIdx == 0 && e.IsInverse()) || (colIdx == 1 && !e.IsInverse()) {
+		matchOn = e.Type
+	}
+	var matches []*Edge
+	for _, e2 := range edgeT.Edges {
+		if e2.Type == matchOn && e2.Field() != nil {
+			matches = append(matches, e2)
+		}
+	}
+	if len(matches) == 1 {
+		// Ensure the M2M foreign key is updated accordingly.
+		e.Rel.Columns[colIdx] = matches[0].Field().Name
+		return matches[0], true
+	}
+	return nil, false
 }
 
 // Tables returns the schema definitions of SQL tables for the graph.
@@ -841,7 +824,7 @@ func (g *Graph) Tables() (all []*schema.Table, err error) {
 				})
 			case M2M:
 				// If there is an edge schema for the association (i.e. edge.Through).
-				if e.Through != nil || e.Ref != nil && e.Ref.Through != nil {
+				if e.Through != nil || (e.Ref != nil && e.Ref.Through != nil) {
 					continue
 				}
 				// M2M edges require exactly 2 columns for join table
@@ -1127,11 +1110,10 @@ func (g *Graph) templates() (*Template, []GraphTemplate) {
 		}
 	}
 	for name := range helpers {
-		idx := strings.Index(name, "/helper/")
-		if idx == -1 {
+		root, _, found := strings.Cut(name, "/helper/")
+		if !found {
 			continue
 		}
-		root := name[:idx]
 		// If the name is prefixed with a name of a root
 		// template, we treat it as a local helper template.
 		if _, ok := roots[root]; ok {

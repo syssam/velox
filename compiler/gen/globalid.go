@@ -42,8 +42,8 @@ func IncrementStartAnnotation(g *Graph) error {
 			matches = make([][]byte, 0, 2)
 			lines   = bytes.Split(buf, []byte("\n"))
 		)
-		for i := 0; i < len(lines); i++ {
-			if l := lines[i]; bytes.HasPrefix(l, []byte(incrementIdent)) {
+		for _, l := range lines {
+			if bytes.HasPrefix(l, []byte(incrementIdent)) {
 				matches = append(matches, l)
 			}
 		}
@@ -88,7 +88,7 @@ func IncrementStartAnnotation(g *Graph) error {
 			need = append(need, n)
 		}
 		if v, ok := r[n.Table()]; ok {
-			lastIdx = max(lastIdx, v/(1<<32-1))
+			lastIdx = max(lastIdx, v>>32)
 		}
 		if err := setAnnotation(n, a); err != nil {
 			return err

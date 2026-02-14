@@ -676,7 +676,7 @@ func (t *Type) AddIndex(idx *load.Index) error {
 		return fmt.Errorf("index %q cannot contain both sqlschema.Prefix and sqlschema.PrefixColumn in annotation", index.Name)
 	case ant.Prefix != 0 && len(idx.Fields)+len(idx.Edges) != 1:
 		return fmt.Errorf("sqlschema.Prefix is used in a multicolumn index %q. Use sqlschema.PrefixColumn instead", index.Name)
-	case len(ant.PrefixColumns) > len(idx.Fields)+len(idx.Fields):
+	case len(ant.PrefixColumns) > len(idx.Fields)+len(idx.Edges):
 		return fmt.Errorf("index %q has more sqlschema.PrefixColumn than column in its definitions", index.Name)
 	}
 	for _, name := range idx.Fields {
@@ -786,18 +786,16 @@ func (t *Type) setupFieldEdge(fk *ForeignKey, fkOwner *Edge, fkName string) erro
 	if !ok {
 		return fmt.Errorf("field %q was not found in %s.Fields() for edge %q", fkName, t.Name, fkOwner.Name)
 	}
-	switch fkField, ok := t.fields[fkName]; {
-	case !ok:
-		return fmt.Errorf("field %q was not found in %s.Fields() for edge %q", fkName, t.Name, fkOwner.Name)
-	case fkField.Optional && !fkOwner.Optional:
+	switch {
+	case tf.Optional && !fkOwner.Optional:
 		return fmt.Errorf("edge-field %q was set as Optional, but edge %q is not", fkName, fkOwner.Name)
-	case !fkField.Optional && fkOwner.Optional:
+	case !tf.Optional && fkOwner.Optional:
 		return fmt.Errorf("edge %q was set as Optional, but edge-field %q is not", fkOwner.Name, fkName)
-	case fkField.Immutable && !fkOwner.Immutable:
+	case tf.Immutable && !fkOwner.Immutable:
 		return fmt.Errorf("edge-field %q was set as Immutable, but edge %q is not", fkName, fkOwner.Name)
-	case !fkField.Immutable && fkOwner.Immutable:
+	case !tf.Immutable && fkOwner.Immutable:
 		return fmt.Errorf("edge %q was set as Immutable, but edge-field %q is not", fkOwner.Name, fkName)
-	case fkField.HasValueScanner():
+	case tf.HasValueScanner():
 		return fmt.Errorf("edge-field %q cannot have an external ValueScanner", fkName)
 	}
 	if t1, t2 := tf.Type.Type, fkOwner.Type.ID.Type.Type; t1 != t2 {

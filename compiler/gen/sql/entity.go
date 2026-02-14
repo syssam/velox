@@ -1049,21 +1049,9 @@ func baseZeroValue(h gen.GeneratorHelper, f *gen.Field) jen.Code {
 		// Default: use empty json.RawMessage
 		return jen.Qual("encoding/json", "RawMessage").Block()
 	case "other":
-		// For custom types (field.Other), use empty struct literal
-		if f.HasGoType() && f.Type.PkgPath != "" {
-			typeName := f.Type.Ident
-			if idx := strings.LastIndex(typeName, "."); idx >= 0 {
-				typeName = typeName[idx+1:]
-			}
-			return jen.Qual(f.Type.PkgPath, typeName).Block()
-		}
-		if f.Type.Ident != "" {
-			return jen.Id(f.Type.Ident).Block()
-		}
-		// Fallback: use empty struct literal with base type
-		return jen.Add(h.BaseType(f)).Block()
+		fallthrough
 	default:
-		// For unknown types with custom Go type, use empty struct literal
+		// For custom types (field.Other) or unknown types, use empty struct literal.
 		if f.HasGoType() && f.Type.PkgPath != "" {
 			typeName := f.Type.Ident
 			if idx := strings.LastIndex(typeName, "."); idx >= 0 {
@@ -1071,11 +1059,10 @@ func baseZeroValue(h gen.GeneratorHelper, f *gen.Field) jen.Code {
 			}
 			return jen.Qual(f.Type.PkgPath, typeName).Block()
 		}
-		// For unknown types, try empty struct literal
 		if f.Type.Ident != "" {
 			return jen.Id(f.Type.Ident).Block()
 		}
-		// Fallback: use empty struct literal with base type
+		// Fallback: use empty struct literal with base type.
 		return jen.Add(h.BaseType(f)).Block()
 	}
 }

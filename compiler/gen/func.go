@@ -152,11 +152,12 @@ func fieldOps(f *Field) (ops []Op) {
 }
 
 // xrange generates a slice of len n.
-func xrange(n int) (a []int) {
+func xrange(n int) []int {
+	a := make([]int, n)
 	for i := range n {
-		a = append(a, i)
+		a[i] = i
 	}
-	return
+	return a
 }
 
 // plural a name.
