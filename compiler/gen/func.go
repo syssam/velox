@@ -153,6 +153,9 @@ func fieldOps(f *Field) (ops []Op) {
 
 // xrange generates a slice of len n.
 func xrange(n int) []int {
+	if n <= 0 {
+		return nil
+	}
 	a := make([]int, n)
 	for i := range n {
 		a[i] = i

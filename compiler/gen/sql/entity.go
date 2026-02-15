@@ -1048,8 +1048,6 @@ func baseZeroValue(h gen.GeneratorHelper, f *gen.Field) jen.Code {
 		}
 		// Default: use empty json.RawMessage
 		return jen.Qual("encoding/json", "RawMessage").Block()
-	case "other":
-		fallthrough
 	default:
 		// For custom types (field.Other) or unknown types, use empty struct literal.
 		if f.HasGoType() && f.Type.PkgPath != "" {
