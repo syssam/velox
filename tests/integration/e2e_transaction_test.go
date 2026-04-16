@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	integration "github.com/syssam/velox/tests/integration"
+	"github.com/syssam/velox/tests/integration/entity"
 	"github.com/syssam/velox/tests/integration/user"
 )
 
@@ -230,4 +231,73 @@ func TestTransaction_WithTxRollbackOnPanic(t *testing.T) {
 	count, err := client.User.Query().Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "WithTx must rollback when callback panics")
+}
+
+// TestEntityUnwrap_PanicsOnNonTx pins the Ent-parity contract: Unwrap only
+// makes sense for entities produced inside a transaction. Calling it on a
+// bare entity (zero config.Driver, no *txDriver to swap) panics.
+func TestEntityUnwrap_PanicsOnNonTx(t *testing.T) {
+	u := &entity.User{ID: 1, Name: "Alice"}
+	assert.Panics(t, func() { u.Unwrap() })
+
+	tg := &entity.Tag{ID: 1, Name: "golang"}
+	assert.Panics(t, func() { tg.Unwrap() })
+}
+
+// TestTransaction_UnwrapAllowsPostCommitEdgeRead pins the core Unwrap
+// contract: after Unwrap(), a tx-returned entity can be used for edge
+// reads without "sql: transaction has already been committed". Unwrap
+// swaps entity.config.Driver from the committed *txDriver to the base
+// driver. Without this, edges fail silently at read time in code paths
+// far from the tx boundary (e.g. GraphQL resolvers).
+func TestTransaction_UnwrapAllowsPostCommitEdgeRead(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+
+	u, err := tx.User.Create().
+		SetName("TxUnwrap").
+		SetEmail("txu@test.com").
+		SetAge(31).
+		SetRole(user.RoleUser).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Commit())
+
+	posts, err := u.Unwrap().QueryPosts().All(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, posts, "freshly-created user has no posts")
+}
+
+// TestTransaction_WithoutUnwrapFailsAfterCommit is the inverse guardrail
+// for Unwrap: without it, reading edges through a tx-returned entity
+// after Commit must surface a clear error rather than succeed against
+// stale driver state. If this test ever starts passing silently, the
+// committed-*txDriver read path is unsafe.
+func TestTransaction_WithoutUnwrapFailsAfterCommit(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+
+	u, err := tx.User.Create().
+		SetName("NoUnwrap").
+		SetEmail("nou@test.com").
+		SetAge(32).
+		SetRole(user.RoleUser).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Commit())
+
+	_, err = u.QueryPosts().All(ctx)
+	require.Error(t, err, "reading via committed tx driver must fail without Unwrap")
 }

@@ -18,8 +18,6 @@ import (
 	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sql"
 
-	// Query package registers query factories via init().
-	_ "example.com/basic/velox/query"
 	_ "modernc.org/sqlite"
 )
 
@@ -1211,69 +1209,6 @@ func TestE2E_TagString(t *testing.T) {
 	s := tg.String()
 	assert.Contains(t, s, "Tag(")
 	assert.Contains(t, s, "name=golang")
-}
-
-// =============================================================================
-// Entity Unwrap
-// =============================================================================
-
-// TestE2E_UserUnwrap_PanicsOnNonTx documents the Ent-parity contract: Unwrap
-// only makes sense for entities produced inside a transaction, so calling it
-// on a bare entity panics. Real usage appears in TestE2E_TxUnwrap_AllowsPostCommitEdgeRead.
-func TestE2E_UserUnwrap_PanicsOnNonTx(t *testing.T) {
-	u := &entity.User{ID: 1, Name: "Alice"}
-	assert.Panics(t, func() { u.Unwrap() })
-}
-
-func TestE2E_TagUnwrap_PanicsOnNonTx(t *testing.T) {
-	tg := &entity.Tag{ID: 1, Name: "golang"}
-	assert.Panics(t, func() { tg.Unwrap() })
-}
-
-// TestE2E_TxUnwrap_AllowsPostCommitEdgeRead pins the core contract:
-// after Unwrap(), the tx-returned entity can be used for edge reads without
-// "sql: transaction has already been committed". Without Unwrap(), the same
-// QueryPosts call fails because e.config.Driver still points at the done *txDriver.
-func TestE2E_TxUnwrap_AllowsPostCommitEdgeRead(t *testing.T) {
-	client := openTestClient(t)
-	ctx := context.Background()
-
-	tx, err := client.Tx(ctx)
-	require.NoError(t, err)
-
-	u, err := tx.User.Create().
-		SetName("TxUnwrap").SetEmail("txu@test.com").SetAge(31).
-		SetRole(user.RoleUser).SetCreatedAt(now).SetUpdatedAt(now).
-		Save(ctx)
-	require.NoError(t, err)
-
-	require.NoError(t, tx.Commit())
-
-	// Without Unwrap, the edge query would panic / error because u.config.Driver
-	// is the committed *txDriver. Unwrap swaps it to the base driver.
-	_, err = u.Unwrap().QueryPosts().All(ctx)
-	require.NoError(t, err)
-}
-
-// TestE2E_TxUnwrap_WithoutUnwrap_FailsAfterCommit documents the failure mode
-// the contract prevents. It's the inverse guardrail for the test above.
-func TestE2E_TxUnwrap_WithoutUnwrap_FailsAfterCommit(t *testing.T) {
-	client := openTestClient(t)
-	ctx := context.Background()
-
-	tx, err := client.Tx(ctx)
-	require.NoError(t, err)
-
-	u, err := tx.User.Create().
-		SetName("NoUnwrap").SetEmail("nou@test.com").SetAge(32).
-		SetRole(user.RoleUser).SetCreatedAt(now).SetUpdatedAt(now).
-		Save(ctx)
-	require.NoError(t, err)
-
-	require.NoError(t, tx.Commit())
-
-	_, err = u.QueryPosts().All(ctx)
-	require.Error(t, err, "reading via committed tx driver must fail without Unwrap")
 }
 
 // =============================================================================

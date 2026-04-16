@@ -75,7 +75,7 @@ func NewEntityQuery(name string, cfg Config) any {
 	defer queryMu.RUnlock()
 	fn, ok := queryFactories[name]
 	if !ok {
-		panic(fmt.Sprintf("velox: query factory not registered for entity %q — ensure the entity package is imported (e.g., import _ \"your/pkg/%s\")", name, strings.ToLower(name)))
+		panic(fmt.Sprintf("velox: query factory not registered for entity %q — ensure the generated query package is imported (e.g., import _ \"your/pkg/query\"). The root client package normally does this automatically; see it if you are using velox generated code directly.", name))
 	}
 	return fn(cfg)
 }

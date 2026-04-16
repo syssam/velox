@@ -6,7 +6,6 @@ import (
 
 	"example.com/tree/velox"
 	"example.com/tree/velox/category"
-	_ "example.com/tree/velox/query" // registers query factories
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

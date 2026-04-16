@@ -22,7 +22,7 @@ import (
 // CI sets VELOX_TEST_MYSQL for the docker mysql container. Local dev
 // exports it (or MYSQL_HOST/MYSQL_PORT/...) when the docker container
 // is running.
-func openMySQLOrSkip(t *testing.T) (*integration.Client, func()) {
+func openMySQLOrSkip(t testing.TB) (*integration.Client, func()) {
 	t.Helper()
 
 	dsn := os.Getenv("VELOX_TEST_MYSQL")

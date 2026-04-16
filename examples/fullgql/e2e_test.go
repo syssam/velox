@@ -26,7 +26,6 @@ import (
 
 	// Import entity sub-packages to trigger init() registration.
 	_ "example.com/fullgql/velox/auditlog"
-	_ "example.com/fullgql/velox/query"
 	_ "modernc.org/sqlite"
 )
 
@@ -189,6 +188,23 @@ func TestGraphQL_NodeResolver(t *testing.T) {
 		node, err := client.Noder(ctx, u.ID)
 		require.NoError(t, err)
 		require.NotNil(t, node)
+
+		// Resolver must return the concrete entity type, not a proxy.
+		// If this assertion ever breaks, the Noder registry is mis-wired
+		// and downstream gqlgen marshaling will fall through to Relay's
+		// opaque Node type.
+		resolved, ok := node.(*entity.User)
+		require.True(t, ok, "Noder must return concrete *entity.User, got %T", node)
+		assert.Equal(t, u.ID, resolved.ID)
+		assert.Equal(t, "Alice", resolved.Name)
+
+		// The resolved entity must carry runtime.Config so downstream
+		// edge reads work without panic. Without Config propagation via
+		// runtime.WithConfigContext, this edge query would dereference
+		// a nil driver.
+		edges, err := resolved.QueryComments().All(ctx)
+		require.NoError(t, err, "resolved entity must be usable for edge reads")
+		assert.Empty(t, edges, "freshly-created user has no comments")
 	})
 
 	t.Run("Noder_returns_ErrNodeNotFound_for_missing_id", func(t *testing.T) {

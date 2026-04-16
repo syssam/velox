@@ -16,8 +16,6 @@ import (
 	"github.com/syssam/velox/privacy"
 
 	_ "modernc.org/sqlite"
-
-	_ "github.com/syssam/velox/examples/realworld/velox/query"
 )
 
 func ptr[T any](v T) *T { return &v }

@@ -13,8 +13,6 @@ import (
 	"github.com/syssam/velox/tests/integration/post"
 	"github.com/syssam/velox/tests/integration/user"
 
-	// Query package registers query factories via init().
-	_ "github.com/syssam/velox/tests/integration/query"
 	// SQLite driver (pure Go, no CGO).
 	_ "modernc.org/sqlite"
 )

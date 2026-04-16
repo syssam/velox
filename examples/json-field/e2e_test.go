@@ -6,7 +6,6 @@ import (
 
 	"example.com/json-field/schema"
 	"example.com/json-field/velox"
-	_ "example.com/json-field/velox/query" // registers query factories
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

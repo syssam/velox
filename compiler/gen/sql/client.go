@@ -10,6 +10,16 @@ import (
 func genClient(h gen.GeneratorHelper) *jen.File {
 	f := h.NewFile(h.Pkg())
 
+	// Side-effect import the generated query/ package so its init() runs
+	// RegisterQueryFactory for every entity. Without this, the first call
+	// to c.User.Query() panics in runtime.NewEntityQuery — query/ is
+	// otherwise only pulled in transitively by intercept/, privacy/, or
+	// gqlfilter/, so projects that use none of those features would hit
+	// the panic unless they remembered a manual blank import.
+	if len(h.Graph().Nodes) > 0 {
+		f.Anon(h.QueryPkg())
+	}
+
 	// ErrTxStarted sentinel
 	f.Comment("ErrTxStarted is returned when trying to start a new transaction from a transactional client.")
 	f.Var().Id("ErrTxStarted").Op("=").Qual("errors", "New").Call(jen.Lit("velox: cannot start a transaction within a transaction"))

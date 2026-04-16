@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"example.com/integration-test/velox"
-	_ "example.com/integration-test/velox/query"
 	"example.com/integration-test/velox/user"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

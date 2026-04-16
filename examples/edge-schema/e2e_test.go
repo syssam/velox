@@ -6,7 +6,6 @@ import (
 
 	"example.com/edge-schema/velox"
 	"example.com/edge-schema/velox/membership"
-	_ "example.com/edge-schema/velox/query" // registers query factories
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

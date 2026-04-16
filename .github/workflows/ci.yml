@@ -361,11 +361,13 @@ jobs:
           VELOX_TEST_MYSQL: "root:test@tcp(localhost:3306)/velox_test?parseTime=true&multiStatements=true"
       - name: Run e2e integration tests against Postgres + MySQL
         # The per-dialect helpers (postgres_helper_test.go,
-        # mysql_helper_test.go) SKIP cleanly without VELOX_TEST_* env
+        # mysql_helper_test.go) and the dialect-parameterized
+        # TestMultiDialect_* suite SKIP cleanly without VELOX_TEST_* env
         # vars, so this step is a no-op on forks/runners without DB
-        # services. Here both services are up, so the smoke tests
-        # actually exercise the live databases.
-        run: go test -race -v ./tests/integration/ -run "Test(Postgres|MySQL)Helper"
+        # services. Here both services are up, so the smoke tests AND
+        # the lifted CRUD/edge/tx/bulk/aggregate cases actually exercise
+        # the live databases across all three dialects.
+        run: go test -race -v ./tests/integration/ -run 'Test(Postgres|MySQL)Helper|TestMultiDialect'
         env:
           VELOX_TEST_POSTGRES: "host=localhost port=5432 user=postgres password=test dbname=velox_test sslmode=disable"
           VELOX_TEST_MYSQL: "root:test@tcp(localhost:3306)/velox_test?parseTime=true&multiStatements=true"

@@ -15,6 +15,7 @@ import (
 	entity "github.com/test/project/ent/entity"
 	migrate "github.com/test/project/ent/migrate"
 	post "github.com/test/project/ent/post"
+	_ "github.com/test/project/ent/query"
 	user "github.com/test/project/ent/user"
 )
 
