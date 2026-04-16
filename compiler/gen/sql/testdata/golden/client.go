@@ -136,11 +136,21 @@ func (c *Client) Close() error {
 }
 
 // Use adds the mutation hooks to all the entity clients.
+//
+// All Use calls must complete before concurrent query or mutation
+// execution begins. Use is intended for application startup (e.g. in
+// main or TestMain), not for runtime registration. No synchronisation
+// is provided — violations are caught by go test -race.
 func (c *Client) Use(hooks ...Hook) {
 	c.config.hooks.AppendAll(hooks...)
 }
 
 // Intercept adds the query interceptors to all the entity clients.
+//
+// All Intercept calls must complete before concurrent query execution
+// begins. Intercept is intended for application startup (e.g. in
+// main or TestMain), not for runtime registration. No synchronisation
+// is provided — violations are caught by go test -race.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	c.config.inters.AppendAll(interceptors...)
 }

@@ -35,11 +35,16 @@ var (
 	}
 
 	// FeatureEntQL provides a feature-flag for the EntQL extension.
+	// When enabled, the generator emits per-entity schema descriptors
+	// (EntitySchema, FieldConfig, EdgeConfig) used by dialect/sql/sqlgraph/eval.go
+	// to translate querylanguage.P expressions into SQL WHERE clauses at runtime.
+	// Use this when predicates must be built dynamically (e.g. from API filter
+	// parameters or a rules engine) without rerunning codegen.
 	FeatureEntQL = Feature{
 		Name:        "entql",
 		Stage:       Experimental,
 		Default:     false,
-		Description: "EntQL provides a generic filtering capability at runtime",
+		Description: "Generates per-entity schema descriptors so querylanguage.P expressions can be evaluated into SQL at runtime — use for dynamic API filters and rules engines",
 		cleanup: func(c *Config) error {
 			return os.RemoveAll(filepath.Join(c.Target, "querylanguage.go"))
 		},

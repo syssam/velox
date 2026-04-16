@@ -236,6 +236,11 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 
 	// Use delegates to HookStore.AppendAll — O(1) generated code regardless of entity count.
 	f.Comment("Use adds the mutation hooks to all the entity clients.")
+	f.Comment("")
+	f.Comment("All Use calls must complete before concurrent query or mutation")
+	f.Comment("execution begins. Use is intended for application startup (e.g. in")
+	f.Comment("main or TestMain), not for runtime registration. No synchronisation")
+	f.Comment("is provided — violations are caught by go test -race.")
 	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("Use").Params(
 		jen.Id("hooks").Op("...").Id("Hook"),
 	).Block(
@@ -243,6 +248,11 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	)
 
 	f.Comment("Intercept adds the query interceptors to all the entity clients.")
+	f.Comment("")
+	f.Comment("All Intercept calls must complete before concurrent query execution")
+	f.Comment("begins. Intercept is intended for application startup (e.g. in")
+	f.Comment("main or TestMain), not for runtime registration. No synchronisation")
+	f.Comment("is provided — violations are caught by go test -race.")
 	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("Intercept").Params(
 		jen.Id("interceptors").Op("...").Id("Interceptor"),
 	).Block(

@@ -95,7 +95,7 @@ Opt-in features live behind flags in `gen.Config.Features`. Stages follow Ent's 
 | `sql/upsert` | Alpha | `ON CONFLICT` / `ON DUPLICATE KEY` for INSERT |
 | `sql/modifier` | Alpha | Custom query modifiers |
 | `sql/autodefault` | Alpha | Auto-emit DB `DEFAULT` for all NOT NULL fields |
-| `entql` | Experimental | Runtime generic filtering language |
+| `entql` | Experimental | Dynamic predicate builder — translates `querylanguage.P` expressions to SQL at runtime; use for API filter params or rules engines without rerunning codegen |
 | `bidiedges` | Experimental | Two-way references on O2M/O2O eager-load |
 | `schema/snapshot` | Experimental | Schema snapshot for merge-conflict resolution |
 | `sql/execquery` | Experimental | Expose driver `ExecContext`/`QueryContext` |

@@ -170,7 +170,7 @@ func normalizePkg(c *gen.Config) error {
 	base := path.Base(c.Package)
 	identifier := strings.ReplaceAll(base, "-", "_")
 	if !token.IsIdentifier(identifier) {
-		return fmt.Errorf("invalid package identifier: %q", base)
+		return fmt.Errorf("velox: invalid package identifier: %q", base)
 	}
 	if identifier != base {
 		c.Package = path.Join(path.Dir(c.Package), identifier)
@@ -207,7 +207,7 @@ func FeatureNames(names ...string) Option {
 				}
 			}
 			if !found {
-				return fmt.Errorf("unknown feature name: %q", name)
+				return fmt.Errorf("velox: unknown feature name: %q", name)
 			}
 		}
 		return nil
@@ -233,7 +233,7 @@ func Annotations(annotations ...Annotation) Option {
 			} else if m, ok := curr.(schema.Merger); ok {
 				cfg.Annotations[name] = m.Merge(ant)
 			} else {
-				return fmt.Errorf("duplicate annotations with name %q", name)
+				return fmt.Errorf("velox: duplicate annotations with name %q", name)
 			}
 		}
 		return nil
@@ -373,7 +373,7 @@ type DependencyOption func(*gen.Dependency) error
 func DependencyType(v any) DependencyOption {
 	return func(d *gen.Dependency) error {
 		if v == nil {
-			return errors.New("nil dependency type")
+			return errors.New("velox: nil dependency type")
 		}
 		t := reflect.TypeOf(v)
 		tv := indirect(t)
@@ -396,7 +396,7 @@ func DependencyType(v any) DependencyOption {
 func DependencyTypeInfo(t *field.TypeInfo) DependencyOption {
 	return func(d *gen.Dependency) error {
 		if t == nil {
-			return errors.New("nil dependency type info")
+			return errors.New("velox: nil dependency type info")
 		}
 		d.Type = t
 		return nil
