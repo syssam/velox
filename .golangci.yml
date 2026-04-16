@@ -1,0 +1,344 @@
+# golangci-lint v2 configuration
+# https://golangci-lint.run/usage/configuration/
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/syssam/velox
+
+linters:
+  enable:
+    # Default linters
+    - errcheck       # Check for unchecked errors
+    - govet          # Report suspicious constructs
+    - ineffassign    # Detect ineffectual assignments
+    - staticcheck    # Static analysis (includes gosimple)
+    - unused         # Check for unused code
+
+    # Additional linters (Google/Uber recommended)
+    - misspell       # Check spelling
+    - gocritic       # Opinionated linter
+    - revive         # Fast, configurable linter
+    - prealloc       # Find slice preallocation opportunities
+    - unconvert      # Remove unnecessary type conversions
+    - unparam        # Report unused function parameters
+    - whitespace     # Check for unnecessary whitespace
+    - gosec          # Security-oriented linter (SQL injection, hardcoded creds, etc.)
+
+  disable:
+    - depguard       # Not needed for this project
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - io.Closer.Close
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (net/http.ResponseWriter).Write
+        - io.WriteString
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - os.Remove
+        - os.RemoveAll
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    misspell:
+      locale: US
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - unnamedResult
+        - paramTypeCombine
+        - sloppyReassign
+        - ifElseChain
+        - dupBranchBody
+        - commentedOutCode
+        - elseif
+        - ptrToRefParam
+        - filepathJoin
+        - equalFold
+        - octalLiteral
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    prealloc:
+      simple: true
+      range-loops: false
+      for-loops: false
+
+  exclusions:
+    # Rules for excluding issues
+    rules:
+      # Exclude some linters from running on tests
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+          - prealloc
+          - unparam
+          - gosec
+
+      # Exclude generated files (stringer, etc.)
+      - path: op_string\.go
+        linters:
+          - revive
+          - gosec
+
+      # Internal code generators write to known paths
+      - path: (querylanguage|schema/field)/internal/gen\.go
+        linters:
+          - gosec
+        text: "G306"
+
+      # Exclude generated example/integration code
+      - path: examples/
+        linters:
+          - revive
+          - unparam
+          - staticcheck
+
+      - path: compiler/integration/
+        linters:
+          - revive
+          - unparam
+          - staticcheck
+
+      # Internal prototypes are generated test code
+      - path: internal/prototype
+        linters:
+          - revive
+          - govet
+          - unused
+          - staticcheck
+          - unparam
+
+      # Builder pattern: unexported return types are by design for fluent API
+      - path: schema/field/field\.go
+        linters:
+          - revive
+        text: "unexported-return"
+
+      - path: schema/edge/edge\.go
+        linters:
+          - revive
+        text: "unexported-return"
+
+      # Deprecated velox.Config is used in snapshot/load code intentionally
+      - linters:
+          - staticcheck
+        text: "SA1019.*velox.Config"
+
+      - linters:
+          - staticcheck
+        text: "SA1019.*schema.Config"
+
+      # iface.Config() is deprecated but still used in MarshalSchema for backward compat
+      - linters:
+          - staticcheck
+        text: "SA1019.*iface.Config"
+
+      # Deprecated sqlite.UUIDType used for backwards compatibility
+      - linters:
+          - staticcheck
+        text: "SA1019.*sqlite.UUIDType"
+
+      # parser.ParseDir is deprecated since Go 1.25 but still works fine.
+      # cycleCause is a diagnostic helper and doesn't need go/packages.
+      - linters:
+          - staticcheck
+        text: "SA1019.*parser.ParseDir"
+
+      # Privacy sentinels (Allow, Deny, Skip) follow Ent API naming convention
+      - path: privacy/privacy\.go
+        linters:
+          - revive
+        text: "error-naming"
+
+      - path: privacy/privacy\.go
+        linters:
+          - staticcheck
+        text: "ST1012"
+
+      # DecisionFromContext returns (error, bool) by design — error IS the decision
+      - path: privacy/privacy\.go
+        linters:
+          - revive
+        text: "error-return"
+
+      # Test file unused params in validator callbacks
+      - path: _test\.go
+        linters:
+          - revive
+        text: "unused-parameter"
+
+      # Code generator functions follow consistent signature pattern
+      - path: compiler/gen/sql/
+        linters:
+          - revive
+          - unparam
+        text: "unused"
+
+      # Shadow detection exclusions — closures in code generators and test helpers
+      # frequently shadow err/ctx which is intentional for isolated scope.
+      - path: compiler/gen/sql/
+        linters:
+          - govet
+        text: "shadow"
+
+      - path: _test\.go
+        linters:
+          - govet
+        text: "shadow"
+
+      # filterEdges keeps skip parameter for API consistency with filterNodes
+      - path: contrib/graphql/helpers\.go
+        linters:
+          - unparam
+
+      # Empty block with comment explaining why it's intentionally empty
+      - path: compiler/gen/sql/create\.go
+        linters:
+          - revive
+        text: "empty-block"
+
+      # SQL builder intentionally constructs SQL strings — this is its purpose
+      # Schema migration uses md5 for non-security name hashing, integer conversions are bounded
+      - path: dialect/sql/
+        linters:
+          - gosec
+        text: "G115|G201|G202|G401|G501|G602"
+
+      # CLI and compiler read files/run commands from trusted paths
+      - path: cmd/velox/
+        linters:
+          - gosec
+        text: "G301|G304|G306"
+
+      - path: compiler/
+        linters:
+          - gosec
+        text: "G104|G204|G301|G304|G306|G602|G703"
+
+      # GraphQL contrib uses trusted paths and ignores HTTP response write errors
+      - path: contrib/graphql/
+        linters:
+          - gosec
+        text: "G104|G301|G304|G306"
+
+      # Generated examples and prototypes
+      - path: examples/
+        linters:
+          - gosec
+
+      - path: internal/prototype/
+        linters:
+          - gosec
+
+      # Deferred Close() in schema/atlas is intentionally unchecked
+      - path: dialect/sql/schema/
+        linters:
+          - errcheck
+        text: "Close"
+
+      # Deferred rows.Close() in sqlgraph is intentionally unchecked
+      - path: dialect/sql/sqlgraph/
+        linters:
+          - errcheck
+        text: "Close"
+
+      # Deferred rows.Close() in runtime is intentionally unchecked
+      - path: runtime/
+        linters:
+          - errcheck
+        text: "Close"
+
+      # Generic type assertions are design-guaranteed by the type parameter
+      # constraint — they cannot fail at runtime. Excludes: n.(*T) in
+      # TypedQuery.All, newT(tv).(T) in ValueScanner, Underlying().(*types.Interface),
+      # IMPORT specs → *ast.ImportSpec, Driver.DB() → *sql.DB.
+      - path: runtime/typed_query\.go
+        linters:
+          - errcheck
+        source: '\.\(\*T\)'
+
+      - path: schema/field/field\.go
+        linters:
+          - errcheck
+        source: 'newT\('
+
+      - path: compiler/load/
+        linters:
+          - errcheck
+        source: '\.\(\*types\.|\.ImportSpec\)'
+
+      - path: dialect/sql/driver\.go
+        linters:
+          - errcheck
+        source: '\.\(\*sql\.DB\)'
+
+    paths:
+      - generated
+      - migrations
+      # Example apps live in the root module but import their own
+      # gitignored velox/ generator output (examples/*/velox/). Linting
+      # them requires every example's generate.go to have been run on
+      # this exact checkout — that's the examples CI job's contract,
+      # not the lint job's. Excluded here; the examples matrix catches
+      # real breakage via go build / go test per example.
+      - examples/
+
+output:
+  formats:
+    text:
+      path: stdout

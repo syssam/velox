@@ -1,0 +1,18 @@
+# GitHub code owners — auto-requested reviewers on matching paths.
+# https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: the maintainer reviews everything unless a more specific rule wins.
+*                                   @syssam
+
+# Codegen core — extra-careful changes because wiring bugs compound.
+/compiler/gen/sql/                  @syssam
+/runtime/                           @syssam
+
+# Load-bearing invariants. Changing these without updating the
+# matching tests has historically caused silent regressions.
+/compiler/gen/sql/wiring_test.go    @syssam
+
+# CI / release tooling — keep in sync with CONTRIBUTING.md.
+/.github/                           @syssam
+/scripts/                           @syssam
+/Makefile                           @syssam

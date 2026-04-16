@@ -1,0 +1,453 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * *'  # Nightly at 3 AM UTC
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref — no duplicate CI on rapid pushes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.26', 'stable']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+      - name: Generate fixtures (root module)
+        # tests/integration and examples/realworld live in the root module
+        # and have files that import their own gitignored velox/ output
+        # (tests/integration/{token,intercept,privacy}, realworld's
+        # e2e_test.go and main.go). `go test ./...` compiles everything in
+        # the module and fails without these. realworld's generate.go uses
+        # relative paths so must run with its dir as CWD.
+        run: |
+          go run tests/integration/generate.go
+          (cd examples/realworld && go run generate.go)
+      - run: go test -race -cover -coverprofile=coverage.out ./...
+      # Integration tests (requires external databases):
+      # go test -tags integration ./dialect/sql/schema/ -run "Test(Postgres|MySQL|MultiDialect)"
+      - name: Report total coverage
+        # Informational only — the real gates are the per-package
+        # thresholds below. Total is unweighted by package importance
+        # and is dragged down by packages with 0% coverage (examples,
+        # generated leaf packages), so a module-wide threshold would
+        # punish work on non-test-bearing packages for no real signal.
+        if: matrix.go-version == 'stable'
+        run: |
+          total=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: ${total}%"
+      - name: Check critical package coverage
+        if: matrix.go-version == 'stable'
+        # Pre-existing bug: prior `grep "^${pkg}/" | tail -1 | awk '$NF'`
+        # took the LAST function's coverage, not the package total — so
+        # privacy reported 100% (actually 97.8%) and dialect/sql reported
+        # 0% (actually 85.2%). The coverage.out profile format is
+        # `<file>:<start>,<end> <n_statements> <n_hits>` per line, so the
+        # correct per-package total is sum(stmts where hits>0)/sum(stmts)
+        # across all files whose path starts with the package path.
+        run: |
+          failed=0
+          check_pkg() {
+            local pkg="$1" threshold="$2"
+            local cov
+            cov=$(awk -v pkg="${pkg}" '
+              NR > 1 && index($1, pkg "/") == 1 {
+                stmts = $(NF-1)
+                hits  = $NF
+                total += stmts
+                if (hits > 0) covered += stmts
+              }
+              END { if (total > 0) printf "%.1f", covered / total * 100 }
+            ' coverage.out)
+            if [ -n "${cov}" ]; then
+              echo "${pkg}: ${cov}% (threshold: ${threshold}%)"
+              if awk "BEGIN {exit !(${cov} < ${threshold})}"; then
+                echo "::error::${pkg} coverage ${cov}% is below ${threshold}%"
+                failed=1
+              fi
+            fi
+          }
+          # Thresholds are the current measured coverage, rounded DOWN to
+          # the nearest 5% — so regressions fail the gate, current state
+          # passes. When a package's real coverage climbs, bump its
+          # threshold in a dedicated commit so the bump is reviewable.
+          # Measured 2026-04-15 with `go test -cover -coverprofile=…` +
+          # the per-package awk parser above.
+          # Critical tier (core runtime / generator):
+          check_pkg "github.com/syssam/velox/privacy" 90          # actual 97.8%
+          check_pkg "github.com/syssam/velox/dialect/sql" 85      # actual 85.2%
+          check_pkg "github.com/syssam/velox/compiler/gen/sql" 85 # actual 90.4%
+          check_pkg "github.com/syssam/velox/runtime" 80          # actual 81.0%
+          check_pkg "github.com/syssam/velox/dialect" 85          # actual 85.4%
+          # High tier (supporting code):
+          check_pkg "github.com/syssam/velox/compiler/gen" 80          # actual 86.3%
+          check_pkg "github.com/syssam/velox/contrib/graphql" 80       # actual 82.4%
+          check_pkg "github.com/syssam/velox/dialect/sql/schema" 80    # actual 82.6%
+          check_pkg "github.com/syssam/velox/dialect/sql/sqlgraph" 80  # actual 82.0%
+          check_pkg "github.com/syssam/velox/compiler/load" 75         # actual 75.8%
+          if [ "${failed}" -eq 1 ]; then
+            echo "::error::Some packages are below their coverage threshold"
+            exit 1
+          fi
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out
+        if: matrix.go-version == 'stable'
+        continue-on-error: true
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Generate fixtures (root module)
+        # tests/integration and examples/realworld live in the root
+        # module and have root-level files (test or main) that import
+        # their own gitignored velox/ output. Any command that compiles
+        # the full module (go test ./..., go build ./..., golangci-lint)
+        # needs these generated first. benchmarks/fixtures/stress-100 has no root
+        # Go files so its missing velox/ is harmless. Tier-1 examples
+        # (basic/fullgql) and tests/external-module live in their own
+        # sub-modules and are handled by the examples CI job.
+        #
+        # realworld's generate.go uses relative paths (gen.WithTarget
+        # "./velox"), so it must run with examples/realworld as CWD.
+        run: |
+          go run tests/integration/generate.go
+          (cd examples/realworld && go run generate.go)
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          # v2.1.0 was built with Go 1.24 and refuses to lint a module
+          # targeting go 1.26 (go.mod). Track latest v2.x so the linter
+          # binary is always ≥ the module's Go version.
+          version: latest
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Generate fixtures (root module)
+        # tests/integration and examples/realworld live in the root
+        # module and have root-level files (test or main) that import
+        # their own gitignored velox/ output. Any command that compiles
+        # the full module (go test ./..., go build ./..., golangci-lint)
+        # needs these generated first. benchmarks/fixtures/stress-100 has no root
+        # Go files so its missing velox/ is harmless. Tier-1 examples
+        # (basic/fullgql) and tests/external-module live in their own
+        # sub-modules and are handled by the examples CI job.
+        #
+        # realworld's generate.go uses relative paths (gen.WithTarget
+        # "./velox"), so it must run with examples/realworld as CWD.
+        run: |
+          go run tests/integration/generate.go
+          (cd examples/realworld && go run generate.go)
+      - run: CGO_ENABLED=0 go build ./...
+
+  drift-check:
+    # Regenerate all codegen artifacts and fail if the working tree differs.
+    # Guards against goldens/integration fixtures/tier-1 examples drifting
+    # out of sync with generator changes. See scripts/regen.sh.
+    #
+    # Kill-switch: if this job produces >2 false positives in the first week
+    # after landing (e.g. goimports version skew, transient go mod resolution),
+    # comment out the regen step and file an issue. Do not mute selectively.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Install pinned goimports
+        run: go install golang.org/x/tools/cmd/goimports@v0.28.0
+      - name: Regenerate and verify working tree is clean
+        run: ./scripts/regen.sh --check
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Generate fixtures (root module)
+        # tests/integration and examples/realworld live in the root
+        # module and have root-level files (test or main) that import
+        # their own gitignored velox/ output. Any command that compiles
+        # the full module (go test ./..., go build ./..., golangci-lint)
+        # needs these generated first. benchmarks/fixtures/stress-100 has no root
+        # Go files so its missing velox/ is harmless. Tier-1 examples
+        # (basic/fullgql) and tests/external-module live in their own
+        # sub-modules and are handled by the examples CI job.
+        #
+        # realworld's generate.go uses relative paths (gen.WithTarget
+        # "./velox"), so it must run with examples/realworld as CWD.
+        run: |
+          go run tests/integration/generate.go
+          (cd examples/realworld && go run generate.go)
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  apidiff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Install apidiff
+        run: go install golang.org/x/exp/cmd/apidiff@latest
+      - name: Check API compatibility
+        # apidiff invocation: `apidiff <old-path> <new-path>` directly
+        # compares two package paths and prints "- removed" / "+ added"
+        # lines. The prior script had `apidiff -w ../velox-base/${pkg} …`
+        # which tries to WRITE the api snapshot to a path that's actually
+        # a directory — always failed silently. Fixed to direct path diff.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add ../velox-base "${BASE_SHA}"
+          incompatible=0
+          for pkg in . ./privacy ./schema/field ./schema/edge ./schema/index ./schema/mixin ./dialect/sql ./runtime; do
+            echo "Checking ${pkg}..."
+            diff_out=$(apidiff "../velox-base/${pkg}" "./${pkg}" 2>/dev/null || true)
+            if echo "${diff_out}" | grep -q "^-"; then
+              echo "::warning::Breaking API change detected in ${pkg}"
+              echo "${diff_out}"
+              incompatible=1
+            fi
+          done
+          git worktree remove ../velox-base
+          if [ "${incompatible}" -eq 1 ]; then
+            echo "::warning::Breaking API changes detected. Pre-1.0: allowed, but ensure intentional and documented in the PR."
+          fi
+
+  examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - { path: examples/basic, mode: test }
+          - { path: examples/fullgql, mode: test }
+          - { path: tests/external-module, mode: test }
+          # testdata/ent-comparison/ is a comparison fixture, not a
+          # user-facing example — excluded from this matrix entirely.
+          # New feature-focused examples (tree, edge-schema, json-field,
+          # versioned-migration, globalid) run locally but aren't in CI
+          # yet — add them here if CI coverage is desired.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Verify example
+        env:
+          EXAMPLE_PATH: ${{ matrix.example.path }}
+          EXAMPLE_MODE: ${{ matrix.example.mode }}
+        run: |
+          cd "${EXAMPLE_PATH}"
+          # mode=test sub-modules need their generated velox/ output
+          # before tests run.
+          if [ "${EXAMPLE_MODE}" = "test" ]; then
+            go run generate.go
+            go test -race -v ./...
+          else
+            go build ./...
+          fi
+
+  test-integration:
+    # Mirrors ent's pattern of covering multiple DB versions: pin latest +
+    # one older widely-used version per engine. Broader matrices (ent has
+    # 8 Postgres + 3 MySQL + 3 MariaDB versions) are valuable for a mature
+    # ORM; revisit after velox hits v0.1 and has real users on older engines.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pg: '16', mysql: '8.0' }
+          - { pg: '14', mysql: '5.7' }
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: velox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mysql:
+        image: mysql:${{ matrix.mysql }}
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: velox_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Generate fixtures (root module)
+        # tests/integration and examples/realworld live in the root
+        # module and have root-level files (test or main) that import
+        # their own gitignored velox/ output. Any command that compiles
+        # the full module (go test ./..., go build ./..., golangci-lint)
+        # needs these generated first. benchmarks/fixtures/stress-100 has no root
+        # Go files so its missing velox/ is harmless. Tier-1 examples
+        # (basic/fullgql) and tests/external-module live in their own
+        # sub-modules and are handled by the examples CI job.
+        #
+        # realworld's generate.go uses relative paths (gen.WithTarget
+        # "./velox"), so it must run with examples/realworld as CWD.
+        run: |
+          go run tests/integration/generate.go
+          (cd examples/realworld && go run generate.go)
+      - name: Run schema integration tests
+        run: go test -tags integration -race -v ./dialect/sql/schema/ -run "Test(Postgres|MySQL|MultiDialect)"
+        env:
+          VELOX_TEST_POSTGRES: "host=localhost port=5432 user=postgres password=test dbname=velox_test sslmode=disable"
+          VELOX_TEST_MYSQL: "root:test@tcp(localhost:3306)/velox_test?parseTime=true&multiStatements=true"
+      - name: Run e2e integration tests against Postgres + MySQL
+        # The per-dialect helpers (postgres_helper_test.go,
+        # mysql_helper_test.go) SKIP cleanly without VELOX_TEST_* env
+        # vars, so this step is a no-op on forks/runners without DB
+        # services. Here both services are up, so the smoke tests
+        # actually exercise the live databases.
+        run: go test -race -v ./tests/integration/ -run "Test(Postgres|MySQL)Helper"
+        env:
+          VELOX_TEST_POSTGRES: "host=localhost port=5432 user=postgres password=test dbname=velox_test sslmode=disable"
+          VELOX_TEST_MYSQL: "root:test@tcp(localhost:3306)/velox_test?parseTime=true&multiStatements=true"
+
+  benchmark:
+    # NOTE: ubuntu-latest shared runners have ~15% variance in benchmark
+    # timings — benchstat flags true regressions but also generates false
+    # positives. Regression check emits ::warning:: (not ::error::)
+    # deliberately. The real bench gate is local: `make bench-compare`
+    # against testdata/bench-baseline.txt. See CONTRIBUTING.md.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+      - name: Run benchmarks
+        # count=5 on 3 packages ≈ 3 min locally (M3); ubuntu-latest
+        # shared runners are 5-10x slower CPU-bound, so -timeout=10m
+        # was getting killed mid-run. Bumped to 20m. Also pipe stdout
+        # through tee so failures are visible in the job log, not
+        # silently swallowed into bench-current.txt.
+        run: go test -bench=. -benchmem -count=5 -timeout=20m ./dialect/sql/ ./compiler/gen/ ./privacy/ 2>&1 | tee bench-current.txt
+      - name: Save baseline (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: bench-current.txt
+          key: benchmark-baseline-${{ github.sha }}
+      - name: Restore baseline (PR only)
+        if: github.event_name == 'pull_request'
+        id: restore-baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: bench-baseline.txt
+          key: benchmark-baseline-
+          restore-keys: benchmark-baseline-
+      - name: Compare benchmarks (PR only)
+        if: github.event_name == 'pull_request' && steps.restore-baseline.outputs.cache-hit == 'true'
+        run: |
+          echo "## Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          benchstat bench-baseline.txt bench-current.txt >> $GITHUB_STEP_SUMMARY 2>&1 || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          benchstat bench-baseline.txt bench-current.txt
+      - name: Check for regressions (PR only)
+        if: github.event_name == 'pull_request' && steps.restore-baseline.outputs.cache-hit == 'true'
+        run: |
+          if benchstat bench-baseline.txt bench-current.txt 2>/dev/null | grep -qE '\+[2-9][0-9]\.[0-9]+%|\+[0-9]{3,}\.[0-9]+%'; then
+            echo "::warning::Significant benchmark regression detected (>20%). Review benchmark comparison in step summary."
+          fi
+
+  fuzz:
+    # 2 min per target = smoke check against the seed corpus, not
+    # continuous fuzzing. For real fuzzing coverage, consider OSS-Fuzz
+    # integration post-v0.1.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Run fuzz tests
+        # Anchored with ^…$ because `-fuzz=FuzzPascal` is a regex-prefix
+        # match and also catches FuzzPascalSnakeRoundTrip, which triggers
+        # `testing: will not fuzz, -fuzz matches more than one fuzz test`.
+        run: |
+          go test -fuzz='^FuzzQuote$' -fuzztime=2m ./dialect/sql/
+          go test -fuzz='^FuzzPredicateEQ$' -fuzztime=2m ./dialect/sql/
+          go test -fuzz='^FuzzPredicateLike$' -fuzztime=2m ./dialect/sql/
+          go test -fuzz='^FuzzPredicateIn$' -fuzztime=2m ./dialect/sql/
+          go test -fuzz='^FuzzSelectBuilder$' -fuzztime=2m ./dialect/sql/
+          go test -fuzz='^FuzzEscapeStringValue$' -fuzztime=2m ./dialect/sql/
+          go test -fuzz='^FuzzPascal$' -fuzztime=2m ./compiler/gen/
+          go test -fuzz='^FuzzSnake$' -fuzztime=2m ./compiler/gen/
+          go test -fuzz='^FuzzCamel$' -fuzztime=2m ./compiler/gen/
+          go test -fuzz='^FuzzPascalSnakeRoundTrip$' -fuzztime=2m ./compiler/gen/

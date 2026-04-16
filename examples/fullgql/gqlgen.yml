@@ -1,0 +1,42 @@
+# gqlgen configuration for the full-featured Velox + GraphQL example.
+# See https://gqlgen.com/config/ for documentation.
+
+schema:
+  - "./velox/schema.graphql"
+
+exec:
+  filename: ./gqlgen/generated.go
+  package: gqlgen
+
+model:
+  filename: ./gqlgen/models_gen.go
+  package: gqlgen
+
+resolver:
+  layout: follow-schema
+  dir: ./gqlgen
+  package: gqlgen
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - example.com/fullgql/velox
+  - example.com/fullgql/velox/entity
+  - example.com/fullgql/velox/gqlfilter
+  - example.com/fullgql/velox/auditlog
+  - example.com/fullgql/velox/category
+  - example.com/fullgql/velox/comment
+  - example.com/fullgql/velox/label
+  - example.com/fullgql/velox/member
+  - example.com/fullgql/velox/product
+  - example.com/fullgql/velox/tag
+  - example.com/fullgql/velox/todo
+  - example.com/fullgql/velox/user
+  - example.com/fullgql/velox/workspace
+
+models:
+  Node:
+    model:
+      - example.com/fullgql/velox.Noder
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.IntID

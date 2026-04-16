@@ -1,0 +1,87 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+velox
+testgen
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Local dev-tool state (editor configs, assistants, profilers, notes)
+.idea/
+.vscode/
+.claude/
+.serena/
+CLAUDE.md
+docs/superpowers/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor (use go modules)
+vendor/
+
+# Build output
+dist/
+bin/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated test fixtures — regenerate with: go run tests/integration/generate.go
+# Only ignore generated subdirectories; keep handwritten files (generate.go, *_test.go)
+tests/integration/client.go
+tests/integration/errors.go
+tests/integration/runtime.go
+tests/integration/tx.go
+tests/integration/types.go
+tests/integration/velox.go
+tests/integration/comment/
+tests/integration/entity/
+tests/integration/hook/
+tests/integration/migrate/
+tests/integration/post/
+tests/integration/predicate/
+tests/integration/query/
+tests/integration/tag/
+tests/integration/user/
+
+# Examples not for public distribution
+examples/erp/
+
+# Local reference clones of upstream Ent (comparison / inspection only,
+# not a build dependency). Clone manually when needed.
+.references/
+
+# Ent-generated code in benchmark fixtures. We author the schemas
+# (tracked under ent/schema/) but do not vendor Ent's generator output —
+# benchmarks/run.sh regenerates it locally on first run.
+benchmarks/fixtures/ent/ent/*
+!benchmarks/fixtures/ent/ent/schema
+!benchmarks/fixtures/ent/ent/schema/**
+.worktrees/
+
+# Velox loader temp directory (cleaned up automatically, but just in case)
+.velox/
+
+# Transient bench run output. testdata/bench-baseline.txt IS tracked
+# (frozen reference); testdata/bench-current.txt is the per-run output.
+testdata/bench-current.txt

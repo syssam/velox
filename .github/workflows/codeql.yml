@@ -1,0 +1,55 @@
+# CodeQL static security analysis.
+#
+# Requires EITHER a public repository (free) OR GitHub Advanced Security
+# (paid, org-level). If velox is a private repo without GHAS, the SARIF
+# upload in the analyze step will fail — we tolerate that with
+# continue-on-error so the workflow doesn't block CI overall. Delete
+# this file if the repo will stay private and GHAS won't be purchased.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly, Monday 6 AM UTC (off-peak vs. nightly CI)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze Go
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write  # required for uploading SARIF results
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Generate test fixtures
+        # CodeQL autobuild runs `go build ./...`; without generated
+        # fixtures the build (and therefore analysis) fails.
+        run: go run tests/integration/generate.go
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:go
+        continue-on-error: true  # Tolerate private-repo-without-GHAS upload failures.
