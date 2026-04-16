@@ -358,7 +358,7 @@ func BuildSelectorFrom(ctx context.Context, q QueryReader) (*sql.Selector, error
 			columns = append(columns, fkCols...)
 		}
 	}
-	selector.Select(columns...)
+	selector.Select(selector.Columns(columns...)...)
 	if qctx.Unique != nil && *qctx.Unique {
 		selector.Distinct()
 	}

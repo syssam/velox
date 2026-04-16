@@ -689,6 +689,41 @@ func TestBuildSelectorFrom_WithFields(t *testing.T) {
 	assert.Contains(t, query, "`org_id`")
 }
 
+// TestBuildSelectorFrom_M2OEdge_AmbiguousColumn is a regression test for the case
+// where a M2O (FromEdgeOwner) edge traversal produces a JOIN where the FK column
+// on the source table shares the same name as the PK on the target table. Without
+// table qualification, the outer SELECT would be ambiguous (e.g. "terms_id" appearing
+// in both "terms" and the subquery "t1"). The fix is in BuildSelectorFrom: columns
+// must be qualified via selector.C() before being passed to selector.Select().
+func TestBuildSelectorFrom_M2OEdge_AmbiguousColumn(t *testing.T) {
+	// Simulate: sales_order.terms_id → terms.terms_id (FK name = target PK name).
+	drv := &mockDriver{dialectName: dialect.Postgres}
+	base := NewQueryBase(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
+	// The path is what SetPath injects for a M2O (FromEdgeOwner) edge:
+	// Neighbors produces SELECT * FROM terms JOIN (SELECT terms_id FROM sales_order WHERE id = ?) AS t1
+	//                        ON terms.terms_id = t1.terms_id
+	base.Path = func(_ context.Context) (*sql.Selector, error) {
+		b := sql.Dialect(dialect.Postgres)
+		targetT := b.Table("terms")
+		subq := b.Select(targetT.C("terms_id")).
+			From(b.Table("sales_order")).
+			Where(sql.EQ("id", 42))
+		return b.Select().
+			From(targetT).
+			Join(subq).
+			On(targetT.C("terms_id"), subq.C("terms_id")), nil
+	}
+
+	sel, err := BuildSelectorFrom(context.Background(), base)
+	require.NoError(t, err)
+	query, _ := sel.Query()
+
+	// All selected columns must be table-qualified to avoid "ambiguous column reference".
+	assert.Contains(t, query, `"terms"."terms_id"`, "terms_id must be qualified to avoid ambiguity")
+	assert.Contains(t, query, `"terms"."name"`, "name must be qualified")
+	assert.NotContains(t, query, `SELECT "terms_id",`, "unqualified terms_id in SELECT is ambiguous")
+}
+
 func TestMakeQuerySpec_ParityWithMethod(t *testing.T) {
 	base := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
 	base.SetLimit(10)
