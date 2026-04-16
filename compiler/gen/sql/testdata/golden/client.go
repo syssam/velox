@@ -139,7 +139,7 @@ func (c *Client) Close() error {
 //
 // All Use calls must complete before concurrent query or mutation
 // execution begins. Use is intended for application startup (e.g. in
-// main or TestMain), not for runtime registration. No synchronisation
+// main or TestMain), not for runtime registration. No synchronization
 // is provided — violations are caught by go test -race.
 func (c *Client) Use(hooks ...Hook) {
 	c.config.hooks.AppendAll(hooks...)
@@ -149,7 +149,7 @@ func (c *Client) Use(hooks ...Hook) {
 //
 // All Intercept calls must complete before concurrent query execution
 // begins. Intercept is intended for application startup (e.g. in
-// main or TestMain), not for runtime registration. No synchronisation
+// main or TestMain), not for runtime registration. No synchronization
 // is provided — violations are caught by go test -race.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	c.config.inters.AppendAll(interceptors...)

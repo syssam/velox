@@ -337,6 +337,10 @@ linters:
       # not the lint job's. Excluded here; the examples matrix catches
       # real breakage via go build / go test per example.
       - examples/
+      # Benchmark fixtures are generated test schemas (stress-100) and
+      # third-party generate.go scripts. Not production code; lint is
+      # irrelevant and the fixtures CI job validates them separately.
+      - benchmarks/
 
 output:
   formats:

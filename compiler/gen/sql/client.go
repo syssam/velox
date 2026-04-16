@@ -239,7 +239,7 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	f.Comment("")
 	f.Comment("All Use calls must complete before concurrent query or mutation")
 	f.Comment("execution begins. Use is intended for application startup (e.g. in")
-	f.Comment("main or TestMain), not for runtime registration. No synchronisation")
+	f.Comment("main or TestMain), not for runtime registration. No synchronization")
 	f.Comment("is provided — violations are caught by go test -race.")
 	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("Use").Params(
 		jen.Id("hooks").Op("...").Id("Hook"),
@@ -251,7 +251,7 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	f.Comment("")
 	f.Comment("All Intercept calls must complete before concurrent query execution")
 	f.Comment("begins. Intercept is intended for application startup (e.g. in")
-	f.Comment("main or TestMain), not for runtime registration. No synchronisation")
+	f.Comment("main or TestMain), not for runtime registration. No synchronization")
 	f.Comment("is provided — violations are caught by go test -race.")
 	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("Intercept").Params(
 		jen.Id("interceptors").Op("...").Id("Interceptor"),
