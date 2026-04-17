@@ -3,6 +3,7 @@ package gen
 import (
 	"errors"
 	"fmt"
+	"go/token"
 )
 
 // Validate performs comprehensive validation of the graph and returns all
@@ -21,6 +22,28 @@ func (g *Graph) Validate() error {
 				}
 				errs = append(errs, NewEdgeError(t.Name, typeName, e.Name,
 					fmt.Sprintf("edge %q references unknown type %q", e.Name, typeName), nil))
+			}
+		}
+	}
+
+	// Validate edge names are valid Go identifiers. Edge names become Go
+	// method names (QueryPosts) and SQL identifiers (join-table column
+	// names); rejecting non-identifiers here closes the same attack surface
+	// the field-name check closes in type.checkField.
+	for _, t := range g.Nodes {
+		for _, e := range t.Edges {
+			if e.Name == "" {
+				errs = append(errs, NewEdgeError(t.Name, "", e.Name,
+					"edge name cannot be empty", nil))
+				continue
+			}
+			if !token.IsIdentifier(e.Name) {
+				edgeTypeName := ""
+				if e.Type != nil {
+					edgeTypeName = e.Type.Name
+				}
+				errs = append(errs, NewEdgeError(t.Name, edgeTypeName, e.Name,
+					fmt.Sprintf("edge name %q is not a valid Go identifier", e.Name), nil))
 			}
 		}
 	}

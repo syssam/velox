@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox/dialect"
@@ -374,32 +375,120 @@ func TestMultipleDialects(t *testing.T) {
 }
 
 // TestIsValidIdentifier tests SQL identifier validation.
+//
+// This function is the security boundary between user-controlled schema
+// input (table/column names, query variable names) and raw SQL emission.
+// A regression here — broadening the regex to accept metacharacters — is a
+// direct path to SQL injection, so the payload matrix below exhaustively
+// covers classic OWASP SQLi techniques.
 func TestIsValidIdentifier(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected bool
 	}{
+		// Happy path.
 		{"valid_simple", "foo", true},
 		{"valid_with_underscore", "foo_bar", true},
 		{"valid_with_number", "foo123", true},
 		{"valid_with_dot", "schema.table", true},
 		{"valid_starting_underscore", "_private", true},
+		{"valid_max_length_128", strings.Repeat("a", 128), true},
+
+		// Structural rejections.
 		{"invalid_empty", "", false},
 		{"invalid_starting_number", "123foo", false},
 		{"invalid_with_space", "foo bar", false},
-		{"invalid_with_quote", "foo'bar", false},
-		{"invalid_with_semicolon", "foo;DROP TABLE", false},
+		{"invalid_with_tab", "foo\tbar", false},
+		{"invalid_with_newline", "foo\nbar", false},
 		{"invalid_with_dash", "foo-bar", false},
-		{"invalid_too_long", string(make([]byte, 129)), false},
+		{"invalid_too_long_129", strings.Repeat("a", 129), false},
+
+		// Quote-based injection (classic identifier breakout).
+		{"reject_single_quote", "foo'bar", false},
+		{"reject_double_quote", `foo"bar`, false},
+		{"reject_backtick", "foo`bar", false},
+		{"reject_escaped_quote", `foo\"bar`, false},
+
+		// Statement terminators / multi-statement injection.
+		{"reject_semicolon", "foo;bar", false},
+		{"reject_semicolon_drop", "foo;DROP TABLE users", false},
+		{"reject_drop_suffix", "id; DROP TABLE users; --", false},
+		{"reject_union_select", "id UNION SELECT password FROM users", false},
+
+		// Comment injection.
+		{"reject_sql_line_comment", "foo--", false},
+		{"reject_sql_block_open", "foo/*", false},
+		{"reject_sql_block_close", "foo*/", false},
+		{"reject_hash_comment", "foo#bar", false},
+
+		// Boolean / always-true payloads.
+		{"reject_or_1_eq_1", "foo OR 1=1", false},
+		{"reject_equals_payload", "foo=1", false},
+
+		// Whitespace / encoding tricks.
+		{"reject_null_byte", "foo\x00bar", false},
+		{"reject_unicode_quote", "foo\u2018bar", false}, // left single quote
+		{"reject_utf8_smuggle", "foo\u00a0bar", false},  // non-breaking space
+
+		// Wildcard / metacharacter leakage.
+		{"reject_wildcard_percent", "foo%", false},
+		{"reject_wildcard_underscore_only", "", false}, // underscore-only guarded by empty check + regex
+		{"reject_paren_open", "foo(", false},
+		{"reject_paren_close", "foo)", false},
+		{"reject_bracket", "foo[bar]", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isValidIdentifier(tt.input)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expected, result, "input=%q", tt.input)
 		})
 	}
+}
+
+// FuzzIsValidIdentifier asserts the invariant that any input accepted by
+// isValidIdentifier contains ONLY characters from the whitelist set
+// [a-zA-Z0-9_.] and starts with [a-zA-Z_]. If the regex is ever relaxed to
+// allow SQL metacharacters, fuzzing will find it — the oracle is the
+// character-class invariant, not an exact allow-list.
+//
+// Run locally with: go test -fuzz FuzzIsValidIdentifier ./dialect/sql/
+func FuzzIsValidIdentifier(f *testing.F) {
+	seeds := []string{
+		"foo", "foo_bar", "schema.table", "_private",
+		"", "123", "foo bar", "foo'x", `foo"x`, "foo;DROP",
+		"foo\x00", "\u2018", "foo\nbar",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		if !isValidIdentifier(s) {
+			return
+		}
+		// Accepted inputs must satisfy both length and character-class rules.
+		if len(s) == 0 || len(s) > 128 {
+			t.Fatalf("accepted out-of-range length: len=%d input=%q", len(s), s)
+		}
+		first := s[0]
+		firstOK := (first >= 'a' && first <= 'z') ||
+			(first >= 'A' && first <= 'Z') ||
+			first == '_'
+		if !firstOK {
+			t.Fatalf("accepted identifier with invalid leading byte %q: %q", first, s)
+		}
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			ok := (c >= 'a' && c <= 'z') ||
+				(c >= 'A' && c <= 'Z') ||
+				(c >= '0' && c <= '9') ||
+				c == '_' || c == '.'
+			if !ok {
+				t.Fatalf("accepted identifier containing forbidden byte %q at index %d: %q", c, i, s)
+			}
+		}
+	})
 }
 
 // TestEscapeStringValue tests SQL string value escaping.
