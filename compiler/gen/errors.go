@@ -329,30 +329,30 @@ func NewSchemaValidationError(typeName, field string, value any, message string,
 
 // IsSchemaError reports whether the error is a SchemaError.
 func IsSchemaError(err error) bool {
-	_, ok := errors.AsType[*SchemaError](err)
-	return ok
+	var target *SchemaError
+	return errors.As(err, &target)
 }
 
 // IsConfigError reports whether the error is a ConfigError.
 func IsConfigError(err error) bool {
-	_, ok := errors.AsType[*ConfigError](err)
-	return ok
+	var target *ConfigError
+	return errors.As(err, &target)
 }
 
 // IsEdgeError reports whether the error is an EdgeError.
 func IsEdgeError(err error) bool {
-	_, ok := errors.AsType[*EdgeError](err)
-	return ok
+	var target *EdgeError
+	return errors.As(err, &target)
 }
 
 // IsGenerationError reports whether the error is a GenerationError.
 func IsGenerationError(err error) bool {
-	_, ok := errors.AsType[*GenerationError](err)
-	return ok
+	var target *GenerationError
+	return errors.As(err, &target)
 }
 
 // IsSchemaValidationError reports whether the error is a SchemaValidationError.
 func IsSchemaValidationError(err error) bool {
-	_, ok := errors.AsType[*SchemaValidationError](err)
-	return ok
+	var target *SchemaValidationError
+	return errors.As(err, &target)
 }

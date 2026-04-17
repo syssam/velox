@@ -354,24 +354,24 @@ func TestErrorTypeChecking(t *testing.T) {
 func TestErrorsAs(t *testing.T) {
 	t.Run("As SchemaError", func(t *testing.T) {
 		err := NewSchemaError("User", "email", "invalid", nil)
-		schemaErr, ok := errors.AsType[*SchemaError](err)
-		require.True(t, ok)
+		var schemaErr *SchemaError
+		require.True(t, errors.As(err, &schemaErr))
 		assert.Equal(t, "User", schemaErr.Type)
 		assert.Equal(t, "email", schemaErr.Field)
 	})
 
 	t.Run("As ConfigError", func(t *testing.T) {
 		err := NewConfigError("Package", "test", "invalid", nil)
-		configErr, ok := errors.AsType[*ConfigError](err)
-		require.True(t, ok)
+		var configErr *ConfigError
+		require.True(t, errors.As(err, &configErr))
 		assert.Equal(t, "Package", configErr.Option)
 		assert.Equal(t, "test", configErr.Value)
 	})
 
 	t.Run("As EdgeError", func(t *testing.T) {
 		err := NewEdgeError("User", "Post", "posts", "invalid", nil)
-		edgeErr, ok := errors.AsType[*EdgeError](err)
-		require.True(t, ok)
+		var edgeErr *EdgeError
+		require.True(t, errors.As(err, &edgeErr))
 		assert.Equal(t, "User", edgeErr.From)
 		assert.Equal(t, "Post", edgeErr.To)
 		assert.Equal(t, "posts", edgeErr.Edge)
@@ -379,16 +379,16 @@ func TestErrorsAs(t *testing.T) {
 
 	t.Run("As GenerationError", func(t *testing.T) {
 		err := NewGenerationError("entity", "user.go", "failed", nil)
-		genErr, ok := errors.AsType[*GenerationError](err)
-		require.True(t, ok)
+		var genErr *GenerationError
+		require.True(t, errors.As(err, &genErr))
 		assert.Equal(t, "entity", genErr.Phase)
 		assert.Equal(t, "user.go", genErr.File)
 	})
 
 	t.Run("As SchemaValidationError", func(t *testing.T) {
 		err := NewSchemaValidationError("User", "age", -1, "invalid", nil)
-		valErr, ok := errors.AsType[*SchemaValidationError](err)
-		require.True(t, ok)
+		var valErr *SchemaValidationError
+		require.True(t, errors.As(err, &valErr))
 		assert.Equal(t, "User", valErr.Type)
 		assert.Equal(t, "age", valErr.Field)
 		assert.Equal(t, -1, valErr.Value)

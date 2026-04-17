@@ -195,8 +195,8 @@ var (
 var mutMethods = func() map[string]bool {
 	names := map[string]bool{"Client": true, "Tx": true, "Where": true, "SetOp": true}
 	t := reflect.TypeFor[velox.Mutation]()
-	for method := range t.Methods() {
-		names[method.Name] = true
+	for i := range t.NumMethod() {
+		names[t.Method(i).Name] = true
 	}
 	return names
 }()

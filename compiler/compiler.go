@@ -481,7 +481,8 @@ func mayRecover(err error, schemaPath string, cfg *gen.Config) error {
 	if ok, _ := cfg.FeatureEnabled(gen.FeatureSnapshot.Name); !ok {
 		return err
 	}
-	if _, ok := errors.AsType[*packages.Error](err); !ok && !internal.IsBuildError(err) {
+	var pkgErr *packages.Error
+	if !errors.As(err, &pkgErr) && !internal.IsBuildError(err) {
 		return err
 	}
 	// If the build error comes from the schema package.

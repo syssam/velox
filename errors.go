@@ -67,8 +67,8 @@ func IsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*NotFoundError](err)
-	return ok || errors.Is(err, ErrNotFound)
+	var target *NotFoundError
+	return errors.As(err, &target) || errors.Is(err, ErrNotFound)
 }
 
 // NotSingularError represents an error when a query expects a singular result
@@ -117,8 +117,8 @@ func IsNotSingular(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*NotSingularError](err)
-	return ok || errors.Is(err, ErrNotSingular)
+	var target *NotSingularError
+	return errors.As(err, &target) || errors.Is(err, ErrNotSingular)
 }
 
 // NotLoadedError represents an error when attempting to access an edge
@@ -147,8 +147,8 @@ func IsNotLoaded(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*NotLoadedError](err)
-	return ok
+	var target *NotLoadedError
+	return errors.As(err, &target)
 }
 
 // ConstraintError represents a database constraint violation error.
@@ -184,8 +184,8 @@ func IsConstraintError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*ConstraintError](err)
-	return ok || sqlgraph.IsConstraintError(err)
+	var target *ConstraintError
+	return errors.As(err, &target) || sqlgraph.IsConstraintError(err)
 }
 
 // ValidationError represents a validation error for field values.
@@ -216,8 +216,8 @@ func IsValidationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*ValidationError](err)
-	return ok
+	var target *ValidationError
+	return errors.As(err, &target)
 }
 
 // RollbackError wraps an error that occurred during a transaction rollback.
@@ -245,8 +245,8 @@ func IsRollbackError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*RollbackError](err)
-	return ok
+	var target *RollbackError
+	return errors.As(err, &target)
 }
 
 // AggregateError represents multiple errors collected during an operation.
@@ -323,8 +323,8 @@ func IsQueryError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*QueryError](err)
-	return ok
+	var target *QueryError
+	return errors.As(err, &target)
 }
 
 // MutationError wraps a mutation error with additional context.
@@ -354,8 +354,8 @@ func IsMutationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*MutationError](err)
-	return ok
+	var target *MutationError
+	return errors.As(err, &target)
 }
 
 // PrivacyError represents a privacy policy violation.
@@ -392,6 +392,6 @@ func IsPrivacyError(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := errors.AsType[*PrivacyError](err)
-	return ok
+	var target *PrivacyError
+	return errors.As(err, &target)
 }

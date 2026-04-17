@@ -7,8 +7,8 @@ import (
 
 // IsConstraintError returns true if the error resulted from a database constraint violation.
 func IsConstraintError(err error) bool {
-	_, ok := errors.AsType[*ConstraintError](err)
-	return ok ||
+	var target *ConstraintError
+	return errors.As(err, &target) ||
 		IsUniqueConstraintError(err) ||
 		IsForeignKeyConstraintError(err) ||
 		IsCheckConstraintError(err)

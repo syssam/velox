@@ -1,6 +1,6 @@
 module github.com/syssam/velox
 
-go 1.26
+go 1.24.11
 
 require (
 	ariga.io/atlas v1.0.0
