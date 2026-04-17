@@ -25,6 +25,21 @@ run_privacy_benchmarks() {
     echo ""
 }
 
+run_postgres_benchmarks() {
+    echo "=== Postgres vs SQLite End-to-End Benchmarks ==="
+    if [ -z "${VELOX_TEST_POSTGRES:-}" ]; then
+        echo "VELOX_TEST_POSTGRES not set — skipping Postgres benchmarks."
+        echo "Example:"
+        echo "  docker run -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:18"
+        echo "  VELOX_TEST_POSTGRES='postgres://postgres:postgres@localhost/postgres?sslmode=disable' \\"
+        echo "    ./benchmarks/run.sh postgres"
+        return 0
+    fi
+    go test -run '^$' -bench '_Postgres' -benchmem -count=3 -timeout=15m \
+        ./tests/integration/ | tee benchmarks/results/postgres.txt
+    echo ""
+}
+
 mkdir -p benchmarks/results
 
 case "$MODE" in
@@ -37,10 +52,14 @@ case "$MODE" in
     privacy)
         run_privacy_benchmarks
         ;;
+    postgres)
+        run_postgres_benchmarks
+        ;;
     all)
         run_sql_benchmarks
         run_codegen_benchmarks
         run_privacy_benchmarks
+        run_postgres_benchmarks
         echo "=== All benchmarks complete ==="
         echo "Results in benchmarks/results/"
         ;;
@@ -123,7 +142,7 @@ case "$MODE" in
         echo "Results saved to benchmarks/results/vs-ent.txt"
         ;;
     *)
-        echo "Usage: $0 [sql|codegen|privacy|all|compare|vs-ent]"
+        echo "Usage: $0 [sql|codegen|privacy|postgres|all|compare|vs-ent]"
         exit 1
         ;;
 esac
