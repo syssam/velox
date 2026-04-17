@@ -53,7 +53,7 @@ func TestSchema_RejectsAdversarialFieldNames(t *testing.T) {
 				},
 			})
 			require.Error(t, err, "adversarial field name %q should be rejected", p.payload)
-			assert.Contains(t, err.Error(), "not a valid Go identifier",
+			assert.Contains(t, err.Error(), "not a valid identifier",
 				"expected identifier validation error for %q, got: %v", p.payload, err)
 		})
 	}
@@ -88,18 +88,23 @@ func TestGraph_RejectsAdversarialEdgeNames(t *testing.T) {
 			}
 			err := g.Validate()
 			require.Error(t, err, "adversarial edge name %q should be rejected", p)
-			assert.Contains(t, err.Error(), "not a valid Go identifier",
+			assert.Contains(t, err.Error(), "not a valid identifier",
 				"expected identifier validation error for %q, got: %v", p, err)
 		})
 	}
 }
 
-// TestSchema_AcceptsRealisticFieldNames is the inverse — these are valid Go
-// identifiers that must NOT be falsely rejected by the hardening above.
+// TestSchema_AcceptsRealisticFieldNames is the inverse — these names must
+// NOT be falsely rejected by the hardening above. Includes Go reserved
+// keywords ("type", "func", "range", "select", "map") — they PascalCase
+// into valid struct fields (Type, Func, Range) and Builder.Ident quotes
+// them as SQL identifiers.
 func TestSchema_AcceptsRealisticFieldNames(t *testing.T) {
 	names := []string{
 		"name", "email", "created_at", "user_id", "_private", "camelCase",
 		"PascalCase", "field1", "a", strings.Repeat("x", 64),
+		// Go reserved keywords commonly used as schema field names.
+		"type", "func", "range", "select", "map", "chan", "interface",
 	}
 	for _, n := range names {
 		t.Run(n, func(t *testing.T) {

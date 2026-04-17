@@ -1116,12 +1116,15 @@ func (t *Type) checkField(tf *Field, f *load.Field) (err error) {
 	switch ant := tf.EntSQL(); {
 	case f.Name == "":
 		err = fmt.Errorf("field name cannot be empty")
-	case !token.IsIdentifier(f.Name):
-		// Field names become Go struct fields AND SQL column identifiers.
-		// Requiring a valid Go identifier here rejects names containing SQL
-		// metacharacters (quotes, semicolons, whitespace, nulls) at the schema
-		// boundary — before they can reach Quote() in the SQL builder.
-		err = fmt.Errorf("field name %q is not a valid Go identifier", f.Name)
+	case !safeIdentifierRe.MatchString(f.Name):
+		// Field names become Go struct fields (PascalCased) AND SQL column
+		// identifiers (quoted by Builder.Ident). The regex rejects names
+		// containing SQL metacharacters (quotes, semicolons, whitespace,
+		// nulls) at the schema boundary — before they can reach Quote() in
+		// the SQL builder. Go reserved keywords ("type", "range") are
+		// deliberately accepted: they PascalCase into valid struct fields
+		// and the SQL builder quotes them as dialect identifiers.
+		err = fmt.Errorf("field name %q is not a valid identifier", f.Name)
 	case f.Info == nil || !f.Info.Valid():
 		err = fmt.Errorf("invalid type for field %s", f.Name)
 	case f.Unique && f.Default && f.DefaultKind != reflect.Func:
