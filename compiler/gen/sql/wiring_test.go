@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -933,5 +934,89 @@ func TestGraphQLEdgeResolverUsesDirectCall(t *testing.T) {
 					filepath.Base(path))
 			}
 		}
+	}
+}
+
+// TestEnumMethodsHaveDocComments pins that every generated enum method
+// (String, IsValid, Scan, Value, MarshalGQL, UnmarshalGQL) carries a
+// non-empty doc comment. IDE tooltips surface these for every schema
+// enum, so a missing comment silently degrades the user-facing API.
+//
+// Uses the regenerated integration prototype because the synthetic
+// createEnumField helper does not round-trip through genEntityPkg with
+// a fully populated *gen.Field; asserting against the real emitted
+// prototype matches what users actually see.
+func TestEnumMethodsHaveDocComments(t *testing.T) {
+	matches, err := filepath.Glob("../../../tests/integration/entity/*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Skip("integration prototype not regenerated; skipping enum docstring scan")
+	}
+
+	// Methods that velox emits for every enum type. Value and MarshalGQL
+	// are value-receiver; Scan and UnmarshalGQL are pointer-receiver.
+	required := []string{"String", "IsValid", "Scan", "Value", "MarshalGQL", "UnmarshalGQL"}
+
+	var scanned bool
+	for _, path := range matches {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, filepath.Base(path), src, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		// Find enum method receivers by scanning for a type named XxxStatus / XxxRole / etc.
+		// We detect enum types heuristically: any type backed by `type T string`.
+		enumTypes := map[string]bool{}
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				if id, ok := ts.Type.(*ast.Ident); ok && id.Name == "string" {
+					enumTypes[ts.Name.Name] = true
+				}
+			}
+		}
+		if len(enumTypes) == 0 {
+			continue
+		}
+		scanned = true
+		for _, decl := range file.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Recv == nil || len(fd.Recv.List) == 0 {
+				continue
+			}
+			recvType := fd.Recv.List[0].Type
+			if star, ok := recvType.(*ast.StarExpr); ok {
+				recvType = star.X
+			}
+			id, ok := recvType.(*ast.Ident)
+			if !ok || !enumTypes[id.Name] {
+				continue
+			}
+			if !slices.Contains(required, fd.Name.Name) {
+				continue
+			}
+			if fd.Doc == nil || strings.TrimSpace(fd.Doc.Text()) == "" {
+				t.Errorf("%s: method %s on enum type %s has no doc comment — "+
+					"IDE tooltips show this to every user; every exported "+
+					"generated method must carry a docstring",
+					filepath.Base(path), fd.Name.Name, id.Name)
+			}
+		}
+	}
+	if !scanned {
+		t.Skip("no enum types found in integration prototype")
 	}
 }

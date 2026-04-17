@@ -1145,11 +1145,13 @@ func genEntityPkgEnumType(f *jen.File, t *gen.Type, field *gen.Field, enumReg *e
 	})
 
 	// String method
+	f.Commentf("String returns the string representation of %s.", enumName)
 	f.Func().Params(jen.Id("e").Id(enumName)).Id("String").Params().String().Block(
 		jen.Return(jen.String().Call(jen.Id("e"))),
 	)
 
 	// IsValid method
+	f.Commentf("IsValid reports whether the %s value is one of the declared enum members.", enumName)
 	f.Func().Params(jen.Id("e").Id(enumName)).Id("IsValid").Params().Bool().BlockFunc(func(body *jen.Group) {
 		body.Switch(jen.Id("e")).BlockFunc(func(sw *jen.Group) {
 			caseValues := make([]jen.Code, 0, len(field.Enums))
@@ -1173,6 +1175,7 @@ func genEntityPkgEnumType(f *jen.File, t *gen.Type, field *gen.Field, enumReg *e
 	})
 
 	// Scan method (for sql.Scanner interface)
+	f.Comment("Scan implements the sql.Scanner interface.")
 	f.Func().Params(jen.Id("e").Op("*").Id(enumName)).Id("Scan").Params(jen.Id("value").Any()).Error().Block(
 		jen.Switch(jen.Id("v").Op(":=").Id("value").Assert(jen.Type())).Block(
 			jen.Case(jen.String()).Block(
@@ -1193,6 +1196,7 @@ func genEntityPkgEnumType(f *jen.File, t *gen.Type, field *gen.Field, enumReg *e
 	)
 
 	// Value method (for driver.Valuer interface)
+	f.Comment("Value implements the driver.Valuer interface.")
 	f.Func().Params(jen.Id("e").Id(enumName)).Id("Value").Params().Params(
 		jen.Qual("database/sql/driver", "Value"),
 		jen.Error(),

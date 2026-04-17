@@ -28,9 +28,12 @@ const (
 	StatusPublished Status = "published"
 )
 
+// String returns the string representation of Status.
 func (e Status) String() string {
 	return string(e)
 }
+
+// IsValid reports whether the Status value is one of the declared enum members.
 func (e Status) IsValid() bool {
 	switch e {
 	case StatusDraft, StatusReview, StatusPublished:
@@ -44,6 +47,8 @@ func (e Status) IsValid() bool {
 func StatusValues() []Status {
 	return []Status{StatusDraft, StatusReview, StatusPublished}
 }
+
+// Scan implements the sql.Scanner interface.
 func (e *Status) Scan(value any) error {
 	switch v := value.(type) {
 	case string:
@@ -56,6 +61,8 @@ func (e *Status) Scan(value any) error {
 		return fmt.Errorf("invalid type %T for enum Status", value)
 	}
 }
+
+// Value implements the driver.Valuer interface.
 func (e Status) Value() (driver.Value, error) {
 	return string(e), nil
 }
