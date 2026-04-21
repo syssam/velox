@@ -83,6 +83,17 @@ func (g *Generator) genEdgeField(_ *gen.Type, e *gen.Edge) string {
 		wantsWhere := g.config.WhereInputs && g.hasWhereInput(e)
 		args := g.genConnectionArgs(targetType, orderByArg, wantsOrder, wantsWhere)
 		fieldDef = fmt.Sprintf("%s%s: %sConnection!", name, args, targetType)
+		// When the edge has `where`, force gqlgen to route through an external
+		// resolver. Without this directive, gqlgen's autobind treats the
+		// Go entity method (which can't carry *gqlfilter.XxxWhereInput due to
+		// the entity -> gqlfilter -> query -> entity import cycle) as a
+		// partial match and silently drops the `where` argument — filter has
+		// no effect at runtime. @goField(forceResolver: true) makes the
+		// resolver path explicit so the user's resolver body actually wires
+		// `where.Filter` into Paginate via WithXxxFilter(...).
+		if wantsWhere {
+			fieldDef += " @goField(forceResolver: true)"
+		}
 	} else {
 		fieldDef = fmt.Sprintf("%s: [%s!]!", name, targetType)
 	}

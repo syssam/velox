@@ -134,18 +134,32 @@ func (g *Generator) genListEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typ
 }
 
 // genConnectionEdgeMethod generates a connection edge method with Relay pagination.
+// The body checks if the edge was eager-loaded via WithXxx() first (fast path,
+// no DB round trip) and falls back to QueryXxx().Paginate(...) otherwise.
+// Matches Ent's gql_edge.go pattern (CategoryConnection.build).
 //
 //	func (m *Category) Products(ctx, after, first, before, last, orderBy) (*ProductConnection, error) {
+//	    if nodes, err := m.Edges.ProductsOrErr(); err == nil && after == nil && before == nil {
+//	        return BuildProductConnection(nodes, 0, orderBy, after, first, before, last), nil
+//	    }
 //	    return m.QueryProducts().(ProductPaginatable).Paginate(ctx, after, first, before, last, WithProductOrder(orderBy))
 //	}
+//
+// The `after == nil && before == nil` guard keeps the fast path correct when
+// the caller has the full edge slice — cursor filtering is a SQL-level
+// operation, so paginating through a pre-loaded slice with a mid-range cursor
+// would need in-memory cursor comparison we don't implement. The slow path
+// handles cursor pagination exactly as before.
 func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typeName string) {
 	edgePascal := pascal(e.Name)
 	targetType := g.graphqlTypeName(e.Type)
 	connName := targetType + "Connection"
 	orderName := targetType + "Order"
 	withOrderFunc := "With" + targetType + "Order"
+	buildConnFunc := "Build" + connName
 	queryMethod := "Query" + edgePascal
 	paginatable := targetType + "Paginatable"
+	edgeOrErr := edgePascal + "OrErr"
 
 	f.Func().Params(
 		jen.Id("m").Op("*").Id(typeName),
@@ -160,6 +174,31 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 		jen.Op("*").Id(connName),
 		jen.Error(),
 	).Block(
+		// Fast path: edge eager-loaded + no cursor pagination. Reuse the
+		// pre-loaded slice via BuildXxxConnection; no DB round trip. This
+		// is what makes `.WithTodos()` on a parent query actually pay off
+		// at the GraphQL resolver layer — before this change the resolver
+		// always ran a fresh Paginate, silently wasting the eager load.
+		jen.If(
+			jen.List(jen.Id("nodes"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgeOrErr).Call(),
+			jen.Id("err").Op("==").Nil().
+				Op("&&").Id("after").Op("==").Nil().
+				Op("&&").Id("before").Op("==").Nil(),
+		).Block(
+			jen.Return(
+				jen.Id(buildConnFunc).Call(
+					jen.Id("nodes"),
+					jen.Lit(0),
+					jen.Id("orderBy"),
+					jen.Id("after"),
+					jen.Id("first"),
+					jen.Id("before"),
+					jen.Id("last"),
+				),
+				jen.Nil(),
+			),
+		),
+		// Slow path: fresh DB query via the per-edge Querier.
 		jen.Return(
 			jen.Id("m").Dot(queryMethod).Call().Assert(jen.Id(paginatable)).Dot("Paginate").Call(
 				jen.Id("ctx"),

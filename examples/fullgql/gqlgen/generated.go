@@ -51,11 +51,8 @@ type Config struct {
 }
 
 type ResolverRoot interface {
-	AuditLog() AuditLogResolver
 	Category() CategoryResolver
-	Comment() CommentResolver
 	Label() LabelResolver
-	Member() MemberResolver
 	Mutation() MutationResolver
 	Product() ProductResolver
 	Query() QueryResolver
@@ -153,14 +150,6 @@ type ComplexityRoot struct {
 		CreateTodo      func(childComplexity int, input todo.CreateTodoInput) int
 		CreateUser      func(childComplexity int, input user.CreateUserInput) int
 		CreateWorkspace func(childComplexity int, input workspace.CreateWorkspaceInput) int
-		DeleteCategory  func(childComplexity int, id int) int
-		DeleteComment   func(childComplexity int, id int) int
-		DeleteMember    func(childComplexity int, id int) int
-		DeleteProduct   func(childComplexity int, id int) int
-		DeleteTag       func(childComplexity int, id int) int
-		DeleteTodo      func(childComplexity int, id int) int
-		DeleteUser      func(childComplexity int, id int) int
-		DeleteWorkspace func(childComplexity int, id int) int
 		UpdateCategory  func(childComplexity int, id int, input category.UpdateCategoryInput) int
 		UpdateComment   func(childComplexity int, id int, input comment.UpdateCommentInput) int
 		UpdateLabel     func(childComplexity int, id int, input label.UpdateLabelInput) int
@@ -316,52 +305,33 @@ type ComplexityRoot struct {
 	}
 }
 
-type AuditLogResolver interface {
-	User(ctx context.Context, obj *entity.AuditLog) (*entity.User, error)
-}
 type CategoryResolver interface {
 	Todos(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
-	Parent(ctx context.Context, obj *entity.Category) (*entity.Category, error)
+
 	Children(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *gqlfilter.CategoryWhereInput) (*entity.CategoryConnection, error)
-}
-type CommentResolver interface {
-	Todo(ctx context.Context, obj *entity.Comment) (*entity.Todo, error)
-	Author(ctx context.Context, obj *entity.Comment) (*entity.User, error)
 }
 type LabelResolver interface {
 	Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
 }
-type MemberResolver interface {
-	Workspace(ctx context.Context, obj *entity.Member) (*entity.Workspace, error)
-	User(ctx context.Context, obj *entity.Member) (*entity.User, error)
-}
 type MutationResolver interface {
 	CreateCategory(ctx context.Context, input category.CreateCategoryInput) (*entity.Category, error)
 	UpdateCategory(ctx context.Context, id int, input category.UpdateCategoryInput) (*entity.Category, error)
-	DeleteCategory(ctx context.Context, id int) (int, error)
 	CreateComment(ctx context.Context, input comment.CreateCommentInput) (*entity.Comment, error)
 	UpdateComment(ctx context.Context, id int, input comment.UpdateCommentInput) (*entity.Comment, error)
-	DeleteComment(ctx context.Context, id int) (int, error)
 	CreateLabel(ctx context.Context, input label.CreateLabelInput) (*entity.Label, error)
 	UpdateLabel(ctx context.Context, id int, input label.UpdateLabelInput) (*entity.Label, error)
 	CreateMember(ctx context.Context, input member.CreateMemberInput) (*entity.Member, error)
 	UpdateMember(ctx context.Context, id int, input member.UpdateMemberInput) (*entity.Member, error)
-	DeleteMember(ctx context.Context, id int) (int, error)
 	CreateProduct(ctx context.Context, input product.CreateProductInput) (*entity.Product, error)
 	UpdateProduct(ctx context.Context, id int, input product.UpdateProductInput) (*entity.Product, error)
-	DeleteProduct(ctx context.Context, id int) (int, error)
 	CreateTag(ctx context.Context, input tag.CreateTagInput) (*entity.Tag, error)
 	UpdateTag(ctx context.Context, id int, input tag.UpdateTagInput) (*entity.Tag, error)
-	DeleteTag(ctx context.Context, id int) (int, error)
 	CreateTodo(ctx context.Context, input todo.CreateTodoInput) (*entity.Todo, error)
 	UpdateTodo(ctx context.Context, id int, input todo.UpdateTodoInput) (*entity.Todo, error)
-	DeleteTodo(ctx context.Context, id int) (int, error)
 	CreateUser(ctx context.Context, input user.CreateUserInput) (*entity.User, error)
 	UpdateUser(ctx context.Context, id int, input user.UpdateUserInput) (*entity.User, error)
-	DeleteUser(ctx context.Context, id int) (int, error)
 	CreateWorkspace(ctx context.Context, input workspace.CreateWorkspaceInput) (*entity.Workspace, error)
 	UpdateWorkspace(ctx context.Context, id int, input workspace.UpdateWorkspaceInput) (*entity.Workspace, error)
-	DeleteWorkspace(ctx context.Context, id int) (int, error)
 }
 type ProductResolver interface {
 	Thumbnail(ctx context.Context, obj *entity.Product) (*string, error)
@@ -387,21 +357,14 @@ type TagResolver interface {
 	Products(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *gqlfilter.ProductWhereInput) (*entity.ProductConnection, error)
 }
 type TodoResolver interface {
-	Owner(ctx context.Context, obj *entity.Todo) (*entity.User, error)
-	Comments(ctx context.Context, obj *entity.Todo) ([]*entity.Comment, error)
 	Tags(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) (*entity.TagConnection, error)
-	Category(ctx context.Context, obj *entity.Todo) (*entity.Category, error)
+
 	Labels(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *gqlfilter.LabelWhereInput) (*entity.LabelConnection, error)
-	Workspace(ctx context.Context, obj *entity.Todo) (*entity.Workspace, error)
 }
 type UserResolver interface {
 	Todos(ctx context.Context, obj *entity.User, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
-	Comments(ctx context.Context, obj *entity.User) ([]*entity.Comment, error)
-	Memberships(ctx context.Context, obj *entity.User) ([]*entity.Member, error)
-	AuditLogs(ctx context.Context, obj *entity.User) ([]*entity.AuditLog, error)
 }
 type WorkspaceResolver interface {
-	Members(ctx context.Context, obj *entity.Workspace) ([]*entity.Member, error)
 	Todos(ctx context.Context, obj *entity.Workspace, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
 }
 
@@ -824,94 +787,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CreateWorkspace(childComplexity, args["input"].(workspace.CreateWorkspaceInput)), true
-	case "Mutation.deleteCategory":
-		if e.complexity.Mutation.DeleteCategory == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteCategory_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteCategory(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteComment":
-		if e.complexity.Mutation.DeleteComment == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteComment_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteComment(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteMember":
-		if e.complexity.Mutation.DeleteMember == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteMember_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteMember(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteProduct":
-		if e.complexity.Mutation.DeleteProduct == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteProduct_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteProduct(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteTag":
-		if e.complexity.Mutation.DeleteTag == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteTag_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteTag(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteTodo":
-		if e.complexity.Mutation.DeleteTodo == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteTodo_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteTodo(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteUser":
-		if e.complexity.Mutation.DeleteUser == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteUser_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteUser(childComplexity, args["id"].(int)), true
-	case "Mutation.deleteWorkspace":
-		if e.complexity.Mutation.DeleteWorkspace == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_deleteWorkspace_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.DeleteWorkspace(childComplexity, args["id"].(int)), true
 	case "Mutation.updateCategory":
 		if e.complexity.Mutation.UpdateCategory == nil {
 			break
@@ -1935,7 +1810,7 @@ type Category implements Node @goModel(model: "example.com/fullgql/velox/entity.
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection!
+  ): TodoConnection! @goField(forceResolver: true)
   parent: Category
   """
   Subcategories
@@ -1970,7 +1845,7 @@ type Category implements Node @goModel(model: "example.com/fullgql/velox/entity.
     Filtering options for Categories returned from the connection.
     """
     where: CategoryWhereInput
-  ): CategoryConnection!
+  ): CategoryConnection! @goField(forceResolver: true)
 }
 
 type Comment implements Node @goModel(model: "example.com/fullgql/velox/entity.Comment") {
@@ -2031,7 +1906,7 @@ type Label implements Node @goModel(model: "example.com/fullgql/velox/entity.Lab
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection!
+  ): TodoConnection! @goField(forceResolver: true)
 }
 
 type Member implements Node @goModel(model: "example.com/fullgql/velox/entity.Member") {
@@ -2099,7 +1974,7 @@ type Product implements Node @goModel(model: "example.com/fullgql/velox/entity.P
     Filtering options for Tags returned from the connection.
     """
     where: TagWhereInput
-  ): TagConnection!
+  ): TagConnection! @goField(forceResolver: true)
 }
 
 type Tag implements Node @goModel(model: "example.com/fullgql/velox/entity.Tag") {
@@ -2138,7 +2013,7 @@ type Tag implements Node @goModel(model: "example.com/fullgql/velox/entity.Tag")
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection!
+  ): TodoConnection! @goField(forceResolver: true)
   """
   Products associated with this tag
   """
@@ -2172,7 +2047,7 @@ type Tag implements Node @goModel(model: "example.com/fullgql/velox/entity.Tag")
     Filtering options for Products returned from the connection.
     """
     where: ProductWhereInput
-  ): ProductConnection!
+  ): ProductConnection! @goField(forceResolver: true)
 }
 
 type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo") {
@@ -2233,7 +2108,7 @@ type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo
     Filtering options for Tags returned from the connection.
     """
     where: TagWhereInput
-  ): TagConnection!
+  ): TagConnection! @goField(forceResolver: true)
   """
   Category this todo belongs to
   """
@@ -2271,7 +2146,7 @@ type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo
     Filtering options for Labels returned from the connection.
     """
     where: LabelWhereInput
-  ): LabelConnection!
+  ): LabelConnection! @goField(forceResolver: true)
   """
   Workspace this todo belongs to
   """
@@ -2327,7 +2202,7 @@ type User implements Node @goModel(model: "example.com/fullgql/velox/entity.User
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection!
+  ): TodoConnection! @goField(forceResolver: true)
   """
   Comments written by this user
   """
@@ -2393,7 +2268,7 @@ type Workspace implements Node @goModel(model: "example.com/fullgql/velox/entity
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection!
+  ): TodoConnection! @goField(forceResolver: true)
 }
 
 
@@ -3071,6 +2946,7 @@ enum WorkspaceOrderField @goModel(model: "example.com/fullgql/velox/entity.Works
 input CreateWorkspaceInput @goModel(model: "example.com/fullgql/velox/workspace.CreateWorkspaceInput") {
   name: String!
   description: String
+  deletedAt: Time
   active: Boolean
   memberIDs: [ID!]
   todoIDs: [ID!]
@@ -3080,6 +2956,8 @@ input UpdateWorkspaceInput @goModel(model: "example.com/fullgql/velox/workspace.
   name: String
   description: String
   clearDescription: Boolean
+  deletedAt: Time
+  clearDeletedAt: Boolean
   active: Boolean
   clearMembers: Boolean
   addMemberIDs: [ID!]
@@ -3577,30 +3455,22 @@ type Query {
 type Mutation {
   createCategory(input: CreateCategoryInput!): Category!
   updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
-  deleteCategory(id: ID!): ID!
   createComment(input: CreateCommentInput!): Comment!
   updateComment(id: ID!, input: UpdateCommentInput!): Comment!
-  deleteComment(id: ID!): ID!
   createLabel(input: CreateLabelInput!): Label!
   updateLabel(id: ID!, input: UpdateLabelInput!): Label!
   createMember(input: CreateMemberInput!): Member!
   updateMember(id: ID!, input: UpdateMemberInput!): Member!
-  deleteMember(id: ID!): ID!
   createProduct(input: CreateProductInput!): Product!
   updateProduct(id: ID!, input: UpdateProductInput!): Product!
-  deleteProduct(id: ID!): ID!
   createTag(input: CreateTagInput!): Tag!
   updateTag(id: ID!, input: UpdateTagInput!): Tag!
-  deleteTag(id: ID!): ID!
   createTodo(input: CreateTodoInput!): Todo!
   updateTodo(id: ID!, input: UpdateTodoInput!): Todo!
-  deleteTodo(id: ID!): ID!
   createUser(input: CreateUserInput!): User!
   updateUser(id: ID!, input: UpdateUserInput!): User!
-  deleteUser(id: ID!): ID!
   createWorkspace(input: CreateWorkspaceInput!): Workspace!
   updateWorkspace(id: ID!, input: UpdateWorkspaceInput!): Workspace!
-  deleteWorkspace(id: ID!): ID!
 }
 `, BuiltIn: false},
 }
@@ -3633,7 +3503,7 @@ func (ec *executionContext) field_Category_children_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -3669,7 +3539,7 @@ func (ec *executionContext) field_Category_todos_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -3705,7 +3575,7 @@ func (ec *executionContext) field_Label_todos_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -3814,94 +3684,6 @@ func (ec *executionContext) field_Mutation_createWorkspace_args(ctx context.Cont
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteCategory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteComment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteMember_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteProduct_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteTag_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteTodo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_deleteWorkspace_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2int)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
 	return args, nil
 }
 
@@ -4072,7 +3854,7 @@ func (ec *executionContext) field_Product_tags_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4119,7 +3901,7 @@ func (ec *executionContext) field_Query_categories_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4155,7 +3937,7 @@ func (ec *executionContext) field_Query_labels_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4213,7 +3995,7 @@ func (ec *executionContext) field_Query_products_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4249,7 +4031,7 @@ func (ec *executionContext) field_Query_tags_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4285,7 +4067,7 @@ func (ec *executionContext) field_Query_todos_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4321,7 +4103,7 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOUserOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOUserOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4357,7 +4139,7 @@ func (ec *executionContext) field_Query_workspaces_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOWorkspaceOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOWorkspaceOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4393,7 +4175,7 @@ func (ec *executionContext) field_Tag_products_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4429,7 +4211,7 @@ func (ec *executionContext) field_Tag_todos_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4465,7 +4247,7 @@ func (ec *executionContext) field_Todo_labels_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4501,7 +4283,7 @@ func (ec *executionContext) field_Todo_tags_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4537,7 +4319,7 @@ func (ec *executionContext) field_User_todos_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4573,7 +4355,7 @@ func (ec *executionContext) field_Workspace_todos_args(ctx context.Context, rawA
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -4877,10 +4659,10 @@ func (ec *executionContext) _AuditLog_user(ctx context.Context, field graphql.Co
 		field,
 		ec.fieldContext_AuditLog_user,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.AuditLog().User(ctx, obj)
+			return obj.User(ctx)
 		},
 		nil,
-		ec.marshalOUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalOUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		false,
 	)
@@ -4891,7 +4673,7 @@ func (ec *executionContext) fieldContext_AuditLog_user(_ context.Context, field 
 		Object:     "AuditLog",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -5083,7 +4865,7 @@ func (ec *executionContext) _Category_todos(ctx context.Context, field graphql.C
 			return ec.resolvers.Category().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
 		},
 		nil,
-		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection,
+		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
 		true,
 		true,
 	)
@@ -5128,10 +4910,10 @@ func (ec *executionContext) _Category_parent(ctx context.Context, field graphql.
 		field,
 		ec.fieldContext_Category_parent,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Category().Parent(ctx, obj)
+			return obj.Parent(ctx)
 		},
 		nil,
-		ec.marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory,
+		ec.marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
 		true,
 		false,
 	)
@@ -5142,7 +4924,7 @@ func (ec *executionContext) fieldContext_Category_parent(_ context.Context, fiel
 		Object:     "Category",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -5179,7 +4961,7 @@ func (ec *executionContext) _Category_children(ctx context.Context, field graphq
 			return ec.resolvers.Category().Children(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*gqlfilter.CategoryWhereInput))
 		},
 		nil,
-		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryConnection,
+		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection,
 		true,
 		true,
 	)
@@ -5227,7 +5009,7 @@ func (ec *executionContext) _CategoryConnection_edges(ctx context.Context, field
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOCategoryEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryEdgeᚄ,
+		ec.marshalOCategoryEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryEdgeᚄ,
 		true,
 		false,
 	)
@@ -5330,7 +5112,7 @@ func (ec *executionContext) _CategoryEdge_node(ctx context.Context, field graphq
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory,
+		ec.marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
 		true,
 		false,
 	)
@@ -5519,10 +5301,10 @@ func (ec *executionContext) _Comment_todo(ctx context.Context, field graphql.Col
 		field,
 		ec.fieldContext_Comment_todo,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Comment().Todo(ctx, obj)
+			return obj.Todo(ctx)
 		},
 		nil,
-		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo,
+		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
 		true,
 		true,
 	)
@@ -5533,7 +5315,7 @@ func (ec *executionContext) fieldContext_Comment_todo(_ context.Context, field g
 		Object:     "Comment",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -5582,10 +5364,10 @@ func (ec *executionContext) _Comment_author(ctx context.Context, field graphql.C
 		field,
 		ec.fieldContext_Comment_author,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Comment().Author(ctx, obj)
+			return obj.Author(ctx)
 		},
 		nil,
-		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		true,
 	)
@@ -5596,7 +5378,7 @@ func (ec *executionContext) fieldContext_Comment_author(_ context.Context, field
 		Object:     "Comment",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -5730,7 +5512,7 @@ func (ec *executionContext) _Label_todos(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Label().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
 		},
 		nil,
-		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection,
+		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
 		true,
 		true,
 	)
@@ -5778,7 +5560,7 @@ func (ec *executionContext) _LabelConnection_edges(ctx context.Context, field gr
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOLabelEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelEdgeᚄ,
+		ec.marshalOLabelEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelEdgeᚄ,
 		true,
 		false,
 	)
@@ -5881,7 +5663,7 @@ func (ec *executionContext) _LabelEdge_node(ctx context.Context, field graphql.C
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabel,
+		ec.marshalOLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel,
 		true,
 		false,
 	)
@@ -6036,7 +5818,7 @@ func (ec *executionContext) _Member_role(ctx context.Context, field graphql.Coll
 			return obj.Role, nil
 		},
 		nil,
-		ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole,
+		ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole,
 		true,
 		true,
 	)
@@ -6120,10 +5902,10 @@ func (ec *executionContext) _Member_workspace(ctx context.Context, field graphql
 		field,
 		ec.fieldContext_Member_workspace,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Member().Workspace(ctx, obj)
+			return obj.Workspace(ctx)
 		},
 		nil,
-		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace,
+		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
 		true,
 		true,
 	)
@@ -6134,7 +5916,7 @@ func (ec *executionContext) fieldContext_Member_workspace(_ context.Context, fie
 		Object:     "Member",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -6169,10 +5951,10 @@ func (ec *executionContext) _Member_user(ctx context.Context, field graphql.Coll
 		field,
 		ec.fieldContext_Member_user,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Member().User(ctx, obj)
+			return obj.User(ctx)
 		},
 		nil,
-		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		true,
 	)
@@ -6183,7 +5965,7 @@ func (ec *executionContext) fieldContext_Member_user(_ context.Context, field gr
 		Object:     "Member",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -6230,7 +6012,7 @@ func (ec *executionContext) _Mutation_createCategory(ctx context.Context, field 
 			return ec.resolvers.Mutation().CreateCategory(ctx, fc.Args["input"].(category.CreateCategoryInput))
 		},
 		nil,
-		ec.marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory,
+		ec.marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
 		true,
 		true,
 	)
@@ -6289,7 +6071,7 @@ func (ec *executionContext) _Mutation_updateCategory(ctx context.Context, field 
 			return ec.resolvers.Mutation().UpdateCategory(ctx, fc.Args["id"].(int), fc.Args["input"].(category.UpdateCategoryInput))
 		},
 		nil,
-		ec.marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory,
+		ec.marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
 		true,
 		true,
 	)
@@ -6337,47 +6119,6 @@ func (ec *executionContext) fieldContext_Mutation_updateCategory(ctx context.Con
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteCategory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteCategory,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteCategory(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteCategory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteCategory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createComment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6389,7 +6130,7 @@ func (ec *executionContext) _Mutation_createComment(ctx context.Context, field g
 			return ec.resolvers.Mutation().CreateComment(ctx, fc.Args["input"].(comment.CreateCommentInput))
 		},
 		nil,
-		ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐComment,
+		ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment,
 		true,
 		true,
 	)
@@ -6444,7 +6185,7 @@ func (ec *executionContext) _Mutation_updateComment(ctx context.Context, field g
 			return ec.resolvers.Mutation().UpdateComment(ctx, fc.Args["id"].(int), fc.Args["input"].(comment.UpdateCommentInput))
 		},
 		nil,
-		ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐComment,
+		ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment,
 		true,
 		true,
 	)
@@ -6488,47 +6229,6 @@ func (ec *executionContext) fieldContext_Mutation_updateComment(ctx context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteComment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteComment,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteComment(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteComment(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteComment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createLabel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6540,7 +6240,7 @@ func (ec *executionContext) _Mutation_createLabel(ctx context.Context, field gra
 			return ec.resolvers.Mutation().CreateLabel(ctx, fc.Args["input"].(label.CreateLabelInput))
 		},
 		nil,
-		ec.marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabel,
+		ec.marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel,
 		true,
 		true,
 	)
@@ -6591,7 +6291,7 @@ func (ec *executionContext) _Mutation_updateLabel(ctx context.Context, field gra
 			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["id"].(int), fc.Args["input"].(label.UpdateLabelInput))
 		},
 		nil,
-		ec.marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabel,
+		ec.marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel,
 		true,
 		true,
 	)
@@ -6642,7 +6342,7 @@ func (ec *executionContext) _Mutation_createMember(ctx context.Context, field gr
 			return ec.resolvers.Mutation().CreateMember(ctx, fc.Args["input"].(member.CreateMemberInput))
 		},
 		nil,
-		ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMember,
+		ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember,
 		true,
 		true,
 	)
@@ -6701,7 +6401,7 @@ func (ec *executionContext) _Mutation_updateMember(ctx context.Context, field gr
 			return ec.resolvers.Mutation().UpdateMember(ctx, fc.Args["id"].(int), fc.Args["input"].(member.UpdateMemberInput))
 		},
 		nil,
-		ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMember,
+		ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember,
 		true,
 		true,
 	)
@@ -6749,47 +6449,6 @@ func (ec *executionContext) fieldContext_Mutation_updateMember(ctx context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteMember(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteMember,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteMember(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteMember(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteMember_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createProduct(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6801,7 +6460,7 @@ func (ec *executionContext) _Mutation_createProduct(ctx context.Context, field g
 			return ec.resolvers.Mutation().CreateProduct(ctx, fc.Args["input"].(product.CreateProductInput))
 		},
 		nil,
-		ec.marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProduct,
+		ec.marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct,
 		true,
 		true,
 	)
@@ -6862,7 +6521,7 @@ func (ec *executionContext) _Mutation_updateProduct(ctx context.Context, field g
 			return ec.resolvers.Mutation().UpdateProduct(ctx, fc.Args["id"].(int), fc.Args["input"].(product.UpdateProductInput))
 		},
 		nil,
-		ec.marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProduct,
+		ec.marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct,
 		true,
 		true,
 	)
@@ -6912,47 +6571,6 @@ func (ec *executionContext) fieldContext_Mutation_updateProduct(ctx context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteProduct(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteProduct,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteProduct(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteProduct(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteProduct_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createTag(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6964,7 +6582,7 @@ func (ec *executionContext) _Mutation_createTag(ctx context.Context, field graph
 			return ec.resolvers.Mutation().CreateTag(ctx, fc.Args["input"].(tag.CreateTagInput))
 		},
 		nil,
-		ec.marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTag,
+		ec.marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag,
 		true,
 		true,
 	)
@@ -7015,7 +6633,7 @@ func (ec *executionContext) _Mutation_updateTag(ctx context.Context, field graph
 			return ec.resolvers.Mutation().UpdateTag(ctx, fc.Args["id"].(int), fc.Args["input"].(tag.UpdateTagInput))
 		},
 		nil,
-		ec.marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTag,
+		ec.marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag,
 		true,
 		true,
 	)
@@ -7055,47 +6673,6 @@ func (ec *executionContext) fieldContext_Mutation_updateTag(ctx context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteTag(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteTag,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteTag(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteTag(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteTag_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createTodo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7107,7 +6684,7 @@ func (ec *executionContext) _Mutation_createTodo(ctx context.Context, field grap
 			return ec.resolvers.Mutation().CreateTodo(ctx, fc.Args["input"].(todo.CreateTodoInput))
 		},
 		nil,
-		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo,
+		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
 		true,
 		true,
 	)
@@ -7182,7 +6759,7 @@ func (ec *executionContext) _Mutation_updateTodo(ctx context.Context, field grap
 			return ec.resolvers.Mutation().UpdateTodo(ctx, fc.Args["id"].(int), fc.Args["input"].(todo.UpdateTodoInput))
 		},
 		nil,
-		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo,
+		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
 		true,
 		true,
 	)
@@ -7246,47 +6823,6 @@ func (ec *executionContext) fieldContext_Mutation_updateTodo(ctx context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteTodo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteTodo,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteTodo(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteTodo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteTodo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7298,7 +6834,7 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(user.CreateUserInput))
 		},
 		nil,
-		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		true,
 	)
@@ -7367,7 +6903,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(int), fc.Args["input"].(user.UpdateUserInput))
 		},
 		nil,
-		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		true,
 	)
@@ -7425,47 +6961,6 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_deleteUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteUser,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteUser(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_createWorkspace(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7477,7 +6972,7 @@ func (ec *executionContext) _Mutation_createWorkspace(ctx context.Context, field
 			return ec.resolvers.Mutation().CreateWorkspace(ctx, fc.Args["input"].(workspace.CreateWorkspaceInput))
 		},
 		nil,
-		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace,
+		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
 		true,
 		true,
 	)
@@ -7538,7 +7033,7 @@ func (ec *executionContext) _Mutation_updateWorkspace(ctx context.Context, field
 			return ec.resolvers.Mutation().UpdateWorkspace(ctx, fc.Args["id"].(int), fc.Args["input"].(workspace.UpdateWorkspaceInput))
 		},
 		nil,
-		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace,
+		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
 		true,
 		true,
 	)
@@ -7582,47 +7077,6 @@ func (ec *executionContext) fieldContext_Mutation_updateWorkspace(ctx context.Co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateWorkspace_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_deleteWorkspace(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_deleteWorkspace,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DeleteWorkspace(ctx, fc.Args["id"].(int))
-		},
-		nil,
-		ec.marshalNID2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_deleteWorkspace(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_deleteWorkspace_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7988,7 +7442,7 @@ func (ec *executionContext) _Product_tags(ctx context.Context, field graphql.Col
 			return ec.resolvers.Product().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*gqlfilter.TagWhereInput))
 		},
 		nil,
-		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagConnection,
+		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
 		true,
 		true,
 	)
@@ -8036,7 +7490,7 @@ func (ec *executionContext) _ProductConnection_edges(ctx context.Context, field 
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOProductEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductEdgeᚄ,
+		ec.marshalOProductEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductEdgeᚄ,
 		true,
 		false,
 	)
@@ -8139,7 +7593,7 @@ func (ec *executionContext) _ProductEdge_node(ctx context.Context, field graphql
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProduct,
+		ec.marshalOProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct,
 		true,
 		false,
 	)
@@ -8299,7 +7753,7 @@ func (ec *executionContext) _Query_auditLogs(ctx context.Context, field graphql.
 			return ec.resolvers.Query().AuditLogs(ctx)
 		},
 		nil,
-		ec.marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐAuditLogᚄ,
+		ec.marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐAuditLogᚄ,
 		true,
 		true,
 	)
@@ -8349,7 +7803,7 @@ func (ec *executionContext) _Query_categories(ctx context.Context, field graphql
 			return ec.resolvers.Query().Categories(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*gqlfilter.CategoryWhereInput))
 		},
 		nil,
-		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryConnection,
+		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection,
 		true,
 		true,
 	)
@@ -8397,7 +7851,7 @@ func (ec *executionContext) _Query_comments(ctx context.Context, field graphql.C
 			return ec.resolvers.Query().Comments(ctx)
 		},
 		nil,
-		ec.marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCommentᚄ,
+		ec.marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCommentᚄ,
 		true,
 		true,
 	)
@@ -8441,7 +7895,7 @@ func (ec *executionContext) _Query_labels(ctx context.Context, field graphql.Col
 			return ec.resolvers.Query().Labels(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*gqlfilter.LabelWhereInput))
 		},
 		nil,
-		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelConnection,
+		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection,
 		true,
 		true,
 	)
@@ -8489,7 +7943,7 @@ func (ec *executionContext) _Query_members(ctx context.Context, field graphql.Co
 			return ec.resolvers.Query().Members(ctx)
 		},
 		nil,
-		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberᚄ,
+		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberᚄ,
 		true,
 		true,
 	)
@@ -8537,7 +7991,7 @@ func (ec *executionContext) _Query_products(ctx context.Context, field graphql.C
 			return ec.resolvers.Query().Products(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*gqlfilter.ProductWhereInput))
 		},
 		nil,
-		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductConnection,
+		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection,
 		true,
 		true,
 	)
@@ -8586,7 +8040,7 @@ func (ec *executionContext) _Query_tags(ctx context.Context, field graphql.Colle
 			return ec.resolvers.Query().Tags(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*gqlfilter.TagWhereInput))
 		},
 		nil,
-		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagConnection,
+		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
 		true,
 		true,
 	)
@@ -8635,7 +8089,7 @@ func (ec *executionContext) _Query_todos(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Query().Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
 		},
 		nil,
-		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection,
+		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
 		true,
 		true,
 	)
@@ -8684,7 +8138,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Query().Users(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.UserOrder), fc.Args["where"].(*gqlfilter.UserWhereInput))
 		},
 		nil,
-		ec.marshalNUserConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserConnection,
+		ec.marshalNUserConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserConnection,
 		true,
 		true,
 	)
@@ -8733,7 +8187,7 @@ func (ec *executionContext) _Query_workspaces(ctx context.Context, field graphql
 			return ec.resolvers.Query().Workspaces(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.WorkspaceOrder), fc.Args["where"].(*gqlfilter.WorkspaceWhereInput))
 		},
 		nil,
-		ec.marshalNWorkspaceConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceConnection,
+		ec.marshalNWorkspaceConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceConnection,
 		true,
 		true,
 	)
@@ -8948,7 +8402,7 @@ func (ec *executionContext) _Tag_todos(ctx context.Context, field graphql.Collec
 			return ec.resolvers.Tag().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
 		},
 		nil,
-		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection,
+		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
 		true,
 		true,
 	)
@@ -8997,7 +8451,7 @@ func (ec *executionContext) _Tag_products(ctx context.Context, field graphql.Col
 			return ec.resolvers.Tag().Products(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*gqlfilter.ProductWhereInput))
 		},
 		nil,
-		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductConnection,
+		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection,
 		true,
 		true,
 	)
@@ -9045,7 +8499,7 @@ func (ec *executionContext) _TagConnection_edges(ctx context.Context, field grap
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOTagEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagEdgeᚄ,
+		ec.marshalOTagEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagEdgeᚄ,
 		true,
 		false,
 	)
@@ -9148,7 +8602,7 @@ func (ec *executionContext) _TagEdge_node(ctx context.Context, field graphql.Col
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTag,
+		ec.marshalOTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag,
 		true,
 		false,
 	)
@@ -9361,7 +8815,7 @@ func (ec *executionContext) _Todo_status(ctx context.Context, field graphql.Coll
 			return obj.Status, nil
 		},
 		nil,
-		ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus,
+		ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus,
 		true,
 		true,
 	)
@@ -9390,7 +8844,7 @@ func (ec *executionContext) _Todo_priority(ctx context.Context, field graphql.Co
 			return obj.Priority, nil
 		},
 		nil,
-		ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority,
+		ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority,
 		true,
 		true,
 	)
@@ -9503,10 +8957,10 @@ func (ec *executionContext) _Todo_owner(ctx context.Context, field graphql.Colle
 		field,
 		ec.fieldContext_Todo_owner,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Todo().Owner(ctx, obj)
+			return obj.Owner(ctx)
 		},
 		nil,
-		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		true,
 	)
@@ -9517,7 +8971,7 @@ func (ec *executionContext) fieldContext_Todo_owner(_ context.Context, field gra
 		Object:     "Todo",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -9560,10 +9014,10 @@ func (ec *executionContext) _Todo_comments(ctx context.Context, field graphql.Co
 		field,
 		ec.fieldContext_Todo_comments,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Todo().Comments(ctx, obj)
+			return obj.Comments(ctx)
 		},
 		nil,
-		ec.marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCommentᚄ,
+		ec.marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCommentᚄ,
 		true,
 		true,
 	)
@@ -9574,7 +9028,7 @@ func (ec *executionContext) fieldContext_Todo_comments(_ context.Context, field 
 		Object:     "Todo",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -9607,7 +9061,7 @@ func (ec *executionContext) _Todo_tags(ctx context.Context, field graphql.Collec
 			return ec.resolvers.Todo().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*gqlfilter.TagWhereInput))
 		},
 		nil,
-		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagConnection,
+		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
 		true,
 		true,
 	)
@@ -9652,10 +9106,10 @@ func (ec *executionContext) _Todo_category(ctx context.Context, field graphql.Co
 		field,
 		ec.fieldContext_Todo_category,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Todo().Category(ctx, obj)
+			return obj.Category(ctx)
 		},
 		nil,
-		ec.marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory,
+		ec.marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
 		true,
 		false,
 	)
@@ -9666,7 +9120,7 @@ func (ec *executionContext) fieldContext_Todo_category(_ context.Context, field 
 		Object:     "Todo",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -9703,7 +9157,7 @@ func (ec *executionContext) _Todo_labels(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Todo().Labels(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*gqlfilter.LabelWhereInput))
 		},
 		nil,
-		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelConnection,
+		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection,
 		true,
 		true,
 	)
@@ -9748,10 +9202,10 @@ func (ec *executionContext) _Todo_workspace(ctx context.Context, field graphql.C
 		field,
 		ec.fieldContext_Todo_workspace,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Todo().Workspace(ctx, obj)
+			return obj.Workspace(ctx)
 		},
 		nil,
-		ec.marshalOWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace,
+		ec.marshalOWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
 		true,
 		false,
 	)
@@ -9762,7 +9216,7 @@ func (ec *executionContext) fieldContext_Todo_workspace(_ context.Context, field
 		Object:     "Todo",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -9800,7 +9254,7 @@ func (ec *executionContext) _TodoConnection_edges(ctx context.Context, field gra
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOTodoEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoEdgeᚄ,
+		ec.marshalOTodoEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoEdgeᚄ,
 		true,
 		false,
 	)
@@ -9903,7 +9357,7 @@ func (ec *executionContext) _TodoEdge_node(ctx context.Context, field graphql.Co
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo,
+		ec.marshalOTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
 		true,
 		false,
 	)
@@ -10198,7 +9652,7 @@ func (ec *executionContext) _User_role(ctx context.Context, field graphql.Collec
 			return obj.Role, nil
 		},
 		nil,
-		ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole,
+		ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole,
 		true,
 		true,
 	)
@@ -10257,7 +9711,7 @@ func (ec *executionContext) _User_todos(ctx context.Context, field graphql.Colle
 			return ec.resolvers.User().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
 		},
 		nil,
-		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection,
+		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
 		true,
 		true,
 	)
@@ -10302,10 +9756,10 @@ func (ec *executionContext) _User_comments(ctx context.Context, field graphql.Co
 		field,
 		ec.fieldContext_User_comments,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.User().Comments(ctx, obj)
+			return obj.Comments(ctx)
 		},
 		nil,
-		ec.marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCommentᚄ,
+		ec.marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCommentᚄ,
 		true,
 		true,
 	)
@@ -10316,7 +9770,7 @@ func (ec *executionContext) fieldContext_User_comments(_ context.Context, field 
 		Object:     "User",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -10345,10 +9799,10 @@ func (ec *executionContext) _User_memberships(ctx context.Context, field graphql
 		field,
 		ec.fieldContext_User_memberships,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.User().Memberships(ctx, obj)
+			return obj.Memberships(ctx)
 		},
 		nil,
-		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberᚄ,
+		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberᚄ,
 		true,
 		true,
 	)
@@ -10359,7 +9813,7 @@ func (ec *executionContext) fieldContext_User_memberships(_ context.Context, fie
 		Object:     "User",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -10392,10 +9846,10 @@ func (ec *executionContext) _User_auditLogs(ctx context.Context, field graphql.C
 		field,
 		ec.fieldContext_User_auditLogs,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.User().AuditLogs(ctx, obj)
+			return obj.AuditLogs(ctx)
 		},
 		nil,
-		ec.marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐAuditLogᚄ,
+		ec.marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐAuditLogᚄ,
 		true,
 		true,
 	)
@@ -10406,7 +9860,7 @@ func (ec *executionContext) fieldContext_User_auditLogs(_ context.Context, field
 		Object:     "User",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -10444,7 +9898,7 @@ func (ec *executionContext) _UserConnection_edges(ctx context.Context, field gra
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOUserEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserEdgeᚄ,
+		ec.marshalOUserEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserEdgeᚄ,
 		true,
 		false,
 	)
@@ -10547,7 +10001,7 @@ func (ec *executionContext) _UserEdge_node(ctx context.Context, field graphql.Co
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser,
+		ec.marshalOUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
 		true,
 		false,
 	)
@@ -10833,10 +10287,10 @@ func (ec *executionContext) _Workspace_members(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_Workspace_members,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Workspace().Members(ctx, obj)
+			return obj.Members(ctx)
 		},
 		nil,
-		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberᚄ,
+		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberᚄ,
 		true,
 		true,
 	)
@@ -10847,7 +10301,7 @@ func (ec *executionContext) fieldContext_Workspace_members(_ context.Context, fi
 		Object:     "Workspace",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -10884,7 +10338,7 @@ func (ec *executionContext) _Workspace_todos(ctx context.Context, field graphql.
 			return ec.resolvers.Workspace().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
 		},
 		nil,
-		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection,
+		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
 		true,
 		true,
 	)
@@ -10932,7 +10386,7 @@ func (ec *executionContext) _WorkspaceConnection_edges(ctx context.Context, fiel
 			return obj.Edges, nil
 		},
 		nil,
-		ec.marshalOWorkspaceEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceEdgeᚄ,
+		ec.marshalOWorkspaceEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceEdgeᚄ,
 		true,
 		false,
 	)
@@ -11035,7 +10489,7 @@ func (ec *executionContext) _WorkspaceEdge_node(ctx context.Context, field graph
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalOWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace,
+		ec.marshalOWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
 		true,
 		false,
 	)
@@ -12736,7 +12190,7 @@ func (ec *executionContext) unmarshalInputCategoryOrder(ctx context.Context, obj
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryOrderField(ctx, v)
+			data, err := ec.unmarshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12997,7 +12451,7 @@ func (ec *executionContext) unmarshalInputCreateMemberInput(ctx context.Context,
 		switch k {
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13157,14 +12611,14 @@ func (ec *executionContext) unmarshalInputCreateTodoInput(ctx context.Context, o
 			it.Description = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13282,7 +12736,7 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 			it.Bio = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13335,7 +12789,7 @@ func (ec *executionContext) unmarshalInputCreateWorkspaceInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "active", "memberIDs", "todoIDs"}
+	fieldsInOrder := [...]string{"name", "description", "deletedAt", "active", "memberIDs", "todoIDs"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13356,6 +12810,13 @@ func (ec *executionContext) unmarshalInputCreateWorkspaceInput(ctx context.Conte
 				return it, err
 			}
 			it.Description = data
+		case "deletedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("deletedAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DeletedAt = data
 		case "active":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("active"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -13410,7 +12871,7 @@ func (ec *executionContext) unmarshalInputLabelOrder(ctx context.Context, obj an
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNLabelOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelOrderField(ctx, v)
+			data, err := ec.unmarshalNLabelOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13534,28 +12995,28 @@ func (ec *executionContext) unmarshalInputMemberWhereInput(ctx context.Context, 
 			it.Or = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Role = data
 		case "roleNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNEQ"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleNEQ = data
 		case "roleIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleIn"))
-			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleIn = data
 		case "roleNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNotIn"))
-			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13593,7 +13054,7 @@ func (ec *executionContext) unmarshalInputProductOrder(ctx context.Context, obj 
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNProductOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductOrderField(ctx, v)
+			data, err := ec.unmarshalNProductOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13833,7 +13294,7 @@ func (ec *executionContext) unmarshalInputTagOrder(ctx context.Context, obj any)
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrderField(ctx, v)
+			data, err := ec.unmarshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13961,7 +13422,7 @@ func (ec *executionContext) unmarshalInputTodoOrder(ctx context.Context, obj any
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrderField(ctx, v)
+			data, err := ec.unmarshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14044,56 +13505,56 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 			it.TitleContains = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "statusNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNEQ"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusNEQ = data
 		case "statusIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusIn"))
-			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusIn = data
 		case "statusNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNotIn"))
-			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusNotIn = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Priority = data
 		case "priorityNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityNEQ"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.PriorityNEQ = data
 		case "priorityIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityIn"))
-			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriorityᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.PriorityIn = data
 		case "priorityNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityNotIn"))
-			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriorityᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14488,7 +13949,7 @@ func (ec *executionContext) unmarshalInputUpdateMemberInput(ctx context.Context,
 		switch k {
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14683,14 +14144,14 @@ func (ec *executionContext) unmarshalInputUpdateTodoInput(ctx context.Context, o
 			it.ClearDescription = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14885,7 +14346,7 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 			it.ClearBio = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14994,7 +14455,7 @@ func (ec *executionContext) unmarshalInputUpdateWorkspaceInput(ctx context.Conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "clearDescription", "active", "clearMembers", "addMemberIDs", "removeMemberIDs", "clearTodos", "addTodoIDs", "removeTodoIDs"}
+	fieldsInOrder := [...]string{"name", "description", "clearDescription", "deletedAt", "clearDeletedAt", "active", "clearMembers", "addMemberIDs", "removeMemberIDs", "clearTodos", "addTodoIDs", "removeTodoIDs"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -15022,6 +14483,20 @@ func (ec *executionContext) unmarshalInputUpdateWorkspaceInput(ctx context.Conte
 				return it, err
 			}
 			it.ClearDescription = data
+		case "deletedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("deletedAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DeletedAt = data
+		case "clearDeletedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearDeletedAt"))
+			data, err := ec.unmarshalOBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClearDeletedAt = data
 		case "active":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("active"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -15104,7 +14579,7 @@ func (ec *executionContext) unmarshalInputUserOrder(ctx context.Context, obj any
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserOrderField(ctx, v)
+			data, err := ec.unmarshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -15292,28 +14767,28 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			it.AgeNotNil = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Role = data
 		case "roleNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNEQ"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleNEQ = data
 		case "roleIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleIn"))
-			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleIn = data
 		case "roleNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNotIn"))
-			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -15393,7 +14868,7 @@ func (ec *executionContext) unmarshalInputWorkspaceOrder(ctx context.Context, ob
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceOrderField(ctx, v)
+			data, err := ec.unmarshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16375,13 +15850,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "deleteCategory":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteCategory(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "createComment":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createComment(ctx, field)
@@ -16392,13 +15860,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateComment":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateComment(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "deleteComment":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteComment(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -16431,13 +15892,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "deleteMember":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteMember(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "createProduct":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createProduct(ctx, field)
@@ -16448,13 +15902,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateProduct":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateProduct(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "deleteProduct":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteProduct(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -16473,13 +15920,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "deleteTag":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteTag(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "createTodo":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createTodo(ctx, field)
@@ -16490,13 +15930,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateTodo":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateTodo(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "deleteTodo":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteTodo(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -16515,13 +15948,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "deleteUser":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteUser(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "createWorkspace":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createWorkspace(ctx, field)
@@ -16532,13 +15958,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateWorkspace":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateWorkspace(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "deleteWorkspace":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_deleteWorkspace(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -18586,7 +18005,7 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
-func (ec *executionContext) marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐAuditLogᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.AuditLog) graphql.Marshaler {
+func (ec *executionContext) marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐAuditLogᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.AuditLog) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -18610,7 +18029,7 @@ func (ec *executionContext) marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋvel
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNAuditLog2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐAuditLog(ctx, sel, v[i])
+			ret[i] = ec.marshalNAuditLog2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐAuditLog(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -18630,7 +18049,7 @@ func (ec *executionContext) marshalNAuditLog2ᚕᚖexampleᚗcomᚋfullgqlᚋvel
 	return ret
 }
 
-func (ec *executionContext) marshalNAuditLog2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐAuditLog(ctx context.Context, sel ast.SelectionSet, v *entity.AuditLog) graphql.Marshaler {
+func (ec *executionContext) marshalNAuditLog2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐAuditLog(ctx context.Context, sel ast.SelectionSet, v *entity.AuditLog) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18661,11 +18080,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) marshalNCategory2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory(ctx context.Context, sel ast.SelectionSet, v entity.Category) graphql.Marshaler {
+func (ec *executionContext) marshalNCategory2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory(ctx context.Context, sel ast.SelectionSet, v entity.Category) graphql.Marshaler {
 	return ec._Category(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory(ctx context.Context, sel ast.SelectionSet, v *entity.Category) graphql.Marshaler {
+func (ec *executionContext) marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory(ctx context.Context, sel ast.SelectionSet, v *entity.Category) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18675,11 +18094,11 @@ func (ec *executionContext) marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._Category(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNCategoryConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryConnection(ctx context.Context, sel ast.SelectionSet, v entity.CategoryConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNCategoryConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection(ctx context.Context, sel ast.SelectionSet, v entity.CategoryConnection) graphql.Marshaler {
 	return ec._CategoryConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryConnection(ctx context.Context, sel ast.SelectionSet, v *entity.CategoryConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection(ctx context.Context, sel ast.SelectionSet, v *entity.CategoryConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18689,7 +18108,7 @@ func (ec *executionContext) marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgq
 	return ec._CategoryConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNCategoryEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryEdge(ctx context.Context, sel ast.SelectionSet, v *entity.CategoryEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNCategoryEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryEdge(ctx context.Context, sel ast.SelectionSet, v *entity.CategoryEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18699,13 +18118,13 @@ func (ec *executionContext) marshalNCategoryEdge2ᚖexampleᚗcomᚋfullgqlᚋve
 	return ec._CategoryEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryOrderField(ctx context.Context, v any) (*entity.CategoryOrderField, error) {
+func (ec *executionContext) unmarshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryOrderField(ctx context.Context, v any) (*entity.CategoryOrderField, error) {
 	var res = new(entity.CategoryOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.CategoryOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.CategoryOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18720,11 +18139,11 @@ func (ec *executionContext) unmarshalNCategoryWhereInput2ᚖexampleᚗcomᚋfull
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNComment2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐComment(ctx context.Context, sel ast.SelectionSet, v entity.Comment) graphql.Marshaler {
+func (ec *executionContext) marshalNComment2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment(ctx context.Context, sel ast.SelectionSet, v entity.Comment) graphql.Marshaler {
 	return ec._Comment(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCommentᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.Comment) graphql.Marshaler {
+func (ec *executionContext) marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCommentᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.Comment) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -18748,7 +18167,7 @@ func (ec *executionContext) marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐComment(ctx, sel, v[i])
+			ret[i] = ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -18768,7 +18187,7 @@ func (ec *executionContext) marshalNComment2ᚕᚖexampleᚗcomᚋfullgqlᚋvelo
 	return ret
 }
 
-func (ec *executionContext) marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐComment(ctx context.Context, sel ast.SelectionSet, v *entity.Comment) graphql.Marshaler {
+func (ec *executionContext) marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment(ctx context.Context, sel ast.SelectionSet, v *entity.Comment) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18911,11 +18330,11 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
-func (ec *executionContext) marshalNLabel2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabel(ctx context.Context, sel ast.SelectionSet, v entity.Label) graphql.Marshaler {
+func (ec *executionContext) marshalNLabel2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel(ctx context.Context, sel ast.SelectionSet, v entity.Label) graphql.Marshaler {
 	return ec._Label(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabel(ctx context.Context, sel ast.SelectionSet, v *entity.Label) graphql.Marshaler {
+func (ec *executionContext) marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel(ctx context.Context, sel ast.SelectionSet, v *entity.Label) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18925,11 +18344,11 @@ func (ec *executionContext) marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋm
 	return ec._Label(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNLabelConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v entity.LabelConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v entity.LabelConnection) graphql.Marshaler {
 	return ec._LabelConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v *entity.LabelConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v *entity.LabelConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18939,7 +18358,7 @@ func (ec *executionContext) marshalNLabelConnection2ᚖexampleᚗcomᚋfullgql�
 	return ec._LabelConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNLabelEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelEdge(ctx context.Context, sel ast.SelectionSet, v *entity.LabelEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelEdge(ctx context.Context, sel ast.SelectionSet, v *entity.LabelEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18949,13 +18368,13 @@ func (ec *executionContext) marshalNLabelEdge2ᚖexampleᚗcomᚋfullgqlᚋvelox
 	return ec._LabelEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNLabelOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelOrderField(ctx context.Context, v any) (*entity.LabelOrderField, error) {
+func (ec *executionContext) unmarshalNLabelOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelOrderField(ctx context.Context, v any) (*entity.LabelOrderField, error) {
 	var res = new(entity.LabelOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNLabelOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.LabelOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.LabelOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -18970,11 +18389,11 @@ func (ec *executionContext) unmarshalNLabelWhereInput2ᚖexampleᚗcomᚋfullgql
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNMember2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMember(ctx context.Context, sel ast.SelectionSet, v entity.Member) graphql.Marshaler {
+func (ec *executionContext) marshalNMember2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember(ctx context.Context, sel ast.SelectionSet, v entity.Member) graphql.Marshaler {
 	return ec._Member(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.Member) graphql.Marshaler {
+func (ec *executionContext) marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.Member) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -18998,7 +18417,7 @@ func (ec *executionContext) marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋvelox
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMember(ctx, sel, v[i])
+			ret[i] = ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -19018,7 +18437,7 @@ func (ec *executionContext) marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋvelox
 	return ret
 }
 
-func (ec *executionContext) marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMember(ctx context.Context, sel ast.SelectionSet, v *entity.Member) graphql.Marshaler {
+func (ec *executionContext) marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember(ctx context.Context, sel ast.SelectionSet, v *entity.Member) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19028,13 +18447,13 @@ func (ec *executionContext) marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋ
 	return ec._Member(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx context.Context, v any) (entity.MemberRole, error) {
-	var res entity.MemberRole
+func (ec *executionContext) unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, v any) (member.Role, error) {
+	var res member.Role
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v entity.MemberRole) graphql.Marshaler {
+func (ec *executionContext) marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v member.Role) graphql.Marshaler {
 	return v
 }
 
@@ -19095,11 +18514,11 @@ func (ec *executionContext) marshalNPageInfo2githubᚗcomᚋsyssamᚋveloxᚋcon
 	return ec._PageInfo(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNProduct2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProduct(ctx context.Context, sel ast.SelectionSet, v entity.Product) graphql.Marshaler {
+func (ec *executionContext) marshalNProduct2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct(ctx context.Context, sel ast.SelectionSet, v entity.Product) graphql.Marshaler {
 	return ec._Product(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProduct(ctx context.Context, sel ast.SelectionSet, v *entity.Product) graphql.Marshaler {
+func (ec *executionContext) marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct(ctx context.Context, sel ast.SelectionSet, v *entity.Product) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19109,11 +18528,11 @@ func (ec *executionContext) marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._Product(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNProductConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductConnection(ctx context.Context, sel ast.SelectionSet, v entity.ProductConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNProductConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection(ctx context.Context, sel ast.SelectionSet, v entity.ProductConnection) graphql.Marshaler {
 	return ec._ProductConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductConnection(ctx context.Context, sel ast.SelectionSet, v *entity.ProductConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection(ctx context.Context, sel ast.SelectionSet, v *entity.ProductConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19123,7 +18542,7 @@ func (ec *executionContext) marshalNProductConnection2ᚖexampleᚗcomᚋfullgql
 	return ec._ProductConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNProductEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductEdge(ctx context.Context, sel ast.SelectionSet, v *entity.ProductEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNProductEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductEdge(ctx context.Context, sel ast.SelectionSet, v *entity.ProductEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19133,13 +18552,13 @@ func (ec *executionContext) marshalNProductEdge2ᚖexampleᚗcomᚋfullgqlᚋvel
 	return ec._ProductEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNProductOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductOrderField(ctx context.Context, v any) (*entity.ProductOrderField, error) {
+func (ec *executionContext) unmarshalNProductOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductOrderField(ctx context.Context, v any) (*entity.ProductOrderField, error) {
 	var res = new(entity.ProductOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNProductOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.ProductOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNProductOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.ProductOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19170,11 +18589,11 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 	return res
 }
 
-func (ec *executionContext) marshalNTag2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTag(ctx context.Context, sel ast.SelectionSet, v entity.Tag) graphql.Marshaler {
+func (ec *executionContext) marshalNTag2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag(ctx context.Context, sel ast.SelectionSet, v entity.Tag) graphql.Marshaler {
 	return ec._Tag(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTag(ctx context.Context, sel ast.SelectionSet, v *entity.Tag) graphql.Marshaler {
+func (ec *executionContext) marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag(ctx context.Context, sel ast.SelectionSet, v *entity.Tag) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19184,11 +18603,11 @@ func (ec *executionContext) marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmod
 	return ec._Tag(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTagConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagConnection(ctx context.Context, sel ast.SelectionSet, v entity.TagConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNTagConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection(ctx context.Context, sel ast.SelectionSet, v entity.TagConnection) graphql.Marshaler {
 	return ec._TagConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagConnection(ctx context.Context, sel ast.SelectionSet, v *entity.TagConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection(ctx context.Context, sel ast.SelectionSet, v *entity.TagConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19198,7 +18617,7 @@ func (ec *executionContext) marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋv
 	return ec._TagConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTagEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagEdge(ctx context.Context, sel ast.SelectionSet, v *entity.TagEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNTagEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagEdge(ctx context.Context, sel ast.SelectionSet, v *entity.TagEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19208,13 +18627,13 @@ func (ec *executionContext) marshalNTagEdge2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._TagEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrderField(ctx context.Context, v any) (*entity.TagOrderField, error) {
+func (ec *executionContext) unmarshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrderField(ctx context.Context, v any) (*entity.TagOrderField, error) {
 	var res = new(entity.TagOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.TagOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.TagOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19245,11 +18664,11 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalNTodo2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v entity.Todo) graphql.Marshaler {
+func (ec *executionContext) marshalNTodo2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo(ctx context.Context, sel ast.SelectionSet, v entity.Todo) graphql.Marshaler {
 	return ec._Todo(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v *entity.Todo) graphql.Marshaler {
+func (ec *executionContext) marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo(ctx context.Context, sel ast.SelectionSet, v *entity.Todo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19259,11 +18678,11 @@ func (ec *executionContext) marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmo
 	return ec._Todo(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTodoConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection(ctx context.Context, sel ast.SelectionSet, v entity.TodoConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection(ctx context.Context, sel ast.SelectionSet, v entity.TodoConnection) graphql.Marshaler {
 	return ec._TodoConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoConnection(ctx context.Context, sel ast.SelectionSet, v *entity.TodoConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection(ctx context.Context, sel ast.SelectionSet, v *entity.TodoConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19273,7 +18692,7 @@ func (ec *executionContext) marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋ
 	return ec._TodoConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTodoEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoEdge(ctx context.Context, sel ast.SelectionSet, v *entity.TodoEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoEdge(ctx context.Context, sel ast.SelectionSet, v *entity.TodoEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19283,13 +18702,13 @@ func (ec *executionContext) marshalNTodoEdge2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._TodoEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrderField(ctx context.Context, v any) (*entity.TodoOrderField, error) {
+func (ec *executionContext) unmarshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrderField(ctx context.Context, v any) (*entity.TodoOrderField, error) {
 	var res = new(entity.TodoOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.TodoOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.TodoOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19299,23 +18718,23 @@ func (ec *executionContext) marshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋ
 	return v
 }
 
-func (ec *executionContext) unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx context.Context, v any) (todo.Priority, error) {
+func (ec *executionContext) unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, v any) (todo.Priority, error) {
 	var res todo.Priority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx context.Context, sel ast.SelectionSet, v todo.Priority) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, sel ast.SelectionSet, v todo.Priority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx context.Context, v any) (todo.Status, error) {
+func (ec *executionContext) unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, v any) (todo.Status, error) {
 	var res todo.Status
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx context.Context, sel ast.SelectionSet, v todo.Status) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, sel ast.SelectionSet, v todo.Status) graphql.Marshaler {
 	return v
 }
 
@@ -19369,11 +18788,11 @@ func (ec *executionContext) unmarshalNUpdateWorkspaceInput2exampleᚗcomᚋfullg
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUser2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v entity.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser(ctx context.Context, sel ast.SelectionSet, v entity.User) graphql.Marshaler {
 	return ec._User(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *entity.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser(ctx context.Context, sel ast.SelectionSet, v *entity.User) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19383,11 +18802,11 @@ func (ec *executionContext) marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmo
 	return ec._User(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNUserConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v entity.UserConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNUserConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v entity.UserConnection) graphql.Marshaler {
 	return ec._UserConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUserConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v *entity.UserConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNUserConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v *entity.UserConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19397,7 +18816,7 @@ func (ec *executionContext) marshalNUserConnection2ᚖexampleᚗcomᚋfullgqlᚋ
 	return ec._UserConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNUserEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserEdge(ctx context.Context, sel ast.SelectionSet, v *entity.UserEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNUserEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserEdge(ctx context.Context, sel ast.SelectionSet, v *entity.UserEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19407,13 +18826,13 @@ func (ec *executionContext) marshalNUserEdge2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._UserEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserOrderField(ctx context.Context, v any) (*entity.UserOrderField, error) {
+func (ec *executionContext) unmarshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserOrderField(ctx context.Context, v any) (*entity.UserOrderField, error) {
 	var res = new(entity.UserOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.UserOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.UserOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19423,13 +18842,13 @@ func (ec *executionContext) marshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋ
 	return v
 }
 
-func (ec *executionContext) unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx context.Context, v any) (user.Role, error) {
-	var res user.Role
+func (ec *executionContext) unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, v any) (entity.UserRole, error) {
+	var res entity.UserRole
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx context.Context, sel ast.SelectionSet, v user.Role) graphql.Marshaler {
+func (ec *executionContext) marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, sel ast.SelectionSet, v entity.UserRole) graphql.Marshaler {
 	return v
 }
 
@@ -19438,11 +18857,11 @@ func (ec *executionContext) unmarshalNUserWhereInput2ᚖexampleᚗcomᚋfullgql�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNWorkspace2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace(ctx context.Context, sel ast.SelectionSet, v entity.Workspace) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkspace2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace(ctx context.Context, sel ast.SelectionSet, v entity.Workspace) graphql.Marshaler {
 	return ec._Workspace(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace(ctx context.Context, sel ast.SelectionSet, v *entity.Workspace) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace(ctx context.Context, sel ast.SelectionSet, v *entity.Workspace) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19452,11 +18871,11 @@ func (ec *executionContext) marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋvelox
 	return ec._Workspace(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNWorkspaceConnection2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceConnection(ctx context.Context, sel ast.SelectionSet, v entity.WorkspaceConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkspaceConnection2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceConnection(ctx context.Context, sel ast.SelectionSet, v entity.WorkspaceConnection) graphql.Marshaler {
 	return ec._WorkspaceConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNWorkspaceConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceConnection(ctx context.Context, sel ast.SelectionSet, v *entity.WorkspaceConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkspaceConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceConnection(ctx context.Context, sel ast.SelectionSet, v *entity.WorkspaceConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19466,7 +18885,7 @@ func (ec *executionContext) marshalNWorkspaceConnection2ᚖexampleᚗcomᚋfullg
 	return ec._WorkspaceConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNWorkspaceEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceEdge(ctx context.Context, sel ast.SelectionSet, v *entity.WorkspaceEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkspaceEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceEdge(ctx context.Context, sel ast.SelectionSet, v *entity.WorkspaceEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19476,13 +18895,13 @@ func (ec *executionContext) marshalNWorkspaceEdge2ᚖexampleᚗcomᚋfullgqlᚋv
 	return ec._WorkspaceEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceOrderField(ctx context.Context, v any) (*entity.WorkspaceOrderField, error) {
+func (ec *executionContext) unmarshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceOrderField(ctx context.Context, v any) (*entity.WorkspaceOrderField, error) {
 	var res = new(entity.WorkspaceOrderField)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.WorkspaceOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceOrderField(ctx context.Context, sel ast.SelectionSet, v *entity.WorkspaceOrderField) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -19824,14 +19243,14 @@ func (ec *executionContext) marshalOBytes2ᚖstring(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategory(ctx context.Context, sel ast.SelectionSet, v *entity.Category) graphql.Marshaler {
+func (ec *executionContext) marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory(ctx context.Context, sel ast.SelectionSet, v *entity.Category) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Category(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOCategoryEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.CategoryEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOCategoryEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.CategoryEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -19858,7 +19277,7 @@ func (ec *executionContext) marshalOCategoryEdge2ᚕᚖexampleᚗcomᚋfullgql�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNCategoryEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNCategoryEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -19878,7 +19297,7 @@ func (ec *executionContext) marshalOCategoryEdge2ᚕᚖexampleᚗcomᚋfullgql�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐCategoryOrder(ctx context.Context, v any) (*entity.CategoryOrder, error) {
+func (ec *executionContext) unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryOrder(ctx context.Context, v any) (*entity.CategoryOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20089,14 +19508,14 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	return res
 }
 
-func (ec *executionContext) marshalOLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabel(ctx context.Context, sel ast.SelectionSet, v *entity.Label) graphql.Marshaler {
+func (ec *executionContext) marshalOLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel(ctx context.Context, sel ast.SelectionSet, v *entity.Label) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Label(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOLabelEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.LabelEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOLabelEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.LabelEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20123,7 +19542,7 @@ func (ec *executionContext) marshalOLabelEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋve
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNLabelEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNLabelEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20143,7 +19562,7 @@ func (ec *executionContext) marshalOLabelEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋve
 	return ret
 }
 
-func (ec *executionContext) unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐLabelOrder(ctx context.Context, v any) (*entity.LabelOrder, error) {
+func (ec *executionContext) unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelOrder(ctx context.Context, v any) (*entity.LabelOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20177,7 +19596,7 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgql
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRoleᚄ(ctx context.Context, v any) ([]member.Role, error) {
+func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx context.Context, v any) ([]member.Role, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20187,7 +19606,7 @@ func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋve
 	res := make([]member.Role, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20195,7 +19614,7 @@ func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋve
 	return res, nil
 }
 
-func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []member.Role) graphql.Marshaler {
+func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []member.Role) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20222,7 +19641,7 @@ func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx, sel, v[i])
+			ret[i] = ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20242,7 +19661,7 @@ func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	return ret
 }
 
-func (ec *executionContext) unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx context.Context, v any) (*entity.MemberRole, error) {
+func (ec *executionContext) unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, v any) (*entity.MemberRole, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20251,7 +19670,7 @@ func (ec *executionContext) unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋve
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v *entity.MemberRole) graphql.Marshaler {
+func (ec *executionContext) marshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v *entity.MemberRole) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20291,14 +19710,14 @@ func (ec *executionContext) marshalONode2exampleᚗcomᚋfullgqlᚋveloxᚐNoder
 	return ec._Node(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProduct(ctx context.Context, sel ast.SelectionSet, v *entity.Product) graphql.Marshaler {
+func (ec *executionContext) marshalOProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct(ctx context.Context, sel ast.SelectionSet, v *entity.Product) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Product(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOProductEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.ProductEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOProductEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.ProductEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20325,7 +19744,7 @@ func (ec *executionContext) marshalOProductEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNProductEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNProductEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20345,7 +19764,7 @@ func (ec *executionContext) marshalOProductEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋ
 	return ret
 }
 
-func (ec *executionContext) unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐProductOrder(ctx context.Context, v any) (*entity.ProductOrder, error) {
+func (ec *executionContext) unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductOrder(ctx context.Context, v any) (*entity.ProductOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20445,14 +19864,14 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalOTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTag(ctx context.Context, sel ast.SelectionSet, v *entity.Tag) graphql.Marshaler {
+func (ec *executionContext) marshalOTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag(ctx context.Context, sel ast.SelectionSet, v *entity.Tag) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Tag(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOTagEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.TagEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOTagEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.TagEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20479,7 +19898,7 @@ func (ec *executionContext) marshalOTagEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTagEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNTagEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20499,7 +19918,7 @@ func (ec *executionContext) marshalOTagEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋvelo
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTagOrder(ctx context.Context, v any) (*entity.TagOrder, error) {
+func (ec *executionContext) unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagOrder(ctx context.Context, v any) (*entity.TagOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20587,14 +20006,14 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	return res
 }
 
-func (ec *executionContext) marshalOTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodo(ctx context.Context, sel ast.SelectionSet, v *entity.Todo) graphql.Marshaler {
+func (ec *executionContext) marshalOTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo(ctx context.Context, sel ast.SelectionSet, v *entity.Todo) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Todo(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOTodoEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.TodoEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.TodoEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20621,7 +20040,7 @@ func (ec *executionContext) marshalOTodoEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋvel
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTodoEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNTodoEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20641,7 +20060,7 @@ func (ec *executionContext) marshalOTodoEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋvel
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoOrder(ctx context.Context, v any) (*entity.TodoOrder, error) {
+func (ec *executionContext) unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoOrder(ctx context.Context, v any) (*entity.TodoOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20649,7 +20068,7 @@ func (ec *executionContext) unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋvel
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriorityᚄ(ctx context.Context, v any) ([]todo.Priority, error) {
+func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx context.Context, v any) ([]todo.Priority, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20659,7 +20078,7 @@ func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋ
 	res := make([]todo.Priority, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20667,7 +20086,7 @@ func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋ
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriorityᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Priority) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Priority) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20694,7 +20113,7 @@ func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋve
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx, sel, v[i])
+			ret[i] = ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20714,7 +20133,7 @@ func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋve
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx context.Context, v any) (*entity.TodoPriority, error) {
+func (ec *executionContext) unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, v any) (*entity.TodoPriority, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20723,14 +20142,14 @@ func (ec *executionContext) unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋ
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoPriority(ctx context.Context, sel ast.SelectionSet, v *entity.TodoPriority) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, sel ast.SelectionSet, v *entity.TodoPriority) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return v
 }
 
-func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatusᚄ(ctx context.Context, v any) ([]todo.Status, error) {
+func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx context.Context, v any) ([]todo.Status, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20740,7 +20159,7 @@ func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋve
 	res := make([]todo.Status, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20748,7 +20167,7 @@ func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋve
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Status) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Status) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20775,7 +20194,7 @@ func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx, sel, v[i])
+			ret[i] = ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20795,7 +20214,7 @@ func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx context.Context, v any) (*entity.TodoStatus, error) {
+func (ec *executionContext) unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, v any) (*entity.TodoStatus, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20804,7 +20223,7 @@ func (ec *executionContext) unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋve
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐTodoStatus(ctx context.Context, sel ast.SelectionSet, v *entity.TodoStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, sel ast.SelectionSet, v *entity.TodoStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20837,14 +20256,14 @@ func (ec *executionContext) unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgql�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *entity.User) graphql.Marshaler {
+func (ec *executionContext) marshalOUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser(ctx context.Context, sel ast.SelectionSet, v *entity.User) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._User(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOUserEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.UserEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOUserEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.UserEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20871,7 +20290,7 @@ func (ec *executionContext) marshalOUserEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋvel
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUserEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNUserEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20891,7 +20310,7 @@ func (ec *executionContext) marshalOUserEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋvel
 	return ret
 }
 
-func (ec *executionContext) unmarshalOUserOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserOrder(ctx context.Context, v any) (*entity.UserOrder, error) {
+func (ec *executionContext) unmarshalOUserOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserOrder(ctx context.Context, v any) (*entity.UserOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20899,7 +20318,7 @@ func (ec *executionContext) unmarshalOUserOrder2ᚖexampleᚗcomᚋfullgqlᚋvel
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRoleᚄ(ctx context.Context, v any) ([]user.Role, error) {
+func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx context.Context, v any) ([]user.Role, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20909,7 +20328,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	res := make([]user.Role, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20917,7 +20336,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	return res, nil
 }
 
-func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []user.Role) graphql.Marshaler {
+func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []user.Role) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20944,7 +20363,7 @@ func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelox�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx, sel, v[i])
+			ret[i] = ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20964,7 +20383,7 @@ func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelox�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx context.Context, v any) (*entity.UserRole, error) {
+func (ec *executionContext) unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, v any) (*entity.UserRole, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20973,7 +20392,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋvelo
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐUserRole(ctx context.Context, sel ast.SelectionSet, v *entity.UserRole) graphql.Marshaler {
+func (ec *executionContext) marshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, sel ast.SelectionSet, v *entity.UserRole) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -21006,14 +20425,14 @@ func (ec *executionContext) unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgql�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspace(ctx context.Context, sel ast.SelectionSet, v *entity.Workspace) graphql.Marshaler {
+func (ec *executionContext) marshalOWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace(ctx context.Context, sel ast.SelectionSet, v *entity.Workspace) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Workspace(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOWorkspaceEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.WorkspaceEdge) graphql.Marshaler {
+func (ec *executionContext) marshalOWorkspaceEdge2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*entity.WorkspaceEdge) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -21040,7 +20459,7 @@ func (ec *executionContext) marshalOWorkspaceEdge2ᚕᚖexampleᚗcomᚋfullgql�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNWorkspaceEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNWorkspaceEdge2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -21060,7 +20479,7 @@ func (ec *executionContext) marshalOWorkspaceEdge2ᚕᚖexampleᚗcomᚋfullgql�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOWorkspaceOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmodelᚐWorkspaceOrder(ctx context.Context, v any) (*entity.WorkspaceOrder, error) {
+func (ec *executionContext) unmarshalOWorkspaceOrder2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceOrder(ctx context.Context, v any) (*entity.WorkspaceOrder, error) {
 	if v == nil {
 		return nil, nil
 	}

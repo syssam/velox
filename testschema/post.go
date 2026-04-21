@@ -2,6 +2,8 @@ package schema
 
 import (
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
@@ -24,12 +26,14 @@ func (Post) Fields() []velox.Field {
 	return []velox.Field{
 		field.String("title").
 			NotEmpty().
-			MaxLen(200),
+			MaxLen(200).
+			Annotations(graphql.WhereInput()),
 		field.Text("content").
 			Optional(),
 		field.Enum("status").
 			Values("draft", "published", "archived").
-			Default("draft"),
+			Default("draft").
+			Annotations(graphql.WhereInput()),
 		field.Int("view_count").
 			Default(0).
 			NonNegative(),
@@ -47,5 +51,15 @@ func (Post) Edges() []velox.Edge {
 			Required(),
 		edge.To("comments", Comment.Type),
 		edge.To("tags", Tag.Type),
+	}
+}
+
+// Annotations of the Post — RelayConnection so Post can appear as a
+// `PostConnection` edge target on User (the `user.posts(where: ...)` edge
+// that exercises the where-on-edge path in the integration test).
+func (Post) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		graphql.QueryField(),
+		graphql.RelayConnection(),
 	}
 }

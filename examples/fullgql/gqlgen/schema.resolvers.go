@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"example.com/fullgql/velox"
-	"example.com/fullgql/velox/auditlog"
 	"example.com/fullgql/velox/category"
 	"example.com/fullgql/velox/comment"
 	"example.com/fullgql/velox/entity"
@@ -25,70 +24,43 @@ import (
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 )
 
-// User is the resolver for the user field.
-func (r *auditLogResolver) User(ctx context.Context, obj *entity.AuditLog) (*entity.User, error) {
-	if u, err := obj.Edges.UserOrErr(); err == nil {
-		return u, nil
-	}
-	return r.Client.User.Query().Where(user.HasAuditLogsWith(auditlog.IDField.EQ(obj.ID))).Only(ctx)
-}
-
 // Todos is the resolver for the todos field.
+//
+// Body shape: fast-path eager-load check, then fall through to Paginate.
+// This is the recommended pattern for hand-written resolvers in velox —
+// mirrors the entity-method fast path (entity/gql_edge_*.go) so that
+// parent queries using .WithTodos() don't waste the eager load when the
+// user hits this edge via GraphQL.
 func (r *categoryResolver) Todos(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
+			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Todo.Query().Where(todo.HasCategoryWith(category.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
 }
 
-// Parent is the resolver for the parent field.
-func (r *categoryResolver) Parent(ctx context.Context, obj *entity.Category) (*entity.Category, error) {
-	if parent, err := obj.Edges.ParentOrErr(); err == nil {
-		return parent, nil
-	}
-	return r.Client.Category.Query().Where(category.HasChildrenWith(category.IDField.EQ(obj.ID))).Only(ctx)
-}
-
 // Children is the resolver for the children field.
 func (r *categoryResolver) Children(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *gqlfilter.CategoryWhereInput) (*entity.CategoryConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.ChildrenOrErr(); err == nil {
+			return entity.BuildCategoryConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Category.Query().Where(category.HasParentWith(category.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithCategoryOrder(orderBy), entity.WithCategoryFilter(where.Filter))
 }
 
-// Todo is the resolver for the todo field.
-func (r *commentResolver) Todo(ctx context.Context, obj *entity.Comment) (*entity.Todo, error) {
-	if t, err := obj.Edges.TodoOrErr(); err == nil {
-		return t, nil
-	}
-	return r.Client.Todo.Query().Where(todo.HasCommentsWith(comment.IDField.EQ(obj.ID))).Only(ctx)
-}
-
-// Author is the resolver for the author field.
-func (r *commentResolver) Author(ctx context.Context, obj *entity.Comment) (*entity.User, error) {
-	if u, err := obj.Edges.AuthorOrErr(); err == nil {
-		return u, nil
-	}
-	return r.Client.User.Query().Where(user.HasCommentsWith(comment.IDField.EQ(obj.ID))).Only(ctx)
-}
-
 // Todos is the resolver for the todos field.
 func (r *labelResolver) Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
+			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Todo.Query().Where(todo.HasLabelsWith(label.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
-}
-
-// Workspace is the resolver for the workspace field.
-func (r *memberResolver) Workspace(ctx context.Context, obj *entity.Member) (*entity.Workspace, error) {
-	if w, err := obj.Edges.WorkspaceOrErr(); err == nil {
-		return w, nil
-	}
-	return r.Client.Workspace.Query().Where(workspace.HasMembersWith(member.IDField.EQ(obj.ID))).Only(ctx)
-}
-
-// User is the resolver for the user field.
-func (r *memberResolver) User(ctx context.Context, obj *entity.Member) (*entity.User, error) {
-	if u, err := obj.Edges.UserOrErr(); err == nil {
-		return u, nil
-	}
-	return r.Client.User.Query().Where(user.HasMembershipsWith(member.IDField.EQ(obj.ID))).Only(ctx)
 }
 
 // CreateCategory is the resolver for the createCategory field.
@@ -101,14 +73,6 @@ func (r *mutationResolver) UpdateCategory(ctx context.Context, id int, input cat
 	return r.Client.Category.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
-// DeleteCategory is the resolver for the deleteCategory field.
-func (r *mutationResolver) DeleteCategory(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Category.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
 // CreateComment is the resolver for the createComment field.
 func (r *mutationResolver) CreateComment(ctx context.Context, input comment.CreateCommentInput) (*entity.Comment, error) {
 	return r.Client.Comment.Create().SetInput(input).Save(ctx)
@@ -117,14 +81,6 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input comment.Crea
 // UpdateComment is the resolver for the updateComment field.
 func (r *mutationResolver) UpdateComment(ctx context.Context, id int, input comment.UpdateCommentInput) (*entity.Comment, error) {
 	return r.Client.Comment.UpdateOneID(id).SetInput(input).Save(ctx)
-}
-
-// DeleteComment is the resolver for the deleteComment field.
-func (r *mutationResolver) DeleteComment(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Comment.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 // CreateLabel is the resolver for the createLabel field.
@@ -147,14 +103,6 @@ func (r *mutationResolver) UpdateMember(ctx context.Context, id int, input membe
 	return r.Client.Member.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
-// DeleteMember is the resolver for the deleteMember field.
-func (r *mutationResolver) DeleteMember(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Member.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
 // CreateProduct is the resolver for the createProduct field.
 func (r *mutationResolver) CreateProduct(ctx context.Context, input product.CreateProductInput) (*entity.Product, error) {
 	return r.Client.Product.Create().SetInput(input).Save(ctx)
@@ -163,14 +111,6 @@ func (r *mutationResolver) CreateProduct(ctx context.Context, input product.Crea
 // UpdateProduct is the resolver for the updateProduct field.
 func (r *mutationResolver) UpdateProduct(ctx context.Context, id int, input product.UpdateProductInput) (*entity.Product, error) {
 	return r.Client.Product.UpdateOneID(id).SetInput(input).Save(ctx)
-}
-
-// DeleteProduct is the resolver for the deleteProduct field.
-func (r *mutationResolver) DeleteProduct(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Product.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 // CreateTag is the resolver for the createTag field.
@@ -183,14 +123,6 @@ func (r *mutationResolver) UpdateTag(ctx context.Context, id int, input tag.Upda
 	return r.Client.Tag.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
-// DeleteTag is the resolver for the deleteTag field.
-func (r *mutationResolver) DeleteTag(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Tag.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
 // CreateTodo is the resolver for the createTodo field.
 func (r *mutationResolver) CreateTodo(ctx context.Context, input todo.CreateTodoInput) (*entity.Todo, error) {
 	return r.Client.Todo.Create().SetInput(input).Save(ctx)
@@ -199,14 +131,6 @@ func (r *mutationResolver) CreateTodo(ctx context.Context, input todo.CreateTodo
 // UpdateTodo is the resolver for the updateTodo field.
 func (r *mutationResolver) UpdateTodo(ctx context.Context, id int, input todo.UpdateTodoInput) (*entity.Todo, error) {
 	return r.Client.Todo.UpdateOneID(id).SetInput(input).Save(ctx)
-}
-
-// DeleteTodo is the resolver for the deleteTodo field.
-func (r *mutationResolver) DeleteTodo(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Todo.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 // CreateUser is the resolver for the createUser field.
@@ -219,14 +143,6 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id int, input user.Up
 	return r.Client.User.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
-// DeleteUser is the resolver for the deleteUser field.
-func (r *mutationResolver) DeleteUser(ctx context.Context, id int) (int, error) {
-	if err := r.Client.User.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
 // CreateWorkspace is the resolver for the createWorkspace field.
 func (r *mutationResolver) CreateWorkspace(ctx context.Context, input workspace.CreateWorkspaceInput) (*entity.Workspace, error) {
 	return r.Client.Workspace.Create().SetInput(input).Save(ctx)
@@ -237,14 +153,6 @@ func (r *mutationResolver) UpdateWorkspace(ctx context.Context, id int, input wo
 	return r.Client.Workspace.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
-// DeleteWorkspace is the resolver for the deleteWorkspace field.
-func (r *mutationResolver) DeleteWorkspace(ctx context.Context, id int) (int, error) {
-	if err := r.Client.Workspace.DeleteOneID(id).Exec(ctx); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
 // Thumbnail is the resolver for the thumbnail field.
 func (r *productResolver) Thumbnail(ctx context.Context, obj *entity.Product) (*string, error) {
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
@@ -252,6 +160,11 @@ func (r *productResolver) Thumbnail(ctx context.Context, obj *entity.Product) (*
 
 // Tags is the resolver for the tags field.
 func (r *productResolver) Tags(ctx context.Context, obj *entity.Product, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) (*entity.TagConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TagsOrErr(); err == nil {
+			return entity.BuildTagConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Tag.Query().Where(tag.HasProductsWith(product.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTagOrder(orderBy), entity.WithTagFilter(where.Filter))
 }
@@ -318,81 +231,66 @@ func (r *queryResolver) Workspaces(ctx context.Context, after *gqlrelay.Cursor, 
 
 // Todos is the resolver for the todos field.
 func (r *tagResolver) Todos(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
+			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Todo.Query().Where(todo.HasTagsWith(tag.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
 }
 
 // Products is the resolver for the products field.
 func (r *tagResolver) Products(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *gqlfilter.ProductWhereInput) (*entity.ProductConnection, error) {
-	panic(fmt.Errorf("not implemented: Products - products"))
-}
-
-// Owner is the resolver for the owner field.
-func (r *todoResolver) Owner(ctx context.Context, obj *entity.Todo) (*entity.User, error) {
-	if u, err := obj.Edges.OwnerOrErr(); err == nil {
-		return u, nil
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.ProductsOrErr(); err == nil {
+			return entity.BuildProductConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
 	}
-	return r.Client.User.Query().Where(user.HasTodosWith(todo.IDField.EQ(obj.ID))).Only(ctx)
-}
-
-// Comments is the resolver for the comments field.
-func (r *todoResolver) Comments(ctx context.Context, obj *entity.Todo) ([]*entity.Comment, error) {
-	return r.Client.Comment.Query().Where(comment.HasTodoWith(todo.IDField.EQ(obj.ID))).All(ctx)
+	q := r.Client.Product.Query().Where(product.HasTagsWith(tag.IDField.EQ(obj.ID)))
+	return q.Paginate(ctx, after, first, before, last, entity.WithProductOrder(orderBy), entity.WithProductFilter(where.Filter))
 }
 
 // Tags is the resolver for the tags field.
 func (r *todoResolver) Tags(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) (*entity.TagConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TagsOrErr(); err == nil {
+			return entity.BuildTagConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Tag.Query().Where(tag.HasTodosWith(todo.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTagOrder(orderBy), entity.WithTagFilter(where.Filter))
 }
 
-// Category is the resolver for the category field.
-func (r *todoResolver) Category(ctx context.Context, obj *entity.Todo) (*entity.Category, error) {
-	if c, err := obj.Edges.CategoryOrErr(); err == nil {
-		return c, nil
-	}
-	return r.Client.Category.Query().Where(category.HasTodosWith(todo.IDField.EQ(obj.ID))).First(ctx)
-}
-
 // Labels is the resolver for the labels field.
 func (r *todoResolver) Labels(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *gqlfilter.LabelWhereInput) (*entity.LabelConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.LabelsOrErr(); err == nil {
+			return entity.BuildLabelConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Label.Query().Where(label.HasTodosWith(todo.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithLabelOrder(orderBy), entity.WithLabelFilter(where.Filter))
 }
 
-// Workspace is the resolver for the workspace field.
-func (r *todoResolver) Workspace(ctx context.Context, obj *entity.Todo) (*entity.Workspace, error) {
-	panic(fmt.Errorf("not implemented: Workspace - workspace"))
-}
-
 // Todos is the resolver for the todos field.
 func (r *userResolver) Todos(ctx context.Context, obj *entity.User, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
+			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Todo.Query().Where(todo.HasOwnerWith(user.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
 }
 
-// Comments is the resolver for the comments field.
-func (r *userResolver) Comments(ctx context.Context, obj *entity.User) ([]*entity.Comment, error) {
-	return r.Client.Comment.Query().Where(comment.HasAuthorWith(user.IDField.EQ(obj.ID))).All(ctx)
-}
-
-// Memberships is the resolver for the memberships field.
-func (r *userResolver) Memberships(ctx context.Context, obj *entity.User) ([]*entity.Member, error) {
-	return r.Client.Member.Query().Where(member.HasUserWith(user.IDField.EQ(obj.ID))).All(ctx)
-}
-
-// AuditLogs is the resolver for the auditLogs field.
-func (r *userResolver) AuditLogs(ctx context.Context, obj *entity.User) ([]*entity.AuditLog, error) {
-	return r.Client.AuditLog.Query().Where(auditlog.HasUserWith(user.IDField.EQ(obj.ID))).All(ctx)
-}
-
-// Members is the resolver for the members field.
-func (r *workspaceResolver) Members(ctx context.Context, obj *entity.Workspace) ([]*entity.Member, error) {
-	return r.Client.Member.Query().Where(member.HasWorkspaceWith(workspace.IDField.EQ(obj.ID))).All(ctx)
-}
-
 // Todos is the resolver for the todos field.
 func (r *workspaceResolver) Todos(ctx context.Context, obj *entity.Workspace, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error) {
+	if where == nil && after == nil && before == nil {
+		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
+			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
+		}
+	}
 	q := r.Client.Todo.Query().Where(todo.HasWorkspaceWith(workspace.IDField.EQ(obj.ID)))
 	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
 }
@@ -407,20 +305,11 @@ func (r *updateProductInputResolver) Thumbnail(ctx context.Context, obj *product
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
 }
 
-// AuditLog returns AuditLogResolver implementation.
-func (r *Resolver) AuditLog() AuditLogResolver { return &auditLogResolver{r} }
-
 // Category returns CategoryResolver implementation.
 func (r *Resolver) Category() CategoryResolver { return &categoryResolver{r} }
 
-// Comment returns CommentResolver implementation.
-func (r *Resolver) Comment() CommentResolver { return &commentResolver{r} }
-
 // Label returns LabelResolver implementation.
 func (r *Resolver) Label() LabelResolver { return &labelResolver{r} }
-
-// Member returns MemberResolver implementation.
-func (r *Resolver) Member() MemberResolver { return &memberResolver{r} }
 
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
@@ -453,11 +342,8 @@ func (r *Resolver) UpdateProductInput() UpdateProductInputResolver {
 	return &updateProductInputResolver{r}
 }
 
-type auditLogResolver struct{ *Resolver }
 type categoryResolver struct{ *Resolver }
-type commentResolver struct{ *Resolver }
 type labelResolver struct{ *Resolver }
-type memberResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type productResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
@@ -467,3 +353,132 @@ type userResolver struct{ *Resolver }
 type workspaceResolver struct{ *Resolver }
 type createProductInputResolver struct{ *Resolver }
 type updateProductInputResolver struct{ *Resolver }
+
+// !!! WARNING !!!
+// The code below was going to be deleted when updating resolvers. It has been copied here so you have
+// one last chance to move it out of harms way if you want. There are two reasons this happens:
+//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
+//    it when you're done.
+//  - You have helper methods in this file. Move them out to keep these resolver files clean.
+/*
+	func (r *auditLogResolver) User(ctx context.Context, obj *entity.AuditLog) (*entity.User, error) {
+	if u, err := obj.Edges.UserOrErr(); err == nil {
+		return u, nil
+	}
+	return r.Client.User.Query().Where(user.HasAuditLogsWith(auditlog.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *categoryResolver) Parent(ctx context.Context, obj *entity.Category) (*entity.Category, error) {
+	if parent, err := obj.Edges.ParentOrErr(); err == nil {
+		return parent, nil
+	}
+	return r.Client.Category.Query().Where(category.HasChildrenWith(category.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *commentResolver) Todo(ctx context.Context, obj *entity.Comment) (*entity.Todo, error) {
+	if t, err := obj.Edges.TodoOrErr(); err == nil {
+		return t, nil
+	}
+	return r.Client.Todo.Query().Where(todo.HasCommentsWith(comment.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *commentResolver) Author(ctx context.Context, obj *entity.Comment) (*entity.User, error) {
+	if u, err := obj.Edges.AuthorOrErr(); err == nil {
+		return u, nil
+	}
+	return r.Client.User.Query().Where(user.HasCommentsWith(comment.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *memberResolver) Workspace(ctx context.Context, obj *entity.Member) (*entity.Workspace, error) {
+	if w, err := obj.Edges.WorkspaceOrErr(); err == nil {
+		return w, nil
+	}
+	return r.Client.Workspace.Query().Where(workspace.HasMembersWith(member.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *memberResolver) User(ctx context.Context, obj *entity.Member) (*entity.User, error) {
+	if u, err := obj.Edges.UserOrErr(); err == nil {
+		return u, nil
+	}
+	return r.Client.User.Query().Where(user.HasMembershipsWith(member.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *mutationResolver) DeleteCategory(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Category.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteComment(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Comment.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteMember(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Member.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteProduct(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Product.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteTag(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Tag.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteTodo(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Todo.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteUser(ctx context.Context, id int) (int, error) {
+	if err := r.Client.User.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *mutationResolver) DeleteWorkspace(ctx context.Context, id int) (int, error) {
+	if err := r.Client.Workspace.DeleteOneID(id).Exec(ctx); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+func (r *todoResolver) Owner(ctx context.Context, obj *entity.Todo) (*entity.User, error) {
+	if u, err := obj.Edges.OwnerOrErr(); err == nil {
+		return u, nil
+	}
+	return r.Client.User.Query().Where(user.HasTodosWith(todo.IDField.EQ(obj.ID))).Only(ctx)
+}
+func (r *todoResolver) Comments(ctx context.Context, obj *entity.Todo) ([]*entity.Comment, error) {
+	return r.Client.Comment.Query().Where(comment.HasTodoWith(todo.IDField.EQ(obj.ID))).All(ctx)
+}
+func (r *todoResolver) Category(ctx context.Context, obj *entity.Todo) (*entity.Category, error) {
+	if c, err := obj.Edges.CategoryOrErr(); err == nil {
+		return c, nil
+	}
+	return r.Client.Category.Query().Where(category.HasTodosWith(todo.IDField.EQ(obj.ID))).First(ctx)
+}
+func (r *todoResolver) Workspace(ctx context.Context, obj *entity.Todo) (*entity.Workspace, error) {
+	panic(fmt.Errorf("not implemented: Workspace - workspace"))
+}
+func (r *userResolver) Comments(ctx context.Context, obj *entity.User) ([]*entity.Comment, error) {
+	return r.Client.Comment.Query().Where(comment.HasAuthorWith(user.IDField.EQ(obj.ID))).All(ctx)
+}
+func (r *userResolver) Memberships(ctx context.Context, obj *entity.User) ([]*entity.Member, error) {
+	return r.Client.Member.Query().Where(member.HasUserWith(user.IDField.EQ(obj.ID))).All(ctx)
+}
+func (r *userResolver) AuditLogs(ctx context.Context, obj *entity.User) ([]*entity.AuditLog, error) {
+	return r.Client.AuditLog.Query().Where(auditlog.HasUserWith(user.IDField.EQ(obj.ID))).All(ctx)
+}
+func (r *workspaceResolver) Members(ctx context.Context, obj *entity.Workspace) ([]*entity.Member, error) {
+	return r.Client.Member.Query().Where(member.HasWorkspaceWith(workspace.IDField.EQ(obj.ID))).All(ctx)
+}
+func (r *Resolver) AuditLog() AuditLogResolver { return &auditLogResolver{r} }
+func (r *Resolver) Comment() CommentResolver { return &commentResolver{r} }
+func (r *Resolver) Member() MemberResolver { return &memberResolver{r} }
+type auditLogResolver struct{ *Resolver }
+type commentResolver struct{ *Resolver }
+type memberResolver struct{ *Resolver }
+*/

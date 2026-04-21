@@ -999,6 +999,141 @@ func TestGenerator_GenEdgeField(t *testing.T) {
 	})
 }
 
+// TestGenerator_GenEdgeField_ForceResolverOnWhere pins a correctness-critical
+// behavior: when a Relay connection edge is opted into `where` filtering via
+// the whitelist, the emitted SDL field MUST carry @goField(forceResolver: true).
+//
+// Rationale: the entity Go method generated in entity/gql_edge_*.go cannot
+// accept a *gqlfilter.XxxWhereInput argument (entity -> gqlfilter -> query
+// -> entity import cycle), so its signature stays `(ctx, after, first,
+// before, last, orderBy)`. Gqlgen's autobind treats this as a successful
+// partial match against the SDL and silently drops `where` at runtime —
+// the filter has zero effect on the query, a data-correctness / potential
+// security bug. The forceResolver directive tells gqlgen to emit a resolver
+// interface requiring `where`, so the filter reaches the query.
+//
+// Edges without `where` in SDL must NOT get the directive (or every edge
+// would require a hand-written resolver, defeating autobind for the common
+// case).
+func TestGenerator_GenEdgeField_ForceResolverOnWhere(t *testing.T) {
+	// Target type must have at least one filterable field so hasFilterableContent
+	// returns true — otherwise wantsWhere is false regardless of the annotation.
+	postType := &entgen.Type{
+		Name: "Post",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{
+				Name: "title",
+				Type: &field.TypeInfo{Type: field.TypeString},
+				Annotations: map[string]any{
+					AnnotationName: &Annotation{WhereInputEnabled: true},
+				},
+			},
+		},
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{RelayConnection: true},
+		},
+	}
+
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{postType},
+	}
+
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelaySpec:       true,
+		RelayConnection: true,
+		WhereInputs:     true,
+	})
+
+	t.Run("EdgeWithWhere_HasDirective", func(t *testing.T) {
+		edge := &entgen.Edge{
+			Name:   "posts",
+			Type:   postType,
+			Unique: false,
+			Annotations: map[string]any{
+				AnnotationName: &Annotation{WhereInputEnabled: true},
+			},
+		}
+		result := gen.genEdgeField(nil, edge)
+		assert.Contains(t, result, "where: PostWhereInput",
+			"sanity: SDL should declare the where arg when edge is whitelisted")
+		assert.Contains(t, result, "@goField(forceResolver: true)",
+			"edge connections with `where` MUST carry forceResolver — without it, "+
+				"gqlgen silently drops `where` at runtime via autobind partial match")
+	})
+
+	t.Run("EdgeSkipsWhereInput_NoDirective", func(t *testing.T) {
+		// Edge opts out of where filtering via Skip(SkipWhereInput).
+		// SDL omits `where`, and must NOT emit forceResolver because the
+		// entity method (no `where` arg) is a full match — autobind works
+		// correctly without a resolver interface.
+		edge := &entgen.Edge{
+			Name:   "posts",
+			Type:   postType,
+			Unique: false,
+			Annotations: map[string]any{
+				AnnotationName: &Annotation{Skip: SkipWhereInput},
+			},
+		}
+		result := gen.genEdgeField(nil, edge)
+		assert.NotContains(t, result, "where:",
+			"sanity: SDL should NOT declare `where` when edge carries Skip(SkipWhereInput)")
+		assert.NotContains(t, result, "forceResolver",
+			"edges without `where` must NOT emit forceResolver — that would "+
+				"force every edge through a hand-written resolver unnecessarily")
+	})
+
+	t.Run("TargetTypeNotFilterable_NoDirective", func(t *testing.T) {
+		// Target type has no filterable fields — hasFilterableContent returns
+		// false, so no where arg goes into SDL, so no forceResolver.
+		emptyType := &entgen.Type{
+			Name:        "Empty",
+			ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+			Fields:      []*entgen.Field{},
+			Annotations: map[string]any{AnnotationName: &Annotation{RelayConnection: true}},
+		}
+		emptyGraph := &entgen.Graph{
+			Config: &entgen.Config{Package: "example/ent"},
+			Nodes:  []*entgen.Type{emptyType},
+		}
+		emptyGen := NewGenerator(emptyGraph, Config{
+			Package:         "graphql",
+			RelaySpec:       true,
+			RelayConnection: true,
+			WhereInputs:     true,
+		})
+		edge := &entgen.Edge{
+			Name:        "items",
+			Type:        emptyType,
+			Unique:      false,
+			Annotations: map[string]any{},
+		}
+		result := emptyGen.genEdgeField(nil, edge)
+		assert.NotContains(t, result, "where:",
+			"sanity: target with no filterable content must not get where arg")
+		assert.NotContains(t, result, "forceResolver",
+			"edges whose target has no filterable content must not emit forceResolver")
+	})
+
+	t.Run("UniqueEdge_NoDirective", func(t *testing.T) {
+		// Unique edges don't produce connections and never take `where`,
+		// so they must not emit forceResolver regardless of the annotation.
+		edge := &entgen.Edge{
+			Name:   "author",
+			Type:   postType,
+			Unique: true,
+			Annotations: map[string]any{
+				AnnotationName: &Annotation{WhereInputEnabled: true},
+			},
+		}
+		result := gen.genEdgeField(nil, edge)
+		assert.NotContains(t, result, "forceResolver",
+			"unique edges never carry `where`, so forceResolver is meaningless")
+	})
+}
+
 // =============================================================================
 // genConnectionsSchema Extended Tests
 // =============================================================================
@@ -1207,6 +1342,173 @@ func TestGenerator_GenEntityPagination_FilterApplication(t *testing.T) {
 	// Wrong filter type should return error (not silently ignored)
 	assert.Contains(t, code, "invalid filter type")
 	assert.Contains(t, code, "fmt.Errorf")
+}
+
+// TestGenerator_GenEntityPagination_DelegatesToBuildConnection pins a
+// single-source-of-truth invariant: query.XxxQuery.Paginate MUST delegate
+// connection assembly to entity.BuildXxxConnection rather than inlining
+// cursor/pageInfo/edge construction. This prevents the slow path from
+// drifting away from the fast path (edge-resolver reuse of eager-loaded
+// edges).
+//
+// A regression that re-inlines the build logic here would silently make
+// the slow path emit subtly different edges (e.g. different HasNextPage
+// semantics, missing StartCursor/EndCursor) from the fast path — test
+// exists to block that class of change at codegen time, before it can
+// ship.
+func TestGenerator_GenEntityPagination_DelegatesToBuildConnection(t *testing.T) {
+	typ := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{},
+	}
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{typ},
+	}
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelayConnection: true,
+		Ordering:        true,
+	})
+
+	f := gen.genEntityPagination(typ)
+	var buf bytes.Buffer
+	if err := f.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	code := buf.String()
+
+	// Must delegate to entity.BuildUserConnection — no inline Edge
+	// construction. If this assertion fails, Paginate is probably
+	// assembling edges itself again, which means slow/fast paths will
+	// drift.
+	assert.Contains(t, code, "entity.BuildUserConnection",
+		"Paginate body must call entity.BuildUserConnection to assemble the "+
+			"connection — inlining the assembly duplicates logic between "+
+			"slow and fast paths and is the root of the pre-Tier-3 gap")
+
+	// Negative: Paginate must NOT contain the old inline loop that built
+	// edges with `conn.Edges = make([]*UserEdge, len(nodes))`. If this
+	// string reappears, someone undid the refactor.
+	assert.NotContains(t, code, "make([]*entity.UserEdge,",
+		"Paginate must not inline edge slice allocation — that belongs "+
+			"inside BuildUserConnection, not Paginate")
+	assert.NotContains(t, code, "conn.PageInfo.StartCursor = ",
+		"Paginate must not inline StartCursor/EndCursor assignment — it "+
+			"belongs inside BuildUserConnection")
+}
+
+// TestGenerator_GenModelPaginationTypes_EmitsBuildConnection pins the
+// other half of the single-source-of-truth invariant: entity/gql_pagination.
+// go must emit BuildXxxConnection. Missing here = broken fast path,
+// broken slow path delegation, and a compile error in every edge-resolver
+// method that tries to call it.
+func TestGenerator_GenModelPaginationTypes_EmitsBuildConnection(t *testing.T) {
+	typ := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{},
+	}
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{typ},
+	}
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelayConnection: true,
+		Ordering:        true,
+		ORMPackage:      "example/ent",
+	})
+
+	f := gen.genModelPaginationTypes([]*entgen.Type{typ})
+	var buf bytes.Buffer
+	if err := f.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	code := buf.String()
+
+	assert.Contains(t, code, "func BuildUserConnection(",
+		"entity/gql_pagination.go must emit BuildUserConnection — edge "+
+			"resolvers depend on it for the fast path")
+	// Signature shape: must take totalCount int explicitly so callers
+	// can pass the real count from COUNT(*) (slow path) or the full
+	// eager-loaded len (fast path).
+	assert.Contains(t, code, "totalCount int",
+		"BuildUserConnection signature must carry totalCount explicitly; a "+
+			"caller-side default to len(nodes) is wrong for the slow path "+
+			"where nodes is the trimmed slice, not the full count")
+	// Must use order.Field.ToCursor when available (not just ID fallback).
+	assert.Contains(t, code, "order.Field.ToCursor",
+		"BuildUserConnection must use order.Field.ToCursor for cursor "+
+			"generation, falling back to node.ID only when no order is set")
+}
+
+// TestGenerator_GenModelPaginationTypes_CustomIDFieldName pins that
+// BuildXxxConnection's fallback-cursor field reference derives from the
+// entity's actual primary-key field name, not a hard-coded "ID".
+//
+// Entities whose primary-key column is named something other than "id"
+// (e.g. "user_id" → Go field UserID) rely on this derivation; a hardcoded
+// "ID" fallback would reference a non-existent field and cause a Go
+// compile error in the generated file. The derivation is
+// `pascal(t.ID.Name)` when t.ID.Name != "id".
+func TestGenerator_GenModelPaginationTypes_CustomIDFieldName(t *testing.T) {
+	typ := &entgen.Type{
+		Name: "Account",
+		// Primary key column is "account_id", Go field will be AccountID.
+		// Before the fix, BuildAccountConnection's fallback cursor would
+		// have said `node.ID` — wrong, no such field on *Account.
+		ID: &entgen.Field{
+			Name: "account_id",
+			Type: &field.TypeInfo{Type: field.TypeInt64},
+		},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{},
+	}
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{typ},
+	}
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelayConnection: true,
+		Ordering:        true,
+		ORMPackage:      "example/ent",
+	})
+
+	f := gen.genModelPaginationTypes([]*entgen.Type{typ})
+	var buf bytes.Buffer
+	if err := f.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	code := buf.String()
+
+	// Fallback cursor must reference AccountID, not ID. The `ID:` key on
+	// gqlrelay.Cursor is the CURSOR field; the right-hand side must
+	// point at the entity's actual primary-key Go field. The hoisted
+	// cursor function parameter can be named anything (generator uses
+	// `n`), so we assert on the suffix `.AccountID` — which identifies
+	// the field reference regardless of receiver name.
+	assert.Contains(t, code, ".AccountID",
+		"BuildAccountConnection fallback cursor must reference the entity's "+
+			"AccountID field (derived from t.ID.Name). A reference to .ID here "+
+			"would be a compile error because the Account struct has no ID field")
+	// Harder negative: the literal string `{ID: n.ID}` or `{ID: node.ID}`
+	// would indicate a hardcoded fallback. Use a regex/substring check
+	// covering both parameter-name conventions.
+	assert.NotContains(t, code, "{ID: n.ID}",
+		"fallback cursor must not hard-code n.ID — breaks entities with custom IDs")
+	assert.NotContains(t, code, "{ID: node.ID}",
+		"fallback cursor must not hard-code node.ID — breaks entities with custom IDs")
 }
 
 // =============================================================================

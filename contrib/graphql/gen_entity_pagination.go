@@ -43,17 +43,16 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 
 	// Pagination types are now in entity/ package.
 	connName := typeName + "Connection"
-	edgeName := typeName + "Edge"
 	optName := typeName + "PaginateOption"
 	pagerCfg := typeName + "PagerConfig"
 
-	idField := "ID"
+	// idColumn is the Go identifier for the entity's ID field constant in
+	// the per-entity predicate package (e.g., `todo.FieldID` or
+	// `todo.FieldUserID`). Used by the order-by fallback and cursor
+	// predicates below.
 	idColumn := "FieldID"
-	if t.ID != nil && t.ID.Name != "" {
-		if t.ID.Name != "id" {
-			idField = pascal(t.ID.Name)
-		}
-		idColumn = "Field" + idField
+	if t.ID != nil && t.ID.Name != "" && t.ID.Name != "id" {
+		idColumn = "Field" + pascal(t.ID.Name)
 	}
 
 	// Paginate method on query.UserQuery — direct style like Ent.
@@ -142,8 +141,7 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Return(jen.Nil(), jen.Err()),
 		)
 
-		// Apply limit
-		grp.Id("reverse").Op(":=").Id("last").Op("!=").Nil()
+		// Apply limit (+1 probe row for hasNext/hasPrev detection; trimmed in Build*Connection).
 		grp.If(jen.Id("first").Op("!=").Nil()).Block(
 			jen.Id("q").Dot("Limit").Call(jen.Op("*").Id("first").Op("+").Lit(1)),
 		).Else().If(jen.Id("last").Op("!=").Nil()).Block(
@@ -156,60 +154,23 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Return(jen.Nil(), jen.Err()),
 		)
 
-		// Build connection
-		grp.Id("conn").Op(":=").Op("&").Qual(entityPkg, connName).Values(jen.Dict{
-			jen.Id("TotalCount"): jen.Id("totalCount"),
-		})
-
-		// Determine hasNext/hasPrev and trim probe row
-		grp.Id("limit").Op(":=").Len(jen.Id("nodes"))
-		grp.If(jen.Id("first").Op("!=").Nil().Op("&&").Id("limit").Op(">").Op("*").Id("first")).Block(
-			jen.Id("nodes").Op("=").Id("nodes").Index(jen.Empty(), jen.Op("*").Id("first")),
-			jen.Id("conn").Dot("PageInfo").Dot("HasNextPage").Op("=").True(),
-		)
-		grp.If(jen.Id("last").Op("!=").Nil().Op("&&").Id("limit").Op(">").Op("*").Id("last")).Block(
-			jen.Id("nodes").Op("=").Id("nodes").Index(jen.Id("limit").Op("-").Op("*").Id("last"), jen.Empty()),
-			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
-		)
-		grp.If(jen.Id("before").Op("!=").Nil()).Block(
-			jen.Id("conn").Dot("PageInfo").Dot("HasNextPage").Op("=").True(),
-		)
-		grp.If(jen.Id("after").Op("!=").Nil()).Block(
-			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
-		)
-
-		// Reverse if paginating backwards
-		grp.If(jen.Id("reverse")).Block(
-			jen.For(jen.List(jen.Id("i"), jen.Id("j")).Op(":=").Lit(0).Op(",").Len(jen.Id("nodes")).Op("-").Lit(1), jen.Id("i").Op("<").Id("j"), jen.List(jen.Id("i"), jen.Id("j")).Op("=").Id("i").Op("+").Lit(1).Op(",").Id("j").Op("-").Lit(1)).Block(
-				jen.List(jen.Id("nodes").Index(jen.Id("i")), jen.Id("nodes").Index(jen.Id("j"))).Op("=").List(jen.Id("nodes").Index(jen.Id("j")), jen.Id("nodes").Index(jen.Id("i"))),
+		// Delegate assembly to entity.BuildXxxConnection — the SAME helper
+		// used by edge-resolver fast paths. Keeping one source of truth for
+		// cursor/pageInfo/edge construction means the slow path and fast
+		// path can't drift (which is exactly what was making the pre-fix
+		// velox behave differently from Ent on eager-loaded edges).
+		grp.Return(
+			jen.Qual(entityPkg, "Build"+connName).Call(
+				jen.Id("nodes"),
+				jen.Id("totalCount"),
+				jen.Id("cfg").Dot("Order"),
+				jen.Id("after"),
+				jen.Id("first"),
+				jen.Id("before"),
+				jen.Id("last"),
 			),
+			jen.Nil(),
 		)
-
-		// Build edges with cursors
-		grp.Id("conn").Dot("Edges").Op("=").Make(jen.Index().Op("*").Qual(entityPkg, edgeName), jen.Len(jen.Id("nodes")))
-		grp.For(jen.List(jen.Id("i"), jen.Id("node")).Op(":=").Range().Id("nodes")).BlockFunc(func(edgeGrp *jen.Group) {
-			// ToCursor
-			edgeGrp.Var().Id("cursor").Qual(gqlrelayPkg, "Cursor")
-			edgeGrp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Dot("ToCursor").Op("!=").Nil()).Block(
-				jen.Id("cursor").Op("=").Id("cfg").Dot("Order").Dot("Field").Dot("ToCursor").Call(jen.Id("node")),
-			).Else().Block(
-				jen.Id("cursor").Op("=").Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
-					jen.Id("ID"): jen.Id("node").Dot(idField),
-				}),
-			)
-			edgeGrp.Id("conn").Dot("Edges").Index(jen.Id("i")).Op("=").Op("&").Qual(entityPkg, edgeName).Values(jen.Dict{
-				jen.Id("Node"):   jen.Id("node"),
-				jen.Id("Cursor"): jen.Id("cursor"),
-			})
-		})
-
-		// Set start/end cursors
-		grp.If(jen.Len(jen.Id("conn").Dot("Edges")).Op(">").Lit(0)).Block(
-			jen.Id("conn").Dot("PageInfo").Dot("StartCursor").Op("=").Op("&").Id("conn").Dot("Edges").Index(jen.Lit(0)).Dot("Cursor"),
-			jen.Id("conn").Dot("PageInfo").Dot("EndCursor").Op("=").Op("&").Id("conn").Dot("Edges").Index(jen.Len(jen.Id("conn").Dot("Edges")).Op("-").Lit(1)).Dot("Cursor"),
-		)
-
-		grp.Return(jen.Id("conn"), jen.Nil())
 	})
 
 	return f
@@ -425,6 +386,18 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 
 	// --- WithFilter function ---
 	g.genModelWithFilter(f, typeName, optName, pagerConfigName)
+
+	// --- BuildConnection helper ---
+	// Shared "assemble a connection from a node slice" helper. Used by BOTH
+	// the slow path (query.XxxQuery.Paginate, which does a fresh DB query)
+	// AND the fast path (edge-resolver methods that reuse eager-loaded edges
+	// without hitting the database). Before this helper was factored out, the
+	// build-connection logic was inlined in Paginate only, which is why edge
+	// resolvers had to always go through Paginate — they had no other way to
+	// reach the cursor/pageInfo assembly. Keeping a single source of truth
+	// here means the fast path is a strict optimization of the slow path and
+	// can't drift.
+	g.genModelBuildConnection(f, t, typeName, connName, edgeName, orderName, multiOrder)
 }
 
 // genModelDefaultOrder generates the DefaultOrder variable in the root package.
@@ -637,4 +610,160 @@ func (g *Generator) genRootPaginationHelpers(_ []*gen.Type) *jen.File {
 	// @goModel directives point directly to entity/ sub-package.
 	// No root re-exports needed.
 	return nil
+}
+
+// genModelBuildConnection emits BuildXxxConnection — the shared in-memory
+// assembly helper used by both the slow path (full Paginate with fresh DB
+// query) and the fast path (edge resolvers reusing eager-loaded edges).
+//
+// The helper takes a raw node slice (possibly with +1 probe row, possibly
+// just the full eager-loaded set), a known totalCount (or 0 to default to
+// len(nodes)), an order spec for cursor generation, and the Relay cursor
+// args — and returns a fully populated *XxxConnection.
+//
+// Matches the semantics of Ent's `func (c *XxxConnection) build(nodes, pager,
+// after, first, before, last)` (entgql/internal/todogotype/ent/gql_pagination.go:
+// CategoryConnection.build). Ent uses a method on connection plus a private
+// pager; velox uses a free function plus the public *XxxOrder — mechanically
+// the same output.
+func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, connName, edgeName, orderName string, multiOrder bool) {
+	// BuildXxxConnection(nodes, totalCount, order, after, first, before, last) *XxxConnection
+	orderParamType := jen.Op("*").Id(orderName)
+	if multiOrder {
+		orderParamType = jen.Index().Op("*").Id(orderName)
+	}
+
+	// Derive the Go field name for the entity's primary key for use in the
+	// fallback cursor (when no order field is provided). For the default
+	// `id` column this is `ID`; for a schema that overrides the PK name to
+	// something like `user_id`, it becomes `UserID`. Matches the rule used
+	// by the old inlined Paginate body so the emitted code is byte-for-byte
+	// equivalent to the pre-refactor output.
+	idField := "ID"
+	if t != nil && t.ID != nil && t.ID.Name != "" && t.ID.Name != "id" {
+		idField = pascal(t.ID.Name)
+	}
+
+	f.Commentf("Build%s assembles a %s from an in-memory node slice, without",
+		connName, connName)
+	f.Commentf("hitting the database. Shared by query.%sQuery.Paginate (slow",
+		typeName)
+	f.Comment("path, fresh DB query) and edge-resolver fast paths (reuse of")
+	f.Commentf("eager-loaded edges). Input contract matches Ent's CategoryConnection.build:")
+	f.Comment("  - nodes may include one probe row (+1 for first/last) — helper trims it")
+	f.Comment("    and sets HasNextPage / HasPreviousPage accordingly")
+	f.Comment("  - totalCount of 0 defaults to len(nodes) — only correct when the caller")
+	f.Comment("    has the full set (e.g. eager-loaded edges). The slow path always")
+	f.Comment("    passes a real count.")
+	f.Commentf("  - order is used only for cursor generation (order.Field.ToCursor); it")
+	f.Comment("    does NOT filter or sort — callers must pass nodes already in the right")
+	f.Comment("    order, because in-memory resorting would silently disagree with the")
+	f.Comment("    cursor comparator at the DB level.")
+
+	f.Func().Id("Build"+connName).Params(
+		jen.Id("nodes").Index().Op("*").Id(typeName),
+		jen.Id("totalCount").Int(),
+		jen.Id("order").Add(orderParamType),
+		jen.Id("after").Op("*").Qual(gqlrelayPkg, "Cursor"),
+		jen.Id("first").Op("*").Int(),
+		jen.Id("before").Op("*").Qual(gqlrelayPkg, "Cursor"),
+		jen.Id("last").Op("*").Int(),
+	).Op("*").Id(connName).BlockFunc(func(grp *jen.Group) {
+		grp.Id("conn").Op(":=").Op("&").Id(connName).Values(jen.Dict{
+			jen.Id("TotalCount"): jen.Id("totalCount"),
+		})
+
+		// Trim probe row and set HasNextPage / HasPreviousPage.
+		grp.Id("limit").Op(":=").Len(jen.Id("nodes"))
+		grp.If(jen.Id("first").Op("!=").Nil().Op("&&").Id("limit").Op(">").Op("*").Id("first")).Block(
+			jen.Id("nodes").Op("=").Id("nodes").Index(jen.Empty(), jen.Op("*").Id("first")),
+			jen.Id("conn").Dot("PageInfo").Dot("HasNextPage").Op("=").True(),
+		)
+		grp.If(jen.Id("last").Op("!=").Nil().Op("&&").Id("limit").Op(">").Op("*").Id("last")).Block(
+			jen.Id("nodes").Op("=").Id("nodes").Index(jen.Id("limit").Op("-").Op("*").Id("last"), jen.Empty()),
+			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
+		)
+		grp.If(jen.Id("before").Op("!=").Nil()).Block(
+			jen.Id("conn").Dot("PageInfo").Dot("HasNextPage").Op("=").True(),
+		)
+		grp.If(jen.Id("after").Op("!=").Nil()).Block(
+			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
+		)
+
+		// Resolve the cursor-generation function ONCE outside the edge
+		// loop. Before this hoist, the loop had 3 nil checks per iteration
+		// (order/order.Field/order.Field.ToCursor) which predictably
+		// short-circuit to the same branch across all edges — branch
+		// prediction handles it but the code is cleaner this way, and
+		// matches Ent's pager.toCursor abstraction. Also critical for
+		// the `last` handling below — we index backward through the
+		// same function.
+		var orderExpr *jen.Statement
+		if multiOrder {
+			orderExpr = jen.Id("order").Index(jen.Lit(0))
+		} else {
+			orderExpr = jen.Id("order")
+		}
+		var orderPresent *jen.Statement
+		if multiOrder {
+			orderPresent = jen.Len(jen.Id("order")).Op(">").Lit(0)
+		} else {
+			orderPresent = jen.Id("order").Op("!=").Nil()
+		}
+		grp.Var().Id("cursorFn").Func().Params(jen.Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor")
+		grp.If(
+			orderPresent.Op("&&").Add(orderExpr.Clone().Dot("Field")).Op("!=").Nil().Op("&&").Add(orderExpr.Clone().Dot("Field").Dot("ToCursor")).Op("!=").Nil(),
+		).Block(
+			jen.Id("cursorFn").Op("=").Add(orderExpr.Clone()).Dot("Field").Dot("ToCursor"),
+		).Else().Block(
+			jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+				jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
+					jen.Id("ID"): jen.Id("n").Dot(idField),
+				})),
+			),
+		)
+
+		// Build edges. For `last != nil`, we index backward through the
+		// input slice WITHOUT mutating it — nodes may be pointer-shared
+		// with obj.Edges.Xxx on the fast path, and an in-place reverse
+		// would corrupt the caller's eager-loaded cache. Matches Ent's
+		// CategoryConnection.build which uses a nodeAt() index function
+		// for the same reason.
+		grp.Id("conn").Dot("Edges").Op("=").Make(jen.Index().Op("*").Id(edgeName), jen.Len(jen.Id("nodes")))
+		grp.If(jen.Id("last").Op("!=").Nil()).Block(
+			// Reverse iteration: output[i] = input[len-1-i], no mutation.
+			jen.Id("n").Op(":=").Len(jen.Id("nodes")).Op("-").Lit(1),
+			jen.For(jen.Id("i").Op(":=").Range().Id("nodes")).Block(
+				jen.Id("node").Op(":=").Id("nodes").Index(jen.Id("n").Op("-").Id("i")),
+				jen.Id("conn").Dot("Edges").Index(jen.Id("i")).Op("=").Op("&").Id(edgeName).Values(jen.Dict{
+					jen.Id("Node"):   jen.Id("node"),
+					jen.Id("Cursor"): jen.Id("cursorFn").Call(jen.Id("node")),
+				}),
+			),
+		).Else().Block(
+			jen.For(jen.List(jen.Id("i"), jen.Id("node")).Op(":=").Range().Id("nodes")).Block(
+				jen.Id("conn").Dot("Edges").Index(jen.Id("i")).Op("=").Op("&").Id(edgeName).Values(jen.Dict{
+					jen.Id("Node"):   jen.Id("node"),
+					jen.Id("Cursor"): jen.Id("cursorFn").Call(jen.Id("node")),
+				}),
+			),
+		)
+
+		// Set start/end cursors.
+		grp.If(jen.Len(jen.Id("conn").Dot("Edges")).Op(">").Lit(0)).Block(
+			jen.Id("conn").Dot("PageInfo").Dot("StartCursor").Op("=").Op("&").Id("conn").Dot("Edges").Index(jen.Lit(0)).Dot("Cursor"),
+			jen.Id("conn").Dot("PageInfo").Dot("EndCursor").Op("=").Op("&").Id("conn").Dot("Edges").Index(jen.Len(jen.Id("conn").Dot("Edges")).Op("-").Lit(1)).Dot("Cursor"),
+		)
+
+		// Default totalCount = len(edges) when 0 — only meaningful for the
+		// fast path where the caller doesn't know the true count yet but has
+		// the full eager-loaded slice. The slow path always passes a real
+		// count from COUNT(*), so conn.TotalCount != 0 at that point.
+		grp.If(jen.Id("conn").Dot("TotalCount").Op("==").Lit(0)).Block(
+			jen.Id("conn").Dot("TotalCount").Op("=").Len(jen.Id("conn").Dot("Edges")),
+		)
+
+		grp.Return(jen.Id("conn"))
+	})
+	f.Line()
 }

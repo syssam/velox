@@ -5,8 +5,10 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/privacy"
+	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -71,26 +73,45 @@ func (User) Fields() []velox.Field {
 	return []velox.Field{
 		field.String("name").
 			NotEmpty().
-			MaxLen(100),
+			MaxLen(100).
+			Annotations(graphql.WhereInput()),
 		field.String("email").
 			Unique().
-			NotEmpty(),
+			NotEmpty().
+			Annotations(graphql.WhereInput()),
 		field.Int("age").
 			Optional().
 			Positive(),
 		field.Enum("role").
 			Values("admin", "user", "guest").
-			Default("user"),
+			Default("user").
+			Annotations(graphql.WhereInput()),
 	}
 }
 
 // Edges of the User.
+// posts is opted into `where:` filtering via graphql.WhereInput() — this is
+// the edge-with-where path that the integration test cover below
+// (user.posts(where: {status: published})). Forces gqlgen to route through
+// a resolver, which the test provides.
 func (User) Edges() []velox.Edge {
 	return []velox.Edge{
 		edge.To("posts", Post.Type).
-			Comment("Posts written by this user"),
+			Comment("Posts written by this user").
+			Annotations(graphql.WhereInput()),
 		edge.To("comments", Comment.Type).
 			Comment("Comments written by this user"),
+	}
+}
+
+// Annotations of the User — opt into Relay connection + GraphQL Query
+// field so contrib/graphql emits the user.posts connection with a
+// TodoWhereInput arg. Without these, the schema has no graphql output
+// and the integration test wouldn't exercise the edge-with-where path.
+func (User) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		graphql.QueryField(),
+		graphql.RelayConnection(),
 	}
 }
 

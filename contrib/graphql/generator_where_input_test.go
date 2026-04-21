@@ -1644,3 +1644,180 @@ func TestGenerator_WhereInputUUIDNotBlanketID(t *testing.T) {
 		t.Error("FK UUID field (user_id) should get equality ops (In)")
 	}
 }
+
+// TestGenerator_WhereOnEdgeConnection_ForceResolverCoupling is the
+// whole-pipeline guard for the silent-drop bug fixed by @goField(forceResolver:
+// true) on edge-connection fields. A narrower unit test lives next to
+// genEdgeField in generator_coverage_test.go
+// (TestGenerator_GenEdgeField_ForceResolverOnWhere); this test runs the full
+// genTypesSchema + genFullSchema pipeline on a realistic multi-entity graph
+// and then asserts the *invariant* that links the two SDL pieces:
+//
+//	every connection field carrying a `where:` argument also carries
+//	@goField(forceResolver: true)
+//
+// The invariant matters because a regression need not touch genEdgeField
+// directly to break it — any higher-level code path that assembles edge
+// fields without routing through genEdgeField would reintroduce silent drop.
+// Parsing the emitted SDL as a black box catches that class of regression,
+// not just direct changes to the edge-field helper.
+func TestGenerator_WhereOnEdgeConnection_ForceResolverCoupling(t *testing.T) {
+	// Two filterable types + a user that has edges to both, some of which
+	// carry a `where:` arg under the whitelist and some of which don't.
+	postType := &entgen.Type{
+		Name: "Post",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{
+				Name: "title",
+				Type: &field.TypeInfo{Type: field.TypeString},
+				Annotations: map[string]any{
+					AnnotationName: &Annotation{WhereInputEnabled: true},
+				},
+			},
+		},
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{RelayConnection: true},
+		},
+	}
+	commentType := &entgen.Type{
+		Name: "Comment",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{
+				Name: "body",
+				Type: &field.TypeInfo{Type: field.TypeString},
+				Annotations: map[string]any{
+					AnnotationName: &Annotation{WhereInputEnabled: true},
+				},
+			},
+		},
+		// No RelayConnection annotation → `comments` edge below renders as
+		// a plain list `[Comment!]!` instead of a connection, so it never
+		// carries `where:` regardless of the whitelist. That's the negative
+		// case the invariant check must not flag.
+		Annotations: map[string]any{},
+	}
+	userType := &entgen.Type{
+		Name:        "User",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields:      []*entgen.Field{},
+		Annotations: map[string]any{AnnotationName: &Annotation{RelayConnection: true}},
+	}
+	userType.Edges = []*entgen.Edge{
+		{
+			// Whitelisted connection edge → SDL gets `where:` → must force
+			// resolver. This is the positive case.
+			Name:   "posts",
+			Type:   postType,
+			Unique: false,
+			Annotations: map[string]any{
+				AnnotationName: &Annotation{WhereInputEnabled: true},
+			},
+		},
+		{
+			// Non-connection (target has no RelayConnection annotation) → SDL
+			// renders as `[Comment!]!`. Must not force resolver, because the
+			// entity method has no `where` mismatch to silently drop.
+			Name:        "comments",
+			Type:        commentType,
+			Unique:      false,
+			Annotations: map[string]any{},
+		},
+	}
+
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{userType, postType, commentType},
+	}
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelaySpec:       true,
+		RelayConnection: true,
+		WhereInputs:     true,
+	})
+
+	sdl := gen.genFullSchema()
+
+	// Walk the SDL line by line, tracking which `type X {` block we're in.
+	// The invariant applies only to edge-connection fields (inside entity
+	// types), not to root Query connection fields — Query fields always
+	// go through the generated QueryResolver interface regardless, so the
+	// autobind subset-match path doesn't apply to them and they must NOT
+	// carry forceResolver.
+	//
+	// A small state machine is easier to reason about than a regex here:
+	// track the enclosing type name and the current field's opening line,
+	// accumulate until we see the closing `)`, then apply the check on
+	// the closing line (which is where the return type and directives
+	// live).
+	lines := strings.Split(sdl, "\n")
+	var (
+		currentType   string // name of the enclosing `type X {` block, empty outside any type
+		inArgs        bool
+		sawWhereArg   bool
+		fieldOpenIdx  int
+		foundCoupling bool // at least one where-bearing edge connection
+	)
+	for i, line := range lines {
+		// Track the enclosing type. Conservatively only match top-level
+		// `type X ...{` lines — directives / descriptions are on separate
+		// lines so a simple prefix check is fine.
+		if strings.HasPrefix(line, "type ") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				currentType = parts[1]
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "}") {
+			currentType = ""
+			continue
+		}
+		// Only enforce the invariant inside entity types. Query/Mutation/
+		// Subscription fields are resolver-resolved regardless and must
+		// not carry the directive.
+		if currentType == "" || currentType == "Query" || currentType == "Mutation" || currentType == "Subscription" {
+			continue
+		}
+
+		if !inArgs && strings.Contains(line, "(") && !strings.Contains(line, ")") {
+			inArgs = true
+			sawWhereArg = false
+			fieldOpenIdx = i
+			continue
+		}
+		if inArgs {
+			if strings.Contains(line, "where:") {
+				sawWhereArg = true
+			}
+			if strings.Contains(line, ")") {
+				inArgs = false
+				closeLine := line
+				isConnection := strings.Contains(closeLine, "Connection")
+				hasForceResolver := strings.Contains(closeLine, "@goField(forceResolver: true)")
+
+				if sawWhereArg && isConnection && !hasForceResolver {
+					t.Errorf(
+						"edge-connection field in type %q (starting at SDL line %d) carries `where:` but is missing @goField(forceResolver: true):\n%s",
+						currentType, fieldOpenIdx+1, closeLine)
+				}
+				if sawWhereArg && isConnection && hasForceResolver {
+					foundCoupling = true
+				}
+				if !sawWhereArg && hasForceResolver {
+					t.Errorf(
+						"field in type %q (starting at SDL line %d) has @goField(forceResolver: true) but no `where:` arg — unnecessary resolver coercion:\n%s",
+						currentType, fieldOpenIdx+1, closeLine)
+				}
+			}
+		}
+	}
+
+	// Liveness: ensure the test actually exercised the coupling path. A
+	// buggy hasFilterableContent or hasWhereInput that made no edge carry
+	// `where:` would make the invariant checks above trivially pass.
+	if !foundCoupling {
+		t.Fatal("liveness: expected at least one edge-connection field with both `where:` and @goField(forceResolver: true)")
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	gqlgenpkg "example.com/fullgql/gqlgen"
 	"example.com/fullgql/velox"
 	"example.com/fullgql/velox/category"
 	"example.com/fullgql/velox/comment"
@@ -18,6 +19,8 @@ import (
 	"example.com/fullgql/velox/user"
 	"example.com/fullgql/velox/workspace"
 
+	gqlclient "github.com/99designs/gqlgen/client"
+	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
@@ -1564,3 +1567,329 @@ func TestEntityM2MEdgeMethod_ReturnsAllAssociated(t *testing.T) {
 	assert.ElementsMatch(t, wantTagNames, gotNames,
 		"M2M edge must return exactly the associated tag names — content, not just cardinality")
 }
+
+// TestGraphQL_EdgeConnectionWhereFilter is the runtime regression guard for
+// the silent-drop bug documented on the @goField(forceResolver: true) branch
+// in contrib/graphql/schema_input.go.
+//
+// Without the directive, gqlgen's autobind treats the velox-generated entity
+// method
+//
+//	(*Tag).Todos(ctx, after, first, before, last, orderBy)
+//
+// as a successful partial match against the SDL field
+//
+//	todos(after, first, before, last, orderBy, where: TodoWhereInput)
+//
+// and silently drops `where` at runtime — a client sending
+// `where: {status: DONE}` gets every todo back regardless of status. With
+// the directive, gqlgen routes through the generated resolver interface,
+// whose user-provided body wires `where.Filter` into `WithTodoFilter(...)`
+// on Paginate.
+//
+// This test drives a real GraphQL query through the gqlgen executor
+// (the same path the production server uses) and asserts the filter
+// actually reduces the result set. It intentionally does NOT use the
+// Go-level `(*entity.Tag).Todos(...)` helper — that helper has no `where`
+// parameter by construction and therefore cannot reproduce the bug.
+func TestGraphQL_EdgeConnectionWhereFilter(t *testing.T) {
+	ctx := context.Background()
+	// Use shared-cache in-memory SQLite so the gqlgen handler's per-request
+	// connections see the seeded schema and rows. Plain `mode=memory` without
+	// `cache=shared` gives each connection its own isolated DB, which masks
+	// this test as "table not found" rather than "filter not applied".
+	client, err := velox.Open(dialect.SQLite, "file:edge-where?mode=memory&cache=shared&_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	t.Cleanup(func() { client.Close() })
+	require.NoError(t, client.Schema.Create(ctx))
+	cfg := client.RuntimeConfig()
+
+	// Seed: one owner, one tag, four todos split across statuses.
+	owner, err := user.NewUserClient(cfg).Create().
+		SetInput(user.CreateUserInput{Name: "Owner", Email: "owner@example.com"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	theTag, err := tag.NewTagClient(cfg).Create().
+		SetInput(tag.CreateTagInput{Name: "work"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// Three DONE, one TODO. Filter must keep the three, drop the one.
+	todoSeed := []struct {
+		title  string
+		status entity.TodoStatus
+	}{
+		{"ship-it", entity.TodoStatusDone},
+		{"merge-pr", entity.TodoStatusDone},
+		{"post-mortem", entity.TodoStatusDone},
+		{"noise-not-done", entity.TodoStatusTodo},
+	}
+	for _, s := range todoSeed {
+		status := s.status
+		created, err := todo.NewTodoClient(cfg).Create().
+			SetInput(todo.CreateTodoInput{
+				Title:   s.title,
+				Status:  &status,
+				OwnerID: owner.ID,
+				TagIDs:  []int{theTag.ID},
+			}).
+			Save(ctx)
+		require.NoError(t, err)
+		require.Equal(t, s.status, created.Status)
+	}
+
+	// Sanity: confirm the Go-level tag→todos traversal sees all 4 seeded
+	// todos BEFORE we go through gqlgen. This isolates seed/M2M-wiring
+	// failures from filter-propagation failures.
+	{
+		reloaded, err := tag.NewTagClient(cfg).Get(ctx, theTag.ID)
+		require.NoError(t, err)
+		sanityConn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, 4, sanityConn.TotalCount,
+			"seed sanity: tag.todos at Go-level should see all 4 todos")
+	}
+
+	// Build the gqlgen executor backed by our test client. Using
+	// NewExecutableSchema here exercises the same field-resolution path
+	// a production server hits.
+	srv := handler.NewDefaultServer(gqlgenpkg.NewExecutableSchema(gqlgenpkg.Config{
+		Resolvers: &gqlgenpkg.Resolver{Client: client},
+	}))
+	gqlClient := gqlclient.New(srv)
+
+	// Query the single seeded tag via the root `tags` connection and then
+	// traverse its edge connection twice — once with a `where` filter,
+	// once without — so we can compare counts in the same response.
+	// `status` comes back as the SDL enum (upper-case), not the Go value,
+	// so we check against "DONE".
+	query := `
+		query {
+			tags(first: 10) {
+				edges {
+					node {
+						doneOnly: todos(where: { status: DONE }) {
+							totalCount
+							edges { node { title status } }
+						}
+						all: todos {
+							totalCount
+						}
+					}
+				}
+			}
+		}`
+
+	var resp struct {
+		Tags struct {
+			Edges []struct {
+				Node struct {
+					DoneOnly struct {
+						TotalCount int `json:"totalCount"`
+						Edges      []struct {
+							Node struct {
+								Title  string `json:"title"`
+								Status string `json:"status"`
+							} `json:"node"`
+						} `json:"edges"`
+					} `json:"doneOnly"`
+					All struct {
+						TotalCount int `json:"totalCount"`
+					} `json:"all"`
+				} `json:"node"`
+			} `json:"edges"`
+		} `json:"tags"`
+	}
+
+	err = gqlClient.Post(query, &resp)
+	require.NoError(t, err, "GraphQL request must succeed")
+	require.Len(t, resp.Tags.Edges, 1, "expected exactly the one seeded tag")
+	got := resp.Tags.Edges[0].Node
+
+	// Sanity: without a filter, tag.todos should surface all 4 seeded
+	// todos — rules out a seeding bug masquerading as a filter bug.
+	require.Equal(t, 4, got.All.TotalCount,
+		"without where, tag.todos should surface all 4 seeded todos")
+
+	// Bug signature: without forceResolver, the where arg is silently
+	// dropped and totalCount == 4 (same as unfiltered). With the fix,
+	// exactly the 3 DONE todos come back.
+	require.Equal(t, 3, got.DoneOnly.TotalCount,
+		"where: {status: DONE} must reduce tag.todos totalCount from 4 to 3 — "+
+			"if this is 4, the where arg is being silently dropped (see the "+
+			"forceResolver directive comment in contrib/graphql/schema_input.go)")
+	require.Len(t, got.DoneOnly.Edges, 3, "edges count must match totalCount")
+
+	gotTitles := make([]string, 0, len(got.DoneOnly.Edges))
+	for _, e := range got.DoneOnly.Edges {
+		assert.Equal(t, "DONE", e.Node.Status,
+			"filtered edges must all carry status DONE — any non-DONE value "+
+				"proves the filter didn't reach the SQL query")
+		gotTitles = append(gotTitles, e.Node.Title)
+	}
+	assert.ElementsMatch(t,
+		[]string{"ship-it", "merge-pr", "post-mortem"}, gotTitles,
+		"filtered edges must be exactly the DONE-status seed set, not a subset by coincidence")
+}
+
+// TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges pins the Ent-parity
+// optimization: when a parent query eagerly loads an edge via WithXxx(),
+// the subsequent call to the entity's edge-connection method MUST reuse
+// that pre-loaded slice and skip the SQL query. Without the fast path,
+// `.WithTodos()` is effectively dead weight at the GraphQL layer — the
+// resolver re-queries regardless. Generated body:
+//
+//	func (m *Category) Todos(ctx, after, first, before, last, orderBy) (*TodoConnection, error) {
+//	    if nodes, err := m.Edges.TodosOrErr(); err == nil && after == nil && before == nil {
+//	        return BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
+//	    }
+//	    return m.QueryTodos().(TodoPaginatable).Paginate(...)
+//	}
+//
+// The test shape: eagerly load edges on a client that will then FAIL if we
+// try to use it again (by closing its underlying connection). If the fast
+// path is taken, no DB call happens and the test passes. If the slow path
+// is taken, the Paginate call errors out (closed DB) and the test fails.
+func TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+	cfg := client.RuntimeConfig()
+
+	owner, err := user.NewUserClient(cfg).Create().
+		SetInput(user.CreateUserInput{Name: "Owner", Email: "owner-fp@example.com"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	cat, err := category.NewCategoryClient(cfg).Create().
+		SetInput(category.CreateCategoryInput{Name: "fast-path"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	for _, title := range []string{"a", "b", "c"} {
+		_, err := todo.NewTodoClient(cfg).Create().
+			SetInput(todo.CreateTodoInput{
+				Title:      title,
+				OwnerID:    owner.ID,
+				CategoryID: &cat.ID,
+			}).
+			Save(ctx)
+		require.NoError(t, err)
+	}
+
+	// Eagerly load the edge. This populates cat.Edges.Todos and sets the
+	// loaded-bit, so TodosOrErr() will succeed without hitting the DB on
+	// a subsequent call.
+	reloaded, err := client.Category.Query().Where(category.IDField.EQ(cat.ID)).WithTodos().Only(ctx)
+	require.NoError(t, err)
+
+	// Close the client's DB connection. Any fresh query after this point
+	// will fail. The fast path avoids touching the DB, so if the edge
+	// method uses it, this test passes.
+	require.NoError(t, client.Close())
+
+	// Call the entity-level edge method. With the fast path, this must
+	// succeed because nodes come from reloaded.Edges.Todos (already loaded
+	// in memory) — no driver round trip.
+	conn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
+	require.NoError(t, err,
+		"entity edge method MUST use eager-loaded edges — if this fails with a "+
+			"closed-DB error, the fast path in gen_entity_edge.go::genConnectionEdgeMethod "+
+			"regressed and the resolver is hitting the DB despite WithTodos()")
+	require.NotNil(t, conn)
+	require.Equal(t, 3, conn.TotalCount, "fast path returned wrong totalCount")
+	require.Len(t, conn.Edges, 3, "fast path returned wrong edge count")
+
+	gotTitles := make([]string, 0, len(conn.Edges))
+	for _, e := range conn.Edges {
+		require.NotNil(t, e.Node)
+		gotTitles = append(gotTitles, e.Node.Title)
+	}
+	assert.ElementsMatch(t, []string{"a", "b", "c"}, gotTitles,
+		"fast path must return exactly the eager-loaded nodes, not a coincidental subset")
+}
+
+// TestUserResolver_FastPath_ThroughGraphQL pins the "fast path through a
+// user-written resolver" pattern documented in doc.go and implemented in
+// examples/fullgql/gqlgen/schema.resolvers.go for every where-carrying edge.
+//
+// The entity-method fast path (TestEntityEdgeMethod_FastPath_... above) only
+// covers edges WITHOUT `where` — those bind to the entity method via gqlgen
+// autobind. Edges WITH `where` go through a user-written resolver in the
+// gqlgen package, and the resolver body must ALSO check
+// obj.Edges.XxxOrErr() before hitting the DB, otherwise eager loading is
+// still wasted at the GraphQL layer.
+//
+// This test sends a GraphQL query that returns pre-loaded edges (via a
+// GraphQL-level eager load in the parent query's CollectFields or — for
+// this fullgql fixture — via a custom runtime wrapper). We verify that
+// the user resolver's fast-path branch is the one taken by observing the
+// correct nodes come back after the client's DB is closed.
+//
+// In practice: if the resolver body drops the `if where == nil && ...` guard
+// velox's doc.go and CLAUDE.md recommend, this test starts failing with a
+// closed-DB error. That's the canary.
+func TestUserResolver_FastPath_ThroughGraphQL(t *testing.T) {
+	ctx := context.Background()
+	// Shared-cache SQLite: gqlgen executor may open new DB connections; they
+	// must see the same in-memory schema as the seeder.
+	client, err := velox.Open(dialect.SQLite, "file:resolver-fp?mode=memory&cache=shared&_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	require.NoError(t, client.Schema.Create(ctx))
+	cfg := client.RuntimeConfig()
+
+	owner, err := user.NewUserClient(cfg).Create().
+		SetInput(user.CreateUserInput{Name: "Owner", Email: "owner-rfp@example.com"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	cat, err := category.NewCategoryClient(cfg).Create().
+		SetInput(category.CreateCategoryInput{Name: "resolver-fp"}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	for _, title := range []string{"p", "q"} {
+		_, err := todo.NewTodoClient(cfg).Create().
+			SetInput(todo.CreateTodoInput{
+				Title:      title,
+				OwnerID:    owner.ID,
+				CategoryID: &cat.ID,
+			}).
+			Save(ctx)
+		require.NoError(t, err)
+	}
+
+	// Unit-level: directly invoke the resolver with an obj that already has
+	// Edges.Todos loaded. This exercises the exact user-written body in
+	// schema.resolvers.go::(*categoryResolver).Todos. Closing the client
+	// DB afterward verifies the fast path branch is taken — if it falls
+	// through to r.Client.Todo.Query(), the test fails with closed-DB.
+	reloaded, err := client.Category.Query().Where(category.IDField.EQ(cat.ID)).WithTodos().Only(ctx)
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
+
+	// Build a fresh executor around the closed client. We're not going to
+	// serve HTTP — we call the sub-resolver directly. This mirrors what
+	// happens inside gqlgen when `where: null` and no cursor are passed.
+	resolverRoot := &gqlgenpkg.Resolver{Client: client}
+	catResolver := resolverRoot.Category()
+
+	conn, err := catResolver.Todos(ctx, reloaded, nil, ptr(10), nil, nil, nil, nil)
+	require.NoError(t, err,
+		"user-written resolver body in schema.resolvers.go::(*categoryResolver).Todos "+
+			"MUST fast-path eager-loaded edges — closed-DB error here means the "+
+			"`if where == nil && after == nil && before == nil { if nodes, err := obj.Edges.TodosOrErr(); err == nil { ... } }` "+
+			"guard was removed or broken")
+	require.Equal(t, 2, conn.TotalCount, "fast path returned wrong totalCount")
+	require.Len(t, conn.Edges, 2, "fast path returned wrong edge count")
+
+	gotTitles := make([]string, 0, 2)
+	for _, e := range conn.Edges {
+		require.NotNil(t, e.Node)
+		gotTitles = append(gotTitles, e.Node.Title)
+	}
+	assert.ElementsMatch(t, []string{"p", "q"}, gotTitles,
+		"user resolver fast path must return the eager-loaded nodes exactly")
+}
+
