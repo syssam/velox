@@ -1892,4 +1892,3 @@ func TestUserResolver_FastPath_ThroughGraphQL(t *testing.T) {
 	assert.ElementsMatch(t, []string{"p", "q"}, gotTitles,
 		"user resolver fast path must return the eager-loaded nodes exactly")
 }
-
