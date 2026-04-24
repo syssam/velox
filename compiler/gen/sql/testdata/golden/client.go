@@ -14,9 +14,7 @@ import (
 	runtime "github.com/syssam/velox/runtime"
 	entity "github.com/test/project/ent/entity"
 	migrate "github.com/test/project/ent/migrate"
-	post "github.com/test/project/ent/post"
 	_ "github.com/test/project/ent/query"
-	user "github.com/test/project/ent/user"
 )
 
 // ErrTxStarted is returned when trying to start a new transaction from a transactional client.
@@ -27,8 +25,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
-	User   *user.UserClient
-	Post   *post.PostClient
+	User   *userclient.UserClient
+	Post   *postclient.PostClient
 }
 
 // config holds the configuration of the client.
@@ -168,8 +166,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 // init constructs per-entity client fields directly.
 func (c *Client) init() {
 	cfg := c.config.runtimeConfig()
-	c.User = user.NewUserClient(cfg)
-	c.Post = post.NewPostClient(cfg)
+	c.User = userclient.NewUserClient(cfg)
+	c.Post = postclient.NewPostClient(cfg)
 }
 
 // Option function to configure the client.

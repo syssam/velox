@@ -57,7 +57,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
 			group.Id("schemaConfig").Qual(h.InternalPkg(), "SchemaConfig")
 		}
-		group.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		group.Id("mutation").Op("*").Id(mutName)
 		group.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			group.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -73,7 +73,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 	f.Commentf("New%s creates a new %s builder.", updateName, updateName)
 	f.Func().Id("New" + updateName).ParamsFunc(func(pg *jen.Group) {
 		pg.Id("c").Qual(runtimePkg, "Config")
-		pg.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		pg.Id("mutation").Op("*").Id(mutName)
 		pg.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			pg.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -123,7 +123,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 
 	// --- Mutation ---
 	f.Commentf("Mutation returns the %s.", mutName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(updateName)).Id("Mutation").Params().Op("*").Qual(entityPkg, mutName).Block(
+	f.Func().Params(jen.Id(recv).Op("*").Id(updateName)).Id("Mutation").Params().Op("*").Id(mutName).Block(
 		jen.Return(jen.Id(recv).Dot("mutation")),
 	)
 
@@ -190,11 +190,11 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(entityPkg, "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Id("Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
-		mutationType := jen.Qual(entityPkg, mutName)
+		mutationType := jen.Id(mutName)
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Int(),
 			mutationType,
@@ -247,7 +247,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
 			group.Id("schemaConfig").Qual(h.InternalPkg(), "SchemaConfig")
 		}
-		group.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		group.Id("mutation").Op("*").Id(mutName)
 		group.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			group.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -264,7 +264,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 	f.Commentf("New%s creates a new %s builder.", updateOneName, updateOneName)
 	f.Func().Id("New" + updateOneName).ParamsFunc(func(pg *jen.Group) {
 		pg.Id("c").Qual(runtimePkg, "Config")
-		pg.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		pg.Id("mutation").Op("*").Id(mutName)
 		pg.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			pg.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -327,7 +327,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 
 	// --- Mutation ---
 	f.Commentf("Mutation returns the %s.", mutName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(updateOneName)).Id("Mutation").Params().Op("*").Qual(entityPkg, mutName).Block(
+	f.Func().Params(jen.Id(recv).Op("*").Id(updateOneName)).Id("Mutation").Params().Op("*").Id(mutName).Block(
 		jen.Return(jen.Id(recv).Dot("mutation")),
 	)
 
@@ -467,11 +467,11 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(entityPkg, "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Id("Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
-		mutationType := jen.Qual(entityPkg, mutName)
+		mutationType := jen.Id(mutName)
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Op("*").Qual(entityReturnPkg, t.Name),
 			mutationType,
@@ -783,7 +783,7 @@ func genUpdateDefaultsFunc(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 
 	f.Commentf("%s applies update default values shared by %s and %s.", funcName, t.UpdateName(), t.UpdateOneName())
 	f.Func().Id(funcName).Params(
-		jen.Id("m").Op("*").Qual(entityPkg, mutName),
+		jen.Id("m").Op("*").Id(mutName),
 		jen.Id("skipDefaults").Bool(),
 		jen.Id("skipDefaultFields").Map(jen.String()).Struct(),
 	).BlockFunc(func(grp *jen.Group) {

@@ -24,7 +24,7 @@ import (
 // ArticleUpdate is the update builder for Article entities.
 type ArticleUpdate struct {
 	config            runtime.Config
-	mutation          *article.ArticleMutation
+	mutation          *ArticleMutation
 	hooks             []runtime.Hook
 	modifiers         []func(*sql.UpdateBuilder)
 	skipDefaults      bool
@@ -32,7 +32,7 @@ type ArticleUpdate struct {
 }
 
 // NewArticleUpdate creates a new ArticleUpdate builder.
-func NewArticleUpdate(c runtime.Config, mutation *article.ArticleMutation, hooks []runtime.Hook) *ArticleUpdate {
+func NewArticleUpdate(c runtime.Config, mutation *ArticleMutation, hooks []runtime.Hook) *ArticleUpdate {
 	return &ArticleUpdate{
 		config:   c,
 		hooks:    hooks,
@@ -161,7 +161,7 @@ func (_u *ArticleUpdate) SetAuthor(v *entity.Author) *ArticleUpdate {
 }
 
 // Mutation returns the ArticleMutation.
-func (_u *ArticleUpdate) Mutation() *article.ArticleMutation {
+func (_u *ArticleUpdate) Mutation() *ArticleMutation {
 	return _u.mutation
 }
 
@@ -284,7 +284,7 @@ func (_u *ArticleUpdate) Save(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	hooks := _u.hooks
-	return velox.WithHooks[int, article.ArticleMutation, *article.ArticleMutation](ctx, _u.sqlSave, _u.mutation, hooks)
+	return velox.WithHooks[int, ArticleMutation, *ArticleMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -312,7 +312,7 @@ func (_u *ArticleUpdate) ExecX(ctx context.Context) {
 // ArticleUpdateOne is the update builder for a single Article entity.
 type ArticleUpdateOne struct {
 	config            runtime.Config
-	mutation          *article.ArticleMutation
+	mutation          *ArticleMutation
 	hooks             []runtime.Hook
 	modifiers         []func(*sql.UpdateBuilder)
 	selectFields      []string
@@ -321,7 +321,7 @@ type ArticleUpdateOne struct {
 }
 
 // NewArticleUpdateOne creates a new ArticleUpdateOne builder.
-func NewArticleUpdateOne(c runtime.Config, mutation *article.ArticleMutation, hooks []runtime.Hook) *ArticleUpdateOne {
+func NewArticleUpdateOne(c runtime.Config, mutation *ArticleMutation, hooks []runtime.Hook) *ArticleUpdateOne {
 	return &ArticleUpdateOne{
 		config:   c,
 		hooks:    hooks,
@@ -456,7 +456,7 @@ func (_u *ArticleUpdateOne) SetAuthor(v *entity.Author) *ArticleUpdateOne {
 }
 
 // Mutation returns the ArticleMutation.
-func (_u *ArticleUpdateOne) Mutation() *article.ArticleMutation {
+func (_u *ArticleUpdateOne) Mutation() *ArticleMutation {
 	return _u.mutation
 }
 
@@ -627,7 +627,7 @@ func (_u *ArticleUpdateOne) Save(ctx context.Context) (*entity.Article, error) {
 		return nil, err
 	}
 	hooks := _u.hooks
-	return velox.WithHooks[*entity.Article, article.ArticleMutation, *article.ArticleMutation](ctx, _u.sqlSave, _u.mutation, hooks)
+	return velox.WithHooks[*entity.Article, ArticleMutation, *ArticleMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -653,7 +653,7 @@ func (_u *ArticleUpdateOne) ExecX(ctx context.Context) {
 }
 
 // articleWrapperUpdateDefaults applies update default values shared by ArticleUpdate and ArticleUpdateOne.
-func articleWrapperUpdateDefaults(m *article.ArticleMutation, skipDefaults bool, skipDefaultFields map[string]struct{}) {
+func articleWrapperUpdateDefaults(m *ArticleMutation, skipDefaults bool, skipDefaultFields map[string]struct{}) {
 	if skipDefaults {
 		return
 	}

@@ -10,8 +10,6 @@ import (
 	"sync"
 
 	dialect "github.com/syssam/velox/dialect"
-	post "github.com/test/project/ent/post"
-	user "github.com/test/project/ent/user"
 )
 
 // Committer is the interface that wraps the Commit method.
@@ -73,8 +71,8 @@ type RollbackHook func(Rollbacker) Rollbacker
 // Tx is a transactional client.
 type Tx struct {
 	config
-	User *user.UserClient
-	Post *post.PostClient
+	User *userclient.UserClient
+	Post *postclient.PostClient
 	// lazily loaded.
 	client     *Client
 	clientOnce sync.Once
@@ -119,8 +117,8 @@ func newTxWithOptions(ctx context.Context, c config, opts *sql.TxOptions) (*Tx, 
 // init constructs per-entity client fields directly.
 func (tx *Tx) init() {
 	cfg := tx.config.runtimeConfig()
-	tx.User = user.NewUserClient(cfg)
-	tx.Post = post.NewPostClient(cfg)
+	tx.User = userclient.NewUserClient(cfg)
+	tx.Post = postclient.NewPostClient(cfg)
 }
 
 // Commit commits the transaction.

@@ -254,7 +254,7 @@ func genEntityClientCRUD(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		grp.Id("mutation").Dot("Where").Call(
 			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(
 				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
-					jen.Id("s").Dot("C").Call(jen.Id("FieldID")),
+					jen.Id("s").Dot("C").Call(jen.Qual(h.EntityPkgPath(t), "FieldID")),
 					jen.Id("id"),
 				)),
 			),
@@ -328,7 +328,7 @@ func genEntityClientGetMethods(h gen.GeneratorHelper, f *jen.File, t *gen.Type) 
 		jen.Return(jen.Id("c").Dot("Query").Call().Dot("Where").Call(
 			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(
 				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
-					jen.Id("s").Dot("C").Call(jen.Id("FieldID")),
+					jen.Id("s").Dot("C").Call(jen.Qual(h.EntityPkgPath(t), "FieldID")),
 					jen.Id("id"),
 				)),
 			),
@@ -410,26 +410,27 @@ func genEntityClientEdgePathClosure(h gen.GeneratorHelper, grp *jen.Group, t *ge
 	grp.Id("id").Op(":=").Id(entityVar).Dot("ID")
 
 	// Edge columns: M2M uses PKConstant (variadic), others use ColumnConstant (single)
+	leafPkg := h.EntityPkgPath(t)
 	var edgeColumns jen.Code
 	if e.M2M() {
-		grp.Id("_edgePKs").Op(":=").Id(e.PKConstant())
+		grp.Id("_edgePKs").Op(":=").Qual(leafPkg, e.PKConstant())
 		edgeColumns = jen.Id("_edgePKs").Op("...")
 	} else {
-		edgeColumns = jen.Id(e.ColumnConstant())
+		edgeColumns = jen.Qual(leafPkg, e.ColumnConstant())
 	}
 
 	// Use string literals for target table/fieldID to avoid cross-entity imports.
-	// Source constants (Table, FieldID, edge constants) are local — no import needed.
+	// Source constants (Table, FieldID, edge constants) live in the leaf — qualify them.
 	targetTable := jen.Lit(e.Type.Table())
 	targetFieldID := jen.Lit(e.Type.ID.StorageKey())
 
 	grp.Id("step").Op(":=").Qual(sqlgraphPkg, "NewStep").Call(
-		jen.Qual(sqlgraphPkg, "From").Call(jen.Id("Table"), jen.Id(t.ID.Constant()), jen.Id("id")),
+		jen.Qual(sqlgraphPkg, "From").Call(jen.Qual(leafPkg, "Table"), jen.Qual(leafPkg, t.ID.Constant()), jen.Id("id")),
 		jen.Qual(sqlgraphPkg, "To").Call(targetTable, targetFieldID),
 		jen.Qual(sqlgraphPkg, "Edge").Call(
 			jen.Qual(sqlgraphPkg, h.EdgeRelType(e)),
 			jen.Lit(e.IsInverse()),
-			jen.Id(e.TableConstant()),
+			jen.Qual(leafPkg, e.TableConstant()),
 			edgeColumns,
 		),
 	)

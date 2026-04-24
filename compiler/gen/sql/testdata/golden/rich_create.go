@@ -25,12 +25,12 @@ var articleFieldTypes = map[string]field.Type{"id": field.TypeInt64, "title": fi
 // ArticleCreate is the builder for creating a Article entity.
 type ArticleCreate struct {
 	config   runtime.Config
-	mutation *article.ArticleMutation
+	mutation *ArticleMutation
 	hooks    []runtime.Hook
 }
 
 // NewArticleCreate creates a new ArticleCreate builder.
-func NewArticleCreate(c runtime.Config, mutation *article.ArticleMutation, hooks []runtime.Hook) *ArticleCreate {
+func NewArticleCreate(c runtime.Config, mutation *ArticleMutation, hooks []runtime.Hook) *ArticleCreate {
 	return &ArticleCreate{
 		config:   c,
 		hooks:    hooks,
@@ -127,7 +127,7 @@ func (c *ArticleCreate) SetAuthor(v *entity.Author) *ArticleCreate {
 }
 
 // Mutation returns the ArticleMutation.
-func (c *ArticleCreate) Mutation() *article.ArticleMutation {
+func (c *ArticleCreate) Mutation() *ArticleMutation {
 	return c.mutation
 }
 
@@ -272,7 +272,7 @@ func (c *ArticleCreate) Save(ctx context.Context) (*entity.Article, error) {
 		return nil, err
 	}
 	hooks := c.hooks
-	return velox.WithHooks[*entity.Article, article.ArticleMutation, *article.ArticleMutation](ctx, c.sqlSave, c.mutation, hooks)
+	return velox.WithHooks[*entity.Article, ArticleMutation, *ArticleMutation](ctx, c.sqlSave, c.mutation, hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.

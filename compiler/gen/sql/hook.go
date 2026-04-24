@@ -25,11 +25,19 @@ func genHook(h gen.GeneratorHelper) *jen.File {
 		mutType := t.MutationName()
 		entityPkg := h.EntityPkgPath(t)
 
+		// In entity-pkg mode (cycle-break), mutations live in client/{entity}/
+		// sub-packages. Derive the client package path when RootPkg is set;
+		// otherwise fall back to entityPkg so non-entity-pkg builds are unaffected.
+		mutPkg := entityPkg
+		if rp := h.RootPkg(); rp != "" {
+			mutPkg = rp + "/client/" + t.PackageDir()
+		}
+
 		f.Commentf("The %s type is an adapter to allow the use of ordinary", funcName)
 		f.Commentf("function as %s mutator.", t.Name)
 		f.Type().Id(funcName).Func().Params(
 			jen.Qual("context", "Context"),
-			jen.Op("*").Qual(entityPkg, mutType),
+			jen.Op("*").Qual(mutPkg, mutType),
 		).Params(jen.Qual(genPkg, "Value"), jen.Error())
 
 		// Mutate method
@@ -39,13 +47,13 @@ func genHook(h gen.GeneratorHelper) *jen.File {
 			jen.Id("m").Qual(veloxPkg, "Mutation"),
 		).Params(jen.Qual(veloxPkg, "Value"), jen.Error()).Block(
 			jen.If(
-				jen.List(jen.Id("mv"), jen.Id("ok")).Op(":=").Id("m").Assert(jen.Op("*").Qual(entityPkg, mutType)),
+				jen.List(jen.Id("mv"), jen.Id("ok")).Op(":=").Id("m").Assert(jen.Op("*").Qual(mutPkg, mutType)),
 				jen.Id("ok"),
 			).Block(
 				jen.Return(jen.Id("f").Call(jen.Id("ctx"), jen.Id("mv"))),
 			),
 			jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
-				jen.Lit("unexpected mutation type %T. expect *"+entityPkg+"."+mutType),
+				jen.Lit("unexpected mutation type %T. expect *"+mutPkg+"."+mutType),
 				jen.Id("m"),
 			)),
 		)

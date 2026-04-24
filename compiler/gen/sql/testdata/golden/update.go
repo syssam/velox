@@ -20,13 +20,13 @@ import (
 // UserUpdate is the update builder for User entities.
 type UserUpdate struct {
 	config    runtime.Config
-	mutation  *user.UserMutation
+	mutation  *UserMutation
 	hooks     []runtime.Hook
 	modifiers []func(*sql.UpdateBuilder)
 }
 
 // NewUserUpdate creates a new UserUpdate builder.
-func NewUserUpdate(c runtime.Config, mutation *user.UserMutation, hooks []runtime.Hook) *UserUpdate {
+func NewUserUpdate(c runtime.Config, mutation *UserMutation, hooks []runtime.Hook) *UserUpdate {
 	return &UserUpdate{
 		config:   c,
 		hooks:    hooks,
@@ -161,7 +161,7 @@ func (_u *UserUpdate) RemovePosts(v ...*entity.Post) *UserUpdate {
 }
 
 // Mutation returns the UserMutation.
-func (_u *UserUpdate) Mutation() *user.UserMutation {
+func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
 }
 
@@ -267,7 +267,7 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (int, error) {
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *UserUpdate) Save(ctx context.Context) (int, error) {
 	hooks := _u.hooks
-	return velox.WithHooks[int, user.UserMutation, *user.UserMutation](ctx, _u.sqlSave, _u.mutation, hooks)
+	return velox.WithHooks[int, UserMutation, *UserMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -295,14 +295,14 @@ func (_u *UserUpdate) ExecX(ctx context.Context) {
 // UserUpdateOne is the update builder for a single User entity.
 type UserUpdateOne struct {
 	config       runtime.Config
-	mutation     *user.UserMutation
+	mutation     *UserMutation
 	hooks        []runtime.Hook
 	modifiers    []func(*sql.UpdateBuilder)
 	selectFields []string
 }
 
 // NewUserUpdateOne creates a new UserUpdateOne builder.
-func NewUserUpdateOne(c runtime.Config, mutation *user.UserMutation, hooks []runtime.Hook) *UserUpdateOne {
+func NewUserUpdateOne(c runtime.Config, mutation *UserMutation, hooks []runtime.Hook) *UserUpdateOne {
 	return &UserUpdateOne{
 		config:   c,
 		hooks:    hooks,
@@ -443,7 +443,7 @@ func (_u *UserUpdateOne) RemovePosts(v ...*entity.Post) *UserUpdateOne {
 }
 
 // Mutation returns the UserMutation.
-func (_u *UserUpdateOne) Mutation() *user.UserMutation {
+func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
 }
 
@@ -597,7 +597,7 @@ func (_u *UserUpdateOne) Save(ctx context.Context) (*entity.User, error) {
 		return _old, nil
 	}
 	hooks := _u.hooks
-	return velox.WithHooks[*entity.User, user.UserMutation, *user.UserMutation](ctx, _u.sqlSave, _u.mutation, hooks)
+	return velox.WithHooks[*entity.User, UserMutation, *UserMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

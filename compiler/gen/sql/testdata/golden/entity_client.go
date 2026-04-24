@@ -12,6 +12,7 @@ import (
 	sqlgraph "github.com/syssam/velox/dialect/sql/sqlgraph"
 	runtime "github.com/syssam/velox/runtime"
 	entity "github.com/test/project/ent/entity"
+	user "github.com/test/project/ent/user"
 )
 
 // UserClient is the client for interacting with the User builders.
@@ -94,7 +95,7 @@ func (c *UserClient) DeleteOneID(id int64) *UserDeleteOne {
 	mutation := NewUserMutation(c.config, runtime.OpDeleteOne)
 	mutation.SetID(id)
 	mutation.Where(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldID), id))
+		s.Where(sql.EQ(s.C(user.FieldID), id))
 	})
 	builder := NewUserDelete(c.config, mutation, c.Hooks())
 	return NewUserDeleteOne(builder)
@@ -117,7 +118,7 @@ func (c *UserClient) Query() entity.UserQuerier {
 // Get returns the User entity with the given id.
 func (c *UserClient) Get(ctx context.Context, id int64) (*entity.User, error) {
 	return c.Query().Where(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldID), id))
+		s.Where(sql.EQ(s.C(user.FieldID), id))
 	}).Only(ctx)
 }
 
@@ -148,7 +149,7 @@ func (c *UserClient) QueryPosts(v *entity.User) entity.PostQuerier {
 		SetPath(func(context.Context) (*sql.Selector, error))
 	}).SetPath(func(ctx context.Context) (*sql.Selector, error) {
 		id := v.ID
-		step := sqlgraph.NewStep(sqlgraph.From(Table, FieldID, id), sqlgraph.To("posts", "id"), sqlgraph.Edge(sqlgraph.O2M, false, PostsTable, PostsColumn))
+		step := sqlgraph.NewStep(sqlgraph.From(user.Table, user.FieldID, id), sqlgraph.To("posts", "id"), sqlgraph.Edge(sqlgraph.O2M, false, user.PostsTable, user.PostsColumn))
 		return sqlgraph.Neighbors(c.config.Driver.Dialect(), step), nil
 	})
 	return tq.(entity.PostQuerier)

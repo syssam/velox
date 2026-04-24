@@ -66,11 +66,11 @@ func genRuntimePolicies(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, sche
 
 	// Set RuntimePolicy to the same policy value. The entity client reads
 	// this at construction time and stores it as a typed field.
-	grp.Id("RuntimePolicy").Op("=").Qual(entityPkg, "Policy")
+	grp.Qual(entityPkg, "RuntimePolicy").Op("=").Qual(entityPkg, "Policy")
 	// Register the policy in the runtime registry so cross-package edge
 	// queries can look it up by entity name and wire it onto freshly-built
 	// target queries (e.g. entity.User.QueryPosts() wires the Post policy).
-	grp.Qual(runtimePkg, "RegisterEntityPolicy").Call(jen.Lit(t.Name), jen.Id("RuntimePolicy"))
+	grp.Qual(runtimePkg, "RegisterEntityPolicy").Call(jen.Lit(t.Name), jen.Qual(entityPkg, "RuntimePolicy"))
 }
 
 // genRuntimeFields generates the fields initialization for an entity.

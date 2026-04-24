@@ -57,6 +57,7 @@ func genEntityRuntime(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 // RegisterEntityClient into one call per entity.
 func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type) {
 	entityPkg := h.SharedEntityPkg()
+	leafPkg := h.EntityPkgPath(t)
 	entityType := func() *jen.Statement { return jen.Qual(entityPkg, t.Name) }
 
 	clientName := t.ClientName()
@@ -65,11 +66,11 @@ func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.
 	grp.Qual(runtimePkg, "RegisterEntity").Call(
 		jen.Qual(runtimePkg, "EntityRegistration").Values(jen.Dict{
 			jen.Id("Name"):  jen.Lit(t.Name),
-			jen.Id("Table"): jen.Id("Table"),
+			jen.Id("Table"): jen.Qual(leafPkg, "Table"),
 			jen.Id("TypeInfo"): jen.Op("&").Qual(runtimePkg, "RegisteredTypeInfo").Values(jen.Dict{
-				jen.Id("Table"):       jen.Id("Table"),
-				jen.Id("Columns"):     jen.Id("Columns"),
-				jen.Id("IDColumn"):    jen.Id("FieldID"),
+				jen.Id("Table"):       jen.Qual(leafPkg, "Table"),
+				jen.Id("Columns"):     jen.Qual(leafPkg, "Columns"),
+				jen.Id("IDColumn"):    jen.Qual(leafPkg, "FieldID"),
 				jen.Id("IDFieldType"): jen.Qual(schemaPkg(), t.ID.Type.ConstName()),
 				jen.Id("ScanValues"): jen.Func().Params(
 					jen.Id("columns").Index().String(),
@@ -94,7 +95,7 @@ func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.
 					jen.Return(jen.Id("_e").Assert(jen.Op("*").Add(entityType())).Dot("ID")),
 				),
 			}),
-			jen.Id("ValidColumn"): jen.Id("ValidColumn"),
+			jen.Id("ValidColumn"): jen.Qual(leafPkg, "ValidColumn"),
 			jen.Id("Mutator"): jen.Func().Params(
 				jen.Id("ctx").Qual("context", "Context"),
 				jen.Id("cfg").Qual(runtimePkg, "Config"),
@@ -120,7 +121,7 @@ func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.
 	// by the generated Noder) and constructs a fresh entity client to call Get.
 	idType := h.IDType(t)
 	grp.Qual(runtimePkg, "RegisterNodeResolver").Call(
-		jen.Id("Table"),
+		jen.Qual(leafPkg, "Table"),
 		jen.Qual(runtimePkg, "NodeResolver").Values(jen.Dict{
 			jen.Id("Type"): jen.Lit(t.Name),
 			jen.Id("Resolve"): jen.Func().Params(

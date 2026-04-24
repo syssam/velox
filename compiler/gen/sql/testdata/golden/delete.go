@@ -15,11 +15,11 @@ import (
 type UserDelete struct {
 	config   runtime.Config
 	hooks    []runtime.Hook
-	mutation *user.UserMutation
+	mutation *UserMutation
 }
 
 // NewUserDelete creates a new UserDelete builder.
-func NewUserDelete(c runtime.Config, mutation *user.UserMutation, hooks []runtime.Hook) *UserDelete {
+func NewUserDelete(c runtime.Config, mutation *UserMutation, hooks []runtime.Hook) *UserDelete {
 	return &UserDelete{
 		config:   c,
 		hooks:    hooks,
@@ -54,7 +54,7 @@ func (_d *UserDelete) sqlExec(ctx context.Context) (int, error) {
 // Exec executes the deletion query and returns how many vertices were deleted.
 func (_d *UserDelete) Exec(ctx context.Context) (int, error) {
 	hooks := _d.hooks
-	return velox.WithHooks[int, user.UserMutation, *user.UserMutation](ctx, _d.sqlExec, _d.mutation, hooks)
+	return velox.WithHooks[int, UserMutation, *UserMutation](ctx, _d.sqlExec, _d.mutation, hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
@@ -67,7 +67,7 @@ func (_d *UserDelete) ExecX(ctx context.Context) int {
 }
 
 // Mutation returns the UserMutation.
-func (_d *UserDelete) Mutation() *user.UserMutation {
+func (_d *UserDelete) Mutation() *UserMutation {
 	return _d.mutation
 }
 
@@ -107,6 +107,6 @@ func (_d *UserDeleteOne) Where(ps ...predicate.User) *UserDeleteOne {
 }
 
 // Mutation returns the UserMutation.
-func (_d *UserDeleteOne) Mutation() *user.UserMutation {
+func (_d *UserDeleteOne) Mutation() *UserMutation {
 	return _d.d.mutation
 }

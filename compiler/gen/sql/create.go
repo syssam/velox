@@ -20,7 +20,6 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 	f := h.NewFile(h.Pkg())
 
 	createName := t.CreateName() // "UserCreate"
-	entityPkg := h.EntityPkgPath(t)
 	// Entity package path for return types (entity.User).
 	entityReturnPkg := h.SharedEntityPkg()
 	mutName := t.MutationName()
@@ -41,7 +40,7 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
 			group.Id("schemaConfig").Qual(h.InternalPkg(), "SchemaConfig")
 		}
-		group.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		group.Id("mutation").Op("*").Id(mutName)
 		group.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			group.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -55,7 +54,7 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 	f.Commentf("New%s creates a new %s builder.", createName, createName)
 	f.Func().Id("New" + createName).ParamsFunc(func(pg *jen.Group) {
 		pg.Id("c").Qual(runtimePkg, "Config")
-		pg.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		pg.Id("mutation").Op("*").Id(mutName)
 		pg.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			pg.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -102,7 +101,7 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 
 	// --- Mutation ---
 	f.Commentf("Mutation returns the %s.", mutName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(createName)).Id("Mutation").Params().Op("*").Qual(entityPkg, mutName).Block(
+	f.Func().Params(jen.Id(recv).Op("*").Id(createName)).Id("Mutation").Params().Op("*").Id(mutName).Block(
 		jen.Return(jen.Id(recv).Dot("mutation")),
 	)
 
@@ -511,8 +510,6 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 // genCreateSave generates the Save method for the root Create builder.
 // Returns *entity.User directly (no wrapping). Delegates to sqlSave via WithHooks.
 func genCreateSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName, recv, entityReturnPkg string) {
-	entityPkg := h.EntityPkgPath(t)
-
 	f.Commentf("Save creates the %s in the database.", t.Name)
 	f.Func().Params(jen.Id(recv).Op("*").Id(builderName)).Id("Save").Params(
 		jen.Id("ctx").Qual("context", "Context"),
@@ -535,11 +532,11 @@ func genCreateSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName,
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(entityPkg, "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Id("Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
-		mutationType := jen.Qual(entityPkg, t.MutationName())
+		mutationType := jen.Id(t.MutationName())
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Op("*").Qual(entityReturnPkg, t.Name),
 			mutationType,

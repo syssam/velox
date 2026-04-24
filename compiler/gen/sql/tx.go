@@ -86,10 +86,11 @@ func genTx(h gen.GeneratorHelper) *jen.File {
 	f.Comment("Tx is a transactional client.")
 	f.Type().Id("Tx").StructFunc(func(group *jen.Group) {
 		group.Id("config")
-		// Per-entity fields: concrete types from entity sub-packages.
+		// Per-entity fields: concrete types from client/{entity}/ sub-packages.
 		for _, t := range graph.Nodes {
-			subPkg := graph.Package + "/" + t.PackageDir()
-			group.Id(t.Name).Op("*").Qual(subPkg, t.ClientName())
+			clientPkg := graph.Package + "/client/" + t.PackageDir()
+			f.ImportName(clientPkg, t.PackageDir()+"client")
+			group.Id(t.Name).Op("*").Qual(clientPkg, t.ClientName())
 		}
 		group.Comment("lazily loaded.")
 		group.Id("client").Op("*").Id("Client")
@@ -153,8 +154,9 @@ func genTx(h gen.GeneratorHelper) *jen.File {
 	f.Func().Params(jen.Id("tx").Op("*").Id("Tx")).Id("init").Params().BlockFunc(func(grp *jen.Group) {
 		grp.Id("cfg").Op(":=").Id("tx").Dot("config").Dot("runtimeConfig").Call()
 		for _, t := range graph.Nodes {
-			subPkg := graph.Package + "/" + t.PackageDir()
-			grp.Id("tx").Dot(t.Name).Op("=").Qual(subPkg, "New"+t.ClientName()).Call(
+			clientPkg := graph.Package + "/client/" + t.PackageDir()
+			f.ImportName(clientPkg, t.PackageDir()+"client")
+			grp.Id("tx").Dot(t.Name).Op("=").Qual(clientPkg, "New"+t.ClientName()).Call(
 				jen.Id("cfg"),
 			)
 		}

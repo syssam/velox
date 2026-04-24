@@ -56,10 +56,11 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 		group.Comment("// Schema is the client for creating, migrating and dropping schema.")
 		group.Id("Schema").Op("*").Qual(migratePkg, "Schema")
 
-		// Per-entity client fields: concrete types from entity sub-packages.
+		// Per-entity client fields: concrete types from client/{entity}/ sub-packages.
 		for _, t := range graph.Nodes {
-			subPkg := graph.Package + "/" + t.PackageDir()
-			group.Id(t.Name).Op("*").Qual(subPkg, t.ClientName())
+			clientPkg := graph.Package + "/client/" + t.PackageDir()
+			f.ImportName(clientPkg, t.PackageDir()+"client")
+			group.Id(t.Name).Op("*").Qual(clientPkg, t.ClientName())
 		}
 	})
 
@@ -277,8 +278,9 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("init").Params().BlockFunc(func(grp *jen.Group) {
 		grp.Id("cfg").Op(":=").Id("c").Dot("config").Dot("runtimeConfig").Call()
 		for _, t := range graph.Nodes {
-			subPkg := graph.Package + "/" + t.PackageDir()
-			grp.Id("c").Dot(t.Name).Op("=").Qual(subPkg, "New"+t.ClientName()).Call(
+			clientPkg := graph.Package + "/client/" + t.PackageDir()
+			f.ImportName(clientPkg, t.PackageDir()+"client")
+			grp.Id("c").Dot(t.Name).Op("=").Qual(clientPkg, "New"+t.ClientName()).Call(
 				jen.Id("cfg"),
 			)
 		}

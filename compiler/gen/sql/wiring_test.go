@@ -666,9 +666,9 @@ func TestEntityRuntimeRegistersNodeResolver(t *testing.T) {
 
 	src := genEntityRuntime(helper, userType).GoString()
 
-	if !strings.Contains(src, "runtime.RegisterNodeResolver(Table") {
-		t.Error("entity runtime.go must call runtime.RegisterNodeResolver(Table, ...) " +
-			"so client.Noder can resolve this entity by global ID")
+	if !strings.Contains(src, "runtime.RegisterNodeResolver(user.Table") {
+		t.Error("entity runtime.go must call runtime.RegisterNodeResolver(user.Table, ...) " +
+			"(qualified leaf ref after Phase B) so client.Noder can resolve this entity by global ID")
 	}
 	if !strings.Contains(src, `Type: "User"`) {
 		t.Error("RegisterNodeResolver must set Type to the entity name (\"User\")")

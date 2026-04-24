@@ -40,14 +40,14 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		if t.NumPolicy() > 0 {
 			group.Id("policy").Qual(h.VeloxPkg(), "Policy")
 		}
-		group.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		group.Id("mutation").Op("*").Id(mutName)
 	})
 
 	// --- Constructor ---
 	f.Commentf("New%s creates a new %s builder.", deleteName, deleteName)
 	f.Func().Id("New" + deleteName).ParamsFunc(func(pg *jen.Group) {
 		pg.Id("c").Qual(runtimePkg, "Config")
-		pg.Id("mutation").Op("*").Qual(entityPkg, mutName)
+		pg.Id("mutation").Op("*").Id(mutName)
 		pg.Id("hooks").Index().Qual(runtimePkg, "Hook")
 		if t.NumPolicy() > 0 {
 			pg.Id("policy").Qual(h.VeloxPkg(), "Policy")
@@ -118,11 +118,11 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(entityPkg, "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Id("Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
-		mutationType := jen.Qual(entityPkg, mutName)
+		mutationType := jen.Id(mutName)
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Int(),
 			mutationType,
@@ -146,7 +146,7 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 
 	// Mutation method
 	f.Commentf("Mutation returns the %s.", mutName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(deleteName)).Id("Mutation").Params().Op("*").Qual(entityPkg, mutName).Block(
+	f.Func().Params(jen.Id(recv).Op("*").Id(deleteName)).Id("Mutation").Params().Op("*").Id(mutName).Block(
 		jen.Return(jen.Id(recv).Dot("mutation")),
 	)
 
@@ -203,7 +203,7 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 
 	// Mutation method for DeleteOne
 	f.Commentf("Mutation returns the %s.", mutName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(deleteOneName)).Id("Mutation").Params().Op("*").Qual(entityPkg, mutName).Block(
+	f.Func().Params(jen.Id(recv).Op("*").Id(deleteOneName)).Id("Mutation").Params().Op("*").Id(mutName).Block(
 		jen.Return(jen.Id(recv).Dot(recv[1:]).Dot("mutation")),
 	)
 }

@@ -24,12 +24,12 @@ var userFieldTypes = map[string]field.Type{"id": field.TypeInt64, "name": field.
 // UserCreate is the builder for creating a User entity.
 type UserCreate struct {
 	config   runtime.Config
-	mutation *user.UserMutation
+	mutation *UserMutation
 	hooks    []runtime.Hook
 }
 
 // NewUserCreate creates a new UserCreate builder.
-func NewUserCreate(c runtime.Config, mutation *user.UserMutation, hooks []runtime.Hook) *UserCreate {
+func NewUserCreate(c runtime.Config, mutation *UserMutation, hooks []runtime.Hook) *UserCreate {
 	return &UserCreate{
 		config:   c,
 		hooks:    hooks,
@@ -100,7 +100,7 @@ func (c *UserCreate) AddPosts(v ...*entity.Post) *UserCreate {
 }
 
 // Mutation returns the UserMutation.
-func (c *UserCreate) Mutation() *user.UserMutation {
+func (c *UserCreate) Mutation() *UserMutation {
 	return c.mutation
 }
 
@@ -224,7 +224,7 @@ func (c *UserCreate) Save(ctx context.Context) (*entity.User, error) {
 		return nil, err
 	}
 	hooks := c.hooks
-	return velox.WithHooks[*entity.User, user.UserMutation, *user.UserMutation](ctx, c.sqlSave, c.mutation, hooks)
+	return velox.WithHooks[*entity.User, UserMutation, *UserMutation](ctx, c.sqlSave, c.mutation, hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.

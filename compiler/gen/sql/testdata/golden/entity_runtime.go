@@ -10,6 +10,7 @@ import (
 	runtime "github.com/syssam/velox/runtime"
 	field "github.com/syssam/velox/schema/field"
 	entity "github.com/test/project/ent/entity"
+	user "github.com/test/project/ent/user"
 )
 
 // The init function reads schema descriptors with runtime code
@@ -24,16 +25,16 @@ func init() {
 			return NewUserClient(cfg).mutate(ctx, m.(*UserMutation))
 		},
 		Name:  "User",
-		Table: Table,
+		Table: user.Table,
 		TypeInfo: &runtime.RegisteredTypeInfo{
 			Assign: func(_e any, columns []string, values []any) error {
 				return _e.(*entity.User).AssignValues(columns, values)
 			},
-			Columns: Columns,
+			Columns: user.Columns,
 			GetID: func(_e any) any {
 				return _e.(*entity.User).ID
 			},
-			IDColumn:    FieldID,
+			IDColumn:    user.FieldID,
 			IDFieldType: field.TypeInt64,
 			New: func() any {
 				return &entity.User{}
@@ -41,11 +42,11 @@ func init() {
 			ScanValues: func(columns []string) ([]any, error) {
 				return (&entity.User{}).ScanValues(columns)
 			},
-			Table: Table,
+			Table: user.Table,
 		},
-		ValidColumn: ValidColumn,
+		ValidColumn: user.ValidColumn,
 	})
-	runtime.RegisterNodeResolver(Table, runtime.NodeResolver{
+	runtime.RegisterNodeResolver(user.Table, runtime.NodeResolver{
 		Resolve: func(ctx context.Context, id any) (any, error) {
 			cfg := runtime.ConfigFromContext(ctx)
 			if cfg.Driver == nil {

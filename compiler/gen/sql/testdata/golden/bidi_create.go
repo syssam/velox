@@ -24,12 +24,12 @@ var postFieldTypes = map[string]field.Type{"id": field.TypeInt64, "title": field
 // PostCreate is the builder for creating a Post entity.
 type PostCreate struct {
 	config   runtime.Config
-	mutation *post.PostMutation
+	mutation *PostMutation
 	hooks    []runtime.Hook
 }
 
 // NewPostCreate creates a new PostCreate builder.
-func NewPostCreate(c runtime.Config, mutation *post.PostMutation, hooks []runtime.Hook) *PostCreate {
+func NewPostCreate(c runtime.Config, mutation *PostMutation, hooks []runtime.Hook) *PostCreate {
 	return &PostCreate{
 		config:   c,
 		hooks:    hooks,
@@ -70,7 +70,7 @@ func (c *PostCreate) SetAuthor(v *entity.User) *PostCreate {
 }
 
 // Mutation returns the PostMutation.
-func (c *PostCreate) Mutation() *post.PostMutation {
+func (c *PostCreate) Mutation() *PostMutation {
 	return c.mutation
 }
 
@@ -163,7 +163,7 @@ func (c *PostCreate) createSpec() (*entity.Post, *sqlgraph.CreateSpec) {
 // Save creates the Post in the database.
 func (c *PostCreate) Save(ctx context.Context) (*entity.Post, error) {
 	hooks := c.hooks
-	return velox.WithHooks[*entity.Post, post.PostMutation, *post.PostMutation](ctx, c.sqlSave, c.mutation, hooks)
+	return velox.WithHooks[*entity.Post, PostMutation, *PostMutation](ctx, c.sqlSave, c.mutation, hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.

@@ -20,13 +20,13 @@ import (
 // PostUpdate is the update builder for Post entities.
 type PostUpdate struct {
 	config    runtime.Config
-	mutation  *post.PostMutation
+	mutation  *PostMutation
 	hooks     []runtime.Hook
 	modifiers []func(*sql.UpdateBuilder)
 }
 
 // NewPostUpdate creates a new PostUpdate builder.
-func NewPostUpdate(c runtime.Config, mutation *post.PostMutation, hooks []runtime.Hook) *PostUpdate {
+func NewPostUpdate(c runtime.Config, mutation *PostMutation, hooks []runtime.Hook) *PostUpdate {
 	return &PostUpdate{
 		config:   c,
 		hooks:    hooks,
@@ -95,7 +95,7 @@ func (_u *PostUpdate) SetAuthor(v *entity.User) *PostUpdate {
 }
 
 // Mutation returns the PostMutation.
-func (_u *PostUpdate) Mutation() *post.PostMutation {
+func (_u *PostUpdate) Mutation() *PostMutation {
 	return _u.mutation
 }
 
@@ -180,7 +180,7 @@ func (_u *PostUpdate) sqlSave(ctx context.Context) (int, error) {
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *PostUpdate) Save(ctx context.Context) (int, error) {
 	hooks := _u.hooks
-	return velox.WithHooks[int, post.PostMutation, *post.PostMutation](ctx, _u.sqlSave, _u.mutation, hooks)
+	return velox.WithHooks[int, PostMutation, *PostMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -208,14 +208,14 @@ func (_u *PostUpdate) ExecX(ctx context.Context) {
 // PostUpdateOne is the update builder for a single Post entity.
 type PostUpdateOne struct {
 	config       runtime.Config
-	mutation     *post.PostMutation
+	mutation     *PostMutation
 	hooks        []runtime.Hook
 	modifiers    []func(*sql.UpdateBuilder)
 	selectFields []string
 }
 
 // NewPostUpdateOne creates a new PostUpdateOne builder.
-func NewPostUpdateOne(c runtime.Config, mutation *post.PostMutation, hooks []runtime.Hook) *PostUpdateOne {
+func NewPostUpdateOne(c runtime.Config, mutation *PostMutation, hooks []runtime.Hook) *PostUpdateOne {
 	return &PostUpdateOne{
 		config:   c,
 		hooks:    hooks,
@@ -290,7 +290,7 @@ func (_u *PostUpdateOne) SetAuthor(v *entity.User) *PostUpdateOne {
 }
 
 // Mutation returns the PostMutation.
-func (_u *PostUpdateOne) Mutation() *post.PostMutation {
+func (_u *PostUpdateOne) Mutation() *PostMutation {
 	return _u.mutation
 }
 
@@ -413,7 +413,7 @@ func (_u *PostUpdateOne) Save(ctx context.Context) (*entity.Post, error) {
 		return _old, nil
 	}
 	hooks := _u.hooks
-	return velox.WithHooks[*entity.Post, post.PostMutation, *post.PostMutation](ctx, _u.sqlSave, _u.mutation, hooks)
+	return velox.WithHooks[*entity.Post, PostMutation, *PostMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
