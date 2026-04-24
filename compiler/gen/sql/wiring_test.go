@@ -1020,3 +1020,40 @@ func TestEnumMethodsHaveDocComments(t *testing.T) {
 		t.Skip("no enum types found in integration prototype")
 	}
 }
+
+// TestPerEntityPackageIsTrueLeaf pins the cycle-break invariant: the per-entity
+// leaf package ({entity}/{entity}.go) must not import back into the shared
+// entity/ package. After Phase A, enum types live in the leaf; there is no
+// remaining reason for the leaf to depend on entity/. Any future generator
+// change that re-introduces such an import reopens the import-cycle pathway
+// that Plan 2 (cycle-break) was written to close.
+func TestPerEntityPackageIsTrueLeaf(t *testing.T) {
+	t.Parallel()
+
+	helper := newMockHelper()
+	helper.rootPkg = "github.com/test/project"
+
+	userType := createTestType("User")
+	userType.Fields = append(userType.Fields, createEnumField("status", []string{"active", "inactive"}))
+	helper.graph.Nodes = []*gen.Type{userType}
+
+	src := genPackage(helper, userType, buildEntityPkgEnumRegistry(helper.graph.Nodes)).GoString()
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "user.go", src, parser.ImportsOnly)
+	if err != nil {
+		t.Fatalf("parse leaf package source: %v", err)
+	}
+
+	// Anything ending in "/entity" (the shared entity package) or starting at
+	// the root package path is a cycle-back into the parent. Predicate, sql,
+	// sqlgraph, runtime, stdlib are all fine.
+	forbiddenSuffix := "/entity"
+	for _, imp := range file.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if strings.HasSuffix(path, forbiddenSuffix) {
+			t.Errorf("leaf package imports %q; the per-entity leaf must not depend "+
+				"on entity/ (cycle-break invariant — see Plan 2 Phase A)", path)
+		}
+	}
+}
