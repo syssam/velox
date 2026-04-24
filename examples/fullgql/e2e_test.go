@@ -9,15 +9,20 @@ import (
 
 	gqlgenpkg "example.com/fullgql/gqlgen"
 	"example.com/fullgql/velox"
+	categoryclient "example.com/fullgql/velox/client/category"
+	commentclient "example.com/fullgql/velox/client/comment"
+	memberclient "example.com/fullgql/velox/client/member"
+	tagclient "example.com/fullgql/velox/client/tag"
+	todoclient "example.com/fullgql/velox/client/todo"
+	userclient "example.com/fullgql/velox/client/user"
+	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/category"
-	"example.com/fullgql/velox/comment"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/member"
 	vquery "example.com/fullgql/velox/query"
 	"example.com/fullgql/velox/tag"
 	"example.com/fullgql/velox/todo"
 	"example.com/fullgql/velox/user"
-	"example.com/fullgql/velox/workspace"
 
 	gqlclient "github.com/99designs/gqlgen/client"
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -50,8 +55,8 @@ func TestCRUD_User(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "alice@example.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "alice@example.com"}).Save(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "Alice", u.Name)
 
@@ -59,8 +64,8 @@ func TestCRUD_User(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, users, 1)
 
-	u2, err := user.NewUserClient(cfg).UpdateOneID(u.ID).
-		SetInput(user.UpdateUserInput{Name: ptr("Bob")}).Save(ctx)
+	u2, err := userclient.NewUserClient(cfg).UpdateOneID(u.ID).
+		SetInput(userclient.UpdateUserInput{Name: ptr("Bob")}).Save(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "Bob", u2.Name)
 
@@ -76,8 +81,8 @@ func TestCRUD_Category(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	cat, err := category.NewCategoryClient(cfg).Create().
-		SetInput(category.CreateCategoryInput{Name: "Electronics"}).Save(ctx)
+	cat, err := categoryclient.NewCategoryClient(cfg).Create().
+		SetInput(categoryclient.CreateCategoryInput{Name: "Electronics"}).Save(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "Electronics", cat.Name)
 }
@@ -87,8 +92,8 @@ func TestCRUD_Workspace(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "Test WS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "Test WS"}).Save(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "Test WS", ws.Name)
 }
@@ -98,16 +103,16 @@ func TestCRUD_Todo(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "alice@t.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "alice@t.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "Work"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "Work"}).Save(ctx)
 	require.NoError(t, err)
 
-	td, err := todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	td, err := todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Buy groceries", Status: ptr(todo.StatusInProgress),
 			Priority: ptr(todo.PriorityMedium), OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
@@ -120,8 +125,8 @@ func TestCRUD_Tag(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	tg, err := tag.NewTagClient(cfg).Create().
-		SetInput(tag.CreateTagInput{Name: "golang"}).Save(ctx)
+	tg, err := tagclient.NewTagClient(cfg).Create().
+		SetInput(tagclient.CreateTagInput{Name: "golang"}).Save(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "golang", tg.Name)
 }
@@ -131,20 +136,20 @@ func TestCRUD_Member(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "a@m.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "a@m.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "Team"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "Team"}).Save(ctx)
 	require.NoError(t, err)
 
-	m, err := member.NewMemberClient(cfg).Create().
-		SetInput(member.CreateMemberInput{
+	m, err := memberclient.NewMemberClient(cfg).Create().
+		SetInput(memberclient.CreateMemberInput{
 			Role: ptr(member.RoleViewer), WorkspaceID: ws.ID, UserID: u.ID,
 		}).Save(ctx)
 	require.NoError(t, err)
-	require.Equal(t, entity.MemberRoleViewer, m.Role)
+	require.Equal(t, member.RoleViewer, m.Role)
 }
 
 func TestEdgeLoading_OptionalFK(t *testing.T) {
@@ -152,17 +157,17 @@ func TestEdgeLoading_OptionalFK(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "edge@test.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "edge@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeTest"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeTest"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Create a todo with owner (required) and workspace (optional FK)
-	_, err = todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Test edge loading", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 	require.NoError(t, err)
@@ -183,8 +188,8 @@ func TestGraphQL_NodeResolver(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "a@n.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "a@n.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	t.Run("Noder_resolves_existing", func(t *testing.T) {
@@ -232,21 +237,21 @@ func TestEdgeLoading_UserWithTodos(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "edge-user@test.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "edge-user@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeWS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeWS"}).Save(ctx)
 	require.NoError(t, err)
 
-	_, err = todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Todo 1", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 	require.NoError(t, err)
-	_, err = todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Todo 2", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 	require.NoError(t, err)
@@ -263,20 +268,20 @@ func TestEdgeLoading_TodoWithTags(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Bob", Email: "bob-edge@test.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Bob", Email: "bob-edge@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeWS2"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeWS2"}).Save(ctx)
 	require.NoError(t, err)
 
-	tg, err := tag.NewTagClient(cfg).Create().
-		SetInput(tag.CreateTagInput{Name: "urgent"}).Save(ctx)
+	tg, err := tagclient.NewTagClient(cfg).Create().
+		SetInput(tagclient.CreateTagInput{Name: "urgent"}).Save(ctx)
 	require.NoError(t, err)
 
-	_, err = todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Tagged todo", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 			TagIDs: []int{tg.ID},
 		}).Save(ctx)
@@ -302,8 +307,8 @@ func TestTransaction_CommitPersists(t *testing.T) {
 	require.NoError(t, err)
 
 	txCfg := tx.Client().RuntimeConfig()
-	_, err = user.NewUserClient(txCfg).Create().
-		SetInput(user.CreateUserInput{Name: "TxUser", Email: "tx@commit.com"}).Save(ctx)
+	_, err = userclient.NewUserClient(txCfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "TxUser", Email: "tx@commit.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	require.NoError(t, tx.Commit())
@@ -322,8 +327,8 @@ func TestTransaction_RollbackDiscards(t *testing.T) {
 	require.NoError(t, err)
 
 	txCfg := tx.Client().RuntimeConfig()
-	_, err = user.NewUserClient(txCfg).Create().
-		SetInput(user.CreateUserInput{Name: "Rollback", Email: "tx@rollback.com"}).Save(ctx)
+	_, err = userclient.NewUserClient(txCfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Rollback", Email: "tx@rollback.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	require.NoError(t, tx.Rollback())
@@ -340,8 +345,8 @@ func TestTransaction_WithTxHelper(t *testing.T) {
 
 	err := velox.WithTx(ctx, client, func(tx *velox.Tx) error {
 		txCfg := tx.Client().RuntimeConfig()
-		_, err := user.NewUserClient(txCfg).Create().
-			SetInput(user.CreateUserInput{Name: "WithTx", Email: "withtx@test.com"}).Save(ctx)
+		_, err := userclient.NewUserClient(txCfg).Create().
+			SetInput(userclient.CreateUserInput{Name: "WithTx", Email: "withtx@test.com"}).Save(ctx)
 		return err
 	})
 	require.NoError(t, err)
@@ -358,10 +363,10 @@ func TestBulkCreate_Tags(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	tc := tag.NewTagClient(cfg)
-	builders := make([]*tag.TagCreate, 5)
+	tc := tagclient.NewTagClient(cfg)
+	builders := make([]*tagclient.TagCreate, 5)
 	for i := range builders {
-		builders[i] = tc.Create().SetInput(tag.CreateTagInput{
+		builders[i] = tc.Create().SetInput(tagclient.CreateTagInput{
 			Name: "tag-" + strings.Repeat("x", i+1),
 		})
 	}
@@ -383,18 +388,18 @@ func TestUpdate_WithPredicate(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
-	_, err := uc.Create().SetInput(user.CreateUserInput{
+	uc := userclient.NewUserClient(cfg)
+	_, err := uc.Create().SetInput(userclient.CreateUserInput{
 		Name: "Admin1", Email: "admin1@test.com", Role: ptr(user.RoleAdmin),
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	_, err = uc.Create().SetInput(user.CreateUserInput{
+	_, err = uc.Create().SetInput(userclient.CreateUserInput{
 		Name: "Admin2", Email: "admin2@test.com", Role: ptr(user.RoleAdmin),
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	_, err = uc.Create().SetInput(user.CreateUserInput{
+	_, err = uc.Create().SetInput(userclient.CreateUserInput{
 		Name: "Viewer", Email: "viewer@test.com", Role: ptr(user.RoleGuest),
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -422,12 +427,12 @@ func TestDelete_WithPredicate(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	tc := tag.NewTagClient(cfg)
-	_, err := tc.Create().SetInput(tag.CreateTagInput{Name: "keep"}).Save(ctx)
+	tc := tagclient.NewTagClient(cfg)
+	_, err := tc.Create().SetInput(tagclient.CreateTagInput{Name: "keep"}).Save(ctx)
 	require.NoError(t, err)
-	_, err = tc.Create().SetInput(tag.CreateTagInput{Name: "remove1"}).Save(ctx)
+	_, err = tc.Create().SetInput(tagclient.CreateTagInput{Name: "remove1"}).Save(ctx)
 	require.NoError(t, err)
-	_, err = tc.Create().SetInput(tag.CreateTagInput{Name: "remove2"}).Save(ctx)
+	_, err = tc.Create().SetInput(tagclient.CreateTagInput{Name: "remove2"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Delete tags whose name starts with "remove" by using NameHasPrefix.
@@ -461,8 +466,8 @@ func TestCountAndExist(t *testing.T) {
 	assert.False(t, exists)
 
 	// Create one user.
-	_, err = user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Counter", Email: "count@test.com"}).Save(ctx)
+	_, err = userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Counter", Email: "count@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	count, err = client.User.Query().Count(ctx)
@@ -481,24 +486,24 @@ func TestGroupBy_TodoStatus(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "GroupByUser", Email: "gb@test.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "GroupByUser", Email: "gb@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "GBWS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "GBWS"}).Save(ctx)
 	require.NoError(t, err)
 
-	tc := todo.NewTodoClient(cfg)
+	tc := todoclient.NewTodoClient(cfg)
 	// Create 3 "todo" status and 2 "done" status.
 	for i := 0; i < 3; i++ {
-		_, err = tc.Create().SetInput(todo.CreateTodoInput{
+		_, err = tc.Create().SetInput(todoclient.CreateTodoInput{
 			Title: "todo-item", Status: ptr(todo.StatusTodo), OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 		require.NoError(t, err)
 	}
 	for i := 0; i < 2; i++ {
-		_, err = tc.Create().SetInput(todo.CreateTodoInput{
+		_, err = tc.Create().SetInput(todoclient.CreateTodoInput{
 			Title: "done-item", Status: ptr(todo.StatusDone), OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 		require.NoError(t, err)
@@ -531,8 +536,8 @@ func TestEntity_String(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Stringer", Email: "str@test.com"}).Save(ctx)
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Stringer", Email: "str@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	s := u.String()
@@ -549,7 +554,7 @@ func TestNotFoundError(t *testing.T) {
 	cfg := client.RuntimeConfig()
 
 	// Get a non-existent ID.
-	_, err := user.NewUserClient(cfg).Get(ctx, 999999)
+	_, err := userclient.NewUserClient(cfg).Get(ctx, 999999)
 	require.Error(t, err)
 	assert.True(t, velox.IsNotFound(err), "expected NotFoundError, got: %v", err)
 }
@@ -559,10 +564,10 @@ func TestNotSingularError(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
-	_, err := uc.Create().SetInput(user.CreateUserInput{Name: "Dup1", Email: "dup1@test.com"}).Save(ctx)
+	uc := userclient.NewUserClient(cfg)
+	_, err := uc.Create().SetInput(userclient.CreateUserInput{Name: "Dup1", Email: "dup1@test.com"}).Save(ctx)
 	require.NoError(t, err)
-	_, err = uc.Create().SetInput(user.CreateUserInput{Name: "Dup2", Email: "dup2@test.com"}).Save(ctx)
+	_, err = uc.Create().SetInput(userclient.CreateUserInput{Name: "Dup2", Email: "dup2@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Only() should fail with NotSingular when multiple results match.
@@ -576,8 +581,8 @@ func TestNotLoadedError(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	_, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "NoEdge", Email: "noedge@test.com"}).Save(ctx)
+	_, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "NoEdge", Email: "noedge@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Query without WithTodos — accessing edge should return NotLoadedError.
@@ -597,11 +602,11 @@ func TestFirst_ReturnsOne(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	_, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "First1", Email: "first1@test.com"}).Save(ctx)
+	_, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "First1", Email: "first1@test.com"}).Save(ctx)
 	require.NoError(t, err)
-	_, err = user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "First2", Email: "first2@test.com"}).Save(ctx)
+	_, err = userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "First2", Email: "first2@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	u, err := client.User.Query().First(ctx)
@@ -625,10 +630,10 @@ func TestIDs(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
-	u1, err := uc.Create().SetInput(user.CreateUserInput{Name: "ID1", Email: "id1@test.com"}).Save(ctx)
+	uc := userclient.NewUserClient(cfg)
+	u1, err := uc.Create().SetInput(userclient.CreateUserInput{Name: "ID1", Email: "id1@test.com"}).Save(ctx)
 	require.NoError(t, err)
-	u2, err := uc.Create().SetInput(user.CreateUserInput{Name: "ID2", Email: "id2@test.com"}).Save(ctx)
+	u2, err := uc.Create().SetInput(userclient.CreateUserInput{Name: "ID2", Email: "id2@test.com"}).Save(ctx)
 	require.NoError(t, err)
 
 	ids, err := client.User.Query().IDs(ctx)
@@ -645,14 +650,14 @@ func TestUniqueConstraintViolation(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
-	_, err := uc.Create().SetInput(user.CreateUserInput{
+	uc := userclient.NewUserClient(cfg)
+	_, err := uc.Create().SetInput(userclient.CreateUserInput{
 		Name: "Alice", Email: "alice@unique.com",
 	}).Save(ctx)
 	require.NoError(t, err)
 
 	// Second user with the same email should fail with a constraint error.
-	_, err = uc.Create().SetInput(user.CreateUserInput{
+	_, err = uc.Create().SetInput(userclient.CreateUserInput{
 		Name: "Bob", Email: "alice@unique.com",
 	}).Save(ctx)
 	require.Error(t, err)
@@ -664,7 +669,7 @@ func TestCreateWithMinimalFields(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+	u, err := userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 		Name: "Minimal", Email: "minimal@test.com",
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -679,10 +684,10 @@ func TestCreateWithMinimalFields(t *testing.T) {
 
 	// Role is optional with Default("user") in the schema (see schema/user.go),
 	// so an unset Role on Create resolves to the schema default, not the zero value.
-	assert.Equal(t, entity.UserRole("user"), u.Role, "role should be schema default when not set")
+	assert.Equal(t, user.Role("user"), u.Role, "role should be schema default when not set")
 
 	// Verify via fresh read.
-	fresh, err := user.NewUserClient(cfg).Get(ctx, u.ID)
+	fresh, err := userclient.NewUserClient(cfg).Get(ctx, u.ID)
 	require.NoError(t, err)
 	assert.Nil(t, fresh.Age)
 	assert.Nil(t, fresh.Bio)
@@ -705,9 +710,9 @@ func TestUnicodeAndSpecialChars(t *testing.T) {
 		{"Percent%20encoded", "percent@test.com"},
 	}
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for _, tc := range cases {
-		u, err := uc.Create().SetInput(user.CreateUserInput{
+		u, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name: tc.name, Email: tc.email,
 		}).Save(ctx)
 		require.NoError(t, err, "create failed for name=%q", tc.name)
@@ -731,26 +736,26 @@ func TestM2M_AddRemoveTags(t *testing.T) {
 	cfg := client.RuntimeConfig()
 
 	// Create prerequisites.
-	u, err := user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+	u, err := userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 		Name: "TagUser", Email: "taguser@test.com",
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().SetInput(workspace.CreateWorkspaceInput{
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().SetInput(workspaceclient.CreateWorkspaceInput{
 		Name: "TagWS",
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	tc := tag.NewTagClient(cfg)
-	tag1, err := tc.Create().SetInput(tag.CreateTagInput{Name: "go"}).Save(ctx)
+	tc := tagclient.NewTagClient(cfg)
+	tag1, err := tc.Create().SetInput(tagclient.CreateTagInput{Name: "go"}).Save(ctx)
 	require.NoError(t, err)
-	tag2, err := tc.Create().SetInput(tag.CreateTagInput{Name: "rust"}).Save(ctx)
+	tag2, err := tc.Create().SetInput(tagclient.CreateTagInput{Name: "rust"}).Save(ctx)
 	require.NoError(t, err)
-	tag3, err := tc.Create().SetInput(tag.CreateTagInput{Name: "python"}).Save(ctx)
+	tag3, err := tc.Create().SetInput(tagclient.CreateTagInput{Name: "python"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Create todo with tag1 and tag2.
-	td, err := todo.NewTodoClient(cfg).Create().SetInput(todo.CreateTodoInput{
+	td, err := todoclient.NewTodoClient(cfg).Create().SetInput(todoclient.CreateTodoInput{
 		Title: "Tagged", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		TagIDs: []int{tag1.ID, tag2.ID},
 	}).Save(ctx)
@@ -765,7 +770,7 @@ func TestM2M_AddRemoveTags(t *testing.T) {
 	assert.Len(t, tags, 2)
 
 	// Add tag3, remove tag1.
-	_, err = todo.NewTodoClient(cfg).UpdateOneID(td.ID).
+	_, err = todoclient.NewTodoClient(cfg).UpdateOneID(td.ID).
 		AddTagIDs(tag3.ID).
 		RemoveTagIDs(tag1.ID).
 		Save(ctx)
@@ -793,22 +798,22 @@ func TestSelfReferentialEdge_CategoryParent(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	cc := category.NewCategoryClient(cfg)
+	cc := categoryclient.NewCategoryClient(cfg)
 
 	// Create parent category.
-	parent, err := cc.Create().SetInput(category.CreateCategoryInput{
+	parent, err := cc.Create().SetInput(categoryclient.CreateCategoryInput{
 		Name: "Electronics",
 	}).Save(ctx)
 	require.NoError(t, err)
 
 	// Create child category with parent.
-	child, err := cc.Create().SetInput(category.CreateCategoryInput{
+	child, err := cc.Create().SetInput(categoryclient.CreateCategoryInput{
 		Name: "Smartphones", ParentID: ptr(parent.ID),
 	}).Save(ctx)
 	require.NoError(t, err)
 
 	// Create another child.
-	_, err = cc.Create().SetInput(category.CreateCategoryInput{
+	_, err = cc.Create().SetInput(categoryclient.CreateCategoryInput{
 		Name: "Laptops", ParentID: ptr(parent.ID),
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -851,7 +856,7 @@ func TestConcurrentCreates(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			_, errs[idx] = user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+			_, errs[idx] = userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 				Name:  fmt.Sprintf("User-%d", idx),
 				Email: fmt.Sprintf("user-%d@concurrent.com", idx),
 			}).Save(ctx)
@@ -874,28 +879,28 @@ func TestNestedEdgeLoading(t *testing.T) {
 	cfg := client.RuntimeConfig()
 
 	// Create user, workspace, tags, and todo with tags.
-	u, err := user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+	u, err := userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 		Name: "Nested", Email: "nested@test.com",
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().SetInput(workspace.CreateWorkspaceInput{
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().SetInput(workspaceclient.CreateWorkspaceInput{
 		Name: "NestedWS",
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	tg1, err := tag.NewTagClient(cfg).Create().SetInput(tag.CreateTagInput{Name: "alpha"}).Save(ctx)
+	tg1, err := tagclient.NewTagClient(cfg).Create().SetInput(tagclient.CreateTagInput{Name: "alpha"}).Save(ctx)
 	require.NoError(t, err)
-	tg2, err := tag.NewTagClient(cfg).Create().SetInput(tag.CreateTagInput{Name: "beta"}).Save(ctx)
+	tg2, err := tagclient.NewTagClient(cfg).Create().SetInput(tagclient.CreateTagInput{Name: "beta"}).Save(ctx)
 	require.NoError(t, err)
 
-	_, err = todo.NewTodoClient(cfg).Create().SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().SetInput(todoclient.CreateTodoInput{
 		Title: "Nested Todo 1", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		TagIDs: []int{tg1.ID, tg2.ID},
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	_, err = todo.NewTodoClient(cfg).Create().SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().SetInput(todoclient.CreateTodoInput{
 		Title: "Nested Todo 2", OwnerID: u.ID, WorkspaceID: ptr(ws.ID),
 		TagIDs: []int{tg1.ID},
 	}).Save(ctx)
@@ -931,10 +936,10 @@ func TestOrdering(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	names := []string{"Charlie", "Alice", "Bob"}
 	for i, name := range names {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:  name,
 			Email: fmt.Sprintf("%s@order.com", strings.ToLower(name)),
 			Age:   ptr((i + 1) * 10),
@@ -970,13 +975,13 @@ func TestEmptyUpdate(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+	u, err := userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 		Name: "NoChange", Email: "nochange@test.com",
 	}).Save(ctx)
 	require.NoError(t, err)
 
 	// Update with no fields set should succeed as a no-op.
-	updated, err := user.NewUserClient(cfg).UpdateOneID(u.ID).Save(ctx)
+	updated, err := userclient.NewUserClient(cfg).UpdateOneID(u.ID).Save(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "NoChange", updated.Name)
 	assert.Equal(t, "nochange@test.com", updated.Email)
@@ -989,7 +994,7 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	_, err := user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+	_, err := userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 		Name: "Cancelled", Email: "cancel@test.com",
 	}).Save(ctx)
 	require.Error(t, err)
@@ -1008,9 +1013,9 @@ func TestPagination_ForwardPaging(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 5; i++ {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:  fmt.Sprintf("User-%d", i),
 			Email: fmt.Sprintf("user%d@test.com", i),
 		}).Save(ctx)
@@ -1045,9 +1050,9 @@ func TestPagination_BackwardPaging(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 5; i++ {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:  fmt.Sprintf("User-%d", i),
 			Email: fmt.Sprintf("user%d@test.com", i),
 		}).Save(ctx)
@@ -1092,9 +1097,9 @@ func TestPagination_ExactPageSize(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 3; i++ {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:  fmt.Sprintf("User-%d", i),
 			Email: fmt.Sprintf("user%d@test.com", i),
 		}).Save(ctx)
@@ -1113,9 +1118,9 @@ func TestPagination_WithOrdering(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for _, name := range []string{"Charlie", "Alice", "Bob"} {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:  name,
 			Email: fmt.Sprintf("%s@page.com", name),
 		}).Save(ctx)
@@ -1164,9 +1169,9 @@ func TestPagination_DescOrdering(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for _, name := range []string{"Alice", "Bob", "Charlie"} {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name: name, Email: fmt.Sprintf("%s@desc.com", name),
 		}).Save(ctx)
 		require.NoError(t, err)
@@ -1203,10 +1208,10 @@ func TestPagination_WithFilter(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 5; i++ {
 		active := i <= 3 // first 3 are active
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:   fmt.Sprintf("User-%d", i),
 			Email:  fmt.Sprintf("filter%d@test.com", i),
 			Active: ptr(active),
@@ -1230,14 +1235,14 @@ func TestPagination_EdgePagination(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	u, err := user.NewUserClient(cfg).Create().SetInput(user.CreateUserInput{
+	u, err := userclient.NewUserClient(cfg).Create().SetInput(userclient.CreateUserInput{
 		Name: "Alice", Email: "alice@edge.com",
 	}).Save(ctx)
 	require.NoError(t, err)
 
-	tc := todo.NewTodoClient(cfg)
+	tc := todoclient.NewTodoClient(cfg)
 	for i := 1; i <= 5; i++ {
-		_, err := tc.Create().SetInput(todo.CreateTodoInput{
+		_, err := tc.Create().SetInput(todoclient.CreateTodoInput{
 			Title:   fmt.Sprintf("Task-%d", i),
 			OwnerID: u.ID,
 		}).Save(ctx)
@@ -1268,9 +1273,9 @@ func TestPagination_DuplicateOrderValues(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 4; i++ {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name:  "SameName",
 			Email: fmt.Sprintf("dup%d@test.com", i),
 		}).Save(ctx)
@@ -1310,9 +1315,9 @@ func TestPagination_SingleItemPage(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 3; i++ {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name: fmt.Sprintf("User-%d", i), Email: fmt.Sprintf("single%d@test.com", i),
 		}).Save(ctx)
 		require.NoError(t, err)
@@ -1331,9 +1336,9 @@ func TestPagination_Overshoot(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	uc := user.NewUserClient(cfg)
+	uc := userclient.NewUserClient(cfg)
 	for i := 1; i <= 3; i++ {
-		_, err := uc.Create().SetInput(user.CreateUserInput{
+		_, err := uc.Create().SetInput(userclient.CreateUserInput{
 			Name: fmt.Sprintf("User-%d", i), Email: fmt.Sprintf("over%d@test.com", i),
 		}).Save(ctx)
 		require.NoError(t, err)
@@ -1359,24 +1364,24 @@ func TestEntityO2MEdgeMethod_ReturnsAllChildren(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	alice, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "alice-o2m-edge@example.com"}).Save(ctx)
+	alice, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "alice-o2m-edge@example.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeO2M-WS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeO2M-WS"}).Save(ctx)
 	require.NoError(t, err)
 
-	td, err := todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	td, err := todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Todo for comments", OwnerID: alice.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 	require.NoError(t, err)
 
 	// Create 3 comments authored by alice on td.
 	for i := 1; i <= 3; i++ {
-		_, err := comment.NewCommentClient(cfg).Create().
-			SetInput(comment.CreateCommentInput{
+		_, err := commentclient.NewCommentClient(cfg).Create().
+			SetInput(commentclient.CreateCommentInput{
 				Content:  fmt.Sprintf("comment-%d", i),
 				TodoID:   td.ID,
 				AuthorID: alice.ID,
@@ -1386,7 +1391,7 @@ func TestEntityO2MEdgeMethod_ReturnsAllChildren(t *testing.T) {
 
 	// Reload alice so Config().Driver is populated the GraphQL-resolver way,
 	// and Edges is unloaded — forcing the (*User).Comments runtime fallback.
-	reloaded, err := user.NewUserClient(cfg).Get(ctx, alice.ID)
+	reloaded, err := userclient.NewUserClient(cfg).Get(ctx, alice.ID)
 	require.NoError(t, err)
 
 	comments, err := reloaded.Comments(ctx)
@@ -1407,33 +1412,33 @@ func TestEntityM2OEdgeMethod_ReturnsCorrectParent(t *testing.T) {
 	cfg := client.RuntimeConfig()
 
 	// Create a decoy user first so author ID != 1.
-	_, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Decoy", Email: "decoy-m2o@example.com"}).Save(ctx)
+	_, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Decoy", Email: "decoy-m2o@example.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	author, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "RealAuthor", Email: "author-m2o@example.com"}).Save(ctx)
+	author, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "RealAuthor", Email: "author-m2o@example.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeM2O-WS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeM2O-WS"}).Save(ctx)
 	require.NoError(t, err)
 
-	td, err := todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	td, err := todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "Todo for M2O author test", OwnerID: author.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 	require.NoError(t, err)
 
-	cm, err := comment.NewCommentClient(cfg).Create().
-		SetInput(comment.CreateCommentInput{
+	cm, err := commentclient.NewCommentClient(cfg).Create().
+		SetInput(commentclient.CreateCommentInput{
 			Content: "authored comment", TodoID: td.ID, AuthorID: author.ID,
 		}).Save(ctx)
 	require.NoError(t, err)
 
 	// Reload the comment so Edges cache is cold — forces the M2O edge
 	// resolver runtime path (genSimpleEdgeMethod output).
-	reloaded, err := comment.NewCommentClient(cfg).Get(ctx, cm.ID)
+	reloaded, err := commentclient.NewCommentClient(cfg).Get(ctx, cm.ID)
 	require.NoError(t, err)
 
 	got, err := reloaded.Author(ctx)
@@ -1458,29 +1463,29 @@ func TestEntityConnectionEdgeMethod_ReturnsAllWithCorrectContent(t *testing.T) {
 	cfg := client.RuntimeConfig()
 
 	// Decoy owner + decoy todo to guard against "returns all todos" bugs.
-	decoy, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "DecoyOwner", Email: "decoy-conn@example.com"}).Save(ctx)
+	decoy, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "DecoyOwner", Email: "decoy-conn@example.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	owner, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "RealOwner", Email: "owner-conn@example.com"}).Save(ctx)
+	owner, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "RealOwner", Email: "owner-conn@example.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeConn-WS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeConn-WS"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Decoy todo owned by decoy — must not appear in owner.Todos().
-	_, err = todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	_, err = todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "decoy-todo-should-not-appear", OwnerID: decoy.ID, WorkspaceID: ptr(ws.ID),
 		}).Save(ctx)
 	require.NoError(t, err)
 
 	wantTitles := []string{"conn-todo-alpha", "conn-todo-beta", "conn-todo-gamma"}
 	for _, title := range wantTitles {
-		_, err := todo.NewTodoClient(cfg).Create().
-			SetInput(todo.CreateTodoInput{
+		_, err := todoclient.NewTodoClient(cfg).Create().
+			SetInput(todoclient.CreateTodoInput{
 				Title: title, OwnerID: owner.ID, WorkspaceID: ptr(ws.ID),
 			}).Save(ctx)
 		require.NoError(t, err)
@@ -1488,7 +1493,7 @@ func TestEntityConnectionEdgeMethod_ReturnsAllWithCorrectContent(t *testing.T) {
 
 	// Reload owner so Edges cache is cold — forces the Relay connection
 	// edge resolver runtime path (genConnectionEdgeMethod output).
-	reloaded, err := user.NewUserClient(cfg).Get(ctx, owner.ID)
+	reloaded, err := userclient.NewUserClient(cfg).Get(ctx, owner.ID)
 	require.NoError(t, err)
 
 	conn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
@@ -1519,30 +1524,30 @@ func TestEntityM2MEdgeMethod_ReturnsAllAssociated(t *testing.T) {
 	ctx := context.Background()
 	cfg := client.RuntimeConfig()
 
-	owner, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "M2MOwner", Email: "owner-m2m@example.com"}).Save(ctx)
+	owner, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "M2MOwner", Email: "owner-m2m@example.com"}).Save(ctx)
 	require.NoError(t, err)
 
-	ws, err := workspace.NewWorkspaceClient(cfg).Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "EdgeM2M-WS"}).Save(ctx)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "EdgeM2M-WS"}).Save(ctx)
 	require.NoError(t, err)
 
 	// Decoy tag that should NOT appear in the reloaded todo's tags.
-	_, err = tag.NewTagClient(cfg).Create().
-		SetInput(tag.CreateTagInput{Name: "decoy-tag-should-not-appear"}).Save(ctx)
+	_, err = tagclient.NewTagClient(cfg).Create().
+		SetInput(tagclient.CreateTagInput{Name: "decoy-tag-should-not-appear"}).Save(ctx)
 	require.NoError(t, err)
 
 	wantTagNames := []string{"m2m-urgent", "m2m-backend", "m2m-polish"}
 	tagIDs := make([]int, 0, len(wantTagNames))
 	for _, name := range wantTagNames {
-		tg, err := tag.NewTagClient(cfg).Create().
-			SetInput(tag.CreateTagInput{Name: name}).Save(ctx)
+		tg, err := tagclient.NewTagClient(cfg).Create().
+			SetInput(tagclient.CreateTagInput{Name: name}).Save(ctx)
 		require.NoError(t, err)
 		tagIDs = append(tagIDs, tg.ID)
 	}
 
-	td, err := todo.NewTodoClient(cfg).Create().
-		SetInput(todo.CreateTodoInput{
+	td, err := todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{
 			Title: "M2M-tagged todo", OwnerID: owner.ID, WorkspaceID: ptr(ws.ID),
 			TagIDs: tagIDs,
 		}).Save(ctx)
@@ -1550,7 +1555,7 @@ func TestEntityM2MEdgeMethod_ReturnsAllAssociated(t *testing.T) {
 
 	// Reload the todo so Edges cache is cold — forces the M2M edge
 	// resolver runtime path.
-	reloaded, err := todo.NewTodoClient(cfg).Get(ctx, td.ID)
+	reloaded, err := todoclient.NewTodoClient(cfg).Get(ctx, td.ID)
 	require.NoError(t, err)
 
 	conn, err := reloaded.Tags(ctx, nil, ptr(10), nil, nil, nil)
@@ -1605,30 +1610,30 @@ func TestGraphQL_EdgeConnectionWhereFilter(t *testing.T) {
 	cfg := client.RuntimeConfig()
 
 	// Seed: one owner, one tag, four todos split across statuses.
-	owner, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Owner", Email: "owner@example.com"}).
+	owner, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Owner", Email: "owner@example.com"}).
 		Save(ctx)
 	require.NoError(t, err)
 
-	theTag, err := tag.NewTagClient(cfg).Create().
-		SetInput(tag.CreateTagInput{Name: "work"}).
+	theTag, err := tagclient.NewTagClient(cfg).Create().
+		SetInput(tagclient.CreateTagInput{Name: "work"}).
 		Save(ctx)
 	require.NoError(t, err)
 
 	// Three DONE, one TODO. Filter must keep the three, drop the one.
 	todoSeed := []struct {
 		title  string
-		status entity.TodoStatus
+		status todo.Status
 	}{
-		{"ship-it", entity.TodoStatusDone},
-		{"merge-pr", entity.TodoStatusDone},
-		{"post-mortem", entity.TodoStatusDone},
-		{"noise-not-done", entity.TodoStatusTodo},
+		{"ship-it", todo.StatusDone},
+		{"merge-pr", todo.StatusDone},
+		{"post-mortem", todo.StatusDone},
+		{"noise-not-done", todo.StatusTodo},
 	}
 	for _, s := range todoSeed {
 		status := s.status
-		created, err := todo.NewTodoClient(cfg).Create().
-			SetInput(todo.CreateTodoInput{
+		created, err := todoclient.NewTodoClient(cfg).Create().
+			SetInput(todoclient.CreateTodoInput{
 				Title:   s.title,
 				Status:  &status,
 				OwnerID: owner.ID,
@@ -1643,7 +1648,7 @@ func TestGraphQL_EdgeConnectionWhereFilter(t *testing.T) {
 	// todos BEFORE we go through gqlgen. This isolates seed/M2M-wiring
 	// failures from filter-propagation failures.
 	{
-		reloaded, err := tag.NewTagClient(cfg).Get(ctx, theTag.ID)
+		reloaded, err := tagclient.NewTagClient(cfg).Get(ctx, theTag.ID)
 		require.NoError(t, err)
 		sanityConn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
 		require.NoError(t, err)
@@ -1756,19 +1761,19 @@ func TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges(t *testing.T) {
 	client := openTestClient(t)
 	cfg := client.RuntimeConfig()
 
-	owner, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Owner", Email: "owner-fp@example.com"}).
+	owner, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Owner", Email: "owner-fp@example.com"}).
 		Save(ctx)
 	require.NoError(t, err)
 
-	cat, err := category.NewCategoryClient(cfg).Create().
-		SetInput(category.CreateCategoryInput{Name: "fast-path"}).
+	cat, err := categoryclient.NewCategoryClient(cfg).Create().
+		SetInput(categoryclient.CreateCategoryInput{Name: "fast-path"}).
 		Save(ctx)
 	require.NoError(t, err)
 
 	for _, title := range []string{"a", "b", "c"} {
-		_, err := todo.NewTodoClient(cfg).Create().
-			SetInput(todo.CreateTodoInput{
+		_, err := todoclient.NewTodoClient(cfg).Create().
+			SetInput(todoclient.CreateTodoInput{
 				Title:      title,
 				OwnerID:    owner.ID,
 				CategoryID: &cat.ID,
@@ -1839,19 +1844,19 @@ func TestUserResolver_FastPath_ThroughGraphQL(t *testing.T) {
 	require.NoError(t, client.Schema.Create(ctx))
 	cfg := client.RuntimeConfig()
 
-	owner, err := user.NewUserClient(cfg).Create().
-		SetInput(user.CreateUserInput{Name: "Owner", Email: "owner-rfp@example.com"}).
+	owner, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Owner", Email: "owner-rfp@example.com"}).
 		Save(ctx)
 	require.NoError(t, err)
 
-	cat, err := category.NewCategoryClient(cfg).Create().
-		SetInput(category.CreateCategoryInput{Name: "resolver-fp"}).
+	cat, err := categoryclient.NewCategoryClient(cfg).Create().
+		SetInput(categoryclient.CreateCategoryInput{Name: "resolver-fp"}).
 		Save(ctx)
 	require.NoError(t, err)
 
 	for _, title := range []string{"p", "q"} {
-		_, err := todo.NewTodoClient(cfg).Create().
-			SetInput(todo.CreateTodoInput{
+		_, err := todoclient.NewTodoClient(cfg).Create().
+			SetInput(todoclient.CreateTodoInput{
 				Title:      title,
 				OwnerID:    owner.ID,
 				CategoryID: &cat.ID,
