@@ -37,7 +37,7 @@ func TestWhereInputGoModelDirective(t *testing.T) {
 	// Use mockGraph() which has FeatureWhereInputAll configured
 	mockG := mockGraph()
 	// Update graph package to match test ORMPackage
-	mockG.Config.Package = "example/ent"
+	mockG.Package = "example/ent"
 
 	g := NewGenerator(mockG, Config{
 		RelayConnection: true,
