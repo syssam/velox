@@ -468,7 +468,7 @@ func (g *Generator) Generate(ctx context.Context) error {
 	if g.config.WhereInputs && g.config.ORMPackage != "" {
 		// Shared WhereInput constants (ErrFilterDepthExceeded, DefaultMaxFilterDepth)
 		if f := g.genWhereInputShared(); f != nil {
-			errg.Go(func() error { return g.writeFileSubdir(ctx, f, "gqlfilter", "filter.go") })
+			errg.Go(func() error { return g.writeFileSubdir(ctx, f, "filter", "filter.go") })
 		}
 		// Per-entity WhereInput files → gqlfilter/ sub-package
 		for _, t := range g.filterNodes(g.graph.Nodes, SkipType|SkipWhereInput) {
@@ -477,7 +477,7 @@ func (g *Generator) Generate(ctx context.Context) error {
 			}
 			errg.Go(func() error {
 				if f := g.genEntityWhereInputFile(t); f != nil {
-					return g.writeFileSubdir(ctx, f, "gqlfilter",
+					return g.writeFileSubdir(ctx, f, "filter",
 						fmt.Sprintf("%s.go", strings.ToLower(t.Name)))
 				}
 				return nil
