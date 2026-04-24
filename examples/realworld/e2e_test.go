@@ -9,10 +9,12 @@ import (
 
 	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/examples/realworld/velox"
+	taskclient "github.com/syssam/velox/examples/realworld/velox/client/task"
+	userclient "github.com/syssam/velox/examples/realworld/velox/client/user"
+	workspaceclient "github.com/syssam/velox/examples/realworld/velox/client/workspace"
 	"github.com/syssam/velox/examples/realworld/velox/entity"
 	"github.com/syssam/velox/examples/realworld/velox/task"
 	"github.com/syssam/velox/examples/realworld/velox/user"
-	"github.com/syssam/velox/examples/realworld/velox/workspace"
 	"github.com/syssam/velox/privacy"
 
 	_ "modernc.org/sqlite"
@@ -53,14 +55,14 @@ func TestRealworld_WorkspaceTaskFlow_EdgeResolution(t *testing.T) {
 	// connect users to tasks via edges, but the scenario is more
 	// realistic with an admin on record).
 	alice, err := client.User.Create().
-		SetInput(user.CreateUserInput{Name: "Alice", Email: "alice@example.com", Role: ptr(user.RoleAdmin)}).
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "alice@example.com", Role: ptr(user.RoleAdmin)}).
 		Save(ctx)
 	require.NoError(t, err)
 	require.NotZero(t, alice.ID)
 
 	// Create a workspace.
 	ws, err := client.Workspace.Create().
-		SetInput(workspace.CreateWorkspaceInput{Name: "Alpha"}).
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "Alpha"}).
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -68,7 +70,7 @@ func TestRealworld_WorkspaceTaskFlow_EdgeResolution(t *testing.T) {
 	titles := []string{"Design schema", "Implement API", "Write tests"}
 	for _, title := range titles {
 		_, err := client.Task.Create().
-			SetInput(task.CreateTaskInput{
+			SetInput(taskclient.CreateTaskInput{
 				Title:       title,
 				WorkspaceID: ws.ID,
 				Priority:    ptr(task.PriorityHigh),
@@ -117,7 +119,7 @@ func TestRealworld_WorkspaceTaskFlow_EdgeResolution(t *testing.T) {
 
 		err := velox.WithTx(ctx, client, func(tx *velox.Tx) error {
 			ct, terr := tx.Task.Create().
-				SetInput(task.CreateTaskInput{
+				SetInput(taskclient.CreateTaskInput{
 					Title:       "Tx-created",
 					WorkspaceID: ws.ID,
 				}).
