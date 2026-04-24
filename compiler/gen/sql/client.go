@@ -14,7 +14,7 @@ func genClient(h gen.GeneratorHelper) *jen.File {
 	// RegisterQueryFactory for every entity. Without this, the first call
 	// to c.User.Query() panics in runtime.NewEntityQuery — query/ is
 	// otherwise only pulled in transitively by intercept/, privacy/, or
-	// gqlfilter/, so projects that use none of those features would hit
+	// filter/, so projects that use none of those features would hit
 	// the panic unless they remembered a manual blank import.
 	if len(h.Graph().Nodes) > 0 {
 		f.Anon(h.QueryPkg())

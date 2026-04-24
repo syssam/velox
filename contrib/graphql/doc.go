@@ -358,11 +358,11 @@
 // argument from the client is silently discarded — filter has no effect
 // at runtime, with no error or warning.
 //
-// The reason the entity method can't accept `where *gqlfilter.XxxWhereInput`
-// directly is a package cycle: entity -> gqlfilter -> query -> entity
-// (actually entity -> gqlfilter -> todo -> entity via todo/client.go, etc.).
+// The reason the entity method can't accept `where *filter.XxxWhereInput`
+// directly is a package cycle: entity -> filter -> query -> entity
+// (actually entity -> filter -> todo -> entity via todo/client.go, etc.).
 // Forcing the resolver interface lets the user's resolver (in a package
-// that CAN import both entity and gqlfilter) do the wiring.
+// that CAN import both entity and filter) do the wiring.
 //
 // # User-written resolver body (required for where-carrying edges)
 //
@@ -372,7 +372,7 @@
 //	func (r *userResolver) Todos(
 //	    ctx context.Context, obj *entity.User,
 //	    after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int,
-//	    orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput,
+//	    orderBy *entity.TodoOrder, where *filter.TodoWhereInput,
 //	) (*entity.TodoConnection, error) {
 //	    q := r.Client.Todo.Query().Where(todo.HasOwnerWith(user.IDField.EQ(obj.ID)))
 //	    return q.Paginate(ctx, after, first, before, last,
@@ -418,7 +418,7 @@
 //
 //	                    Ent (entgql)              Velox
 //	Entity struct       package ent               package entity
-//	WhereInput struct   package ent (same pkg)    package gqlfilter (separate)
+//	WhereInput struct   package ent (same pkg)    package filter (separate)
 //	Query builder       package ent (same pkg)    package query (separate)
 //	Paginate option     package ent (same pkg)    package entity (same as struct)
 //	Edge resolver       method on *Category       user-written resolver body
@@ -430,11 +430,11 @@
 // silent-drop risk. Ent does NOT emit @goField(forceResolver: true) on
 // connection edges.
 //
-// Velox splits the ORM into entity/, query/, gqlfilter/, and per-entity
+// Velox splits the ORM into entity/, query/, filter/, and per-entity
 // sub-packages (todo/, user/, etc.) for build performance and memory. The
 // per-entity packages currently own client-wrapper code that imports entity,
-// which transitively makes entity -> gqlfilter -> todo -> entity a cycle.
-// The cycle means entity methods can't accept *gqlfilter.XxxWhereInput —
+// which transitively makes entity -> filter -> todo -> entity a cycle.
+// The cycle means entity methods can't accept *filter.XxxWhereInput —
 // not until a bigger refactor splits per-entity packages into true leaves
 // (predicates + enum only, no client wrapper).
 //

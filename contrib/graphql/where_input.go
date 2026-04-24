@@ -18,7 +18,7 @@ import (
 	"github.com/syssam/velox/schema/field"
 )
 
-// Filter depth constants — shared between root and gqlfilter packages.
+// Filter depth constants — shared between root and filter packages.
 const (
 	filterDepthErrMsg     = "filter nesting depth exceeded"
 	defaultMaxFilterDepth = 5
@@ -34,7 +34,7 @@ func (g *Generator) effectiveMaxFilterDepth() int {
 }
 
 // genFilterDepthDecls emits the ErrFilterDepthExceeded and DefaultMaxFilterDepth
-// declarations into the given file. Used by both root and gqlfilter packages.
+// declarations into the given file. Used by both root and filter packages.
 func (g *Generator) genFilterDepthDecls(f *jen.File) {
 	f.Comment("ErrFilterDepthExceeded is returned when a WhereInput filter exceeds the maximum nesting depth.")
 	f.Var().Id("ErrFilterDepthExceeded").Op("=").Qual("errors", "New").Call(jen.Lit(filterDepthErrMsg))

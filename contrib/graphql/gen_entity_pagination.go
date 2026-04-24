@@ -560,7 +560,7 @@ func (g *Generator) genModelWithOrder(f *jen.File, typeName, optName, orderName,
 
 // genModelWithFilter generates WithXxxFilter function.
 // The filter is stored as `any` in PagerConfig to avoid circular imports
-// (root package cannot import entity sub-packages or gqlfilter/).
+// (root package cannot import entity sub-packages or filter/).
 // The entity's Paginate method type-asserts it to func(*XxxQuery) (*XxxQuery, error).
 func (g *Generator) genModelWithFilter(f *jen.File, typeName, optName, pagerConfigName string) {
 	optFilterName := "With" + typeName + "Filter"

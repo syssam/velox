@@ -200,7 +200,7 @@ func (c *GQLGenConfig) SetModel(typeName string, modelPath string) {
 // Most type bindings are handled automatically by @goModel directives
 // in the generated GraphQL schema. This function adds:
 //   - Schema path
-//   - Autobind for the ORM root and gqlfilter/ sub-packages
+//   - Autobind for the ORM root and filter/ sub-packages
 //   - ID/UUID → graphql.UUID (external package, no @goModel possible)
 //   - JSON → graphql.Map (for generic JSON fields without custom types)
 //
@@ -215,7 +215,7 @@ func (c *GQLGenConfig) InjectVeloxBindings(ormPackage string, schemaPath string)
 		c.AddSchemaPath(schemaPath)
 	}
 
-	// Add autobind for the ORM root and gqlfilter sub-package.
+	// Add autobind for the ORM root and filter sub-package.
 	// Pagination types, mutation inputs, and entity wrappers are all in root.
 	c.AddAutobind(ormPackage)
 	c.AddAutobind(ormPackage + "/filter")

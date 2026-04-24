@@ -56,7 +56,7 @@
 //	├── gql_collection.go        # Field collection for eager loading
 //	├── gql_pagination.go        # Relay cursor pagination
 //	├── gql_scalars.go           # Scalar marshalers for typed JSON fields
-//	├── gqlfilter/               # WhereInput to predicate converters (per-entity)
+//	├── filter/                  # WhereInput to predicate converters (per-entity)
 //	├── gql_pagination.go        # Pagination types (Connection, Edge, Order)
 //	└── {entity}/                # Per-entity sub-packages
 //	    ├── gql_node.go              # Node implementors
@@ -464,13 +464,13 @@ func (g *Generator) Generate(ctx context.Context) error {
 
 	// Generate WhereInput Go structs with P() and Filter() methods (like entgql's gql_where_input.go)
 	// This generates the Go structs; the SDL is generated in the schema.
-	// WhereInput types go to gqlfilter/ sub-package to avoid circular imports.
+	// WhereInput types go to filter/ sub-package to avoid circular imports.
 	if g.config.WhereInputs && g.config.ORMPackage != "" {
 		// Shared WhereInput constants (ErrFilterDepthExceeded, DefaultMaxFilterDepth)
 		if f := g.genWhereInputShared(); f != nil {
 			errg.Go(func() error { return g.writeFileSubdir(ctx, f, "filter", "filter.go") })
 		}
-		// Per-entity WhereInput files → gqlfilter/ sub-package
+		// Per-entity WhereInput files → filter/ sub-package
 		for _, t := range g.filterNodes(g.graph.Nodes, SkipType|SkipWhereInput) {
 			if !g.hasFilterableContent(t) {
 				continue
