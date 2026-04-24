@@ -3,27 +3,87 @@
 package article
 
 import (
+	"database/sql/driver"
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
 	"time"
 
 	sql "github.com/syssam/velox/dialect/sql"
 	sqlgraph "github.com/syssam/velox/dialect/sql/sqlgraph"
 	runtime "github.com/syssam/velox/runtime"
-	entity "github.com/test/project/ent/entity"
 	predicate "github.com/test/project/ent/predicate"
 )
 
-// Status is a type alias for the "status" enum field defined in the entity package.
-type Status = entity.Status
+// Status defines the type for the "status" enum field.
+type Status string
 
-var (
-	StatusDraft     = entity.StatusDraft
-	StatusReview    = entity.StatusReview
-	StatusPublished = entity.StatusPublished
+const (
+	StatusDraft     Status = "draft"
+	StatusReview    Status = "review"
+	StatusPublished Status = "published"
 )
+
+// String returns the string representation of Status.
+func (e Status) String() string {
+	return string(e)
+}
+
+// IsValid reports whether the Status value is one of the declared enum members.
+func (e Status) IsValid() bool {
+	switch e {
+	case StatusDraft, StatusReview, StatusPublished:
+		return true
+	default:
+		return false
+	}
+}
 
 // StatusValues returns all valid values for Status.
 func StatusValues() []Status {
-	return entity.StatusValues()
+	return []Status{StatusDraft, StatusReview, StatusPublished}
+}
+
+// Scan implements the sql.Scanner interface.
+func (e *Status) Scan(value any) error {
+	switch v := value.(type) {
+	case string:
+		*e = Status(v)
+		return nil
+	case []byte:
+		*e = Status(v)
+		return nil
+	default:
+		return fmt.Errorf("invalid type %T for enum Status", value)
+	}
+}
+
+// Value implements the driver.Valuer interface.
+func (e Status) Value() (driver.Value, error) {
+	return string(e), nil
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (e Status) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(strings.ToUpper(e.String())))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (e *Status) UnmarshalGQL(val any) error {
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("enum %T must be a string", val)
+	}
+	*e = Status(str)
+	if e.IsValid() {
+		return nil
+	}
+	*e = Status(strings.ToLower(str))
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid Status", str)
+	}
+	return nil
 }
 
 const (

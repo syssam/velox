@@ -3,39 +3,156 @@
 package task
 
 import (
+	"database/sql/driver"
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+
 	sql "github.com/syssam/velox/dialect/sql"
 	runtime "github.com/syssam/velox/runtime"
-	entity "github.com/test/project/ent/entity"
 	predicate "github.com/test/project/ent/predicate"
 )
 
-// Status is a type alias for the "status" enum field defined in the entity package.
-type Status = entity.Status
+// Status defines the type for the "status" enum field.
+type Status string
 
-var (
-	StatusPending = entity.StatusPending
-	StatusActive  = entity.StatusActive
-	StatusDone    = entity.StatusDone
+const (
+	StatusPending Status = "pending"
+	StatusActive  Status = "active"
+	StatusDone    Status = "done"
 )
+
+// String returns the string representation of Status.
+func (e Status) String() string {
+	return string(e)
+}
+
+// IsValid reports whether the Status value is one of the declared enum members.
+func (e Status) IsValid() bool {
+	switch e {
+	case StatusPending, StatusActive, StatusDone:
+		return true
+	default:
+		return false
+	}
+}
 
 // StatusValues returns all valid values for Status.
 func StatusValues() []Status {
-	return entity.StatusValues()
+	return []Status{StatusPending, StatusActive, StatusDone}
 }
 
-// Priority is a type alias for the "priority" enum field defined in the entity package.
-type Priority = entity.Priority
+// Scan implements the sql.Scanner interface.
+func (e *Status) Scan(value any) error {
+	switch v := value.(type) {
+	case string:
+		*e = Status(v)
+		return nil
+	case []byte:
+		*e = Status(v)
+		return nil
+	default:
+		return fmt.Errorf("invalid type %T for enum Status", value)
+	}
+}
 
-var (
-	PriorityLow      = entity.PriorityLow
-	PriorityMedium   = entity.PriorityMedium
-	PriorityHigh     = entity.PriorityHigh
-	PriorityCritical = entity.PriorityCritical
+// Value implements the driver.Valuer interface.
+func (e Status) Value() (driver.Value, error) {
+	return string(e), nil
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (e Status) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(strings.ToUpper(e.String())))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (e *Status) UnmarshalGQL(val any) error {
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("enum %T must be a string", val)
+	}
+	*e = Status(str)
+	if e.IsValid() {
+		return nil
+	}
+	*e = Status(strings.ToLower(str))
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid Status", str)
+	}
+	return nil
+}
+
+// Priority defines the type for the "priority" enum field.
+type Priority string
+
+const (
+	PriorityLow      Priority = "low"
+	PriorityMedium   Priority = "medium"
+	PriorityHigh     Priority = "high"
+	PriorityCritical Priority = "critical"
 )
+
+// String returns the string representation of Priority.
+func (e Priority) String() string {
+	return string(e)
+}
+
+// IsValid reports whether the Priority value is one of the declared enum members.
+func (e Priority) IsValid() bool {
+	switch e {
+	case PriorityLow, PriorityMedium, PriorityHigh, PriorityCritical:
+		return true
+	default:
+		return false
+	}
+}
 
 // PriorityValues returns all valid values for Priority.
 func PriorityValues() []Priority {
-	return entity.PriorityValues()
+	return []Priority{PriorityLow, PriorityMedium, PriorityHigh, PriorityCritical}
+}
+
+// Scan implements the sql.Scanner interface.
+func (e *Priority) Scan(value any) error {
+	switch v := value.(type) {
+	case string:
+		*e = Priority(v)
+		return nil
+	case []byte:
+		*e = Priority(v)
+		return nil
+	default:
+		return fmt.Errorf("invalid type %T for enum Priority", value)
+	}
+}
+
+// Value implements the driver.Valuer interface.
+func (e Priority) Value() (driver.Value, error) {
+	return string(e), nil
+}
+
+// MarshalGQL implements graphql.Marshaler interface.
+func (e Priority) MarshalGQL(w io.Writer) {
+	io.WriteString(w, strconv.Quote(strings.ToUpper(e.String())))
+}
+
+// UnmarshalGQL implements graphql.Unmarshaler interface.
+func (e *Priority) UnmarshalGQL(val any) error {
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("enum %T must be a string", val)
+	}
+	*e = Priority(str)
+	if e.IsValid() {
+		return nil
+	}
+	*e = Priority(strings.ToLower(str))
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid Priority", str)
+	}
+	return nil
 }
 
 const (

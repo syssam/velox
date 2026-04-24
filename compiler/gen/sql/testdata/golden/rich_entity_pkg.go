@@ -4,11 +4,8 @@ package ent
 
 import (
 	"context"
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"io"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,88 +13,19 @@ import (
 	sql "github.com/syssam/velox/dialect/sql"
 	sqlgraph "github.com/syssam/velox/dialect/sql/sqlgraph"
 	runtime "github.com/syssam/velox/runtime"
+	article "github.com/test/project/ent/article"
 	predicate "github.com/test/project/ent/predicate"
 )
 
-// Status defines the type for the "status" enum field.
-type Status string
-
-const (
-	StatusDraft     Status = "draft"
-	StatusReview    Status = "review"
-	StatusPublished Status = "published"
-)
-
-// String returns the string representation of Status.
-func (e Status) String() string {
-	return string(e)
-}
-
-// IsValid reports whether the Status value is one of the declared enum members.
-func (e Status) IsValid() bool {
-	switch e {
-	case StatusDraft, StatusReview, StatusPublished:
-		return true
-	default:
-		return false
-	}
-}
-
-// StatusValues returns all valid values for Status.
-func StatusValues() []Status {
-	return []Status{StatusDraft, StatusReview, StatusPublished}
-}
-
-// Scan implements the sql.Scanner interface.
-func (e *Status) Scan(value any) error {
-	switch v := value.(type) {
-	case string:
-		*e = Status(v)
-		return nil
-	case []byte:
-		*e = Status(v)
-		return nil
-	default:
-		return fmt.Errorf("invalid type %T for enum Status", value)
-	}
-}
-
-// Value implements the driver.Valuer interface.
-func (e Status) Value() (driver.Value, error) {
-	return string(e), nil
-}
-
-// MarshalGQL implements graphql.Marshaler interface.
-func (e Status) MarshalGQL(w io.Writer) {
-	io.WriteString(w, strconv.Quote(strings.ToUpper(e.String())))
-}
-
-// UnmarshalGQL implements graphql.Unmarshaler interface.
-func (e *Status) UnmarshalGQL(val any) error {
-	str, ok := val.(string)
-	if !ok {
-		return fmt.Errorf("enum %T must be a string", val)
-	}
-	*e = Status(str)
-	if e.IsValid() {
-		return nil
-	}
-	*e = Status(strings.ToLower(str))
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid Status", str)
-	}
-	return nil
-}
-
 // Article is the model entity for the Article schema.
 type Article struct {
-	ID           int64     `json:"id,omitempty"`
-	Title        string    `json:"title,omitempty"`
-	Content      *string   `json:"content,omitempty"`
-	CreatedAt    time.Time `json:"created_at,omitempty"`
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
-	Tags         any       `json:"tags,omitempty"`
-	Status       Status    `json:"status,omitempty"`
+	ID           int64          `json:"id,omitempty"`
+	Title        string         `json:"title,omitempty"`
+	Content      *string        `json:"content,omitempty"`
+	CreatedAt    time.Time      `json:"created_at,omitempty"`
+	UpdatedAt    time.Time      `json:"updated_at,omitempty"`
+	Tags         any            `json:"tags,omitempty"`
+	Status       article.Status `json:"status,omitempty"`
 	config       runtime.Config
 	selectValues sql.SelectValues
 	Edges        ArticleEdges `json:"edges"`
@@ -229,7 +157,7 @@ func (e *Article) AssignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else {
 				if value.Valid {
-					e.Status = Status(value.String)
+					e.Status = article.Status(value.String)
 				}
 			}
 		default:

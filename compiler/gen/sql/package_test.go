@@ -131,12 +131,15 @@ func TestGenSubpackageEnumType(t *testing.T) {
 	genSubpackageEnumType(helper, f, userType, enumField, buildEntityPkgEnumRegistry(helper.graph.Nodes))
 
 	code := f.GoString()
-	// Entity mode: generates type aliases pointing to entity/ package
-	assert.Contains(t, code, "Status")
+	// Target state (cycle-break): generates a real type in the leaf sub-package.
+	assert.Contains(t, code, "type Status string",
+		"leaf package must declare the real enum type, not an alias")
 	assert.Contains(t, code, "StatusActive")
 	assert.Contains(t, code, "StatusInactive")
 	assert.Contains(t, code, "StatusValues")
-	assert.Contains(t, code, "entity.UserStatus")
+	// Must NOT alias back to entity/
+	assert.NotContains(t, code, "entity.UserStatus",
+		"leaf package must not alias the enum type from entity/")
 }
 
 func TestGenSubpackageEnumType_MultipleValues(t *testing.T) {
