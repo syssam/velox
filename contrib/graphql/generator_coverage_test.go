@@ -1004,7 +1004,7 @@ func TestGenerator_GenEdgeField(t *testing.T) {
 // the whitelist, the emitted SDL field MUST carry @goField(forceResolver: true).
 //
 // Rationale: the entity Go method generated in entity/gql_edge_*.go cannot
-// accept a *gqlfilter.XxxWhereInput argument (entity -> gqlfilter -> query
+// accept a *filter.XxxWhereInput argument (entity -> filter -> query
 // -> entity import cycle), so its signature stays `(ctx, after, first,
 // before, last, orderBy)`. Gqlgen's autobind treats this as a successful
 // partial match against the SDL and silently drops `where` at runtime —
