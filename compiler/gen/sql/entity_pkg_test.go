@@ -150,45 +150,6 @@ func TestGenEntityPkgNamedEdgeMethods(t *testing.T) {
 }
 
 // =============================================================================
-// genEntityPkgEnumType Tests
-// =============================================================================
-
-func TestGenEntityPkgEnumType(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	helper.rootPkg = "github.com/test/project"
-
-	userType := createTestType("User")
-	roleField := createEnumField("role", []string{"admin", "user", "moderator"})
-	userType.Fields = append(userType.Fields, roleField)
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	reg := buildEntityPkgEnumRegistry(helper.graph.Nodes)
-	f := helper.NewFile("entity")
-	genEntityPkgEnumType(f, userType, roleField, reg)
-
-	code := f.GoString()
-	// Enum type definition (with only one entity "User", the enum name is just "Role" not "UserRole")
-	assert.Contains(t, code, "type Role string")
-	// Enum constants
-	assert.Contains(t, code, "RoleAdmin")
-	assert.Contains(t, code, "RoleUser")
-	assert.Contains(t, code, "RoleModerator")
-	// String method
-	assert.Contains(t, code, "func (e Role) String()")
-	// IsValid method
-	assert.Contains(t, code, "func (e Role) IsValid()")
-	// Values function
-	assert.Contains(t, code, "RoleValues")
-	// Scan method
-	assert.Contains(t, code, "func (e *Role) Scan(")
-	// Value method (driver.Valuer)
-	assert.Contains(t, code, "func (e Role) Value()")
-	// MarshalGQL
-	assert.Contains(t, code, "MarshalGQL")
-}
-
-// =============================================================================
 // genEntityPkgFKValueMethod Tests
 // =============================================================================
 

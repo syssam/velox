@@ -249,11 +249,127 @@ func genEnumValidator(h gen.GeneratorHelper, f *jen.File, t *gen.Type, field *ge
 	)
 }
 
-func genSubpackageEnumType(h gen.GeneratorHelper, f *jen.File, t *gen.Type, field *gen.Field, enumReg *entityPkgEnumRegistry) {
-	// Enum types are defined in entity/ package with entity-prefixed names
-	// (e.g., UserRole, PostStatus). Sub-packages create type aliases and constant aliases
-	// so existing code like `user.Role`, `user.RoleAdmin` keeps working.
-	genSubpackageEnumAlias(h, f, t, field, enumReg)
+// genSubpackageEnumType generates a real enum type declaration in the per-entity
+// leaf sub-package (e.g., user/, task/). Uses short unprefixed names (Status,
+// StatusActive) because the package name already qualifies the type at call sites.
+func genSubpackageEnumType(_ gen.GeneratorHelper, f *jen.File, _ *gen.Type, field *gen.Field, _ *entityPkgEnumRegistry) {
+	// Short unprefixed name: "Status" (not "UserStatus").
+	enumName := field.StructField()
+
+	// Type definition
+	f.Commentf("%s defines the type for the %q enum field.", enumName, field.Name)
+	f.Type().Id(enumName).String()
+
+	// Enum constants — field.EnumName already yields the short prefixed form:
+	// e.g. field "status", value "active" → "StatusActive".
+	f.Const().DefsFunc(func(defs *jen.Group) {
+		for _, e := range field.Enums {
+			defs.Id(field.EnumName(e.Value)).Id(enumName).Op("=").Lit(e.Value)
+		}
+	})
+
+	// String method
+	f.Commentf("String returns the string representation of %s.", enumName)
+	f.Func().Params(jen.Id("e").Id(enumName)).Id("String").Params().String().Block(
+		jen.Return(jen.String().Call(jen.Id("e"))),
+	)
+
+	// IsValid method
+	f.Commentf("IsValid reports whether the %s value is one of the declared enum members.", enumName)
+	f.Func().Params(jen.Id("e").Id(enumName)).Id("IsValid").Params().Bool().BlockFunc(func(body *jen.Group) {
+		body.Switch(jen.Id("e")).BlockFunc(func(sw *jen.Group) {
+			caseValues := make([]jen.Code, 0, len(field.Enums))
+			for _, e := range field.Enums {
+				caseValues = append(caseValues, jen.Id(field.EnumName(e.Value)))
+			}
+			sw.Case(caseValues...).Block(jen.Return(jen.True()))
+			sw.Default().Block(jen.Return(jen.False()))
+		})
+	})
+
+	// Values function
+	valuesFunc := enumName + "Values"
+	f.Commentf("%s returns all valid values for %s.", valuesFunc, enumName)
+	f.Func().Id(valuesFunc).Params().Index().Id(enumName).BlockFunc(func(body *jen.Group) {
+		body.Return(jen.Index().Id(enumName).ValuesFunc(func(vals *jen.Group) {
+			for _, e := range field.Enums {
+				vals.Id(field.EnumName(e.Value))
+			}
+		}))
+	})
+
+	// Scan method (for sql.Scanner interface)
+	f.Comment("Scan implements the sql.Scanner interface.")
+	f.Func().Params(jen.Id("e").Op("*").Id(enumName)).Id("Scan").Params(jen.Id("value").Any()).Error().Block(
+		jen.Switch(jen.Id("v").Op(":=").Id("value").Assert(jen.Type())).Block(
+			jen.Case(jen.String()).Block(
+				jen.Op("*").Id("e").Op("=").Id(enumName).Call(jen.Id("v")),
+				jen.Return(jen.Nil()),
+			),
+			jen.Case(jen.Index().Byte()).Block(
+				jen.Op("*").Id("e").Op("=").Id(enumName).Call(jen.Id("v")),
+				jen.Return(jen.Nil()),
+			),
+			jen.Default().Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("invalid type %T for enum "+enumName),
+					jen.Id("value"),
+				)),
+			),
+		),
+	)
+
+	// Value method (for driver.Valuer interface)
+	f.Comment("Value implements the driver.Valuer interface.")
+	f.Func().Params(jen.Id("e").Id(enumName)).Id("Value").Params().Params(
+		jen.Qual("database/sql/driver", "Value"),
+		jen.Error(),
+	).Block(
+		jen.Return(jen.String().Call(jen.Id("e")), jen.Nil()),
+	)
+
+	// MarshalGQL method (for graphql.Marshaler interface)
+	f.Comment("MarshalGQL implements graphql.Marshaler interface.")
+	f.Func().Params(jen.Id("e").Id(enumName)).Id("MarshalGQL").Params(
+		jen.Id("w").Qual("io", "Writer"),
+	).Block(
+		jen.Qual("io", "WriteString").Call(
+			jen.Id("w"),
+			jen.Qual("strconv", "Quote").Call(
+				jen.Qual("strings", "ToUpper").Call(jen.Id("e").Dot("String").Call()),
+			),
+		),
+	)
+
+	// UnmarshalGQL method (for graphql.Unmarshaler interface)
+	f.Comment("UnmarshalGQL implements graphql.Unmarshaler interface.")
+	f.Func().Params(jen.Id("e").Op("*").Id(enumName)).Id("UnmarshalGQL").Params(
+		jen.Id("val").Any(),
+	).Error().Block(
+		jen.List(jen.Id("str"), jen.Id("ok")).Op(":=").Id("val").Assert(jen.String()),
+		jen.If(jen.Op("!").Id("ok")).Block(
+			jen.Return(jen.Qual("fmt", "Errorf").Call(
+				jen.Lit("enum %T must be a string"),
+				jen.Id("val"),
+			)),
+		),
+		// Try as-is first (for NamedValues with uppercase DB values)
+		jen.Op("*").Id("e").Op("=").Id(enumName).Call(jen.Id("str")),
+		jen.If(jen.Id("e").Dot("IsValid").Call()).Block(
+			jen.Return(jen.Nil()),
+		),
+		// Try lowercase (for Values with lowercase DB values)
+		jen.Op("*").Id("e").Op("=").Id(enumName).Call(
+			jen.Qual("strings", "ToLower").Call(jen.Id("str")),
+		),
+		jen.If(jen.Op("!").Id("e").Dot("IsValid").Call()).Block(
+			jen.Return(jen.Qual("fmt", "Errorf").Call(
+				jen.Lit("%s is not a valid "+enumName),
+				jen.Id("str"),
+			)),
+		),
+		jen.Return(jen.Nil()),
+	)
 }
 
 // genSubpackageEnumAlias generates type and constant aliases in the sub-package
