@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/user"
 )
 
@@ -84,7 +85,7 @@ func BenchmarkCreateBulk_Postgres(b *testing.B) {
 				prefix := "run" + strconv.FormatInt(pgBenchSeq.Add(1), 10) + "-"
 				b.StartTimer()
 
-				if _, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, j int) {
+				if _, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, j int) {
 					c.SetName(prefix + names[j]).
 						SetEmail(prefix + names[j] + "@ex.com").
 						SetAge(30).
@@ -144,7 +145,7 @@ func BenchmarkQueryAll_Postgres(b *testing.B) {
 	for j := range names {
 		names[j] = "u" + strconv.Itoa(j)
 	}
-	if _, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, j int) {
+	if _, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, j int) {
 		c.SetName(names[j]).
 			SetEmail(names[j] + "@ex.com").
 			SetAge(30).

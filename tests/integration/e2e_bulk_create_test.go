@@ -12,6 +12,10 @@ import (
 
 	"github.com/syssam/velox/dialect/sql"
 	integration "github.com/syssam/velox/tests/integration"
+	postclient "github.com/syssam/velox/tests/integration/client/post"
+	tagclient "github.com/syssam/velox/tests/integration/client/tag"
+	tokenclient "github.com/syssam/velox/tests/integration/client/token"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/post"
 	"github.com/syssam/velox/tests/integration/tag"
 	"github.com/syssam/velox/tests/integration/token"
@@ -29,7 +33,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 		ctx := context.Background()
 
 		names := []string{"a", "b", "c", "d", "e", "f"}
-		tags, err := client.Tag.MapCreateBulk(names, func(c *tag.TagCreate, i int) {
+		tags, err := client.Tag.MapCreateBulk(names, func(c *tagclient.TagCreate, i int) {
 			c.SetName(names[i])
 		}).BatchSize(2).Save(ctx)
 		require.NoError(t, err)
@@ -45,7 +49,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 		ctx := context.Background()
 
 		names := []string{"a", "b", "c", "d", "e"}
-		tags, err := client.Tag.MapCreateBulk(names, func(c *tag.TagCreate, i int) {
+		tags, err := client.Tag.MapCreateBulk(names, func(c *tagclient.TagCreate, i int) {
 			c.SetName(names[i])
 		}).BatchSize(3).Save(ctx)
 		require.NoError(t, err)
@@ -61,7 +65,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 		ctx := context.Background()
 
 		names := []string{"a", "b"}
-		tags, err := client.Tag.MapCreateBulk(names, func(c *tag.TagCreate, i int) {
+		tags, err := client.Tag.MapCreateBulk(names, func(c *tagclient.TagCreate, i int) {
 			c.SetName(names[i])
 		}).BatchSize(100).Save(ctx)
 		require.NoError(t, err)
@@ -73,7 +77,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 		ctx := context.Background()
 
 		names := []string{"a", "b", "c"}
-		tags, err := client.Tag.MapCreateBulk(names, func(c *tag.TagCreate, i int) {
+		tags, err := client.Tag.MapCreateBulk(names, func(c *tagclient.TagCreate, i int) {
 			c.SetName(names[i])
 		}).BatchSize(0).Save(ctx)
 		require.NoError(t, err)
@@ -93,7 +97,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 		for i := range names {
 			names[i] = "batch_" + strconv.Itoa(i)
 		}
-		users, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+		users, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 			c.SetName(names[i]).
 				SetEmail(names[i] + "@ex.com").
 				SetAge(30).
@@ -122,7 +126,7 @@ func TestCreateBulk_BatchSize_ErrorMidChunk(t *testing.T) {
 	createTag(t, client, "collide")
 
 	names := []string{"ok1", "ok2", "collide", "ok4"}
-	tags, err := client.Tag.MapCreateBulk(names, func(c *tag.TagCreate, i int) {
+	tags, err := client.Tag.MapCreateBulk(names, func(c *tagclient.TagCreate, i int) {
 		c.SetName(names[i])
 	}).BatchSize(2).Save(ctx)
 
@@ -154,7 +158,7 @@ func TestCreateBulk_BatchSize_InsideTx(t *testing.T) {
 	require.NoError(t, err)
 
 	names := []string{"tx_ok1", "tx_ok2", "tx_collide", "tx_ok4"}
-	_, err = tx.Tag.MapCreateBulk(names, func(c *tag.TagCreate, i int) {
+	_, err = tx.Tag.MapCreateBulk(names, func(c *tagclient.TagCreate, i int) {
 		c.SetName(names[i])
 	}).BatchSize(2).Save(ctx)
 	require.Error(t, err)
@@ -191,7 +195,7 @@ func TestCreateBulk_SQLiteParamLimit(t *testing.T) {
 		for i := range names {
 			names[i] = "under_" + strconv.Itoa(i)
 		}
-		users, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+		users, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 			c.SetName(names[i]).
 				SetEmail(names[i] + "@ex.com").
 				SetAge(30).
@@ -212,7 +216,7 @@ func TestCreateBulk_SQLiteParamLimit(t *testing.T) {
 		for i := range names {
 			names[i] = "over_" + strconv.Itoa(i)
 		}
-		_, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+		_, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 			c.SetName(names[i]).
 				SetEmail(names[i] + "@ex.com").
 				SetAge(30).
@@ -240,7 +244,7 @@ func TestCreateBulk_SQLiteParamLimit(t *testing.T) {
 			for i := range names {
 				names[i] = "chunk_" + strconv.Itoa(start+i)
 			}
-			_, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+			_, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 				c.SetName(names[i]).
 					SetEmail(names[i] + "@ex.com").
 					SetAge(30).
@@ -302,7 +306,7 @@ func TestCreateBulk_ReturnedNodesHaveConfig(t *testing.T) {
 	ctx := context.Background()
 
 	names := []string{"Alice", "Bob", "Carol"}
-	users, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+	users, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 		c.SetName(names[i]).
 			SetEmail(names[i] + "@example.com").
 			SetAge(30).
@@ -385,7 +389,7 @@ func TestCreateBulk_PostsForSameAuthor(t *testing.T) {
 	author := createUser(t, client, "Alice", "alice@example.com")
 
 	titles := []string{"P1", "P2", "P3"}
-	posts, err := client.Post.MapCreateBulk(titles, func(c *post.PostCreate, i int) {
+	posts, err := client.Post.MapCreateBulk(titles, func(c *postclient.PostCreate, i int) {
 		c.SetTitle(titles[i]).
 			SetContent("body").
 			SetStatus(post.StatusPublished).
@@ -426,7 +430,7 @@ func TestCreateBulk_OnConflictUpdateNewValues(t *testing.T) {
 	client := openTestClient(t)
 	ctx := context.Background()
 
-	tags1, err := client.Tag.MapCreateBulk([]string{"go", "orm"}, func(c *tag.TagCreate, i int) {
+	tags1, err := client.Tag.MapCreateBulk([]string{"go", "orm"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"go", "orm"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.ResolveWithNewValues()).
@@ -435,7 +439,7 @@ func TestCreateBulk_OnConflictUpdateNewValues(t *testing.T) {
 	require.Len(t, tags1, 2)
 
 	// Re-insert the exact same names — must not error and must not duplicate.
-	tags2, err := client.Tag.MapCreateBulk([]string{"go", "orm"}, func(c *tag.TagCreate, i int) {
+	tags2, err := client.Tag.MapCreateBulk([]string{"go", "orm"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"go", "orm"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.ResolveWithNewValues()).
@@ -460,7 +464,7 @@ func TestCreateBulk_OnConflictDoNothing(t *testing.T) {
 	client := openTestClient(t)
 	ctx := context.Background()
 
-	first, err := client.Tag.MapCreateBulk([]string{"a", "b"}, func(c *tag.TagCreate, i int) {
+	first, err := client.Tag.MapCreateBulk([]string{"a", "b"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"a", "b"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.DoNothing()).
@@ -472,7 +476,7 @@ func TestCreateBulk_OnConflictDoNothing(t *testing.T) {
 	}
 
 	// Second insert: both names already exist. Must not error.
-	second, err := client.Tag.MapCreateBulk([]string{"a", "b"}, func(c *tag.TagCreate, i int) {
+	second, err := client.Tag.MapCreateBulk([]string{"a", "b"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"a", "b"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.DoNothing()).
@@ -502,7 +506,7 @@ func TestCreateBulk_OnConflictUpdateNewValues_Mixed(t *testing.T) {
 
 	tags, err := client.Tag.MapCreateBulk(
 		[]string{"alpha", "beta", "charlie"},
-		func(c *tag.TagCreate, i int) {
+		func(c *tagclient.TagCreate, i int) {
 			c.SetName([]string{"alpha", "beta", "charlie"}[i])
 		},
 	).
@@ -555,7 +559,7 @@ func TestCreateBulk_OnConflictDoNothing_Mixed(t *testing.T) {
 	// Bulk insert: alpha (dup), beta (new), charlie (dup).
 	tags, err := client.Tag.MapCreateBulk(
 		[]string{"alpha", "beta", "charlie"},
-		func(c *tag.TagCreate, i int) {
+		func(c *tagclient.TagCreate, i int) {
 			c.SetName([]string{"alpha", "beta", "charlie"}[i])
 		},
 	).
@@ -599,7 +603,7 @@ func TestCreateBulk_OnConflictWithHookFallback(t *testing.T) {
 	})
 
 	// First insert via bulk + hook fallback path.
-	_, err := client.Tag.MapCreateBulk([]string{"x", "y"}, func(c *tag.TagCreate, i int) {
+	_, err := client.Tag.MapCreateBulk([]string{"x", "y"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"x", "y"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.ResolveWithNewValues()).
@@ -608,7 +612,7 @@ func TestCreateBulk_OnConflictWithHookFallback(t *testing.T) {
 	assert.Equal(t, 2, calls)
 
 	// Re-insert duplicates: must not error if conflict opts propagated.
-	_, err = client.Tag.MapCreateBulk([]string{"x", "y"}, func(c *tag.TagCreate, i int) {
+	_, err = client.Tag.MapCreateBulk([]string{"x", "y"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"x", "y"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.ResolveWithNewValues()).
@@ -635,7 +639,7 @@ func TestCreateBulk_OnConflictIgnore_Mixed(t *testing.T) {
 
 	tags, err := client.Tag.MapCreateBulk(
 		[]string{"ign_a", "ign_b", "ign_c"},
-		func(c *tag.TagCreate, i int) {
+		func(c *tagclient.TagCreate, i int) {
 			c.SetName([]string{"ign_a", "ign_b", "ign_c"}[i])
 		},
 	).
@@ -676,7 +680,7 @@ func TestCreateBulk_PostsWithM2MTags(t *testing.T) {
 	tagOrm := createTag(t, client, "kind:orm")
 
 	titles := []string{"BulkM2M-1", "BulkM2M-2"}
-	posts, err := client.Post.MapCreateBulk(titles, func(c *post.PostCreate, i int) {
+	posts, err := client.Post.MapCreateBulk(titles, func(c *postclient.PostCreate, i int) {
 		c.SetTitle(titles[i]).
 			SetContent("body").
 			SetStatus(post.StatusPublished).
@@ -726,7 +730,7 @@ func TestCreateBulk_OnConflictDoNothing_WithHookMixed(t *testing.T) {
 
 	tags, err := client.Tag.MapCreateBulk(
 		[]string{"alpha", "beta", "charlie"},
-		func(c *tag.TagCreate, i int) {
+		func(c *tagclient.TagCreate, i int) {
 			c.SetName([]string{"alpha", "beta", "charlie"}[i])
 		},
 	).
@@ -761,7 +765,7 @@ func TestCreateBulk_InsideTransactionCommits(t *testing.T) {
 	tx, err := client.Tx(ctx)
 	require.NoError(t, err)
 
-	_, err = tx.Tag.MapCreateBulk([]string{"tx1", "tx2"}, func(c *tag.TagCreate, i int) {
+	_, err = tx.Tag.MapCreateBulk([]string{"tx1", "tx2"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"tx1", "tx2"}[i])
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -781,7 +785,7 @@ func TestCreateBulk_InsideTransactionRollsBack(t *testing.T) {
 	tx, err := client.Tx(ctx)
 	require.NoError(t, err)
 
-	_, err = tx.Tag.MapCreateBulk([]string{"rb1", "rb2"}, func(c *tag.TagCreate, i int) {
+	_, err = tx.Tag.MapCreateBulk([]string{"rb1", "rb2"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"rb1", "rb2"}[i])
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -809,7 +813,7 @@ func TestCreateBulk_InsideTransaction_WithOnConflict(t *testing.T) {
 	require.NoError(t, err)
 
 	// "seed" is a dup; "fresh" is new. DoNothing → per-row fallback.
-	tags, err := tx.Tag.MapCreateBulk([]string{"seed", "fresh"}, func(c *tag.TagCreate, i int) {
+	tags, err := tx.Tag.MapCreateBulk([]string{"seed", "fresh"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"seed", "fresh"}[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.DoNothing()).
@@ -860,7 +864,7 @@ func TestCreateBulk_InsideCallerTx_AtomicOnConstraintError(t *testing.T) {
 	// Bulk inside the tx: "in_tx_1" (new), "dup_ctx" (collision), "in_tx_3" (never persisted).
 	_, err = tx.Tag.MapCreateBulk(
 		[]string{"in_tx_1", "dup_ctx", "in_tx_3"},
-		func(c *tag.TagCreate, i int) {
+		func(c *tagclient.TagCreate, i int) {
 			c.SetName([]string{"in_tx_1", "dup_ctx", "in_tx_3"}[i])
 		},
 	).Save(ctx)
@@ -908,7 +912,7 @@ func TestCreateBulk_AtomicOnMidRowConstraintError(t *testing.T) {
 	// Bulk: new, dup (unique constraint violation), new.
 	_, err := client.Tag.MapCreateBulk(
 		[]string{"new1", "dup", "new3"},
-		func(c *tag.TagCreate, i int) {
+		func(c *tagclient.TagCreate, i int) {
 			c.SetName([]string{"new1", "dup", "new3"}[i])
 		},
 	).Save(ctx)
@@ -930,7 +934,7 @@ func TestCreateBulk_Token_DefaultUUID(t *testing.T) {
 	ctx := context.Background()
 
 	names := []string{"tok1", "tok2", "tok3"}
-	tokens, err := client.Token.MapCreateBulk(names, func(c *token.TokenCreate, i int) {
+	tokens, err := client.Token.MapCreateBulk(names, func(c *tokenclient.TokenCreate, i int) {
 		c.SetName(names[i])
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -964,7 +968,7 @@ func TestCreateBulk_Token_ExplicitID(t *testing.T) {
 	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
 	names := []string{"ex1", "ex2", "ex3"}
 
-	tokens, err := client.Token.MapCreateBulk(names, func(c *token.TokenCreate, i int) {
+	tokens, err := client.Token.MapCreateBulk(names, func(c *tokenclient.TokenCreate, i int) {
 		c.SetID(ids[i]).SetName(names[i])
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -999,7 +1003,7 @@ func TestCreateBulk_Token_OnConflictDoNothing_Mixed(t *testing.T) {
 	require.NoError(t, err)
 
 	names := []string{"pre_a", "bulk_b", "pre_c"}
-	tokens, err := client.Token.MapCreateBulk(names, func(c *token.TokenCreate, i int) {
+	tokens, err := client.Token.MapCreateBulk(names, func(c *tokenclient.TokenCreate, i int) {
 		c.SetName(names[i])
 	}).
 		OnConflict(sql.ConflictColumns("name"), sql.DoNothing()).
@@ -1050,7 +1054,7 @@ func TestCreateBulk_MutatorChainHookOrdering(t *testing.T) {
 		})
 	})
 
-	_, err := client.Tag.MapCreateBulk([]string{"a", "b", "c"}, func(c *tag.TagCreate, i int) {
+	_, err := client.Tag.MapCreateBulk([]string{"a", "b", "c"}, func(c *tagclient.TagCreate, i int) {
 		c.SetName([]string{"a", "b", "c"}[i])
 	}).Save(ctx)
 	require.NoError(t, err)
@@ -1080,7 +1084,7 @@ func TestCreateBulk_HookFiresPerRow(t *testing.T) {
 	})
 
 	names := []string{"a", "b", "c"}
-	_, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+	_, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 		c.SetName(names[i]).
 			SetEmail(names[i] + "@test.com").
 			SetAge(20).

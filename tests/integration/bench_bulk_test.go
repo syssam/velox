@@ -7,6 +7,7 @@ import (
 
 	"github.com/syssam/velox/dialect"
 	integration "github.com/syssam/velox/tests/integration"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/user"
 
 	_ "modernc.org/sqlite"
@@ -47,7 +48,7 @@ func BenchmarkCreateBulk(b *testing.B) {
 					}
 					b.StartTimer()
 
-					if _, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, j int) {
+					if _, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, j int) {
 						c.SetName(names[j]).
 							SetEmail(names[j] + "@ex.com").
 							SetAge(30).

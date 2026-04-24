@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox/privacy"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/user"
 	schema "github.com/syssam/velox/testschema"
 )
@@ -24,7 +25,7 @@ func TestPrivacy_DenyBulkCreateWithoutAuth(t *testing.T) {
 	ctx := schema.EnforceUserPrivacyContext(context.Background())
 
 	names := []string{"Mallory", "Oscar"}
-	_, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+	_, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 		c.SetName(names[i]).
 			SetEmail(names[i] + "@test.com").
 			SetAge(30).
@@ -134,7 +135,7 @@ func TestPrivacy_AllowBulkCreateWithAuth(t *testing.T) {
 	ctx := schema.AllowWriteContext(schema.EnforceUserPrivacyContext(context.Background()))
 
 	names := []string{"Alice", "Bob"}
-	users, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+	users, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 		c.SetName(names[i]).
 			SetEmail(names[i] + "@test.com").
 			SetAge(30).

@@ -262,7 +262,7 @@ func genRuntimeValidator(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, fie
 		grp.Commentf("// %s.%s is a validator for the %q field. It is called by the builders before save.",
 			pkg, validatorVar, field.Name)
 		grp.Qual(entityPkg, validatorVar).Op("=").Func().Params(
-			jen.Id("v").Id(field.SubpackageEnumTypeName()),
+			jen.Id("v").Qual(entityPkg, field.SubpackageEnumTypeName()),
 		).Error().Block(
 			jen.If(jen.Op("!").Id("v").Dot("IsValid").Call()).Block(
 				jen.Return(jen.Qual("fmt", "Errorf").Call(

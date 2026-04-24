@@ -54,15 +54,22 @@ tests/integration/runtime.go
 tests/integration/tx.go
 tests/integration/types.go
 tests/integration/velox.go
+tests/integration/client/
 tests/integration/comment/
 tests/integration/entity/
+tests/integration/filter/
 tests/integration/hook/
+tests/integration/intercept/
+tests/integration/internal/
 tests/integration/migrate/
 tests/integration/post/
 tests/integration/predicate/
+tests/integration/privacy/
 tests/integration/query/
 tests/integration/tag/
+tests/integration/token/
 tests/integration/user/
+tests/integration/.velox-manifest
 
 # Examples not for public distribution
 examples/erp/

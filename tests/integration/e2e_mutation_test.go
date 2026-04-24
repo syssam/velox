@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	integration "github.com/syssam/velox/tests/integration"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/user"
 )
 
@@ -20,7 +21,7 @@ func TestCreateBulk(t *testing.T) {
 	emails := []string{"a@test.com", "b@test.com", "c@test.com"}
 	ages := []int{30, 25, 40}
 
-	users, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+	users, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 		c.SetName(names[i]).
 			SetEmail(emails[i]).
 			SetAge(ages[i]).

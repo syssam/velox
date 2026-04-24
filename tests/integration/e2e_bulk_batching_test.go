@@ -12,6 +12,7 @@ import (
 	"github.com/syssam/velox/dialect"
 	sqldialect "github.com/syssam/velox/dialect/sql"
 	integration "github.com/syssam/velox/tests/integration"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/user"
 
 	_ "modernc.org/sqlite"
@@ -134,7 +135,7 @@ func TestCreateBulk_BatchingUnderHooks_IsOneStatement(t *testing.T) {
 			for i := range names {
 				names[i] = "u" + string(rune('0'+i))
 			}
-			users, err := client.User.MapCreateBulk(names, func(c *user.UserCreate, i int) {
+			users, err := client.User.MapCreateBulk(names, func(c *userclient.UserCreate, i int) {
 				c.SetName(names[i]).
 					SetEmail(names[i] + "@example.com").
 					SetAge(30).

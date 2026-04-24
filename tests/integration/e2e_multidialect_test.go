@@ -9,6 +9,7 @@ import (
 
 	"github.com/syssam/velox/dialect/sql"
 	integration "github.com/syssam/velox/tests/integration"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/user"
 )
 
@@ -187,7 +188,7 @@ func TestMultiDialect_BulkOnConflictUpdate(t *testing.T) {
 		// Bulk-create with one duplicate email (Original) and one new
 		// row (Fresh). With ResolveWithNewValues, the duplicate should
 		// update in place and the new row should insert.
-		builders := []*user.UserCreate{
+		builders := []*userclient.UserCreate{
 			client.User.Create().
 				SetName("Updated").
 				SetEmail("conflict@multi.com").

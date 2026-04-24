@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	integration "github.com/syssam/velox/tests/integration"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/entity"
 	"github.com/syssam/velox/tests/integration/user"
 )
@@ -24,7 +25,7 @@ func TestClientMutate_CreateUser(t *testing.T) {
 	// Construct the mutation directly and populate it — the dynamic dispatch
 	// path doesn't need to go through the typed builder, only through a
 	// velox.Mutation-conforming value.
-	m := user.NewUserMutation(client.RuntimeConfig(), integration.OpCreate)
+	m := userclient.NewUserMutation(client.RuntimeConfig(), integration.OpCreate)
 	m.SetName("MutateViaClient")
 	m.SetEmail("mutate@test.com")
 	m.SetAge(30)
