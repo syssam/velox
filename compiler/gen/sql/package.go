@@ -372,48 +372,6 @@ func genSubpackageEnumType(_ gen.GeneratorHelper, f *jen.File, _ *gen.Type, fiel
 	)
 }
 
-// genSubpackageEnumAlias generates type and constant aliases in the sub-package
-// that point to the canonical enum type in entity/ package.
-// This keeps the sub-package API backward-compatible (user.Role, user.RoleAdmin still work)
-// while the actual type lives in entity/ (entity.UserRole, entity.UserRoleAdmin).
-func genSubpackageEnumAlias(h gen.GeneratorHelper, f *jen.File, t *gen.Type, field *gen.Field, enumReg *entityPkgEnumRegistry) {
-	enumName := field.StructField()                       // e.g., "Role"
-	entityEnumName := enumReg.resolve(t.Name, field.Name) // e.g., "UserRole"
-
-	// Compute entity/ import path.
-	entityPkgImport := h.SharedEntityPkg()
-
-	// Type alias: type Role = entity.UserRole
-	f.Commentf("%s is a type alias for the %q enum field defined in the entity package.", enumName, field.Name)
-	f.Type().Id(enumName).Op("=").Qual(entityPkgImport, entityEnumName)
-
-	// Constant aliases: var RoleAdmin = entity.UserRoleAdmin
-	// Go type aliases share methods but not constants, so we re-export as vars.
-	f.Var().DefsFunc(func(defs *jen.Group) {
-		for _, e := range field.Enums {
-			localConst := field.EnumName(e.Value) // e.g., "RoleAdmin"
-			// Build entity constant name using the same logic as entity_pkg.go:
-			// strip field.StructField() prefix from EnumName, prepend resolved entity enum name.
-			fullEnumConst := field.EnumName(e.Value) // "RoleAdmin"
-			sf := field.StructField()                // "Role"
-			valueSuffix := fullEnumConst
-			if len(fullEnumConst) > len(sf) && fullEnumConst[:len(sf)] == sf {
-				valueSuffix = fullEnumConst[len(sf):]
-			}
-			entityConst := entityEnumName + valueSuffix // "UserRole" + "Admin" = "UserRoleAdmin"
-			defs.Id(localConst).Op("=").Qual(entityPkgImport, entityConst)
-		}
-	})
-
-	// Values function delegates to entity/ package.
-	valuesFunc := enumName + "Values"
-	entityValuesFunc := entityEnumName + "Values"
-	f.Commentf("%s returns all valid values for %s.", valuesFunc, enumName)
-	f.Func().Id(valuesFunc).Params().Index().Id(enumName).Block(
-		jen.Return(jen.Qual(entityPkgImport, entityValuesFunc).Call()),
-	)
-}
-
 // genLoadOptionHelpers generates functional option helpers for the entity package.
 // These provide a type-safe, Go-idiomatic API for configuring edge loading.
 func genLoadOptionHelpers(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
