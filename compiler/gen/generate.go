@@ -221,20 +221,21 @@ func (g *JenniferGenerator) generateEntities(ctx context.Context, errg *errgroup
 
 	for _, t := range g.graph.Nodes {
 		entityDir := t.PackageDir()
-		entityHelper := newEntityPkgHelper(g, entityDir, rootPkg)
-		ed := creator.WithHelper(entityHelper)
+		clientHelper := newClientPkgHelper(g, entityDir, rootPkg)
+		clientDir := filepath.Join("client", entityDir)
+		ed := creator.WithHelper(clientHelper)
 
 		errg.Go(func() error {
 			f, err := ed.GenMutation(t)
-			return g.writeFileResult(ctx, f, err, entityDir, "mutation.go")
+			return g.writeFileResult(ctx, f, err, clientDir, "mutation.go")
 		})
 		errg.Go(func() error {
-			f, err := creator.GenEntityClient(entityHelper, t)
-			return g.writeFileResult(ctx, f, err, entityDir, "client.go")
+			f, err := creator.GenEntityClient(clientHelper, t)
+			return g.writeFileResult(ctx, f, err, clientDir, "client.go")
 		})
 		errg.Go(func() error {
-			f, err := creator.GenEntityRuntime(entityHelper, t)
-			return g.writeFileResult(ctx, f, err, entityDir, "runtime.go")
+			f, err := creator.GenEntityRuntime(clientHelper, t)
+			return g.writeFileResult(ctx, f, err, clientDir, "runtime.go")
 		})
 		errg.Go(func() error {
 			entityPkgHelper := newEntityPkgHelper(g, "entity", rootPkg)
@@ -251,16 +252,16 @@ func (g *JenniferGenerator) generateEntities(ctx context.Context, errg *errgroup
 			return g.writeFileResult(ctx, f, err, "query", strings.ToLower(t.Name)+".go")
 		})
 		errg.Go(func() error {
-			f, err := creator.GenCreate(entityHelper, t)
-			return g.writeFileResult(ctx, f, err, entityDir, "create.go")
+			f, err := creator.GenCreate(clientHelper, t)
+			return g.writeFileResult(ctx, f, err, clientDir, "create.go")
 		})
 		errg.Go(func() error {
-			f, err := creator.GenUpdate(entityHelper, t)
-			return g.writeFileResult(ctx, f, err, entityDir, "update.go")
+			f, err := creator.GenUpdate(clientHelper, t)
+			return g.writeFileResult(ctx, f, err, clientDir, "update.go")
 		})
 		errg.Go(func() error {
-			f, err := creator.GenDelete(entityHelper, t)
-			return g.writeFileResult(ctx, f, err, entityDir, "delete.go")
+			f, err := creator.GenDelete(clientHelper, t)
+			return g.writeFileResult(ctx, f, err, clientDir, "delete.go")
 		})
 		errg.Go(func() error {
 			f, err := g.dialect.GenPackage(t)
@@ -352,11 +353,12 @@ func (g *JenniferGenerator) generateFeatures(ctx context.Context, errg *errgroup
 			for _, t := range g.graph.Nodes {
 				errg.Go(func() error {
 					if useEntityPkg {
-						entityHelper := newEntityPkgHelper(g, t.PackageDir(), rootPkg)
-						ed := creator.WithHelper(entityHelper)
+						clientHelper := newClientPkgHelper(g, t.PackageDir(), rootPkg)
+						ed := creator.WithHelper(clientHelper)
 						if pf, ok := ed.(PrivacyFilterGenerator); ok {
 							f, err := pf.GenFilter(t)
-							return g.writeFileResult(ctx, f, err, t.PackageDir(), "filter.go")
+							clientDir := filepath.Join("client", t.PackageDir())
+							return g.writeFileResult(ctx, f, err, clientDir, "filter.go")
 						}
 						return nil
 					}
