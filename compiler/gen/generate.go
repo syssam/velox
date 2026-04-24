@@ -190,6 +190,15 @@ func (g *JenniferGenerator) Generate(ctx context.Context) error {
 
 // generateEntities dispatches per-entity code generation tasks.
 // The EntityPackageDialect requirement is validated upfront in Generate().
+// entityFileSpec declares a single per-entity output file: where to write it
+// and how to generate it. Used by generateEntities to drive emission via a
+// table instead of repeating errg.Go boilerplate per output.
+type entityFileSpec struct {
+	dir  string                      // output directory (relative to outDir)
+	file string                      // output filename
+	gen  func() (*jen.File, error)   // captures the right helper / args per entry
+}
+
 func (g *JenniferGenerator) generateEntities(ctx context.Context, errg *errgroup.Group) {
 	// Safe: validated in Generate() before this is called.
 	creator, _ := g.dialect.(EntityPackageDialect)
@@ -200,56 +209,54 @@ func (g *JenniferGenerator) generateEntities(ctx context.Context, errg *errgroup
 
 	for _, t := range g.graph.Nodes {
 		entityDir := t.PackageDir()
+		lowerName := strings.ToLower(t.Name)
+
+		// Three helpers for three output destinations, each scoped to t:
+		//  - clientHelper: client/{entity}/ (package {entity}client) — heavy code
+		//  - entityHelper: entity/           — shared entity struct & interfaces
+		//  - queryHelper:  query/            — query builders
+		// The leaf {entity}/ files (meta + predicates) use the dialect generator directly.
 		clientHelper := newClientPkgHelper(g, entityDir, rootPkg)
+		entityHelper := newEntityPkgHelper(g, "entity", rootPkg)
+		queryHelper := newEntityPkgHelper(g, "query", rootPkg)
 		clientDir := filepath.Join("client", entityDir)
+
+		entityPkgImport := "entity"
+		if rootPkg != "" {
+			entityPkgImport = rootPkg + "/entity"
+		}
+
 		ed := creator.WithHelper(clientHelper)
 
-		errg.Go(func() error {
-			f, err := ed.GenMutation(t)
-			return g.writeFileResult(ctx, f, err, clientDir, "mutation.go")
-		})
-		errg.Go(func() error {
-			f, err := creator.GenEntityClient(clientHelper, t)
-			return g.writeFileResult(ctx, f, err, clientDir, "client.go")
-		})
-		errg.Go(func() error {
-			f, err := creator.GenEntityRuntime(clientHelper, t)
-			return g.writeFileResult(ctx, f, err, clientDir, "runtime.go")
-		})
-		errg.Go(func() error {
-			entityPkgHelper := newEntityPkgHelper(g, "entity", rootPkg)
-			f, err := creator.GenEntityPkg(entityPkgHelper, t)
-			return g.writeFileResult(ctx, f, err, "entity", strings.ToLower(t.Name)+".go")
-		})
-		errg.Go(func() error {
-			queryHelper := newEntityPkgHelper(g, "query", rootPkg)
-			entityPkgImport := "entity"
-			if rootPkg != "" {
-				entityPkgImport = rootPkg + "/entity"
-			}
-			f, err := creator.GenQueryPkg(queryHelper, t, entityPkgImport)
-			return g.writeFileResult(ctx, f, err, "query", strings.ToLower(t.Name)+".go")
-		})
-		errg.Go(func() error {
-			f, err := creator.GenCreate(clientHelper, t)
-			return g.writeFileResult(ctx, f, err, clientDir, "create.go")
-		})
-		errg.Go(func() error {
-			f, err := creator.GenUpdate(clientHelper, t)
-			return g.writeFileResult(ctx, f, err, clientDir, "update.go")
-		})
-		errg.Go(func() error {
-			f, err := creator.GenDelete(clientHelper, t)
-			return g.writeFileResult(ctx, f, err, clientDir, "delete.go")
-		})
-		errg.Go(func() error {
-			f, err := g.dialect.GenPackage(t)
-			return g.writeFileResult(ctx, f, err, t.PackageDir(), t.PackageDir()+".go")
-		})
-		errg.Go(func() error {
-			f, err := g.dialect.GenPredicate(t)
-			return g.writeFileResult(ctx, f, err, t.PackageDir(), "where.go")
-		})
+		specs := []entityFileSpec{
+			// Heavy per-entity code → client/{entity}/ (package {entity}client)
+			{clientDir, "mutation.go", func() (*jen.File, error) { return ed.GenMutation(t) }},
+			{clientDir, "client.go", func() (*jen.File, error) { return creator.GenEntityClient(clientHelper, t) }},
+			{clientDir, "runtime.go", func() (*jen.File, error) { return creator.GenEntityRuntime(clientHelper, t) }},
+			{clientDir, "create.go", func() (*jen.File, error) { return creator.GenCreate(clientHelper, t) }},
+			{clientDir, "update.go", func() (*jen.File, error) { return creator.GenUpdate(clientHelper, t) }},
+			{clientDir, "delete.go", func() (*jen.File, error) { return creator.GenDelete(clientHelper, t) }},
+
+			// Shared entity types → entity/
+			{"entity", lowerName + ".go", func() (*jen.File, error) { return creator.GenEntityPkg(entityHelper, t) }},
+
+			// Query builders → query/
+			{"query", lowerName + ".go", func() (*jen.File, error) {
+				return creator.GenQueryPkg(queryHelper, t, entityPkgImport)
+			}},
+
+			// True leaf: schema metadata + predicate helpers → {entity}/
+			{entityDir, entityDir + ".go", func() (*jen.File, error) { return g.dialect.GenPackage(t) }},
+			{entityDir, "where.go", func() (*jen.File, error) { return g.dialect.GenPredicate(t) }},
+		}
+
+		for _, s := range specs {
+			s := s // capture per iteration
+			errg.Go(func() error {
+				f, err := s.gen()
+				return g.writeFileResult(ctx, f, err, s.dir, s.file)
+			})
+		}
 	}
 }
 
