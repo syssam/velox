@@ -218,7 +218,7 @@ func (c *GQLGenConfig) InjectVeloxBindings(ormPackage string, schemaPath string)
 	// Add autobind for the ORM root and gqlfilter sub-package.
 	// Pagination types, mutation inputs, and entity wrappers are all in root.
 	c.AddAutobind(ormPackage)
-	c.AddAutobind(ormPackage + "/gqlfilter")
+	c.AddAutobind(ormPackage + "/filter")
 
 	// Bind ID and UUID scalars to gqlgen's built-in UUID type
 	c.SetModel(ScalarID, "github.com/99designs/gqlgen/graphql.UUID")
