@@ -1335,9 +1335,10 @@ func TestGenerator_GenEntityPagination_FilterApplication(t *testing.T) {
 	assert.NoError(t, err)
 	code := buf.String()
 
-	// Filter should be applied with type assertion
+	// Filter should be applied with type assertion (post cycle-break signature).
 	assert.Contains(t, code, "cfg.Filter != nil")
-	assert.Contains(t, code, "cfg.Filter.(func(*UserQuery) (*UserQuery, error))")
+	assert.Contains(t, code, "cfg.Filter.(func() (predicate.User, error))")
+	assert.Contains(t, code, "q.Where(p)")
 
 	// Wrong filter type should return error (not silently ignored)
 	assert.Contains(t, code, "invalid filter type")

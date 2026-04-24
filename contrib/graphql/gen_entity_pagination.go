@@ -81,20 +81,24 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Id("opt").Call(jen.Id("cfg")),
 		)
 
-		// Apply filter
+		// Apply filter. After cycle-break, filter returns a predicate (not a
+		// modified query) so we can break the filter/ -> query/ import edge.
 		grp.If(jen.Id("cfg").Dot("Filter").Op("!=").Nil()).BlockFunc(func(filterGrp *jen.Group) {
+			predicatePkg := g.config.ORMPackage + "/predicate"
 			filterGrp.List(jen.Id("f"), jen.Id("ok")).Op(":=").Id("cfg").Dot("Filter").Op(".").Parens(
-				jen.Func().Params(jen.Op("*").Id(queryName)).Params(jen.Op("*").Id(queryName), jen.Error()),
+				jen.Func().Params().Params(jen.Qual(predicatePkg, t.Name), jen.Error()),
 			)
 			filterGrp.If(jen.Op("!").Id("ok")).Block(
 				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
 					jen.Lit("pagination: invalid filter type %T"), jen.Id("cfg").Dot("Filter"),
 				)),
 			)
-			filterGrp.Var().Id("err").Error()
-			filterGrp.List(jen.Id("q"), jen.Id("err")).Op("=").Id("f").Call(jen.Id("q"))
+			filterGrp.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("f").Call()
 			filterGrp.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
+			)
+			filterGrp.If(jen.Id("p").Op("!=").Nil()).Block(
+				jen.Id("q").Dot("Where").Call(jen.Id("p")),
 			)
 		})
 
@@ -560,12 +564,13 @@ func (g *Generator) genModelWithOrder(f *jen.File, typeName, optName, orderName,
 
 // genModelWithFilter generates WithXxxFilter function.
 // The filter is stored as `any` in PagerConfig to avoid circular imports
-// (root package cannot import entity sub-packages or filter/).
-// The entity's Paginate method type-asserts it to func(*XxxQuery) (*XxxQuery, error).
+// (entity/ package cannot import filter/ without re-introducing the cycle).
+// After the cycle-break refactor, the expected filter type is
+// func() (predicate.Xxx, error) — Paginate type-asserts to this shape.
 func (g *Generator) genModelWithFilter(f *jen.File, typeName, optName, pagerConfigName string) {
 	optFilterName := "With" + typeName + "Filter"
 	f.Commentf("%s sets a filter function for %s pagination.", optFilterName, typeName)
-	f.Commentf("The filter parameter should be func(*%sQuery) (*%sQuery, error).", typeName, typeName)
+	f.Commentf("The filter parameter should be func() (predicate.%s, error).", typeName)
 	f.Func().Id(optFilterName).Params(
 		jen.Id("filter").Any(),
 	).Id(optName).Block(

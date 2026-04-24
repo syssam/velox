@@ -19,7 +19,7 @@ import (
 	"example.com/fullgql/velox/category"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/member"
-	vquery "example.com/fullgql/velox/query"
+	"example.com/fullgql/velox/predicate"
 	"example.com/fullgql/velox/tag"
 	"example.com/fullgql/velox/todo"
 	"example.com/fullgql/velox/user"
@@ -1219,9 +1219,8 @@ func TestPagination_WithFilter(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	activeFilter := entity.WithUserFilter(func(q *vquery.UserQuery) (*vquery.UserQuery, error) {
-		q.Where(user.ActiveField.EQ(true))
-		return q, nil
+	activeFilter := entity.WithUserFilter(func() (predicate.User, error) {
+		return user.ActiveField.EQ(true), nil
 	})
 
 	conn, err := client.User.Query().Paginate(ctx, nil, ptr(10), nil, nil, activeFilter)
@@ -1250,9 +1249,8 @@ func TestPagination_EdgePagination(t *testing.T) {
 	}
 
 	// Paginate user's todos via filter.
-	ownerFilter := entity.WithTodoFilter(func(q *vquery.TodoQuery) (*vquery.TodoQuery, error) {
-		q.Where(todo.HasOwnerWith(user.IDField.EQ(u.ID)))
-		return q, nil
+	ownerFilter := entity.WithTodoFilter(func() (predicate.Todo, error) {
+		return todo.HasOwnerWith(user.IDField.EQ(u.ID)), nil
 	})
 
 	conn, err := client.Todo.Query().Paginate(ctx, nil, ptr(2), nil, nil, ownerFilter)

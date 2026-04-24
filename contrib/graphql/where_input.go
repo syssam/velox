@@ -88,10 +88,6 @@ func (g *Generator) genEntityWhereInputFile(t *gen.Type) *jen.File {
 	entityPkg := g.config.ORMPackage + "/" + strings.ToLower(t.Name)
 	f.ImportName(entityPkg, strings.ToLower(t.Name))
 
-	// Import query/ package for query types (e.g. query.CategoryQuery)
-	queryPkg := g.config.ORMPackage + "/query"
-	f.ImportName(queryPkg, "query")
-
 	// Import edge target entity packages for edge predicates
 	for _, edge := range t.Edges {
 		if edge.Type == nil {
@@ -110,24 +106,10 @@ func (g *Generator) genEntityWhereInputFile(t *gen.Type) *jen.File {
 func (g *Generator) genEntityWhereInputGo(f *jen.File, t *gen.Type) {
 	typeName := g.graphqlTypeName(t)
 	inputName := typeName + "WhereInput"
-	queryType := t.Name + "Query"
 	predicatePkg := g.config.ORMPackage + "/predicate"
 	// entityPkg is the entity sub-package with predicates and field constants (e.g. category/).
 	entityPkg := g.config.ORMPackage + "/" + strings.ToLower(t.Name)
-	// In entity-package mode, query types (e.g. CategoryQuery) live in the shared query/ package.
-	// In root mode, ORMPackage is the package containing the query types directly.
-	queryPkg := g.config.ORMPackage + "/query"
-	if g.config.ORMPackage == "" {
-		queryPkg = ""
-	}
 
-	// The query type lives in the query/ sub-package (entity-package mode) or root package.
-	queryTypeRef := func() jen.Code {
-		if queryPkg != "" {
-			return jen.Op("*").Qual(queryPkg, queryType)
-		}
-		return jen.Op("*").Id(queryType)
-	}
 	errName := "ErrEmpty" + inputName
 
 	// Collect all filterable fields (ID + all fields except skipped)
@@ -180,30 +162,33 @@ func (g *Generator) genEntityWhereInputGo(f *jen.File, t *gen.Type) {
 	)
 	f.Line()
 
-	// Filter method (before Error variable to match Ent order)
-	f.Comment(fmt.Sprintf("Filter applies the %s filter on the %s builder.", inputName, queryType))
+	// Filter method — returns a predicate for the caller to apply.
+	// Signature deviates from Ent: Ent's Filter(q *XxxQuery) took a query so it
+	// could return the same *XxxQuery after calling q.Where(p) internally. Velox
+	// cannot use that signature without re-introducing the filter/ -> query/
+	// import edge, which would close the entity -> filter -> query -> entity
+	// cycle that the cycle-break refactor was designed to eliminate. The caller
+	// applies the predicate itself: `p, err := w.Filter(); if err == nil { q.Where(p) }`.
+	f.Commentf("Filter returns a predicate for the %s or an error.", inputName)
+	f.Comment("Callers apply the predicate to their query: q.Where(p).")
 	f.Func().Params(
 		jen.Id("i").Op("*").Id(inputName),
-	).Id("Filter").Params(
-		jen.Id("q").Add(queryTypeRef()),
-	).Params(
-		queryTypeRef(),
+	).Id("Filter").Params().Params(
+		jen.Qual(predicatePkg, t.Name),
 		jen.Error(),
 	).Block(
 		jen.If(jen.Id("i").Op("==").Nil()).Block(
-			jen.Return(jen.Id("q"), jen.Nil()),
+			jen.Return(jen.Nil(), jen.Nil()),
 		),
 		jen.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("i").Dot("P").Call(),
 		jen.If(jen.Id("err").Op("!=").Nil()).Block(
 			// Skip errors only for top-level empty predicates
 			jen.If(jen.Id("err").Op("==").Id(errName)).Block(
-				jen.Return(jen.Id("q"), jen.Nil()),
+				jen.Return(jen.Nil(), jen.Nil()),
 			),
 			jen.Return(jen.Nil(), jen.Id("err")),
 		),
-		// q.Where(p) mutates q in-place and returns the querier interface; return q directly.
-		jen.Id("q").Dot("Where").Call(jen.Id("p")),
-		jen.Return(jen.Id("q"), jen.Nil()),
+		jen.Return(jen.Id("p"), jen.Nil()),
 	)
 	f.Line()
 

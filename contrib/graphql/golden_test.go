@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -129,6 +130,31 @@ func TestGolden_WhereInput(t *testing.T) {
 	f := g.genEntityWhereInputFile(userType)
 	require.NotNil(t, f)
 	checkGoldenFile(t, filepath.Join("testdata", "golden", "where_input.go"), f.GoString())
+}
+
+// TestWhereInput_FilterDoesNotImportQuery pins the cycle-break invariant
+// (Plan 2, Phase C/D): generated filter/{entity}.go must NOT import the
+// query/ package. The Filter method's signature was deliberately changed
+// from Filter(q *XxxQuery) to Filter() (predicate.X, error) so that the
+// filter/ → query/ import edge disappears — closing the
+// entity → filter → query → entity import cycle that Plan 2 was written
+// to eliminate. Any future generator change that re-introduces a query/
+// import in the filter file re-opens the cycle.
+func TestWhereInput_FilterDoesNotImportQuery(t *testing.T) {
+	t.Parallel()
+	g, userType := goldenTestType()
+	f := g.genEntityWhereInputFile(userType)
+	require.NotNil(t, f)
+	src := f.GoString()
+	if strings.Contains(src, `"example/ent/query"`) || strings.Contains(src, `example/ent/query.`) {
+		t.Errorf("filter/%s.go imports query/ — the cycle-break refactor "+
+			"requires filter/ to be a leaf relative to query/ (Plan 2 Phase C/D)",
+			strings.ToLower(userType.Name))
+	}
+	// Also verify the Filter method signature is the post-cycle-break form.
+	if !strings.Contains(src, "Filter() (predicate.User, error)") {
+		t.Errorf("Filter method must have signature `Filter() (predicate.User, error)` — found other shape")
+	}
 }
 
 func TestGolden_Node(t *testing.T) {

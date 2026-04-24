@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"example.com/app/velox/predicate"
-	"example.com/app/velox/query"
 	"example.com/app/velox/user"
 )
 
@@ -24,20 +23,20 @@ func (i *UserWhereInput) AddPredicates(predicates ...predicate.User) {
 	i.Predicates = append(i.Predicates, predicates...)
 }
 
-// Filter applies the UserWhereInput filter on the UserQuery builder.
-func (i *UserWhereInput) Filter(q *query.UserQuery) (*query.UserQuery, error) {
+// Filter returns a predicate for the UserWhereInput or an error.
+// Callers apply the predicate to their query: q.Where(p).
+func (i *UserWhereInput) Filter() (predicate.User, error) {
 	if i == nil {
-		return q, nil
+		return nil, nil
 	}
 	p, err := i.P()
 	if err != nil {
 		if err == ErrEmptyUserWhereInput {
-			return q, nil
+			return nil, nil
 		}
 		return nil, err
 	}
-	q.Where(p)
-	return q, nil
+	return p, nil
 }
 
 // ErrEmptyUserWhereInput is returned in case the UserWhereInput is empty.
