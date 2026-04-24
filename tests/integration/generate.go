@@ -5,7 +5,7 @@
 //
 // Includes the contrib/graphql extension so this fixture exercises the
 // GraphQL pipeline (entity/gql_edge_*.go, entity/gql_pagination.go,
-// gqlfilter/, etc.) as part of velox's own integration tests — not only
+// filter/, etc.) as part of velox's own integration tests — not only
 // via the external examples/fullgql matrix job. Schema under ./testschema
 // has RelayConnection + WhereInput annotations on User and Post for
 // e2e_graphql_edge_test.go to drive end-to-end.
@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// contrib/graphql extension — generates gqlfilter/, entity/gql_*,
+	// contrib/graphql extension — generates filter/, entity/gql_*,
 	// query/gql_pagination_*, etc. WithSchemaGenerator emits schema.graphql
 	// alongside the Go output so a downstream gqlgen run would see a
 	// complete schema, though tests/integration doesn't actually call

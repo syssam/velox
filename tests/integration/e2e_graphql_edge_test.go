@@ -24,7 +24,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	integration "github.com/syssam/velox/tests/integration"
 	"github.com/syssam/velox/tests/integration/entity"
-	"github.com/syssam/velox/tests/integration/gqlfilter"
+	"github.com/syssam/velox/tests/integration/filter"
 	"github.com/syssam/velox/tests/integration/post"
 	"github.com/syssam/velox/tests/integration/user"
 )
@@ -79,7 +79,7 @@ func TestGraphQLEdge_FastPath_UsesEagerLoadedPosts(t *testing.T) {
 
 // TestGraphQLEdge_SlowPath_WithFilter pins the hand-written-resolver
 // pattern for edge-connection-with-where. Since the entity method cannot
-// accept *gqlfilter.PostWhereInput (entity -> gqlfilter -> post -> entity
+// accept *filter.PostWhereInput (entity -> filter -> post -> entity
 // cycle), @goField(forceResolver: true) forces a user-written resolver.
 // The canonical body shape is:
 //
@@ -120,7 +120,7 @@ func TestGraphQLEdge_SlowPath_WithFilter(t *testing.T) {
 	// literally what schema.resolvers.go::(*userResolver).Posts would do,
 	// minus gqlgen's arg-unpacking.
 	publishedStatus := post.StatusPublished
-	where := &gqlfilter.PostWhereInput{
+	where := &filter.PostWhereInput{
 		Status: &publishedStatus,
 	}
 
@@ -343,7 +343,7 @@ func TestGraphQLEdge_FilterWithCursorPagination(t *testing.T) {
 	}
 
 	publishedStatus := post.StatusPublished
-	where := &gqlfilter.PostWhereInput{Status: &publishedStatus}
+	where := &filter.PostWhereInput{Status: &publishedStatus}
 	first := 2
 
 	// Page 1: expect 2 published posts, HasNextPage=true.
@@ -416,7 +416,7 @@ func TestGraphQLEdge_WhereNilSafety_FastPathBranching(t *testing.T) {
 	// the recipe in contrib/graphql/doc.go — this is what every user
 	// would write for a where-bearing edge resolver.
 	userResolverPosts := func(
-		where *gqlfilter.PostWhereInput,
+		where *filter.PostWhereInput,
 		after, before *gqlrelay.Cursor,
 		first, last *int,
 	) (*entity.PostConnection, error) {
@@ -445,7 +445,7 @@ func TestGraphQLEdge_WhereNilSafety_FastPathBranching(t *testing.T) {
 	// → 2 posts (drafts excluded). If this returns 3, someone removed the
 	// `where == nil` guard and silent-wrong-data is back.
 	publishedStatus := post.StatusPublished
-	where := &gqlfilter.PostWhereInput{Status: &publishedStatus}
+	where := &filter.PostWhereInput{Status: &publishedStatus}
 	connSlow, err := userResolverPosts(where, nil, nil, &first, nil)
 	require.NoError(t, err)
 	require.Equal(t, 2, connSlow.TotalCount,
@@ -483,7 +483,7 @@ func TestGraphQLEdge_FilterEmptyResult(t *testing.T) {
 	}
 
 	publishedStatus := post.StatusPublished
-	where := &gqlfilter.PostWhereInput{Status: &publishedStatus}
+	where := &filter.PostWhereInput{Status: &publishedStatus}
 
 	q := client.Post.Query().Where(post.HasAuthorWith(user.IDField.EQ(alice.ID)))
 	first := 10
@@ -647,10 +647,10 @@ func TestGraphQLEdge_NestedWhereLogic(t *testing.T) {
 
 	publishedStatus := post.StatusPublished
 	draftPrefix := "draft"
-	where := &gqlfilter.PostWhereInput{
-		And: []*gqlfilter.PostWhereInput{
+	where := &filter.PostWhereInput{
+		And: []*filter.PostWhereInput{
 			{Status: &publishedStatus},
-			{Not: &gqlfilter.PostWhereInput{TitleContains: &draftPrefix}},
+			{Not: &filter.PostWhereInput{TitleContains: &draftPrefix}},
 		},
 	}
 
