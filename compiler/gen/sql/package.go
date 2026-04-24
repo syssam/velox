@@ -228,27 +228,6 @@ func genPackage(h gen.GeneratorHelper, t *gen.Type, enumReg *entityPkgEnumRegist
 	return f
 }
 
-// genEnumValidator generates a validator function for an enum field.
-func genEnumValidator(h gen.GeneratorHelper, f *jen.File, t *gen.Type, field *gen.Field) {
-	validatorName := field.Validator()
-	enumName := t.Name + field.StructField()
-	graph := h.Graph()
-	enumPkg := graph.Package
-
-	f.Commentf("%s validates the %q field value.", validatorName, field.Name)
-	f.Func().Id(validatorName).Params(
-		jen.Id("v").Qual(enumPkg, enumName),
-	).Error().Block(
-		jen.If(jen.Op("!").Id("v").Dot("IsValid").Call()).Block(
-			jen.Return(jen.Qual("fmt", "Errorf").Call(
-				jen.Lit("invalid enum value for "+field.Name+": %v"),
-				jen.Id("v"),
-			)),
-		),
-		jen.Return(jen.Nil()),
-	)
-}
-
 // genSubpackageEnumType generates a real enum type declaration in the per-entity
 // leaf sub-package (e.g., user/, task/). Uses short unprefixed names (Status,
 // StatusActive) because the package name already qualifies the type at call sites.

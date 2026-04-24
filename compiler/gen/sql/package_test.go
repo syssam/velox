@@ -96,26 +96,6 @@ func TestGenEdgeStepFunction_M2O(t *testing.T) {
 }
 
 // =============================================================================
-// genEnumValidator Tests
-// =============================================================================
-
-func TestGenEnumValidator(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	userType := createTestType("User")
-	enumField := createEnumField("status", []string{"active", "inactive"})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	f := helper.NewFile("user")
-	genEnumValidator(helper, f, userType, enumField)
-
-	code := f.GoString()
-	assert.Contains(t, code, "StatusValidator")
-	assert.Contains(t, code, "IsValid")
-	assert.Contains(t, code, "invalid enum value")
-}
-
-// =============================================================================
 // genSubpackageEnumType Tests
 // =============================================================================
 
@@ -407,8 +387,6 @@ func TestBuildEntityPkgEnumRegistry_NoCollision(t *testing.T) {
 
 	assert.Equal(t, "UserStatus", reg.resolve("User", "status"))
 	assert.Equal(t, "PostRole", reg.resolve("Post", "role"))
-	assert.True(t, reg.isOwner("User", "status"))
-	assert.True(t, reg.isOwner("Post", "role"))
 }
 
 func TestBuildEntityPkgEnumRegistry_CollisionSameValues(t *testing.T) {
@@ -422,10 +400,6 @@ func TestBuildEntityPkgEnumRegistry_CollisionSameValues(t *testing.T) {
 	// Both should resolve to the same name since values are identical.
 	assert.Equal(t, "AssetDepreciationMethod", reg.resolve("Asset", "depreciation_method"))
 	assert.Equal(t, "AssetDepreciationMethod", reg.resolve("AssetDepreciation", "method"))
-
-	// Only the first (alphabetically) should be the owner.
-	assert.True(t, reg.isOwner("Asset", "depreciation_method"))
-	assert.False(t, reg.isOwner("AssetDepreciation", "method"))
 }
 
 func TestBuildEntityPkgEnumRegistry_CollisionDifferentValues(t *testing.T) {
@@ -440,10 +414,6 @@ func TestBuildEntityPkgEnumRegistry_CollisionDifferentValues(t *testing.T) {
 	assert.Equal(t, "AssetDepreciationMethod", reg.resolve("Asset", "depreciation_method"))
 	// Second entity gets disambiguated name.
 	assert.Equal(t, "AssetDepreciationMethodEnum", reg.resolve("AssetDepreciation", "method"))
-
-	// Both should be owners of their respective names.
-	assert.True(t, reg.isOwner("Asset", "depreciation_method"))
-	assert.True(t, reg.isOwner("AssetDepreciation", "method"))
 }
 
 // =============================================================================

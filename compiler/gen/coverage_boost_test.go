@@ -1001,22 +1001,6 @@ func TestWriteFileResult(t *testing.T) {
 }
 
 // =============================================================================
-// generate.go — JenniferGenerator.isNonEntityDir
-// =============================================================================
-
-func TestJenniferGenerator_IsNonEntityDir(t *testing.T) {
-	graph := &Graph{Config: &Config{Package: "example.com/app/ent"}}
-	g := &JenniferGenerator{
-		graph:          graph,
-		generatedEnums: make(map[string]bool),
-	}
-	// Known non-entity dirs (predicate, internal, migrate, etc.)
-	assert.True(t, g.isNonEntityDir("predicate"))
-	assert.True(t, g.isNonEntityDir("internal"))
-	assert.False(t, g.isNonEntityDir("user"))
-}
-
-// =============================================================================
 // generate.go — JenniferGenerator.EdgeRel
 // =============================================================================
 

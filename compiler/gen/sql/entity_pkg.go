@@ -976,17 +976,6 @@ func (r *entityPkgEnumRegistry) resolve(entityName, fieldName string) string {
 	return entityName + pascal(fieldName)
 }
 
-// isOwner returns true if this entity+field is the canonical owner that should
-// generate the enum type definition (as opposed to a duplicate that reuses it).
-func (r *entityPkgEnumRegistry) isOwner(entityName, fieldName string) bool {
-	resolved := r.resolve(entityName, fieldName)
-	own, ok := r.owner[resolved]
-	if !ok {
-		return true
-	}
-	return own.EntityName == entityName && own.FieldName == fieldName
-}
-
 // buildEntityPkgEnumRegistry scans all entities to detect enum name collisions
 // in the shared entity/ package and produces a registry with resolved names.
 //

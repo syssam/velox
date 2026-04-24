@@ -22,16 +22,6 @@ import (
 // chosen to balance throughput against file-descriptor and memory pressure.
 const maxDefaultWorkers = 16
 
-// isDefaultNonEntityDir reports whether the given name is a built-in non-entity directory.
-func isDefaultNonEntityDir(name string) bool {
-	switch name {
-	case "predicate", "internal", "migrate", "intercept",
-		"privacy", "hook", "enttest", "runtime", "entity", "query":
-		return true
-	}
-	return false
-}
-
 // JenniferGenerator generates code using Jennifer instead of templates.
 // This provides better performance by:
 // - Auto-tracking imports (no goimports needed)
@@ -62,17 +52,6 @@ type JenniferGenerator struct {
 	// Protected by manifestMu for concurrent writes from parallel generation.
 	manifestMu     sync.Mutex
 	generatedFiles []string
-}
-
-// isNonEntityDir returns true if the given directory name is known to not be an entity sub-package.
-func (g *JenniferGenerator) isNonEntityDir(name string) bool {
-	if isDefaultNonEntityDir(name) {
-		return true
-	}
-	if g.graph != nil && slices.Contains(g.graph.InfrastructureDirs, name) {
-		return true
-	}
-	return false
 }
 
 // NewJenniferGenerator creates a new Jennifer-based generator.
