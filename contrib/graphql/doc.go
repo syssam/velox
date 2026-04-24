@@ -358,11 +358,15 @@
 // argument from the client is silently discarded — filter has no effect
 // at runtime, with no error or warning.
 //
-// The reason the entity method can't accept `where *filter.XxxWhereInput`
-// directly is a package cycle: entity -> filter -> query -> entity
-// (actually entity -> filter -> todo -> entity via todo/client.go, etc.).
-// Forcing the resolver interface lets the user's resolver (in a package
-// that CAN import both entity and filter) do the wiring.
+// Historical note: this directive was originally a workaround for a package
+// cycle (entity -> filter -> query -> entity). The cycle-break refactor
+// (Plan 2, 2026-04-24) eliminated it by splitting heavy per-entity code into
+// client/{entity}/ and changing the Filter() signature to return a predicate
+// instead of taking a *XxxQuery. Today the forceResolver emission is still
+// load-bearing to prevent gqlgen's silent-drop partial-match bug, and the
+// resolver-body boilerplate is still a user-authored stub until Plan 3
+// generates (c *entity.Category).Todos(ctx, ..., where *filter.TodoWhereInput)
+// as a real entity method (now possible post-cycle-break).
 //
 // # User-written resolver body (required for where-carrying edges)
 //

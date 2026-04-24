@@ -157,6 +157,37 @@ func TestWhereInput_FilterDoesNotImportQuery(t *testing.T) {
 	}
 }
 
+// TestWhereInput_FilterDoesNotImportEntityOrClient pins the positive
+// cycle-break invariant (Plan 2, Phase E Task 22): filter/ must not import
+// entity/ or client/{entity}/. This is the forward-looking guarantee that
+// enables entity/ to safely import filter/ in Plan 3 — the whole motivation
+// for Plan 2. Allowed filter/ deps: predicate, leaf {entity}/ packages,
+// gqlrelay, stdlib. Anything else re-opens a cycle path.
+func TestWhereInput_FilterDoesNotImportEntityOrClient(t *testing.T) {
+	t.Parallel()
+	g, userType := goldenTestType()
+	f := g.genEntityWhereInputFile(userType)
+	require.NotNil(t, f)
+	src := f.GoString()
+
+	// entity/ is where entity types (User, Post, etc.) live — filter
+	// referencing them would be the direct filter → entity edge that
+	// makes the inverse entity → filter → ... cycle impossible.
+	if strings.Contains(src, `"example/ent/entity"`) || strings.Contains(src, `example/ent/entity.`) {
+		t.Errorf("filter/%s.go imports entity/ — re-opens the cycle-break "+
+			"(entity cannot import filter if filter already imports entity)",
+			strings.ToLower(userType.Name))
+	}
+	// client/{entity}/ holds mutation/builder types — filter has no
+	// business touching them. If it ever does, the filter → client → entity
+	// chain would also re-introduce the cycle.
+	if strings.Contains(src, `"example/ent/client/`) {
+		t.Errorf("filter/%s.go imports client/{entity}/ — filter must stay "+
+			"independent of the heavy generator outputs to preserve the cycle break",
+			strings.ToLower(userType.Name))
+	}
+}
+
 func TestGolden_Node(t *testing.T) {
 	t.Parallel()
 	g, userType := goldenTestType()
