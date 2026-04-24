@@ -21,7 +21,7 @@ resolver:
 autobind:
   - example.com/fullgql/velox
   - example.com/fullgql/velox/entity
-  - example.com/fullgql/velox/gqlfilter
+  - example.com/fullgql/velox/filter
   - example.com/fullgql/velox/auditlog
   - example.com/fullgql/velox/category
   - example.com/fullgql/velox/comment

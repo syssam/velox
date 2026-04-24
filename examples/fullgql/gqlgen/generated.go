@@ -16,7 +16,7 @@ import (
 	"example.com/fullgql/velox/category"
 	"example.com/fullgql/velox/comment"
 	"example.com/fullgql/velox/entity"
-	"example.com/fullgql/velox/gqlfilter"
+	"example.com/fullgql/velox/filter"
 	"example.com/fullgql/velox/label"
 	"example.com/fullgql/velox/member"
 	"example.com/fullgql/velox/product"
@@ -81,13 +81,13 @@ type ComplexityRoot struct {
 	}
 
 	Category struct {
-		Children    func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *gqlfilter.CategoryWhereInput) int
+		Children    func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *filter.CategoryWhereInput) int
 		CreatedAt   func(childComplexity int) int
 		Description func(childComplexity int) int
 		ID          func(childComplexity int) int
 		Name        func(childComplexity int) int
 		Parent      func(childComplexity int) int
-		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) int
+		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 		UpdatedAt   func(childComplexity int) int
 	}
 
@@ -115,7 +115,7 @@ type ComplexityRoot struct {
 		Color func(childComplexity int) int
 		ID    func(childComplexity int) int
 		Name  func(childComplexity int) int
-		Todos func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) int
+		Todos func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 	}
 
 	LabelConnection struct {
@@ -175,7 +175,7 @@ type ComplexityRoot struct {
 		Price     func(childComplexity int) int
 		Published func(childComplexity int) int
 		Stock     func(childComplexity int) int
-		Tags      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) int
+		Tags      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) int
 		Thumbnail func(childComplexity int) int
 		UpdatedAt func(childComplexity int) int
 	}
@@ -193,24 +193,24 @@ type ComplexityRoot struct {
 
 	Query struct {
 		AuditLogs  func(childComplexity int) int
-		Categories func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *gqlfilter.CategoryWhereInput) int
+		Categories func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *filter.CategoryWhereInput) int
 		Comments   func(childComplexity int) int
-		Labels     func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *gqlfilter.LabelWhereInput) int
+		Labels     func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *filter.LabelWhereInput) int
 		Members    func(childComplexity int) int
 		Node       func(childComplexity int, id int) int
 		Nodes      func(childComplexity int, ids []int) int
-		Products   func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *gqlfilter.ProductWhereInput) int
-		Tags       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) int
-		Todos      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) int
-		Users      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.UserOrder, where *gqlfilter.UserWhereInput) int
-		Workspaces func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.WorkspaceOrder, where *gqlfilter.WorkspaceWhereInput) int
+		Products   func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *filter.ProductWhereInput) int
+		Tags       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) int
+		Todos      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
+		Users      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.UserOrder, where *filter.UserWhereInput) int
+		Workspaces func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.WorkspaceOrder, where *filter.WorkspaceWhereInput) int
 	}
 
 	Tag struct {
 		ID       func(childComplexity int) int
 		Name     func(childComplexity int) int
-		Products func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *gqlfilter.ProductWhereInput) int
-		Todos    func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) int
+		Products func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *filter.ProductWhereInput) int
+		Todos    func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 	}
 
 	TagConnection struct {
@@ -233,11 +233,11 @@ type ComplexityRoot struct {
 		DueDate        func(childComplexity int) int
 		EstimatedHours func(childComplexity int) int
 		ID             func(childComplexity int) int
-		Labels         func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *gqlfilter.LabelWhereInput) int
+		Labels         func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *filter.LabelWhereInput) int
 		Owner          func(childComplexity int) int
 		Priority       func(childComplexity int) int
 		Status         func(childComplexity int) int
-		Tags           func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) int
+		Tags           func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) int
 		Title          func(childComplexity int) int
 		UpdatedAt      func(childComplexity int) int
 		Workspace      func(childComplexity int) int
@@ -266,7 +266,7 @@ type ComplexityRoot struct {
 		Memberships func(childComplexity int) int
 		Name        func(childComplexity int) int
 		Role        func(childComplexity int) int
-		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) int
+		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 		UpdatedAt   func(childComplexity int) int
 	}
 
@@ -289,7 +289,7 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 		Members     func(childComplexity int) int
 		Name        func(childComplexity int) int
-		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) int
+		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 		UpdatedAt   func(childComplexity int) int
 	}
 
@@ -306,12 +306,12 @@ type ComplexityRoot struct {
 }
 
 type CategoryResolver interface {
-	Todos(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
+	Todos(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 
-	Children(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *gqlfilter.CategoryWhereInput) (*entity.CategoryConnection, error)
+	Children(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *filter.CategoryWhereInput) (*entity.CategoryConnection, error)
 }
 type LabelResolver interface {
-	Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
+	Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 }
 type MutationResolver interface {
 	CreateCategory(ctx context.Context, input category.CreateCategoryInput) (*entity.Category, error)
@@ -336,36 +336,36 @@ type MutationResolver interface {
 type ProductResolver interface {
 	Thumbnail(ctx context.Context, obj *entity.Product) (*string, error)
 
-	Tags(ctx context.Context, obj *entity.Product, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) (*entity.TagConnection, error)
+	Tags(ctx context.Context, obj *entity.Product, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id int) (velox.Noder, error)
 	Nodes(ctx context.Context, ids []int) ([]velox.Noder, error)
 	AuditLogs(ctx context.Context) ([]*entity.AuditLog, error)
-	Categories(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *gqlfilter.CategoryWhereInput) (*entity.CategoryConnection, error)
+	Categories(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *filter.CategoryWhereInput) (*entity.CategoryConnection, error)
 	Comments(ctx context.Context) ([]*entity.Comment, error)
-	Labels(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *gqlfilter.LabelWhereInput) (*entity.LabelConnection, error)
+	Labels(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *filter.LabelWhereInput) (*entity.LabelConnection, error)
 	Members(ctx context.Context) ([]*entity.Member, error)
-	Products(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *gqlfilter.ProductWhereInput) (*entity.ProductConnection, error)
-	Tags(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) (*entity.TagConnection, error)
-	Todos(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
-	Users(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.UserOrder, where *gqlfilter.UserWhereInput) (*entity.UserConnection, error)
-	Workspaces(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.WorkspaceOrder, where *gqlfilter.WorkspaceWhereInput) (*entity.WorkspaceConnection, error)
+	Products(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *filter.ProductWhereInput) (*entity.ProductConnection, error)
+	Tags(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error)
+	Todos(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
+	Users(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.UserOrder, where *filter.UserWhereInput) (*entity.UserConnection, error)
+	Workspaces(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.WorkspaceOrder, where *filter.WorkspaceWhereInput) (*entity.WorkspaceConnection, error)
 }
 type TagResolver interface {
-	Todos(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
-	Products(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *gqlfilter.ProductWhereInput) (*entity.ProductConnection, error)
+	Todos(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
+	Products(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *filter.ProductWhereInput) (*entity.ProductConnection, error)
 }
 type TodoResolver interface {
-	Tags(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *gqlfilter.TagWhereInput) (*entity.TagConnection, error)
+	Tags(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error)
 
-	Labels(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *gqlfilter.LabelWhereInput) (*entity.LabelConnection, error)
+	Labels(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *filter.LabelWhereInput) (*entity.LabelConnection, error)
 }
 type UserResolver interface {
-	Todos(ctx context.Context, obj *entity.User, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
+	Todos(ctx context.Context, obj *entity.User, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 }
 type WorkspaceResolver interface {
-	Todos(ctx context.Context, obj *entity.Workspace, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *gqlfilter.TodoWhereInput) (*entity.TodoConnection, error)
+	Todos(ctx context.Context, obj *entity.Workspace, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 }
 
 type CreateProductInputResolver interface {
@@ -459,7 +459,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Category.Children(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.CategoryOrder), args["where"].(*gqlfilter.CategoryWhereInput)), true
+		return e.complexity.Category.Children(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.CategoryOrder), args["where"].(*filter.CategoryWhereInput)), true
 	case "Category.createdAt":
 		if e.complexity.Category.CreatedAt == nil {
 			break
@@ -500,7 +500,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Category.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*gqlfilter.TodoWhereInput)), true
+		return e.complexity.Category.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*filter.TodoWhereInput)), true
 	case "Category.updatedAt":
 		if e.complexity.Category.UpdatedAt == nil {
 			break
@@ -605,7 +605,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Label.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*gqlfilter.TodoWhereInput)), true
+		return e.complexity.Label.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*filter.TodoWhereInput)), true
 
 	case "LabelConnection.edges":
 		if e.complexity.LabelConnection.Edges == nil {
@@ -958,7 +958,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Product.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*gqlfilter.TagWhereInput)), true
+		return e.complexity.Product.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*filter.TagWhereInput)), true
 	case "Product.thumbnail":
 		if e.complexity.Product.Thumbnail == nil {
 			break
@@ -1020,7 +1020,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Categories(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.CategoryOrder), args["where"].(*gqlfilter.CategoryWhereInput)), true
+		return e.complexity.Query.Categories(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.CategoryOrder), args["where"].(*filter.CategoryWhereInput)), true
 	case "Query.comments":
 		if e.complexity.Query.Comments == nil {
 			break
@@ -1037,7 +1037,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Labels(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.LabelOrder), args["where"].(*gqlfilter.LabelWhereInput)), true
+		return e.complexity.Query.Labels(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.LabelOrder), args["where"].(*filter.LabelWhereInput)), true
 	case "Query.members":
 		if e.complexity.Query.Members == nil {
 			break
@@ -1076,7 +1076,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Products(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.ProductOrder), args["where"].(*gqlfilter.ProductWhereInput)), true
+		return e.complexity.Query.Products(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.ProductOrder), args["where"].(*filter.ProductWhereInput)), true
 	case "Query.tags":
 		if e.complexity.Query.Tags == nil {
 			break
@@ -1087,7 +1087,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*gqlfilter.TagWhereInput)), true
+		return e.complexity.Query.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*filter.TagWhereInput)), true
 	case "Query.todos":
 		if e.complexity.Query.Todos == nil {
 			break
@@ -1098,7 +1098,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*gqlfilter.TodoWhereInput)), true
+		return e.complexity.Query.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*filter.TodoWhereInput)), true
 	case "Query.users":
 		if e.complexity.Query.Users == nil {
 			break
@@ -1109,7 +1109,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Users(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.UserOrder), args["where"].(*gqlfilter.UserWhereInput)), true
+		return e.complexity.Query.Users(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.UserOrder), args["where"].(*filter.UserWhereInput)), true
 	case "Query.workspaces":
 		if e.complexity.Query.Workspaces == nil {
 			break
@@ -1120,7 +1120,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Workspaces(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.WorkspaceOrder), args["where"].(*gqlfilter.WorkspaceWhereInput)), true
+		return e.complexity.Query.Workspaces(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.WorkspaceOrder), args["where"].(*filter.WorkspaceWhereInput)), true
 
 	case "Tag.id":
 		if e.complexity.Tag.ID == nil {
@@ -1144,7 +1144,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Tag.Products(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.ProductOrder), args["where"].(*gqlfilter.ProductWhereInput)), true
+		return e.complexity.Tag.Products(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.ProductOrder), args["where"].(*filter.ProductWhereInput)), true
 	case "Tag.todos":
 		if e.complexity.Tag.Todos == nil {
 			break
@@ -1155,7 +1155,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Tag.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*gqlfilter.TodoWhereInput)), true
+		return e.complexity.Tag.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*filter.TodoWhereInput)), true
 
 	case "TagConnection.edges":
 		if e.complexity.TagConnection.Edges == nil {
@@ -1247,7 +1247,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Todo.Labels(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.LabelOrder), args["where"].(*gqlfilter.LabelWhereInput)), true
+		return e.complexity.Todo.Labels(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.LabelOrder), args["where"].(*filter.LabelWhereInput)), true
 	case "Todo.owner":
 		if e.complexity.Todo.Owner == nil {
 			break
@@ -1276,7 +1276,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Todo.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*gqlfilter.TagWhereInput)), true
+		return e.complexity.Todo.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*filter.TagWhereInput)), true
 	case "Todo.title":
 		if e.complexity.Todo.Title == nil {
 			break
@@ -1404,7 +1404,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.User.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*gqlfilter.TodoWhereInput)), true
+		return e.complexity.User.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*filter.TodoWhereInput)), true
 	case "User.updatedAt":
 		if e.complexity.User.UpdatedAt == nil {
 			break
@@ -1496,7 +1496,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Workspace.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*gqlfilter.TodoWhereInput)), true
+		return e.complexity.Workspace.Todos(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TodoOrder), args["where"].(*filter.TodoWhereInput)), true
 	case "Workspace.updatedAt":
 		if e.complexity.Workspace.UpdatedAt == nil {
 			break
@@ -2291,7 +2291,7 @@ enum OrderDirection {
 """AuditLogWhereInput is used for filtering AuditLog objects.
 Input was generated by velox.
 """
-input AuditLogWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.AuditLogWhereInput") {
+input AuditLogWhereInput @goModel(model: "example.com/fullgql/velox/filter.AuditLogWhereInput") {
   not: AuditLogWhereInput
   and: [AuditLogWhereInput!]
   or: [AuditLogWhereInput!]
@@ -2326,7 +2326,7 @@ input AuditLogWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.Au
 """CategoryWhereInput is used for filtering Category objects.
 Input was generated by velox.
 """
-input CategoryWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.CategoryWhereInput") {
+input CategoryWhereInput @goModel(model: "example.com/fullgql/velox/filter.CategoryWhereInput") {
   not: CategoryWhereInput
   and: [CategoryWhereInput!]
   or: [CategoryWhereInput!]
@@ -2409,7 +2409,7 @@ input UpdateCommentInput @goModel(model: "example.com/fullgql/velox/comment.Upda
 """LabelWhereInput is used for filtering Label objects.
 Input was generated by velox.
 """
-input LabelWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.LabelWhereInput") {
+input LabelWhereInput @goModel(model: "example.com/fullgql/velox/filter.LabelWhereInput") {
   not: LabelWhereInput
   and: [LabelWhereInput!]
   or: [LabelWhereInput!]
@@ -2457,7 +2457,7 @@ input UpdateLabelInput @goModel(model: "example.com/fullgql/velox/label.UpdateLa
 """MemberWhereInput is used for filtering Member objects.
 Input was generated by velox.
 """
-input MemberWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.MemberWhereInput") {
+input MemberWhereInput @goModel(model: "example.com/fullgql/velox/filter.MemberWhereInput") {
   not: MemberWhereInput
   and: [MemberWhereInput!]
   or: [MemberWhereInput!]
@@ -2490,7 +2490,7 @@ input UpdateMemberInput @goModel(model: "example.com/fullgql/velox/member.Update
 """ProductWhereInput is used for filtering Product objects.
 Input was generated by velox.
 """
-input ProductWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.ProductWhereInput") {
+input ProductWhereInput @goModel(model: "example.com/fullgql/velox/filter.ProductWhereInput") {
   not: ProductWhereInput
   and: [ProductWhereInput!]
   or: [ProductWhereInput!]
@@ -2580,7 +2580,7 @@ input UpdateProductInput @goModel(model: "example.com/fullgql/velox/product.Upda
 """TagWhereInput is used for filtering Tag objects.
 Input was generated by velox.
 """
-input TagWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.TagWhereInput") {
+input TagWhereInput @goModel(model: "example.com/fullgql/velox/filter.TagWhereInput") {
   not: TagWhereInput
   and: [TagWhereInput!]
   or: [TagWhereInput!]
@@ -2630,7 +2630,7 @@ input UpdateTagInput @goModel(model: "example.com/fullgql/velox/tag.UpdateTagInp
 """TodoWhereInput is used for filtering Todo objects.
 Input was generated by velox.
 """
-input TodoWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.TodoWhereInput") {
+input TodoWhereInput @goModel(model: "example.com/fullgql/velox/filter.TodoWhereInput") {
   not: TodoWhereInput
   and: [TodoWhereInput!]
   or: [TodoWhereInput!]
@@ -2777,7 +2777,7 @@ input UpdateTodoInput @goModel(model: "example.com/fullgql/velox/todo.UpdateTodo
 """UserWhereInput is used for filtering User objects.
 Input was generated by velox.
 """
-input UserWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.UserWhereInput") {
+input UserWhereInput @goModel(model: "example.com/fullgql/velox/filter.UserWhereInput") {
   not: UserWhereInput
   and: [UserWhereInput!]
   or: [UserWhereInput!]
@@ -2899,7 +2899,7 @@ input UpdateUserInput @goModel(model: "example.com/fullgql/velox/user.UpdateUser
 """WorkspaceWhereInput is used for filtering Workspace objects.
 Input was generated by velox.
 """
-input WorkspaceWhereInput @goModel(model: "example.com/fullgql/velox/gqlfilter.WorkspaceWhereInput") {
+input WorkspaceWhereInput @goModel(model: "example.com/fullgql/velox/filter.WorkspaceWhereInput") {
   not: WorkspaceWhereInput
   and: [WorkspaceWhereInput!]
   or: [WorkspaceWhereInput!]
@@ -3508,7 +3508,7 @@ func (ec *executionContext) field_Category_children_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3544,7 +3544,7 @@ func (ec *executionContext) field_Category_todos_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3580,7 +3580,7 @@ func (ec *executionContext) field_Label_todos_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3859,7 +3859,7 @@ func (ec *executionContext) field_Product_tags_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3906,7 +3906,7 @@ func (ec *executionContext) field_Query_categories_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3942,7 +3942,7 @@ func (ec *executionContext) field_Query_labels_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4000,7 +4000,7 @@ func (ec *executionContext) field_Query_products_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4036,7 +4036,7 @@ func (ec *executionContext) field_Query_tags_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4072,7 +4072,7 @@ func (ec *executionContext) field_Query_todos_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4108,7 +4108,7 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4144,7 +4144,7 @@ func (ec *executionContext) field_Query_workspaces_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4180,7 +4180,7 @@ func (ec *executionContext) field_Tag_products_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4216,7 +4216,7 @@ func (ec *executionContext) field_Tag_todos_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4252,7 +4252,7 @@ func (ec *executionContext) field_Todo_labels_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4288,7 +4288,7 @@ func (ec *executionContext) field_Todo_tags_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4324,7 +4324,7 @@ func (ec *executionContext) field_User_todos_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4360,7 +4360,7 @@ func (ec *executionContext) field_Workspace_todos_args(ctx context.Context, rawA
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4862,7 +4862,7 @@ func (ec *executionContext) _Category_todos(ctx context.Context, field graphql.C
 		ec.fieldContext_Category_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Category().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
+			return ec.resolvers.Category().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -4958,7 +4958,7 @@ func (ec *executionContext) _Category_children(ctx context.Context, field graphq
 		ec.fieldContext_Category_children,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Category().Children(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*gqlfilter.CategoryWhereInput))
+			return ec.resolvers.Category().Children(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*filter.CategoryWhereInput))
 		},
 		nil,
 		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection,
@@ -5509,7 +5509,7 @@ func (ec *executionContext) _Label_todos(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Label_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Label().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
+			return ec.resolvers.Label().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -7439,7 +7439,7 @@ func (ec *executionContext) _Product_tags(ctx context.Context, field graphql.Col
 		ec.fieldContext_Product_tags,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Product().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*gqlfilter.TagWhereInput))
+			return ec.resolvers.Product().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
 		},
 		nil,
 		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
@@ -7800,7 +7800,7 @@ func (ec *executionContext) _Query_categories(ctx context.Context, field graphql
 		ec.fieldContext_Query_categories,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Categories(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*gqlfilter.CategoryWhereInput))
+			return ec.resolvers.Query().Categories(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*filter.CategoryWhereInput))
 		},
 		nil,
 		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection,
@@ -7892,7 +7892,7 @@ func (ec *executionContext) _Query_labels(ctx context.Context, field graphql.Col
 		ec.fieldContext_Query_labels,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Labels(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*gqlfilter.LabelWhereInput))
+			return ec.resolvers.Query().Labels(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*filter.LabelWhereInput))
 		},
 		nil,
 		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection,
@@ -7988,7 +7988,7 @@ func (ec *executionContext) _Query_products(ctx context.Context, field graphql.C
 		ec.fieldContext_Query_products,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Products(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*gqlfilter.ProductWhereInput))
+			return ec.resolvers.Query().Products(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*filter.ProductWhereInput))
 		},
 		nil,
 		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection,
@@ -8037,7 +8037,7 @@ func (ec *executionContext) _Query_tags(ctx context.Context, field graphql.Colle
 		ec.fieldContext_Query_tags,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Tags(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*gqlfilter.TagWhereInput))
+			return ec.resolvers.Query().Tags(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
 		},
 		nil,
 		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
@@ -8086,7 +8086,7 @@ func (ec *executionContext) _Query_todos(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Query_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
+			return ec.resolvers.Query().Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -8135,7 +8135,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Query_users,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Users(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.UserOrder), fc.Args["where"].(*gqlfilter.UserWhereInput))
+			return ec.resolvers.Query().Users(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.UserOrder), fc.Args["where"].(*filter.UserWhereInput))
 		},
 		nil,
 		ec.marshalNUserConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserConnection,
@@ -8184,7 +8184,7 @@ func (ec *executionContext) _Query_workspaces(ctx context.Context, field graphql
 		ec.fieldContext_Query_workspaces,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Workspaces(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.WorkspaceOrder), fc.Args["where"].(*gqlfilter.WorkspaceWhereInput))
+			return ec.resolvers.Query().Workspaces(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.WorkspaceOrder), fc.Args["where"].(*filter.WorkspaceWhereInput))
 		},
 		nil,
 		ec.marshalNWorkspaceConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspaceConnection,
@@ -8399,7 +8399,7 @@ func (ec *executionContext) _Tag_todos(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Tag_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Tag().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
+			return ec.resolvers.Tag().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -8448,7 +8448,7 @@ func (ec *executionContext) _Tag_products(ctx context.Context, field graphql.Col
 		ec.fieldContext_Tag_products,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Tag().Products(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*gqlfilter.ProductWhereInput))
+			return ec.resolvers.Tag().Products(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*filter.ProductWhereInput))
 		},
 		nil,
 		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection,
@@ -9058,7 +9058,7 @@ func (ec *executionContext) _Todo_tags(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Todo_tags,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Todo().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*gqlfilter.TagWhereInput))
+			return ec.resolvers.Todo().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
 		},
 		nil,
 		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
@@ -9154,7 +9154,7 @@ func (ec *executionContext) _Todo_labels(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Todo_labels,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Todo().Labels(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*gqlfilter.LabelWhereInput))
+			return ec.resolvers.Todo().Labels(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*filter.LabelWhereInput))
 		},
 		nil,
 		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection,
@@ -9708,7 +9708,7 @@ func (ec *executionContext) _User_todos(ctx context.Context, field graphql.Colle
 		ec.fieldContext_User_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.User().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
+			return ec.resolvers.User().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -10335,7 +10335,7 @@ func (ec *executionContext) _Workspace_todos(ctx context.Context, field graphql.
 		ec.fieldContext_Workspace_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Workspace().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*gqlfilter.TodoWhereInput))
+			return ec.resolvers.Workspace().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -12003,8 +12003,8 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
-func (ec *executionContext) unmarshalInputAuditLogWhereInput(ctx context.Context, obj any) (gqlfilter.AuditLogWhereInput, error) {
-	var it gqlfilter.AuditLogWhereInput
+func (ec *executionContext) unmarshalInputAuditLogWhereInput(ctx context.Context, obj any) (filter.AuditLogWhereInput, error) {
+	var it filter.AuditLogWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12019,21 +12019,21 @@ func (ec *executionContext) unmarshalInputAuditLogWhereInput(ctx context.Context
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInput(ctx, v)
+			data, err := ec.unmarshalOAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12201,8 +12201,8 @@ func (ec *executionContext) unmarshalInputCategoryOrder(ctx context.Context, obj
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCategoryWhereInput(ctx context.Context, obj any) (gqlfilter.CategoryWhereInput, error) {
-	var it gqlfilter.CategoryWhereInput
+func (ec *executionContext) unmarshalInputCategoryWhereInput(ctx context.Context, obj any) (filter.CategoryWhereInput, error) {
+	var it filter.CategoryWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12217,21 +12217,21 @@ func (ec *executionContext) unmarshalInputCategoryWhereInput(ctx context.Context
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInput(ctx, v)
+			data, err := ec.unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12280,7 +12280,7 @@ func (ec *executionContext) unmarshalInputCategoryWhereInput(ctx context.Context
 			it.HasTodos = data
 		case "hasTodosWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasTodosWith"))
-			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12294,7 +12294,7 @@ func (ec *executionContext) unmarshalInputCategoryWhereInput(ctx context.Context
 			it.HasParent = data
 		case "hasParentWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasParentWith"))
-			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12882,8 +12882,8 @@ func (ec *executionContext) unmarshalInputLabelOrder(ctx context.Context, obj an
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, obj any) (gqlfilter.LabelWhereInput, error) {
-	var it gqlfilter.LabelWhereInput
+func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, obj any) (filter.LabelWhereInput, error) {
+	var it filter.LabelWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12898,21 +12898,21 @@ func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, o
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInput(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12958,8 +12958,8 @@ func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, o
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputMemberWhereInput(ctx context.Context, obj any) (gqlfilter.MemberWhereInput, error) {
-	var it gqlfilter.MemberWhereInput
+func (ec *executionContext) unmarshalInputMemberWhereInput(ctx context.Context, obj any) (filter.MemberWhereInput, error) {
+	var it filter.MemberWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12974,21 +12974,21 @@ func (ec *executionContext) unmarshalInputMemberWhereInput(ctx context.Context, 
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInput(ctx, v)
+			data, err := ec.unmarshalOMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13065,8 +13065,8 @@ func (ec *executionContext) unmarshalInputProductOrder(ctx context.Context, obj 
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputProductWhereInput(ctx context.Context, obj any) (gqlfilter.ProductWhereInput, error) {
-	var it gqlfilter.ProductWhereInput
+func (ec *executionContext) unmarshalInputProductWhereInput(ctx context.Context, obj any) (filter.ProductWhereInput, error) {
+	var it filter.ProductWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13081,21 +13081,21 @@ func (ec *executionContext) unmarshalInputProductWhereInput(ctx context.Context,
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInput(ctx, v)
+			data, err := ec.unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13305,8 +13305,8 @@ func (ec *executionContext) unmarshalInputTagOrder(ctx context.Context, obj any)
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputTagWhereInput(ctx context.Context, obj any) (gqlfilter.TagWhereInput, error) {
-	var it gqlfilter.TagWhereInput
+func (ec *executionContext) unmarshalInputTagWhereInput(ctx context.Context, obj any) (filter.TagWhereInput, error) {
+	var it filter.TagWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13321,21 +13321,21 @@ func (ec *executionContext) unmarshalInputTagWhereInput(ctx context.Context, obj
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput(ctx, v)
+			data, err := ec.unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13384,7 +13384,7 @@ func (ec *executionContext) unmarshalInputTagWhereInput(ctx context.Context, obj
 			it.HasTodos = data
 		case "hasTodosWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasTodosWith"))
-			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13433,8 +13433,8 @@ func (ec *executionContext) unmarshalInputTodoOrder(ctx context.Context, obj any
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, obj any) (gqlfilter.TodoWhereInput, error) {
-	var it gqlfilter.TodoWhereInput
+func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, obj any) (filter.TodoWhereInput, error) {
+	var it filter.TodoWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13449,21 +13449,21 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput(ctx, v)
+			data, err := ec.unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13722,7 +13722,7 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 			it.HasOwner = data
 		case "hasOwnerWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasOwnerWith"))
-			data, err := ec.unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13736,7 +13736,7 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 			it.HasTags = data
 		case "hasTagsWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasTagsWith"))
-			data, err := ec.unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13750,7 +13750,7 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 			it.HasCategory = data
 		case "hasCategoryWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasCategoryWith"))
-			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14590,8 +14590,8 @@ func (ec *executionContext) unmarshalInputUserOrder(ctx context.Context, obj any
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, obj any) (gqlfilter.UserWhereInput, error) {
-	var it gqlfilter.UserWhereInput
+func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, obj any) (filter.UserWhereInput, error) {
+	var it filter.UserWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14606,21 +14606,21 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInput(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14816,7 +14816,7 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			it.HasTodos = data
 		case "hasTodosWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasTodosWith"))
-			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14830,7 +14830,7 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			it.HasMemberships = data
 		case "hasMembershipsWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasMembershipsWith"))
-			data, err := ec.unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14879,8 +14879,8 @@ func (ec *executionContext) unmarshalInputWorkspaceOrder(ctx context.Context, ob
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputWorkspaceWhereInput(ctx context.Context, obj any) (gqlfilter.WorkspaceWhereInput, error) {
-	var it gqlfilter.WorkspaceWhereInput
+func (ec *executionContext) unmarshalInputWorkspaceWhereInput(ctx context.Context, obj any) (filter.WorkspaceWhereInput, error) {
+	var it filter.WorkspaceWhereInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14895,21 +14895,21 @@ func (ec *executionContext) unmarshalInputWorkspaceWhereInput(ctx context.Contex
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInput(ctx, v)
+			data, err := ec.unmarshalOWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -18059,7 +18059,7 @@ func (ec *executionContext) marshalNAuditLog2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._AuditLog(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInput(ctx context.Context, v any) (*gqlfilter.AuditLogWhereInput, error) {
+func (ec *executionContext) unmarshalNAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInput(ctx context.Context, v any) (*filter.AuditLogWhereInput, error) {
 	res, err := ec.unmarshalInputAuditLogWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18134,7 +18134,7 @@ func (ec *executionContext) marshalNCategoryOrderField2ᚖexampleᚗcomᚋfullgq
 	return v
 }
 
-func (ec *executionContext) unmarshalNCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInput(ctx context.Context, v any) (*gqlfilter.CategoryWhereInput, error) {
+func (ec *executionContext) unmarshalNCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInput(ctx context.Context, v any) (*filter.CategoryWhereInput, error) {
 	res, err := ec.unmarshalInputCategoryWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18384,7 +18384,7 @@ func (ec *executionContext) marshalNLabelOrderField2ᚖexampleᚗcomᚋfullgql�
 	return v
 }
 
-func (ec *executionContext) unmarshalNLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInput(ctx context.Context, v any) (*gqlfilter.LabelWhereInput, error) {
+func (ec *executionContext) unmarshalNLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInput(ctx context.Context, v any) (*filter.LabelWhereInput, error) {
 	res, err := ec.unmarshalInputLabelWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18447,17 +18447,17 @@ func (ec *executionContext) marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋ
 	return ec._Member(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, v any) (member.Role, error) {
-	var res member.Role
+func (ec *executionContext) unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, v any) (entity.MemberRole, error) {
+	var res entity.MemberRole
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v member.Role) graphql.Marshaler {
+func (ec *executionContext) marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v entity.MemberRole) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInput(ctx context.Context, v any) (*gqlfilter.MemberWhereInput, error) {
+func (ec *executionContext) unmarshalNMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInput(ctx context.Context, v any) (*filter.MemberWhereInput, error) {
 	res, err := ec.unmarshalInputMemberWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18568,7 +18568,7 @@ func (ec *executionContext) marshalNProductOrderField2ᚖexampleᚗcomᚋfullgql
 	return v
 }
 
-func (ec *executionContext) unmarshalNProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInput(ctx context.Context, v any) (*gqlfilter.ProductWhereInput, error) {
+func (ec *executionContext) unmarshalNProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInput(ctx context.Context, v any) (*filter.ProductWhereInput, error) {
 	res, err := ec.unmarshalInputProductWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18643,7 +18643,7 @@ func (ec *executionContext) marshalNTagOrderField2ᚖexampleᚗcomᚋfullgqlᚋv
 	return v
 }
 
-func (ec *executionContext) unmarshalNTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput(ctx context.Context, v any) (*gqlfilter.TagWhereInput, error) {
+func (ec *executionContext) unmarshalNTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput(ctx context.Context, v any) (*filter.TagWhereInput, error) {
 	res, err := ec.unmarshalInputTagWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18738,7 +18738,7 @@ func (ec *executionContext) marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋvelox�
 	return v
 }
 
-func (ec *executionContext) unmarshalNTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput(ctx context.Context, v any) (*gqlfilter.TodoWhereInput, error) {
+func (ec *executionContext) unmarshalNTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput(ctx context.Context, v any) (*filter.TodoWhereInput, error) {
 	res, err := ec.unmarshalInputTodoWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18842,17 +18842,17 @@ func (ec *executionContext) marshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋ
 	return v
 }
 
-func (ec *executionContext) unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, v any) (entity.UserRole, error) {
-	var res entity.UserRole
+func (ec *executionContext) unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, v any) (user.Role, error) {
+	var res user.Role
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, sel ast.SelectionSet, v entity.UserRole) graphql.Marshaler {
+func (ec *executionContext) marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, sel ast.SelectionSet, v user.Role) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInput(ctx context.Context, v any) (*gqlfilter.UserWhereInput, error) {
+func (ec *executionContext) unmarshalNUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInput(ctx context.Context, v any) (*filter.UserWhereInput, error) {
 	res, err := ec.unmarshalInputUserWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18911,7 +18911,7 @@ func (ec *executionContext) marshalNWorkspaceOrderField2ᚖexampleᚗcomᚋfullg
 	return v
 }
 
-func (ec *executionContext) unmarshalNWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInput(ctx context.Context, v any) (*gqlfilter.WorkspaceWhereInput, error) {
+func (ec *executionContext) unmarshalNWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInput(ctx context.Context, v any) (*filter.WorkspaceWhereInput, error) {
 	res, err := ec.unmarshalInputWorkspaceWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -19169,17 +19169,17 @@ func (ec *executionContext) marshalN__TypeKind2string(ctx context.Context, sel a
 	return res
 }
 
-func (ec *executionContext) unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.AuditLogWhereInput, error) {
+func (ec *executionContext) unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInputᚄ(ctx context.Context, v any) ([]*filter.AuditLogWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.AuditLogWhereInput, len(vSlice))
+	res := make([]*filter.AuditLogWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19187,7 +19187,7 @@ func (ec *executionContext) unmarshalOAuditLogWhereInput2ᚕᚖexampleᚗcomᚋf
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐAuditLogWhereInput(ctx context.Context, v any) (*gqlfilter.AuditLogWhereInput, error) {
+func (ec *executionContext) unmarshalOAuditLogWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐAuditLogWhereInput(ctx context.Context, v any) (*filter.AuditLogWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -19305,17 +19305,17 @@ func (ec *executionContext) unmarshalOCategoryOrder2ᚖexampleᚗcomᚋfullgql�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.CategoryWhereInput, error) {
+func (ec *executionContext) unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInputᚄ(ctx context.Context, v any) ([]*filter.CategoryWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.CategoryWhereInput, len(vSlice))
+	res := make([]*filter.CategoryWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19323,7 +19323,7 @@ func (ec *executionContext) unmarshalOCategoryWhereInput2ᚕᚖexampleᚗcomᚋf
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐCategoryWhereInput(ctx context.Context, v any) (*gqlfilter.CategoryWhereInput, error) {
+func (ec *executionContext) unmarshalOCategoryWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐCategoryWhereInput(ctx context.Context, v any) (*filter.CategoryWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -19570,17 +19570,17 @@ func (ec *executionContext) unmarshalOLabelOrder2ᚖexampleᚗcomᚋfullgqlᚋve
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.LabelWhereInput, error) {
+func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInputᚄ(ctx context.Context, v any) ([]*filter.LabelWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.LabelWhereInput, len(vSlice))
+	res := make([]*filter.LabelWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19588,7 +19588,7 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖexampleᚗcomᚋfull
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐLabelWhereInput(ctx context.Context, v any) (*gqlfilter.LabelWhereInput, error) {
+func (ec *executionContext) unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐLabelWhereInput(ctx context.Context, v any) (*filter.LabelWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -19677,17 +19677,17 @@ func (ec *executionContext) marshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋvelo
 	return v
 }
 
-func (ec *executionContext) unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.MemberWhereInput, error) {
+func (ec *executionContext) unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInputᚄ(ctx context.Context, v any) ([]*filter.MemberWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.MemberWhereInput, len(vSlice))
+	res := make([]*filter.MemberWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19695,7 +19695,7 @@ func (ec *executionContext) unmarshalOMemberWhereInput2ᚕᚖexampleᚗcomᚋful
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐMemberWhereInput(ctx context.Context, v any) (*gqlfilter.MemberWhereInput, error) {
+func (ec *executionContext) unmarshalOMemberWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐMemberWhereInput(ctx context.Context, v any) (*filter.MemberWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -19772,17 +19772,17 @@ func (ec *executionContext) unmarshalOProductOrder2ᚖexampleᚗcomᚋfullgqlᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.ProductWhereInput, error) {
+func (ec *executionContext) unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInputᚄ(ctx context.Context, v any) ([]*filter.ProductWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.ProductWhereInput, len(vSlice))
+	res := make([]*filter.ProductWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19790,7 +19790,7 @@ func (ec *executionContext) unmarshalOProductWhereInput2ᚕᚖexampleᚗcomᚋfu
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐProductWhereInput(ctx context.Context, v any) (*gqlfilter.ProductWhereInput, error) {
+func (ec *executionContext) unmarshalOProductWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐProductWhereInput(ctx context.Context, v any) (*filter.ProductWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -19926,17 +19926,17 @@ func (ec *executionContext) unmarshalOTagOrder2ᚖexampleᚗcomᚋfullgqlᚋvelo
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.TagWhereInput, error) {
+func (ec *executionContext) unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInputᚄ(ctx context.Context, v any) ([]*filter.TagWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.TagWhereInput, len(vSlice))
+	res := make([]*filter.TagWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19944,7 +19944,7 @@ func (ec *executionContext) unmarshalOTagWhereInput2ᚕᚖexampleᚗcomᚋfullgq
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTagWhereInput(ctx context.Context, v any) (*gqlfilter.TagWhereInput, error) {
+func (ec *executionContext) unmarshalOTagWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTagWhereInput(ctx context.Context, v any) (*filter.TagWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20230,17 +20230,17 @@ func (ec *executionContext) marshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋvelo
 	return v
 }
 
-func (ec *executionContext) unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.TodoWhereInput, error) {
+func (ec *executionContext) unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInputᚄ(ctx context.Context, v any) ([]*filter.TodoWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.TodoWhereInput, len(vSlice))
+	res := make([]*filter.TodoWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20248,7 +20248,7 @@ func (ec *executionContext) unmarshalOTodoWhereInput2ᚕᚖexampleᚗcomᚋfullg
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐTodoWhereInput(ctx context.Context, v any) (*gqlfilter.TodoWhereInput, error) {
+func (ec *executionContext) unmarshalOTodoWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐTodoWhereInput(ctx context.Context, v any) (*filter.TodoWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20399,17 +20399,17 @@ func (ec *executionContext) marshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return v
 }
 
-func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.UserWhereInput, error) {
+func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInputᚄ(ctx context.Context, v any) ([]*filter.UserWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.UserWhereInput, len(vSlice))
+	res := make([]*filter.UserWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20417,7 +20417,7 @@ func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖexampleᚗcomᚋfullg
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐUserWhereInput(ctx context.Context, v any) (*gqlfilter.UserWhereInput, error) {
+func (ec *executionContext) unmarshalOUserWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐUserWhereInput(ctx context.Context, v any) (*filter.UserWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20487,17 +20487,17 @@ func (ec *executionContext) unmarshalOWorkspaceOrder2ᚖexampleᚗcomᚋfullgql�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInputᚄ(ctx context.Context, v any) ([]*gqlfilter.WorkspaceWhereInput, error) {
+func (ec *executionContext) unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInputᚄ(ctx context.Context, v any) ([]*filter.WorkspaceWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
 	var err error
-	res := make([]*gqlfilter.WorkspaceWhereInput, len(vSlice))
+	res := make([]*filter.WorkspaceWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20505,7 +20505,7 @@ func (ec *executionContext) unmarshalOWorkspaceWhereInput2ᚕᚖexampleᚗcomᚋ
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋgqlfilterᚐWorkspaceWhereInput(ctx context.Context, v any) (*gqlfilter.WorkspaceWhereInput, error) {
+func (ec *executionContext) unmarshalOWorkspaceWhereInput2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋfilterᚐWorkspaceWhereInput(ctx context.Context, v any) (*filter.WorkspaceWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
