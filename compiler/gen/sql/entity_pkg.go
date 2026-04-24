@@ -457,9 +457,9 @@ func genEntityPkgAssignValues(h gen.GeneratorHelper, f *jen.File, t *gen.Type, e
 }
 
 // genEntityPkgFieldAssignment generates a field assignment for the entity/ package.
-// For enum fields without a custom Go type, the enum type is defined locally in the
-// entity/ package (e.g., UserRole, PostStatus), so we use a local reference.
-func genEntityPkgFieldAssignment(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, field *gen.Field, idx string, receiver string, structField string, enumReg *entityPkgEnumRegistry) {
+// For enum fields without a custom Go type, the enum type lives in the per-entity
+// leaf sub-package (e.g., user.Status), so we emit a qualified reference.
+func genEntityPkgFieldAssignment(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, field *gen.Field, idx string, receiver string, structField string, _ *entityPkgEnumRegistry) {
 	if field.IsEnum() && !field.HasGoType() {
 		// Enum type lives in the per-entity leaf sub-package (e.g., user.Status).
 		// Use jen.Qual so the import is added automatically.
@@ -1114,7 +1114,6 @@ func entityPkgGoType(h gen.GeneratorHelper, t *gen.Type, f *gen.Field, _ *entity
 	}
 	return h.GoType(f)
 }
-
 
 // =============================================================================
 // Builder Interfaces (Creator, Updater, UpdateOner, Deleter, DeleteOner, Clienter)
