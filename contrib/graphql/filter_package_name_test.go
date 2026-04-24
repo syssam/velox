@@ -30,3 +30,25 @@ func TestWhereInputGeneratedPackageName(t *testing.T) {
 	require.NotContains(t, got, "package gqlfilter",
 		"legacy package name must be gone")
 }
+
+// TestWhereInputGoModelDirective asserts the @goModel directive points to
+// the filter/ sub-package rather than the legacy gqlfilter/.
+func TestWhereInputGoModelDirective(t *testing.T) {
+	// Use mockGraph() which has FeatureWhereInputAll configured
+	mockG := mockGraph()
+	// Update graph package to match test ORMPackage
+	mockG.Config.Package = "example/ent"
+
+	g := NewGenerator(mockG, Config{
+		RelayConnection: true,
+		WhereInputs:     true,
+		ORMPackage:      "example/ent",
+	})
+
+	sdl := g.genInputsSchema()
+
+	require.Contains(t, sdl, `@goModel(model: "example/ent/filter.`,
+		"input type @goModel must reference filter/, not gqlfilter/")
+	require.NotContains(t, sdl, `@goModel(model: "example/ent/gqlfilter.`,
+		"legacy gqlfilter path must be gone")
+}
