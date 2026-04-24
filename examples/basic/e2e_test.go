@@ -1112,25 +1112,25 @@ func TestE2E_TagEdgeNotLoaded(t *testing.T) {
 // =============================================================================
 
 func TestE2E_EnumValues(t *testing.T) {
-	roles := entity.UserRoleValues()
+	roles := user.RoleValues()
 	assert.Len(t, roles, 3)
-	assert.Contains(t, roles, entity.UserRoleAdmin)
-	assert.Contains(t, roles, entity.UserRoleUser)
-	assert.Contains(t, roles, entity.UserRoleGuest)
+	assert.Contains(t, roles, user.RoleAdmin)
+	assert.Contains(t, roles, user.RoleUser)
+	assert.Contains(t, roles, user.RoleGuest)
 }
 
 func TestE2E_EnumIsValid(t *testing.T) {
-	assert.True(t, entity.UserRoleAdmin.IsValid())
-	assert.True(t, entity.UserRoleUser.IsValid())
-	assert.True(t, entity.UserRoleGuest.IsValid())
-	assert.False(t, entity.UserRole("invalid").IsValid())
-	assert.False(t, entity.UserRole("").IsValid())
+	assert.True(t, user.RoleAdmin.IsValid())
+	assert.True(t, user.RoleUser.IsValid())
+	assert.True(t, user.RoleGuest.IsValid())
+	assert.False(t, user.Role("invalid").IsValid())
+	assert.False(t, user.Role("").IsValid())
 }
 
 func TestE2E_EnumString(t *testing.T) {
-	assert.Equal(t, "admin", entity.UserRoleAdmin.String())
-	assert.Equal(t, "user", entity.UserRoleUser.String())
-	assert.Equal(t, "guest", entity.UserRoleGuest.String())
+	assert.Equal(t, "admin", user.RoleAdmin.String())
+	assert.Equal(t, "user", user.RoleUser.String())
+	assert.Equal(t, "guest", user.RoleGuest.String())
 }
 
 func TestE2E_EnumFilter(t *testing.T) {
@@ -1172,16 +1172,16 @@ func TestE2E_EnumFilter(t *testing.T) {
 }
 
 func TestE2E_PostStatusEnum(t *testing.T) {
-	statuses := entity.PostStatusValues()
+	statuses := post.StatusValues()
 	assert.Len(t, statuses, 3)
-	assert.Contains(t, statuses, entity.PostStatusDraft)
-	assert.Contains(t, statuses, entity.PostStatusPublished)
-	assert.Contains(t, statuses, entity.PostStatusArchived)
+	assert.Contains(t, statuses, post.StatusDraft)
+	assert.Contains(t, statuses, post.StatusPublished)
+	assert.Contains(t, statuses, post.StatusArchived)
 
 	for _, s := range statuses {
 		assert.True(t, s.IsValid())
 	}
-	assert.False(t, entity.PostStatus("invalid").IsValid())
+	assert.False(t, post.Status("invalid").IsValid())
 }
 
 // =============================================================================
@@ -1194,7 +1194,7 @@ func TestE2E_EntityString(t *testing.T) {
 		Name:  "Alice",
 		Email: "alice@test.com",
 		Age:   25,
-		Role:  entity.UserRoleUser,
+		Role:  user.RoleUser,
 	}
 	s := u.String()
 	assert.Contains(t, s, "User(")
