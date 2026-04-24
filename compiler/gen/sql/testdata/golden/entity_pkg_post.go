@@ -65,6 +65,8 @@ func (e *Post) AssignValues(columns []string, values []any) error {
 					e.Title = value.String
 				}
 			}
+		default:
+			e.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil

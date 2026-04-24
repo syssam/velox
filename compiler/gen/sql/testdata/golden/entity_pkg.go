@@ -147,6 +147,8 @@ func (e *User) AssignValues(columns []string, values []any) error {
 					*e.Nickname = value.String
 				}
 			}
+		default:
+			e.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil

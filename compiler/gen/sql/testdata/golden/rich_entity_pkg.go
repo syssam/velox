@@ -232,6 +232,8 @@ func (e *Article) AssignValues(columns []string, values []any) error {
 					e.Status = Status(value.String)
 				}
 			}
+		default:
+			e.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil

@@ -310,9 +310,6 @@ func BuildQueryFrom(ctx context.Context, q QueryReader) (*sql.Selector, error) {
 	for _, p := range q.GetPredicates() {
 		p(selector)
 	}
-	for _, m := range q.GetModifiers() {
-		m(selector)
-	}
 	for _, o := range q.GetOrder() {
 		o(selector)
 	}
@@ -361,6 +358,13 @@ func BuildSelectorFrom(ctx context.Context, q QueryReader) (*sql.Selector, error
 	selector.Select(selector.Columns(columns...)...)
 	if qctx.Unique != nil && *qctx.Unique {
 		selector.Distinct()
+	}
+	// Modifiers run LAST so callers can replace the default projection
+	// (e.g. aggregate queries emitting SUM/COUNT/TO_CHAR expressions via
+	// selector.Select) or append to it (selector.AppendSelect). Matches
+	// Ent's sqlgraph.query.selector ordering.
+	for _, m := range q.GetModifiers() {
+		m(selector)
 	}
 	return selector, nil
 }
@@ -702,6 +706,12 @@ func QuerySelect(ctx context.Context, q QueryReader, fns []AggregateFunc, v any)
 	}
 	if qctx.Unique != nil && *qctx.Unique {
 		selector.Distinct()
+	}
+	// Modifiers run LAST so they can override the SELECT list built above.
+	// Matches Ent's sqlgraph.query.selector ordering and keeps behavior
+	// consistent with BuildSelectorFrom.
+	for _, m := range q.GetModifiers() {
+		m(selector)
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()

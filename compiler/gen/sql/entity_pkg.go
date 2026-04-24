@@ -449,6 +449,17 @@ func genEntityPkgAssignValues(h gen.GeneratorHelper, f *jen.File, t *gen.Type, e
 						genEntityPkgFieldAssignment(h, caseGrp, t, fk.Field, "i", "e", fk.StructField(), enumReg)
 					})
 				}
+
+				// Default: store columns that weren't matched above (e.g. aggregate
+				// expressions, ORDER BY expressions, or other modifier-selected
+				// columns) into selectValues so they can be retrieved via the Value
+				// method. Matches Ent's (*T).assignValues default-case behavior.
+				switchGrp.Default().Block(
+					jen.Id("e").Dot("selectValues").Dot("Set").Call(
+						jen.Id("columns").Index(jen.Id("i")),
+						jen.Id("values").Index(jen.Id("i")),
+					),
+				)
 			})
 		})
 		grp.Return(jen.Nil())

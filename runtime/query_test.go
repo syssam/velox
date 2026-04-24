@@ -724,6 +724,65 @@ func TestBuildSelectorFrom_M2OEdge_AmbiguousColumn(t *testing.T) {
 	assert.NotContains(t, query, `SELECT "terms_id",`, "unqualified terms_id in SELECT is ambiguous")
 }
 
+// TestBuildSelectorFrom_ModifierOrdering pins that modifiers run AFTER the
+// default entity-column projection, matching Ent's sqlgraph.query.selector
+// ordering. This is load-bearing for aggregate queries: a Modify() callback
+// that does `sel.Select("SUM(age)")` must replace the default column list,
+// otherwise PostgreSQL rejects the emitted SQL with SQLSTATE 42803 (column
+// must appear in GROUP BY or be used in an aggregate). Similarly, a Modify()
+// callback that does `sel.AppendSelect(expr)` must add to the defaults rather
+// than producing a SELECT with only the extra expression.
+func TestBuildSelectorFrom_ModifierOrdering(t *testing.T) {
+	t.Run("Select replaces defaults", func(t *testing.T) {
+		drv := &mockDriver{dialectName: dialect.Postgres}
+		base := NewQueryBase(drv, "users", []string{"id", "name", "age"}, "id", nil, "User")
+		base.AddModifier(func(s *sql.Selector) {
+			s.Select("SUM(age)")
+			s.GroupBy("id")
+		})
+
+		sel, err := BuildSelectorFrom(context.Background(), base)
+		require.NoError(t, err)
+		query, _ := sel.Query()
+
+		assert.Contains(t, query, "SUM(age)", "modifier's aggregate expr must survive")
+		assert.NotContains(t, query, `"name"`, "default columns must not be selected when modifier replaced selection")
+		assert.NotContains(t, query, `"age",`, "default 'age' column must not appear as a separate SELECT item")
+		assert.Contains(t, query, "GROUP BY", "modifier's GROUP BY must survive")
+	})
+
+	t.Run("AppendSelect adds to defaults", func(t *testing.T) {
+		drv := &mockDriver{dialectName: dialect.Postgres}
+		base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+		base.AddModifier(func(s *sql.Selector) {
+			s.AppendSelect("LOWER(name) AS lname")
+		})
+
+		sel, err := BuildSelectorFrom(context.Background(), base)
+		require.NoError(t, err)
+		query, _ := sel.Query()
+
+		assert.Contains(t, query, `"id"`, "default 'id' column must survive AppendSelect")
+		assert.Contains(t, query, `"name"`, "default 'name' column must survive AppendSelect")
+		assert.Contains(t, query, "LOWER(name) AS lname", "modifier's appended expr must be present")
+	})
+
+	t.Run("Where in modifier still runs", func(t *testing.T) {
+		drv := &mockDriver{dialectName: dialect.Postgres}
+		base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+		base.AddModifier(func(s *sql.Selector) {
+			s.Where(sql.Like(s.C("name"), "A%"))
+		})
+
+		sel, err := BuildSelectorFrom(context.Background(), base)
+		require.NoError(t, err)
+		query, _ := sel.Query()
+
+		assert.Contains(t, query, `"id"`, "defaults still present")
+		assert.Contains(t, query, "LIKE", "modifier's predicate applied")
+	})
+}
+
 func TestMakeQuerySpec_ParityWithMethod(t *testing.T) {
 	base := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
 	base.SetLimit(10)

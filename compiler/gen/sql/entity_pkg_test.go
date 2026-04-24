@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dave/jennifer/jen"
@@ -204,6 +205,42 @@ func TestGenEntityPkgFKValueMethod_NoFKs(t *testing.T) {
 	code := f.GoString()
 	// No FKs, so no FKValue method should be generated
 	assert.NotContains(t, code, "FKValue")
+}
+
+// =============================================================================
+// genEntityPkgAssignValues Tests
+// =============================================================================
+
+// TestGenEntityPkgAssignValues_DefaultCaseStoresSelectValues pins that the
+// generated AssignValues switch has a default case that writes unknown columns
+// into e.selectValues. Without this, columns selected via Modify() (aggregate
+// expressions, aliased computations, ORDER BY expressions) are scanned with
+// sql.UnknownType but their values are silently discarded — (*Entity).Value(name)
+// then returns "value was not selected" for every caller. Matches Ent's
+// (*T).assignValues default-case contract in .references/ent/entc/integration/
+// ent/user.go:330-332.
+func TestGenEntityPkgAssignValues_DefaultCaseStoresSelectValues(t *testing.T) {
+	t.Parallel()
+	helper := newMockHelper()
+	helper.rootPkg = "github.com/test/project"
+
+	userType := createTestType("User")
+	helper.graph.Nodes = []*gen.Type{userType}
+
+	f := genEntityPkgFileWithRegistry(helper, userType, helper.graph.Nodes, nil)
+	require.NotNil(t, f)
+	code := f.GoString()
+
+	start := strings.Index(code, "func (e *User) AssignValues(")
+	require.NotEqual(t, -1, start, "AssignValues method must be emitted")
+	end := strings.Index(code[start:], "return nil")
+	require.NotEqual(t, -1, end, "AssignValues body must end with return nil")
+	body := code[start : start+end]
+
+	assert.Contains(t, body, "default:",
+		"AssignValues switch must have a default case so unknown columns from Modify()/ORDER BY aren't dropped")
+	assert.Contains(t, body, "e.selectValues.Set(columns[i], values[i])",
+		"default case must write into selectValues — without it Value(name) always reports 'not selected'")
 }
 
 // =============================================================================

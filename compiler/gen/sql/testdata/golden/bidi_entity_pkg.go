@@ -116,6 +116,8 @@ func (e *Post) AssignValues(columns []string, values []any) error {
 					e.Content = value.String
 				}
 			}
+		default:
+			e.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
