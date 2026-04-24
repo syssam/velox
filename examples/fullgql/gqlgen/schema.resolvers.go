@@ -11,11 +11,18 @@ import (
 
 	"example.com/fullgql/velox"
 	"example.com/fullgql/velox/category"
-	"example.com/fullgql/velox/comment"
+	categoryclient "example.com/fullgql/velox/client/category"
+	commentclient "example.com/fullgql/velox/client/comment"
+	labelclient "example.com/fullgql/velox/client/label"
+	memberclient "example.com/fullgql/velox/client/member"
+	productclient "example.com/fullgql/velox/client/product"
+	tagclient "example.com/fullgql/velox/client/tag"
+	todoclient "example.com/fullgql/velox/client/todo"
+	userclient "example.com/fullgql/velox/client/user"
+	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/filter"
 	"example.com/fullgql/velox/label"
-	"example.com/fullgql/velox/member"
 	"example.com/fullgql/velox/product"
 	"example.com/fullgql/velox/tag"
 	"example.com/fullgql/velox/todo"
@@ -64,92 +71,92 @@ func (r *labelResolver) Todos(ctx context.Context, obj *entity.Label, after *gql
 }
 
 // CreateCategory is the resolver for the createCategory field.
-func (r *mutationResolver) CreateCategory(ctx context.Context, input category.CreateCategoryInput) (*entity.Category, error) {
+func (r *mutationResolver) CreateCategory(ctx context.Context, input categoryclient.CreateCategoryInput) (*entity.Category, error) {
 	return r.Client.Category.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateCategory is the resolver for the updateCategory field.
-func (r *mutationResolver) UpdateCategory(ctx context.Context, id int, input category.UpdateCategoryInput) (*entity.Category, error) {
+func (r *mutationResolver) UpdateCategory(ctx context.Context, id int, input categoryclient.UpdateCategoryInput) (*entity.Category, error) {
 	return r.Client.Category.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateComment is the resolver for the createComment field.
-func (r *mutationResolver) CreateComment(ctx context.Context, input comment.CreateCommentInput) (*entity.Comment, error) {
+func (r *mutationResolver) CreateComment(ctx context.Context, input commentclient.CreateCommentInput) (*entity.Comment, error) {
 	return r.Client.Comment.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateComment is the resolver for the updateComment field.
-func (r *mutationResolver) UpdateComment(ctx context.Context, id int, input comment.UpdateCommentInput) (*entity.Comment, error) {
+func (r *mutationResolver) UpdateComment(ctx context.Context, id int, input commentclient.UpdateCommentInput) (*entity.Comment, error) {
 	return r.Client.Comment.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateLabel is the resolver for the createLabel field.
-func (r *mutationResolver) CreateLabel(ctx context.Context, input label.CreateLabelInput) (*entity.Label, error) {
+func (r *mutationResolver) CreateLabel(ctx context.Context, input labelclient.CreateLabelInput) (*entity.Label, error) {
 	return r.Client.Label.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateLabel is the resolver for the updateLabel field.
-func (r *mutationResolver) UpdateLabel(ctx context.Context, id int, input label.UpdateLabelInput) (*entity.Label, error) {
+func (r *mutationResolver) UpdateLabel(ctx context.Context, id int, input labelclient.UpdateLabelInput) (*entity.Label, error) {
 	return r.Client.Label.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateMember is the resolver for the createMember field.
-func (r *mutationResolver) CreateMember(ctx context.Context, input member.CreateMemberInput) (*entity.Member, error) {
+func (r *mutationResolver) CreateMember(ctx context.Context, input memberclient.CreateMemberInput) (*entity.Member, error) {
 	return r.Client.Member.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateMember is the resolver for the updateMember field.
-func (r *mutationResolver) UpdateMember(ctx context.Context, id int, input member.UpdateMemberInput) (*entity.Member, error) {
+func (r *mutationResolver) UpdateMember(ctx context.Context, id int, input memberclient.UpdateMemberInput) (*entity.Member, error) {
 	return r.Client.Member.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateProduct is the resolver for the createProduct field.
-func (r *mutationResolver) CreateProduct(ctx context.Context, input product.CreateProductInput) (*entity.Product, error) {
+func (r *mutationResolver) CreateProduct(ctx context.Context, input productclient.CreateProductInput) (*entity.Product, error) {
 	return r.Client.Product.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateProduct is the resolver for the updateProduct field.
-func (r *mutationResolver) UpdateProduct(ctx context.Context, id int, input product.UpdateProductInput) (*entity.Product, error) {
+func (r *mutationResolver) UpdateProduct(ctx context.Context, id int, input productclient.UpdateProductInput) (*entity.Product, error) {
 	return r.Client.Product.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateTag is the resolver for the createTag field.
-func (r *mutationResolver) CreateTag(ctx context.Context, input tag.CreateTagInput) (*entity.Tag, error) {
+func (r *mutationResolver) CreateTag(ctx context.Context, input tagclient.CreateTagInput) (*entity.Tag, error) {
 	return r.Client.Tag.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateTag is the resolver for the updateTag field.
-func (r *mutationResolver) UpdateTag(ctx context.Context, id int, input tag.UpdateTagInput) (*entity.Tag, error) {
+func (r *mutationResolver) UpdateTag(ctx context.Context, id int, input tagclient.UpdateTagInput) (*entity.Tag, error) {
 	return r.Client.Tag.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateTodo is the resolver for the createTodo field.
-func (r *mutationResolver) CreateTodo(ctx context.Context, input todo.CreateTodoInput) (*entity.Todo, error) {
+func (r *mutationResolver) CreateTodo(ctx context.Context, input todoclient.CreateTodoInput) (*entity.Todo, error) {
 	return r.Client.Todo.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateTodo is the resolver for the updateTodo field.
-func (r *mutationResolver) UpdateTodo(ctx context.Context, id int, input todo.UpdateTodoInput) (*entity.Todo, error) {
+func (r *mutationResolver) UpdateTodo(ctx context.Context, id int, input todoclient.UpdateTodoInput) (*entity.Todo, error) {
 	return r.Client.Todo.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateUser is the resolver for the createUser field.
-func (r *mutationResolver) CreateUser(ctx context.Context, input user.CreateUserInput) (*entity.User, error) {
+func (r *mutationResolver) CreateUser(ctx context.Context, input userclient.CreateUserInput) (*entity.User, error) {
 	return r.Client.User.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateUser is the resolver for the updateUser field.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id int, input user.UpdateUserInput) (*entity.User, error) {
+func (r *mutationResolver) UpdateUser(ctx context.Context, id int, input userclient.UpdateUserInput) (*entity.User, error) {
 	return r.Client.User.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
 // CreateWorkspace is the resolver for the createWorkspace field.
-func (r *mutationResolver) CreateWorkspace(ctx context.Context, input workspace.CreateWorkspaceInput) (*entity.Workspace, error) {
+func (r *mutationResolver) CreateWorkspace(ctx context.Context, input workspaceclient.CreateWorkspaceInput) (*entity.Workspace, error) {
 	return r.Client.Workspace.Create().SetInput(input).Save(ctx)
 }
 
 // UpdateWorkspace is the resolver for the updateWorkspace field.
-func (r *mutationResolver) UpdateWorkspace(ctx context.Context, id int, input workspace.UpdateWorkspaceInput) (*entity.Workspace, error) {
+func (r *mutationResolver) UpdateWorkspace(ctx context.Context, id int, input workspaceclient.UpdateWorkspaceInput) (*entity.Workspace, error) {
 	return r.Client.Workspace.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
@@ -296,12 +303,12 @@ func (r *workspaceResolver) Todos(ctx context.Context, obj *entity.Workspace, af
 }
 
 // Thumbnail is the resolver for the thumbnail field.
-func (r *createProductInputResolver) Thumbnail(ctx context.Context, obj *product.CreateProductInput, data *string) error {
+func (r *createProductInputResolver) Thumbnail(ctx context.Context, obj *productclient.CreateProductInput, data *string) error {
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
 }
 
 // Thumbnail is the resolver for the thumbnail field.
-func (r *updateProductInputResolver) Thumbnail(ctx context.Context, obj *product.UpdateProductInput, data *string) error {
+func (r *updateProductInputResolver) Thumbnail(ctx context.Context, obj *productclient.UpdateProductInput, data *string) error {
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
 }
 

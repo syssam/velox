@@ -13,17 +13,20 @@ import (
 	"time"
 
 	"example.com/fullgql/velox"
-	"example.com/fullgql/velox/category"
-	"example.com/fullgql/velox/comment"
+	categoryclient "example.com/fullgql/velox/client/category"
+	commentclient "example.com/fullgql/velox/client/comment"
+	labelclient "example.com/fullgql/velox/client/label"
+	memberclient "example.com/fullgql/velox/client/member"
+	productclient "example.com/fullgql/velox/client/product"
+	tagclient "example.com/fullgql/velox/client/tag"
+	todoclient "example.com/fullgql/velox/client/todo"
+	userclient "example.com/fullgql/velox/client/user"
+	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/filter"
-	"example.com/fullgql/velox/label"
 	"example.com/fullgql/velox/member"
-	"example.com/fullgql/velox/product"
-	"example.com/fullgql/velox/tag"
 	"example.com/fullgql/velox/todo"
 	"example.com/fullgql/velox/user"
-	"example.com/fullgql/velox/workspace"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
@@ -141,24 +144,24 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CreateCategory  func(childComplexity int, input category.CreateCategoryInput) int
-		CreateComment   func(childComplexity int, input comment.CreateCommentInput) int
-		CreateLabel     func(childComplexity int, input label.CreateLabelInput) int
-		CreateMember    func(childComplexity int, input member.CreateMemberInput) int
-		CreateProduct   func(childComplexity int, input product.CreateProductInput) int
-		CreateTag       func(childComplexity int, input tag.CreateTagInput) int
-		CreateTodo      func(childComplexity int, input todo.CreateTodoInput) int
-		CreateUser      func(childComplexity int, input user.CreateUserInput) int
-		CreateWorkspace func(childComplexity int, input workspace.CreateWorkspaceInput) int
-		UpdateCategory  func(childComplexity int, id int, input category.UpdateCategoryInput) int
-		UpdateComment   func(childComplexity int, id int, input comment.UpdateCommentInput) int
-		UpdateLabel     func(childComplexity int, id int, input label.UpdateLabelInput) int
-		UpdateMember    func(childComplexity int, id int, input member.UpdateMemberInput) int
-		UpdateProduct   func(childComplexity int, id int, input product.UpdateProductInput) int
-		UpdateTag       func(childComplexity int, id int, input tag.UpdateTagInput) int
-		UpdateTodo      func(childComplexity int, id int, input todo.UpdateTodoInput) int
-		UpdateUser      func(childComplexity int, id int, input user.UpdateUserInput) int
-		UpdateWorkspace func(childComplexity int, id int, input workspace.UpdateWorkspaceInput) int
+		CreateCategory  func(childComplexity int, input categoryclient.CreateCategoryInput) int
+		CreateComment   func(childComplexity int, input commentclient.CreateCommentInput) int
+		CreateLabel     func(childComplexity int, input labelclient.CreateLabelInput) int
+		CreateMember    func(childComplexity int, input memberclient.CreateMemberInput) int
+		CreateProduct   func(childComplexity int, input productclient.CreateProductInput) int
+		CreateTag       func(childComplexity int, input tagclient.CreateTagInput) int
+		CreateTodo      func(childComplexity int, input todoclient.CreateTodoInput) int
+		CreateUser      func(childComplexity int, input userclient.CreateUserInput) int
+		CreateWorkspace func(childComplexity int, input workspaceclient.CreateWorkspaceInput) int
+		UpdateCategory  func(childComplexity int, id int, input categoryclient.UpdateCategoryInput) int
+		UpdateComment   func(childComplexity int, id int, input commentclient.UpdateCommentInput) int
+		UpdateLabel     func(childComplexity int, id int, input labelclient.UpdateLabelInput) int
+		UpdateMember    func(childComplexity int, id int, input memberclient.UpdateMemberInput) int
+		UpdateProduct   func(childComplexity int, id int, input productclient.UpdateProductInput) int
+		UpdateTag       func(childComplexity int, id int, input tagclient.UpdateTagInput) int
+		UpdateTodo      func(childComplexity int, id int, input todoclient.UpdateTodoInput) int
+		UpdateUser      func(childComplexity int, id int, input userclient.UpdateUserInput) int
+		UpdateWorkspace func(childComplexity int, id int, input workspaceclient.UpdateWorkspaceInput) int
 	}
 
 	PageInfo struct {
@@ -314,24 +317,24 @@ type LabelResolver interface {
 	Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 }
 type MutationResolver interface {
-	CreateCategory(ctx context.Context, input category.CreateCategoryInput) (*entity.Category, error)
-	UpdateCategory(ctx context.Context, id int, input category.UpdateCategoryInput) (*entity.Category, error)
-	CreateComment(ctx context.Context, input comment.CreateCommentInput) (*entity.Comment, error)
-	UpdateComment(ctx context.Context, id int, input comment.UpdateCommentInput) (*entity.Comment, error)
-	CreateLabel(ctx context.Context, input label.CreateLabelInput) (*entity.Label, error)
-	UpdateLabel(ctx context.Context, id int, input label.UpdateLabelInput) (*entity.Label, error)
-	CreateMember(ctx context.Context, input member.CreateMemberInput) (*entity.Member, error)
-	UpdateMember(ctx context.Context, id int, input member.UpdateMemberInput) (*entity.Member, error)
-	CreateProduct(ctx context.Context, input product.CreateProductInput) (*entity.Product, error)
-	UpdateProduct(ctx context.Context, id int, input product.UpdateProductInput) (*entity.Product, error)
-	CreateTag(ctx context.Context, input tag.CreateTagInput) (*entity.Tag, error)
-	UpdateTag(ctx context.Context, id int, input tag.UpdateTagInput) (*entity.Tag, error)
-	CreateTodo(ctx context.Context, input todo.CreateTodoInput) (*entity.Todo, error)
-	UpdateTodo(ctx context.Context, id int, input todo.UpdateTodoInput) (*entity.Todo, error)
-	CreateUser(ctx context.Context, input user.CreateUserInput) (*entity.User, error)
-	UpdateUser(ctx context.Context, id int, input user.UpdateUserInput) (*entity.User, error)
-	CreateWorkspace(ctx context.Context, input workspace.CreateWorkspaceInput) (*entity.Workspace, error)
-	UpdateWorkspace(ctx context.Context, id int, input workspace.UpdateWorkspaceInput) (*entity.Workspace, error)
+	CreateCategory(ctx context.Context, input categoryclient.CreateCategoryInput) (*entity.Category, error)
+	UpdateCategory(ctx context.Context, id int, input categoryclient.UpdateCategoryInput) (*entity.Category, error)
+	CreateComment(ctx context.Context, input commentclient.CreateCommentInput) (*entity.Comment, error)
+	UpdateComment(ctx context.Context, id int, input commentclient.UpdateCommentInput) (*entity.Comment, error)
+	CreateLabel(ctx context.Context, input labelclient.CreateLabelInput) (*entity.Label, error)
+	UpdateLabel(ctx context.Context, id int, input labelclient.UpdateLabelInput) (*entity.Label, error)
+	CreateMember(ctx context.Context, input memberclient.CreateMemberInput) (*entity.Member, error)
+	UpdateMember(ctx context.Context, id int, input memberclient.UpdateMemberInput) (*entity.Member, error)
+	CreateProduct(ctx context.Context, input productclient.CreateProductInput) (*entity.Product, error)
+	UpdateProduct(ctx context.Context, id int, input productclient.UpdateProductInput) (*entity.Product, error)
+	CreateTag(ctx context.Context, input tagclient.CreateTagInput) (*entity.Tag, error)
+	UpdateTag(ctx context.Context, id int, input tagclient.UpdateTagInput) (*entity.Tag, error)
+	CreateTodo(ctx context.Context, input todoclient.CreateTodoInput) (*entity.Todo, error)
+	UpdateTodo(ctx context.Context, id int, input todoclient.UpdateTodoInput) (*entity.Todo, error)
+	CreateUser(ctx context.Context, input userclient.CreateUserInput) (*entity.User, error)
+	UpdateUser(ctx context.Context, id int, input userclient.UpdateUserInput) (*entity.User, error)
+	CreateWorkspace(ctx context.Context, input workspaceclient.CreateWorkspaceInput) (*entity.Workspace, error)
+	UpdateWorkspace(ctx context.Context, id int, input workspaceclient.UpdateWorkspaceInput) (*entity.Workspace, error)
 }
 type ProductResolver interface {
 	Thumbnail(ctx context.Context, obj *entity.Product) (*string, error)
@@ -369,10 +372,10 @@ type WorkspaceResolver interface {
 }
 
 type CreateProductInputResolver interface {
-	Thumbnail(ctx context.Context, obj *product.CreateProductInput, data *string) error
+	Thumbnail(ctx context.Context, obj *productclient.CreateProductInput, data *string) error
 }
 type UpdateProductInputResolver interface {
-	Thumbnail(ctx context.Context, obj *product.UpdateProductInput, data *string) error
+	Thumbnail(ctx context.Context, obj *productclient.UpdateProductInput, data *string) error
 }
 
 type executableSchema struct {
@@ -698,7 +701,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateCategory(childComplexity, args["input"].(category.CreateCategoryInput)), true
+		return e.complexity.Mutation.CreateCategory(childComplexity, args["input"].(categoryclient.CreateCategoryInput)), true
 	case "Mutation.createComment":
 		if e.complexity.Mutation.CreateComment == nil {
 			break
@@ -709,7 +712,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateComment(childComplexity, args["input"].(comment.CreateCommentInput)), true
+		return e.complexity.Mutation.CreateComment(childComplexity, args["input"].(commentclient.CreateCommentInput)), true
 	case "Mutation.createLabel":
 		if e.complexity.Mutation.CreateLabel == nil {
 			break
@@ -720,7 +723,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateLabel(childComplexity, args["input"].(label.CreateLabelInput)), true
+		return e.complexity.Mutation.CreateLabel(childComplexity, args["input"].(labelclient.CreateLabelInput)), true
 	case "Mutation.createMember":
 		if e.complexity.Mutation.CreateMember == nil {
 			break
@@ -731,7 +734,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateMember(childComplexity, args["input"].(member.CreateMemberInput)), true
+		return e.complexity.Mutation.CreateMember(childComplexity, args["input"].(memberclient.CreateMemberInput)), true
 	case "Mutation.createProduct":
 		if e.complexity.Mutation.CreateProduct == nil {
 			break
@@ -742,7 +745,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateProduct(childComplexity, args["input"].(product.CreateProductInput)), true
+		return e.complexity.Mutation.CreateProduct(childComplexity, args["input"].(productclient.CreateProductInput)), true
 	case "Mutation.createTag":
 		if e.complexity.Mutation.CreateTag == nil {
 			break
@@ -753,7 +756,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateTag(childComplexity, args["input"].(tag.CreateTagInput)), true
+		return e.complexity.Mutation.CreateTag(childComplexity, args["input"].(tagclient.CreateTagInput)), true
 	case "Mutation.createTodo":
 		if e.complexity.Mutation.CreateTodo == nil {
 			break
@@ -764,7 +767,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateTodo(childComplexity, args["input"].(todo.CreateTodoInput)), true
+		return e.complexity.Mutation.CreateTodo(childComplexity, args["input"].(todoclient.CreateTodoInput)), true
 	case "Mutation.createUser":
 		if e.complexity.Mutation.CreateUser == nil {
 			break
@@ -775,7 +778,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateUser(childComplexity, args["input"].(user.CreateUserInput)), true
+		return e.complexity.Mutation.CreateUser(childComplexity, args["input"].(userclient.CreateUserInput)), true
 	case "Mutation.createWorkspace":
 		if e.complexity.Mutation.CreateWorkspace == nil {
 			break
@@ -786,7 +789,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateWorkspace(childComplexity, args["input"].(workspace.CreateWorkspaceInput)), true
+		return e.complexity.Mutation.CreateWorkspace(childComplexity, args["input"].(workspaceclient.CreateWorkspaceInput)), true
 	case "Mutation.updateCategory":
 		if e.complexity.Mutation.UpdateCategory == nil {
 			break
@@ -797,7 +800,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateCategory(childComplexity, args["id"].(int), args["input"].(category.UpdateCategoryInput)), true
+		return e.complexity.Mutation.UpdateCategory(childComplexity, args["id"].(int), args["input"].(categoryclient.UpdateCategoryInput)), true
 	case "Mutation.updateComment":
 		if e.complexity.Mutation.UpdateComment == nil {
 			break
@@ -808,7 +811,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateComment(childComplexity, args["id"].(int), args["input"].(comment.UpdateCommentInput)), true
+		return e.complexity.Mutation.UpdateComment(childComplexity, args["id"].(int), args["input"].(commentclient.UpdateCommentInput)), true
 	case "Mutation.updateLabel":
 		if e.complexity.Mutation.UpdateLabel == nil {
 			break
@@ -819,7 +822,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateLabel(childComplexity, args["id"].(int), args["input"].(label.UpdateLabelInput)), true
+		return e.complexity.Mutation.UpdateLabel(childComplexity, args["id"].(int), args["input"].(labelclient.UpdateLabelInput)), true
 	case "Mutation.updateMember":
 		if e.complexity.Mutation.UpdateMember == nil {
 			break
@@ -830,7 +833,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateMember(childComplexity, args["id"].(int), args["input"].(member.UpdateMemberInput)), true
+		return e.complexity.Mutation.UpdateMember(childComplexity, args["id"].(int), args["input"].(memberclient.UpdateMemberInput)), true
 	case "Mutation.updateProduct":
 		if e.complexity.Mutation.UpdateProduct == nil {
 			break
@@ -841,7 +844,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateProduct(childComplexity, args["id"].(int), args["input"].(product.UpdateProductInput)), true
+		return e.complexity.Mutation.UpdateProduct(childComplexity, args["id"].(int), args["input"].(productclient.UpdateProductInput)), true
 	case "Mutation.updateTag":
 		if e.complexity.Mutation.UpdateTag == nil {
 			break
@@ -852,7 +855,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateTag(childComplexity, args["id"].(int), args["input"].(tag.UpdateTagInput)), true
+		return e.complexity.Mutation.UpdateTag(childComplexity, args["id"].(int), args["input"].(tagclient.UpdateTagInput)), true
 	case "Mutation.updateTodo":
 		if e.complexity.Mutation.UpdateTodo == nil {
 			break
@@ -863,7 +866,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateTodo(childComplexity, args["id"].(int), args["input"].(todo.UpdateTodoInput)), true
+		return e.complexity.Mutation.UpdateTodo(childComplexity, args["id"].(int), args["input"].(todoclient.UpdateTodoInput)), true
 	case "Mutation.updateUser":
 		if e.complexity.Mutation.UpdateUser == nil {
 			break
@@ -874,7 +877,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(int), args["input"].(user.UpdateUserInput)), true
+		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(int), args["input"].(userclient.UpdateUserInput)), true
 	case "Mutation.updateWorkspace":
 		if e.complexity.Mutation.UpdateWorkspace == nil {
 			break
@@ -885,7 +888,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateWorkspace(childComplexity, args["id"].(int), args["input"].(workspace.UpdateWorkspaceInput)), true
+		return e.complexity.Mutation.UpdateWorkspace(childComplexity, args["id"].(int), args["input"].(workspaceclient.UpdateWorkspaceInput)), true
 
 	case "PageInfo.endCursor":
 		if e.complexity.PageInfo.EndCursor == nil {
@@ -2372,7 +2375,7 @@ enum CategoryOrderField @goModel(model: "example.com/fullgql/velox/entity.Catego
   NAME
 }
 
-input CreateCategoryInput @goModel(model: "example.com/fullgql/velox/category.CreateCategoryInput") {
+input CreateCategoryInput @goModel(model: "example.com/fullgql/velox/client/category.CreateCategoryInput") {
   name: String!
   description: String
   todoIDs: [ID!]
@@ -2380,7 +2383,7 @@ input CreateCategoryInput @goModel(model: "example.com/fullgql/velox/category.Cr
   childIDs: [ID!]
 }
 
-input UpdateCategoryInput @goModel(model: "example.com/fullgql/velox/category.UpdateCategoryInput") {
+input UpdateCategoryInput @goModel(model: "example.com/fullgql/velox/client/category.UpdateCategoryInput") {
   name: String
   description: String
   clearDescription: Boolean
@@ -2394,13 +2397,13 @@ input UpdateCategoryInput @goModel(model: "example.com/fullgql/velox/category.Up
   removeChildIDs: [ID!]
 }
 
-input CreateCommentInput @goModel(model: "example.com/fullgql/velox/comment.CreateCommentInput") {
+input CreateCommentInput @goModel(model: "example.com/fullgql/velox/client/comment.CreateCommentInput") {
   content: String!
   todoID: ID!
   authorID: ID!
 }
 
-input UpdateCommentInput @goModel(model: "example.com/fullgql/velox/comment.UpdateCommentInput") {
+input UpdateCommentInput @goModel(model: "example.com/fullgql/velox/client/comment.UpdateCommentInput") {
   content: String
   todoID: ID
   authorID: ID
@@ -2444,12 +2447,12 @@ enum LabelOrderField @goModel(model: "example.com/fullgql/velox/entity.LabelOrde
   COLOR
 }
 
-input CreateLabelInput @goModel(model: "example.com/fullgql/velox/label.CreateLabelInput") {
+input CreateLabelInput @goModel(model: "example.com/fullgql/velox/client/label.CreateLabelInput") {
   name: String!
   color: String
 }
 
-input UpdateLabelInput @goModel(model: "example.com/fullgql/velox/label.UpdateLabelInput") {
+input UpdateLabelInput @goModel(model: "example.com/fullgql/velox/client/label.UpdateLabelInput") {
   name: String
   color: String
 }
@@ -2470,7 +2473,7 @@ input MemberWhereInput @goModel(model: "example.com/fullgql/velox/filter.MemberW
   roleNotIn: [MemberRole!]
 }
 
-input CreateMemberInput @goModel(model: "example.com/fullgql/velox/member.CreateMemberInput") {
+input CreateMemberInput @goModel(model: "example.com/fullgql/velox/client/member.CreateMemberInput") {
   role: MemberRole
   inviteToken: String
   accepted: Boolean
@@ -2478,7 +2481,7 @@ input CreateMemberInput @goModel(model: "example.com/fullgql/velox/member.Create
   userID: ID!
 }
 
-input UpdateMemberInput @goModel(model: "example.com/fullgql/velox/member.UpdateMemberInput") {
+input UpdateMemberInput @goModel(model: "example.com/fullgql/velox/client/member.UpdateMemberInput") {
   role: MemberRole
   inviteToken: String
   clearInviteToken: Boolean
@@ -2556,7 +2559,7 @@ enum ProductOrderField @goModel(model: "example.com/fullgql/velox/entity.Product
   PUBLISHED
 }
 
-input CreateProductInput @goModel(model: "example.com/fullgql/velox/product.CreateProductInput") {
+input CreateProductInput @goModel(model: "example.com/fullgql/velox/client/product.CreateProductInput") {
   name: String!
   price: Float!
   stock: Int
@@ -2565,7 +2568,7 @@ input CreateProductInput @goModel(model: "example.com/fullgql/velox/product.Crea
   tagIDs: [ID!]
 }
 
-input UpdateProductInput @goModel(model: "example.com/fullgql/velox/product.UpdateProductInput") {
+input UpdateProductInput @goModel(model: "example.com/fullgql/velox/client/product.UpdateProductInput") {
   name: String
   price: Float
   stock: Int
@@ -2619,11 +2622,11 @@ enum TagOrderField @goModel(model: "example.com/fullgql/velox/entity.TagOrderFie
   NAME
 }
 
-input CreateTagInput @goModel(model: "example.com/fullgql/velox/tag.CreateTagInput") {
+input CreateTagInput @goModel(model: "example.com/fullgql/velox/client/tag.CreateTagInput") {
   name: String!
 }
 
-input UpdateTagInput @goModel(model: "example.com/fullgql/velox/tag.UpdateTagInput") {
+input UpdateTagInput @goModel(model: "example.com/fullgql/velox/client/tag.UpdateTagInput") {
   name: String
 }
 
@@ -2731,7 +2734,7 @@ enum TodoOrderField @goModel(model: "example.com/fullgql/velox/entity.TodoOrderF
   ESTIMATED_HOURS
 }
 
-input CreateTodoInput @goModel(model: "example.com/fullgql/velox/todo.CreateTodoInput") {
+input CreateTodoInput @goModel(model: "example.com/fullgql/velox/client/todo.CreateTodoInput") {
   title: String!
   description: String
   status: TodoStatus
@@ -2747,7 +2750,7 @@ input CreateTodoInput @goModel(model: "example.com/fullgql/velox/todo.CreateTodo
   workspaceID: ID
 }
 
-input UpdateTodoInput @goModel(model: "example.com/fullgql/velox/todo.UpdateTodoInput") {
+input UpdateTodoInput @goModel(model: "example.com/fullgql/velox/client/todo.UpdateTodoInput") {
   title: String
   description: String
   clearDescription: Boolean
@@ -2861,7 +2864,7 @@ enum UserOrderField @goModel(model: "example.com/fullgql/velox/entity.UserOrderF
   ACTIVE
 }
 
-input CreateUserInput @goModel(model: "example.com/fullgql/velox/user.CreateUserInput") {
+input CreateUserInput @goModel(model: "example.com/fullgql/velox/client/user.CreateUserInput") {
   name: String!
   email: String!
   age: Int
@@ -2874,7 +2877,7 @@ input CreateUserInput @goModel(model: "example.com/fullgql/velox/user.CreateUser
   auditLogIDs: [ID!]
 }
 
-input UpdateUserInput @goModel(model: "example.com/fullgql/velox/user.UpdateUserInput") {
+input UpdateUserInput @goModel(model: "example.com/fullgql/velox/client/user.UpdateUserInput") {
   name: String
   age: Int
   clearAge: Boolean
@@ -2943,7 +2946,7 @@ enum WorkspaceOrderField @goModel(model: "example.com/fullgql/velox/entity.Works
   ACTIVE
 }
 
-input CreateWorkspaceInput @goModel(model: "example.com/fullgql/velox/workspace.CreateWorkspaceInput") {
+input CreateWorkspaceInput @goModel(model: "example.com/fullgql/velox/client/workspace.CreateWorkspaceInput") {
   name: String!
   description: String
   deletedAt: Time
@@ -2952,7 +2955,7 @@ input CreateWorkspaceInput @goModel(model: "example.com/fullgql/velox/workspace.
   todoIDs: [ID!]
 }
 
-input UpdateWorkspaceInput @goModel(model: "example.com/fullgql/velox/workspace.UpdateWorkspaceInput") {
+input UpdateWorkspaceInput @goModel(model: "example.com/fullgql/velox/client/workspace.UpdateWorkspaceInput") {
   name: String
   description: String
   clearDescription: Boolean
@@ -3591,7 +3594,7 @@ func (ec *executionContext) field_Label_todos_args(ctx context.Context, rawArgs 
 func (ec *executionContext) field_Mutation_createCategory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋcategoryᚐCreateCategoryInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcategoryᚐCreateCategoryInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3602,7 +3605,7 @@ func (ec *executionContext) field_Mutation_createCategory_args(ctx context.Conte
 func (ec *executionContext) field_Mutation_createComment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋcommentᚐCreateCommentInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcommentᚐCreateCommentInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3613,7 +3616,7 @@ func (ec *executionContext) field_Mutation_createComment_args(ctx context.Contex
 func (ec *executionContext) field_Mutation_createLabel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋlabelᚐCreateLabelInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋlabelᚐCreateLabelInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3624,7 +3627,7 @@ func (ec *executionContext) field_Mutation_createLabel_args(ctx context.Context,
 func (ec *executionContext) field_Mutation_createMember_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐCreateMemberInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋmemberᚐCreateMemberInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3635,7 +3638,7 @@ func (ec *executionContext) field_Mutation_createMember_args(ctx context.Context
 func (ec *executionContext) field_Mutation_createProduct_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋproductᚐCreateProductInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋproductᚐCreateProductInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3646,7 +3649,7 @@ func (ec *executionContext) field_Mutation_createProduct_args(ctx context.Contex
 func (ec *executionContext) field_Mutation_createTag_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋtagᚐCreateTagInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtagᚐCreateTagInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3657,7 +3660,7 @@ func (ec *executionContext) field_Mutation_createTag_args(ctx context.Context, r
 func (ec *executionContext) field_Mutation_createTodo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐCreateTodoInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtodoᚐCreateTodoInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3668,7 +3671,7 @@ func (ec *executionContext) field_Mutation_createTodo_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐCreateUserInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋuserᚐCreateUserInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3679,7 +3682,7 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_createWorkspace_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋworkspaceᚐCreateWorkspaceInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋworkspaceᚐCreateWorkspaceInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3695,7 +3698,7 @@ func (ec *executionContext) field_Mutation_updateCategory_args(ctx context.Conte
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋcategoryᚐUpdateCategoryInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcategoryᚐUpdateCategoryInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3711,7 +3714,7 @@ func (ec *executionContext) field_Mutation_updateComment_args(ctx context.Contex
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋcommentᚐUpdateCommentInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcommentᚐUpdateCommentInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3727,7 +3730,7 @@ func (ec *executionContext) field_Mutation_updateLabel_args(ctx context.Context,
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋlabelᚐUpdateLabelInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋlabelᚐUpdateLabelInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3743,7 +3746,7 @@ func (ec *executionContext) field_Mutation_updateMember_args(ctx context.Context
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐUpdateMemberInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋmemberᚐUpdateMemberInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3759,7 +3762,7 @@ func (ec *executionContext) field_Mutation_updateProduct_args(ctx context.Contex
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋproductᚐUpdateProductInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋproductᚐUpdateProductInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3775,7 +3778,7 @@ func (ec *executionContext) field_Mutation_updateTag_args(ctx context.Context, r
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋtagᚐUpdateTagInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtagᚐUpdateTagInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3791,7 +3794,7 @@ func (ec *executionContext) field_Mutation_updateTodo_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐUpdateTodoInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtodoᚐUpdateTodoInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3807,7 +3810,7 @@ func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐUpdateUserInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋuserᚐUpdateUserInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3823,7 +3826,7 @@ func (ec *executionContext) field_Mutation_updateWorkspace_args(ctx context.Cont
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋworkspaceᚐUpdateWorkspaceInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋworkspaceᚐUpdateWorkspaceInput)
 	if err != nil {
 		return nil, err
 	}
@@ -5818,7 +5821,7 @@ func (ec *executionContext) _Member_role(ctx context.Context, field graphql.Coll
 			return obj.Role, nil
 		},
 		nil,
-		ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole,
+		ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole,
 		true,
 		true,
 	)
@@ -6009,7 +6012,7 @@ func (ec *executionContext) _Mutation_createCategory(ctx context.Context, field 
 		ec.fieldContext_Mutation_createCategory,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateCategory(ctx, fc.Args["input"].(category.CreateCategoryInput))
+			return ec.resolvers.Mutation().CreateCategory(ctx, fc.Args["input"].(categoryclient.CreateCategoryInput))
 		},
 		nil,
 		ec.marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
@@ -6068,7 +6071,7 @@ func (ec *executionContext) _Mutation_updateCategory(ctx context.Context, field 
 		ec.fieldContext_Mutation_updateCategory,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateCategory(ctx, fc.Args["id"].(int), fc.Args["input"].(category.UpdateCategoryInput))
+			return ec.resolvers.Mutation().UpdateCategory(ctx, fc.Args["id"].(int), fc.Args["input"].(categoryclient.UpdateCategoryInput))
 		},
 		nil,
 		ec.marshalNCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory,
@@ -6127,7 +6130,7 @@ func (ec *executionContext) _Mutation_createComment(ctx context.Context, field g
 		ec.fieldContext_Mutation_createComment,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateComment(ctx, fc.Args["input"].(comment.CreateCommentInput))
+			return ec.resolvers.Mutation().CreateComment(ctx, fc.Args["input"].(commentclient.CreateCommentInput))
 		},
 		nil,
 		ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment,
@@ -6182,7 +6185,7 @@ func (ec *executionContext) _Mutation_updateComment(ctx context.Context, field g
 		ec.fieldContext_Mutation_updateComment,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateComment(ctx, fc.Args["id"].(int), fc.Args["input"].(comment.UpdateCommentInput))
+			return ec.resolvers.Mutation().UpdateComment(ctx, fc.Args["id"].(int), fc.Args["input"].(commentclient.UpdateCommentInput))
 		},
 		nil,
 		ec.marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐComment,
@@ -6237,7 +6240,7 @@ func (ec *executionContext) _Mutation_createLabel(ctx context.Context, field gra
 		ec.fieldContext_Mutation_createLabel,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateLabel(ctx, fc.Args["input"].(label.CreateLabelInput))
+			return ec.resolvers.Mutation().CreateLabel(ctx, fc.Args["input"].(labelclient.CreateLabelInput))
 		},
 		nil,
 		ec.marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel,
@@ -6288,7 +6291,7 @@ func (ec *executionContext) _Mutation_updateLabel(ctx context.Context, field gra
 		ec.fieldContext_Mutation_updateLabel,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["id"].(int), fc.Args["input"].(label.UpdateLabelInput))
+			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["id"].(int), fc.Args["input"].(labelclient.UpdateLabelInput))
 		},
 		nil,
 		ec.marshalNLabel2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabel,
@@ -6339,7 +6342,7 @@ func (ec *executionContext) _Mutation_createMember(ctx context.Context, field gr
 		ec.fieldContext_Mutation_createMember,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateMember(ctx, fc.Args["input"].(member.CreateMemberInput))
+			return ec.resolvers.Mutation().CreateMember(ctx, fc.Args["input"].(memberclient.CreateMemberInput))
 		},
 		nil,
 		ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember,
@@ -6398,7 +6401,7 @@ func (ec *executionContext) _Mutation_updateMember(ctx context.Context, field gr
 		ec.fieldContext_Mutation_updateMember,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateMember(ctx, fc.Args["id"].(int), fc.Args["input"].(member.UpdateMemberInput))
+			return ec.resolvers.Mutation().UpdateMember(ctx, fc.Args["id"].(int), fc.Args["input"].(memberclient.UpdateMemberInput))
 		},
 		nil,
 		ec.marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMember,
@@ -6457,7 +6460,7 @@ func (ec *executionContext) _Mutation_createProduct(ctx context.Context, field g
 		ec.fieldContext_Mutation_createProduct,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateProduct(ctx, fc.Args["input"].(product.CreateProductInput))
+			return ec.resolvers.Mutation().CreateProduct(ctx, fc.Args["input"].(productclient.CreateProductInput))
 		},
 		nil,
 		ec.marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct,
@@ -6518,7 +6521,7 @@ func (ec *executionContext) _Mutation_updateProduct(ctx context.Context, field g
 		ec.fieldContext_Mutation_updateProduct,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateProduct(ctx, fc.Args["id"].(int), fc.Args["input"].(product.UpdateProductInput))
+			return ec.resolvers.Mutation().UpdateProduct(ctx, fc.Args["id"].(int), fc.Args["input"].(productclient.UpdateProductInput))
 		},
 		nil,
 		ec.marshalNProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct,
@@ -6579,7 +6582,7 @@ func (ec *executionContext) _Mutation_createTag(ctx context.Context, field graph
 		ec.fieldContext_Mutation_createTag,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateTag(ctx, fc.Args["input"].(tag.CreateTagInput))
+			return ec.resolvers.Mutation().CreateTag(ctx, fc.Args["input"].(tagclient.CreateTagInput))
 		},
 		nil,
 		ec.marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag,
@@ -6630,7 +6633,7 @@ func (ec *executionContext) _Mutation_updateTag(ctx context.Context, field graph
 		ec.fieldContext_Mutation_updateTag,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateTag(ctx, fc.Args["id"].(int), fc.Args["input"].(tag.UpdateTagInput))
+			return ec.resolvers.Mutation().UpdateTag(ctx, fc.Args["id"].(int), fc.Args["input"].(tagclient.UpdateTagInput))
 		},
 		nil,
 		ec.marshalNTag2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTag,
@@ -6681,7 +6684,7 @@ func (ec *executionContext) _Mutation_createTodo(ctx context.Context, field grap
 		ec.fieldContext_Mutation_createTodo,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateTodo(ctx, fc.Args["input"].(todo.CreateTodoInput))
+			return ec.resolvers.Mutation().CreateTodo(ctx, fc.Args["input"].(todoclient.CreateTodoInput))
 		},
 		nil,
 		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
@@ -6756,7 +6759,7 @@ func (ec *executionContext) _Mutation_updateTodo(ctx context.Context, field grap
 		ec.fieldContext_Mutation_updateTodo,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateTodo(ctx, fc.Args["id"].(int), fc.Args["input"].(todo.UpdateTodoInput))
+			return ec.resolvers.Mutation().UpdateTodo(ctx, fc.Args["id"].(int), fc.Args["input"].(todoclient.UpdateTodoInput))
 		},
 		nil,
 		ec.marshalNTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
@@ -6831,7 +6834,7 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 		ec.fieldContext_Mutation_createUser,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(user.CreateUserInput))
+			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(userclient.CreateUserInput))
 		},
 		nil,
 		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
@@ -6900,7 +6903,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 		ec.fieldContext_Mutation_updateUser,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(int), fc.Args["input"].(user.UpdateUserInput))
+			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(int), fc.Args["input"].(userclient.UpdateUserInput))
 		},
 		nil,
 		ec.marshalNUser2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUser,
@@ -6969,7 +6972,7 @@ func (ec *executionContext) _Mutation_createWorkspace(ctx context.Context, field
 		ec.fieldContext_Mutation_createWorkspace,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateWorkspace(ctx, fc.Args["input"].(workspace.CreateWorkspaceInput))
+			return ec.resolvers.Mutation().CreateWorkspace(ctx, fc.Args["input"].(workspaceclient.CreateWorkspaceInput))
 		},
 		nil,
 		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
@@ -7030,7 +7033,7 @@ func (ec *executionContext) _Mutation_updateWorkspace(ctx context.Context, field
 		ec.fieldContext_Mutation_updateWorkspace,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateWorkspace(ctx, fc.Args["id"].(int), fc.Args["input"].(workspace.UpdateWorkspaceInput))
+			return ec.resolvers.Mutation().UpdateWorkspace(ctx, fc.Args["id"].(int), fc.Args["input"].(workspaceclient.UpdateWorkspaceInput))
 		},
 		nil,
 		ec.marshalNWorkspace2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐWorkspace,
@@ -8815,7 +8818,7 @@ func (ec *executionContext) _Todo_status(ctx context.Context, field graphql.Coll
 			return obj.Status, nil
 		},
 		nil,
-		ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus,
+		ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus,
 		true,
 		true,
 	)
@@ -8844,7 +8847,7 @@ func (ec *executionContext) _Todo_priority(ctx context.Context, field graphql.Co
 			return obj.Priority, nil
 		},
 		nil,
-		ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority,
+		ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority,
 		true,
 		true,
 	)
@@ -9652,7 +9655,7 @@ func (ec *executionContext) _User_role(ctx context.Context, field graphql.Collec
 			return obj.Role, nil
 		},
 		nil,
-		ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole,
+		ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole,
 		true,
 		true,
 	)
@@ -12305,8 +12308,8 @@ func (ec *executionContext) unmarshalInputCategoryWhereInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateCategoryInput(ctx context.Context, obj any) (category.CreateCategoryInput, error) {
-	var it category.CreateCategoryInput
+func (ec *executionContext) unmarshalInputCreateCategoryInput(ctx context.Context, obj any) (categoryclient.CreateCategoryInput, error) {
+	var it categoryclient.CreateCategoryInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12360,8 +12363,8 @@ func (ec *executionContext) unmarshalInputCreateCategoryInput(ctx context.Contex
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateCommentInput(ctx context.Context, obj any) (comment.CreateCommentInput, error) {
-	var it comment.CreateCommentInput
+func (ec *executionContext) unmarshalInputCreateCommentInput(ctx context.Context, obj any) (commentclient.CreateCommentInput, error) {
+	var it commentclient.CreateCommentInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12401,8 +12404,8 @@ func (ec *executionContext) unmarshalInputCreateCommentInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateLabelInput(ctx context.Context, obj any) (label.CreateLabelInput, error) {
-	var it label.CreateLabelInput
+func (ec *executionContext) unmarshalInputCreateLabelInput(ctx context.Context, obj any) (labelclient.CreateLabelInput, error) {
+	var it labelclient.CreateLabelInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12435,8 +12438,8 @@ func (ec *executionContext) unmarshalInputCreateLabelInput(ctx context.Context, 
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateMemberInput(ctx context.Context, obj any) (member.CreateMemberInput, error) {
-	var it member.CreateMemberInput
+func (ec *executionContext) unmarshalInputCreateMemberInput(ctx context.Context, obj any) (memberclient.CreateMemberInput, error) {
+	var it memberclient.CreateMemberInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12451,7 +12454,7 @@ func (ec *executionContext) unmarshalInputCreateMemberInput(ctx context.Context,
 		switch k {
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12490,8 +12493,8 @@ func (ec *executionContext) unmarshalInputCreateMemberInput(ctx context.Context,
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateProductInput(ctx context.Context, obj any) (product.CreateProductInput, error) {
-	var it product.CreateProductInput
+func (ec *executionContext) unmarshalInputCreateProductInput(ctx context.Context, obj any) (productclient.CreateProductInput, error) {
+	var it productclient.CreateProductInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12554,8 +12557,8 @@ func (ec *executionContext) unmarshalInputCreateProductInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateTagInput(ctx context.Context, obj any) (tag.CreateTagInput, error) {
-	var it tag.CreateTagInput
+func (ec *executionContext) unmarshalInputCreateTagInput(ctx context.Context, obj any) (tagclient.CreateTagInput, error) {
+	var it tagclient.CreateTagInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12581,8 +12584,8 @@ func (ec *executionContext) unmarshalInputCreateTagInput(ctx context.Context, ob
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateTodoInput(ctx context.Context, obj any) (todo.CreateTodoInput, error) {
-	var it todo.CreateTodoInput
+func (ec *executionContext) unmarshalInputCreateTodoInput(ctx context.Context, obj any) (todoclient.CreateTodoInput, error) {
+	var it todoclient.CreateTodoInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12611,14 +12614,14 @@ func (ec *executionContext) unmarshalInputCreateTodoInput(ctx context.Context, o
 			it.Description = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12692,8 +12695,8 @@ func (ec *executionContext) unmarshalInputCreateTodoInput(ctx context.Context, o
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, obj any) (user.CreateUserInput, error) {
-	var it user.CreateUserInput
+func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, obj any) (userclient.CreateUserInput, error) {
+	var it userclient.CreateUserInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12736,7 +12739,7 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 			it.Bio = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -12782,8 +12785,8 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateWorkspaceInput(ctx context.Context, obj any) (workspace.CreateWorkspaceInput, error) {
-	var it workspace.CreateWorkspaceInput
+func (ec *executionContext) unmarshalInputCreateWorkspaceInput(ctx context.Context, obj any) (workspaceclient.CreateWorkspaceInput, error) {
+	var it workspaceclient.CreateWorkspaceInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -12995,28 +12998,28 @@ func (ec *executionContext) unmarshalInputMemberWhereInput(ctx context.Context, 
 			it.Or = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Role = data
 		case "roleNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNEQ"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleNEQ = data
 		case "roleIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleIn"))
-			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleIn = data
 		case "roleNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNotIn"))
-			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13505,56 +13508,56 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 			it.TitleContains = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "statusNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNEQ"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusNEQ = data
 		case "statusIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusIn"))
-			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusIn = data
 		case "statusNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNotIn"))
-			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusNotIn = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Priority = data
 		case "priorityNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityNEQ"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.PriorityNEQ = data
 		case "priorityIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityIn"))
-			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriorityᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.PriorityIn = data
 		case "priorityNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priorityNotIn"))
-			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriorityᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13761,8 +13764,8 @@ func (ec *executionContext) unmarshalInputTodoWhereInput(ctx context.Context, ob
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateCategoryInput(ctx context.Context, obj any) (category.UpdateCategoryInput, error) {
-	var it category.UpdateCategoryInput
+func (ec *executionContext) unmarshalInputUpdateCategoryInput(ctx context.Context, obj any) (categoryclient.UpdateCategoryInput, error) {
+	var it categoryclient.UpdateCategoryInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13858,8 +13861,8 @@ func (ec *executionContext) unmarshalInputUpdateCategoryInput(ctx context.Contex
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateCommentInput(ctx context.Context, obj any) (comment.UpdateCommentInput, error) {
-	var it comment.UpdateCommentInput
+func (ec *executionContext) unmarshalInputUpdateCommentInput(ctx context.Context, obj any) (commentclient.UpdateCommentInput, error) {
+	var it commentclient.UpdateCommentInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13899,8 +13902,8 @@ func (ec *executionContext) unmarshalInputUpdateCommentInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateLabelInput(ctx context.Context, obj any) (label.UpdateLabelInput, error) {
-	var it label.UpdateLabelInput
+func (ec *executionContext) unmarshalInputUpdateLabelInput(ctx context.Context, obj any) (labelclient.UpdateLabelInput, error) {
+	var it labelclient.UpdateLabelInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13933,8 +13936,8 @@ func (ec *executionContext) unmarshalInputUpdateLabelInput(ctx context.Context, 
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateMemberInput(ctx context.Context, obj any) (member.UpdateMemberInput, error) {
-	var it member.UpdateMemberInput
+func (ec *executionContext) unmarshalInputUpdateMemberInput(ctx context.Context, obj any) (memberclient.UpdateMemberInput, error) {
+	var it memberclient.UpdateMemberInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -13949,7 +13952,7 @@ func (ec *executionContext) unmarshalInputUpdateMemberInput(ctx context.Context,
 		switch k {
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, v)
+			data, err := ec.unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13995,8 +13998,8 @@ func (ec *executionContext) unmarshalInputUpdateMemberInput(ctx context.Context,
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateProductInput(ctx context.Context, obj any) (product.UpdateProductInput, error) {
-	var it product.UpdateProductInput
+func (ec *executionContext) unmarshalInputUpdateProductInput(ctx context.Context, obj any) (productclient.UpdateProductInput, error) {
+	var it productclient.UpdateProductInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14080,8 +14083,8 @@ func (ec *executionContext) unmarshalInputUpdateProductInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateTagInput(ctx context.Context, obj any) (tag.UpdateTagInput, error) {
-	var it tag.UpdateTagInput
+func (ec *executionContext) unmarshalInputUpdateTagInput(ctx context.Context, obj any) (tagclient.UpdateTagInput, error) {
+	var it tagclient.UpdateTagInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14107,8 +14110,8 @@ func (ec *executionContext) unmarshalInputUpdateTagInput(ctx context.Context, ob
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateTodoInput(ctx context.Context, obj any) (todo.UpdateTodoInput, error) {
-	var it todo.UpdateTodoInput
+func (ec *executionContext) unmarshalInputUpdateTodoInput(ctx context.Context, obj any) (todoclient.UpdateTodoInput, error) {
+	var it todoclient.UpdateTodoInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14144,14 +14147,14 @@ func (ec *executionContext) unmarshalInputUpdateTodoInput(ctx context.Context, o
 			it.ClearDescription = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, v)
+			data, err := ec.unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, v)
+			data, err := ec.unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14295,8 +14298,8 @@ func (ec *executionContext) unmarshalInputUpdateTodoInput(ctx context.Context, o
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, obj any) (user.UpdateUserInput, error) {
-	var it user.UpdateUserInput
+func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, obj any) (userclient.UpdateUserInput, error) {
+	var it userclient.UpdateUserInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14346,7 +14349,7 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 			it.ClearBio = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -14448,8 +14451,8 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateWorkspaceInput(ctx context.Context, obj any) (workspace.UpdateWorkspaceInput, error) {
-	var it workspace.UpdateWorkspaceInput
+func (ec *executionContext) unmarshalInputUpdateWorkspaceInput(ctx context.Context, obj any) (workspaceclient.UpdateWorkspaceInput, error) {
+	var it workspaceclient.UpdateWorkspaceInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14767,28 +14770,28 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			it.AgeNotNil = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Role = data
 		case "roleNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNEQ"))
-			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleNEQ = data
 		case "roleIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleIn"))
-			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleIn = data
 		case "roleNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNotIn"))
-			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -18197,47 +18200,47 @@ func (ec *executionContext) marshalNComment2ᚖexampleᚗcomᚋfullgqlᚋvelox�
 	return ec._Comment(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNCreateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋcategoryᚐCreateCategoryInput(ctx context.Context, v any) (category.CreateCategoryInput, error) {
+func (ec *executionContext) unmarshalNCreateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcategoryᚐCreateCategoryInput(ctx context.Context, v any) (categoryclient.CreateCategoryInput, error) {
 	res, err := ec.unmarshalInputCreateCategoryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋcommentᚐCreateCommentInput(ctx context.Context, v any) (comment.CreateCommentInput, error) {
+func (ec *executionContext) unmarshalNCreateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcommentᚐCreateCommentInput(ctx context.Context, v any) (commentclient.CreateCommentInput, error) {
 	res, err := ec.unmarshalInputCreateCommentInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋlabelᚐCreateLabelInput(ctx context.Context, v any) (label.CreateLabelInput, error) {
+func (ec *executionContext) unmarshalNCreateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋlabelᚐCreateLabelInput(ctx context.Context, v any) (labelclient.CreateLabelInput, error) {
 	res, err := ec.unmarshalInputCreateLabelInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐCreateMemberInput(ctx context.Context, v any) (member.CreateMemberInput, error) {
+func (ec *executionContext) unmarshalNCreateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋmemberᚐCreateMemberInput(ctx context.Context, v any) (memberclient.CreateMemberInput, error) {
 	res, err := ec.unmarshalInputCreateMemberInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋproductᚐCreateProductInput(ctx context.Context, v any) (product.CreateProductInput, error) {
+func (ec *executionContext) unmarshalNCreateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋproductᚐCreateProductInput(ctx context.Context, v any) (productclient.CreateProductInput, error) {
 	res, err := ec.unmarshalInputCreateProductInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋtagᚐCreateTagInput(ctx context.Context, v any) (tag.CreateTagInput, error) {
+func (ec *executionContext) unmarshalNCreateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtagᚐCreateTagInput(ctx context.Context, v any) (tagclient.CreateTagInput, error) {
 	res, err := ec.unmarshalInputCreateTagInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐCreateTodoInput(ctx context.Context, v any) (todo.CreateTodoInput, error) {
+func (ec *executionContext) unmarshalNCreateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtodoᚐCreateTodoInput(ctx context.Context, v any) (todoclient.CreateTodoInput, error) {
 	res, err := ec.unmarshalInputCreateTodoInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐCreateUserInput(ctx context.Context, v any) (user.CreateUserInput, error) {
+func (ec *executionContext) unmarshalNCreateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋuserᚐCreateUserInput(ctx context.Context, v any) (userclient.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋworkspaceᚐCreateWorkspaceInput(ctx context.Context, v any) (workspace.CreateWorkspaceInput, error) {
+func (ec *executionContext) unmarshalNCreateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋworkspaceᚐCreateWorkspaceInput(ctx context.Context, v any) (workspaceclient.CreateWorkspaceInput, error) {
 	res, err := ec.unmarshalInputCreateWorkspaceInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18447,13 +18450,13 @@ func (ec *executionContext) marshalNMember2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋ
 	return ec._Member(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, v any) (entity.MemberRole, error) {
-	var res entity.MemberRole
+func (ec *executionContext) unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx context.Context, v any) (member.Role, error) {
+	var res member.Role
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v entity.MemberRole) graphql.Marshaler {
+func (ec *executionContext) marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx context.Context, sel ast.SelectionSet, v member.Role) graphql.Marshaler {
 	return v
 }
 
@@ -18718,23 +18721,23 @@ func (ec *executionContext) marshalNTodoOrderField2ᚖexampleᚗcomᚋfullgqlᚋ
 	return v
 }
 
-func (ec *executionContext) unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, v any) (todo.Priority, error) {
+func (ec *executionContext) unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx context.Context, v any) (todo.Priority, error) {
 	var res todo.Priority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, sel ast.SelectionSet, v todo.Priority) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx context.Context, sel ast.SelectionSet, v todo.Priority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, v any) (todo.Status, error) {
+func (ec *executionContext) unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx context.Context, v any) (todo.Status, error) {
 	var res todo.Status
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, sel ast.SelectionSet, v todo.Status) graphql.Marshaler {
+func (ec *executionContext) marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx context.Context, sel ast.SelectionSet, v todo.Status) graphql.Marshaler {
 	return v
 }
 
@@ -18743,47 +18746,47 @@ func (ec *executionContext) unmarshalNTodoWhereInput2ᚖexampleᚗcomᚋfullgql�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋcategoryᚐUpdateCategoryInput(ctx context.Context, v any) (category.UpdateCategoryInput, error) {
+func (ec *executionContext) unmarshalNUpdateCategoryInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcategoryᚐUpdateCategoryInput(ctx context.Context, v any) (categoryclient.UpdateCategoryInput, error) {
 	res, err := ec.unmarshalInputUpdateCategoryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋcommentᚐUpdateCommentInput(ctx context.Context, v any) (comment.UpdateCommentInput, error) {
+func (ec *executionContext) unmarshalNUpdateCommentInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋcommentᚐUpdateCommentInput(ctx context.Context, v any) (commentclient.UpdateCommentInput, error) {
 	res, err := ec.unmarshalInputUpdateCommentInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋlabelᚐUpdateLabelInput(ctx context.Context, v any) (label.UpdateLabelInput, error) {
+func (ec *executionContext) unmarshalNUpdateLabelInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋlabelᚐUpdateLabelInput(ctx context.Context, v any) (labelclient.UpdateLabelInput, error) {
 	res, err := ec.unmarshalInputUpdateLabelInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐUpdateMemberInput(ctx context.Context, v any) (member.UpdateMemberInput, error) {
+func (ec *executionContext) unmarshalNUpdateMemberInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋmemberᚐUpdateMemberInput(ctx context.Context, v any) (memberclient.UpdateMemberInput, error) {
 	res, err := ec.unmarshalInputUpdateMemberInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋproductᚐUpdateProductInput(ctx context.Context, v any) (product.UpdateProductInput, error) {
+func (ec *executionContext) unmarshalNUpdateProductInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋproductᚐUpdateProductInput(ctx context.Context, v any) (productclient.UpdateProductInput, error) {
 	res, err := ec.unmarshalInputUpdateProductInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋtagᚐUpdateTagInput(ctx context.Context, v any) (tag.UpdateTagInput, error) {
+func (ec *executionContext) unmarshalNUpdateTagInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtagᚐUpdateTagInput(ctx context.Context, v any) (tagclient.UpdateTagInput, error) {
 	res, err := ec.unmarshalInputUpdateTagInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐUpdateTodoInput(ctx context.Context, v any) (todo.UpdateTodoInput, error) {
+func (ec *executionContext) unmarshalNUpdateTodoInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋtodoᚐUpdateTodoInput(ctx context.Context, v any) (todoclient.UpdateTodoInput, error) {
 	res, err := ec.unmarshalInputUpdateTodoInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐUpdateUserInput(ctx context.Context, v any) (user.UpdateUserInput, error) {
+func (ec *executionContext) unmarshalNUpdateUserInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋuserᚐUpdateUserInput(ctx context.Context, v any) (userclient.UpdateUserInput, error) {
 	res, err := ec.unmarshalInputUpdateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋworkspaceᚐUpdateWorkspaceInput(ctx context.Context, v any) (workspace.UpdateWorkspaceInput, error) {
+func (ec *executionContext) unmarshalNUpdateWorkspaceInput2exampleᚗcomᚋfullgqlᚋveloxᚋclientᚋworkspaceᚐUpdateWorkspaceInput(ctx context.Context, v any) (workspaceclient.UpdateWorkspaceInput, error) {
 	res, err := ec.unmarshalInputUpdateWorkspaceInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
@@ -18842,13 +18845,13 @@ func (ec *executionContext) marshalNUserOrderField2ᚖexampleᚗcomᚋfullgqlᚋ
 	return v
 }
 
-func (ec *executionContext) unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, v any) (user.Role, error) {
+func (ec *executionContext) unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx context.Context, v any) (user.Role, error) {
 	var res user.Role
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, sel ast.SelectionSet, v user.Role) graphql.Marshaler {
+func (ec *executionContext) marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx context.Context, sel ast.SelectionSet, v user.Role) graphql.Marshaler {
 	return v
 }
 
@@ -19596,7 +19599,7 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚖexampleᚗcomᚋfullgql
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx context.Context, v any) ([]member.Role, error) {
+func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRoleᚄ(ctx context.Context, v any) ([]member.Role, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -19606,7 +19609,7 @@ func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋve
 	res := make([]member.Role, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -19614,7 +19617,7 @@ func (ec *executionContext) unmarshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋve
 	return res, nil
 }
 
-func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []member.Role) graphql.Marshaler {
+func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []member.Role) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -19641,7 +19644,7 @@ func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx, sel, v[i])
+			ret[i] = ec.marshalNMemberRole2exampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -19661,16 +19664,16 @@ func (ec *executionContext) marshalOMemberRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	return ret
 }
 
-func (ec *executionContext) unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, v any) (*entity.MemberRole, error) {
+func (ec *executionContext) unmarshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx context.Context, v any) (*member.Role, error) {
 	if v == nil {
 		return nil, nil
 	}
-	var res = new(entity.MemberRole)
+	var res = new(member.Role)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberRole(ctx context.Context, sel ast.SelectionSet, v *entity.MemberRole) graphql.Marshaler {
+func (ec *executionContext) marshalOMemberRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋmemberᚐRole(ctx context.Context, sel ast.SelectionSet, v *member.Role) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20068,7 +20071,7 @@ func (ec *executionContext) unmarshalOTodoOrder2ᚖexampleᚗcomᚋfullgqlᚋvel
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx context.Context, v any) ([]todo.Priority, error) {
+func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriorityᚄ(ctx context.Context, v any) ([]todo.Priority, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20078,7 +20081,7 @@ func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋ
 	res := make([]todo.Priority, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20086,7 +20089,7 @@ func (ec *executionContext) unmarshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋ
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriorityᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Priority) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriorityᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Priority) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20113,7 +20116,7 @@ func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋve
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx, sel, v[i])
+			ret[i] = ec.marshalNTodoPriority2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20133,23 +20136,23 @@ func (ec *executionContext) marshalOTodoPriority2ᚕexampleᚗcomᚋfullgqlᚋve
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, v any) (*entity.TodoPriority, error) {
+func (ec *executionContext) unmarshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx context.Context, v any) (*todo.Priority, error) {
 	if v == nil {
 		return nil, nil
 	}
-	var res = new(entity.TodoPriority)
+	var res = new(todo.Priority)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoPriority(ctx context.Context, sel ast.SelectionSet, v *entity.TodoPriority) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoPriority2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐPriority(ctx context.Context, sel ast.SelectionSet, v *todo.Priority) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return v
 }
 
-func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx context.Context, v any) ([]todo.Status, error) {
+func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatusᚄ(ctx context.Context, v any) ([]todo.Status, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20159,7 +20162,7 @@ func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋve
 	res := make([]todo.Status, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20167,7 +20170,7 @@ func (ec *executionContext) unmarshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋve
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Status) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []todo.Status) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20194,7 +20197,7 @@ func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx, sel, v[i])
+			ret[i] = ec.marshalNTodoStatus2exampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20214,16 +20217,16 @@ func (ec *executionContext) marshalOTodoStatus2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, v any) (*entity.TodoStatus, error) {
+func (ec *executionContext) unmarshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx context.Context, v any) (*todo.Status, error) {
 	if v == nil {
 		return nil, nil
 	}
-	var res = new(entity.TodoStatus)
+	var res = new(todo.Status)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoStatus(ctx context.Context, sel ast.SelectionSet, v *entity.TodoStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOTodoStatus2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋtodoᚐStatus(ctx context.Context, sel ast.SelectionSet, v *todo.Status) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20318,7 +20321,7 @@ func (ec *executionContext) unmarshalOUserOrder2ᚖexampleᚗcomᚋfullgqlᚋvel
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx context.Context, v any) ([]user.Role, error) {
+func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRoleᚄ(ctx context.Context, v any) ([]user.Role, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -20328,7 +20331,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	res := make([]user.Role, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -20336,7 +20339,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelo
 	return res, nil
 }
 
-func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []user.Role) graphql.Marshaler {
+func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []user.Role) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -20363,7 +20366,7 @@ func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelox�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx, sel, v[i])
+			ret[i] = ec.marshalNUserRole2exampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -20383,16 +20386,16 @@ func (ec *executionContext) marshalOUserRole2ᚕexampleᚗcomᚋfullgqlᚋvelox�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, v any) (*entity.UserRole, error) {
+func (ec *executionContext) unmarshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx context.Context, v any) (*user.Role, error) {
 	if v == nil {
 		return nil, nil
 	}
-	var res = new(entity.UserRole)
+	var res = new(user.Role)
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐUserRole(ctx context.Context, sel ast.SelectionSet, v *entity.UserRole) graphql.Marshaler {
+func (ec *executionContext) marshalOUserRole2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋuserᚐRole(ctx context.Context, sel ast.SelectionSet, v *user.Role) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

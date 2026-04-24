@@ -106,7 +106,7 @@ enum UserOrderField @goModel(model: "example.com/app/velox/entity.UserOrderField
   BIO
 }
 
-input CreateUserInput @goModel(model: "example.com/app/velox/user.CreateUserInput") {
+input CreateUserInput @goModel(model: "example.com/app/velox/client/user.CreateUserInput") {
   name: String!
   email: String!
   age: Int
@@ -114,7 +114,7 @@ input CreateUserInput @goModel(model: "example.com/app/velox/user.CreateUserInpu
   postIDs: [ID!]
 }
 
-input UpdateUserInput @goModel(model: "example.com/app/velox/user.UpdateUserInput") {
+input UpdateUserInput @goModel(model: "example.com/app/velox/client/user.UpdateUserInput") {
   name: String
   email: String
   age: Int

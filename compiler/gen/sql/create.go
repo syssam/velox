@@ -532,7 +532,7 @@ func genCreateSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName,
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Id("Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
@@ -868,12 +868,12 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 				// Hooks identifier to reference. Privacy is evaluated
 				// separately in saveChunk before the mutator chain.
 				if t.NumHooks() > 0 {
-					// Hooks is a package-level var in the same generated
-					// sub-package as this bulk builder, so Id (not Qual)
-					// is correct.
+					// Hooks is a package-level var declared in the {entity}/ leaf
+					// package (by genPackageRuntimeVars). After cycle-break, this
+					// bulk builder lives in client/{entity}/, so qualify the ref.
 					iife.Id("allHooks").Op(":=").Append(
 						jen.Id("builder").Dot("hooks"),
-						jen.Id("Hooks").Index(jen.Op(":")).Op("..."),
+						jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."),
 					)
 					iife.For(
 						jen.Id("j").Op(":=").Len(jen.Id("allHooks")).Op("-").Lit(1),

@@ -400,6 +400,24 @@ func (g *Generator) entityPkgPath(t *gen.Type) string {
 	return g.config.ORMPackage + "/" + strings.ToLower(t.Name)
 }
 
+// clientPkgName returns the client sub-package declaration name (e.g. "todoclient").
+// Post-cycle-break, heavy builder types live in {ORM}/client/{entity}/ declared as
+// `package {entity}client`.
+func (g *Generator) clientPkgName(t *gen.Type) string {
+	return strings.ToLower(t.Name) + "client"
+}
+
+// clientPkgPath returns the full import path for an entity's client sub-package.
+func (g *Generator) clientPkgPath(t *gen.Type) string {
+	return g.config.ORMPackage + "/client/" + strings.ToLower(t.Name)
+}
+
+// clientPkgDir returns the on-disk directory (relative to OutDir) for an entity's
+// client sub-package. Used with writeFileSubdir for file emission routing.
+func (g *Generator) clientPkgDir(t *gen.Type) string {
+	return "client/" + strings.ToLower(t.Name)
+}
+
 // Generate generates all GraphQL artifacts.
 func (g *Generator) Generate(ctx context.Context) error {
 	// Validate WhereInput annotations before generation
@@ -585,7 +603,7 @@ func (g *Generator) Generate(ctx context.Context) error {
 				}
 				errg.Go(func() error {
 					if f := g.genEntityMutationInput(t); f != nil {
-						return g.writeFileSubdir(ctx, f, g.entityPkgName(t), "gql_mutation_input.go")
+						return g.writeFileSubdir(ctx, f, g.clientPkgDir(t), "gql_mutation_input.go")
 					}
 					return nil
 				})

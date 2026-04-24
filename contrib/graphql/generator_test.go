@@ -57,8 +57,8 @@ func TestGenerator_Generate_Integration(t *testing.T) {
 		"post/gql_collection.go",
 		"query/gql_pagination_user.go",
 		"query/gql_pagination_post.go",
-		"user/gql_mutation_input.go",
-		"post/gql_mutation_input.go",
+		"client/user/gql_mutation_input.go",
+		"client/post/gql_mutation_input.go",
 	}
 
 	for _, file := range expectedFiles {

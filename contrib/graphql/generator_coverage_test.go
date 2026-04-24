@@ -1198,11 +1198,11 @@ func TestGenerator_GoModelPaths_PointToActualPackages(t *testing.T) {
 	assert.Contains(t, schema, `@goModel(model: "example/ent/filter.UserWhereInput")`)
 	assert.Contains(t, schema, `@goModel(model: "example/ent/filter.PostWhereInput")`)
 
-	// CreateInput/UpdateInput → entity sub-package (uses t.Name, not graphqlTypeName)
-	assert.Contains(t, schema, `@goModel(model: "example/ent/user.CreateUserInput")`)
-	assert.Contains(t, schema, `@goModel(model: "example/ent/user.UpdateUserInput")`)
-	assert.Contains(t, schema, `@goModel(model: "example/ent/post.CreatePostInput")`)
-	assert.Contains(t, schema, `@goModel(model: "example/ent/post.UpdatePostInput")`)
+	// CreateInput/UpdateInput → client/{entity}/ after cycle-break (same package as builders)
+	assert.Contains(t, schema, `@goModel(model: "example/ent/client/user.CreateUserInput")`)
+	assert.Contains(t, schema, `@goModel(model: "example/ent/client/user.UpdateUserInput")`)
+	assert.Contains(t, schema, `@goModel(model: "example/ent/client/post.CreatePostInput")`)
+	assert.Contains(t, schema, `@goModel(model: "example/ent/client/post.UpdatePostInput")`)
 
 	// Cursor/PageInfo → gqlrelay library package
 	assert.Contains(t, schema, `@goModel(model: "github.com/syssam/velox/contrib/graphql/gqlrelay.Cursor")`)
@@ -1253,13 +1253,13 @@ func TestGenerator_GoModelPaths_CustomGraphQLTypeName(t *testing.T) {
 	assert.Contains(t, typesSchema, `type Member`)
 	assert.Contains(t, typesSchema, `@goModel(model: "example/ent/entity.User")`)
 
-	// CreateInput: SDL says "CreateMemberInput" but goModel points to user.CreateUserInput (Go struct name)
+	// CreateInput: SDL says "CreateMemberInput" but goModel points to client/user.CreateUserInput
 	createInput := gen.genCreateInput(typ)
-	assert.Contains(t, createInput, `input CreateMemberInput @goModel(model: "example/ent/user.CreateUserInput")`)
+	assert.Contains(t, createInput, `input CreateMemberInput @goModel(model: "example/ent/client/user.CreateUserInput")`)
 
 	// UpdateInput: same pattern
 	updateInput := gen.genUpdateInput(typ)
-	assert.Contains(t, updateInput, `input UpdateMemberInput @goModel(model: "example/ent/user.UpdateUserInput")`)
+	assert.Contains(t, updateInput, `input UpdateMemberInput @goModel(model: "example/ent/client/user.UpdateUserInput")`)
 
 	// Connection types use graphqlTypeName since Go structs are also named with it
 	var buf bytes.Buffer

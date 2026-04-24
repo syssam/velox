@@ -32,6 +32,17 @@ autobind:
   - example.com/fullgql/velox/todo
   - example.com/fullgql/velox/user
   - example.com/fullgql/velox/workspace
+  # After cycle-break: mutation input types (CreateXxxInput) moved to client/
+  - example.com/fullgql/velox/client/auditlog
+  - example.com/fullgql/velox/client/category
+  - example.com/fullgql/velox/client/comment
+  - example.com/fullgql/velox/client/label
+  - example.com/fullgql/velox/client/member
+  - example.com/fullgql/velox/client/product
+  - example.com/fullgql/velox/client/tag
+  - example.com/fullgql/velox/client/todo
+  - example.com/fullgql/velox/client/user
+  - example.com/fullgql/velox/client/workspace
 
 models:
   Node:

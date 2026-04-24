@@ -120,9 +120,11 @@ func genPrivacy(h gen.GeneratorHelper) *jen.File {
 // genPrivacyEntityTypes generates entity-specific query/mutation rule types.
 func genPrivacyEntityTypes(h gen.GeneratorHelper, f *jen.File, n *gen.Type, entPkg string) {
 	// Query types (e.g. CategoryQuery) are in query/ package;
-	// mutation types (e.g. CategoryMutation) are in entity sub-packages.
+	// mutation types (e.g. CategoryMutation) are in client/{entity}/ sub-packages
+	// after the cycle-break refactor.
 	queryTypePkg := h.QueryPkg()
-	mutationTypePkg := h.EntityPkgPath(n)
+	mutationTypePkg := h.RootPkg() + "/client/" + n.PackageDir()
+	f.ImportName(mutationTypePkg, n.PackageDir()+"client")
 	queryType := jen.Op("*").Qual(queryTypePkg, n.QueryName())
 	mutationType := jen.Op("*").Qual(mutationTypePkg, n.MutationName())
 

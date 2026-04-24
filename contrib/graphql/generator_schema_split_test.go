@@ -265,7 +265,7 @@ func TestGenerator_Generate_SplitPerEntity(t *testing.T) {
 		"user/gql_node.go", "post/gql_node.go",
 		"user/gql_collection.go", "post/gql_collection.go",
 		"query/gql_pagination_user.go", "query/gql_pagination_post.go",
-		"user/gql_mutation_input.go", "post/gql_mutation_input.go",
+		"client/user/gql_mutation_input.go", "client/post/gql_mutation_input.go",
 	}
 	for _, goFile := range goFiles {
 		if _, statErr := os.Stat(filepath.Join(tmpDir, goFile)); os.IsNotExist(statErr) {

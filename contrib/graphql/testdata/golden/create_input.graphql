@@ -1,4 +1,4 @@
-input CreateUserInput @goModel(model: "example.com/app/velox/user.CreateUserInput") {
+input CreateUserInput @goModel(model: "example.com/app/velox/client/user.CreateUserInput") {
   name: String!
   email: String!
   age: Int

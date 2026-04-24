@@ -166,11 +166,12 @@ func (g *Generator) genCreateInput(t *gen.Type) string {
 	typeName := g.graphqlTypeName(t)
 	inputName := "Create" + typeName + "Input"
 
-	// Add @goModel directive for autobind — CreateInput is defined in entity sub-package.
+	// Add @goModel directive for autobind — CreateInput lives in client/{entity}/
+	// after cycle-break (same package as the CreateXxx builder type).
 	// Go struct name uses t.Name (not graphqlTypeName) since genEntityMutationInputImpl uses t.Name.
 	if g.config.ORMPackage != "" {
 		goStructName := "Create" + t.Name + "Input"
-		fmt.Fprintf(&buf, "input %s @goModel(model: \"%s.%s\") {\n", inputName, g.entityPkgPath(t), goStructName)
+		fmt.Fprintf(&buf, "input %s @goModel(model: \"%s.%s\") {\n", inputName, g.clientPkgPath(t), goStructName)
 	} else {
 		fmt.Fprintf(&buf, "input %s {\n", inputName)
 	}
@@ -228,11 +229,12 @@ func (g *Generator) genUpdateInput(t *gen.Type) string {
 	typeName := g.graphqlTypeName(t)
 	inputName := "Update" + typeName + "Input"
 
-	// Add @goModel directive for autobind — UpdateInput is defined in entity sub-package.
+	// Add @goModel directive for autobind — UpdateInput lives in client/{entity}/
+	// after cycle-break (same package as the UpdateXxx builder type).
 	// Go struct name uses t.Name (not graphqlTypeName) since genEntityMutationInputImpl uses t.Name.
 	if g.config.ORMPackage != "" {
 		goStructName := "Update" + t.Name + "Input"
-		fmt.Fprintf(&buf, "input %s @goModel(model: \"%s.%s\") {\n", inputName, g.entityPkgPath(t), goStructName)
+		fmt.Fprintf(&buf, "input %s @goModel(model: \"%s.%s\") {\n", inputName, g.clientPkgPath(t), goStructName)
 	} else {
 		fmt.Fprintf(&buf, "input %s {\n", inputName)
 	}

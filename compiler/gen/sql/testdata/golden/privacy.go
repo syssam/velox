@@ -7,9 +7,7 @@ import (
 
 	"github.com/syssam/velox/privacy"
 	ent "github.com/test/project/ent"
-	"github.com/test/project/ent/post"
 	ormquery "github.com/test/project/ent/query"
-	"github.com/test/project/ent/user"
 )
 
 // Policy groups query and mutation policies.
@@ -95,11 +93,11 @@ func (f UserQueryRuleFunc) EvalQuery(ctx context.Context, q ent.Query) error {
 
 // The UserMutationRuleFunc type is an adapter to allow the use of ordinary
 // functions as a mutation rule.
-type UserMutationRuleFunc func(context.Context, *user.UserMutation) error
+type UserMutationRuleFunc func(context.Context, *userclient.UserMutation) error
 
 // EvalMutation returns f(ctx, m).
 func (f UserMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mutation) error {
-	if m, ok := m.(*user.UserMutation); ok {
+	if m, ok := m.(*userclient.UserMutation); ok {
 		return f(ctx, m)
 	}
 	return Denyf("unexpected mutation type %T, expect UserMutation", m)
@@ -119,11 +117,11 @@ func (f PostQueryRuleFunc) EvalQuery(ctx context.Context, q ent.Query) error {
 
 // The PostMutationRuleFunc type is an adapter to allow the use of ordinary
 // functions as a mutation rule.
-type PostMutationRuleFunc func(context.Context, *post.PostMutation) error
+type PostMutationRuleFunc func(context.Context, *postclient.PostMutation) error
 
 // EvalMutation returns f(ctx, m).
 func (f PostMutationRuleFunc) EvalMutation(ctx context.Context, m ent.Mutation) error {
-	if m, ok := m.(*post.PostMutation); ok {
+	if m, ok := m.(*postclient.PostMutation); ok {
 		return f(ctx, m)
 	}
 	return Denyf("unexpected mutation type %T, expect PostMutation", m)

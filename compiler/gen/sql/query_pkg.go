@@ -184,7 +184,9 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// filter lives in a sibling generated package, so structural
 	// interface satisfaction requires an exported method.
 	if h.FeatureEnabled(gen.FeaturePrivacy.Name) {
-		entitySubPkgPath := h.EntityPkgPath(t)
+		// After cycle-break, filter.go lives in client/{entity}/ (package {entity}client),
+		// not the {entity}/ leaf — the filter constructor must be qualified there.
+		clientPkgPath := h.RootPkg() + "/client/" + t.PackageDir()
 		const privacyPkgPath = "github.com/syssam/velox/privacy"
 		f.Commentf("AddPredicate appends a raw SQL-level predicate to the query.")
 		f.Comment("Satisfies runtime.PredicateAdder so privacy filters can write")
@@ -199,7 +201,7 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 		f.Comment("Implements privacy.Filterable so FilterFunc-based query rules")
 		f.Comment("can inject WHERE clauses without knowing the concrete query type.")
 		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Filter").Params().Qual(privacyPkgPath, "Filter").Block(
-			jen.Return(jen.Qual(entitySubPkgPath, "New"+t.Name+"Filter").Call(
+			jen.Return(jen.Qual(clientPkgPath, "New"+t.Name+"Filter").Call(
 				jen.Id(recv).Dot("config"),
 				jen.Id(recv),
 			)),

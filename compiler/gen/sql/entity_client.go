@@ -48,7 +48,7 @@ func genEntityClient(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 			jen.Id("interStore"): jen.Id("is"),
 		}
 		if t.NumPolicy() > 0 {
-			vals[jen.Id("policy")] = jen.Id("RuntimePolicy")
+			vals[jen.Id("policy")] = jen.Qual(h.EntityPkgPath(t), "RuntimePolicy")
 		}
 		grp.Return(jen.Op("&").Id(clientName).Values(vals))
 	})
