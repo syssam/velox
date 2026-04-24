@@ -48,7 +48,7 @@ func genEntityClient(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 			jen.Id("interStore"): jen.Id("is"),
 		}
 		if t.NumPolicy() > 0 {
-			vals[jen.Id("policy")] = jen.Qual(h.EntityPkgPath(t), "RuntimePolicy")
+			vals[jen.Id("policy")] = jen.Qual(h.LeafPkgPath(t), "RuntimePolicy")
 		}
 		grp.Return(jen.Op("&").Id(clientName).Values(vals))
 	})
@@ -254,7 +254,7 @@ func genEntityClientCRUD(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		grp.Id("mutation").Dot("Where").Call(
 			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(
 				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
-					jen.Id("s").Dot("C").Call(jen.Qual(h.EntityPkgPath(t), "FieldID")),
+					jen.Id("s").Dot("C").Call(jen.Qual(h.LeafPkgPath(t), "FieldID")),
 					jen.Id("id"),
 				)),
 			),
@@ -328,7 +328,7 @@ func genEntityClientGetMethods(h gen.GeneratorHelper, f *jen.File, t *gen.Type) 
 		jen.Return(jen.Id("c").Dot("Query").Call().Dot("Where").Call(
 			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(
 				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
-					jen.Id("s").Dot("C").Call(jen.Qual(h.EntityPkgPath(t), "FieldID")),
+					jen.Id("s").Dot("C").Call(jen.Qual(h.LeafPkgPath(t), "FieldID")),
 					jen.Id("id"),
 				)),
 			),
@@ -410,7 +410,7 @@ func genEntityClientEdgePathClosure(h gen.GeneratorHelper, grp *jen.Group, t *ge
 	grp.Id("id").Op(":=").Id(entityVar).Dot("ID")
 
 	// Edge columns: M2M uses PKConstant (variadic), others use ColumnConstant (single)
-	leafPkg := h.EntityPkgPath(t)
+	leafPkg := h.LeafPkgPath(t)
 	var edgeColumns jen.Code
 	if e.M2M() {
 		grp.Id("_edgePKs").Op(":=").Qual(leafPkg, e.PKConstant())

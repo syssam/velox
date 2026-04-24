@@ -473,10 +473,10 @@ func genEntityPkgFieldAssignment(h gen.GeneratorHelper, grp *jen.Group, t *gen.T
 			jen.If(jen.Id("value").Dot("Valid")).BlockFunc(func(validGrp *jen.Group) {
 				if field.NillableValue() {
 					// Nillable enum: allocate and assign via pointer.
-					validGrp.Id("v").Op(":=").Qual(h.EntityPkgPath(t), field.StructField()).Call(jen.Id("value").Dot("String"))
+					validGrp.Id("v").Op(":=").Qual(h.LeafPkgPath(t), field.StructField()).Call(jen.Id("value").Dot("String"))
 					validGrp.Id(receiver).Dot(structField).Op("=").Op("&").Id("v")
 				} else {
-					validGrp.Id(receiver).Dot(structField).Op("=").Qual(h.EntityPkgPath(t), field.StructField()).Call(jen.Id("value").Dot("String"))
+					validGrp.Id(receiver).Dot(structField).Op("=").Qual(h.LeafPkgPath(t), field.StructField()).Call(jen.Id("value").Dot("String"))
 				}
 			}),
 		)
@@ -1106,7 +1106,7 @@ func buildEntityPkgEnumRegistry(allNodes []*gen.Type) *entityPkgEnumRegistry {
 // For enums, references the real type in the per-entity leaf sub-package (e.g., user.Status).
 func entityPkgGoType(h gen.GeneratorHelper, t *gen.Type, f *gen.Field, _ *entityPkgEnumRegistry) jen.Code {
 	if f.IsEnum() && !f.HasGoType() {
-		enumType := jen.Qual(h.EntityPkgPath(t), f.StructField())
+		enumType := jen.Qual(h.LeafPkgPath(t), f.StructField())
 		if f.Nillable {
 			return jen.Op("*").Add(enumType)
 		}

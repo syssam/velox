@@ -12,7 +12,7 @@ import (
 // It follows Ent's template logic for handling mixins and field positions.
 // Order: Mixin → Policies → Hooks → Interceptors → Fields
 func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schemaPkg string) {
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	pkg := t.Package() // lowercase package name (e.g., "abtestevent")
 
 	// Check if entity has defaults, update defaults, validators, or value scanners

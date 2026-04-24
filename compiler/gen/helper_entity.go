@@ -30,14 +30,14 @@ func (h *entityPkgHelper) Pkg() string { return h.pkgName }
 // RootPkg returns the root package import path when in entity mode (non-empty = entity mode).
 func (h *entityPkgHelper) RootPkg() string { return h.rootPkg }
 
-// EntityPkgPath returns empty string when the target entity IS the current package.
+// LeafPkgPath returns empty string when the target entity IS the current package.
 // This prevents self-imports: when generating user/create.go, references to
 // user.FieldID become just FieldID (local, no import).
-func (h *entityPkgHelper) EntityPkgPath(t *Type) string {
+func (h *entityPkgHelper) LeafPkgPath(t *Type) string {
 	if t.PackageDir() == h.pkgName {
 		return ""
 	}
-	return h.GeneratorHelper.EntityPkgPath(t)
+	return h.GeneratorHelper.LeafPkgPath(t)
 }
 
 // GoType returns the type code for a field. For enum fields defined in the

@@ -11,7 +11,7 @@ import "github.com/dave/jennifer/jen"
 // `package userclient`. The Go directory for the emitted file is
 // client/{entity}/ — the package name ≠ dir name is intentional (Go allows it).
 //
-// EntityPkgPath(t) delegates to the base helper (never returns ""), so the
+// LeafPkgPath(t) delegates to the base helper (never returns ""), so the
 // client code references the leaf via qualified imports like user.Label,
 // user.FieldID, etc.
 //

@@ -49,17 +49,17 @@ func TestNewClientPkgHelper_RootPkg(t *testing.T) {
 }
 
 // =============================================================================
-// TestNewClientPkgHelper_EntityPkgPath_Qualifies
+// TestNewClientPkgHelper_LeafPkgPath_Qualifies
 // =============================================================================
 
-// For entityPkgHelper, EntityPkgPath returns "" for the helper's own entity
+// For entityPkgHelper, LeafPkgPath returns "" for the helper's own entity
 // (to avoid self-imports). clientPkgHelper must NOT do this — it lives in a
 // different package from the leaf and must always qualify.
-func TestNewClientPkgHelper_EntityPkgPath_Qualifies(t *testing.T) {
+func TestNewClientPkgHelper_LeafPkgPath_Qualifies(t *testing.T) {
 	h := newTestClientPkgHelper("user", "example.com/app/ent")
 	// Even for the "own" entity (User → packageDir "user"), the path must be
 	// non-empty so the generated client code can import the leaf.
-	path := h.(*clientPkgHelper).EntityPkgPath(&Type{Name: "User"})
+	path := h.(*clientPkgHelper).LeafPkgPath(&Type{Name: "User"})
 	assert.NotEmpty(t, path, "clientPkgHelper must not suppress self-imports")
 	assert.Contains(t, path, "user")
 }

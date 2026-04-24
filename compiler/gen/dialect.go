@@ -131,8 +131,16 @@ type GeneratorHelper interface {
 	FieldPkg() string
 	// PredicatePkg returns the import path for the predicate package.
 	PredicatePkg() string
-	// EntityPkgPath returns the full import path for an entity's subpackage.
-	EntityPkgPath(t *Type) string
+	// LeafPkgPath returns the full import path of the per-entity leaf package
+	// (e.g., "example.com/app/ent/user"). This is the {entity}/ sub-package that
+	// holds schema constants, predicates, and enum types — distinct from the
+	// shared entity/ package (see SharedEntityPkg()).
+	//
+	// For generators emitting INTO a leaf package whose entity matches t,
+	// entityPkgHelper returns "" so that local references don't get self-qualified.
+	// For generators emitting into any OTHER package (query/, client/{entity}/, etc.),
+	// this returns the qualified path.
+	LeafPkgPath(t *Type) string
 	// EdgeRelType returns the sqlgraph relationship type constant name for an edge.
 	EdgeRelType(e *Edge) string
 	// FieldTypeConstant returns the field type constant name for a field.

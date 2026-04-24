@@ -57,7 +57,7 @@ func genEntityRuntime(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 // RegisterEntityClient into one call per entity.
 func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type) {
 	entityPkg := h.SharedEntityPkg()
-	leafPkg := h.EntityPkgPath(t)
+	leafPkg := h.LeafPkgPath(t)
 	entityType := func() *jen.Statement { return jen.Qual(entityPkg, t.Name) }
 
 	clientName := t.ClientName()

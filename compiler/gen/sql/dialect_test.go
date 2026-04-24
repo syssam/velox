@@ -148,7 +148,7 @@ func (m *mockHelper) SQLPkg() string       { return "github.com/syssam/velox/dia
 func (m *mockHelper) SQLGraphPkg() string  { return "github.com/syssam/velox/dialect/sql/sqlgraph" }
 func (m *mockHelper) FieldPkg() string     { return "github.com/syssam/velox/schema/field" }
 func (m *mockHelper) PredicatePkg() string { return m.graph.Package + "/predicate" }
-func (m *mockHelper) EntityPkgPath(t *gen.Type) string {
+func (m *mockHelper) LeafPkgPath(t *gen.Type) string {
 	return m.graph.Package + "/" + t.PackageDir()
 }
 func (m *mockHelper) EdgeRelType(e *gen.Edge) string {

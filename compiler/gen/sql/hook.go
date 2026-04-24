@@ -23,7 +23,7 @@ func genHook(h gen.GeneratorHelper) *jen.File {
 	for _, t := range graph.MutableNodes() {
 		funcName := t.Name + "Func"
 		mutType := t.MutationName()
-		entityPkg := h.EntityPkgPath(t)
+		entityPkg := h.LeafPkgPath(t)
 
 		// In entity-pkg mode (cycle-break), mutations live in client/{entity}/
 		// sub-packages. Derive the client package path when RootPkg is set;

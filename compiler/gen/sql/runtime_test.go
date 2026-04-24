@@ -223,7 +223,7 @@ func TestGenRuntimeHooks_WithSchemaHooks(t *testing.T) {
 		{Index: 0, MixedIn: false},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeHooks(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -238,7 +238,7 @@ func TestGenRuntimeHooks_WithMixinHooks(t *testing.T) {
 		{Index: 0, MixedIn: true, MixinIndex: 0},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeHooks(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -254,7 +254,7 @@ func TestGenRuntimeHooks_WithPolicyOffset(t *testing.T) {
 		Policy: []*load.Position{{Index: 0, MixedIn: false}},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeHooks(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -283,7 +283,7 @@ func TestGenRuntimeInterceptors_WithSchemaInterceptors(t *testing.T) {
 		{Index: 0, MixedIn: false},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeInterceptors(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -297,7 +297,7 @@ func TestGenRuntimeInterceptors_WithMixinInterceptors(t *testing.T) {
 		{Index: 0, MixedIn: true, MixinIndex: 0},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeInterceptors(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -312,7 +312,7 @@ func TestGenRuntimeInterceptors_MixedSchemaAndMixin(t *testing.T) {
 		{Index: 0, MixedIn: false},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeInterceptors(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -340,7 +340,7 @@ func TestGenRuntimePolicies_WithSchemaPolicy(t *testing.T) {
 		{Index: 0, MixedIn: false},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimePolicies(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -354,7 +354,7 @@ func TestGenRuntimePolicies_WithMixinPolicy(t *testing.T) {
 		{Index: 0, MixedIn: true, MixinIndex: 0},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimePolicies(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -376,7 +376,7 @@ func TestGenRuntimeFields_WithDefaults(t *testing.T) {
 		},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeFields(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -395,7 +395,7 @@ func TestGenRuntimeFields_WithValidators(t *testing.T) {
 		},
 	})
 	fh.graph.Nodes = []*gen.Type{userType}
-	entityPkg := fh.EntityPkgPath(userType)
+	entityPkg := fh.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeFields(fh, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -413,7 +413,7 @@ func TestGenRuntimeFields_WithUpdateDefault(t *testing.T) {
 		},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeFields(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
@@ -432,7 +432,7 @@ func TestGenRuntimeFields_MixinField(t *testing.T) {
 		},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.EntityPkgPath(userType)
+	entityPkg := helper.LeafPkgPath(userType)
 
 	grp := &jen.Group{}
 	genRuntimeFields(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")

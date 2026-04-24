@@ -19,7 +19,7 @@ func genPrivacy(h gen.GeneratorHelper) *jen.File {
 	f.ImportName(privacyPkg, "privacy")
 	// Import entity sub-packages (for mutation types + constants)
 	for _, n := range graph.Nodes {
-		f.ImportName(h.EntityPkgPath(n), n.PackageDir())
+		f.ImportName(h.LeafPkgPath(n), n.PackageDir())
 	}
 	// Import query/ package for query types (e.g. CategoryQuery)
 	f.ImportAlias(h.QueryPkg(), "ormquery")

@@ -22,7 +22,7 @@ func genIntercept(h gen.GeneratorHelper) *jen.File {
 	f.ImportName(h.SQLPkg(), "sql")
 	f.ImportName(h.PredicatePkg(), "predicate")
 	for _, n := range graph.Nodes {
-		f.ImportName(h.EntityPkgPath(n), n.PackageDir())
+		f.ImportName(h.LeafPkgPath(n), n.PackageDir())
 	}
 	// Use "ormquery" alias to avoid conflict with the local generic type "query[T,P,R]".
 	f.ImportAlias(h.QueryPkg(), "ormquery")

@@ -959,7 +959,7 @@ func TestGenerator_EntityPkgName(t *testing.T) {
 	assert.Equal(t, "user", gen.entityPkgName(typ))
 }
 
-func TestGenerator_EntityPkgPath(t *testing.T) {
+func TestGenerator_LeafPkgPath(t *testing.T) {
 	gen := &Generator{config: Config{ORMPackage: "example.com/ent"}}
 	typ := &entgen.Type{Name: "User"}
 	assert.Equal(t, "example.com/ent/user", gen.entityPkgPath(typ))

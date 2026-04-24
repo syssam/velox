@@ -80,8 +80,8 @@ func (g *JenniferGenerator) FieldPkg() string {
 	return "github.com/syssam/velox/schema/field"
 }
 
-// EntityPkgPath returns the full import path for an entity's subpackage.
-func (g *JenniferGenerator) EntityPkgPath(t *Type) string {
+// LeafPkgPath returns the full import path for an entity's subpackage.
+func (g *JenniferGenerator) LeafPkgPath(t *Type) string {
 	if g.graph.Config != nil && g.graph.Package != "" {
 		return g.graph.Package + "/" + t.PackageDir()
 	}

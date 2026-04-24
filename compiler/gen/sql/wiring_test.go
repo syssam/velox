@@ -50,7 +50,7 @@ func renderEntityClient(t *testing.T, h *mockHelper, node *gen.Type) string {
 
 func renderQueryPkg(t *testing.T, h *mockHelper, node *gen.Type) string {
 	t.Helper()
-	return genQueryPkg(h, node, h.graph.Nodes, h.EntityPkgPath(node)).GoString()
+	return genQueryPkg(h, node, h.graph.Nodes, h.LeafPkgPath(node)).GoString()
 }
 
 // TestNoSetIntersInterfaceAssertion guards against silent interceptor
@@ -147,7 +147,7 @@ func TestPolicyExplicitEvaluation(t *testing.T) {
 	helper.graph = graph
 
 	// --- User (has policy) ---
-	userSrc := genQueryPkg(helper, userType, graph.Nodes, helper.EntityPkgPath(userType)).GoString()
+	userSrc := genQueryPkg(helper, userType, graph.Nodes, helper.LeafPkgPath(userType)).GoString()
 
 	if !strings.Contains(userSrc, "q.policy.EvalQuery(ctx, q)") {
 		t.Error("User query prepareQuery should call q.policy.EvalQuery(ctx, q) explicitly")
@@ -160,7 +160,7 @@ func TestPolicyExplicitEvaluation(t *testing.T) {
 	}
 
 	// --- Post (no policy) ---
-	postSrc := genQueryPkg(helper, postType, graph.Nodes, helper.EntityPkgPath(postType)).GoString()
+	postSrc := genQueryPkg(helper, postType, graph.Nodes, helper.LeafPkgPath(postType)).GoString()
 
 	if strings.Contains(postSrc, "EvalQuery") {
 		t.Error("Post query (no policy) should not reference EvalQuery")
@@ -242,7 +242,7 @@ func TestQueryCloneCopiesEveryField(t *testing.T) {
 			helper.graph = graph
 
 			for _, node := range []*gen.Type{userType, postType} {
-				src := genQueryPkg(helper, node, graph.Nodes, helper.EntityPkgPath(node)).GoString()
+				src := genQueryPkg(helper, node, graph.Nodes, helper.LeafPkgPath(node)).GoString()
 				fields := parseQueryStructFields(t, src, node.Name+"Query")
 				cloned := parseCloneCompositeKeys(t, src, node.Name+"Query")
 				for _, f := range fields {
@@ -376,7 +376,7 @@ func TestQueryIntersUnifiedAccess(t *testing.T) {
 	helper.graph = graph
 
 	for _, node := range []*gen.Type{userType, postType} {
-		src := genQueryPkg(helper, node, graph.Nodes, helper.EntityPkgPath(node)).GoString()
+		src := genQueryPkg(helper, node, graph.Nodes, helper.LeafPkgPath(node)).GoString()
 		if strings.Contains(src, "effectiveInters") {
 			t.Errorf("%s query should not have effectiveInters", node.Name)
 		}
@@ -537,7 +537,7 @@ func TestSelectScanUsesDirectInters(t *testing.T) {
 	helper.graph = graph
 
 	for _, node := range []*gen.Type{userType, postType} {
-		src := genQueryPkg(helper, node, graph.Nodes, helper.EntityPkgPath(node)).GoString()
+		src := genQueryPkg(helper, node, graph.Nodes, helper.LeafPkgPath(node)).GoString()
 		if strings.Contains(src, "effectiveInters") {
 			t.Errorf("%s: effectiveInters must be removed", node.Name)
 		}

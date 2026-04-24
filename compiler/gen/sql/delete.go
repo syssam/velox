@@ -19,7 +19,7 @@ func genDelete(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 //   - {Entity}Delete      — multi-entity delete
 //   - {Entity}DeleteOne   — single-entity delete
 func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	mutName := t.MutationName()
 	deleteName := t.DeleteName()
 	deleteOneName := t.DeleteOneName()
@@ -118,7 +118,7 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}

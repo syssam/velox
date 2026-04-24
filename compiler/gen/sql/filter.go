@@ -36,7 +36,7 @@ func genFilter(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 	f := h.NewFile(h.Pkg())
 
 	filterName := t.Name + "Filter"
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 
 	// Filter struct — wraps a pointer to the query's own predicates
 	// slice so modifications written through the filter land directly

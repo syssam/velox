@@ -19,7 +19,7 @@ func genUpdate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 //   - {Entity}Update      — bulk update (Save returns int, no wrapping needed)
 //   - {Entity}UpdateOne   — single update (Save returns *Entity, needs wrapping)
 func genUpdateInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	// Entity package path for return types (entity.User).
 	entityReturnPkg := h.SharedEntityPkg()
 	mutName := t.MutationName()
@@ -190,7 +190,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
@@ -467,7 +467,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
@@ -518,7 +518,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 // selectFields is empty or contains the field name — so UpdateOne.Select()
 // restricts which fields are actually written in the UPDATE SET clause.
 func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv string, hasSelect bool) {
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	fieldPkg := h.FieldPkg()
 	sqlGraphPkg := h.SQLGraphPkg()
 
@@ -609,7 +609,7 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 // update path. isUpdateOne controls whether ClearField/SetField for FK columns
 // on non-owning-FK edges are supported (M2M/O2M add/remove needs owner ID).
 func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv string, _ bool) {
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	fieldPkg := h.FieldPkg()
 	sqlGraphPkg := h.SQLGraphPkg()
 
@@ -778,7 +778,7 @@ func genUpdateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 // defaults logic for both Update and UpdateOne root wrappers.
 func genUpdateDefaultsFunc(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 	funcName := lowerFirst(t.Name) + "WrapperUpdateDefaults"
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	mutName := t.MutationName()
 
 	f.Commentf("%s applies update default values shared by %s and %s.", funcName, t.UpdateName(), t.UpdateOneName())

@@ -167,7 +167,7 @@ func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderN
 		fields = append(fields, t.ID)
 	}
 
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	pkg := t.PackageDir()
 
 	autoDefault := h.FeatureEnabled(gen.FeatureAutoDefault.Name)
@@ -225,7 +225,7 @@ func genCreateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName
 		fields = append(fields, t.ID)
 	}
 
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
 
 	// Uses runtime.ValidationError with uppercase Err field.
@@ -387,7 +387,7 @@ func genCreateAssignID(grp *jen.Group, t *gen.Type, nodeVar, specVar string) {
 // genCreateSpecMethod emits the createSpec method that builds both the entity
 // node and the sqlgraph.CreateSpec from typed mutation fields.
 func genCreateSpecMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName, recv, entityReturnPkg string) {
-	entityPkg := h.EntityPkgPath(t)
+	entityPkg := h.LeafPkgPath(t)
 	fieldPkg := h.FieldPkg()
 	sqlGraphPkg := h.SQLGraphPkg()
 
@@ -532,7 +532,7 @@ func genCreateSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName,
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
+			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
 		} else {
 			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
 		}
@@ -873,7 +873,7 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 					// bulk builder lives in client/{entity}/, so qualify the ref.
 					iife.Id("allHooks").Op(":=").Append(
 						jen.Id("builder").Dot("hooks"),
-						jen.Qual(h.EntityPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."),
+						jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."),
 					)
 					iife.For(
 						jen.Id("j").Op(":=").Len(jen.Id("allHooks")).Op("-").Lit(1),

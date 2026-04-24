@@ -29,7 +29,7 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// the shared *entity.InterceptorStore.
 	entityPkgImportPath := h.SharedEntityPkg()
 	// Per-entity sub-package import path; needed by many later emitters.
-	entitySubPkg := h.EntityPkgPath(t)
+	entitySubPkg := h.LeafPkgPath(t)
 
 	// intersField returns Jen for the effective interceptor slice the
 	// query should use at execute time — always the per-entity slice
@@ -470,8 +470,8 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 		targetQueryName := edge.Type.Name + "Query"
 
 		// Get the entity sub-package paths
-		srcEntitySubPkg := h.EntityPkgPath(t)
-		targetEntitySubPkg := h.EntityPkgPath(edge.Type)
+		srcEntitySubPkg := h.LeafPkgPath(t)
+		targetEntitySubPkg := h.LeafPkgPath(edge.Type)
 
 		f.Commentf("%s chains the current query on the %q edge.", methodName, edge.Name)
 		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id(methodName).Params().Qual(entityPkgPath, targetIface).BlockFunc(func(grp *jen.Group) {
@@ -1614,7 +1614,7 @@ func genTypedO2MLoader(
 	sqlPkg string,
 	idType jen.Code,
 ) {
-	srcSubPkg := h.EntityPkgPath(t)
+	srcSubPkg := h.LeafPkgPath(t)
 	fkColumn := edge.ColumnConstant()
 
 	// fks := make([]any, 0, len(nodes))
@@ -1712,7 +1712,7 @@ func genTypedM2OLoader(
 	sqlPkg string,
 	idType jen.Code,
 ) {
-	targetSubPkg := h.EntityPkgPath(edge.Type)
+	targetSubPkg := h.LeafPkgPath(edge.Type)
 
 	fk, err := edge.ForeignKey()
 	if err != nil {
@@ -1817,8 +1817,8 @@ func genM2MLoaderFallback(
 	recv, entityPkgPath string,
 	entityType func() *jen.Statement,
 ) {
-	srcSubPkg := h.EntityPkgPath(t)
-	targetSubPkg := h.EntityPkgPath(edge.Type)
+	srcSubPkg := h.LeafPkgPath(t)
+	targetSubPkg := h.LeafPkgPath(edge.Type)
 	sqlPkg := h.SQLPkg()
 	veloxPkg := h.VeloxPkg()
 	idType := h.IDType(t)

@@ -591,7 +591,7 @@ func TestJenniferGenerator_FieldPkg(t *testing.T) {
 	assert.Equal(t, "github.com/syssam/velox/schema/field", g.FieldPkg())
 }
 
-func TestJenniferGenerator_EntityPkgPath(t *testing.T) {
+func TestJenniferGenerator_LeafPkgPath(t *testing.T) {
 	graph := &Graph{Config: &Config{Package: "example.com/app/ent"}}
 	graph.Package = "example.com/app/ent"
 	g := &JenniferGenerator{
@@ -600,10 +600,10 @@ func TestJenniferGenerator_EntityPkgPath(t *testing.T) {
 		generatedEnums: make(map[string]bool),
 	}
 	typ := &Type{Name: "User"}
-	assert.Equal(t, "example.com/app/ent/user", g.EntityPkgPath(typ))
+	assert.Equal(t, "example.com/app/ent/user", g.LeafPkgPath(typ))
 }
 
-func TestJenniferGenerator_EntityPkgPath_FallbackPkg(t *testing.T) {
+func TestJenniferGenerator_LeafPkgPath_FallbackPkg(t *testing.T) {
 	// When graph.Config is nil or Package is empty, falls back to g.pkg.
 	graph := &Graph{}
 	g := &JenniferGenerator{
@@ -612,7 +612,7 @@ func TestJenniferGenerator_EntityPkgPath_FallbackPkg(t *testing.T) {
 		generatedEnums: make(map[string]bool),
 	}
 	typ := &Type{Name: "Post"}
-	assert.Equal(t, "ent/post", g.EntityPkgPath(typ))
+	assert.Equal(t, "ent/post", g.LeafPkgPath(typ))
 }
 
 func TestJenniferGenerator_PredicateType(t *testing.T) {
@@ -806,7 +806,7 @@ func TestEntityPkgHelper_RootPkg(t *testing.T) {
 	assert.Equal(t, "example.com/app/ent", h.(*entityPkgHelper).RootPkg())
 }
 
-func TestEntityPkgHelper_EntityPkgPath_Self(t *testing.T) {
+func TestEntityPkgHelper_LeafPkgPath_Self(t *testing.T) {
 	base := &JenniferGenerator{
 		graph:          &Graph{Config: &Config{Package: "example.com/app/ent"}},
 		pkg:            "ent",
@@ -814,10 +814,10 @@ func TestEntityPkgHelper_EntityPkgPath_Self(t *testing.T) {
 	}
 	h := newEntityPkgHelper(base, "user", "example.com/app/ent")
 	// Self-reference → empty (no self-import).
-	assert.Equal(t, "", h.(*entityPkgHelper).EntityPkgPath(&Type{Name: "User"}))
+	assert.Equal(t, "", h.(*entityPkgHelper).LeafPkgPath(&Type{Name: "User"}))
 }
 
-func TestEntityPkgHelper_EntityPkgPath_Other(t *testing.T) {
+func TestEntityPkgHelper_LeafPkgPath_Other(t *testing.T) {
 	base := &JenniferGenerator{
 		graph:          &Graph{Config: &Config{Package: "example.com/app/ent"}},
 		pkg:            "ent",
@@ -825,7 +825,7 @@ func TestEntityPkgHelper_EntityPkgPath_Other(t *testing.T) {
 	}
 	h := newEntityPkgHelper(base, "user", "example.com/app/ent")
 	// Other entity → delegates to base.
-	path := h.(*entityPkgHelper).EntityPkgPath(&Type{Name: "Post"})
+	path := h.(*entityPkgHelper).LeafPkgPath(&Type{Name: "Post"})
 	assert.Contains(t, path, "post")
 }
 
