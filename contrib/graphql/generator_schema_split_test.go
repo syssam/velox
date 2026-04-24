@@ -258,9 +258,9 @@ func TestGenerator_Generate_SplitPerEntity(t *testing.T) {
 	// Go files should still be generated (shared + per-entity)
 	goFiles := []string{
 		"gql_node.go",
-		// gqlfilter/ sub-package
-		"gqlfilter/filter.go",
-		"gqlfilter/user.go", "gqlfilter/post.go",
+		// filter/ sub-package
+		"filter/filter.go",
+		"filter/user.go", "filter/post.go",
 		// Per-entity files (entity sub-packages)
 		"user/gql_node.go", "post/gql_node.go",
 		"user/gql_collection.go", "post/gql_collection.go",

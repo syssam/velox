@@ -1194,9 +1194,9 @@ func TestGenerator_GoModelPaths_PointToActualPackages(t *testing.T) {
 	assert.Contains(t, schema, `@goModel(model: "example/ent/entity.UserOrder")`)
 	assert.Contains(t, schema, `@goModel(model: "example/ent/entity.UserOrderField")`)
 
-	// WhereInput → gqlfilter/ sub-package
-	assert.Contains(t, schema, `@goModel(model: "example/ent/gqlfilter.UserWhereInput")`)
-	assert.Contains(t, schema, `@goModel(model: "example/ent/gqlfilter.PostWhereInput")`)
+	// WhereInput → filter/ sub-package
+	assert.Contains(t, schema, `@goModel(model: "example/ent/filter.UserWhereInput")`)
+	assert.Contains(t, schema, `@goModel(model: "example/ent/filter.PostWhereInput")`)
 
 	// CreateInput/UpdateInput → entity sub-package (uses t.Name, not graphqlTypeName)
 	assert.Contains(t, schema, `@goModel(model: "example/ent/user.CreateUserInput")`)
@@ -1211,7 +1211,7 @@ func TestGenerator_GoModelPaths_PointToActualPackages(t *testing.T) {
 	// Noder → root ORM package (defined in gql_node.go)
 	assert.Contains(t, schema, `@goModel(model: "example/ent.Noder")`)
 
-	// WhereInput → gqlfilter/, CreateInput → entity sub-package (NOT root)
+	// WhereInput → filter/, CreateInput → entity sub-package (NOT root)
 	assert.NotContains(t, schema, `@goModel(model: "example/ent.UserWhereInput")`)
 	assert.NotContains(t, schema, `@goModel(model: "example/ent.CreateUserInput")`)
 	// PageInfo → gqlrelay library (NOT root)

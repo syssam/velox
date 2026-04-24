@@ -46,10 +46,10 @@ func TestGenerator_Generate_Integration(t *testing.T) {
 		"schema.graphql",
 		// Shared files (root package)
 		"gql_node.go",
-		// gqlfilter/ sub-package
-		"gqlfilter/filter.go",
-		"gqlfilter/user.go",
-		"gqlfilter/post.go",
+		// filter/ sub-package
+		"filter/filter.go",
+		"filter/user.go",
+		"filter/post.go",
 		// Per-entity files (entity sub-packages)
 		"user/gql_node.go",
 		"post/gql_node.go",
