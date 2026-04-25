@@ -9,6 +9,7 @@ import (
 
 	gqlgenpkg "example.com/fullgql/gqlgen"
 	"example.com/fullgql/velox"
+	"example.com/fullgql/velox/category"
 	categoryclient "example.com/fullgql/velox/client/category"
 	commentclient "example.com/fullgql/velox/client/comment"
 	memberclient "example.com/fullgql/velox/client/member"
@@ -16,7 +17,6 @@ import (
 	todoclient "example.com/fullgql/velox/client/todo"
 	userclient "example.com/fullgql/velox/client/user"
 	workspaceclient "example.com/fullgql/velox/client/workspace"
-	"example.com/fullgql/velox/category"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/member"
 	"example.com/fullgql/velox/predicate"

@@ -49,6 +49,27 @@ for dir in "${DRIFT_CHECK_MODULES[@]}"; do
         FAILED_EXAMPLES+=("${dir}")
         continue
     fi
+    # gqlgen step: any module with a gqlgen.yml needs gqlgen to re-emit
+    # generated.go after velox produces the schema.graphql + GoModel
+    # autobind targets. Without this step, examples/fullgql ends up with
+    # stale gqlgen output that won't compile against new layouts (e.g.,
+    # the cycle-break refactor moved CreateXxxInput to client/{entity}/
+    # — gqlgen autobind needs to be re-run to pick up the new path).
+    if [[ -f "${dir}/gqlgen.yml" ]]; then
+        if command -v gqlgen >/dev/null 2>&1; then
+            echo "==> gqlgen generate ${dir}"
+            if ! (cd "${dir}" && gqlgen generate); then
+                echo "warning: ${dir} gqlgen failed, continuing" >&2
+                FAILED_EXAMPLES+=("${dir}")
+                continue
+            fi
+        else
+            echo "warning: ${dir} has gqlgen.yml but gqlgen binary not in PATH;" >&2
+            echo "         install with: go install github.com/99designs/gqlgen@latest" >&2
+            FAILED_EXAMPLES+=("${dir}")
+            continue
+        fi
+    fi
     echo "==> building ${dir}"
     if ! (cd "${dir}" && go build ./...); then
         echo "warning: ${dir} build failed after regen" >&2

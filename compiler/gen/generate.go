@@ -194,9 +194,9 @@ func (g *JenniferGenerator) Generate(ctx context.Context) error {
 // and how to generate it. Used by generateEntities to drive emission via a
 // table instead of repeating errg.Go boilerplate per output.
 type entityFileSpec struct {
-	dir  string                      // output directory (relative to outDir)
-	file string                      // output filename
-	gen  func() (*jen.File, error)   // captures the right helper / args per entry
+	dir  string                    // output directory (relative to outDir)
+	file string                    // output filename
+	gen  func() (*jen.File, error) // captures the right helper / args per entry
 }
 
 func (g *JenniferGenerator) generateEntities(ctx context.Context, errg *errgroup.Group) {
