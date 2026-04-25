@@ -141,8 +141,83 @@ case "$MODE" in
         echo ""
         echo "Results saved to benchmarks/results/vs-ent.txt"
         ;;
+    scale)
+        # Scale benchmark across stress fixtures: time codegen + cold build
+        # + peak RSS at 100/200/328-entity schemas. Used to verify the
+        # cycle-break refactor (which doubled per-entity package count via
+        # client/{entity}/) didn't regress velox's incremental-compile
+        # advantage. Output: benchmarks/results/scale.txt
+        echo "=== Velox scale benchmark (100 / 200 / 328 entities) ==="
+        mkdir -p benchmarks/results
+
+        ROOT="$(pwd)"
+        OUT="$ROOT/benchmarks/results/scale.txt"
+
+        rss_cmd() {
+            if [[ "$(uname)" == "Darwin" ]]; then
+                echo "/usr/bin/time -l"
+            else
+                echo "/usr/bin/time -v"
+            fi
+        }
+        rss_extract() {
+            if [[ "$(uname)" == "Darwin" ]]; then
+                # macOS reports bytes
+                awk '/maximum resident/{printf "%.0fMB\n", $1/1048576}'
+            else
+                # Linux reports KB
+                awk '/Maximum resident/{printf "%.0fMB\n", $1/1024}'
+            fi
+        }
+
+        {
+            echo "Velox scale benchmark"
+            echo "Date: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "Platform: $(uname -sr) $(uname -m)"
+            echo "Go: $(go version | awk '{print $3, $4}')"
+            echo "---"
+        } | tee "$OUT"
+
+        for n in 100 200 328; do
+            DIR="$ROOT/benchmarks/fixtures/stress-$n"
+            if [[ ! -d "$DIR" ]]; then
+                echo "warning: stress-$n fixture missing at $DIR — skipping" | tee -a "$OUT"
+                continue
+            fi
+
+            echo "" | tee -a "$OUT"
+            echo "=== stress-$n ===" | tee -a "$OUT"
+
+            # 1) regen — cold (forces parsing the schema dir, so generator startup cost included)
+            (cd "$DIR" && rm -rf velox)
+            REGEN=$( { time (cd "$DIR" && go run generate.go >/dev/null 2>&1); } 2>&1 | awk '/^real/{print $2}')
+            echo "regen wall: $REGEN" | tee -a "$OUT"
+
+            # 2) cold build
+            go clean -cache >/dev/null 2>&1
+            BUILD=$( { time (cd "$DIR" && go build ./velox/... 2>/dev/null); } 2>&1 | awk '/^real/{print $2}')
+            echo "cold build wall: $BUILD" | tee -a "$OUT"
+
+            # 3) peak RSS during build
+            go clean -cache >/dev/null 2>&1
+            RSS=$(cd "$DIR" && $(rss_cmd) go build ./velox/... 2>&1 >/dev/null | rss_extract)
+            echo "cold build RSS: ${RSS:-n/a}" | tee -a "$OUT"
+
+            # 4) incremental rebuild — touch one entity, rebuild
+            # This is the metric that motivated per-entity packages in the first place.
+            ENT_FILE=$(find "$DIR/velox" -maxdepth 2 -name 'entity000.go' | head -1)
+            if [[ -n "$ENT_FILE" ]]; then
+                touch "$ENT_FILE"
+                INCR=$( { time (cd "$DIR" && go build ./velox/... 2>/dev/null); } 2>&1 | awk '/^real/{print $2}')
+                echo "incremental (1-file touch): $INCR" | tee -a "$OUT"
+            fi
+        done
+
+        echo "" | tee -a "$OUT"
+        echo "Results: $OUT"
+        ;;
     *)
-        echo "Usage: $0 [sql|codegen|privacy|postgres|all|compare|vs-ent]"
+        echo "Usage: $0 [sql|codegen|privacy|postgres|all|compare|vs-ent|scale]"
         exit 1
         ;;
 esac
