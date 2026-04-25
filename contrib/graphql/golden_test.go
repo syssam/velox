@@ -188,6 +188,129 @@ func TestWhereInput_FilterDoesNotImportEntityOrClient(t *testing.T) {
 	}
 }
 
+// TestEdgeMethod_HasWhereParameter pins the Plan 3 invariant: when an
+// edge connection is opted into WhereInput filtering, the generated
+// entity-side method (entity/gql_edge_*.go) MUST carry a
+// `where *filter.XxxWhereInput` parameter so gqlgen's autobind binds
+// directly without needing a hand-written resolver stub.
+//
+// This is the payoff of Plan 2's cycle-break: filter/ no longer imports
+// query/, so entity/ can now safely import filter/. Plan 3 consumes the
+// new freedom by adding the where param to the entity edge method.
+func TestEdgeMethod_HasWhereParameter(t *testing.T) {
+	t.Parallel()
+
+	postType := &entgen.Type{
+		Name: "Post",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{{
+			Name: "title",
+			Type: &field.TypeInfo{Type: field.TypeString},
+			Annotations: map[string]any{
+				AnnotationName: &Annotation{WhereInputEnabled: true},
+			},
+		}},
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{RelayConnection: true},
+		},
+	}
+	userType := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{RelayConnection: true},
+		},
+	}
+	postsEdge := &entgen.Edge{
+		Name:   "posts",
+		Type:   postType,
+		Unique: false,
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{WhereInputEnabled: true},
+		},
+	}
+	userType.Edges = []*entgen.Edge{postsEdge}
+
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{userType, postType},
+	}
+
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelaySpec:       true,
+		RelayConnection: true,
+		WhereInputs:     true,
+	})
+
+	src := gen.genEntityEdge(userType).GoString()
+	if !strings.Contains(src, "where *filter.PostWhereInput") &&
+		!strings.Contains(src, `where *filter.PostWhereInput`) {
+		t.Errorf("entity/gql_edge_user.go must declare `where *filter.PostWhereInput` "+
+			"on the Posts method (Plan 3 invariant) — current shape:\n%s", src)
+	}
+}
+
+// TestEdgeWhere_NoForceResolverDirective pins the Plan 3 inverse:
+// after Plan 3, `@goField(forceResolver: true)` MUST NOT be emitted on
+// edge-with-where SDL fields. The directive was a workaround for the
+// (now-extinct) cycle that prevented the entity method from carrying
+// `where *filter.XxxWhereInput`. Now that the entity method carries it,
+// gqlgen autobinds directly — no resolver interface needed.
+//
+// Replaces TestGenerator_GenEdgeField_ForceResolverOnWhere (and its
+// whole-SDL companion TestGenerator_WhereOnEdgeConnection_ForceResolverCoupling),
+// which guarded the OPPOSITE invariant. Those tests must be deleted in
+// Plan 3 Phase B alongside removing the forceResolver emission.
+func TestEdgeWhere_NoForceResolverDirective(t *testing.T) {
+	t.Parallel()
+
+	postType := &entgen.Type{
+		Name: "Post",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{{
+			Name: "title",
+			Type: &field.TypeInfo{Type: field.TypeString},
+			Annotations: map[string]any{
+				AnnotationName: &Annotation{WhereInputEnabled: true},
+			},
+		}},
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{RelayConnection: true},
+		},
+	}
+
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{postType},
+	}
+
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		RelaySpec:       true,
+		RelayConnection: true,
+		WhereInputs:     true,
+	})
+
+	edge := &entgen.Edge{
+		Name:   "posts",
+		Type:   postType,
+		Unique: false,
+		Annotations: map[string]any{
+			AnnotationName: &Annotation{WhereInputEnabled: true},
+		},
+	}
+	sdl := gen.genEdgeField(nil, edge)
+	if strings.Contains(sdl, "@goField(forceResolver: true)") {
+		t.Errorf("Plan 3 removes the forceResolver workaround — edge-with-where "+
+			"SDL fields must NOT carry @goField(forceResolver: true) anymore. "+
+			"Got SDL:\n%s", sdl)
+	}
+	if !strings.Contains(sdl, "where: PostWhereInput") {
+		t.Errorf("sanity: edge SDL should still carry the `where` arg; got:\n%s", sdl)
+	}
+}
+
 func TestGolden_Node(t *testing.T) {
 	t.Parallel()
 	g, userType := goldenTestType()
