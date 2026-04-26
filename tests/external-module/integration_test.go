@@ -3,6 +3,11 @@ package main
 import (
 	"testing"
 
+	commentclient "example.com/integration-test/velox/client/comment"
+	postclient "example.com/integration-test/velox/client/post"
+	profileclient "example.com/integration-test/velox/client/profile"
+	tagclient "example.com/integration-test/velox/client/tag"
+	userclient "example.com/integration-test/velox/client/user"
 	"example.com/integration-test/velox/comment"
 	"example.com/integration-test/velox/entity"
 	"example.com/integration-test/velox/post"
@@ -58,29 +63,29 @@ func TestSubPackageQueries(t *testing.T) {
 	cfg := runtime.Config{}
 
 	// User query with typed methods + chaining
-	uq := user.NewUserClient(cfg).Query()
+	uq := userclient.NewUserClient(cfg).Query()
 	require.NotNil(t, uq)
 	uq = uq.Limit(10).Offset(0)
 	assert.NotNil(t, uq)
 
 	// WithXxx eager loading (O2M, O2O)
-	uq = user.NewUserClient(cfg).Query().WithPosts().WithComments().WithProfile()
+	uq = userclient.NewUserClient(cfg).Query().WithPosts().WithComments().WithProfile()
 	assert.NotNil(t, uq)
 
 	// Post query with M2O + M2M edges
-	pq := post.NewPostClient(cfg).Query().WithAuthor().WithComments().WithTags()
+	pq := postclient.NewPostClient(cfg).Query().WithAuthor().WithComments().WithTags()
 	assert.NotNil(t, pq)
 
 	// Tag query with M2M inverse
-	tq := tag.NewTagClient(cfg).Query().WithPosts()
+	tq := tagclient.NewTagClient(cfg).Query().WithPosts()
 	assert.NotNil(t, tq)
 
 	// Comment query with M2O edges
-	cq := comment.NewCommentClient(cfg).Query().WithAuthor().WithPost()
+	cq := commentclient.NewCommentClient(cfg).Query().WithAuthor().WithPost()
 	assert.NotNil(t, cq)
 
 	// Profile query with O2O inverse
-	prq := profile.NewProfileClient(cfg).Query().WithUser()
+	prq := profileclient.NewProfileClient(cfg).Query().WithUser()
 	assert.NotNil(t, prq)
 }
 
@@ -113,13 +118,13 @@ func TestEdgeConstants(t *testing.T) {
 func TestCreateBuilders(t *testing.T) {
 	cfg := runtime.Config{}
 
-	uc := user.NewUserClient(cfg).Create().SetName("Test").SetEmail("test@example.com").SetActive(true)
+	uc := userclient.NewUserClient(cfg).Create().SetName("Test").SetEmail("test@example.com").SetActive(true)
 	assert.NotNil(t, uc)
 
-	pc := post.NewPostClient(cfg).Create().SetTitle("Test Post")
+	pc := postclient.NewPostClient(cfg).Create().SetTitle("Test Post")
 	assert.NotNil(t, pc)
 
-	tc := tag.NewTagClient(cfg).Create().SetName("golang")
+	tc := tagclient.NewTagClient(cfg).Create().SetName("golang")
 	assert.NotNil(t, tc)
 }
 
@@ -128,10 +133,10 @@ func TestUpdateViaEntity(t *testing.T) {
 	cfg := runtime.Config{}
 
 	// Entity-level update via client
-	uu := user.NewUserClient(cfg).UpdateOneID(1)
+	uu := userclient.NewUserClient(cfg).UpdateOneID(1)
 	require.NotNil(t, uu)
 
-	pu := post.NewPostClient(cfg).UpdateOneID(1)
+	pu := postclient.NewPostClient(cfg).UpdateOneID(1)
 	require.NotNil(t, pu)
 }
 
@@ -139,10 +144,10 @@ func TestUpdateViaEntity(t *testing.T) {
 func TestDeleteBuilders(t *testing.T) {
 	cfg := runtime.Config{}
 
-	ud := user.NewUserClient(cfg).Delete()
+	ud := userclient.NewUserClient(cfg).Delete()
 	assert.NotNil(t, ud)
 
-	pd := post.NewPostClient(cfg).Delete()
+	pd := postclient.NewPostClient(cfg).Delete()
 	assert.NotNil(t, pd)
 }
 
@@ -151,14 +156,14 @@ func TestEdgePredicateTypes(t *testing.T) {
 	cfg := runtime.Config{}
 
 	// HasXxx and HasXxxWith predicates
-	_ = user.NewUserClient(cfg).Query().Where(user.HasPosts())
-	_ = user.NewUserClient(cfg).Query().Where(user.HasComments())
-	_ = user.NewUserClient(cfg).Query().Where(user.HasProfile())
-	_ = post.NewPostClient(cfg).Query().Where(post.HasAuthor())
-	_ = post.NewPostClient(cfg).Query().Where(post.HasTags())
-	_ = tag.NewTagClient(cfg).Query().Where(tag.HasPosts())
-	_ = comment.NewCommentClient(cfg).Query().Where(comment.HasAuthor())
-	_ = comment.NewCommentClient(cfg).Query().Where(comment.HasPost())
+	_ = userclient.NewUserClient(cfg).Query().Where(user.HasPosts())
+	_ = userclient.NewUserClient(cfg).Query().Where(user.HasComments())
+	_ = userclient.NewUserClient(cfg).Query().Where(user.HasProfile())
+	_ = postclient.NewPostClient(cfg).Query().Where(post.HasAuthor())
+	_ = postclient.NewPostClient(cfg).Query().Where(post.HasTags())
+	_ = tagclient.NewTagClient(cfg).Query().Where(tag.HasPosts())
+	_ = commentclient.NewCommentClient(cfg).Query().Where(comment.HasAuthor())
+	_ = commentclient.NewCommentClient(cfg).Query().Where(comment.HasPost())
 }
 
 // TestUnwrap pins the Ent-parity contract: Unwrap() panics on a
