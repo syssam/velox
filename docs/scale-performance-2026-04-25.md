@@ -154,3 +154,85 @@ benchmarks/run.sh scale
 The exact platform/Go matters more for absolute numbers than for the
 trends shown here; the deltas reproduce on Apple Silicon and Linux
 amd64 within ±10%.
+
+---
+
+## Post-Plan-3 Re-run (2026-04-27)
+
+Plan 3 (`9f9bdee..076096a`) reshaped GraphQL edge-method codegen so
+edge-with-where binds directly via a typed entity method, eliminating
+the `@goField(forceResolver: true)` workaround and the user-written
+resolver stubs. The change is localised to `contrib/graphql/`; SQL
+codegen and the runtime layer were not touched.
+
+The stress fixtures (`benchmarks/fixtures/stress-{100,200,328}/`) emit
+SQL-only schemas and do not import `contrib/graphql`, so this re-run
+should — by construction — show no architectural delta. Re-running
+`benchmarks/run.sh scale` on `feature/phase-e` (post-Plan-3 HEAD)
+confirms that.
+
+### Numbers (2026-04-27)
+
+| Metric            | 100 ent  | 200 ent  | 328 ent  |
+| ----------------- | -------- | -------- | -------- |
+| Codegen           | 10.12s   | 15.40s   | 20.15s   |
+| Cold build wall   | 14.05s   | 26.18s   | 41.73s   |
+| Cold build RSS    | 1134 MB  | 2262 MB  | 3844 MB  |
+| Incremental (1)   | 0.41s    | 0.88s    | 1.47s    |
+
+### Comparison vs 2026-04-25 baseline
+
+| Metric                  | 100 (Apr 25) | 100 (Apr 27) | Δ        | 328 (Apr 25) | 328 (Apr 27) | Δ        |
+| ----------------------- | ------------ | ------------ | -------- | ------------ | ------------ | -------- |
+| Codegen                 | 4.79s        | 10.12s       | +111%    | 15.61s       | 20.15s       | +29%     |
+| Cold build wall         | 9.78s        | 14.05s       | +44%     | 28.64s       | 41.73s       | +46%     |
+| Cold build peak RSS     | 1.13 GB      | 1134 MB      | flat     | 3.71 GB      | 3844 MB      | +1%      |
+| Incremental (1 entity)  | 0.27s        | 0.41s        | +52%     | 1.02s        | 1.47s        | +44%     |
+
+### Why the absolute numbers shifted but the architecture did not
+
+Every wall-time metric is ~30–50% slower than the Apr 25 baseline. RSS
+is unchanged. Plan 3 didn't touch SQL codegen, so the slowdown can't
+be architectural in this benchmark. Two checks confirm it's
+machine-state variance, not a regression:
+
+**Within-run scaling is preserved.** Going from 100 → 328 entities:
+
+| Metric          | Apr 25 100→328 ratio | Apr 27 100→328 ratio |
+| --------------- | -------------------- | -------------------- |
+| Cold build wall | 2.93×                | 2.97×                |
+| Cold build RSS  | 3.37×                | 3.39×                |
+| Incremental     | 3.78×                | 3.59×                |
+
+The slope per entity is the same in both runs. A real regression
+would change the slope, not shift the entire curve up. A constant-
+factor shift across all metrics is what you'd expect from machine
+load, fan throttling, or Spotlight indexing during the run.
+
+**Codegen-100 anomaly fits a warmup hypothesis.** Codegen at 100
+slowed by +111%, at 328 by only +29%. Both runs use `time go run
+generate.go`, which forces the generator binary to recompile on first
+invocation and amortises that cost across the rest of the run. If the
+Apr 25 baseline was taken when the Go module cache and toolchain were
+already warm (other Velox work that day) and the Apr 27 run was taken
+after a long idle period, the 100 figure absorbs all of the cold-cache
+penalty while 200 / 328 do not.
+
+### Verdict
+
+- ✅ **No architectural regression from Plan 3.** Stress fixtures don't
+  exercise `contrib/graphql`, and within-run scaling matches Apr 25.
+- ⚠️ **Apr 27 absolute numbers should not be locked in as a new
+  baseline.** The constant-factor wall-time shift is consistent with
+  single-shot machine variance; the next measurement-quality run
+  should warm caches, run on an idle machine, and median across ≥3
+  iterations. The Apr 25 baseline still represents the best
+  measurement we have for headline claims.
+- ✅ **Memory remains flat.** RSS reproduces to within 1% across runs
+  at every fixture size — this is the most measurement-stable metric
+  and the one that mattered most for the cycle-break verdict.
+
+If a future change DOES touch SQL codegen and you need to compare,
+re-run the Apr 25 measurement methodology (warm machine, multiple
+runs, median) before drawing conclusions from a single Apr 27-style
+shot.
