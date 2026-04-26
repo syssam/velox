@@ -565,6 +565,21 @@ cfg, err := gen.NewConfig(
 )
 ```
 
+### Edge Connections with `where` (programmatic API)
+
+For edges opted into `WhereInput` filtering, the generated entity method on the parent carries a typed `where *filter.XxxWhereInput` parameter. This makes filtered edge access usable both from gqlgen (which autobinds it directly — no resolver code needed) and from non-GraphQL callers (REST handlers, batch jobs, gRPC services):
+
+```go
+// Find a user's overdue todos without a GraphQL request.
+where := &filter.TodoWhereInput{
+    Status:    &filter.TodoStatus{EQ: ptr(todo.StatusActive)},
+    DueBefore: ptr(time.Now()),
+}
+overdue, err := user.Todos(ctx, nil, nil, nil, nil, nil, where)
+```
+
+The cursor/limit args (`after, first, before, last`) and `orderBy` accept `nil` when you only want filtering. When `where == nil` AND no cursor is passed, the method returns the eager-loaded slice (via `.WithTodos()` on the parent query) without a DB round trip.
+
 ### Custom Resolvers
 
 Use `Resolvers()` to add custom resolver fields to an entity type. gqlgen generates resolver stubs that you implement. For forcing existing fields to use resolvers, configure `forceResolver` in gqlgen.yml instead.
