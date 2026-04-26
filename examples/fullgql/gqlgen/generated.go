@@ -54,15 +54,9 @@ type Config struct {
 }
 
 type ResolverRoot interface {
-	Category() CategoryResolver
-	Label() LabelResolver
 	Mutation() MutationResolver
 	Product() ProductResolver
 	Query() QueryResolver
-	Tag() TagResolver
-	Todo() TodoResolver
-	User() UserResolver
-	Workspace() WorkspaceResolver
 	CreateProductInput() CreateProductInputResolver
 	UpdateProductInput() UpdateProductInputResolver
 }
@@ -308,14 +302,6 @@ type ComplexityRoot struct {
 	}
 }
 
-type CategoryResolver interface {
-	Todos(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
-
-	Children(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *filter.CategoryWhereInput) (*entity.CategoryConnection, error)
-}
-type LabelResolver interface {
-	Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
-}
 type MutationResolver interface {
 	CreateCategory(ctx context.Context, input categoryclient.CreateCategoryInput) (*entity.Category, error)
 	UpdateCategory(ctx context.Context, id int, input categoryclient.UpdateCategoryInput) (*entity.Category, error)
@@ -338,8 +324,6 @@ type MutationResolver interface {
 }
 type ProductResolver interface {
 	Thumbnail(ctx context.Context, obj *entity.Product) (*string, error)
-
-	Tags(ctx context.Context, obj *entity.Product, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id int) (velox.Noder, error)
@@ -354,21 +338,6 @@ type QueryResolver interface {
 	Todos(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 	Users(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.UserOrder, where *filter.UserWhereInput) (*entity.UserConnection, error)
 	Workspaces(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.WorkspaceOrder, where *filter.WorkspaceWhereInput) (*entity.WorkspaceConnection, error)
-}
-type TagResolver interface {
-	Todos(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
-	Products(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *filter.ProductWhereInput) (*entity.ProductConnection, error)
-}
-type TodoResolver interface {
-	Tags(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error)
-
-	Labels(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *filter.LabelWhereInput) (*entity.LabelConnection, error)
-}
-type UserResolver interface {
-	Todos(ctx context.Context, obj *entity.User, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
-}
-type WorkspaceResolver interface {
-	Todos(ctx context.Context, obj *entity.Workspace, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 }
 
 type CreateProductInputResolver interface {
@@ -1813,7 +1782,7 @@ type Category implements Node @goModel(model: "example.com/fullgql/velox/entity.
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection! @goField(forceResolver: true)
+  ): TodoConnection!
   parent: Category
   """
   Subcategories
@@ -1848,7 +1817,7 @@ type Category implements Node @goModel(model: "example.com/fullgql/velox/entity.
     Filtering options for Categories returned from the connection.
     """
     where: CategoryWhereInput
-  ): CategoryConnection! @goField(forceResolver: true)
+  ): CategoryConnection!
 }
 
 type Comment implements Node @goModel(model: "example.com/fullgql/velox/entity.Comment") {
@@ -1909,7 +1878,7 @@ type Label implements Node @goModel(model: "example.com/fullgql/velox/entity.Lab
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection! @goField(forceResolver: true)
+  ): TodoConnection!
 }
 
 type Member implements Node @goModel(model: "example.com/fullgql/velox/entity.Member") {
@@ -1977,7 +1946,7 @@ type Product implements Node @goModel(model: "example.com/fullgql/velox/entity.P
     Filtering options for Tags returned from the connection.
     """
     where: TagWhereInput
-  ): TagConnection! @goField(forceResolver: true)
+  ): TagConnection!
 }
 
 type Tag implements Node @goModel(model: "example.com/fullgql/velox/entity.Tag") {
@@ -2016,7 +1985,7 @@ type Tag implements Node @goModel(model: "example.com/fullgql/velox/entity.Tag")
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection! @goField(forceResolver: true)
+  ): TodoConnection!
   """
   Products associated with this tag
   """
@@ -2050,7 +2019,7 @@ type Tag implements Node @goModel(model: "example.com/fullgql/velox/entity.Tag")
     Filtering options for Products returned from the connection.
     """
     where: ProductWhereInput
-  ): ProductConnection! @goField(forceResolver: true)
+  ): ProductConnection!
 }
 
 type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo") {
@@ -2111,7 +2080,7 @@ type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo
     Filtering options for Tags returned from the connection.
     """
     where: TagWhereInput
-  ): TagConnection! @goField(forceResolver: true)
+  ): TagConnection!
   """
   Category this todo belongs to
   """
@@ -2149,7 +2118,7 @@ type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo
     Filtering options for Labels returned from the connection.
     """
     where: LabelWhereInput
-  ): LabelConnection! @goField(forceResolver: true)
+  ): LabelConnection!
   """
   Workspace this todo belongs to
   """
@@ -2205,7 +2174,7 @@ type User implements Node @goModel(model: "example.com/fullgql/velox/entity.User
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection! @goField(forceResolver: true)
+  ): TodoConnection!
   """
   Comments written by this user
   """
@@ -2271,7 +2240,7 @@ type Workspace implements Node @goModel(model: "example.com/fullgql/velox/entity
     Filtering options for Todos returned from the connection.
     """
     where: TodoWhereInput
-  ): TodoConnection! @goField(forceResolver: true)
+  ): TodoConnection!
 }
 
 
@@ -4865,7 +4834,7 @@ func (ec *executionContext) _Category_todos(ctx context.Context, field graphql.C
 		ec.fieldContext_Category_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Category().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
+			return obj.Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -4879,7 +4848,7 @@ func (ec *executionContext) fieldContext_Category_todos(ctx context.Context, fie
 		Object:     "Category",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -4961,7 +4930,7 @@ func (ec *executionContext) _Category_children(ctx context.Context, field graphq
 		ec.fieldContext_Category_children,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Category().Children(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*filter.CategoryWhereInput))
+			return obj.Children(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.CategoryOrder), fc.Args["where"].(*filter.CategoryWhereInput))
 		},
 		nil,
 		ec.marshalNCategoryConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategoryConnection,
@@ -4975,7 +4944,7 @@ func (ec *executionContext) fieldContext_Category_children(ctx context.Context, 
 		Object:     "Category",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -5512,7 +5481,7 @@ func (ec *executionContext) _Label_todos(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Label_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Label().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
+			return obj.Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -5526,7 +5495,7 @@ func (ec *executionContext) fieldContext_Label_todos(ctx context.Context, field 
 		Object:     "Label",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -7442,7 +7411,7 @@ func (ec *executionContext) _Product_tags(ctx context.Context, field graphql.Col
 		ec.fieldContext_Product_tags,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Product().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
+			return obj.Tags(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
 		},
 		nil,
 		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
@@ -7456,7 +7425,7 @@ func (ec *executionContext) fieldContext_Product_tags(ctx context.Context, field
 		Object:     "Product",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -8402,7 +8371,7 @@ func (ec *executionContext) _Tag_todos(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Tag_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Tag().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
+			return obj.Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -8416,7 +8385,7 @@ func (ec *executionContext) fieldContext_Tag_todos(ctx context.Context, field gr
 		Object:     "Tag",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -8451,7 +8420,7 @@ func (ec *executionContext) _Tag_products(ctx context.Context, field graphql.Col
 		ec.fieldContext_Tag_products,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Tag().Products(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*filter.ProductWhereInput))
+			return obj.Products(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.ProductOrder), fc.Args["where"].(*filter.ProductWhereInput))
 		},
 		nil,
 		ec.marshalNProductConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProductConnection,
@@ -8465,7 +8434,7 @@ func (ec *executionContext) fieldContext_Tag_products(ctx context.Context, field
 		Object:     "Tag",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -9061,7 +9030,7 @@ func (ec *executionContext) _Todo_tags(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Todo_tags,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Todo().Tags(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
+			return obj.Tags(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TagOrder), fc.Args["where"].(*filter.TagWhereInput))
 		},
 		nil,
 		ec.marshalNTagConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTagConnection,
@@ -9075,7 +9044,7 @@ func (ec *executionContext) fieldContext_Todo_tags(ctx context.Context, field gr
 		Object:     "Todo",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -9157,7 +9126,7 @@ func (ec *executionContext) _Todo_labels(ctx context.Context, field graphql.Coll
 		ec.fieldContext_Todo_labels,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Todo().Labels(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*filter.LabelWhereInput))
+			return obj.Labels(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.LabelOrder), fc.Args["where"].(*filter.LabelWhereInput))
 		},
 		nil,
 		ec.marshalNLabelConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐLabelConnection,
@@ -9171,7 +9140,7 @@ func (ec *executionContext) fieldContext_Todo_labels(ctx context.Context, field 
 		Object:     "Todo",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -9711,7 +9680,7 @@ func (ec *executionContext) _User_todos(ctx context.Context, field graphql.Colle
 		ec.fieldContext_User_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.User().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
+			return obj.Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -9725,7 +9694,7 @@ func (ec *executionContext) fieldContext_User_todos(ctx context.Context, field g
 		Object:     "User",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
@@ -10338,7 +10307,7 @@ func (ec *executionContext) _Workspace_todos(ctx context.Context, field graphql.
 		ec.fieldContext_Workspace_todos,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Workspace().Todos(ctx, obj, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
+			return obj.Todos(ctx, fc.Args["after"].(*gqlrelay.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*gqlrelay.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*entity.TodoOrder), fc.Args["where"].(*filter.TodoWhereInput))
 		},
 		nil,
 		ec.marshalNTodoConnection2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodoConnection,
@@ -10352,7 +10321,7 @@ func (ec *executionContext) fieldContext_Workspace_todos(ctx context.Context, fi
 		Object:     "Workspace",
 		Field:      field,
 		IsMethod:   true,
-		IsResolver: true,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":

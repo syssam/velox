@@ -163,7 +163,7 @@ type Tag implements Node @goModel(model: "github.com/syssam/velox/tests/integrat
     Filtering options for Posts returned from the connection.
     """
     where: PostWhereInput
-  ): PostConnection! @goField(forceResolver: true)
+  ): PostConnection!
 }
 
 type Token implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Token") {
@@ -218,7 +218,7 @@ type User implements Node @goModel(model: "github.com/syssam/velox/tests/integra
     Filtering options for Posts returned from the connection.
     """
     where: PostWhereInput
-  ): PostConnection! @goField(forceResolver: true)
+  ): PostConnection!
   """
   Comments written by this user
   """

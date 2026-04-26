@@ -59,7 +59,7 @@ func TestGraphQLEdge_FastPath_UsesEagerLoadedPosts(t *testing.T) {
 	require.NoError(t, client.Close())
 
 	first := 10
-	conn, err := reloaded.Posts(ctx, nil, &first, nil, nil, nil)
+	conn, err := reloaded.Posts(ctx, nil, &first, nil, nil, nil, nil)
 	require.NoError(t, err,
 		"entity edge method MUST use eager-loaded edges — a closed-DB error "+
 			"here means the fast path in gen_entity_edge.go::genConnectionEdgeMethod "+
@@ -552,7 +552,7 @@ func TestGraphQLEdge_Tx_FastPath(t *testing.T) {
 	// Fast path: no DB call. Must work despite loaded.config.Driver being
 	// a (now committed) *txDriver.
 	first := 10
-	conn, err := loaded.Posts(ctx, nil, &first, nil, nil, nil)
+	conn, err := loaded.Posts(ctx, nil, &first, nil, nil, nil, nil)
 	require.NoError(t, err,
 		"entity edge method fast path must work post-commit on a tx-created "+
 			"entity WITHOUT Unwrap() — if this fails, the fast path is falling "+

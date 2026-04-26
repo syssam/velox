@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"example.com/fullgql/velox"
-	"example.com/fullgql/velox/category"
 	categoryclient "example.com/fullgql/velox/client/category"
 	commentclient "example.com/fullgql/velox/client/comment"
 	labelclient "example.com/fullgql/velox/client/label"
@@ -22,53 +21,8 @@ import (
 	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/filter"
-	"example.com/fullgql/velox/label"
-	"example.com/fullgql/velox/product"
-	"example.com/fullgql/velox/tag"
-	"example.com/fullgql/velox/todo"
-	"example.com/fullgql/velox/user"
-	"example.com/fullgql/velox/workspace"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 )
-
-// Todos is the resolver for the todos field.
-//
-// Body shape: fast-path eager-load check, then fall through to Paginate.
-// This is the recommended pattern for hand-written resolvers in velox —
-// mirrors the entity-method fast path (entity/gql_edge_*.go) so that
-// parent queries using .WithTodos() don't waste the eager load when the
-// user hits this edge via GraphQL.
-func (r *categoryResolver) Todos(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
-			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Todo.Query().Where(todo.HasCategoryWith(category.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
-}
-
-// Children is the resolver for the children field.
-func (r *categoryResolver) Children(ctx context.Context, obj *entity.Category, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.CategoryOrder, where *filter.CategoryWhereInput) (*entity.CategoryConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.ChildrenOrErr(); err == nil {
-			return entity.BuildCategoryConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Category.Query().Where(category.HasParentWith(category.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithCategoryOrder(orderBy), entity.WithCategoryFilter(where.Filter))
-}
-
-// Todos is the resolver for the todos field.
-func (r *labelResolver) Todos(ctx context.Context, obj *entity.Label, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
-			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Todo.Query().Where(todo.HasLabelsWith(label.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
-}
 
 // CreateCategory is the resolver for the createCategory field.
 func (r *mutationResolver) CreateCategory(ctx context.Context, input categoryclient.CreateCategoryInput) (*entity.Category, error) {
@@ -165,17 +119,6 @@ func (r *productResolver) Thumbnail(ctx context.Context, obj *entity.Product) (*
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
 }
 
-// Tags is the resolver for the tags field.
-func (r *productResolver) Tags(ctx context.Context, obj *entity.Product, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TagsOrErr(); err == nil {
-			return entity.BuildTagConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Tag.Query().Where(tag.HasProductsWith(product.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTagOrder(orderBy), entity.WithTagFilter(where.Filter))
-}
-
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id int) (velox.Noder, error) {
 	return r.Client.Noder(ctx, id)
@@ -236,72 +179,6 @@ func (r *queryResolver) Workspaces(ctx context.Context, after *gqlrelay.Cursor, 
 	return r.Client.Workspace.Query().Paginate(ctx, after, first, before, last, entity.WithWorkspaceOrder(orderBy), entity.WithWorkspaceFilter(where.Filter))
 }
 
-// Todos is the resolver for the todos field.
-func (r *tagResolver) Todos(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
-			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Todo.Query().Where(todo.HasTagsWith(tag.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
-}
-
-// Products is the resolver for the products field.
-func (r *tagResolver) Products(ctx context.Context, obj *entity.Tag, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.ProductOrder, where *filter.ProductWhereInput) (*entity.ProductConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.ProductsOrErr(); err == nil {
-			return entity.BuildProductConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Product.Query().Where(product.HasTagsWith(tag.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithProductOrder(orderBy), entity.WithProductFilter(where.Filter))
-}
-
-// Tags is the resolver for the tags field.
-func (r *todoResolver) Tags(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) (*entity.TagConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TagsOrErr(); err == nil {
-			return entity.BuildTagConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Tag.Query().Where(tag.HasTodosWith(todo.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTagOrder(orderBy), entity.WithTagFilter(where.Filter))
-}
-
-// Labels is the resolver for the labels field.
-func (r *todoResolver) Labels(ctx context.Context, obj *entity.Todo, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.LabelOrder, where *filter.LabelWhereInput) (*entity.LabelConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.LabelsOrErr(); err == nil {
-			return entity.BuildLabelConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Label.Query().Where(label.HasTodosWith(todo.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithLabelOrder(orderBy), entity.WithLabelFilter(where.Filter))
-}
-
-// Todos is the resolver for the todos field.
-func (r *userResolver) Todos(ctx context.Context, obj *entity.User, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
-			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Todo.Query().Where(todo.HasOwnerWith(user.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
-}
-
-// Todos is the resolver for the todos field.
-func (r *workspaceResolver) Todos(ctx context.Context, obj *entity.Workspace, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-	if where == nil && after == nil && before == nil {
-		if nodes, err := obj.Edges.TodosOrErr(); err == nil {
-			return entity.BuildTodoConnection(nodes, 0, orderBy, after, first, before, last), nil
-		}
-	}
-	q := r.Client.Todo.Query().Where(todo.HasWorkspaceWith(workspace.IDField.EQ(obj.ID)))
-	return q.Paginate(ctx, after, first, before, last, entity.WithTodoOrder(orderBy), entity.WithTodoFilter(where.Filter))
-}
-
 // Thumbnail is the resolver for the thumbnail field.
 func (r *createProductInputResolver) Thumbnail(ctx context.Context, obj *productclient.CreateProductInput, data *string) error {
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
@@ -312,12 +189,6 @@ func (r *updateProductInputResolver) Thumbnail(ctx context.Context, obj *product
 	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
 }
 
-// Category returns CategoryResolver implementation.
-func (r *Resolver) Category() CategoryResolver { return &categoryResolver{r} }
-
-// Label returns LabelResolver implementation.
-func (r *Resolver) Label() LabelResolver { return &labelResolver{r} }
-
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
@@ -326,18 +197,6 @@ func (r *Resolver) Product() ProductResolver { return &productResolver{r} }
 
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
-
-// Tag returns TagResolver implementation.
-func (r *Resolver) Tag() TagResolver { return &tagResolver{r} }
-
-// Todo returns TodoResolver implementation.
-func (r *Resolver) Todo() TodoResolver { return &todoResolver{r} }
-
-// User returns UserResolver implementation.
-func (r *Resolver) User() UserResolver { return &userResolver{r} }
-
-// Workspace returns WorkspaceResolver implementation.
-func (r *Resolver) Workspace() WorkspaceResolver { return &workspaceResolver{r} }
 
 // CreateProductInput returns CreateProductInputResolver implementation.
 func (r *Resolver) CreateProductInput() CreateProductInputResolver {
@@ -349,14 +208,8 @@ func (r *Resolver) UpdateProductInput() UpdateProductInputResolver {
 	return &updateProductInputResolver{r}
 }
 
-type categoryResolver struct{ *Resolver }
-type labelResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type productResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
-type tagResolver struct{ *Resolver }
-type todoResolver struct{ *Resolver }
-type userResolver struct{ *Resolver }
-type workspaceResolver struct{ *Resolver }
 type createProductInputResolver struct{ *Resolver }
 type updateProductInputResolver struct{ *Resolver }

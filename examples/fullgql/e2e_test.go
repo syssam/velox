@@ -1494,7 +1494,7 @@ func TestEntityConnectionEdgeMethod_ReturnsAllWithCorrectContent(t *testing.T) {
 	reloaded, err := userclient.NewUserClient(cfg).Get(ctx, owner.ID)
 	require.NoError(t, err)
 
-	conn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
+	conn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil, nil)
 	require.NoError(t, err, "regression guard for the Relay connection path")
 	require.NotNil(t, conn)
 	assert.Len(t, conn.Edges, 3, "Relay connection edge must return exactly the owner's todos")
@@ -1556,7 +1556,7 @@ func TestEntityM2MEdgeMethod_ReturnsAllAssociated(t *testing.T) {
 	reloaded, err := todoclient.NewTodoClient(cfg).Get(ctx, td.ID)
 	require.NoError(t, err)
 
-	conn, err := reloaded.Tags(ctx, nil, ptr(10), nil, nil, nil)
+	conn, err := reloaded.Tags(ctx, nil, ptr(10), nil, nil, nil, nil)
 	require.NoError(t, err, "regression guard for the M2M path")
 	require.NotNil(t, conn)
 	assert.Len(t, conn.Edges, 3, "M2M edge must return exactly the todo's associated tags")
@@ -1648,7 +1648,7 @@ func TestGraphQL_EdgeConnectionWhereFilter(t *testing.T) {
 	{
 		reloaded, err := tagclient.NewTagClient(cfg).Get(ctx, theTag.ID)
 		require.NoError(t, err)
-		sanityConn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
+		sanityConn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil, nil)
 		require.NoError(t, err)
 		require.Equal(t, 4, sanityConn.TotalCount,
 			"seed sanity: tag.todos at Go-level should see all 4 todos")
@@ -1794,7 +1794,7 @@ func TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges(t *testing.T) {
 	// Call the entity-level edge method. With the fast path, this must
 	// succeed because nodes come from reloaded.Edges.Todos (already loaded
 	// in memory) — no driver round trip.
-	conn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil)
+	conn, err := reloaded.Todos(ctx, nil, ptr(10), nil, nil, nil, nil)
 	require.NoError(t, err,
 		"entity edge method MUST use eager-loaded edges — if this fails with a "+
 			"closed-DB error, the fast path in gen_entity_edge.go::genConnectionEdgeMethod "+
@@ -1812,86 +1812,10 @@ func TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges(t *testing.T) {
 		"fast path must return exactly the eager-loaded nodes, not a coincidental subset")
 }
 
-// TestUserResolver_FastPath_ThroughGraphQL pins the "fast path through a
-// user-written resolver" pattern documented in doc.go and implemented in
-// examples/fullgql/gqlgen/schema.resolvers.go for every where-carrying edge.
-//
-// The entity-method fast path (TestEntityEdgeMethod_FastPath_... above) only
-// covers edges WITHOUT `where` — those bind to the entity method via gqlgen
-// autobind. Edges WITH `where` go through a user-written resolver in the
-// gqlgen package, and the resolver body must ALSO check
-// obj.Edges.XxxOrErr() before hitting the DB, otherwise eager loading is
-// still wasted at the GraphQL layer.
-//
-// This test sends a GraphQL query that returns pre-loaded edges (via a
-// GraphQL-level eager load in the parent query's CollectFields or — for
-// this fullgql fixture — via a custom runtime wrapper). We verify that
-// the user resolver's fast-path branch is the one taken by observing the
-// correct nodes come back after the client's DB is closed.
-//
-// In practice: if the resolver body drops the `if where == nil && ...` guard
-// velox's doc.go and CLAUDE.md recommend, this test starts failing with a
-// closed-DB error. That's the canary.
-func TestUserResolver_FastPath_ThroughGraphQL(t *testing.T) {
-	ctx := context.Background()
-	// Shared-cache SQLite: gqlgen executor may open new DB connections; they
-	// must see the same in-memory schema as the seeder.
-	client, err := velox.Open(dialect.SQLite, "file:resolver-fp?mode=memory&cache=shared&_pragma=foreign_keys(1)")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = client.Close() })
-	require.NoError(t, client.Schema.Create(ctx))
-	cfg := client.RuntimeConfig()
-
-	owner, err := userclient.NewUserClient(cfg).Create().
-		SetInput(userclient.CreateUserInput{Name: "Owner", Email: "owner-rfp@example.com"}).
-		Save(ctx)
-	require.NoError(t, err)
-
-	cat, err := categoryclient.NewCategoryClient(cfg).Create().
-		SetInput(categoryclient.CreateCategoryInput{Name: "resolver-fp"}).
-		Save(ctx)
-	require.NoError(t, err)
-
-	for _, title := range []string{"p", "q"} {
-		_, err := todoclient.NewTodoClient(cfg).Create().
-			SetInput(todoclient.CreateTodoInput{
-				Title:      title,
-				OwnerID:    owner.ID,
-				CategoryID: &cat.ID,
-			}).
-			Save(ctx)
-		require.NoError(t, err)
-	}
-
-	// Unit-level: directly invoke the resolver with an obj that already has
-	// Edges.Todos loaded. This exercises the exact user-written body in
-	// schema.resolvers.go::(*categoryResolver).Todos. Closing the client
-	// DB afterward verifies the fast path branch is taken — if it falls
-	// through to r.Client.Todo.Query(), the test fails with closed-DB.
-	reloaded, err := client.Category.Query().Where(category.IDField.EQ(cat.ID)).WithTodos().Only(ctx)
-	require.NoError(t, err)
-	require.NoError(t, client.Close())
-
-	// Build a fresh executor around the closed client. We're not going to
-	// serve HTTP — we call the sub-resolver directly. This mirrors what
-	// happens inside gqlgen when `where: null` and no cursor are passed.
-	resolverRoot := &gqlgenpkg.Resolver{Client: client}
-	catResolver := resolverRoot.Category()
-
-	conn, err := catResolver.Todos(ctx, reloaded, nil, ptr(10), nil, nil, nil, nil)
-	require.NoError(t, err,
-		"user-written resolver body in schema.resolvers.go::(*categoryResolver).Todos "+
-			"MUST fast-path eager-loaded edges — closed-DB error here means the "+
-			"`if where == nil && after == nil && before == nil { if nodes, err := obj.Edges.TodosOrErr(); err == nil { ... } }` "+
-			"guard was removed or broken")
-	require.Equal(t, 2, conn.TotalCount, "fast path returned wrong totalCount")
-	require.Len(t, conn.Edges, 2, "fast path returned wrong edge count")
-
-	gotTitles := make([]string, 0, 2)
-	for _, e := range conn.Edges {
-		require.NotNil(t, e.Node)
-		gotTitles = append(gotTitles, e.Node.Title)
-	}
-	assert.ElementsMatch(t, []string{"p", "q"}, gotTitles,
-		"user resolver fast path must return the eager-loaded nodes exactly")
-}
+// (TestUserResolver_FastPath_ThroughGraphQL was deleted in Plan 3 Phase D.
+// It pinned a fast-path inside a user-written categoryResolver.Todos body,
+// which existed only because edge-with-where used to require the
+// @goField(forceResolver: true) workaround. With Phase C/D, edges-with-where
+// autobind directly to the entity method; the fast path now lives entirely
+// in genConnectionEdgeMethod and is covered by
+// TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges above.)
