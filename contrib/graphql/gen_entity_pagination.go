@@ -81,19 +81,12 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Id("opt").Call(jen.Id("cfg")),
 		)
 
-		// Apply filter. After cycle-break, filter returns a predicate (not a
-		// modified query) so we can break the filter/ -> query/ import edge.
+		// Apply filter. cfg.Filter is a typed closure
+		// `func() (predicate.X, error)` — invoke it to resolve the predicate,
+		// propagate any error, and apply the predicate to the query when
+		// non-nil.
 		grp.If(jen.Id("cfg").Dot("Filter").Op("!=").Nil()).BlockFunc(func(filterGrp *jen.Group) {
-			predicatePkg := g.config.ORMPackage + "/predicate"
-			filterGrp.List(jen.Id("f"), jen.Id("ok")).Op(":=").Id("cfg").Dot("Filter").Op(".").Parens(
-				jen.Func().Params().Params(jen.Qual(predicatePkg, t.Name), jen.Error()),
-			)
-			filterGrp.If(jen.Op("!").Id("ok")).Block(
-				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("pagination: invalid filter type %T"), jen.Id("cfg").Dot("Filter"),
-				)),
-			)
-			filterGrp.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("f").Call()
+			filterGrp.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("cfg").Dot("Filter").Call()
 			filterGrp.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
 			)
@@ -342,7 +335,7 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	}
 	f.Type().Id(pagerConfigName).Struct(
 		orderField,
-		jen.Id("Filter").Any(),
+		jen.Id("Filter").Func().Params().Params(jen.Qual(predicatePkg, t.Name), jen.Error()),
 		jen.Id("Predicate").Qual(predicatePkg, t.Name),
 	)
 	f.Line()
@@ -393,7 +386,7 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	g.genModelWithOrder(f, typeName, optName, orderName, pagerConfigName, defaultOrderName, multiOrder)
 
 	// --- WithFilter function ---
-	g.genModelWithFilter(f, typeName, optName, pagerConfigName)
+	g.genModelWithFilter(f, t, typeName, optName, pagerConfigName)
 
 	// --- WithPredicate function ---
 	g.genModelWithPredicate(f, t, typeName, optName, pagerConfigName)
@@ -570,16 +563,17 @@ func (g *Generator) genModelWithOrder(f *jen.File, typeName, optName, orderName,
 }
 
 // genModelWithFilter generates WithXxxFilter function.
-// The filter is stored as `any` in PagerConfig to avoid circular imports
-// (entity/ package cannot import filter/ without re-introducing the cycle).
-// After the cycle-break refactor, the expected filter type is
-// func() (predicate.Xxx, error) — Paginate type-asserts to this shape.
-func (g *Generator) genModelWithFilter(f *jen.File, typeName, optName, pagerConfigName string) {
+// Filter is a closure that resolves to a predicate, typed as
+// `func() (predicate.Xxx, error)`. The closure form (vs. WithXxxPredicate's
+// already-resolved predicate) lets callers thread WhereInput.Filter — a
+// method value of exactly this shape — without invoking it at the call site.
+func (g *Generator) genModelWithFilter(f *jen.File, t *gen.Type, typeName, optName, pagerConfigName string) {
+	predicatePkg := g.config.ORMPackage + "/predicate"
 	optFilterName := "With" + typeName + "Filter"
-	f.Commentf("%s sets a filter function for %s pagination.", optFilterName, typeName)
-	f.Commentf("The filter parameter should be func() (predicate.%s, error).", typeName)
+	f.Commentf("%s sets a filter closure for %s pagination.", optFilterName, typeName)
+	f.Commentf("The closure resolves to a predicate.%s (or an error) at apply time.", t.Name)
 	f.Func().Id(optFilterName).Params(
-		jen.Id("filter").Any(),
+		jen.Id("filter").Func().Params().Params(jen.Qual(predicatePkg, t.Name), jen.Error()),
 	).Id(optName).Block(
 		jen.Return(jen.Func().Params(jen.Id("cfg").Op("*").Id(pagerConfigName)).Block(
 			jen.Id("cfg").Dot("Filter").Op("=").Id("filter"),

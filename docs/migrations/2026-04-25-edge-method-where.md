@@ -19,8 +19,9 @@ The cycle-break migration (2026-04-24) made `filter/` no longer depend on
 1. Changed the generated edge method signature to accept
    `where *filter.XxxWhereInput` directly.
 2. Threaded `where.Filter` into the underlying query as an
-   `entity.WithXxxPredicate` option (closure form `WithXxxFilter` is kept
-   for backcompat with hand-written code that uses it directly).
+   `entity.WithXxxPredicate` option (typed closure form `WithXxxFilter` —
+   `func() (predicate.X, error)` — is kept for backcompat with hand-written
+   code that uses it directly).
 3. Dropped the `@goField(forceResolver: true)` directive emission for
    edge-with-where SDL fields.
 
@@ -112,6 +113,17 @@ Phase C/D removes the workaround now that the cycle is gone. The runtime
 behavior is identical — the same `WithXxxPredicate` plumbing the
 hand-written `WithXxxFilter(where.Filter)` invoked. Both are still
 exported; the closure form is preserved for backcompat.
+
+### 2026-04-27 — `WithXxxFilter` typed
+
+`WithXxxFilter`'s `any` parameter was retyped to
+`func() (predicate.X, error)`. Caller code (`WithXxxFilter(where.Filter)`)
+is unchanged because `where.Filter` is already a method value of that
+exact shape. The change closes the last `any`-erased seam in the
+pagination API — callers now get a compile-time type error if they pass
+the wrong shape, instead of a runtime "invalid filter type" panic. The
+`any` was a cycle-era artifact; once the entity → filter cycle was
+broken, the closure type could be named directly.
 
 ## Compared to Ent
 

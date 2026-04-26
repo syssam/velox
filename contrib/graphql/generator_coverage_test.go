@@ -1155,6 +1155,7 @@ func TestGenerator_GenModelPagination_WithFilter(t *testing.T) {
 
 	gen := NewGenerator(g, Config{
 		Package:         "graphql",
+		ORMPackage:      "example/ent",
 		RelayConnection: true,
 		Ordering:        true,
 	})
@@ -1165,13 +1166,13 @@ func TestGenerator_GenModelPagination_WithFilter(t *testing.T) {
 	assert.NoError(t, err)
 	code := buf.String()
 
-	// PagerConfig should have Filter field. gofmt aligns struct field types
-	// in tabular form, so the rendered line is `Filter    any` (variable
-	// whitespace). Match on the trimmed form to stay agnostic to alignment.
-	assert.Regexp(t, `Filter\s+any`, code)
+	// PagerConfig should have a typed Filter field
+	// `func() (predicate.User, error)`. gofmt aligns struct field types in
+	// tabular form, so we match on whitespace-tolerant regex.
+	assert.Regexp(t, `Filter\s+func\(\) \(predicate\.User, error\)`, code)
 
-	// WithUserFilter function should be generated
-	assert.Contains(t, code, "func WithUserFilter(filter any) UserPaginateOption")
+	// WithUserFilter function should be generated with the typed parameter.
+	assert.Contains(t, code, "func WithUserFilter(filter func() (predicate.User, error)) UserPaginateOption")
 	assert.Contains(t, code, "cfg.Filter = filter")
 }
 
@@ -1192,6 +1193,7 @@ func TestGenerator_GenEntityPagination_FilterApplication(t *testing.T) {
 
 	gen := NewGenerator(g, Config{
 		Package:         "graphql",
+		ORMPackage:      "example/ent",
 		RelayConnection: true,
 		Ordering:        true,
 	})
@@ -1202,14 +1204,17 @@ func TestGenerator_GenEntityPagination_FilterApplication(t *testing.T) {
 	assert.NoError(t, err)
 	code := buf.String()
 
-	// Filter should be applied with type assertion (post cycle-break signature).
+	// cfg.Filter is now typed `func() (predicate.User, error)` — the
+	// Paginate body invokes it directly, propagates errors, and applies
+	// the resolved predicate to the query. No type assertion path remains.
 	assert.Contains(t, code, "cfg.Filter != nil")
-	assert.Contains(t, code, "cfg.Filter.(func() (predicate.User, error))")
+	assert.Contains(t, code, "p, err := cfg.Filter()")
 	assert.Contains(t, code, "q.Where(p)")
 
-	// Wrong filter type should return error (not silently ignored)
-	assert.Contains(t, code, "invalid filter type")
-	assert.Contains(t, code, "fmt.Errorf")
+	// The legacy `any`-erased path is gone: no type assertion, no
+	// "invalid filter type" branch.
+	assert.NotContains(t, code, "cfg.Filter.(func() (predicate.User, error))")
+	assert.NotContains(t, code, "invalid filter type")
 }
 
 // TestGenerator_GenEntityPagination_DelegatesToBuildConnection pins a
@@ -1330,13 +1335,14 @@ func TestPagination_WithPredicate_Applied(t *testing.T) {
 		"WithUserPredicate body must assign cfg.Predicate = p — the option "+
 			"is responsible for installing the predicate into the config.")
 
-	// WithUserFilter MUST still exist for backward compatibility — the
-	// typed path is additive, not a replacement. If this disappears,
-	// callers built against Plan 1/Plan 2 break without a deprecation
-	// window.
-	assert.Contains(t, typesCode, "func WithUserFilter(filter any) UserPaginateOption",
+	// WithUserFilter MUST still exist alongside the typed predicate API —
+	// the closure form is the canonical way to thread *WhereInput.Filter
+	// (a method value of `func() (predicate.User, error)`) without
+	// invoking it at the call site. If this disappears, callers that pass
+	// where.Filter break without a deprecation window.
+	assert.Contains(t, typesCode, "func WithUserFilter(filter func() (predicate.User, error)) UserPaginateOption",
 		"WithUserFilter must still be emitted alongside WithUserPredicate "+
-			"for backward compatibility (Plan 3 Phase B contract: coexist).")
+			"with the typed closure parameter (Plan 3 Phase B contract: coexist).")
 
 	// Paginate body — emits the cfg.Predicate apply block.
 	pagFile := gen.genEntityPagination(typ)
