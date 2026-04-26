@@ -102,6 +102,15 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			)
 		})
 
+		// Apply predicate. After Plan 2 cycle-break, edge methods accept
+		// *filter.XxxWhereInput directly and call .Filter() at the call site
+		// to get a predicate, then pass it via WithXxxPredicate. No closure
+		// indirection, no type assertion. Coexists with cfg.Filter for
+		// backward compatibility — both apply if set.
+		grp.If(jen.Id("cfg").Dot("Predicate").Op("!=").Nil()).Block(
+			jen.Id("q").Dot("Where").Call(jen.Id("cfg").Dot("Predicate")),
+		)
+
 		// Apply order — use query builder methods directly (same package).
 		grp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).BlockFunc(func(orderGrp *jen.Group) {
 			orderGrp.Id("q").Dot("Order").Call(
@@ -325,6 +334,7 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	f.Line()
 
 	// --- PagerConfig struct ---
+	predicatePkg := g.config.ORMPackage + "/predicate"
 	f.Comment(fmt.Sprintf("%s holds pagination configuration for %s.", pagerConfigName, typeName))
 	if multiOrder {
 		f.Type().Id(pagerConfigName).Struct(
@@ -332,6 +342,9 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 			jen.Comment("Filter is a typed filter function stored as any to avoid circular imports."),
 			jen.Comment("The actual type is func(*XxxQuery) (*XxxQuery, error)."),
 			jen.Id("Filter").Any(),
+			jen.Comment("Predicate is applied directly via q.Where(p) — preferred over Filter."),
+			jen.Comment("Set by WithXxxPredicate; coexists with Filter for backward compatibility."),
+			jen.Id("Predicate").Qual(predicatePkg, t.Name),
 		)
 	} else {
 		f.Type().Id(pagerConfigName).Struct(
@@ -339,6 +352,9 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 			jen.Comment("Filter is a typed filter function stored as any to avoid circular imports."),
 			jen.Comment("The actual type is func(*XxxQuery) (*XxxQuery, error)."),
 			jen.Id("Filter").Any(),
+			jen.Comment("Predicate is applied directly via q.Where(p) — preferred over Filter."),
+			jen.Comment("Set by WithXxxPredicate; coexists with Filter for backward compatibility."),
+			jen.Id("Predicate").Qual(predicatePkg, t.Name),
 		)
 	}
 	f.Line()
@@ -390,6 +406,9 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 
 	// --- WithFilter function ---
 	g.genModelWithFilter(f, typeName, optName, pagerConfigName)
+
+	// --- WithPredicate function ---
+	g.genModelWithPredicate(f, t, typeName, optName, pagerConfigName)
 
 	// --- BuildConnection helper ---
 	// Shared "assemble a connection from a node slice" helper. Used by BOTH
@@ -576,6 +595,30 @@ func (g *Generator) genModelWithFilter(f *jen.File, typeName, optName, pagerConf
 	).Id(optName).Block(
 		jen.Return(jen.Func().Params(jen.Id("cfg").Op("*").Id(pagerConfigName)).Block(
 			jen.Id("cfg").Dot("Filter").Op("=").Id("filter"),
+		)),
+	)
+	f.Line()
+}
+
+// genModelWithPredicate generates WithXxxPredicate function — the typed
+// successor to WithXxxFilter. Plan 2 broke the entity -> filter -> query
+// import cycle, so filter/.WhereInput.Filter() now returns a typed
+// predicate.Xxx directly (no closure-of-closure shape). The edge method
+// can call Filter() at the call site and pass the resulting predicate
+// to Paginate via this option, skipping the type-assertion dance that
+// the legacy Filter (any) field forces.
+//
+// WithXxxFilter coexists for backward compatibility: callers that built
+// against the Plan 1/Plan 2 surface keep working without recompilation.
+func (g *Generator) genModelWithPredicate(f *jen.File, t *gen.Type, typeName, optName, pagerConfigName string) {
+	predicatePkg := g.config.ORMPackage + "/predicate"
+	optPredicateName := "With" + typeName + "Predicate"
+	f.Commentf("%s sets a predicate to apply during %s pagination.", optPredicateName, typeName)
+	f.Func().Id(optPredicateName).Params(
+		jen.Id("p").Qual(predicatePkg, t.Name),
+	).Id(optName).Block(
+		jen.Return(jen.Func().Params(jen.Id("cfg").Op("*").Id(pagerConfigName)).Block(
+			jen.Id("cfg").Dot("Predicate").Op("=").Id("p"),
 		)),
 	)
 	f.Line()

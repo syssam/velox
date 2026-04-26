@@ -37,6 +37,9 @@ func (g *Generator) genEntityEdge(t *gen.Type) *jen.File {
 	f.ImportName("github.com/99designs/gqlgen/graphql", "graphql")
 	f.ImportName(gqlrelayPkg, "gqlrelay")
 	f.ImportName(runtimePkgPath, "runtime")
+	if g.config.WhereInputs {
+		f.ImportName(g.config.ORMPackage+"/filter", "filter")
+	}
 
 	typeName := g.graphqlTypeName(t)
 
@@ -138,11 +141,17 @@ func (g *Generator) genListEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typ
 // no DB round trip) and falls back to QueryXxx().Paginate(...) otherwise.
 // Matches Ent's gql_edge.go pattern (CategoryConnection.build).
 //
-//	func (m *Category) Products(ctx, after, first, before, last, orderBy) (*ProductConnection, error) {
-//	    if nodes, err := m.Edges.ProductsOrErr(); err == nil && after == nil && before == nil {
+//	func (m *Category) Products(ctx, after, first, before, last, orderBy, where) (*ProductConnection, error) {
+//	    if nodes, err := m.Edges.ProductsOrErr(); err == nil && where == nil && after == nil && before == nil {
 //	        return BuildProductConnection(nodes, 0, orderBy, after, first, before, last), nil
 //	    }
-//	    return m.QueryProducts().(ProductPaginatable).Paginate(ctx, after, first, before, last, WithProductOrder(orderBy))
+//	    opts := []ProductPaginateOption{WithProductOrder(orderBy)}
+//	    if where != nil {
+//	        pred, err := where.Filter()
+//	        if err != nil { return nil, err }
+//	        if pred != nil { opts = append(opts, WithProductPredicate(pred)) }
+//	    }
+//	    return m.QueryProducts().(ProductPaginatable).Paginate(ctx, after, first, before, last, opts...)
 //	}
 //
 // The `after == nil && before == nil` guard keeps the fast path correct when
@@ -150,40 +159,64 @@ func (g *Generator) genListEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typ
 // operation, so paginating through a pre-loaded slice with a mid-range cursor
 // would need in-memory cursor comparison we don't implement. The slow path
 // handles cursor pagination exactly as before.
+//
+// `where *filter.XxxWhereInput` is added only when the edge SDL emits a
+// `where:` argument (g.config.WhereInputs && g.hasWhereInput(e)). Plan 2
+// broke the entity -> filter -> query -> entity import cycle; Plan 3
+// consumes the new freedom so gqlgen autobinds the where arg directly,
+// without the @goField(forceResolver: true) workaround. The parameter
+// MUST be named exactly `where` — gqlgen's bindArgs is name-based.
 func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typeName string) {
 	edgePascal := pascal(e.Name)
 	targetType := g.graphqlTypeName(e.Type)
 	connName := targetType + "Connection"
 	orderName := targetType + "Order"
+	optName := targetType + "PaginateOption"
 	withOrderFunc := "With" + targetType + "Order"
+	withPredicateFunc := "With" + targetType + "Predicate"
 	buildConnFunc := "Build" + connName
 	queryMethod := "Query" + edgePascal
 	paginatable := targetType + "Paginatable"
 	edgeOrErr := edgePascal + "OrErr"
 
+	wantsWhere := g.config.WhereInputs && g.hasWhereInput(e)
+	filterPkg := g.config.ORMPackage + "/filter"
+	whereInputName := e.Type.Name + "WhereInput"
+
 	f.Func().Params(
 		jen.Id("m").Op("*").Id(typeName),
-	).Id(edgePascal).Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("after").Op("*").Qual(gqlrelayPkg, "Cursor"),
-		jen.Id("first").Op("*").Int(),
-		jen.Id("before").Op("*").Qual(gqlrelayPkg, "Cursor"),
-		jen.Id("last").Op("*").Int(),
-		jen.Id("orderBy").Op("*").Id(orderName),
-	).Params(
+	).Id(edgePascal).ParamsFunc(func(params *jen.Group) {
+		params.Id("ctx").Qual("context", "Context")
+		params.Id("after").Op("*").Qual(gqlrelayPkg, "Cursor")
+		params.Id("first").Op("*").Int()
+		params.Id("before").Op("*").Qual(gqlrelayPkg, "Cursor")
+		params.Id("last").Op("*").Int()
+		params.Id("orderBy").Op("*").Id(orderName)
+		if wantsWhere {
+			params.Id("where").Op("*").Qual(filterPkg, whereInputName)
+		}
+	}).Params(
 		jen.Op("*").Id(connName),
 		jen.Error(),
-	).Block(
-		// Fast path: edge eager-loaded + no cursor pagination. Reuse the
-		// pre-loaded slice via BuildXxxConnection; no DB round trip. This
-		// is what makes `.WithTodos()` on a parent query actually pay off
-		// at the GraphQL resolver layer — before this change the resolver
-		// always ran a fresh Paginate, silently wasting the eager load.
-		jen.If(
+	).BlockFunc(func(body *jen.Group) {
+		// Fast path: edge eager-loaded + no cursor pagination + no where
+		// filter. Reuse the pre-loaded slice via BuildXxxConnection; no DB
+		// round trip. This is what makes `.WithTodos()` on a parent query
+		// actually pay off at the GraphQL resolver layer — before this
+		// change the resolver always ran a fresh Paginate, silently
+		// wasting the eager load. `where == nil` is part of the guard:
+		// if a where filter is supplied we cannot reuse the eager-loaded
+		// slice (filter would have to be evaluated in-memory against the
+		// node set, which is a separate code path we do not implement).
+		fastCondition := jen.Id("err").Op("==").Nil()
+		if wantsWhere {
+			fastCondition = fastCondition.Op("&&").Id("where").Op("==").Nil()
+		}
+		fastCondition = fastCondition.Op("&&").Id("after").Op("==").Nil().
+			Op("&&").Id("before").Op("==").Nil()
+		body.If(
 			jen.List(jen.Id("nodes"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgeOrErr).Call(),
-			jen.Id("err").Op("==").Nil().
-				Op("&&").Id("after").Op("==").Nil().
-				Op("&&").Id("before").Op("==").Nil(),
+			fastCondition,
 		).Block(
 			jen.Return(
 				jen.Id(buildConnFunc).Call(
@@ -197,17 +230,39 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 				),
 				jen.Nil(),
 			),
-		),
-		// Slow path: fresh DB query via the per-edge Querier.
-		jen.Return(
+		)
+
+		// Slow path: build options conditionally, then delegate to the
+		// per-edge Querier's Paginate. When `where` is supplied we call
+		// .Filter() (post-Plan-2 returns predicate.X, error directly) and
+		// thread the result via WithXxxPredicate — the typed successor
+		// to the legacy WithXxxFilter (any) closure form.
+		body.Id("opts").Op(":=").Index().Id(optName).Values(
+			jen.Id(withOrderFunc).Call(jen.Id("orderBy")),
+		)
+		if wantsWhere {
+			body.If(jen.Id("where").Op("!=").Nil()).Block(
+				jen.List(jen.Id("pred"), jen.Id("err")).Op(":=").Id("where").Dot("Filter").Call(),
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("err")),
+				),
+				jen.If(jen.Id("pred").Op("!=").Nil()).Block(
+					jen.Id("opts").Op("=").Append(
+						jen.Id("opts"),
+						jen.Id(withPredicateFunc).Call(jen.Id("pred")),
+					),
+				),
+			)
+		}
+		body.Return(
 			jen.Id("m").Dot(queryMethod).Call().Assert(jen.Id(paginatable)).Dot("Paginate").Call(
 				jen.Id("ctx"),
 				jen.Id("after"),
 				jen.Id("first"),
 				jen.Id("before"),
 				jen.Id("last"),
-				jen.Id(withOrderFunc).Call(jen.Id("orderBy")),
+				jen.Id("opts").Op("..."),
 			),
-		),
-	)
+		)
+	})
 }
