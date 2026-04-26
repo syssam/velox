@@ -536,8 +536,9 @@ func (g *Generator) Generate(ctx context.Context) error {
 			return nil
 		})
 
-		// Note: Edge resolvers are handled by gqlgen's forceResolver pattern in entity-pkg-mode.
-		// Entity types live in sub-packages, so methods cannot be defined on them from root.
+		// Note: Edge resolvers are real methods on the entity struct in entity/
+		// sub-package (genConnectionEdgeMethod). gqlgen autobinds to them
+		// directly — no forceResolver workaround needed (Plan 3, 2026-04-25).
 
 		// Generate pagination utilities (Relay cursor connections)
 		if g.config.RelayConnection {

@@ -332,62 +332,33 @@
 //	  createdAtLTE: Time
 //	}
 //
-// # Edge Connections with where: @goField(forceResolver: true)
+// # Edge Connections with where: autobind to entity method (Plan 3)
 //
 // When a Relay connection edge is opted into `where` filtering via the
 // whitelist (edge-level graphql.WhereInput() or entity-level
-// graphql.WhereInputEdges(...)), velox emits @goField(forceResolver: true)
-// on the SDL field. Example:
+// graphql.WhereInputEdges(...)), velox generates a real entity method
+// that carries the where arg directly:
 //
-//	type User {
-//	  todos(
-//	    first: Int, after: Cursor,
-//	    orderBy: TodoOrder,
-//	    where: TodoWhereInput,
-//	  ): TodoConnection! @goField(forceResolver: true)
-//	}
-//
-// The directive is NOT cosmetic — it prevents a silent-drop bug. Without it,
-// gqlgen's autobind treats the velox-generated entity method
-//
-//	func (m *User) Todos(ctx, after, first, before, last, orderBy) (*TodoConnection, error)
-//
-// as a successful partial match (all Go params map to SDL args by name),
-// even though the Go method has no `where` parameter. gqlgen then emits a
-// field resolver that calls the method without `where`, and the `where`
-// argument from the client is silently discarded — filter has no effect
-// at runtime, with no error or warning.
-//
-// Historical note: this directive was originally a workaround for a package
-// cycle (entity -> filter -> query -> entity). The cycle-break refactor
-// (Plan 2, 2026-04-24) eliminated it by splitting heavy per-entity code into
-// client/{entity}/ and changing the Filter() signature to return a predicate
-// instead of taking a *XxxQuery. Today the forceResolver emission is still
-// load-bearing to prevent gqlgen's silent-drop partial-match bug, and the
-// resolver-body boilerplate is still a user-authored stub until Plan 3
-// generates (c *entity.Category).Todos(ctx, ..., where *filter.TodoWhereInput)
-// as a real entity method (now possible post-cycle-break).
-//
-// # User-written resolver body (required for where-carrying edges)
-//
-// For every edge-connection field that carries `where:`, you must implement
-// the resolver method in your gqlgen package. Standard body:
-//
-//	func (r *userResolver) Todos(
-//	    ctx context.Context, obj *entity.User,
+//	func (m *User) Todos(
+//	    ctx context.Context,
 //	    after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int,
 //	    orderBy *entity.TodoOrder, where *filter.TodoWhereInput,
-//	) (*entity.TodoConnection, error) {
-//	    q := r.Client.Todo.Query().Where(todo.HasOwnerWith(user.IDField.EQ(obj.ID)))
-//	    return q.Paginate(ctx, after, first, before, last,
-//	        entity.WithTodoOrder(orderBy),
-//	        entity.WithTodoFilter(where.Filter),
-//	    )
-//	}
+//	) (*entity.TodoConnection, error)
 //
-// If you forget to implement this, gqlgen generates a panic stub that fails
-// loudly at first request — not silent. Edges NOT opted into where continue
-// to bind to the entity method directly and need no resolver code.
+// gqlgen's bindArgs sees a full param-name match against the SDL arg list
+// and autobinds without any directive — no @goField(forceResolver: true),
+// no resolver-interface stub, no user-written resolver body needed. The
+// generated body calls where.Filter() to obtain a predicate and threads
+// it through pagination via WithXxxPredicate(pred).
+//
+// Historical note: prior to Plan 3 (2026-04-25), the entity method took
+// no where parameter (because the entity → filter → query → entity package
+// cycle made *filter.XxxWhereInput unimportable from entity/), and velox
+// emitted @goField(forceResolver: true) to force users to write their own
+// resolver body. The cycle was broken in Plan 2 (2026-04-24) by changing
+// the Filter() signature to return (predicate, error) instead of taking a
+// *XxxQuery, and Plan 3 (Phase B) consumed that freedom. The directive
+// emission and user-written resolver requirement are gone.
 //
 // # Fast path: reusing eager-loaded edges
 //
@@ -409,63 +380,28 @@
 // source of truth for cursor/pageInfo/edge construction means the fast and
 // slow paths can't drift.
 //
-// Note: this fast path applies only to the entity method (edges WITHOUT
-// `where`). User-written resolvers for edges WITH `where` do not get the
-// fast path automatically — add the same NamedXxxOrErr / BuildXxxConnection
-// guard in your resolver body if you care about eager-load performance with
-// filters.
+// The fast path applies to ALL edges (with or without `where`) since Plan 3
+// — the entity method now carries the `where` arg directly, so the same
+// path handles filtered and unfiltered cases. When `where != nil`, the
+// predicate runs against the loaded slice in-memory (or against the slow
+// path query when no eager-load is present).
 //
 // # Comparison: Ent's entgql
 //
-// Ent's entgql solves the same end-user problem but with a different
-// architecture, because Ent has different package constraints:
-//
-//	                    Ent (entgql)              Velox
-//	Entity struct       package ent               package entity
-//	WhereInput struct   package ent (same pkg)    package filter (separate)
-//	Query builder       package ent (same pkg)    package query (separate)
-//	Paginate option     package ent (same pkg)    package entity (same as struct)
-//	Edge resolver       method on *Category       user-written resolver body
-//	                    directly in ent/          in gqlgen/schema.resolvers.go
-//
-// Ent colocates Category, TodoWhereInput, and TodoQuery in the root `ent/`
-// package, so it can write a method on *Category that accepts
-// *TodoWhereInput — gqlgen autobinds to it directly and there is no
-// silent-drop risk. Ent does NOT emit @goField(forceResolver: true) on
-// connection edges.
+// Ent's entgql colocates Category, TodoWhereInput, and TodoQuery in the
+// root `ent/` package, so it writes a method on *Category that accepts
+// *TodoWhereInput directly — gqlgen autobinds to it and there is no
+// silent-drop risk.
 //
 // Velox splits the ORM into entity/, query/, filter/, and per-entity
-// sub-packages (todo/, user/, etc.) for build performance and memory. The
-// per-entity packages currently own client-wrapper code that imports entity,
-// which transitively makes entity -> filter -> todo -> entity a cycle.
-// The cycle means entity methods can't accept *filter.XxxWhereInput —
-// not until a bigger refactor splits per-entity packages into true leaves
-// (predicates + enum only, no client wrapper).
-//
-// Until that refactor, velox gives up on "zero user code" and instead
-// guarantees correctness:
-//
-//  1. @goField(forceResolver: true) on the SDL field — makes gqlgen route
-//     through an explicit resolver method so `where` is never silently
-//     dropped. Without this directive, gqlgen's autobind partial-matches
-//     the entity method (which has no `where` param) and discards the
-//     argument at runtime — a data-correctness / tenant-isolation bug.
-//
-//  2. User writes the resolver body (~5 lines of Paginate delegation) in
-//     their gqlgen package. See `examples/fullgql/gqlgen/schema.resolvers.go`
-//     for the canonical pattern.
-//
-// Functional parity with Ent for where-on-edge filtering: yes. Ergonomic
-// parity: ~5 lines of user code per edge instead of zero. The fix for that
-// gap is the per-entity package refactor (velox team owns this decision;
-// not a small job).
-//
-// Performance parity: the entity-level edge method reuses eager-loaded
-// edges via entity.BuildXxxConnection — matching Ent's gql_edge.go pattern
-// for edges without `where`. User-written resolvers for where-carrying
-// edges can add the same `obj.Edges.<Edge>OrErr` / BuildXxxConnection
-// guard in their body if they care about eager-load performance with
-// filters.
+// sub-packages (todo/, user/, etc.) for build performance and memory.
+// Plan 2 + Plan 3 (2026-04-24/25) broke the entity → filter → query →
+// entity cycle by changing Filter() to return (predicate, error) instead
+// of taking a *XxxQuery, then made the entity method take
+// *filter.XxxWhereInput as a parameter. The result is functional AND
+// ergonomic parity with Ent: zero user-written resolver code for
+// where-carrying edges. Performance parity is via the eager-load fast
+// path described above — same as Ent's gql_edge.go pattern.
 //
 // # Migration from Previous Versions
 //
