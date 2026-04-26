@@ -1300,8 +1300,10 @@ func TestGenerator_GenModelPagination_WithFilter(t *testing.T) {
 	assert.NoError(t, err)
 	code := buf.String()
 
-	// PagerConfig should have Filter field
-	assert.Contains(t, code, "Filter any")
+	// PagerConfig should have Filter field. gofmt aligns struct field types
+	// in tabular form, so the rendered line is `Filter    any` (variable
+	// whitespace). Match on the trimmed form to stay agnostic to alignment.
+	assert.Regexp(t, `Filter\s+any`, code)
 
 	// WithUserFilter function should be generated
 	assert.Contains(t, code, "func WithUserFilter(filter any) UserPaginateOption")

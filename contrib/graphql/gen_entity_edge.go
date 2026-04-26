@@ -180,8 +180,6 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 	edgeOrErr := edgePascal + "OrErr"
 
 	wantsWhere := g.config.WhereInputs && g.hasWhereInput(e)
-	filterPkg := g.config.ORMPackage + "/filter"
-	whereInputName := e.Type.Name + "WhereInput"
 
 	f.Func().Params(
 		jen.Id("m").Op("*").Id(typeName),
@@ -193,21 +191,14 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 		params.Id("last").Op("*").Int()
 		params.Id("orderBy").Op("*").Id(orderName)
 		if wantsWhere {
+			filterPkg := g.config.ORMPackage + "/filter"
+			whereInputName := e.Type.Name + "WhereInput"
 			params.Id("where").Op("*").Qual(filterPkg, whereInputName)
 		}
 	}).Params(
 		jen.Op("*").Id(connName),
 		jen.Error(),
 	).BlockFunc(func(body *jen.Group) {
-		// Fast path: edge eager-loaded + no cursor pagination + no where
-		// filter. Reuse the pre-loaded slice via BuildXxxConnection; no DB
-		// round trip. This is what makes `.WithTodos()` on a parent query
-		// actually pay off at the GraphQL resolver layer — before this
-		// change the resolver always ran a fresh Paginate, silently
-		// wasting the eager load. `where == nil` is part of the guard:
-		// if a where filter is supplied we cannot reuse the eager-loaded
-		// slice (filter would have to be evaluated in-memory against the
-		// node set, which is a separate code path we do not implement).
 		fastCondition := jen.Id("err").Op("==").Nil()
 		if wantsWhere {
 			fastCondition = fastCondition.Op("&&").Id("where").Op("==").Nil()
@@ -232,11 +223,6 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 			),
 		)
 
-		// Slow path: build options conditionally, then delegate to the
-		// per-edge Querier's Paginate. When `where` is supplied we call
-		// .Filter() (post-Plan-2 returns predicate.X, error directly) and
-		// thread the result via WithXxxPredicate — the typed successor
-		// to the legacy WithXxxFilter (any) closure form.
 		body.Id("opts").Op(":=").Index().Id(optName).Values(
 			jen.Id(withOrderFunc).Call(jen.Id("orderBy")),
 		)

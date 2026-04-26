@@ -336,27 +336,15 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	// --- PagerConfig struct ---
 	predicatePkg := g.config.ORMPackage + "/predicate"
 	f.Comment(fmt.Sprintf("%s holds pagination configuration for %s.", pagerConfigName, typeName))
+	orderField := jen.Id("Order").Op("*").Id(orderName)
 	if multiOrder {
-		f.Type().Id(pagerConfigName).Struct(
-			jen.Id("Order").Index().Op("*").Id(orderName),
-			jen.Comment("Filter is a typed filter function stored as any to avoid circular imports."),
-			jen.Comment("The actual type is func(*XxxQuery) (*XxxQuery, error)."),
-			jen.Id("Filter").Any(),
-			jen.Comment("Predicate is applied directly via q.Where(p) — preferred over Filter."),
-			jen.Comment("Set by WithXxxPredicate; coexists with Filter for backward compatibility."),
-			jen.Id("Predicate").Qual(predicatePkg, t.Name),
-		)
-	} else {
-		f.Type().Id(pagerConfigName).Struct(
-			jen.Id("Order").Op("*").Id(orderName),
-			jen.Comment("Filter is a typed filter function stored as any to avoid circular imports."),
-			jen.Comment("The actual type is func(*XxxQuery) (*XxxQuery, error)."),
-			jen.Id("Filter").Any(),
-			jen.Comment("Predicate is applied directly via q.Where(p) — preferred over Filter."),
-			jen.Comment("Set by WithXxxPredicate; coexists with Filter for backward compatibility."),
-			jen.Id("Predicate").Qual(predicatePkg, t.Name),
-		)
+		orderField = jen.Id("Order").Index().Op("*").Id(orderName)
 	}
+	f.Type().Id(pagerConfigName).Struct(
+		orderField,
+		jen.Id("Filter").Any(),
+		jen.Id("Predicate").Qual(predicatePkg, t.Name),
+	)
 	f.Line()
 
 	// --- OrderField struct ---
@@ -600,16 +588,8 @@ func (g *Generator) genModelWithFilter(f *jen.File, typeName, optName, pagerConf
 	f.Line()
 }
 
-// genModelWithPredicate generates WithXxxPredicate function — the typed
-// successor to WithXxxFilter. Plan 2 broke the entity -> filter -> query
-// import cycle, so filter/.WhereInput.Filter() now returns a typed
-// predicate.Xxx directly (no closure-of-closure shape). The edge method
-// can call Filter() at the call site and pass the resulting predicate
-// to Paginate via this option, skipping the type-assertion dance that
-// the legacy Filter (any) field forces.
-//
-// WithXxxFilter coexists for backward compatibility: callers that built
-// against the Plan 1/Plan 2 surface keep working without recompilation.
+// genModelWithPredicate emits WithXxxPredicate(p predicate.T) PaginateOption,
+// the typed counterpart to genModelWithFilter (which takes any).
 func (g *Generator) genModelWithPredicate(f *jen.File, t *gen.Type, typeName, optName, pagerConfigName string) {
 	predicatePkg := g.config.ORMPackage + "/predicate"
 	optPredicateName := "With" + typeName + "Predicate"
