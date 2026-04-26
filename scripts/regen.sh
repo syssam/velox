@@ -34,7 +34,14 @@ go run tests/integration/generate.go
 # surface and surfaces type/import drift that the diff-only path misses.
 DRIFT_CHECK_MODULES=(
     examples/basic
+    examples/edge-schema
+    examples/erp
     examples/fullgql
+    examples/fulltest
+    examples/globalid
+    examples/json-field
+    examples/tree
+    examples/versioned-migration
     tests/external-module
 )
 FAILED_EXAMPLES=()
