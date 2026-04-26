@@ -263,10 +263,6 @@ func TestEdgeMethod_HasWhereParameter(t *testing.T) {
 // Plan 3 Phase B alongside removing the forceResolver emission.
 func TestEdgeWhere_NoForceResolverDirective(t *testing.T) {
 	t.Parallel()
-	// Plan 3 Phase B blocker: forceResolver emission is still in place
-	// today (the cycle-break workaround that Plan 3 makes obsolete).
-	// Remove this Skip when Phase B drops the forceResolver emission.
-	t.Skip("Plan 3 Phase B not yet implemented — see docs/superpowers/plans/2026-04-25-edge-method-where-impl.md")
 
 	postType := &entgen.Type{
 		Name: "Post",
