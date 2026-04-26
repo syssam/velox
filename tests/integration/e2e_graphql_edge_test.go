@@ -8,10 +8,15 @@ package integration_test
 // What's covered:
 //  - entity edge method fast path: reloaded.Posts(...) reuses eager-loaded
 //    Edges.Posts via entity.BuildPostConnection — no DB round trip.
-//  - Slow-path Paginate with WithPostFilter: mimics the hand-written
-//    resolver body for edge-with-where (SDL emits @goField(forceResolver:
-//    true); the body calls Paginate with WithPostFilter(where.Filter)).
-//    Verifies the filter actually reaches SQL and reduces the result.
+//  - Slow-path Paginate with WithPostFilter: drives the exact Go code path
+//    that the generated entity edge method runs internally for
+//    edge-with-where. Post-Plan-3 the entity method autobinds via gqlgen
+//    and threads where.Filter through WithPostFilter (closure form, Ent
+//    parity). This test exercises the same chain — PostWhereInput.Filter
+//    → WithPostFilter → cfg.Filter → Paginate applies to SQL → result set
+//    is filtered — without going through gqlgen. If any link drops `where`
+//    silently, the returned count equals the unfiltered count and the test
+//    fails.
 
 import (
 	"context"
@@ -77,21 +82,76 @@ func TestGraphQLEdge_FastPath_UsesEagerLoadedPosts(t *testing.T) {
 		"fast path must return the eager-loaded posts exactly, not a coincidental subset")
 }
 
-// TestGraphQLEdge_SlowPath_WithFilter pins the hand-written-resolver
-// pattern for edge-connection-with-where. Since the entity method cannot
-// accept *filter.PostWhereInput (entity -> filter -> post -> entity
-// cycle), @goField(forceResolver: true) forces a user-written resolver.
-// The canonical body shape is:
+// TestGraphQLEdge_FastPath_TotalCountReflectsLoadedSlice pins the
+// documented BuildPostConnection contract: when the caller eager-loads
+// only a subset of edges (e.g. via .WithPosts(func(q){q.Limit(N)})),
+// the fast path returns TotalCount = len(loaded), NOT the DB total.
+// This matches Ent's behavior: the connection assembler trusts the
+// caller's slice, since re-querying for a count would defeat the
+// fast-path's "no DB round trip" promise.
 //
-//	q := r.Client.Post.Query().Where(post.HasAuthorWith(user.IDField.EQ(u.ID)))
-//	return q.Paginate(ctx, ..., entity.WithPostOrder(orderBy),
-//	                            entity.WithPostFilter(where.Filter))
+// Why this test exists: a future maintainer might "fix" the perceived
+// inconsistency by injecting a count query into the fast path — that
+// would silently regress the eager-load optimisation. This test fails
+// the moment the fast path issues an extra count query (because the DB
+// is closed) AND fails if TotalCount stops matching len(loaded).
 //
-// This test drives that exact Go code path directly (no gqlgen) to pin the
-// whole chain: PostWhereInput.Filter → WithPostFilter → cfg.Filter → Paginate
-// applies to SQL → result set is filtered. If any link drops `where`
-// silently, the returned count will equal the unfiltered count and the
-// test fails.
+// Users who want strict TotalCount = DB total should NOT pass a Limit
+// inside .WithPosts() — limit at the parent level instead, or use the
+// slow path with explicit pagination args.
+func TestGraphQLEdge_FastPath_TotalCountReflectsLoadedSlice(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	alice := createUser(t, client, "Alice-tc", "alice-tc@example.com")
+	createPost(t, client, alice, "A", "a")
+	createPost(t, client, alice, "B", "b")
+	createPost(t, client, alice, "C", "c")
+	createPost(t, client, alice, "D", "d")
+	createPost(t, client, alice, "E", "e")
+
+	// Eager-load only 2 of the 5 posts. The fast path will see a slice
+	// of length 2 and report TotalCount=2 — by design.
+	reloaded, err := client.User.Query().
+		Where(user.IDField.EQ(alice.ID)).
+		WithPosts(func(pq entity.PostQuerier) { pq.Limit(2) }).
+		Only(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, client.Close())
+
+	first := 10
+	conn, err := reloaded.Posts(ctx, nil, &first, nil, nil, nil, nil)
+	require.NoError(t, err,
+		"fast path must NOT issue a count query — DB is closed; any DB call here "+
+			"means the optimisation regressed (e.g. someone injected a count for "+
+			"strict TotalCount semantics that defeats the no-round-trip promise)")
+	require.NotNil(t, conn)
+	assert.Equal(t, 2, conn.TotalCount,
+		"fast path TotalCount MUST reflect the loaded slice (matching Ent), NOT the "+
+			"DB total — if this becomes 5 the fast path started issuing extra queries")
+	assert.Len(t, conn.Edges, 2)
+}
+
+// TestGraphQLEdge_SlowPath_WithFilter pins the where-threading code path
+// that the generated entity edge method runs internally on its slow path.
+// Plan 3 made the entity method (*User).Posts(ctx, ..., where) autobindable
+// — gqlgen routes the where arg directly via parameter-name match, no
+// hand-written resolver needed. The method body internally does:
+//
+//	opts := []entity.PostPaginateOption{entity.WithPostOrder(orderBy)}
+//	if where != nil {
+//	    opts = append(opts, entity.WithPostFilter(where.Filter))
+//	}
+//	return q.Paginate(ctx, ..., opts...)
+//
+// (Same shape as Ent's gql_edge.go uniform pattern, post-cycle-break.)
+// This test exercises the same Go-level chain WITHOUT going through gqlgen
+// to pin every link in isolation: PostWhereInput.Filter → WithPostFilter
+// → cfg.Filter → Paginate applies the predicate to SQL → result set is
+// filtered. If any link drops `where` silently, the returned count equals
+// the unfiltered count and the test fails — giving a precise regression
+// signal independent of gqlgen runtime behavior.
 func TestGraphQLEdge_SlowPath_WithFilter(t *testing.T) {
 	client := openTestClient(t)
 	ctx := context.Background()

@@ -1571,30 +1571,37 @@ func TestEntityM2MEdgeMethod_ReturnsAllAssociated(t *testing.T) {
 		"M2M edge must return exactly the associated tag names — content, not just cardinality")
 }
 
-// TestGraphQL_EdgeConnectionWhereFilter is the runtime regression guard for
-// the silent-drop bug documented on the @goField(forceResolver: true) branch
-// in contrib/graphql/schema_input.go.
+// TestGraphQL_EdgeConnectionWhereFilter is THE runtime pin for Plan 3's
+// autobind contract — it proves end-to-end that gqlgen routes the SDL
+// `where` argument into the velox-generated entity method without any
+// directive, resolver stub, or hand-written plumbing.
 //
-// Without the directive, gqlgen's autobind treats the velox-generated entity
-// method
+// Plan 3 (2026-04-25) made the entity method
 //
-//	(*Tag).Todos(ctx, after, first, before, last, orderBy)
+//	(*Tag).Todos(ctx, after, first, before, last, orderBy, where *filter.TodoWhereInput)
 //
-// as a successful partial match against the SDL field
+// carry `where` as a real Go parameter. gqlgen's bindArgs is name-based:
+// because the Go param name (`where`) matches the SDL arg name exactly,
+// autobind succeeds and routes the filter through to `WithTodoFilter`
+// inside the generated method body. Pre-Plan-3, the Go method had no
+// `where` param — autobind was a "successful partial match" that silently
+// dropped the SDL `where` arg, returning unfiltered data. The
+// `@goField(forceResolver: true)` directive (now removed) was the
+// pre-Plan-3 workaround that forced gqlgen onto a resolver-interface
+// path with a user-written body.
 //
-//	todos(after, first, before, last, orderBy, where: TodoWhereInput)
+// Why this test is load-bearing: structural tests (e.g.
+// `TestEdgeMethod_HasWhereParameter` in contrib/graphql/golden_test.go)
+// prove the method signature has the right shape. Only this test proves
+// gqlgen actually picks up the where arg AT RUNTIME and threads it to
+// SQL. If gqlgen's bindArgs ever changes behavior, or if a future
+// generator change renames the param to anything but `where`, this test
+// is the catch — it would silently report `totalCount=4` (all todos)
+// instead of `totalCount=3` (DONE-only).
 //
-// and silently drops `where` at runtime — a client sending
-// `where: {status: DONE}` gets every todo back regardless of status. With
-// the directive, gqlgen routes through the generated resolver interface,
-// whose user-provided body wires `where.Filter` into `WithTodoFilter(...)`
-// on Paginate.
-//
-// This test drives a real GraphQL query through the gqlgen executor
-// (the same path the production server uses) and asserts the filter
-// actually reduces the result set. It intentionally does NOT use the
-// Go-level `(*entity.Tag).Todos(...)` helper — that helper has no `where`
-// parameter by construction and therefore cannot reproduce the bug.
+// The test fires a real GraphQL query through `handler.NewDefaultServer`
+// (the same path a production server hits) and checks that filtered vs
+// unfiltered counts diverge in the same response.
 func TestGraphQL_EdgeConnectionWhereFilter(t *testing.T) {
 	ctx := context.Background()
 	// Use shared-cache in-memory SQLite so the gqlgen handler's per-request
@@ -1715,13 +1722,17 @@ func TestGraphQL_EdgeConnectionWhereFilter(t *testing.T) {
 	require.Equal(t, 4, got.All.TotalCount,
 		"without where, tag.todos should surface all 4 seeded todos")
 
-	// Bug signature: without forceResolver, the where arg is silently
-	// dropped and totalCount == 4 (same as unfiltered). With the fix,
-	// exactly the 3 DONE todos come back.
+	// Plan 3 autobind invariant: `where: {status: DONE}` must reach SQL
+	// via gqlgen's autobind into the entity method's `where` param. If
+	// totalCount comes back as 4 (= unfiltered), gqlgen silently dropped
+	// the SDL where arg — typically because the Go method param was
+	// renamed to anything but `where`, or gqlgen's bindArgs behavior
+	// regressed. With the autobind working, exactly the 3 DONE todos
+	// come back.
 	require.Equal(t, 3, got.DoneOnly.TotalCount,
 		"where: {status: DONE} must reduce tag.todos totalCount from 4 to 3 — "+
-			"if this is 4, the where arg is being silently dropped (see the "+
-			"forceResolver directive comment in contrib/graphql/schema_input.go)")
+			"if this is 4, gqlgen autobind dropped the where arg silently "+
+			"(check that genConnectionEdgeMethod still names the param `where`)")
 	require.Len(t, got.DoneOnly.Edges, 3, "edges count must match totalCount")
 
 	gotTitles := make([]string, 0, len(got.DoneOnly.Edges))
