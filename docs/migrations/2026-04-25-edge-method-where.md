@@ -19,9 +19,10 @@ The cycle-break migration (2026-04-24) made `filter/` no longer depend on
 1. Changed the generated edge method signature to accept
    `where *filter.XxxWhereInput` directly.
 2. Threaded `where.Filter` into the underlying query as an
-   `entity.WithXxxPredicate` option (typed closure form `WithXxxFilter` —
-   `func() (predicate.X, error)` — is kept for backcompat with hand-written
-   code that uses it directly).
+   `entity.WithXxxFilter(where.Filter)` option (the typed closure form,
+   `func() (predicate.X, error)`, matches `where.Filter`'s method-value
+   shape directly — Paginate invokes the closure once at apply time and
+   propagates any error).
 3. Dropped the `@goField(forceResolver: true)` directive emission for
    edge-with-where SDL fields.
 
@@ -110,9 +111,10 @@ The compiler catches every call site, so the migration is mechanical.
 
 The pre-Phase-C implementation was a workaround for a package cycle.
 Phase C/D removes the workaround now that the cycle is gone. The runtime
-behavior is identical — the same `WithXxxPredicate` plumbing the
-hand-written `WithXxxFilter(where.Filter)` invoked. Both are still
-exported; the closure form is preserved for backcompat.
+behavior is identical — the generated body and the (now-removed) hand-
+written stub both routed through the same `WithXxxFilter(where.Filter)`
+plumbing. After the 2026-04-27 collapse, `WithXxxFilter` is the sole
+public option, matching Ent's `gql_edge.go` uniform pattern.
 
 ### 2026-04-27 — `WithXxxFilter` typed
 
@@ -124,6 +126,45 @@ pagination API — callers now get a compile-time type error if they pass
 the wrong shape, instead of a runtime "invalid filter type" panic. The
 `any` was a cycle-era artifact; once the entity → filter cycle was
 broken, the closure type could be named directly.
+
+### 2026-04-27 — `WithXxxPredicate` removed (single-option API)
+
+`WithXxxPredicate` (added briefly in Plan 3 Phase B as a typed escape
+hatch for the generated entity edge method body) has been removed. The
+sole public option for threading a predicate into Paginate is now
+`WithXxxFilter(where.Filter)` — matching Ent's `gql_edge.go` uniform
+pattern exactly.
+
+**Why collapse:**
+
+- The Predicate field on `XxxPagerConfig` and the WithXxxPredicate option
+  were duplicates of the closure form once `WithXxxFilter` was typed
+  (`func() (predicate.X, error)`); the only difference was that
+  `WithXxxFilter` defers the resolve-or-error decision by one frame.
+- Coexistence had a silent-double-filter footgun: if both `Filter` and
+  `Predicate` were set on the same config (e.g. by mixing options across
+  callers), both predicates were applied additively (AND-combined) with
+  no test, no docs, no warning.
+- The generated entity edge method now passes `where.Filter` directly
+  through `WithXxxFilter` instead of resolving the predicate at the call
+  site; semantics are identical (Paginate's body invokes the closure
+  exactly once), output is shorter, and the public surface area is the
+  same as Ent.
+
+**What you need to do:** nothing. `WithXxxPredicate` was never used
+outside the generator's own output. Hand-written code uses
+`WithXxxFilter(where.Filter)` (the canonical form documented in the
+Phase D resolver template above) and is unaffected.
+
+**If you somehow had a direct call to `WithXxxPredicate`:** replace
+`WithXxxPredicate(pred)` with `WithXxxFilter(func() (predicate.X, error) { return pred, nil })`,
+or migrate the call site to a `*XxxWhereInput` and pass `where.Filter`
+directly.
+
+**Brief co-existence window:** `WithXxxPredicate` shipped between
+2026-04-25 (Plan 3 Phase B) and 2026-04-27 (this collapse). If you
+pinned to a velox version inside that two-day window and adopted the
+new option, the migration above is the only change needed.
 
 ## Compared to Ent
 

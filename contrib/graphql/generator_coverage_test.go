@@ -1275,24 +1275,16 @@ func TestGenerator_GenEntityPagination_DelegatesToBuildConnection(t *testing.T) 
 			"belongs inside BuildUserConnection")
 }
 
-// TestPagination_WithPredicate_Applied pins Plan 3 Phase B Task 6: the
-// generated PagerConfig must carry a typed `Predicate predicate.Xxx`
-// field, the generator must emit `WithXxxPredicate(p predicate.Xxx)`,
-// and the Paginate body must apply `cfg.Predicate` to the query when
-// non-nil.
+// TestPagination_OnlyFilterOption_NoPredicate pins the 2026-04-27 collapse
+// of the dual pagination options: WithXxxPredicate was removed, leaving
+// WithXxxFilter as the SOLE public entry point for predicate threading.
+// Matches Ent's gql_edge.go uniform `WithFilter(where.Filter)` pattern.
 //
-// This is the typed successor to the legacy WithXxxFilter (any) closure
-// pattern. Plan 2 broke the entity -> filter -> query cycle, so edge
-// methods can now accept *filter.XxxWhereInput, call Filter() at the
-// call site to get a predicate, and pass it via WithXxxPredicate
-// directly — no closure indirection, no type assertion. Both paths
-// coexist for backward compatibility.
-//
-// Regression class blocked: someone deletes the Predicate field /
-// WithXxxPredicate / the apply block as "looks redundant given Filter",
-// silently reverting Plan 3 Phase B and re-introducing the silent-
-// drop bug class for callers that rely on the typed path.
-func TestPagination_WithPredicate_Applied(t *testing.T) {
+// Regression class blocked: someone re-adds WithXxxPredicate / a
+// `Predicate` field on PagerConfig as a "typed convenience" — that brings
+// back the silent-double-filter footgun (both options applied additively
+// when set) and a duplicated public API surface for one semantic.
+func TestPagination_OnlyFilterOption_NoPredicate(t *testing.T) {
 	typ := &entgen.Type{
 		Name: "User",
 		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
@@ -1312,7 +1304,6 @@ func TestPagination_WithPredicate_Applied(t *testing.T) {
 		Ordering:        true,
 	})
 
-	// Pagination types file — emits PagerConfig + WithXxxPredicate.
 	typesFile := gen.genModelPaginationTypes([]*entgen.Type{typ})
 	var typesBuf bytes.Buffer
 	if err := typesFile.Render(&typesBuf); err != nil {
@@ -1320,31 +1311,17 @@ func TestPagination_WithPredicate_Applied(t *testing.T) {
 	}
 	typesCode := typesBuf.String()
 
-	// PagerConfig must declare Predicate predicate.User.
-	assert.Contains(t, typesCode, "Predicate predicate.User",
-		"UserPagerConfig must carry a typed Predicate field — the typed "+
-			"successor to the legacy Filter (any) closure form. If absent, "+
-			"the WithXxxPredicate option has nowhere to land.")
-
-	// Generator must emit WithUserPredicate(p predicate.User) UserPaginateOption.
-	assert.Contains(t, typesCode, "func WithUserPredicate(p predicate.User) UserPaginateOption",
-		"genModelWithPredicate must emit WithUserPredicate with the typed "+
-			"predicate.User parameter — gqlgen edge methods call this with "+
-			"the result of where.Filter() at the call site.")
-	assert.Contains(t, typesCode, "cfg.Predicate = p",
-		"WithUserPredicate body must assign cfg.Predicate = p — the option "+
-			"is responsible for installing the predicate into the config.")
-
-	// WithUserFilter MUST still exist alongside the typed predicate API —
-	// the closure form is the canonical way to thread *WhereInput.Filter
-	// (a method value of `func() (predicate.User, error)`) without
-	// invoking it at the call site. If this disappears, callers that pass
-	// where.Filter break without a deprecation window.
+	// WithUserFilter must still be there (the surviving option).
 	assert.Contains(t, typesCode, "func WithUserFilter(filter func() (predicate.User, error)) UserPaginateOption",
-		"WithUserFilter must still be emitted alongside WithUserPredicate "+
-			"with the typed closure parameter (Plan 3 Phase B contract: coexist).")
+		"WithUserFilter is the sole public predicate-threading option")
 
-	// Paginate body — emits the cfg.Predicate apply block.
+	// Negative invariants: no Predicate field, no WithXxxPredicate function.
+	assert.NotContains(t, typesCode, "Predicate predicate.User",
+		"PagerConfig must NOT carry a Predicate field — collapsed into Filter")
+	assert.NotContains(t, typesCode, "func WithUserPredicate",
+		"WithUserPredicate must not be emitted — collapsed into WithUserFilter")
+
+	// Paginate body — must NOT have the cfg.Predicate apply block.
 	pagFile := gen.genEntityPagination(typ)
 	var pagBuf bytes.Buffer
 	if err := pagFile.Render(&pagBuf); err != nil {
@@ -1352,15 +1329,10 @@ func TestPagination_WithPredicate_Applied(t *testing.T) {
 	}
 	pagCode := pagBuf.String()
 
-	assert.Contains(t, pagCode, "if cfg.Predicate != nil",
-		"Paginate body must guard the predicate application with `if "+
-			"cfg.Predicate != nil` — without the guard, an unset Predicate "+
-			"is passed to q.Where, which is a no-op at best and a bug "+
-			"at worst depending on the predicate type.")
-	assert.Contains(t, pagCode, "q.Where(cfg.Predicate)",
-		"Paginate body must apply cfg.Predicate via q.Where — without "+
-			"this call, WithXxxPredicate is silently no-op and edge "+
-			"methods that thread `where` through it produce wrong results.")
+	assert.NotContains(t, pagCode, "cfg.Predicate",
+		"Paginate body must not reference cfg.Predicate — the field is gone")
+	assert.NotContains(t, pagCode, "q.Where(cfg.Predicate)",
+		"Paginate body must not apply cfg.Predicate — collapsed into Filter path")
 }
 
 // TestGenerator_GenModelPaginationTypes_EmitsBuildConnection pins the

@@ -348,8 +348,10 @@
 // gqlgen's bindArgs sees a full param-name match against the SDL arg list
 // and autobinds without any directive — no @goField(forceResolver: true),
 // no resolver-interface stub, no user-written resolver body needed. The
-// generated body calls where.Filter() to obtain a predicate and threads
-// it through pagination via WithXxxPredicate(pred).
+// generated body threads where.Filter (a method value of shape
+// `func() (predicate.X, error)`) through pagination via
+// WithXxxFilter(where.Filter); Paginate's body invokes the closure once
+// and propagates any error.
 //
 // Historical note: prior to Plan 3 (2026-04-25), the entity method took
 // no where parameter (because the entity → filter → query → entity package

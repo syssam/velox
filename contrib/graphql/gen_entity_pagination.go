@@ -84,7 +84,8 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		// Apply filter. cfg.Filter is a typed closure
 		// `func() (predicate.X, error)` — invoke it to resolve the predicate,
 		// propagate any error, and apply the predicate to the query when
-		// non-nil.
+		// non-nil. This is the single entry point for predicate application;
+		// matches Ent's gql_edge.go uniform `WithFilter(where.Filter)` pattern.
 		grp.If(jen.Id("cfg").Dot("Filter").Op("!=").Nil()).BlockFunc(func(filterGrp *jen.Group) {
 			filterGrp.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("cfg").Dot("Filter").Call()
 			filterGrp.If(jen.Id("err").Op("!=").Nil()).Block(
@@ -94,15 +95,6 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 				jen.Id("q").Dot("Where").Call(jen.Id("p")),
 			)
 		})
-
-		// Apply predicate. After Plan 2 cycle-break, edge methods accept
-		// *filter.XxxWhereInput directly and call .Filter() at the call site
-		// to get a predicate, then pass it via WithXxxPredicate. No closure
-		// indirection, no type assertion. Coexists with cfg.Filter for
-		// backward compatibility — both apply if set.
-		grp.If(jen.Id("cfg").Dot("Predicate").Op("!=").Nil()).Block(
-			jen.Id("q").Dot("Where").Call(jen.Id("cfg").Dot("Predicate")),
-		)
 
 		// Apply order — use query builder methods directly (same package).
 		grp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).BlockFunc(func(orderGrp *jen.Group) {
@@ -336,7 +328,6 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	f.Type().Id(pagerConfigName).Struct(
 		orderField,
 		jen.Id("Filter").Func().Params().Params(jen.Qual(predicatePkg, t.Name), jen.Error()),
-		jen.Id("Predicate").Qual(predicatePkg, t.Name),
 	)
 	f.Line()
 
@@ -387,9 +378,6 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 
 	// --- WithFilter function ---
 	g.genModelWithFilter(f, t, typeName, optName, pagerConfigName)
-
-	// --- WithPredicate function ---
-	g.genModelWithPredicate(f, t, typeName, optName, pagerConfigName)
 
 	// --- BuildConnection helper ---
 	// Shared "assemble a connection from a node slice" helper. Used by BOTH
@@ -564,9 +552,12 @@ func (g *Generator) genModelWithOrder(f *jen.File, typeName, optName, orderName,
 
 // genModelWithFilter generates WithXxxFilter function.
 // Filter is a closure that resolves to a predicate, typed as
-// `func() (predicate.Xxx, error)`. The closure form (vs. WithXxxPredicate's
-// already-resolved predicate) lets callers thread WhereInput.Filter — a
-// method value of exactly this shape — without invoking it at the call site.
+// `func() (predicate.Xxx, error)`. This is the single public entry point
+// for threading a predicate into Paginate; matches Ent's gql_edge.go pattern
+// (`WithFilter(where.Filter)`). The closure form lets callers pass
+// WhereInput.Filter — a method value of exactly this shape — without
+// invoking it at the call site, deferring the resolve-or-error decision to
+// Paginate's body.
 func (g *Generator) genModelWithFilter(f *jen.File, t *gen.Type, typeName, optName, pagerConfigName string) {
 	predicatePkg := g.config.ORMPackage + "/predicate"
 	optFilterName := "With" + typeName + "Filter"
@@ -577,22 +568,6 @@ func (g *Generator) genModelWithFilter(f *jen.File, t *gen.Type, typeName, optNa
 	).Id(optName).Block(
 		jen.Return(jen.Func().Params(jen.Id("cfg").Op("*").Id(pagerConfigName)).Block(
 			jen.Id("cfg").Dot("Filter").Op("=").Id("filter"),
-		)),
-	)
-	f.Line()
-}
-
-// genModelWithPredicate emits WithXxxPredicate(p predicate.T) PaginateOption,
-// the typed counterpart to genModelWithFilter (which takes any).
-func (g *Generator) genModelWithPredicate(f *jen.File, t *gen.Type, typeName, optName, pagerConfigName string) {
-	predicatePkg := g.config.ORMPackage + "/predicate"
-	optPredicateName := "With" + typeName + "Predicate"
-	f.Commentf("%s sets a predicate to apply during %s pagination.", optPredicateName, typeName)
-	f.Func().Id(optPredicateName).Params(
-		jen.Id("p").Qual(predicatePkg, t.Name),
-	).Id(optName).Block(
-		jen.Return(jen.Func().Params(jen.Id("cfg").Op("*").Id(pagerConfigName)).Block(
-			jen.Id("cfg").Dot("Predicate").Op("=").Id("p"),
 		)),
 	)
 	f.Line()

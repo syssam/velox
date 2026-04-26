@@ -147,9 +147,7 @@ func (g *Generator) genListEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typ
 //	    }
 //	    opts := []ProductPaginateOption{WithProductOrder(orderBy)}
 //	    if where != nil {
-//	        pred, err := where.Filter()
-//	        if err != nil { return nil, err }
-//	        if pred != nil { opts = append(opts, WithProductPredicate(pred)) }
+//	        opts = append(opts, WithProductFilter(where.Filter))
 //	    }
 //	    return m.QueryProducts().(ProductPaginatable).Paginate(ctx, after, first, before, last, opts...)
 //	}
@@ -166,6 +164,10 @@ func (g *Generator) genListEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typ
 // consumes the new freedom so gqlgen autobinds the where arg directly,
 // without the @goField(forceResolver: true) workaround. The parameter
 // MUST be named exactly `where` — gqlgen's bindArgs is name-based.
+//
+// where.Filter is threaded through WithXxxFilter — a method value of shape
+// `func() (predicate.X, error)` matching the closure parameter directly.
+// Paginate's body invokes the closure once and propagates any error.
 func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typeName string) {
 	edgePascal := pascal(e.Name)
 	targetType := g.graphqlTypeName(e.Type)
@@ -173,7 +175,7 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 	orderName := targetType + "Order"
 	optName := targetType + "PaginateOption"
 	withOrderFunc := "With" + targetType + "Order"
-	withPredicateFunc := "With" + targetType + "Predicate"
+	withFilterFunc := "With" + targetType + "Filter"
 	buildConnFunc := "Build" + connName
 	queryMethod := "Query" + edgePascal
 	paginatable := targetType + "Paginatable"
@@ -228,15 +230,9 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 		)
 		if wantsWhere {
 			body.If(jen.Id("where").Op("!=").Nil()).Block(
-				jen.List(jen.Id("pred"), jen.Id("err")).Op(":=").Id("where").Dot("Filter").Call(),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Nil(), jen.Id("err")),
-				),
-				jen.If(jen.Id("pred").Op("!=").Nil()).Block(
-					jen.Id("opts").Op("=").Append(
-						jen.Id("opts"),
-						jen.Id(withPredicateFunc).Call(jen.Id("pred")),
-					),
+				jen.Id("opts").Op("=").Append(
+					jen.Id("opts"),
+					jen.Id(withFilterFunc).Call(jen.Id("where").Dot("Filter")),
 				),
 			)
 		}
