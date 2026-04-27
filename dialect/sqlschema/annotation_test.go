@@ -1,6 +1,7 @@
 package sqlschema
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -153,19 +154,23 @@ func TestConstructor_Skip(t *testing.T) {
 
 func TestConstructor_IndexType(t *testing.T) {
 	a := IndexType("GIN")
-	assert.Equal(t, "GIN", a.IndexType)
+	require.NotNil(t, a)
+	assert.Equal(t, "GIN", a.Type)
+	assert.Equal(t, IndexAnnotationName, a.Name())
 }
 
 func TestConstructor_StorageParams(t *testing.T) {
 	a := StorageParams("fillfactor=90")
+	require.NotNil(t, a)
 	assert.Equal(t, "fillfactor=90", a.StorageParams)
+	assert.Equal(t, IndexAnnotationName, a.Name())
 }
 
 func TestConstructor_Desc(t *testing.T) {
 	ia := Desc()
 	require.NotNil(t, ia)
 	assert.True(t, ia.Desc)
-	assert.Equal(t, AnnotationName, ia.Name())
+	assert.Equal(t, IndexAnnotationName, ia.Name())
 }
 
 func TestConstructor_View(t *testing.T) {
@@ -195,7 +200,7 @@ func TestAnnotation_Name(t *testing.T) {
 
 func TestIndexAnnotation_Name(t *testing.T) {
 	ia := IndexAnnotation{}
-	assert.Equal(t, "sql", ia.Name())
+	assert.Equal(t, IndexAnnotationName, ia.Name())
 }
 
 // ---------------------------------------------------------------------------
@@ -339,17 +344,103 @@ func TestGetIncremental(t *testing.T) {
 }
 
 func TestGetIndexType(t *testing.T) {
-	assert.Equal(t, "GIN", IndexType("GIN").GetIndexType())
+	assert.Equal(t, "GIN", IndexType("GIN").Type)
 	assert.Equal(t, "", Annotation{}.GetIndexType())
 }
 
 func TestGetStorageParams(t *testing.T) {
-	assert.Equal(t, "fillfactor=90", StorageParams("fillfactor=90").GetStorageParams())
+	assert.Equal(t, "fillfactor=90", StorageParams("fillfactor=90").StorageParams)
 	assert.Equal(t, "", Annotation{}.GetStorageParams())
 }
 
 // ---------------------------------------------------------------------------
-// Merge
+// IndexAnnotation.Merge
+// ---------------------------------------------------------------------------
+
+// TestIndexAnnotation_Merge_PreservesWhere is the regression test for the
+// WHERE-clause-disappears bug: two *IndexAnnotation values on the same index
+// must merge rather than silently dropping the second one.
+func TestIndexAnnotation_Merge_PreservesWhere(t *testing.T) {
+	// Simulate: index.Fields("status").Annotations(Desc(), &IndexAnnotation{Where: "..."})
+	// Before the fix: addAnnotation stored Desc() under "sqlindex"; the second
+	// IndexAnnotation was dropped because neither implemented Merger.
+	first := Desc() // *IndexAnnotation{Desc: true}
+	second := &IndexAnnotation{Where: "status = 'active'"}
+
+	merged := first.Merge(second).(IndexAnnotation)
+	assert.True(t, merged.Desc)
+	assert.Equal(t, "status = 'active'", merged.Where)
+}
+
+func TestIndexAnnotation_Merge_AllFields(t *testing.T) {
+	base := IndexAnnotation{
+		Type:    "GIN",
+		OpClass: "jsonb_ops",
+		Prefix:  10,
+	}
+	other := IndexAnnotation{
+		Where:          "active = true",
+		StorageParams:  "fillfactor=90",
+		Desc:           true,
+		IncludeColumns: []string{"id"},
+		Types:          map[string]string{"postgres": "GIN"},
+		DescColumns:    map[string]bool{"name": true},
+		OpClassColumns: map[string]string{"tags": "jsonb_path_ops"},
+		PrefixColumns:  map[string]uint{"name": 5},
+	}
+	result := base.Merge(other).(IndexAnnotation)
+
+	assert.Equal(t, "GIN", result.Type)          // base preserved
+	assert.Equal(t, "jsonb_ops", result.OpClass) // base preserved
+	assert.Equal(t, uint(10), result.Prefix)     // base preserved
+	assert.Equal(t, "active = true", result.Where)
+	assert.Equal(t, "fillfactor=90", result.StorageParams)
+	assert.True(t, result.Desc)
+	assert.Equal(t, []string{"id"}, result.IncludeColumns)
+	assert.Equal(t, "GIN", result.Types["postgres"])
+	assert.True(t, result.DescColumns["name"])
+	assert.Equal(t, "jsonb_path_ops", result.OpClassColumns["tags"])
+	assert.Equal(t, uint(5), result.PrefixColumns["name"])
+}
+
+func TestIndexAnnotation_Merge_TypeOpClassPrefix(t *testing.T) {
+	// Exercises the three bodies not hit by AllFields (which keeps those in receiver, not other).
+	base := IndexAnnotation{Where: "x = 1"}
+	other := IndexAnnotation{
+		Type:    "GIN",
+		OpClass: "int8_bloom_ops",
+		Prefix:  20,
+	}
+	result := base.Merge(other).(IndexAnnotation)
+	assert.Equal(t, "GIN", result.Type)
+	assert.Equal(t, "int8_bloom_ops", result.OpClass)
+	assert.Equal(t, uint(20), result.Prefix)
+	assert.Equal(t, "x = 1", result.Where)
+}
+
+func TestIndexAnnotation_Merge_IgnoresNonIndexAnnotation(t *testing.T) {
+	base := IndexAnnotation{Where: "x = 1"}
+	result := base.Merge(Annotation{Table: "users"}).(IndexAnnotation)
+	assert.Equal(t, "x = 1", result.Where) // unchanged
+}
+
+func TestIndexAnnotation_Merge_NilPointerIsNoop(t *testing.T) {
+	base := IndexAnnotation{Where: "x = 1"}
+	var nilPtr *IndexAnnotation
+	result := base.Merge(nilPtr).(IndexAnnotation)
+	assert.Equal(t, "x = 1", result.Where)
+}
+
+// TestIndexAnnotation_SeparateKeyFromAnnotation verifies that IndexAnnotation
+// and Annotation use distinct annotation names, so they can coexist on the
+// same index without one dropping the other.
+func TestIndexAnnotation_SeparateKeyFromAnnotation(t *testing.T) {
+	assert.NotEqual(t, AnnotationName, IndexAnnotationName,
+		"IndexAnnotation.Name() must differ from Annotation.Name() to avoid collision")
+}
+
+// ---------------------------------------------------------------------------
+// Merge (Annotation utility function)
 // ---------------------------------------------------------------------------
 
 func TestMerge_OverridesFields(t *testing.T) {
@@ -474,6 +565,56 @@ func TestMerge_ThreeAnnotations(t *testing.T) {
 	assert.Equal(t, "x", merged.Default)    // from a3
 }
 
+func TestMerge_MapFields(t *testing.T) {
+	a1 := Annotation{
+		Checks:       map[string]string{"c1": "age > 0"},
+		DefaultExprs: map[string]string{"postgres": "uuid_generate_v4()"},
+		ViewFor:      map[string]string{"postgres": "SELECT 1"},
+	}
+	a2 := Annotation{
+		Checks:       map[string]string{"c2": "status != ''"},
+		DefaultExprs: map[string]string{"mysql": "uuid()"},
+		ViewFor:      map[string]string{"mysql": "SELECT 1"},
+	}
+	merged := Merge(a1, a2)
+	assert.Equal(t, "age > 0", merged.Checks["c1"])
+	assert.Equal(t, "status != ''", merged.Checks["c2"])
+	assert.Equal(t, "uuid_generate_v4()", merged.DefaultExprs["postgres"])
+	assert.Equal(t, "uuid()", merged.DefaultExprs["mysql"])
+	assert.Equal(t, "SELECT 1", merged.ViewFor["postgres"])
+	assert.Equal(t, "SELECT 1", merged.ViewFor["mysql"])
+}
+
+func TestMerge_ViewAs(t *testing.T) {
+	a1 := Annotation{ViewAs: "SELECT 1"}
+	a2 := Annotation{ViewAs: "SELECT 2"}
+	merged := Merge(a1, a2)
+	assert.Equal(t, "SELECT 2", merged.ViewAs)
+}
+
+func TestMerge_IncrementStart(t *testing.T) {
+	start := 1000
+	a := Annotation{IncrementStart: &start}
+	merged := Merge(Annotation{}, a)
+	require.NotNil(t, merged.IncrementStart)
+	assert.Equal(t, 1000, *merged.IncrementStart)
+}
+
+func TestMerge_Options(t *testing.T) {
+	merged := Merge(Annotation{Options: "ENGINE=InnoDB"}, Annotation{Options: "ENGINE=MyISAM"})
+	assert.Equal(t, "ENGINE=MyISAM", merged.Options)
+}
+
+func TestMerge_Prefix(t *testing.T) {
+	merged := Merge(Annotation{}, Annotation{Prefix: "p_"})
+	assert.Equal(t, "p_", merged.Prefix)
+}
+
+func TestMerge_PrefixColumns(t *testing.T) {
+	merged := Merge(Annotation{}, Annotation{PrefixColumns: true})
+	assert.True(t, merged.PrefixColumns)
+}
+
 // ---------------------------------------------------------------------------
 // ValidateColumnType — additional edge cases
 // ---------------------------------------------------------------------------
@@ -529,7 +670,7 @@ func TestAnnotation_ImplementsSchemaAnnotation(t *testing.T) {
 
 func TestIndexAnnotation_ImplementsSchemaAnnotation(t *testing.T) {
 	var a interface{ Name() string } = IndexAnnotation{}
-	assert.Equal(t, AnnotationName, a.Name())
+	assert.Equal(t, IndexAnnotationName, a.Name())
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +757,7 @@ func TestIndexAnnotation_StructLiteral(t *testing.T) {
 		IncludeColumns: []string{"id", "name"},
 	}
 
-	assert.Equal(t, "sql", ia.Name())
+	assert.Equal(t, IndexAnnotationName, ia.Name())
 	assert.Equal(t, "GIN", ia.Type)
 	assert.True(t, ia.Desc)
 	assert.Equal(t, "status = 'active'", ia.Where)
@@ -645,11 +786,26 @@ func TestViewFor_GeneratesQuery(t *testing.T) {
 		s.Select("id", "name").From(sql.Table("users"))
 	})
 	require.NotNil(t, a)
+	assert.NoError(t, a.Err())
 	require.Contains(t, a.ViewFor, "postgres")
 	query := a.ViewFor["postgres"]
 	assert.Contains(t, query, "id")
 	assert.Contains(t, query, "name")
 	assert.Contains(t, query, "users")
+}
+
+func TestViewFor_ErrorOnBindArgs(t *testing.T) {
+	a := ViewFor("postgres", func(s *sql.Selector) {
+		s.Select("id").From(sql.Table("users")).Where(sql.EQ("id", 42))
+	})
+	require.NotNil(t, a)
+	assert.Error(t, a.Err())
+	assert.Contains(t, a.Err().Error(), "bind arguments")
+}
+
+func TestAnnotation_Err_NilByDefault(t *testing.T) {
+	assert.NoError(t, Annotation{}.Err())
+	assert.NoError(t, Table("users").Err())
 }
 
 // ---------------------------------------------------------------------------
@@ -731,4 +887,256 @@ func TestDefault_ValidLiteral(t *testing.T) {
 
 func TestDefaultExpr_ValidExpression(t *testing.T) {
 	assert.NotPanics(t, func() { DefaultExpr("gen_random_uuid()") })
+}
+
+// ---------------------------------------------------------------------------
+// New Annotation constructors (Ent parity)
+// ---------------------------------------------------------------------------
+
+func TestConstructor_SchemaTable(t *testing.T) {
+	a := SchemaTable("public", "users")
+	assert.Equal(t, "public", a.Schema)
+	assert.Equal(t, "users", a.Table)
+	assert.Equal(t, AnnotationName, a.Name())
+}
+
+func TestConstructor_Checks(t *testing.T) {
+	checks := map[string]string{
+		"valid_age":    "age >= 0",
+		"valid_status": "status IN ('active', 'inactive')",
+	}
+	a := Checks(checks)
+	assert.Equal(t, checks, a.Checks)
+	assert.Equal(t, AnnotationName, a.Name())
+}
+
+func TestConstructor_DefaultExprs(t *testing.T) {
+	exprs := map[string]string{
+		"postgres": "uuid_generate_v4()",
+		"mysql":    "uuid()",
+	}
+	a := DefaultExprs(exprs)
+	assert.Equal(t, exprs, a.DefaultExprs)
+	assert.Equal(t, AnnotationName, a.Name())
+}
+
+func TestConstructor_IncrementStart(t *testing.T) {
+	a := IncrementStart(1000)
+	require.NotNil(t, a.IncrementStart)
+	assert.Equal(t, 1000, *a.IncrementStart)
+	assert.Equal(t, AnnotationName, a.Name())
+}
+
+// ---------------------------------------------------------------------------
+// New IndexAnnotation constructors (Ent parity)
+// ---------------------------------------------------------------------------
+
+func TestConstructor_Prefix(t *testing.T) {
+	a := Prefix(100)
+	assert.Equal(t, uint(100), a.Prefix)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_PrefixColumn(t *testing.T) {
+	a := PrefixColumn("name", 200)
+	assert.Equal(t, map[string]uint{"name": 200}, a.PrefixColumns)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_DescColumns(t *testing.T) {
+	a := DescColumns("c1", "c2")
+	assert.True(t, a.DescColumns["c1"])
+	assert.True(t, a.DescColumns["c2"])
+	assert.False(t, a.Desc) // single-column Desc flag unset
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_OpClass(t *testing.T) {
+	a := OpClass("int8_bloom_ops")
+	assert.Equal(t, "int8_bloom_ops", a.OpClass)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_OpClassColumn(t *testing.T) {
+	a := OpClassColumn("c1", "jsonb_ops")
+	assert.Equal(t, map[string]string{"c1": "jsonb_ops"}, a.OpClassColumns)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_IncludeColumns(t *testing.T) {
+	a := IncludeColumns("c2", "c3")
+	assert.Equal(t, []string{"c2", "c3"}, a.IncludeColumns)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_IndexTypes(t *testing.T) {
+	types := map[string]string{
+		"postgres": "GIN",
+		"mysql":    "FULLTEXT",
+	}
+	a := IndexTypes(types)
+	assert.Equal(t, types, a.Types)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+func TestConstructor_IndexWhere(t *testing.T) {
+	a := IndexWhere("status = 'active'")
+	assert.Equal(t, "status = 'active'", a.Where)
+	assert.Equal(t, IndexAnnotationName, a.Name())
+}
+
+// ---------------------------------------------------------------------------
+// Annotation.Merge (schema.Merger)
+// ---------------------------------------------------------------------------
+
+func TestAnnotation_Merge_BasicFields(t *testing.T) {
+	a := Annotation{Table: "users", Schema: "public"}
+	b := Annotation{Table: "accounts", Collation: "utf8mb4_unicode_ci"}
+	merged := a.Merge(b).(Annotation)
+	assert.Equal(t, "accounts", merged.Table)               // overwritten
+	assert.Equal(t, "public", merged.Schema)                // preserved
+	assert.Equal(t, "utf8mb4_unicode_ci", merged.Collation) // new field
+}
+
+func TestAnnotation_Merge_ZeroDoesNotOverwrite(t *testing.T) {
+	a := Annotation{Table: "users", Size: 100}
+	b := Annotation{ColumnType: "TEXT"} // Table and Size are zero
+	merged := a.Merge(b).(Annotation)
+	assert.Equal(t, "users", merged.Table)   // preserved
+	assert.Equal(t, int64(100), merged.Size) // preserved
+	assert.Equal(t, "TEXT", merged.ColumnType)
+}
+
+func TestAnnotation_Merge_MapsAreCopied(t *testing.T) {
+	a := Annotation{Checks: map[string]string{"c1": "age > 0"}}
+	b := Annotation{Checks: map[string]string{"c2": "status != ''"}}
+	merged := a.Merge(b).(Annotation)
+	assert.Equal(t, "age > 0", merged.Checks["c1"])
+	assert.Equal(t, "status != ''", merged.Checks["c2"])
+}
+
+func TestAnnotation_Merge_DefaultExprsAreCopied(t *testing.T) {
+	a := Annotation{DefaultExprs: map[string]string{"postgres": "uuid_generate_v4()"}}
+	b := Annotation{DefaultExprs: map[string]string{"mysql": "uuid()"}}
+	merged := a.Merge(b).(Annotation)
+	assert.Equal(t, "uuid_generate_v4()", merged.DefaultExprs["postgres"])
+	assert.Equal(t, "uuid()", merged.DefaultExprs["mysql"])
+}
+
+func TestAnnotation_Merge_ViewForAreCopied(t *testing.T) {
+	a := Annotation{ViewFor: map[string]string{"postgres": "SELECT 1"}}
+	b := Annotation{ViewFor: map[string]string{"mysql": "SELECT 1"}}
+	merged := a.Merge(b).(Annotation)
+	assert.Equal(t, "SELECT 1", merged.ViewFor["postgres"])
+	assert.Equal(t, "SELECT 1", merged.ViewFor["mysql"])
+}
+
+func TestAnnotation_Merge_SkipIsSticky(t *testing.T) {
+	a := Annotation{Table: "t"}
+	b := Annotation{Skip: true}
+	merged := a.Merge(b).(Annotation)
+	assert.True(t, merged.Skip)
+}
+
+func TestAnnotation_Merge_PointerFields(t *testing.T) {
+	enabled := true
+	a := Annotation{}
+	b := Annotation{WithComments: &enabled, IncrementStart: func() *int { v := 100; return &v }()}
+	merged := a.Merge(b).(Annotation)
+	require.NotNil(t, merged.WithComments)
+	assert.True(t, *merged.WithComments)
+	require.NotNil(t, merged.IncrementStart)
+	assert.Equal(t, 100, *merged.IncrementStart)
+}
+
+func TestAnnotation_Merge_PointerInput(t *testing.T) {
+	a := Annotation{Table: "users"}
+	b := &Annotation{Schema: "public"}
+	merged := a.Merge(b).(Annotation)
+	assert.Equal(t, "users", merged.Table)
+	assert.Equal(t, "public", merged.Schema)
+}
+
+func TestAnnotation_Merge_NilPointerIsNoop(t *testing.T) {
+	a := Annotation{Table: "users"}
+	merged := a.Merge((*Annotation)(nil)).(Annotation)
+	assert.Equal(t, "users", merged.Table)
+}
+
+func TestAnnotation_Merge_IgnoresOtherTypes(t *testing.T) {
+	a := Annotation{Table: "users"}
+	merged := a.Merge(IndexAnnotation{Type: "GIN"}).(Annotation)
+	assert.Equal(t, "users", merged.Table) // unchanged
+}
+
+func TestAnnotation_Merge_AllScalarFields(t *testing.T) {
+	// Receiver starts empty so every body branch in Merge fires.
+	incr := true
+	start := 500
+	other := Annotation{
+		Charset:        "utf8mb4",
+		Default:        "'pending'",
+		DefaultExpr:    "gen_random_uuid()",
+		DefaultExprs:   map[string]string{"postgres": "uuid_generate_v4()"},
+		Options:        "ENGINE=InnoDB",
+		Size:           255,
+		Incremental:    &incr,
+		OnDelete:       Cascade,
+		OnUpdate:       SetNull,
+		Check:          "age >= 0",
+		Checks:         map[string]string{"chk": "status != ''"},
+		ViewAs:         "SELECT 1",
+		ViewFor:        map[string]string{"postgres": "SELECT 1"},
+		IndexType:      "GIN",
+		StorageParams:  "fillfactor=90",
+		Prefix:         "p_",
+		PrefixColumns:  true,
+		IncrementStart: &start,
+	}
+	merged := Annotation{}.Merge(other).(Annotation)
+
+	assert.Equal(t, "utf8mb4", merged.Charset)
+	assert.Equal(t, "'pending'", merged.Default)
+	assert.Equal(t, "gen_random_uuid()", merged.DefaultExpr)
+	assert.Equal(t, "uuid_generate_v4()", merged.DefaultExprs["postgres"])
+	assert.Equal(t, "ENGINE=InnoDB", merged.Options)
+	assert.Equal(t, int64(255), merged.Size)
+	require.NotNil(t, merged.Incremental)
+	assert.True(t, *merged.Incremental)
+	assert.Equal(t, Cascade, merged.OnDelete)
+	assert.Equal(t, SetNull, merged.OnUpdate)
+	assert.Equal(t, "age >= 0", merged.Check)
+	assert.Equal(t, "status != ''", merged.Checks["chk"])
+	assert.Equal(t, "SELECT 1", merged.ViewAs)
+	assert.Equal(t, "SELECT 1", merged.ViewFor["postgres"])
+	assert.Equal(t, "GIN", merged.IndexType)
+	assert.Equal(t, "fillfactor=90", merged.StorageParams)
+	assert.Equal(t, "p_", merged.Prefix)
+	assert.True(t, merged.PrefixColumns)
+	require.NotNil(t, merged.IncrementStart)
+	assert.Equal(t, 500, *merged.IncrementStart)
+}
+
+func TestAnnotation_Merge_ErrPropagation(t *testing.T) {
+	a := Annotation{}
+	b := Annotation{err: fmt.Errorf("build error")}
+	merged := a.Merge(b).(Annotation)
+	assert.Error(t, merged.Err())
+	assert.Contains(t, merged.Err().Error(), "build error")
+
+	// Both sides have errors → joined.
+	c := Annotation{err: fmt.Errorf("first")}
+	d := Annotation{err: fmt.Errorf("second")}
+	both := c.Merge(d).(Annotation)
+	assert.Contains(t, both.Err().Error(), "first")
+	assert.Contains(t, both.Err().Error(), "second")
+}
+
+func TestAnnotation_ImplementsSchemaMerger(t *testing.T) {
+	// compile-time check: Annotation satisfies the Merger interface assertion in annotation.go
+	// (the var _ block covers this; this test documents the expectation at runtime)
+	a := Annotation{Table: "t"}
+	result := a.Merge(Annotation{Schema: "public"})
+	_, ok := result.(Annotation)
+	assert.True(t, ok, "Merge must return Annotation")
 }

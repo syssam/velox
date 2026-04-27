@@ -70,15 +70,22 @@
 package sqlschema
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/schema"
 )
 
-// AnnotationName is the name used for SQL annotations.
+// AnnotationName is the name used for SQL annotations (entity/field/edge level).
 const AnnotationName = "sql"
+
+// IndexAnnotationName is the name used for index-specific SQL annotations.
+// Kept separate from AnnotationName to prevent collision when both are used
+// on the same index (e.g. Desc() + &IndexAnnotation{Where: "..."}).
+const IndexAnnotationName = "sqlindex"
 
 // CascadeAction defines cascade behavior for foreign key constraints.
 type CascadeAction string
@@ -126,6 +133,9 @@ func (c CascadeAction) ConstName() string {
 //	sql.Annotation{Size: intPtr(10), ColumnType: "JSONB"}
 //	sql.Annotation{Table: "users"}
 type Annotation struct {
+	// err carries errors that occurred during annotation construction (e.g. ViewFor
+	// with bind args or an empty query). Checked by the compiler loader via Err().
+	err error
 	// Table overrides the database table name for an entity.
 	// Equivalent to sqlschema.Annotation{Table: "users"}.
 	Table string
@@ -216,6 +226,10 @@ type IndexAnnotation struct {
 	// Where sets the partial index predicate (WHERE clause).
 	Where string
 
+	// StorageParams sets storage parameters for the index (e.g. "fillfactor=90").
+	// PostgreSQL-specific: emitted as WITH (...) on CREATE INDEX.
+	StorageParams string
+
 	// Desc indicates descending sort order for the index.
 	Desc bool
 
@@ -243,7 +257,70 @@ type IndexAnnotation struct {
 
 // Name implements schema.Annotation for IndexAnnotation.
 func (IndexAnnotation) Name() string {
-	return AnnotationName
+	return IndexAnnotationName
+}
+
+// Merge implements schema.Merger so multiple IndexAnnotation values on the same
+// index are combined rather than the second silently overwriting the first.
+// Non-zero fields in other win; zero fields leave the receiver's value intact.
+func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation {
+	var ant IndexAnnotation
+	switch v := other.(type) {
+	case IndexAnnotation:
+		ant = v
+	case *IndexAnnotation:
+		if v != nil {
+			ant = *v
+		}
+	default:
+		return a
+	}
+	if ant.Type != "" {
+		a.Type = ant.Type
+	}
+	if ant.Types != nil {
+		if a.Types == nil {
+			a.Types = make(map[string]string)
+		}
+		maps.Copy(a.Types, ant.Types)
+	}
+	if ant.Where != "" {
+		a.Where = ant.Where
+	}
+	if ant.StorageParams != "" {
+		a.StorageParams = ant.StorageParams
+	}
+	if ant.Desc {
+		a.Desc = ant.Desc
+	}
+	if ant.DescColumns != nil {
+		if a.DescColumns == nil {
+			a.DescColumns = make(map[string]bool)
+		}
+		maps.Copy(a.DescColumns, ant.DescColumns)
+	}
+	if ant.OpClass != "" {
+		a.OpClass = ant.OpClass
+	}
+	if ant.OpClassColumns != nil {
+		if a.OpClassColumns == nil {
+			a.OpClassColumns = make(map[string]string)
+		}
+		maps.Copy(a.OpClassColumns, ant.OpClassColumns)
+	}
+	if ant.Prefix != 0 {
+		a.Prefix = ant.Prefix
+	}
+	if ant.PrefixColumns != nil {
+		if a.PrefixColumns == nil {
+			a.PrefixColumns = make(map[string]uint)
+		}
+		maps.Copy(a.PrefixColumns, ant.PrefixColumns)
+	}
+	if ant.IncludeColumns != nil {
+		a.IncludeColumns = append(a.IncludeColumns, ant.IncludeColumns...)
+	}
+	return a
 }
 
 // Name implements schema.Annotation.
@@ -251,8 +328,125 @@ func (a Annotation) Name() string {
 	return AnnotationName
 }
 
-// Ensure Annotation implements schema.Annotation.
-var _ schema.Annotation = (*Annotation)(nil)
+// Err returns any error that occurred during annotation construction (e.g. from ViewFor).
+// The compiler loader checks this and surfaces it as a schema validation error.
+func (a Annotation) Err() error {
+	return a.err
+}
+
+// Merge implements schema.Merger so multiple Annotation values on the same
+// entity/field/edge are combined rather than the second silently overwriting the first.
+// Non-zero fields in other win; zero fields leave the receiver's value intact.
+func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
+	var ant Annotation
+	switch v := other.(type) {
+	case Annotation:
+		ant = v
+	case *Annotation:
+		if v != nil {
+			ant = *v
+		}
+	default:
+		return a
+	}
+	if ant.Schema != "" {
+		a.Schema = ant.Schema
+	}
+	if ant.Table != "" {
+		a.Table = ant.Table
+	}
+	if ant.Charset != "" {
+		a.Charset = ant.Charset
+	}
+	if ant.Collation != "" {
+		a.Collation = ant.Collation
+	}
+	if ant.Default != "" {
+		a.Default = ant.Default
+	}
+	if ant.DefaultExpr != "" {
+		a.DefaultExpr = ant.DefaultExpr
+	}
+	if ant.DefaultExprs != nil {
+		if a.DefaultExprs == nil {
+			a.DefaultExprs = make(map[string]string)
+		}
+		maps.Copy(a.DefaultExprs, ant.DefaultExprs)
+	}
+	if ant.Options != "" {
+		a.Options = ant.Options
+	}
+	if ant.Size != 0 {
+		a.Size = ant.Size
+	}
+	if ant.WithComments != nil {
+		a.WithComments = ant.WithComments
+	}
+	if ant.Incremental != nil {
+		a.Incremental = ant.Incremental
+	}
+	if ant.IncrementStart != nil {
+		a.IncrementStart = ant.IncrementStart
+	}
+	if ant.OnDelete != "" {
+		a.OnDelete = ant.OnDelete
+	}
+	if ant.OnUpdate != "" {
+		a.OnUpdate = ant.OnUpdate
+	}
+	if ant.Check != "" {
+		a.Check = ant.Check
+	}
+	if len(ant.Checks) > 0 {
+		if a.Checks == nil {
+			a.Checks = make(map[string]string)
+		}
+		maps.Copy(a.Checks, ant.Checks)
+	}
+	if ant.Skip {
+		a.Skip = true
+	}
+	if ant.ViewAs != "" {
+		a.ViewAs = ant.ViewAs
+	}
+	if len(ant.ViewFor) > 0 {
+		if a.ViewFor == nil {
+			a.ViewFor = make(map[string]string)
+		}
+		maps.Copy(a.ViewFor, ant.ViewFor)
+	}
+	if ant.ColumnType != "" {
+		a.ColumnType = ant.ColumnType
+	}
+	if ant.IndexType != "" {
+		a.IndexType = ant.IndexType
+	}
+	if ant.StorageParams != "" {
+		a.StorageParams = ant.StorageParams
+	}
+	if ant.Prefix != "" {
+		a.Prefix = ant.Prefix
+	}
+	if ant.PrefixColumns {
+		a.PrefixColumns = ant.PrefixColumns
+	}
+	if ant.err != nil {
+		a.err = errors.Join(a.err, ant.err)
+	}
+	return a
+}
+
+// Ensure Annotation implements both schema.Annotation and schema.Merger.
+var _ interface {
+	schema.Annotation
+	schema.Merger
+} = (*Annotation)(nil)
+
+// Ensure IndexAnnotation implements both schema.Annotation and schema.Merger.
+var _ interface {
+	schema.Annotation
+	schema.Merger
+} = (*IndexAnnotation)(nil)
 
 // Table sets the database table name for an entity.
 //
@@ -437,6 +631,60 @@ func Schema(schemaName string) Annotation {
 	return Annotation{Schema: schemaName}
 }
 
+// SchemaTable sets both the database schema and table name for an entity in one annotation.
+//
+// Example:
+//
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
+//	        sqlschema.SchemaTable("public", "users"),
+//	    }
+//	}
+func SchemaTable(s, t string) Annotation {
+	return Annotation{Schema: s, Table: t}
+}
+
+// Checks sets multiple named CHECK constraints on the table.
+//
+// Example:
+//
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
+//	        sqlschema.Checks(map[string]string{
+//	            "valid_age": "age >= 0 AND age < 150",
+//	        }),
+//	    }
+//	}
+func Checks(c map[string]string) Annotation {
+	return Annotation{Checks: c}
+}
+
+// DefaultExprs sets dialect-specific default expressions for the column.
+//
+// Example:
+//
+//	field.UUID("id", uuid.Nil).
+//	    Annotations(sqlschema.DefaultExprs(map[string]string{
+//	        dialect.MySQL:    "uuid()",
+//	        dialect.Postgres: "uuid_generate_v4()",
+//	    }))
+func DefaultExprs(exprs map[string]string) Annotation {
+	return Annotation{DefaultExprs: exprs}
+}
+
+// IncrementStart sets the starting value for auto-increment columns.
+//
+// Example:
+//
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
+//	        sqlschema.IncrementStart(1000),
+//	    }
+//	}
+func IncrementStart(start int) Annotation {
+	return Annotation{IncrementStart: &start}
+}
+
 // Skip marks this entity/field to be skipped in SQL generation.
 //
 // Example:
@@ -451,18 +699,58 @@ func Skip() Annotation {
 //
 // Example:
 //
-//	index.Fields("tags").Annotations(sql.IndexType("GIN"))
-func IndexType(typ string) Annotation {
-	return Annotation{IndexType: typ}
+//	index.Fields("tags").Annotations(sqlschema.IndexType("GIN"))
+func IndexType(typ string) *IndexAnnotation {
+	return &IndexAnnotation{Type: typ}
 }
 
-// StorageParams sets storage parameters for indexes.
+// StorageParams sets storage parameters for indexes (PostgreSQL-specific).
 //
 // Example:
 //
-//	index.Fields("id").Annotations(sql.StorageParams("fillfactor=90"))
-func StorageParams(params string) Annotation {
-	return Annotation{StorageParams: params}
+//	index.Fields("id").Annotations(sqlschema.StorageParams("fillfactor=90"))
+func StorageParams(params string) *IndexAnnotation {
+	return &IndexAnnotation{StorageParams: params}
+}
+
+// Prefix returns a new index annotation with a prefix length for a single column index.
+// MySQL-specific: limits the index to the first N characters of the column value.
+//
+// Example:
+//
+//	index.Fields("name").Annotations(sqlschema.Prefix(100))
+//	// CREATE INDEX `t_name` ON `t`(`name`(100))
+func Prefix(prefix uint) *IndexAnnotation {
+	return &IndexAnnotation{Prefix: prefix}
+}
+
+// PrefixColumn returns a new index annotation with a prefix length for a specific column
+// in a multi-column index. MySQL-specific.
+//
+// Example:
+//
+//	index.Fields("c1", "c2").Annotations(
+//	    sqlschema.PrefixColumn("c1", 100),
+//	    sqlschema.PrefixColumn("c2", 200),
+//	)
+//	// CREATE INDEX `t_c1_c2` ON `t`(`c1`(100), `c2`(200))
+func PrefixColumn(name string, prefix uint) *IndexAnnotation {
+	return &IndexAnnotation{PrefixColumns: map[string]uint{name: prefix}}
+}
+
+// DescColumns returns a new index annotation with descending order for specific columns
+// in a multi-column index.
+//
+// Example:
+//
+//	index.Fields("c1", "c2", "c3").Annotations(sqlschema.DescColumns("c1", "c2"))
+//	// CREATE INDEX `t_c1_c2_c3` ON `t`(`c1` DESC, `c2` DESC, `c3`)
+func DescColumns(names ...string) *IndexAnnotation {
+	ant := &IndexAnnotation{DescColumns: make(map[string]bool, len(names))}
+	for _, name := range names {
+		ant.DescColumns[name] = true
+	}
+	return ant
 }
 
 // Desc returns an index annotation indicating descending sort order.
@@ -473,6 +761,68 @@ func StorageParams(params string) Annotation {
 //	index.Fields("created_at").Annotations(sqlschema.Desc())
 func Desc() *IndexAnnotation {
 	return &IndexAnnotation{Desc: true}
+}
+
+// OpClass returns a new index annotation with an operator class for a single column index.
+// PostgreSQL-specific.
+//
+// Example:
+//
+//	index.Fields("col").Annotations(
+//	    sqlschema.IndexType("BRIN"),
+//	    sqlschema.OpClass("int8_bloom_ops"),
+//	)
+//	// CREATE INDEX "t_col" ON "t" USING BRIN ("col" int8_bloom_ops)
+func OpClass(op string) *IndexAnnotation {
+	return &IndexAnnotation{OpClass: op}
+}
+
+// OpClassColumn returns a new index annotation with an operator class for a specific column
+// in a multi-column index. PostgreSQL-specific.
+//
+// Example:
+//
+//	index.Fields("c1", "c2").Annotations(
+//	    sqlschema.IndexType("BRIN"),
+//	    sqlschema.OpClassColumn("c1", "int8_bloom_ops"),
+//	)
+func OpClassColumn(name, op string) *IndexAnnotation {
+	return &IndexAnnotation{OpClassColumns: map[string]string{name: op}}
+}
+
+// IncludeColumns returns a new index annotation specifying columns to include in a
+// covering index (INCLUDE clause). PostgreSQL-specific.
+//
+// Example:
+//
+//	index.Fields("c1").Annotations(sqlschema.IncludeColumns("c2", "c3"))
+//	// CREATE INDEX "t_c1" ON "t"("c1") INCLUDE ("c2", "c3")
+func IncludeColumns(names ...string) *IndexAnnotation {
+	return &IndexAnnotation{IncludeColumns: names}
+}
+
+// IndexTypes returns a new index annotation with dialect-specific index types.
+//
+// Example:
+//
+//	index.Fields("tags").Annotations(sqlschema.IndexTypes(map[string]string{
+//	    dialect.MySQL:    "FULLTEXT",
+//	    dialect.Postgres: "GIN",
+//	}))
+func IndexTypes(types map[string]string) *IndexAnnotation {
+	return &IndexAnnotation{Types: types}
+}
+
+// IndexWhere returns a new index annotation configuring a partial index predicate.
+// Works in SQLite and PostgreSQL. The WHERE clause must be in the same normal form
+// as it is stored in the database (Atlas dev-database normalization applies).
+//
+// Example:
+//
+//	index.Fields("status").Annotations(sqlschema.IndexWhere("status = 'active'"))
+//	// CREATE INDEX "t_status" ON "t"("status") WHERE (status = 'active')
+func IndexWhere(pred string) *IndexAnnotation {
+	return &IndexAnnotation{Where: pred}
 }
 
 // View returns an annotation that defines a view with the given SQL query.
@@ -504,12 +854,11 @@ func View(query string) *Annotation {
 func ViewFor(d string, fn func(*sql.Selector)) *Annotation {
 	s := sql.Dialect(d).Select()
 	fn(s)
-	query, _ := s.Query()
-	return &Annotation{
-		ViewFor: map[string]string{
-			d: query,
-		},
+	q, args := s.Query()
+	if len(args) > 0 {
+		return &Annotation{err: fmt.Errorf("sqlschema: view query must not contain bind arguments, got %d", len(args))}
 	}
+	return &Annotation{ViewFor: map[string]string{d: q}}
 }
 
 // Getters for use by generators.
@@ -591,7 +940,7 @@ func (a Annotation) GetStorageParams() string {
 }
 
 // Merge combines multiple SQL annotations into one.
-// Later annotations override earlier ones for the same field.
+// Later annotations override earlier ones for scalar fields; maps are merged.
 func Merge(annotations ...Annotation) Annotation {
 	result := Annotation{}
 	for _, a := range annotations {
@@ -602,7 +951,7 @@ func Merge(annotations ...Annotation) Annotation {
 			result.Schema = a.Schema
 		}
 		if a.Skip {
-			result.Skip = a.Skip
+			result.Skip = true
 		}
 		if a.Size != 0 {
 			result.Size = a.Size
@@ -622,8 +971,17 @@ func Merge(annotations ...Annotation) Annotation {
 		if a.Collation != "" {
 			result.Collation = a.Collation
 		}
+		if a.Charset != "" {
+			result.Charset = a.Charset
+		}
 		if a.Check != "" {
 			result.Check = a.Check
+		}
+		if len(a.Checks) > 0 {
+			if result.Checks == nil {
+				result.Checks = make(map[string]string)
+			}
+			maps.Copy(result.Checks, a.Checks)
 		}
 		if a.Default != "" {
 			result.Default = a.Default
@@ -631,17 +989,41 @@ func Merge(annotations ...Annotation) Annotation {
 		if a.DefaultExpr != "" {
 			result.DefaultExpr = a.DefaultExpr
 		}
-		if a.Charset != "" {
-			result.Charset = a.Charset
+		if len(a.DefaultExprs) > 0 {
+			if result.DefaultExprs == nil {
+				result.DefaultExprs = make(map[string]string)
+			}
+			maps.Copy(result.DefaultExprs, a.DefaultExprs)
+		}
+		if a.Options != "" {
+			result.Options = a.Options
 		}
 		if a.Incremental != nil {
 			result.Incremental = a.Incremental
+		}
+		if a.IncrementStart != nil {
+			result.IncrementStart = a.IncrementStart
 		}
 		if a.IndexType != "" {
 			result.IndexType = a.IndexType
 		}
 		if a.StorageParams != "" {
 			result.StorageParams = a.StorageParams
+		}
+		if a.ViewAs != "" {
+			result.ViewAs = a.ViewAs
+		}
+		if len(a.ViewFor) > 0 {
+			if result.ViewFor == nil {
+				result.ViewFor = make(map[string]string)
+			}
+			maps.Copy(result.ViewFor, a.ViewFor)
+		}
+		if a.Prefix != "" {
+			result.Prefix = a.Prefix
+		}
+		if a.PrefixColumns {
+			result.PrefixColumns = true
 		}
 	}
 	return result

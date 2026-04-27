@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"ariga.io/atlas/sql/migrate"
+	"ariga.io/atlas/sql/postgres"
 	"ariga.io/atlas/sql/schema"
+	"ariga.io/atlas/sql/sqlite"
 
 	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sql"
@@ -921,6 +923,15 @@ func TestPostgres_AtIndex(t *testing.T) {
 		idx2 := schema.NewIndex("idx_status")
 		err := d.atIndex(idx1, at, idx2)
 		require.NoError(t, err)
+		var pred *postgres.IndexPredicate
+		for _, a := range idx2.Attrs {
+			if p, ok := a.(*postgres.IndexPredicate); ok {
+				pred = p
+				break
+			}
+		}
+		require.NotNil(t, pred, "IndexPredicate attribute must be set on the Atlas index")
+		assert.Equal(t, "status = 'active'", pred.P)
 	})
 
 	t.Run("index with missing column", func(t *testing.T) {
@@ -1046,6 +1057,15 @@ func TestSQLite_AtIndex(t *testing.T) {
 		idx2 := schema.NewIndex("idx_status")
 		err := d.atIndex(idx1, at, idx2)
 		require.NoError(t, err)
+		var pred *sqlite.IndexPredicate
+		for _, a := range idx2.Attrs {
+			if p, ok := a.(*sqlite.IndexPredicate); ok {
+				pred = p
+				break
+			}
+		}
+		require.NotNil(t, pred, "IndexPredicate attribute must be set on the Atlas index")
+		assert.Equal(t, "status = 'active'", pred.P)
 	})
 
 	t.Run("missing column", func(t *testing.T) {
