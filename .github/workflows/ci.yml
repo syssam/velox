@@ -268,7 +268,6 @@ jobs:
         example:
           - { path: examples/basic, mode: test }
           - { path: examples/edge-schema, mode: test }
-          - { path: examples/erp, mode: build }
           - { path: examples/fullgql, mode: test }
           - { path: examples/fulltest, mode: build }
           - { path: examples/globalid, mode: test }
@@ -278,10 +277,9 @@ jobs:
           - { path: tests/external-module, mode: test }
           # testdata/ent-comparison/ is a comparison fixture, not a
           # user-facing example — excluded from this matrix entirely.
-          # erp / fulltest run in mode: build only — erp has hand-written
-          # gqlgen panic-stubs (no real test bodies) and fulltest has no
-          # test files; building each catches stale generated/hand-written
-          # code without paying for a no-op test pass.
+          # examples/erp is gitignored (not for public distribution) and
+          # is excluded from CI. fulltest runs in mode: build only — it
+          # has no test files; building catches stale generated code.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

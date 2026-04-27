@@ -35,7 +35,6 @@ go run tests/integration/generate.go
 DRIFT_CHECK_MODULES=(
     examples/basic
     examples/edge-schema
-    examples/erp
     examples/fullgql
     examples/fulltest
     examples/globalid
@@ -63,16 +62,9 @@ for dir in "${DRIFT_CHECK_MODULES[@]}"; do
     # the cycle-break refactor moved CreateXxxInput to client/{entity}/
     # — gqlgen autobind needs to be re-run to pick up the new path).
     if [[ -f "${dir}/gqlgen.yml" ]]; then
-        if command -v gqlgen >/dev/null 2>&1; then
-            echo "==> gqlgen generate ${dir}"
-            if ! (cd "${dir}" && gqlgen generate); then
-                echo "warning: ${dir} gqlgen failed, continuing" >&2
-                FAILED_EXAMPLES+=("${dir}")
-                continue
-            fi
-        else
-            echo "warning: ${dir} has gqlgen.yml but gqlgen binary not in PATH;" >&2
-            echo "         install with: go install github.com/99designs/gqlgen@latest" >&2
+        echo "==> gqlgen generate ${dir}"
+        if ! (cd "${dir}" && go run github.com/99designs/gqlgen generate); then
+            echo "warning: ${dir} gqlgen failed, continuing" >&2
             FAILED_EXAMPLES+=("${dir}")
             continue
         fi
