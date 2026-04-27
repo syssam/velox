@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect/sql"
 )
 
@@ -186,6 +187,128 @@ func TestValidateRegistries_MissingEntityClient(t *testing.T) {
 	err := ValidateRegistries()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "entity client missing")
+}
+
+// =============================================================================
+// Has-prefixed accessors (non-panicking companions)
+// =============================================================================
+
+// TestHasAccessors_NonPanicking pins the contract that the Has* accessors
+// added for Client.ValidateRegistries are read-only and never panic. Their
+// reason for existing is to let the generated startup-time validator probe
+// the registries without inheriting NewEntityQuery / NewEntityClient's panic
+// behavior, which is load-bearing on the hot path but unsuitable for a
+// fail-fast diagnostic that needs to *report* missing entries, not crash on
+// them.
+func TestHasAccessors_NonPanicking(t *testing.T) {
+	t.Run("missing_entries_return_false", func(t *testing.T) {
+		assert.False(t, HasMutator("NoSuchEntity_For_Has_Test"))
+		assert.False(t, HasQueryFactory("NoSuchEntity_For_Has_Test"))
+		assert.False(t, HasEntityClient("NoSuchEntity_For_Has_Test"))
+		assert.False(t, HasEntityRegistration("NoSuchEntity_For_Has_Test"))
+		assert.False(t, HasEntityPolicy("NoSuchEntity_For_Has_Test"))
+		assert.False(t, HasNodeResolver("no_such_table_for_has_test"))
+		assert.False(t, HasColumns("no_such_table_for_has_test"))
+	})
+
+	t.Run("populated_entries_return_true", func(t *testing.T) {
+		const name = "TestHasAccessor"
+		const table = "test_has_accessor_tbl"
+		defer cleanupRegistries(t, name)
+		defer cleanupColumns(t, table)
+		defer cleanupNodeResolver(t, table)
+		defer cleanupPolicy(t, name)
+
+		RegisterMutator(name, func(_ context.Context, _ Config, _ any) (any, error) { return nil, nil })
+		RegisterQueryFactory(name, func(_ Config) any { return nil })
+		RegisterEntityClient(name, func(_ Config) any { return nil })
+		RegisterColumns(table, func(string) bool { return true })
+		RegisterNodeResolver(table, NodeResolver{Type: name, Resolve: func(_ context.Context, _ any) (any, error) { return nil, nil }})
+
+		assert.True(t, HasMutator(name))
+		assert.True(t, HasQueryFactory(name))
+		assert.True(t, HasEntityClient(name))
+		assert.True(t, HasEntityRegistration(name))
+		assert.True(t, HasNodeResolver(table))
+		assert.True(t, HasColumns(table))
+		// Policy registry has its own RegisterEntityPolicy entry point;
+		// nil policy is a documented no-op so we can't reuse one of the
+		// pieces above. Use a sentinel policy instead.
+		RegisterEntityPolicy(name, sentinelPolicy{})
+		assert.True(t, HasEntityPolicy(name))
+	})
+}
+
+// TestHasEntityRegistration_RequiresAllThree pins the "any one of the three
+// pieces missing" semantic of HasEntityRegistration. The generated
+// ValidateRegistries collapses three checks into this one call as a
+// readability aid; if a future refactor weakens the conjunction (say, to
+// "at least one populated") the validator stops detecting partial imports.
+func TestHasEntityRegistration_RequiresAllThree(t *testing.T) {
+	cases := []struct {
+		name   string
+		mut    bool
+		query  bool
+		client bool
+		want   bool
+	}{
+		{"none", false, false, false, false},
+		{"mut_only", true, false, false, false},
+		{"query_only", false, true, false, false},
+		{"client_only", false, false, true, false},
+		{"missing_query", true, false, true, false},
+		{"missing_client", true, true, false, false},
+		{"missing_mut", false, true, true, false},
+		{"all_three", true, true, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := "TestHasER_" + tc.name
+			defer cleanupRegistries(t, n)
+
+			if tc.mut {
+				RegisterMutator(n, func(_ context.Context, _ Config, _ any) (any, error) { return nil, nil })
+			}
+			if tc.query {
+				RegisterQueryFactory(n, func(_ Config) any { return nil })
+			}
+			if tc.client {
+				RegisterEntityClient(n, func(_ Config) any { return nil })
+			}
+			assert.Equal(t, tc.want, HasEntityRegistration(n))
+		})
+	}
+}
+
+// sentinelPolicy is a stand-in policy used only to distinguish "registered"
+// from "unregistered" in HasEntityPolicy assertions. It is NOT exercised
+// against any actual query/mutation in this test — the Policy interface
+// requires velox.Query / velox.Mutation, but the methods here always return
+// nil so the parameter shapes do not matter at the call sites we use.
+type sentinelPolicy struct{}
+
+func (sentinelPolicy) EvalQuery(context.Context, velox.Query) error       { return nil }
+func (sentinelPolicy) EvalMutation(context.Context, velox.Mutation) error { return nil }
+
+func cleanupColumns(t *testing.T, table string) {
+	t.Helper()
+	columnMu.Lock()
+	delete(columnRegistry, table)
+	columnMu.Unlock()
+}
+
+func cleanupNodeResolver(t *testing.T, table string) {
+	t.Helper()
+	nodeMu.Lock()
+	delete(nodeRegistry, table)
+	nodeMu.Unlock()
+}
+
+func cleanupPolicy(t *testing.T, name string) {
+	t.Helper()
+	policyMu.Lock()
+	delete(policyRegistry, name)
+	policyMu.Unlock()
 }
 
 // =============================================================================

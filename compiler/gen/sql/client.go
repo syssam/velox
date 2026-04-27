@@ -273,6 +273,14 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	// Mutate dispatches to the correct entity client based on mutation type.
 	genClientMutateMethod(h, f, graph)
 
+	// expectedEntities + ValidateRegistries: fail-fast on missing entity imports.
+	// The per-entity client/<entity> and query/ sub-packages register themselves
+	// via init(); a missing transitive import (rare but possible in plugin and
+	// partial-build scenarios) only surfaces as a runtime.NewEntityQuery panic
+	// at first edge traversal. Surfacing it at startup catches the import-site
+	// bug at the right place.
+	genValidateRegistries(h, f, graph)
+
 	// init() constructs per-entity client fields directly from sub-packages.
 	f.Comment("init constructs per-entity client fields directly.")
 	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("init").Params().BlockFunc(func(grp *jen.Group) {
@@ -302,4 +310,121 @@ func genClientMutateMethod(_ gen.GeneratorHelper, f *jen.File, _ *gen.Graph) {
 		),
 		jen.Return(jen.Id("fn").Call(jen.Id("ctx"), jen.Id("c").Dot("config").Dot("runtimeConfig").Call(), jen.Id("m"))),
 	)
+}
+
+// genValidateRegistries emits a package-level expectedEntities slice and a
+// (*Client).ValidateRegistries() method that walks the slice and verifies the
+// runtime registries are populated for each entity. The intended call site is
+// right after velox.Open() / NewClient(): a missing transitive import
+// (rare but possible in plugin / partial-build scenarios) is otherwise
+// invisible until the first NewEntityQuery call panics with no nearby cause.
+//
+// The check matches the registration sites:
+//   - HasEntityRegistration(name) == RegisterEntity (mutator + query factory +
+//     entity client) populated by client/<entity>/init() via genEntityRuntimeRegistration.
+//   - HasNodeResolver(table) == RegisterNodeResolver populated alongside.
+//   - HasEntityPolicy(name) == RegisterEntityPolicy populated by
+//     genRuntimePolicies when the schema declares a Policy() method.
+//
+// Generation is gated on a non-empty graph: a zero-entity client has nothing
+// to validate, so the method emits a stub that returns nil.
+func genValidateRegistries(_ gen.GeneratorHelper, f *jen.File, graph *gen.Graph) {
+	// expectedEntity descriptor. Emitting it as a struct (rather than three
+	// parallel slices) keeps the validation loop readable and lets us add new
+	// fields without breaking the generated package's API surface.
+	f.Comment("expectedEntity describes a single entity that the generated client")
+	f.Comment("expects to find populated in the runtime registries at startup.")
+	f.Type().Id("expectedEntity").Struct(
+		jen.Id("name").String(),
+		jen.Id("table").String(),
+		jen.Id("hasPolicy").Bool(),
+	)
+
+	f.Comment("expectedEntities is the generator-emitted list of every entity")
+	f.Comment("declared in the schema. ValidateRegistries iterates it to detect")
+	f.Comment("missing per-entity sub-package imports.")
+	f.Var().Id("expectedEntities").Op("=").Index().Id("expectedEntity").ValuesFunc(func(grp *jen.Group) {
+		for _, t := range graph.Nodes {
+			grp.Values(jen.Dict{
+				jen.Id("name"):      jen.Lit(t.Name),
+				jen.Id("table"):     jen.Lit(t.Table()),
+				jen.Id("hasPolicy"): jen.Lit(len(t.PolicyPositions()) > 0),
+			})
+		}
+	})
+
+	f.Comment("ValidateRegistries verifies that every entity expected by this client")
+	f.Comment("has its runtime registries populated. Returns a structured error when")
+	f.Comment("one or more entities are missing registrations — typically because the")
+	f.Comment("user forgot to import a per-entity sub-package, causing the init()-time")
+	f.Comment("registration to be skipped by the linker.")
+	f.Comment("")
+	f.Comment("Recommended call site: right after velox.Open() / NewClient(), so")
+	f.Comment("missing-import bugs surface at process start rather than at first edge")
+	f.Comment("traversal (where the failure mode is a runtime.NewEntityQuery panic far")
+	f.Comment("from the import-site cause).")
+	f.Comment("")
+	f.Comment("ValidateRegistries is opt-in: it is NOT invoked automatically from")
+	f.Comment("Open or NewClient, because some users deliberately operate the client")
+	f.Comment("with a partial set of entity sub-packages imported (e.g. a worker that")
+	f.Comment("only mutates a subset). Callers who want fail-fast guarantees should")
+	f.Comment("wire it into their startup path explicitly.")
+	// Receiver is named but currently unused — validation is purely against
+	// package-level registries (populated at init time) and the generator-emitted
+	// expectedEntities slice. The named receiver leaves room for future
+	// dialect-specific checks via c.config.driver without an API change.
+	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("ValidateRegistries").Params().Error().BlockFunc(func(grp *jen.Group) {
+		grp.Var().Id("problems").Index().String()
+		grp.For(jen.List(jen.Id("_"), jen.Id("e")).Op(":=").Range().Id("expectedEntities")).Block(
+			jen.If(jen.Op("!").Qual(runtimePkg, "HasEntityRegistration").Call(jen.Id("e").Dot("name"))).Block(
+				jen.Id("problems").Op("=").Append(
+					jen.Id("problems"),
+					jen.Qual("fmt", "Sprintf").Call(
+						jen.Lit("entity %q: missing runtime.RegisterEntity (forgot to import the per-entity client/%s package?)"),
+						jen.Id("e").Dot("name"),
+						jen.Qual("strings", "ToLower").Call(jen.Id("e").Dot("name")),
+					),
+				),
+				// If the consolidated registration is absent, downstream checks
+				// would just produce noise — skip them for this entity.
+				jen.Continue(),
+			),
+			jen.If(jen.Op("!").Qual(runtimePkg, "HasNodeResolver").Call(jen.Id("e").Dot("table"))).Block(
+				jen.Id("problems").Op("=").Append(
+					jen.Id("problems"),
+					jen.Qual("fmt", "Sprintf").Call(
+						jen.Lit("entity %q: missing runtime.RegisterNodeResolver for table %q (per-entity init() did not run)"),
+						jen.Id("e").Dot("name"),
+						jen.Id("e").Dot("table"),
+					),
+				),
+			),
+			jen.If(jen.Op("!").Qual(runtimePkg, "HasColumns").Call(jen.Id("e").Dot("table"))).Block(
+				jen.Id("problems").Op("=").Append(
+					jen.Id("problems"),
+					jen.Qual("fmt", "Sprintf").Call(
+						jen.Lit("entity %q: missing runtime.RegisterColumns for table %q (per-entity init() did not run)"),
+						jen.Id("e").Dot("name"),
+						jen.Id("e").Dot("table"),
+					),
+				),
+			),
+			jen.If(jen.Id("e").Dot("hasPolicy").Op("&&").Op("!").Qual(runtimePkg, "HasEntityPolicy").Call(jen.Id("e").Dot("name"))).Block(
+				jen.Id("problems").Op("=").Append(
+					jen.Id("problems"),
+					jen.Qual("fmt", "Sprintf").Call(
+						jen.Lit("entity %q: schema declares Policy() but runtime.RegisterEntityPolicy was not called (entity sub-package runtime.go init() did not run)"),
+						jen.Id("e").Dot("name"),
+					),
+				),
+			),
+		)
+		grp.If(jen.Len(jen.Id("problems")).Op(">").Lit(0)).Block(
+			jen.Return(jen.Qual("fmt", "Errorf").Call(
+				jen.Lit("velox: registry validation failed:\n  - %s"),
+				jen.Qual("strings", "Join").Call(jen.Id("problems"), jen.Lit("\n  - ")),
+			)),
+		)
+		grp.Return(jen.Nil())
+	})
 }

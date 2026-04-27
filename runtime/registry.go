@@ -45,6 +45,15 @@ func FindMutator(name string) MutatorFunc {
 	return mutators[name]
 }
 
+// HasMutator reports whether a mutator is registered for the given entity name.
+// Non-panicking companion to FindMutator, used by Client.ValidateRegistries.
+func HasMutator(name string) bool {
+	mutatorMu.RLock()
+	defer mutatorMu.RUnlock()
+	_, ok := mutators[name]
+	return ok
+}
+
 // RegisteredTypeNames returns all registered entity type names.
 func RegisteredTypeNames() []string {
 	mutatorMu.RLock()
@@ -80,6 +89,16 @@ func NewEntityQuery(name string, cfg Config) any {
 	return fn(cfg)
 }
 
+// HasQueryFactory reports whether a query factory is registered for the given
+// entity name. Non-panicking companion to NewEntityQuery, used by
+// Client.ValidateRegistries.
+func HasQueryFactory(name string) bool {
+	queryMu.RLock()
+	defer queryMu.RUnlock()
+	_, ok := queryFactories[name]
+	return ok
+}
+
 // EntityClientFunc creates a typed entity client from runtime config.
 type EntityClientFunc func(cfg Config) any
 
@@ -106,6 +125,27 @@ func NewEntityClient(name string, cfg Config) any {
 		panic(fmt.Sprintf("velox: entity client not registered for %q — ensure the entity package is imported (e.g., import _ \"your/pkg/%s\")", name, strings.ToLower(name)))
 	}
 	return fn(cfg)
+}
+
+// HasEntityClient reports whether an entity client factory is registered for the
+// given name. Non-panicking companion to NewEntityClient, used by
+// Client.ValidateRegistries.
+func HasEntityClient(name string) bool {
+	clientMu.RLock()
+	defer clientMu.RUnlock()
+	_, ok := entityClients[name]
+	return ok
+}
+
+// HasEntityRegistration reports whether the consolidated entity registration
+// (mutator + query factory + entity client) is fully populated for the given
+// entity name. This is the primary signal used by Client.ValidateRegistries to
+// detect a missing per-entity sub-package import: when the user forgets to
+// import (or transitively pull in) "your/pkg/client/<entity>" or
+// "your/pkg/query", one or more of the underlying registries stays empty and
+// the eventual NewEntityQuery call panics far from the cause.
+func HasEntityRegistration(name string) bool {
+	return HasMutator(name) && HasQueryFactory(name) && HasEntityClient(name)
 }
 
 // EntityRegistration holds all per-entity registration data.
@@ -210,6 +250,17 @@ func EntityPolicy(name string) velox.Policy {
 	return policyRegistry[name]
 }
 
+// HasEntityPolicy reports whether a privacy policy is registered for the given
+// entity name. Used by Client.ValidateRegistries when the schema declares a
+// Policy() method and the entity sub-package's runtime.go init() is expected
+// to have populated the policy registry.
+func HasEntityPolicy(name string) bool {
+	policyMu.RLock()
+	defer policyMu.RUnlock()
+	_, ok := policyRegistry[name]
+	return ok
+}
+
 // =============================================================================
 // Column Registry
 // =============================================================================
@@ -282,4 +333,25 @@ func NodeResolvers() map[string]NodeResolver {
 	result := make(map[string]NodeResolver, len(nodeRegistry))
 	maps.Copy(result, nodeRegistry)
 	return result
+}
+
+// HasNodeResolver reports whether a node resolver is registered for the given
+// table name. Used by Client.ValidateRegistries when the consolidated
+// RegisterEntity call is expected to have wired RegisterNodeResolver alongside.
+func HasNodeResolver(table string) bool {
+	nodeMu.RLock()
+	defer nodeMu.RUnlock()
+	_, ok := nodeRegistry[table]
+	return ok
+}
+
+// HasColumns reports whether a column validator is registered for the given
+// table name. Used by Client.ValidateRegistries when verifying the
+// consolidated RegisterEntity call ran (it populates RegisterColumns
+// internally).
+func HasColumns(table string) bool {
+	columnMu.RLock()
+	defer columnMu.RUnlock()
+	_, ok := columnRegistry[table]
+	return ok
 }

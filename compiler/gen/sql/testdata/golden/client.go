@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	dialect "github.com/syssam/velox/dialect"
 	sql "github.com/syssam/velox/dialect/sql"
@@ -161,6 +162,66 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return nil, fmt.Errorf("unknown mutation type %T", m)
 	}
 	return fn(ctx, c.config.runtimeConfig(), m)
+}
+
+// expectedEntity describes a single entity that the generated client
+// expects to find populated in the runtime registries at startup.
+type expectedEntity struct {
+	name      string
+	table     string
+	hasPolicy bool
+}
+
+// expectedEntities is the generator-emitted list of every entity
+// declared in the schema. ValidateRegistries iterates it to detect
+// missing per-entity sub-package imports.
+var expectedEntities = []expectedEntity{{
+	hasPolicy: false,
+	name:      "User",
+	table:     "users",
+}, {
+	hasPolicy: false,
+	name:      "Post",
+	table:     "posts",
+}}
+
+// ValidateRegistries verifies that every entity expected by this client
+// has its runtime registries populated. Returns a structured error when
+// one or more entities are missing registrations — typically because the
+// user forgot to import a per-entity sub-package, causing the init()-time
+// registration to be skipped by the linker.
+//
+// Recommended call site: right after velox.Open() / NewClient(), so
+// missing-import bugs surface at process start rather than at first edge
+// traversal (where the failure mode is a runtime.NewEntityQuery panic far
+// from the import-site cause).
+//
+// ValidateRegistries is opt-in: it is NOT invoked automatically from
+// Open or NewClient, because some users deliberately operate the client
+// with a partial set of entity sub-packages imported (e.g. a worker that
+// only mutates a subset). Callers who want fail-fast guarantees should
+// wire it into their startup path explicitly.
+func (c *Client) ValidateRegistries() error {
+	var problems []string
+	for _, e := range expectedEntities {
+		if !runtime.HasEntityRegistration(e.name) {
+			problems = append(problems, fmt.Sprintf("entity %q: missing runtime.RegisterEntity (forgot to import the per-entity client/%s package?)", e.name, strings.ToLower(e.name)))
+			continue
+		}
+		if !runtime.HasNodeResolver(e.table) {
+			problems = append(problems, fmt.Sprintf("entity %q: missing runtime.RegisterNodeResolver for table %q (per-entity init() did not run)", e.name, e.table))
+		}
+		if !runtime.HasColumns(e.table) {
+			problems = append(problems, fmt.Sprintf("entity %q: missing runtime.RegisterColumns for table %q (per-entity init() did not run)", e.name, e.table))
+		}
+		if e.hasPolicy && !runtime.HasEntityPolicy(e.name) {
+			problems = append(problems, fmt.Sprintf("entity %q: schema declares Policy() but runtime.RegisterEntityPolicy was not called (entity sub-package runtime.go init() did not run)", e.name))
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("velox: registry validation failed:\n  - %s", strings.Join(problems, "\n  - "))
+	}
+	return nil
 }
 
 // init constructs per-entity client fields directly.
