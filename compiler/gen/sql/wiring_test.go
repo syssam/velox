@@ -1057,3 +1057,224 @@ func TestPerEntityPackageIsTrueLeaf(t *testing.T) {
 		}
 	}
 }
+
+// edgeQueryMethodRE matches every generated entity-side edge query method
+// shape: `func (_e *X) QueryFoo() FooQuerier { ... }`. Used by the sweep
+// tests below to enumerate every emitted edge query body without relying
+// on graph-fixture knowledge of which edges exist.
+var edgeQueryMethodRE = regexp.MustCompile(`(?m)^func \(_e \*\w+\) Query(\w+)\(\)\s+\w+Querier\s*\{`)
+
+// extractEdgeQueryBody returns the brace-balanced body of the edge query
+// method whose declaration starts at offset `start` in src. Returns the
+// entity-method body string (between the outer `{` and matching `}`),
+// or "" if the source is malformed.
+func extractEdgeQueryBody(src string, start int) string {
+	open := strings.IndexByte(src[start:], '{')
+	if open < 0 {
+		return ""
+	}
+	depth := 1
+	i := start + open + 1
+	for i < len(src) && depth > 0 {
+		switch src[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+		}
+		i++
+	}
+	if depth != 0 {
+		return ""
+	}
+	return src[start+open : i]
+}
+
+// TestEveryEdgeQueryWiresInterStoreAndPath sweeps the regenerated
+// integration prototype and asserts that EVERY generated edge-query
+// method (`(*X).QueryY()`) calls BOTH `SetInterStore(...)` AND
+// `SetPath(...)` in its body. This is the structural defense against
+// the reviewer-flagged risk class: "一條 edge query 少 wire 一個 setter"
+// (a generator change that emits a new edge query but forgets one of
+// the two required setter calls). A missing SetInterStore causes a nil
+// pointer panic at runtime when interceptors are registered; a missing
+// SetPath bypasses the FK column entirely and silently returns wrong
+// rows. CLAUDE.md documents these invariants but until now there was
+// no comprehensive structural test enforcing them across every emitted
+// edge.
+//
+// Skipped if the integration prototype hasn't been regenerated.
+func TestEveryEdgeQueryWiresInterStoreAndPath(t *testing.T) {
+	t.Parallel()
+	matches, err := filepath.Glob("../../../tests/integration/entity/*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Skip("integration prototype not regenerated; skipping edge-query sweep")
+	}
+
+	scanned := 0
+	for _, path := range matches {
+		base := filepath.Base(path)
+		// gql_*, hooks.go, edges.go, etc. — only entity{name}.go-style files
+		// declare the per-entity QueryX methods. Filter on emit pattern.
+		if strings.HasPrefix(base, "gql_") || base == "hooks.go" || base == "edges.go" ||
+			base == "node.go" || base == "config.go" || base == "client.go" ||
+			strings.HasPrefix(base, "build_") {
+			continue
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(raw)
+
+		for _, m := range edgeQueryMethodRE.FindAllStringSubmatchIndex(src, -1) {
+			edgeName := src[m[2]:m[3]]
+			body := extractEdgeQueryBody(src, m[0])
+			if body == "" {
+				t.Errorf("%s: malformed edge-query body for Query%s", path, edgeName)
+				continue
+			}
+			scanned++
+			if !strings.Contains(body, "SetInterStore(") {
+				t.Errorf("%s::Query%s body lacks SetInterStore(...) call — "+
+					"interceptors will not propagate to this edge query, breaking "+
+					"the shared-pointer wiring contract (see CLAUDE.md gotcha "+
+					"\"Entity-level edge queries ... must wire BOTH SetInterStore AND SetPath\")",
+					base, edgeName)
+			}
+			if !strings.Contains(body, "SetPath(") {
+				t.Errorf("%s::Query%s body lacks SetPath(...) call — "+
+					"the edge query has no foreign-key step and will silently "+
+					"return wrong rows (typically `WHERE target.id = owner.id` "+
+					"instead of the intended FK predicate)", base, edgeName)
+			}
+		}
+	}
+	if scanned == 0 {
+		t.Skip("no edge-query methods found in entity/ — schema has no edges?")
+	}
+}
+
+// TestEveryEdgeQueryToPolicyEntitySetsPolicy is the structural defense
+// against the reviewer-flagged risk: "privacy 回到 interceptor chain"
+// in its specific edge-query manifestation. When `(*User).QueryPosts()`
+// constructs the Post query, it MUST look up the target entity's policy
+// via `runtime.EntityPolicy("Post")` and call `SetPolicy(...)` on the
+// constructed query — otherwise the edge traversal silently bypasses
+// the target's privacy rules.
+//
+// The current generator emits the SetPolicy guarded block unconditionally
+// (it's a no-op at runtime when the target has no policy). This test
+// asserts that block is present in every edge-query body so a future
+// generator simplification ("we only need SetPolicy when target has a
+// policy") can't accidentally drop the lookup for entities that ARE
+// policy-bearing.
+func TestEveryEdgeQueryToPolicyEntitySetsPolicy(t *testing.T) {
+	t.Parallel()
+	matches, err := filepath.Glob("../../../tests/integration/entity/*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Skip("integration prototype not regenerated; skipping policy-edge sweep")
+	}
+
+	scanned := 0
+	missing := 0
+	for _, path := range matches {
+		base := filepath.Base(path)
+		if strings.HasPrefix(base, "gql_") || base == "hooks.go" || base == "edges.go" ||
+			base == "node.go" || base == "config.go" || base == "client.go" ||
+			strings.HasPrefix(base, "build_") {
+			continue
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(raw)
+
+		for _, m := range edgeQueryMethodRE.FindAllStringSubmatchIndex(src, -1) {
+			edgeName := src[m[2]:m[3]]
+			body := extractEdgeQueryBody(src, m[0])
+			if body == "" {
+				continue
+			}
+			scanned++
+			// Both halves of the SetPolicy block must be present:
+			// (a) registry lookup,  (b) conditional SetPolicy call.
+			hasLookup := strings.Contains(body, "runtime.EntityPolicy(")
+			hasSetPolicy := strings.Contains(body, "SetPolicy(")
+			if !hasLookup || !hasSetPolicy {
+				missing++
+				t.Errorf("%s::Query%s body lacks the runtime.EntityPolicy(...) "+
+					"lookup + SetPolicy(...) wiring — edge traversal to a policy-"+
+					"bearing target will silently bypass privacy rules. Has lookup: %v, "+
+					"Has SetPolicy: %v", base, edgeName, hasLookup, hasSetPolicy)
+			}
+		}
+	}
+	if scanned == 0 {
+		t.Skip("no edge-query methods found in entity/")
+	}
+	if missing > 0 {
+		t.Logf("scanned=%d edge methods, %d missing the policy wiring", scanned, missing)
+	}
+}
+
+// TestPrivacyHasNoInterceptorTraces extends TestPolicyExplicitEvaluation
+// with negative-invariant breadth: ensures no generated query file in
+// the integration prototype carries ANY trace of the pre-2026-04-10
+// "privacy lives in the interceptor chain" pattern. Catches the broader
+// regression class — not just `effectiveInters()`, but also Hooks[0] /
+// Interceptors[0] privacy-slot wrappers, `numHooks++` accounting that
+// reserved a slot for privacy, etc.
+//
+// If a future refactor reintroduces ANY of these patterns, this test
+// fails with a precise pointer to the file and the regressed pattern,
+// preventing the silent-policy-bypass bug class from coming back via
+// generator drift.
+func TestPrivacyHasNoInterceptorTraces(t *testing.T) {
+	t.Parallel()
+	matches, err := filepath.Glob("../../../tests/integration/query/*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Skip("integration prototype not regenerated; skipping privacy-trace scan")
+	}
+
+	// Each entry: regex pattern + human-readable explanation of the bug
+	// class it pins. The patterns are scoped narrowly so we don't false-
+	// match unrelated occurrences (e.g. legitimate Hooks[i] indexing
+	// inside the hook chain itself, only at index 0 with a privacy
+	// neighbor).
+	type forbidden struct {
+		pattern string
+		reason  string
+	}
+	forbiddenPatterns := []forbidden{
+		{"effectiveInters", "effectiveInters() merged privacy with interceptors; privacy is now its own explicit step"},
+		{"Hooks[0] = privacy.", "Hooks[0] = privacy.X reintroduces the privacy-as-hook-slot pattern"},
+		{"Interceptors[0] = privacy.", "Interceptors[0] = privacy.X reintroduces the privacy-as-interceptor-slot pattern"},
+		{"numHooks++ // privacy", "numHooks++ accounting for privacy means it's been re-added to the hook chain"},
+		{"numInterceptors++ // privacy", "numInterceptors++ accounting for privacy means it's been re-added to the interceptor chain"},
+	}
+
+	for _, path := range matches {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(raw)
+		for _, f := range forbiddenPatterns {
+			if strings.Contains(src, f.pattern) {
+				t.Errorf("%s contains forbidden pattern %q — %s",
+					filepath.Base(path), f.pattern, f.reason)
+			}
+		}
+	}
+}
