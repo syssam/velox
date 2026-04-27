@@ -267,13 +267,21 @@ jobs:
       matrix:
         example:
           - { path: examples/basic, mode: test }
+          - { path: examples/edge-schema, mode: test }
+          - { path: examples/erp, mode: build }
           - { path: examples/fullgql, mode: test }
+          - { path: examples/fulltest, mode: build }
+          - { path: examples/globalid, mode: test }
+          - { path: examples/json-field, mode: test }
+          - { path: examples/tree, mode: test }
+          - { path: examples/versioned-migration, mode: test }
           - { path: tests/external-module, mode: test }
           # testdata/ent-comparison/ is a comparison fixture, not a
           # user-facing example — excluded from this matrix entirely.
-          # New feature-focused examples (tree, edge-schema, json-field,
-          # versioned-migration, globalid) run locally but aren't in CI
-          # yet — add them here if CI coverage is desired.
+          # erp / fulltest run in mode: build only — erp has hand-written
+          # gqlgen panic-stubs (no real test bodies) and fulltest has no
+          # test files; building each catches stale generated/hand-written
+          # code without paying for a no-op test pass.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -286,10 +294,16 @@ jobs:
           EXAMPLE_MODE: ${{ matrix.example.mode }}
         run: |
           cd "${EXAMPLE_PATH}"
-          # mode=test sub-modules need their generated velox/ output
-          # before tests run.
+          # All modes need the generated velox/ output (gitignored).
+          go run generate.go
+          # If the example uses gqlgen, regenerate its output too. erp's
+          # graph/ent.resolvers.go is gitignored and must be regenerated
+          # before build; fullgql's gqlgen/* IS tracked but re-running
+          # gqlgen is idempotent (ci doesn't commit, so no drift risk).
+          if [ -f gqlgen.yml ]; then
+            go run github.com/99designs/gqlgen generate
+          fi
           if [ "${EXAMPLE_MODE}" = "test" ]; then
-            go run generate.go
             go test -race -v ./...
           else
             go build ./...
