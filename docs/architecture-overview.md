@@ -43,7 +43,7 @@ sub-packages per project. Use the integration prototype at
 
 | Path                           | Holds                                                                 | Does NOT hold                                                                            | Look at                                                  |
 | ------------------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Root (`velox/`, project-named) | `Client`, `Open`, `WithTx`, `Use`, `Intercept`, `ValidateRegistries`  | No CRUD code, no entity structs                                                          | `tests/integration/client.go`                            |
+| Root (`velox/`, project-named) | `Client`, `Open`, `WithTx`, `Use`, `Intercept`                        | No CRUD code, no entity structs                                                          | `tests/integration/client.go`                            |
 | `entity/`                      | Concrete entity structs, edge methods, `HookStore`, `InterceptorStore`, GraphQL pagination types | Per-entity client methods, predicates, schema constants                                  | `tests/integration/entity/user.go`                       |
 | `client/{entity}/`             | Heavy per-entity client + builders: `NewXxxClient`, `Create`, `Update`, `Delete`, `Query`, `Mutation`, GraphQL input types | Schema metadata, predicates, edge interfaces                                             | `tests/integration/client/user/client.go`                |
 | `{entity}/`                    | True leaf: field constants (`FieldID`, `FieldName`), edge name constants (`EdgePosts`), typed predicates (`HasPosts`, `IDField.EQ`), enum types | NO references back to `query/`, `client/{entity}/`, or `entity/`                         | `tests/integration/user/user.go`, `tests/integration/user/where.go` |
@@ -377,37 +377,15 @@ func main() {
         slog.Error("migrate", "err", err); os.Exit(1)
     }
 
-    if err := client.ValidateRegistries(); err != nil {
-        slog.Error("registry validation", "err", err); os.Exit(1)
-    }
-
     // ... start HTTP server, gqlgen handler, etc.
 }
 ```
 
-### Why call `ValidateRegistries()`?
-
-The runtime relies on per-entity `init()` functions to register query
-factories, mutators, node resolvers, and policies. Those `init()` blocks
-run only if the per-entity sub-package is **transitively imported** —
-normally the generated root client imports them all, but plugin-style
-builds, partial test packages, and unusual `replace` directives can drop
-an entity from the import graph silently.
-
-A missing import does not cause an immediate failure. The first symptom is
-typically a `runtime.NewEntityQuery: no factory for "Post"` panic on the
-**first cross-entity edge query**, often from inside a GraphQL resolver,
-hours into a deploy.
-
-`ValidateRegistries()` walks every entity declared by the schema and
-verifies its registrations are present. It returns a structured error
-naming the missing entity, so the bug surfaces at process start, not at
-first request. Calling it is opt-in but cheap (one map lookup per entity).
-For long-running services, do it.
-
-Source: `runtime/registry.go:182`,
-`compiler/gen/sql/client.go:331` (generator),
-`examples/basic/e2e_test.go:2331` (happy-path test).
+The generated root client transitively imports every per-entity
+sub-package, so the per-entity `init()` blocks (which register query
+factories, mutators, node resolvers, and policies) run as a compile-time
+guarantee. A missing entity sub-package is therefore a Go build error,
+not a runtime concern.
 
 ---
 

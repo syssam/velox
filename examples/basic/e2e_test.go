@@ -2315,26 +2315,3 @@ func TestE2E_Edge_CountTags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, tagCount)
 }
-
-// TestValidateRegistries_HappyPath exercises (*Client).ValidateRegistries
-// against a fully-populated registry — i.e. all entity sub-packages are
-// transitively imported (the test file imports user, post, comment, tag).
-// In this state the method MUST return nil; a non-nil result here would
-// indicate the generator's expectedEntities slice or one of the runtime
-// HasXxx accessors disagrees with the actual init()-time registration.
-//
-// Pairs with the structural pin in compiler/gen/sql/wiring_test.go and the
-// runtime tests for the Has* accessors. The three layers together pin:
-//   - emission   (wiring_test): the slice and method are emitted
-//   - inspection (runtime):     the Has* accessors are non-panicking
-//   - integration (this test):  the wiring matches in a real build
-func TestValidateRegistries_HappyPath(t *testing.T) {
-	client := openTestClient(t)
-	if err := client.ValidateRegistries(); err != nil {
-		t.Fatalf("ValidateRegistries returned %v on a fully-imported client; "+
-			"this means a generator-emitted expected entity is missing its "+
-			"init()-time registration — check meta.go (RegisterEntity) and "+
-			"runtime.go (RegisterEntityPolicy) emission for the failing entity",
-			err)
-	}
-}

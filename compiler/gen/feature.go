@@ -12,12 +12,18 @@ import (
 //   - Schema-level features: "schema/" prefix ("schema/snapshot")
 var (
 	// FeaturePrivacy provides a feature-flag for the privacy extension.
+	//
+	// Privacy depends only on always-on interceptor infrastructure
+	// (*entity.InterceptorStore, q.inters field, runtime.RunTraversers).
+	// The "intercept" feature only gates the user-facing intercept/intercept.go
+	// helper package, which privacy does not import — so the two are
+	// orthogonal, matching Ent's separation between core interceptor plumbing
+	// and the convenience helper package.
 	FeaturePrivacy = Feature{
 		Name:        "privacy",
 		Stage:       Alpha,
 		Default:     false,
 		Description: "Privacy provides a privacy layer for velox through the schema configuration",
-		Requires:    []string{"intercept"},
 		cleanup: func(c *Config) error {
 			return os.RemoveAll(filepath.Join(c.Target, "privacy"))
 		},
