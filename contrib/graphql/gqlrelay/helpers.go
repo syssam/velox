@@ -120,6 +120,12 @@ func CursorsPredicate(after *Cursor, before *Cursor, idField string, field strin
 	if direction == "" {
 		direction = OrderDirectionAsc
 	}
+	// DefaultOrder sets Field.Column = idStorageKey but ToCursor only stores ID (Value=nil).
+	// If field == idField, the composite path would produce WHERE (id,id) > (NULL, cursor_id)
+	// which SQL evaluates to NULL/false → 0 rows. Degrade to ID-only in this case.
+	if field == idField {
+		field = ""
+	}
 	if after != nil {
 		if field == "" {
 			// ID-only cursor: simple single-column comparison.
