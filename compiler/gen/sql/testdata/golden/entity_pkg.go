@@ -281,6 +281,8 @@ type UserQuerier interface {
 	Scan(context.Context, any) error
 	ScanX(context.Context, any)
 	Clone() UserQuerier
+	ForUpdate(opts ...sql.LockOption) UserQuerier
+	ForShare(opts ...sql.LockOption) UserQuerier
 }
 
 // UserSelector defines the select interface for User entities.

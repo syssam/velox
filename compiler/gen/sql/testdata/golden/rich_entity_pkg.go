@@ -296,6 +296,8 @@ type ArticleQuerier interface {
 	Scan(context.Context, any) error
 	ScanX(context.Context, any)
 	Clone() ArticleQuerier
+	ForUpdate(opts ...sql.LockOption) ArticleQuerier
+	ForShare(opts ...sql.LockOption) ArticleQuerier
 }
 
 // ArticleSelector defines the select interface for Article entities.

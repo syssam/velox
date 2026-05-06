@@ -853,6 +853,91 @@ func TestEdge_Index_NotFound(t *testing.T) {
 }
 
 // =============================================================================
+// setupFieldEdge — field is the source of truth for Optional / Immutable
+// =============================================================================
+
+// setupFieldEdgeFixture builds the minimal Type / Edge / ForeignKey structure
+// required to call (*Type).setupFieldEdge. The bound field is named "x_id"
+// and has type Int; the edge points at a target type whose ID is also Int
+// so the type-match check passes. An empty load.Edge def is wired so
+// fkOwner.StorageKey() does not panic.
+func setupFieldEdgeFixture(fieldOpt, fieldImmut, edgeOpt, edgeImmut bool) (*Type, *Edge, *ForeignKey, *Field) {
+	intType := &field.TypeInfo{Type: field.TypeInt}
+	target := &Type{
+		Name: "Target",
+		ID:   &Field{Name: "id", Type: intType},
+	}
+	tf := &Field{
+		Name:      "x_id",
+		Type:      intType,
+		Optional:  fieldOpt,
+		Immutable: fieldImmut,
+		def:       &load.Field{},
+	}
+	owner := &Type{
+		Name:   "Owner",
+		Fields: []*Field{tf},
+		fields: map[string]*Field{"x_id": tf},
+	}
+	e := &Edge{
+		Name:      "x",
+		Type:      target,
+		Optional:  edgeOpt,
+		Immutable: edgeImmut,
+		def:       &load.Edge{},
+	}
+	fk := &ForeignKey{}
+	return owner, e, fk, tf
+}
+
+func TestSetupFieldEdge_FieldOptionalOverridesEdge(t *testing.T) {
+	// field.Optional()=true, edge default (Optional=true) — should agree, no override needed.
+	owner, e, fk, _ := setupFieldEdgeFixture(true, false, true, false)
+	require.NoError(t, owner.setupFieldEdge(fk, e, "x_id"))
+	assert.True(t, e.Optional, "edge.Optional should remain true")
+	assert.False(t, e.Immutable)
+}
+
+func TestSetupFieldEdge_FieldRequiredOverridesEdgeDefault(t *testing.T) {
+	// field is required (Optional=false), edge defaults to Optional=true.
+	// Pre-change: this would error. Post-change: edge auto-syncs to Optional=false.
+	owner, e, fk, _ := setupFieldEdgeFixture(false, false, true, false)
+	require.NoError(t, owner.setupFieldEdge(fk, e, "x_id"))
+	assert.False(t, e.Optional, "edge.Optional must be auto-synced from required field")
+}
+
+func TestSetupFieldEdge_FieldRequiredEdgeRequired(t *testing.T) {
+	// Both required — already consistent, edge stays required.
+	owner, e, fk, _ := setupFieldEdgeFixture(false, false, false, false)
+	require.NoError(t, owner.setupFieldEdge(fk, e, "x_id"))
+	assert.False(t, e.Optional)
+}
+
+func TestSetupFieldEdge_FieldOptionalEdgeRequired_FieldWins(t *testing.T) {
+	// User wrote field.Optional() AND edge.Required() (conflict in Ent).
+	// Post-change: field wins silently — edge becomes Optional.
+	owner, e, fk, _ := setupFieldEdgeFixture(true, false, false, false)
+	require.NoError(t, owner.setupFieldEdge(fk, e, "x_id"))
+	assert.True(t, e.Optional, "field.Optional() must override edge.Required()")
+}
+
+func TestSetupFieldEdge_FieldImmutableSyncsToEdge(t *testing.T) {
+	// field.Immutable() — edge inherits Immutable.
+	owner, e, fk, _ := setupFieldEdgeFixture(false, true, false, false)
+	require.NoError(t, owner.setupFieldEdge(fk, e, "x_id"))
+	assert.True(t, e.Immutable, "edge.Immutable must be auto-synced from immutable field")
+}
+
+func TestSetupFieldEdge_MissingField(t *testing.T) {
+	// .Field("missing") with no matching field → clear error.
+	owner, e, fk, _ := setupFieldEdgeFixture(false, false, false, false)
+	delete(owner.fields, "x_id")
+	err := owner.setupFieldEdge(fk, e, "missing")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "was not found")
+}
+
+// =============================================================================
 // ForeignKey StructField
 // =============================================================================
 

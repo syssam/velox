@@ -67,6 +67,24 @@ Most field and edge declarations map directly. Key differences are noted.
 | `edge.From("owner", User.Type).Ref("posts")` | `edge.From("owner", User.Type).Ref("posts")` | Identical |
 | `edge.To("cars", Car.Type).Unique()` | `edge.To("cars", Car.Type).Unique()` | Identical |
 
+> **Deviation from Ent — edge bound via `.Field()` inherits Optional/Immutable from the field.**
+>
+> Ent requires you to declare `Optional()` / `Immutable()` on **both** the field and the edge when using `.Field("x_id")`, and errors at codegen time if they disagree. The error is confusing because Ent's defaults are asymmetric (field defaults to required, edge defaults to optional), so leaving both at default silently disagrees.
+>
+> Velox auto-syncs from the field side — declare nullability/immutability **once** on the field, the edge follows:
+>
+> ```go
+> // Ent: must align both sides explicitly
+> field.Int("product_id").Optional(),
+> edge.From("product", Product.Type).Field("product_id").Unique(),  // edge defaults Optional ✅
+>
+> // Velox: same code works, but you can also do this
+> field.Int("product_id"),                                          // (no Optional() = required)
+> edge.From("product", Product.Type).Field("product_id").Unique(),  // ← edge auto-syncs to required
+> ```
+>
+> If you write `.Required()` on the edge AND `.Optional()` on the field, the **field wins silently**. The field is the single source of truth — that's where all column-level concerns (GraphQL annotations, Default, SchemaType, validators) live anyway.
+
 ### Indexes
 
 ```go

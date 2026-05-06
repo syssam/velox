@@ -74,7 +74,9 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 	// --- Field setters ---
 	fieldsForSetters := t.Fields
 	if !t.HasCompositeID() && t.HasOneFieldID() && t.ID.UserDefined {
-		fieldsForSetters = append(fieldsForSetters, t.ID)
+		// Cap to len before appending so concurrent generators sharing t.Fields
+		// don't write to the same backing-array slot (data race with runtime.go).
+		fieldsForSetters = append(fieldsForSetters[:len(fieldsForSetters):len(fieldsForSetters)], t.ID)
 	}
 	for _, fd := range fieldsForSetters {
 		if fd.IsEdgeField() && !fd.UserDefined {
@@ -164,7 +166,7 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName, recv string) {
 	fields := t.Fields
 	if t.HasOneFieldID() && t.ID.UserDefined {
-		fields = append(fields, t.ID)
+		fields = append(fields[:len(fields):len(fields)], t.ID)
 	}
 
 	entityPkg := h.LeafPkgPath(t)
@@ -222,7 +224,7 @@ func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderN
 func genCreateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName, recv string) {
 	fields := t.Fields
 	if t.HasOneFieldID() && t.ID.UserDefined {
-		fields = append(fields, t.ID)
+		fields = append(fields[:len(fields):len(fields)], t.ID)
 	}
 
 	entityPkg := h.LeafPkgPath(t)

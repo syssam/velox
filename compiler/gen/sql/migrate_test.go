@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/compiler/load"
 	"github.com/syssam/velox/dialect/sql/schema"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -366,6 +367,86 @@ func TestGenMigrateSchema_WithIndexes(t *testing.T) {
 
 	code := file.GoString()
 	assert.Contains(t, code, "Indexes")
+}
+
+func TestGenMigrateSchema_PartialIndexWhereClause(t *testing.T) {
+	t.Parallel()
+	helper := newMockHelper()
+	userType := createTestType("User")
+	// Simulate index.Fields("email").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))
+	// Annotations are stored as map[string]any keyed by annotation.Name() ("sqlindex").
+	userType.Indexes = []*gen.Index{{
+		Name:    "user_email_unique_active",
+		Unique:  true,
+		Columns: []string{"email"},
+		Annotations: gen.Annotations{
+			"sqlindex": map[string]any{"Where": "deleted_at IS NULL"},
+		},
+	}}
+	helper.graph.Nodes = []*gen.Type{userType}
+
+	file := genMigrateSchema(helper)
+	require.NotNil(t, file)
+
+	code := file.GoString()
+	assert.Contains(t, code, "Annotation")
+	assert.Contains(t, code, "IndexAnnotation")
+	assert.Contains(t, code, "deleted_at IS NULL")
+}
+
+func TestGenIndexAnnotationDict_AllScalarFields(t *testing.T) {
+	t.Parallel()
+	const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
+	ant := &sqlschema.IndexAnnotation{
+		Where:         "status = 'active'",
+		Type:          "GIN",
+		StorageParams: "fillfactor=90",
+		Desc:          true,
+		OpClass:       "gin_trgm_ops",
+		Prefix:        10,
+	}
+	d := genIndexAnnotationDict(ant)
+	require.NotEmpty(t, d)
+
+	f := jen.NewFile("test")
+	f.Var().Id("x").Op("=").Op("&").Qual(sqlschemaPkg, "IndexAnnotation").Values(d)
+	code := f.GoString()
+	assert.Contains(t, code, "status = 'active'")
+	assert.Contains(t, code, "GIN")
+	assert.Contains(t, code, "fillfactor=90")
+	assert.Contains(t, code, "true")
+	assert.Contains(t, code, "gin_trgm_ops")
+	assert.Contains(t, code, "Prefix")
+}
+
+func TestGenIndexAnnotationDict_MapFields(t *testing.T) {
+	t.Parallel()
+	const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
+	ant := &sqlschema.IndexAnnotation{
+		Types:          map[string]string{"postgres": "GIN"},
+		DescColumns:    map[string]bool{"created_at": true},
+		OpClassColumns: map[string]string{"name": "gin_trgm_ops"},
+		PrefixColumns:  map[string]uint{"title": 5},
+		IncludeColumns: []string{"id", "name"},
+	}
+	d := genIndexAnnotationDict(ant)
+	require.NotEmpty(t, d)
+
+	f := jen.NewFile("test")
+	f.Var().Id("x").Op("=").Op("&").Qual(sqlschemaPkg, "IndexAnnotation").Values(d)
+	code := f.GoString()
+	assert.Contains(t, code, "postgres")
+	assert.Contains(t, code, "created_at")
+	assert.Contains(t, code, "gin_trgm_ops")
+	assert.Contains(t, code, "title")
+	assert.Contains(t, code, "id")
+	assert.Contains(t, code, "name")
+}
+
+func TestGenIndexAnnotationDict_EmptyAnnotation(t *testing.T) {
+	t.Parallel()
+	d := genIndexAnnotationDict(&sqlschema.IndexAnnotation{})
+	assert.Empty(t, d)
 }
 
 // =============================================================================
@@ -773,8 +854,9 @@ func TestGenForeignKeysSchema_WithM2OEdge(t *testing.T) {
 	f := jen.NewFile("test")
 	f.Var().Id("fks").Op("=").Add(code)
 	output := f.GoString()
+	// Symbol format: {ownerTable}_{refTable}_{edgeName} (matches graph_tables.go fkSymbol)
 	assert.Contains(t, output, "Symbol")
-	assert.Contains(t, output, "fkey")
+	assert.Contains(t, output, "posts_users_author")
 }
 
 func TestGenForeignKeysSchema_SkipsO2M(t *testing.T) {

@@ -234,6 +234,8 @@ type PostQuerier interface {
 	Scan(context.Context, any) error
 	ScanX(context.Context, any)
 	Clone() PostQuerier
+	ForUpdate(opts ...sql.LockOption) PostQuerier
+	ForShare(opts ...sql.LockOption) PostQuerier
 }
 
 // PostSelector defines the select interface for Post entities.

@@ -666,6 +666,11 @@ func (t Type) TagTypes() []string {
 	return r
 }
 
+// EntSQL returns the EntSQL index annotation if one was defined.
+func (i Index) EntSQL() *sqlschema.IndexAnnotation {
+	return sqlIndexAnnotate(i.Annotations)
+}
+
 // AddIndex adds a new index for the type.
 // It fails if the schema index is invalid.
 func (t *Type) AddIndex(idx *load.Index) error {
@@ -784,23 +789,27 @@ func (t *Type) setupFKs() error {
 }
 
 // setupFieldEdge check the field-edge validity and configures it and its foreign-key.
+//
+// When an edge is bound to a field via `.Field("x_id")`, the field is the single
+// source of truth for nullability (Optional) and immutability (Immutable). The edge
+// inherits these from the bound field automatically — users do NOT need to repeat
+// `.Required()` / `.Immutable()` on the edge.
+//
+// This deviates from Ent's behavior (which errors on mismatch and forces double-
+// declaration) to eliminate the asymmetric-defaults trap: field defaults to required
+// while edge defaults to optional, so leaving both at their defaults silently
+// disagrees. Velox auto-syncs from the field side instead.
 func (t *Type) setupFieldEdge(fk *ForeignKey, fkOwner *Edge, fkName string) error {
 	tf, ok := t.fields[fkName]
 	if !ok {
 		return fmt.Errorf("field %q was not found in %s.Fields() for edge %q", fkName, t.Name, fkOwner.Name)
 	}
-	switch {
-	case tf.Optional && !fkOwner.Optional:
-		return fmt.Errorf("edge-field %q was set as Optional, but edge %q is not", fkName, fkOwner.Name)
-	case !tf.Optional && fkOwner.Optional:
-		return fmt.Errorf("edge %q was set as Optional, but edge-field %q is not", fkOwner.Name, fkName)
-	case tf.Immutable && !fkOwner.Immutable:
-		return fmt.Errorf("edge-field %q was set as Immutable, but edge %q is not", fkName, fkOwner.Name)
-	case !tf.Immutable && fkOwner.Immutable:
-		return fmt.Errorf("edge %q was set as Immutable, but edge-field %q is not", fkOwner.Name, fkName)
-	case tf.HasValueScanner():
+	if tf.HasValueScanner() {
 		return fmt.Errorf("edge-field %q cannot have an external ValueScanner", fkName)
 	}
+	// Field is the source of truth: edge inherits Optional/Immutable from the bound field.
+	fkOwner.Optional = tf.Optional
+	fkOwner.Immutable = tf.Immutable
 	if t1, t2 := tf.Type.Type, fkOwner.Type.ID.Type.Type; t1 != t2 {
 		return fmt.Errorf("mismatch field type between edge field %q and id of type %q (%s != %s)", fkName, fkOwner.Type.Name, t1, t2)
 	}
@@ -1195,6 +1204,10 @@ func aliases(g *Graph) {
 		}
 	}
 }
+
+// TableComment returns the SQL database comment for this entity's table, for use by codegen.
+// Returns an empty string when no comment annotation is configured.
+func (t Type) TableComment() string { return t.sqlComment() }
 
 // sqlComment returns the SQL database comment for the node (table), if defined and enabled.
 func (t Type) sqlComment() string {

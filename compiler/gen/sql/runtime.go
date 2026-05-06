@@ -87,7 +87,9 @@ func genRuntimeFields(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schema
 	// Template: $fields := $n.Fields; if $n.HasOneFieldID && $n.ID.UserDefined { $fields = append($fields, $n.ID) }
 	fields := t.Fields
 	if t.HasOneFieldID() && t.ID != nil && t.ID.UserDefined {
-		fields = append(fields, t.ID)
+		// Cap before appending so concurrent generators sharing t.Fields don't
+		// write to the same backing-array slot (data race with create.go).
+		fields = append(fields[:len(fields):len(fields)], t.ID)
 	}
 
 	// Load entity fields if there are any

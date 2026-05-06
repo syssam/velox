@@ -941,7 +941,78 @@ func TestExtractID_Int(t *testing.T) {
 	ni := &sql.NullInt64{Int64: 42, Valid: true}
 	got, err := ExtractID(ni, field.TypeInt)
 	require.NoError(t, err)
-	assert.Equal(t, 42, got)
+	assert.Equal(t, 42, got) // must be int, not int64 — generated assertion is id.(int)
+}
+
+func TestExtractID_Int64(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeInt64)
+	require.NoError(t, err)
+	assert.Equal(t, int64(42), got) // must be int64 — generated assertion is id.(int64)
+}
+
+func TestExtractID_Int8(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeInt8)
+	require.NoError(t, err)
+	assert.Equal(t, int8(42), got)
+}
+
+func TestExtractID_Int16(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeInt16)
+	require.NoError(t, err)
+	assert.Equal(t, int16(42), got)
+}
+
+func TestExtractID_Int32(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeInt32)
+	require.NoError(t, err)
+	assert.Equal(t, int32(42), got)
+}
+
+func TestExtractID_Uint(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeUint)
+	require.NoError(t, err)
+	assert.Equal(t, uint(42), got)
+}
+
+func TestExtractID_Uint8(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeUint8)
+	require.NoError(t, err)
+	assert.Equal(t, uint8(42), got)
+}
+
+func TestExtractID_Uint16(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeUint16)
+	require.NoError(t, err)
+	assert.Equal(t, uint16(42), got)
+}
+
+func TestExtractID_Uint32(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeUint32)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(42), got)
+}
+
+func TestExtractID_Uint64(t *testing.T) {
+	ni := &sql.NullInt64{Int64: 42, Valid: true}
+	got, err := ExtractID(ni, field.TypeUint64)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), got)
+}
+
+func TestExtractID_WrongScanType(t *testing.T) {
+	// passing a NullString for an int field must error, not panic
+	ns := &sql.NullString{String: "oops", Valid: true}
+	_, err := ExtractID(ns, field.TypeInt)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "*sql.NullString")
 }
 
 // =============================================================================

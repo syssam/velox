@@ -2,12 +2,15 @@
 package sql
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
 
 	"github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/dialect/sql/schema"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -48,8 +51,11 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 				g.Op("&").Qual(schemaPkg, "Column").Values(genColumnDict(pk, fieldPkg))
 			}
 
-			// Other columns
+			// Other columns — skip fields annotated with sqlschema.Skip()
 			for _, fld := range t.Fields {
+				if a := fld.EntSQL(); a != nil && a.Skip {
+					continue
+				}
 				col := fld.Column()
 				g.Op("&").Qual(schemaPkg, "Column").Values(genColumnDict(col, fieldPkg))
 			}
@@ -65,13 +71,26 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 
 		// Generate table definition
 		f.Comment("// " + tableVar + " holds the schema information for the \"" + t.Table() + "\" table.")
-		f.Var().Id(tableVar).Op("=").Op("&").Qual(schemaPkg, "Table").Values(jen.Dict{
+		tableDict := jen.Dict{
 			jen.Id("Name"):        jen.Lit(t.Table()),
 			jen.Id("Columns"):     jen.Id(columnsVar),
 			jen.Id("PrimaryKey"):  genPrimaryKey(t, columnsVar, schemaPkg),
 			jen.Id("ForeignKeys"): genForeignKeysSchema(t, schemaPkg),
 			jen.Id("Indexes"):     genIndexesSchema(t, schemaPkg),
-		})
+		}
+		if comment := t.TableComment(); comment != "" {
+			tableDict[jen.Id("Comment")] = jen.Lit(comment)
+		}
+		if ant := t.EntSQL(); ant != nil {
+			if ant.Schema != "" {
+				tableDict[jen.Id("Schema")] = jen.Lit(ant.Schema)
+			}
+			if antDict := genTableAnnotationDict(ant); len(antDict) > 0 {
+				const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
+				tableDict[jen.Id("Annotation")] = jen.Op("&").Qual(sqlschemaPkg, "Annotation").Values(antDict)
+			}
+		}
+		f.Var().Id(tableVar).Op("=").Op("&").Qual(schemaPkg, "Table").Values(tableDict)
 		f.Line()
 	}
 
@@ -138,6 +157,7 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 			f.Line()
 
 			// Generate table
+			sym1, sym2 := m2mFKSymbols(e, j.col1, j.col2)
 			f.Commentf("// %s holds the schema information for the %q join table.", tableVar, j.tableName)
 			f.Var().Id(tableVar).Op("=").Op("&").Qual(schemaPkg, "Table").Values(jen.Dict{
 				jen.Id("Name"):       jen.Lit(j.tableName),
@@ -148,13 +168,13 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 						jen.Id("Columns"):    jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(0))),
 						jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(j.ref1).Dot("PrimaryKey").Index(jen.Lit(0))),
 						jen.Id("OnDelete"):   jen.Qual(schemaPkg, "Cascade"),
-						jen.Id("Symbol"):     jen.Lit(j.tableName + "_" + j.col1 + "_fkey"),
+						jen.Id("Symbol"):     jen.Lit(sym1),
 					}),
 					jen.Op("&").Qual(schemaPkg, "ForeignKey").Values(jen.Dict{
 						jen.Id("Columns"):    jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(1))),
 						jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(j.ref2).Dot("PrimaryKey").Index(jen.Lit(0))),
 						jen.Id("OnDelete"):   jen.Qual(schemaPkg, "Cascade"),
-						jen.Id("Symbol"):     jen.Lit(j.tableName + "_" + j.col2 + "_fkey"),
+						jen.Id("Symbol"):     jen.Lit(sym2),
 					}),
 				),
 			})
@@ -345,6 +365,18 @@ func genColumnDict(col *schema.Column, fieldPkg string) jen.Dict {
 			dict[jen.Id("Default")] = jen.Lit(v)
 		case schema.Expr:
 			dict[jen.Id("Default")] = jen.Qual("github.com/syssam/velox/dialect/sql/schema", "Expr").Call(jen.Lit(string(v)))
+		case map[string]schema.Expr:
+			// Dialect-specific SQL expression defaults (sqlschema.DefaultExprs).
+			exprKeys := make([]string, 0, len(v))
+			for k := range v {
+				exprKeys = append(exprKeys, k)
+			}
+			sort.Strings(exprKeys)
+			exprElems := make([]jen.Code, 0, len(exprKeys))
+			for _, k := range exprKeys {
+				exprElems = append(exprElems, jen.Lit(k).Op(":").Qual("github.com/syssam/velox/dialect/sql/schema", "Expr").Call(jen.Lit(string(v[k]))))
+			}
+			dict[jen.Id("Default")] = jen.Map(jen.String()).Qual("github.com/syssam/velox/dialect/sql/schema", "Expr").Values(exprElems...)
 		}
 	}
 	if col.Collation != "" {
@@ -353,13 +385,19 @@ func genColumnDict(col *schema.Column, fieldPkg string) jen.Dict {
 	if col.Comment != "" {
 		dict[jen.Id("Comment")] = jen.Lit(col.Comment)
 	}
-	// Include SchemaType for TypeOther fields (like decimal) that need dialect-specific types
+	// Include SchemaType for TypeOther fields (like decimal) that need dialect-specific types.
+	// Iterate in sorted order for deterministic generated output.
 	if len(col.SchemaType) > 0 {
-		dict[jen.Id("SchemaType")] = jen.Map(jen.String()).String().ValuesFunc(func(g *jen.Group) {
-			for dialect, typ := range col.SchemaType {
-				g.Lit(dialect).Op(":").Lit(typ)
-			}
-		})
+		stKeys := make([]string, 0, len(col.SchemaType))
+		for k := range col.SchemaType {
+			stKeys = append(stKeys, k)
+		}
+		sort.Strings(stKeys)
+		stElems := make([]jen.Code, 0, len(stKeys))
+		for _, k := range stKeys {
+			stElems = append(stElems, jen.Lit(k).Op(":").Lit(col.SchemaType[k]))
+		}
+		dict[jen.Id("SchemaType")] = jen.Map(jen.String()).String().Values(stElems...)
 	}
 	return dict
 }
@@ -381,16 +419,21 @@ func edgeFKColumn(e *gen.Edge, t *gen.Type) *schema.Column {
 	if fkName == "" {
 		return nil
 	}
-	// Create FK column
+	// Build the FK column from the referenced entity's PK column so that Type, Size,
+	// and SchemaType all match the target table's primary key (BUG 2, 4 fixes).
 	col := &schema.Column{
 		Name:     fkName,
 		Nullable: e.Optional,
+		Unique:   e.Rel.Type == gen.O2O, // O2O FK must be unique to enforce the constraint.
 	}
-	// Use the type of the referenced entity's ID
 	if e.Type != nil && e.Type.ID != nil {
-		col.Type = e.Type.ID.Type.Type
+		// Use Column() (not PK()) so we get SchemaType and Size from the field definition.
+		refCol := e.Type.ID.Column()
+		col.Type = refCol.Type
+		col.Size = refCol.Size
+		col.SchemaType = refCol.SchemaType
 	} else {
-		col.Type = field.TypeInt64 // Default
+		col.Type = field.TypeInt64
 	}
 	return col
 }
@@ -407,8 +450,15 @@ func genForeignKeysSchema(t *gen.Type, schemaPkg string) jen.Code {
 	var fks []jen.Code
 	columnsVar := pascal(t.Name) + "Columns"
 
-	// Track which edge FK columns are added (for edges without field association)
-	edgeFKIdx := 1 + len(t.Fields)
+	// Track which edge FK columns are added (for edges without field association).
+	// Start after the non-skipped fields (same skip logic as the column loop).
+	edgeFKIdx := 1
+	for _, fld := range t.Fields {
+		if a := fld.EntSQL(); a != nil && a.Skip {
+			continue
+		}
+		edgeFKIdx++
+	}
 
 	for _, e := range t.Edges {
 		// Only M2O edges and O2O edges where this table owns the FK.
@@ -420,7 +470,7 @@ func genForeignKeysSchema(t *gen.Type, schemaPkg string) jen.Code {
 			continue
 		}
 
-		fkSymbol := t.Table() + "_" + strings.ToLower(e.Name) + "_fkey"
+		fkSymbol := fkSymbolForEdge(e, t.Table(), e.Type.Table())
 		refColumnsVar := pascal(e.Type.Name) + "Columns"
 
 		var fkColIdx int
@@ -462,6 +512,7 @@ func genForeignKeysSchema(t *gen.Type, schemaPkg string) jen.Code {
 
 // genIndexesSchema generates index definitions for a type.
 func genIndexesSchema(t *gen.Type, schemaPkg string) jen.Code {
+	const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
 	var indexes []jen.Code
 	columnsVar := pascal(t.Name) + "Columns"
 
@@ -482,6 +533,13 @@ func genIndexesSchema(t *gen.Type, schemaPkg string) jen.Code {
 		}
 		idxDict[jen.Id("Columns")] = jen.Index().Op("*").Qual(schemaPkg, "Column").Values(colRefs...)
 
+		// Thread IndexAnnotation (e.g. partial-index WHERE clause) into the generated index.
+		if ant := idx.EntSQL(); ant != nil {
+			if antDict := genIndexAnnotationDict(ant); len(antDict) > 0 {
+				idxDict[jen.Id("Annotation")] = jen.Op("&").Qual(sqlschemaPkg, "IndexAnnotation").Values(antDict)
+			}
+		}
+
 		indexes = append(indexes, jen.Values(idxDict))
 	}
 
@@ -491,17 +549,112 @@ func genIndexesSchema(t *gen.Type, schemaPkg string) jen.Code {
 	return jen.Index().Op("*").Qual(schemaPkg, "Index").Values(indexes...)
 }
 
-// findColumnIndex finds the index of a column in the type's column list.
+// genIndexAnnotationDict builds a jen.Dict for the non-zero fields of an IndexAnnotation.
+// Returns an empty dict when the annotation carries no meaningful data.
+func genIndexAnnotationDict(ant *sqlschema.IndexAnnotation) jen.Dict {
+	d := jen.Dict{}
+	if ant.Where != "" {
+		d[jen.Id("Where")] = jen.Lit(ant.Where)
+	}
+	if ant.Type != "" {
+		d[jen.Id("Type")] = jen.Lit(ant.Type)
+	}
+	if ant.StorageParams != "" {
+		d[jen.Id("StorageParams")] = jen.Lit(ant.StorageParams)
+	}
+	if ant.Desc {
+		d[jen.Id("Desc")] = jen.Lit(true)
+	}
+	if ant.OpClass != "" {
+		d[jen.Id("OpClass")] = jen.Lit(ant.OpClass)
+	}
+	if ant.Prefix > 0 {
+		d[jen.Id("Prefix")] = jen.Lit(ant.Prefix)
+	}
+	if len(ant.Types) > 0 {
+		keys := make([]string, 0, len(ant.Types))
+		for k := range ant.Types {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		mapElems := make([]jen.Code, 0, len(keys))
+		for _, k := range keys {
+			mapElems = append(mapElems, jen.Lit(k).Op(":").Lit(ant.Types[k]))
+		}
+		d[jen.Id("Types")] = jen.Map(jen.String()).String().Values(mapElems...)
+	}
+	if len(ant.DescColumns) > 0 {
+		keys := make([]string, 0, len(ant.DescColumns))
+		for k := range ant.DescColumns {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		mapElems := make([]jen.Code, 0, len(keys))
+		for _, k := range keys {
+			mapElems = append(mapElems, jen.Lit(k).Op(":").Lit(ant.DescColumns[k]))
+		}
+		d[jen.Id("DescColumns")] = jen.Map(jen.String()).Bool().Values(mapElems...)
+	}
+	if len(ant.OpClassColumns) > 0 {
+		keys := make([]string, 0, len(ant.OpClassColumns))
+		for k := range ant.OpClassColumns {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		mapElems := make([]jen.Code, 0, len(keys))
+		for _, k := range keys {
+			mapElems = append(mapElems, jen.Lit(k).Op(":").Lit(ant.OpClassColumns[k]))
+		}
+		d[jen.Id("OpClassColumns")] = jen.Map(jen.String()).String().Values(mapElems...)
+	}
+	if len(ant.PrefixColumns) > 0 {
+		keys := make([]string, 0, len(ant.PrefixColumns))
+		for k := range ant.PrefixColumns {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		mapElems := make([]jen.Code, 0, len(keys))
+		for _, k := range keys {
+			mapElems = append(mapElems, jen.Lit(k).Op(":").Lit(ant.PrefixColumns[k]))
+		}
+		d[jen.Id("PrefixColumns")] = jen.Map(jen.String()).Uint().Values(mapElems...)
+	}
+	if len(ant.IncludeColumns) > 0 {
+		cols := make([]jen.Code, len(ant.IncludeColumns))
+		for i, c := range ant.IncludeColumns {
+			cols[i] = jen.Lit(c)
+		}
+		d[jen.Id("IncludeColumns")] = jen.Index().String().Values(cols...)
+	}
+	return d
+}
+
+// findColumnIndex finds the index of a column in the type's columnsVar slice.
+// The slice layout is: [0: ID, 1..n: fields (excl. skipped), n+1..: implicit edge FK cols].
 // Returns -1 if the column is not found.
 func findColumnIndex(t *gen.Type, colName string) int {
-	// ID is at index 0
+	// 0: ID
 	if t.ID != nil && t.ID.StorageKey() == colName {
 		return 0
 	}
-	// Fields start at index 1
-	for i, f := range t.Fields {
+	// 1..n: regular fields (skipped fields occupy no slot)
+	idx := 1
+	for _, f := range t.Fields {
+		if a := f.EntSQL(); a != nil && a.Skip {
+			continue
+		}
 		if f.StorageKey() == colName {
-			return i + 1
+			return idx
+		}
+		idx++
+	}
+	// idx..: implicit edge FK columns (those not bound to a field via .Field())
+	for _, e := range t.Edges {
+		if edgeFKColumn(e, t) != nil {
+			if e.Rel.Column() == colName {
+				return idx
+			}
+			idx++
 		}
 	}
 	return -1
@@ -561,6 +714,63 @@ func pascal(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// fkSymbolForEdge returns the FK constraint symbol for O2O/O2M/M2O edges,
+// matching the runtime fkSymbol() in graph_tables.go (BUG 1 fix).
+func fkSymbolForEdge(e *gen.Edge, ownerTable, refTable string) string {
+	if k, _ := e.StorageKey(); k != nil && len(k.Symbols) == 1 {
+		return k.Symbols[0]
+	}
+	return fmt.Sprintf("%s_%s_%s", ownerTable, refTable, e.Name)
+}
+
+// m2mFKSymbols returns the two FK constraint symbols for an M2M join table,
+// matching the runtime fkSymbols() in graph_tables.go (BUG 1 M2M fix).
+func m2mFKSymbols(e *gen.Edge, col1Name, col2Name string) (string, string) {
+	s1 := fmt.Sprintf("%s_%s", e.Rel.Table, col1Name)
+	s2 := fmt.Sprintf("%s_%s", e.Rel.Table, col2Name)
+	if k, _ := e.StorageKey(); k != nil {
+		if len(k.Symbols) > 0 {
+			s1 = k.Symbols[0]
+		}
+		if len(k.Symbols) > 1 {
+			s2 = k.Symbols[1]
+		}
+	}
+	return s1, s2
+}
+
+// genTableAnnotationDict builds a jen.Dict for the non-zero annotation fields that
+// Atlas needs at the table level: CHECK constraints, charset, collation, options (RISK 7).
+// Schema is handled separately as a direct Table.Schema field.
+func genTableAnnotationDict(ant *sqlschema.Annotation) jen.Dict {
+	d := jen.Dict{}
+	if ant.Check != "" {
+		d[jen.Id("Check")] = jen.Lit(ant.Check)
+	}
+	if len(ant.Checks) > 0 {
+		keys := make([]string, 0, len(ant.Checks))
+		for k := range ant.Checks {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		elems := make([]jen.Code, 0, len(keys))
+		for _, k := range keys {
+			elems = append(elems, jen.Lit(k).Op(":").Lit(ant.Checks[k]))
+		}
+		d[jen.Id("Checks")] = jen.Map(jen.String()).String().Values(elems...)
+	}
+	if ant.Charset != "" {
+		d[jen.Id("Charset")] = jen.Lit(ant.Charset)
+	}
+	if ant.Collation != "" {
+		d[jen.Id("Collation")] = jen.Lit(ant.Collation)
+	}
+	if ant.Options != "" {
+		d[jen.Id("Options")] = jen.Lit(ant.Options)
+	}
+	return d
 }
 
 // deleteAction returns the Jennifer code for the ON DELETE referential action.

@@ -288,6 +288,9 @@ func (e *Edge) setStorageKey() error {
 
 // StorageKey returns the storage-key defined on the schema if exists.
 func (e Edge) StorageKey() (*edge.StorageKey, error) {
+	if e.def == nil {
+		return nil, nil
+	}
 	key := e.def.StorageKey
 	if !e.IsInverse() {
 		return key, nil

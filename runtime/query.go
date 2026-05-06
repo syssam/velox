@@ -559,7 +559,31 @@ func ExtractID(v any, ft field.Type) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("velox: unexpected scan type %T for int ID", v)
 		}
-		return int(ni.Int64), nil
+		// Return the exact Go type that matches ft so the generated id.(T) assertion
+		// succeeds. All integer variants scan via NullInt64 (see IDScanValues), so we
+		// convert here. Each case mirrors the BaseType mapping in generate_helper.go.
+		switch ft {
+		case field.TypeInt64:
+			return ni.Int64, nil
+		case field.TypeInt8:
+			return int8(ni.Int64), nil
+		case field.TypeInt16:
+			return int16(ni.Int64), nil
+		case field.TypeInt32:
+			return int32(ni.Int64), nil
+		case field.TypeUint:
+			return uint(ni.Int64), nil
+		case field.TypeUint8:
+			return uint8(ni.Int64), nil
+		case field.TypeUint16:
+			return uint16(ni.Int64), nil
+		case field.TypeUint32:
+			return uint32(ni.Int64), nil
+		case field.TypeUint64:
+			return uint64(ni.Int64), nil
+		default: // TypeInt (default velox ID type) and any future integer-like type
+			return int(ni.Int64), nil
+		}
 	}
 }
 

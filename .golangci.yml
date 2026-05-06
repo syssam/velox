@@ -303,6 +303,14 @@ linters:
           - errcheck
         text: "Close"
 
+      # ExtractID narrows int64 to the user-declared ID type (int8, int32, uint*, …).
+      # Overflow is impossible in practice: the DB column type is constrained by the
+      # field declaration (TINYINT for TypeInt8, UNSIGNED INT for TypeUint32, etc.).
+      - path: runtime/query\.go
+        linters:
+          - gosec
+        text: "G115"
+
       # Generic type assertions are design-guaranteed by the type parameter
       # constraint — they cannot fail at runtime. Excludes: n.(*T) in
       # TypedQuery.All, newT(tv).(T) in ValueScanner, Underlying().(*types.Interface),

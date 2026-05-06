@@ -1278,3 +1278,26 @@ func TestPrivacyHasNoInterceptorTraces(t *testing.T) {
 		}
 	}
 }
+
+// TestQuerierInterfaceAlwaysHasForUpdateForShare pins that ForUpdate and
+// ForShare are in the XxxQuerier interface regardless of FeatureLock.
+// The concrete *XxxQuery always generates these methods (query_pkg.go),
+// so the interface must match — callers using Query() (which returns the
+// interface) must be able to reach them without a type assertion.
+func TestQuerierInterfaceAlwaysHasForUpdateForShare(t *testing.T) {
+	graph, userType, _ := buildWiringTestGraph(t)
+	helper := newMockHelper()
+	helper.graph = graph
+	// mockHelper.FeatureEnabled always returns false — FeatureLock is off,
+	// which is exactly the case that was broken.
+
+	file := genEntityPkgFileWithRegistry(helper, userType, graph.Nodes, nil)
+	src := file.GoString()
+
+	if !strings.Contains(src, "ForUpdate(opts ...sql.LockOption) UserQuerier") {
+		t.Errorf("UserQuerier interface missing ForUpdate — callers of Query() cannot reach row-level locking\n%s", src)
+	}
+	if !strings.Contains(src, "ForShare(opts ...sql.LockOption) UserQuerier") {
+		t.Errorf("UserQuerier interface missing ForShare — callers of Query() cannot reach row-level locking\n%s", src)
+	}
+}

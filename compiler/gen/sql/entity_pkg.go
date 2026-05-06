@@ -806,15 +806,16 @@ func genEntityPkgQuerierInterface(h gen.GeneratorHelper, f *jen.File, t *gen.Typ
 		// --- Clone ---
 		grp.Id("Clone").Params().Id(ifaceName)
 
-		// --- ForUpdate/ForShare (when Lock feature is enabled) ---
-		if h.FeatureEnabled(gen.FeatureLock.Name) {
-			grp.Id("ForUpdate").Params(
-				jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
-			).Id(ifaceName)
-			grp.Id("ForShare").Params(
-				jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
-			).Id(ifaceName)
-		}
+		// --- ForUpdate/ForShare ---
+		// Always in the interface: the concrete *XxxQuery generates these
+		// unconditionally (query_pkg.go), so the interface must match or
+		// callers can never reach them through Query() without a type assertion.
+		grp.Id("ForUpdate").Params(
+			jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
+		).Id(ifaceName)
+		grp.Id("ForShare").Params(
+			jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
+		).Id(ifaceName)
 
 		// --- Paginate (when GraphQL RelayConnection is annotated) ---
 		// Check for graphql annotation with RelayConnection enabled.

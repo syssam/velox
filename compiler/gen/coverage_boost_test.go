@@ -255,7 +255,7 @@ func TestField_NillableValue(t *testing.T) {
 		Nillable: true,
 		Type: &field.TypeInfo{
 			Type:  field.TypeString,
-			RType: &field.RType{Kind: reflect.Ptr},
+			RType: &field.RType{Kind: reflect.Pointer},
 		},
 	}
 	assert.False(t, f3.NillableValue())
