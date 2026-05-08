@@ -552,6 +552,13 @@ type Annotation struct {
 	// Changes both SDL (@goField(omittable: true)) and Go mutation input struct
 	// (*T -> graphql.Omittable[*T]).
 	Omittable bool `json:"omittable,omitempty"`
+
+	// Unions lists GraphQL union names this entity is a member of.
+	// For each name "X", velox emits `func (*Entity) IsX() {}` on the
+	// generated entity type so it satisfies the gqlgen-generated marker
+	// interface for `union X = ...`. Velox does NOT emit the union SDL —
+	// the user declares it in their own .graphql file.
+	Unions []string `json:"unions,omitempty"`
 }
 
 // Name implements velox.Annotation.
@@ -1252,6 +1259,26 @@ func CollectedFor(fields ...string) Annotation {
 	return Annotation{CollectedFor: fields}
 }
 
+// UnionMember declares this entity as a member of one or more GraphQL unions.
+// For each name "X", velox emits a marker method `func (*Entity) IsX() {}` so
+// the generated entity type satisfies the gqlgen-generated interface for
+// `union X = ...`. Velox does NOT emit the union SDL — declare
+// `union X = A | B | ...` in your own .graphql file.
+//
+// At least two distinct entities must declare membership in the same union;
+// single-member unions are rejected at codegen time per the GraphQL spec.
+//
+// Example:
+//
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
+//	        graphql.UnionMember("SearchResult", "Activity"),
+//	    }
+//	}
+func UnionMember(names ...string) Annotation {
+	return Annotation{Unions: names}
+}
+
 // --- Entity-Level Getters ---
 
 // IsSkipType returns true if the entire type should be skipped.
@@ -1441,6 +1468,9 @@ func (a Annotation) GetResolverMappings() []ResolverMapping { return a.ResolverM
 // IsOmittable returns true if this field uses Omittable for PATCH semantics.
 func (a Annotation) IsOmittable() bool { return a.Omittable }
 
+// GetUnions returns the GraphQL union names this entity is a member of.
+func (a Annotation) GetUnions() []string { return a.Unions }
+
 // --- Merge ---
 
 // Merge implements schema.Merger interface for combining annotations.
@@ -1584,6 +1614,12 @@ func mergeAnnotations(a, o Annotation) Annotation {
 	// Omittable
 	if o.Omittable {
 		result.Omittable = true
+	}
+
+	// Unions: append-deduplicate so repeated UnionMember() calls don't
+	// produce duplicate marker methods.
+	if len(o.Unions) > 0 {
+		result.Unions = appendUnique(result.Unions, o.Unions...)
 	}
 
 	return result
