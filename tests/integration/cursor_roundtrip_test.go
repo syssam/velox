@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
+	"github.com/syssam/velox/dialect"
 	integration "github.com/syssam/velox/tests/integration"
 	"github.com/syssam/velox/tests/integration/user"
-	"github.com/syssam/velox/dialect"
 
 	_ "modernc.org/sqlite"
 )
@@ -32,7 +32,7 @@ func TestPaginate_CursorRoundTrip(t *testing.T) {
 		_, err := client.User.Create().
 			SetName(fmt.Sprintf("User%02d", i)).
 			SetEmail(fmt.Sprintf("user%02d@test.com", i)).
-			SetAge(20+i).
+			SetAge(20 + i).
 			SetRole(user.RoleUser).
 			SetCreatedAt(now).
 			SetUpdatedAt(now).
