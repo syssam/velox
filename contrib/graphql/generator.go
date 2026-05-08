@@ -489,7 +489,9 @@ func (g *Generator) Generate(ctx context.Context) error {
 			errg.Go(func() error { return g.writeFileSubdir(ctx, f, "filter", "filter.go") })
 		}
 		// Per-entity WhereInput files → filter/ sub-package
-		for _, t := range g.filterNodes(g.graph.Nodes, SkipType|SkipWhereInput) {
+		// SkipType is intentionally NOT included: hide-output-keep-filter is supported.
+		// See genWhereInputGo for the matching invariant on the monolithic path.
+		for _, t := range g.filterNodes(g.graph.Nodes, SkipWhereInput) {
 			if !g.hasFilterableContent(t) {
 				continue
 			}
