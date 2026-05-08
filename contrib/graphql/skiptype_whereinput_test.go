@@ -181,3 +181,81 @@ func TestSkipType_OnEdge_PreservesHasXxxWith(t *testing.T) {
 	require.Contains(t, rendered, "HasCustomerWith",
 		"hasCustomerWith predicate must survive Skip(SkipType) on the edge")
 }
+
+// TestSkipAll_StillSuppressesWhereInput is the inverse pin of
+// TestSkipType_PreservesWhereInputGo. It guards against a future "fix"
+// that decouples SkipType too aggressively and accidentally lets SkipAll
+// (which explicitly includes SkipWhereInput) leak a WhereInput struct.
+//
+// Contract:
+//
+//	Skip()                       = SkipAll → no Customer output, no CustomerWhereInput
+//	Skip(SkipType)               → no Customer output, but CustomerWhereInput remains
+//	Skip(SkipType, SkipWhereInput) → no output, no WhereInput (explicit dual skip)
+func TestSkipAll_StillSuppressesWhereInput(t *testing.T) {
+	customer := &entgen.Type{
+		Name: "Customer",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*entgen.Field{
+			{Name: "country", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{
+			// Skip() with no args = SkipAll (= SkipType | SkipWhereInput | ...)
+			AnnotationName: Skip().Merge(Annotation{
+				WhereInputFieldNames: []string{"country"},
+			}),
+		},
+	}
+	g := newTestGeneratorWithConfig(Config{
+		Package:     "graphql",
+		ORMPackage:  "example/ent",
+		WhereInputs: true,
+	}, customer)
+
+	file := g.genWhereInputGo()
+	if file == nil {
+		// Acceptable: no WhereInput at all means the contract holds.
+		return
+	}
+	var buf bytes.Buffer
+	require.NoError(t, file.Render(&buf))
+	rendered := buf.String()
+
+	require.NotContains(t, rendered, "type CustomerWhereInput",
+		"Skip()/SkipAll must continue to suppress WhereInput; only Skip(SkipType) alone preserves it")
+}
+
+// TestSkipTypeAndWhereInput_BothFlags pins that the explicit dual-skip
+// composition Skip(SkipType, SkipWhereInput) suppresses BOTH surfaces.
+// This guards against a future change that drops SkipWhereInput's effect
+// when SkipType is also set.
+func TestSkipTypeAndWhereInput_BothFlags(t *testing.T) {
+	customer := &entgen.Type{
+		Name: "Customer",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*entgen.Field{
+			{Name: "country", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{
+			AnnotationName: Skip(SkipType, SkipWhereInput).Merge(Annotation{
+				WhereInputFieldNames: []string{"country"},
+			}),
+		},
+	}
+	g := newTestGeneratorWithConfig(Config{
+		Package:     "graphql",
+		ORMPackage:  "example/ent",
+		WhereInputs: true,
+	}, customer)
+
+	file := g.genWhereInputGo()
+	if file == nil {
+		return
+	}
+	var buf bytes.Buffer
+	require.NoError(t, file.Render(&buf))
+	rendered := buf.String()
+
+	require.NotContains(t, rendered, "type CustomerWhereInput",
+		"Skip(SkipType, SkipWhereInput) must suppress both output and WhereInput")
+}
