@@ -121,23 +121,29 @@ enum OrderDirection {
 `)
 	}
 
-	// Use filterNodes to get nodes that should be included (like Ent)
-	nodes := g.filterNodes(g.graph.Nodes, SkipType)
-	for _, t := range nodes {
-		// WhereInput - use filterNodes with SkipWhereInput
-		if g.config.WhereInputs && g.wantsWhereInput(t) {
-			buf.WriteString(g.genWhereInput(t))
-			buf.WriteString("\n")
+	// WhereInput SDL is independent of SkipType: filter input types can exist
+	// even when the output type is hidden (PII / projection-type pattern).
+	// Iterate WhereInput-enabled nodes separately, gated only by SkipWhereInput.
+	if g.config.WhereInputs {
+		for _, t := range g.filterNodes(g.graph.Nodes, SkipWhereInput) {
+			if g.wantsWhereInput(t) {
+				buf.WriteString(g.genWhereInput(t))
+				buf.WriteString("\n")
+			}
 		}
+	}
 
+	// Output-bound surfaces (Order, Mutation inputs) require the type to exist
+	// in the GraphQL schema, so they remain gated by SkipType.
+	for _, t := range g.filterNodes(g.graph.Nodes, SkipType) {
 		// OrderBy - only for Relay connection entities (non-Relay use simple list queries)
 		if g.config.Ordering && g.wantsOrderField(t) && g.hasRelayConnection(t) {
 			buf.WriteString(g.genOrderBy(t))
 			buf.WriteString("\n")
 		}
 
-		// Generate mutation input types (CreateXXXInput, UpdateXXXInput)
-		// These are needed for gqlgen schema validation even though Go structs are bound via gqlgen.yml
+		// Mutation input types (CreateXXXInput, UpdateXXXInput) — required for
+		// gqlgen schema validation even though Go structs bind via gqlgen.yml.
 		if g.config.Mutations {
 			if g.wantsMutationCreate(t) {
 				buf.WriteString(g.genCreateInput(t))
