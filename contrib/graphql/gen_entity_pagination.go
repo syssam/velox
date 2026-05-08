@@ -96,32 +96,57 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			)
 		})
 
+		// Count total BEFORE applying cursor predicates so TotalCount reflects
+		// the full filtered dataset (matching Ent's pager semantics) — not the
+		// post-cursor window. Filter has already been applied above; cursor
+		// predicates would shrink the count to only "rows past the cursor",
+		// which would make TotalCount change between pages.
+		grp.List(jen.Id("totalCount"), jen.Id("err")).Op(":=").Id("q").Dot("Clone").Call().Dot("Count").Call(jen.Id("ctx"))
+		grp.If(jen.Err().Op("!=").Nil()).Block(
+			jen.Return(jen.Nil(), jen.Err()),
+		)
+
+		// Determine the SQL ORDER BY direction. For backward pagination
+		// (`last`), flip it so SQL fetches from the END of the dataset;
+		// we'll reverse the result back to natural display order after fetch.
+		// Cursor predicates (below) still use the NATURAL direction because
+		// cursors are issued against natural display order.
+		grp.Var().Id("sqlDir").Qual(gqlrelayPkg, "OrderDirection").Op("=").Qual(gqlrelayPkg, "OrderDirectionAsc")
+		grp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).Block(
+			jen.Id("sqlDir").Op("=").Id("cfg").Dot("Order").Dot("Direction"),
+		)
+		grp.If(jen.Id("last").Op("!=").Nil()).Block(
+			jen.Id("sqlDir").Op("=").Id("sqlDir").Dot("Reverse").Call(),
+		)
+
 		// Apply order — use query builder methods directly (same package).
 		grp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).BlockFunc(func(orderGrp *jen.Group) {
 			orderGrp.Id("q").Dot("Order").Call(
 				jen.Qual("github.com/syssam/velox/dialect/sql", "OrderByField").Call(
 					jen.Id("cfg").Dot("Order").Dot("Field").Dot("Column"),
-					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("cfg").Dot("Order").Dot("Direction")),
+					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
 				).Dot("ToFunc").Call(),
 			)
 			orderGrp.Id("q").Dot("Order").Call(
 				jen.Qual("github.com/syssam/velox/dialect/sql", "OrderByField").Call(
 					jen.Qual(subEntityPkg, idColumn),
-					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("cfg").Dot("Order").Dot("Direction")),
+					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
 				).Dot("ToFunc").Call(),
 			)
 		}).Else().Block(
 			jen.Id("q").Dot("Order").Call(
 				jen.Qual("github.com/syssam/velox/dialect/sql", "OrderByField").Call(
 					jen.Qual(subEntityPkg, idColumn),
+					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
 				).Dot("ToFunc").Call(),
 			),
 		)
 
-		// Apply cursors
+		// Apply cursor predicates — using the NATURAL direction (cursors
+		// are issued against natural display order).
 		grp.If(jen.Id("after").Op("!=").Nil().Op("||").Id("before").Op("!=").Nil()).BlockFunc(func(cursorGrp *jen.Group) {
 			cursorGrp.Var().Id("orderField").String()
-			cursorGrp.Var().Id("orderDir").Qual(gqlrelayPkg, "OrderDirection")
+			cursorGrp.Var().Id("orderDir").Qual(gqlrelayPkg, "OrderDirection").Op("=").Qual(gqlrelayPkg, "OrderDirectionAsc")
 			cursorGrp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).Block(
 				jen.Id("orderField").Op("=").Id("cfg").Dot("Order").Dot("Field").Dot("Column"),
 				jen.Id("orderDir").Op("=").Id("cfg").Dot("Order").Dot("Direction"),
@@ -133,13 +158,7 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			)
 		})
 
-		// Count total (before limit). Clone returns UserQuerier which has Count.
-		grp.List(jen.Id("totalCount"), jen.Id("err")).Op(":=").Id("q").Dot("Clone").Call().Dot("Count").Call(jen.Id("ctx"))
-		grp.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-
-		// Apply limit (+1 probe row for hasNext/hasPrev detection; trimmed in Build*Connection).
+		// Apply limit (+1 probe row for hasNext/hasPrev detection).
 		grp.If(jen.Id("first").Op("!=").Nil()).Block(
 			jen.Id("q").Dot("Limit").Call(jen.Op("*").Id("first").Op("+").Lit(1)),
 		).Else().If(jen.Id("last").Op("!=").Nil()).Block(
@@ -152,23 +171,50 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Return(jen.Nil(), jen.Err()),
 		)
 
+		// Backward post-processing: trim probe row and reverse to natural
+		// display order. This must happen BEFORE BuildXxxConnection so the
+		// helper sees nodes already in display order.
+		grp.Var().Id("backwardHasPrev").Bool()
+		grp.If(jen.Id("last").Op("!=").Nil()).BlockFunc(func(bwd *jen.Group) {
+			bwd.If(jen.Len(jen.Id("nodes")).Op(">").Op("*").Id("last")).Block(
+				// Probe is the LAST row fetched (smallest item in flipped order
+				// = the "next" row past the window in natural order). Drop it.
+				jen.Id("nodes").Op("=").Id("nodes").Index(jen.Empty(), jen.Len(jen.Id("nodes")).Op("-").Lit(1)),
+				jen.Id("backwardHasPrev").Op("=").True(),
+			)
+			// Reverse in place to natural display order.
+			bwd.For(
+				jen.List(jen.Id("i"), jen.Id("j")).Op(":=").Lit(0).Op(",").Len(jen.Id("nodes")).Op("-").Lit(1),
+				jen.Id("i").Op("<").Id("j"),
+				jen.List(jen.Id("i"), jen.Id("j")).Op("=").Id("i").Op("+").Lit(1).Op(",").Id("j").Op("-").Lit(1),
+			).Block(
+				jen.List(jen.Id("nodes").Index(jen.Id("i")), jen.Id("nodes").Index(jen.Id("j"))).
+					Op("=").
+					List(jen.Id("nodes").Index(jen.Id("j")), jen.Id("nodes").Index(jen.Id("i"))),
+			)
+		})
+
 		// Delegate assembly to entity.BuildXxxConnection — the SAME helper
-		// used by edge-resolver fast paths. Keeping one source of truth for
-		// cursor/pageInfo/edge construction means the slow path and fast
-		// path can't drift (which is exactly what was making the pre-fix
-		// velox behave differently from Ent on eager-loaded edges).
-		grp.Return(
-			jen.Qual(entityPkg, "Build"+connName).Call(
-				jen.Id("nodes"),
-				jen.Id("totalCount"),
-				jen.Id("cfg").Dot("Order"),
-				jen.Id("after"),
-				jen.Id("first"),
-				jen.Id("before"),
-				jen.Id("last"),
-			),
-			jen.Nil(),
+		// used by edge-resolver fast paths. For backward pagination we pass
+		// last=nil because we've already trimmed and reversed; otherwise the
+		// helper would re-trim and re-reverse. HasPreviousPage is set below.
+		grp.Var().Id("buildLast").Op("*").Int()
+		grp.If(jen.Id("last").Op("==").Nil()).Block(
+			jen.Id("buildLast").Op("=").Id("last"),
 		)
+		grp.Id("conn").Op(":=").Qual(entityPkg, "Build"+connName).Call(
+			jen.Id("nodes"),
+			jen.Id("totalCount"),
+			jen.Id("cfg").Dot("Order"),
+			jen.Id("after"),
+			jen.Id("first"),
+			jen.Id("before"),
+			jen.Id("buildLast"),
+		)
+		grp.If(jen.Id("backwardHasPrev")).Block(
+			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
+		)
+		grp.Return(jen.Id("conn"), jen.Nil())
 	})
 
 	return f
