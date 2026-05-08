@@ -1230,7 +1230,10 @@ func (g *Generator) genWhereInputGo() *jen.File {
 	f.ImportName("github.com/syssam/velox/dialect/sql", "sql")
 	f.ImportName("github.com/syssam/velox/dialect/sql/sqljson", "sqljson")
 
-	nodes := g.filterNodes(g.graph.Nodes, SkipType|SkipWhereInput)
+	// WhereInput is independent of SkipType: an entity's input filter type can
+	// exist even when the output type is hidden (PII / projection-type pattern).
+	// Only SkipWhereInput skips WhereInput emission.
+	nodes := g.filterNodes(g.graph.Nodes, SkipWhereInput)
 	for _, t := range nodes {
 		entityPkg := g.config.ORMPackage + "/" + strings.ToLower(t.Name)
 		f.ImportName(entityPkg, strings.ToLower(t.Name))
