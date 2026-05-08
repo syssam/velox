@@ -117,3 +117,67 @@ func TestSkipType_PreservesWhereInputSDL(t *testing.T) {
 	require.Contains(t, sdl, "country",
 		"CustomerWhereInput must contain whitelisted field 'country'")
 }
+
+// TestSkipType_OnEdge_PreservesHasXxxWith pins that when an edge has
+// graphql.Skip(graphql.SkipType) AND graphql.WhereInput(), the
+// hasCustomer/hasCustomerWith predicates are emitted on the parent's
+// WhereInput even though the `customer` output field is suppressed.
+//
+// This is the second half of the PII/projection pattern: hiding the edge
+// output but keeping cross-entity filtering. The target Customer entity
+// does NOT need Skip(SkipType) for this to work — the predicate looks up
+// the edge target by name, not by output visibility.
+//
+// Pin: skipEdgeInWhereInput must NOT consult edge.Skip&SkipType.
+func TestSkipType_OnEdge_PreservesHasXxxWith(t *testing.T) {
+	customer := &entgen.Type{
+		Name: "Customer",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*entgen.Field{
+			{Name: "country", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{
+			AnnotationName: Annotation{
+				WhereInputFieldNames: []string{"country"},
+			},
+		},
+	}
+	order := &entgen.Type{
+		Name: "Order",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*entgen.Field{
+			{Name: "total", Type: &field.TypeInfo{Type: field.TypeFloat64}},
+		},
+		Annotations: map[string]any{},
+	}
+	customerEdge := &entgen.Edge{
+		Name:   "customer",
+		Type:   customer,
+		Unique: true, // M2O — Order has one Customer
+		Annotations: map[string]any{
+			AnnotationName: Annotation{
+				Skip:              SkipType, // hide from Order output
+				WhereInputEnabled: true,     // keep in WhereInput
+			},
+		},
+	}
+	order.Edges = []*entgen.Edge{customerEdge}
+
+	g := newTestGeneratorWithConfig(Config{
+		Package:     "graphql",
+		ORMPackage:  "example/ent",
+		WhereInputs: true,
+	}, customer, order)
+
+	file := g.genWhereInputGo()
+	require.NotNil(t, file, "WhereInput Go file must be generated")
+
+	var buf bytes.Buffer
+	require.NoError(t, file.Render(&buf), "rendering Jen file must succeed")
+	rendered := buf.String()
+
+	require.Contains(t, rendered, "HasCustomer",
+		"hasCustomer predicate must survive Skip(SkipType) on the edge")
+	require.Contains(t, rendered, "HasCustomerWith",
+		"hasCustomerWith predicate must survive Skip(SkipType) on the edge")
+}
