@@ -574,10 +574,36 @@ var _ schema.Annotation = (*Annotation)(nil)
 // Skip returns an annotation that skips the specified modes.
 // When called with no arguments, defaults to SkipAll (like Ent).
 //
-// Example:
+// The flags are independent: SkipType controls only the GraphQL output
+// type; SkipWhereInput controls only the WhereInput; etc. Set just the
+// surface you want to hide. Composition is via varargs (OR-merge).
 //
-//	graphql.Skip()                                            // skip all
-//	graphql.Skip(graphql.SkipMutationCreate, graphql.SkipWhereInput) // skip specific
+// PII / projection-type pattern — hide an entity's output type but keep
+// its WhereInput so other entities can filter by it (e.g. Customer is
+// replaced by a hand-written PublicUser GraphQL type, but Order can
+// still be filtered with `hasCustomerWith: { country: "US" }`):
+//
+//	// schema/customer.go
+//	func (Customer) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
+//	        graphql.Skip(graphql.SkipType),                 // no Customer in output
+//	        graphql.WhereInputFields("country", "tier"),    // CustomerWhereInput exists
+//	    }
+//	}
+//
+//	// schema/order.go — edge to Customer hidden from output but filterable
+//	edge.From("customer", Customer.Type).
+//	    Field("customer_id").
+//	    Required().
+//	    Annotations(
+//	        graphql.Skip(graphql.SkipType),  // no Order.customer field
+//	        graphql.WhereInput(),            // hasCustomerWith retained
+//	    )
+//
+// Other examples:
+//
+//	graphql.Skip()                                                   // skip all (= SkipAll)
+//	graphql.Skip(graphql.SkipMutationCreate, graphql.SkipWhereInput) // skip specific surfaces
 func Skip(modes ...SkipMode) Annotation {
 	if len(modes) == 0 {
 		return Annotation{Skip: SkipAll}
