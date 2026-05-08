@@ -261,7 +261,6 @@ func (c *ArticleCreate) createSpec() (*entity.Article, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.Edges.SetAuthor(&entity.Author{ID: nodes[0]})
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

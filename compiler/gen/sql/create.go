@@ -497,22 +497,11 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 				jen.Id("k"),
 			),
 		)
-		// For OwnFK edges (M2O, O2M-inverse, O2O-inverse), pre-populate
-		// _node.Edges.<EdgeName> with a stub target carrying just the ID.
-		// This lets callers navigate the edge via Edges.XxxOrErr() right
-		// after Create.Save without an extra DB round-trip — matching Ent's
-		// `_node.<edge_field> = &nodes[0]` pattern. Other field values on
-		// the stub stay zero; users who need the full target must still
-		// call .QueryXxx() explicitly.
-		ownFK := edge.M2O() || (edge.O2M() && edge.IsInverse()) || (edge.O2O() && edge.IsInverse())
-		if ownFK && targetType != nil {
-			sharedEntityPkg := h.SharedEntityPkg()
-			blk.Id(nodeVar).Dot("Edges").Dot("Set" + edge.StructField()).Call(
-				jen.Op("&").Qual(sharedEntityPkg, targetType.Name).Values(jen.Dict{
-					jen.Id(targetType.ID.StructField()): jen.Id("nodes").Index(jen.Lit(0)),
-				}),
-			)
-		}
+		// Note: for M2O/O2O-inverse (OwnFK), sqlgraph materializes the FK column
+		// on the insert statement. The returned _node will not have that FK field
+		// populated, but the ID is in mutation state and the user's Save caller
+		// can re-query if needed. This matches Velox's behavior before this refactor.
+		_ = nodeVar
 		blk.Id(specVar).Dot("Edges").Op("=").Append(
 			jen.Id(specVar).Dot("Edges"),
 			jen.Id("edge"),
