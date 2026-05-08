@@ -78,3 +78,42 @@ func TestSkipType_PreservesWhereInputGo(t *testing.T) {
 	require.True(t, strings.Contains(rendered, "[]*CustomerWhereInput"),
 		"OrderWhereInput.HasCustomerWith must reference []*CustomerWhereInput")
 }
+
+// TestSkipType_PreservesWhereInputSDL pins that when an entity has
+// graphql.Skip(graphql.SkipType), its WhereInput SDL block is still
+// emitted even though the output type SDL block is suppressed.
+// This complements TestSkipType_PreservesWhereInputGo at the SDL layer:
+// input types and output types are independent — the output type is hidden,
+// but the WhereInput block must still be emitted so other entities'
+// WhereInput can reference [CustomerWhereInput!] in hasCustomerWith.
+func TestSkipType_PreservesWhereInputSDL(t *testing.T) {
+	customer := &entgen.Type{
+		Name: "Customer",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*entgen.Field{
+			{Name: "country", Type: &field.TypeInfo{Type: field.TypeString}},
+			{Name: "tier", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{
+			AnnotationName: Annotation{
+				Skip:                 SkipType,
+				WhereInputFieldNames: []string{"country", "tier"},
+			},
+		},
+	}
+
+	g := newTestGeneratorWithConfig(Config{
+		Package:     "graphql",
+		ORMPackage:  "example/ent",
+		WhereInputs: true,
+	}, customer)
+
+	sdl := g.genInputsSchema()
+
+	require.NotContains(t, sdl, "type Customer ",
+		"Customer output type must NOT appear in SDL when Skip(SkipType) is set")
+	require.Contains(t, sdl, "input CustomerWhereInput",
+		"CustomerWhereInput SDL must be emitted even when Skip(SkipType) is set")
+	require.Contains(t, sdl, "country",
+		"CustomerWhereInput must contain whitelisted field 'country'")
+}
