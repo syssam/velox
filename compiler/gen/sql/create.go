@@ -497,21 +497,15 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 				jen.Id("k"),
 			),
 		)
-		// For OwnFK edges (this side stores the FK column → single-pointer
-		// edge target), pre-populate _node.Edges.<EdgeName> with a stub
-		// carrying just the ID. This lets callers navigate the edge via
-		// Edges.XxxOrErr() right after Create.Save without an extra DB
-		// round-trip — matching Ent's `_node.<edge_field> = &nodes[0]`
-		// pattern. Other field values on the stub stay zero; callers who
-		// need the full target must still call .QueryXxx() explicitly.
-		//
-		// Use Edge.OwnFK() (M2O || O2O+inverse/Bidi) — this is the same
-		// condition Ent uses. NOT O2M-inverse: even though edgeSpecBase
-		// reclassifies O2M-inverse as sqlgraph.M2O for routing, the FK
-		// column actually lives on the OTHER side and the entity stores
-		// a SLICE of targets — calling Set<Edge>(&single) would be a
-		// type error (e.g. M2M-Through edges).
-		if edge.OwnFK() && targetType != nil {
+		// For OwnFK edges (M2O, O2M-inverse, O2O-inverse), pre-populate
+		// _node.Edges.<EdgeName> with a stub target carrying just the ID.
+		// This lets callers navigate the edge via Edges.XxxOrErr() right
+		// after Create.Save without an extra DB round-trip — matching Ent's
+		// `_node.<edge_field> = &nodes[0]` pattern. Other field values on
+		// the stub stay zero; users who need the full target must still
+		// call .QueryXxx() explicitly.
+		ownFK := edge.M2O() || (edge.O2M() && edge.IsInverse()) || (edge.O2O() && edge.IsInverse())
+		if ownFK && targetType != nil {
 			sharedEntityPkg := h.SharedEntityPkg()
 			blk.Id(nodeVar).Dot("Edges").Dot("Set" + edge.StructField()).Call(
 				jen.Op("&").Qual(sharedEntityPkg, targetType.Name).Values(jen.Dict{
