@@ -1,9 +1,6 @@
 package model
 
-import (
-	"velox.test/parity/compare"
-	"velox.test/parity/op"
-)
+import "velox.test/parity/op"
 
 // author is the in-memory author entity, keyed by its creation handle.
 type author struct {
@@ -86,7 +83,7 @@ func (st *State) step(idx int, o op.Op) Result {
 			handle: idx, name: v.Name, age: v.Age, role: v.Role,
 			bio: v.Bio, labels: cloneStrings(v.Labels),
 		}
-		return Result{Err: compare.ErrOK}
+		return Result{Err: ErrOK}
 	case op.CreatePost:
 		st.posts[idx] = &post{
 			handle: idx, title: v.Title, status: v.Status, viewCount: v.ViewCount,
@@ -94,16 +91,16 @@ func (st *State) step(idx int, o op.Op) Result {
 			createdAt: idx, updatedAt: idx,
 		}
 		st.postOrder = append(st.postOrder, idx)
-		return Result{Err: compare.ErrOK}
+		return Result{Err: ErrOK}
 	case op.CreateComment:
 		st.comments[idx] = &comment{
 			handle: idx, content: v.Content, labels: cloneStrings(v.Labels),
 			postRef: v.PostRef, authorRef: v.AuthorRef,
 		}
-		return Result{Err: compare.ErrOK}
+		return Result{Err: ErrOK}
 	case op.CreateTag:
 		st.tags[idx] = &tag{handle: idx, name: v.Name}
-		return Result{Err: compare.ErrOK}
+		return Result{Err: ErrOK}
 	case op.AddTagToPost:
 		return st.addTagToPost(v)
 	case op.SetPostLabels:
@@ -124,7 +121,7 @@ func (st *State) step(idx int, o op.Op) Result {
 		return st.queryPostsByStatus(v.Status)
 	case op.CountPosts:
 		n := st.livePostCount()
-		return Result{Scalar: &n, Err: compare.ErrOK}
+		return Result{Scalar: &n, Err: ErrOK}
 	case op.SumViewCount:
 		return st.sumViewCount()
 	case op.LoadAuthorPosts:
@@ -151,29 +148,29 @@ func (st *State) livePost(handle int) *post {
 func (st *State) mutatePost(idx, ref int, mut func(*post)) Result {
 	p := st.livePost(ref)
 	if p == nil {
-		return Result{Err: compare.ErrNotFound}
+		return Result{Err: ErrNotFound}
 	}
 	mut(p)
 	p.updatedAt = idx
-	return Result{Err: compare.ErrOK}
+	return Result{Err: ErrOK}
 }
 
 func (st *State) deletePost(ref int) Result {
 	p := st.livePost(ref)
 	if p == nil {
-		return Result{Err: compare.ErrNotFound}
+		return Result{Err: ErrNotFound}
 	}
 	p.deleted = true
-	return Result{Err: compare.ErrOK}
+	return Result{Err: ErrOK}
 }
 
 func (st *State) addTagToPost(v op.AddTagToPost) Result {
 	p := st.livePost(v.PostRef)
 	if p == nil {
-		return Result{Err: compare.ErrNotFound}
+		return Result{Err: ErrNotFound}
 	}
 	if _, ok := st.tags[v.TagRef]; !ok {
-		return Result{Err: compare.ErrNotFound}
+		return Result{Err: ErrNotFound}
 	}
 	set := st.postTags[v.PostRef]
 	if set == nil {
@@ -181,7 +178,7 @@ func (st *State) addTagToPost(v op.AddTagToPost) Result {
 		st.postTags[v.PostRef] = set
 	}
 	set[v.TagRef] = true
-	return Result{Err: compare.ErrOK}
+	return Result{Err: ErrOK}
 }
 
 // livePosts returns live posts in insertion order.
@@ -212,7 +209,7 @@ func (st *State) queryPostsByStatus(status string) Result {
 			rows = append(rows, postRow(p))
 		}
 	}
-	return Result{Rows: rows, Err: compare.ErrOK}
+	return Result{Rows: rows, Err: ErrOK}
 }
 
 func (st *State) sumViewCount() Result {
@@ -220,7 +217,7 @@ func (st *State) sumViewCount() Result {
 	for _, p := range st.livePosts() {
 		sum += p.viewCount
 	}
-	return Result{Scalar: &sum, Err: compare.ErrOK}
+	return Result{Scalar: &sum, Err: ErrOK}
 }
 
 func (st *State) loadAuthorPosts(ref int) Result {
@@ -230,7 +227,7 @@ func (st *State) loadAuthorPosts(ref int) Result {
 			rows = append(rows, postRow(p))
 		}
 	}
-	return Result{Rows: rows, Err: compare.ErrOK}
+	return Result{Rows: rows, Err: ErrOK}
 }
 
 // postRow projects a post into its normalized Row. Every Row carries "id" as a

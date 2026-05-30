@@ -3,7 +3,6 @@ package model
 import (
 	"sort"
 
-	"velox.test/parity/compare"
 	"velox.test/parity/op"
 )
 
@@ -75,7 +74,7 @@ func paginate(posts []*post, p op.PaginatePosts) Result {
 		page.StartHandle = &start
 		page.EndHandle = &end
 	}
-	return Result{Rows: rows, Page: page, Err: compare.ErrOK}
+	return Result{Rows: rows, Page: page, Err: ErrOK}
 }
 
 // sortPosts sorts in place by the order terms, with a final handle-ascending

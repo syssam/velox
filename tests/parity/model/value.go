@@ -5,8 +5,6 @@
 // against.
 package model
 
-import "velox.test/parity/compare"
-
 // Value is the normalized cell type shared by every executor. Its allowed
 // dynamic types are exactly: nil, int, string, bool, []string (JSON labels),
 // and Ref (a foreign entity reference normalized to its creation handle). The
@@ -26,10 +24,10 @@ type Row map[string]Value
 
 // Result is the observable outcome of exactly one op.
 type Result struct {
-	Rows   []Row          // for queries / paginate / load; nil for non-returning ops
-	Scalar *int           // for count / sum
-	Page   *PageInfo      // for paginate ops only
-	Err    compare.ErrCat // canonical error category; ErrOK when no error
+	Rows   []Row     // for queries / paginate / load; nil for non-returning ops
+	Scalar *int      // for count / sum
+	Page   *PageInfo // for paginate ops only
+	Err    ErrCat    // canonical error category; ErrOK when no error
 }
 
 // PageInfo is the Relay page metadata for a paginate op.
