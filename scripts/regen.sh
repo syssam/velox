@@ -42,6 +42,7 @@ DRIFT_CHECK_MODULES=(
     examples/tree
     examples/versioned-migration
     tests/external-module
+    tests/parity
 )
 FAILED_EXAMPLES=()
 for dir in "${DRIFT_CHECK_MODULES[@]}"; do
@@ -69,8 +70,16 @@ for dir in "${DRIFT_CHECK_MODULES[@]}"; do
             continue
         fi
     fi
+    # Build targets: most modules build the whole module (./...). tests/parity
+    # generates two separate ORM clients (velox/ and ent/) and additionally
+    # carries a compile-gate test that re-runs generation, so build only the
+    # generated client packages there.
+    BUILD_TARGETS=(./...)
+    if [[ "${dir}" == "tests/parity" ]]; then
+        BUILD_TARGETS=(./velox/... ./ent/...)
+    fi
     echo "==> building ${dir}"
-    if ! (cd "${dir}" && go build ./...); then
+    if ! (cd "${dir}" && go build "${BUILD_TARGETS[@]}"); then
         echo "warning: ${dir} build failed after regen" >&2
         FAILED_EXAMPLES+=("${dir}")
     fi
