@@ -233,7 +233,7 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 			switch d {
 			case dialect.MySQL:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ", colCopy))
+					b.WriteString(fmt.Sprintf("JSON_MERGE_PRESERVE(IF(%[1]s IS NULL OR JSON_TYPE(%[1]s) = 'NULL', JSON_ARRAY(), %[1]s), ", colCopy))
 					b.Arg(string(appendJSON))
 					b.WriteString(")")
 				}))
@@ -245,7 +245,7 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 				}))
 			default:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("COALESCE(%s, '[]') || ", colCopy))
+					b.WriteString(fmt.Sprintf("COALESCE(NULLIF(%s, 'null'::jsonb), '[]') || ", colCopy))
 					b.Arg(string(appendJSON))
 				}))
 			}
@@ -555,7 +555,7 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 			switch d {
 			case dialect.MySQL:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ", colCopy))
+					b.WriteString(fmt.Sprintf("JSON_MERGE_PRESERVE(IF(%[1]s IS NULL OR JSON_TYPE(%[1]s) = 'NULL', JSON_ARRAY(), %[1]s), ", colCopy))
 					b.Arg(string(appendJSON))
 					b.WriteString(")")
 				}))
@@ -567,7 +567,7 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 				}))
 			default:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("COALESCE(%s, '[]') || ", colCopy))
+					b.WriteString(fmt.Sprintf("COALESCE(NULLIF(%s, 'null'::jsonb), '[]') || ", colCopy))
 					b.Arg(string(appendJSON))
 				}))
 			}

@@ -667,7 +667,12 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 					// jsonb key-existence operator, producing a syntax error.
 					jen.Switch(jen.Id("d")).Block(
 						jen.Case(jen.Qual(dialectPkg(), "MySQL")).Block(
-							jsonAppendSet(h, "JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ", ")"),
+							// A column holding the JSON scalar null (a prior SetLabels(nil),
+							// which marshals to "null") is NOT caught by COALESCE — that only
+							// swaps SQL NULL — so JSON_MERGE_PRESERVE(JSON'null', x) would
+							// inject a spurious null element. Normalize a JSON_TYPE of 'NULL'
+							// (and SQL NULL) to an empty array first (matches Ent's guard).
+							jsonAppendSet(h, "JSON_MERGE_PRESERVE(IF(%[1]s IS NULL OR JSON_TYPE(%[1]s) = 'NULL', JSON_ARRAY(), %[1]s), ", ")"),
 						),
 						jen.Case(jen.Qual(dialectPkg(), "SQLite")).Block(
 							// SQLite has no JSON array concat operator. Build the merged
@@ -683,8 +688,13 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 							jsonAppendSet(h, "(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CASE WHEN json_type(CAST(COALESCE(%[1]s, '[]') AS TEXT)) = 'null' THEN '[]' ELSE CAST(COALESCE(%[1]s, '[]') AS TEXT) END) UNION ALL SELECT value FROM json_each(", ")))"),
 						),
 						jen.Default().Block(
-							// PostgreSQL: jsonb || jsonb concatenates arrays.
-							jsonAppendSet(h, "COALESCE(%s, '[]') || ", ""),
+							// PostgreSQL: jsonb || jsonb concatenates arrays. A column
+							// holding the jsonb scalar null (a prior SetLabels(nil), which
+							// marshals to "null") is NOT caught by COALESCE — that only swaps
+							// SQL NULL — so 'null'::jsonb || x would inject a spurious null
+							// element. NULLIF maps a jsonb null to SQL NULL so COALESCE then
+							// normalizes it to an empty array (matches Ent's guard).
+							jsonAppendSet(h, "COALESCE(NULLIF(%s, 'null'::jsonb), '[]') || ", ""),
 						),
 					),
 				),
