@@ -102,6 +102,26 @@ func curatedPrograms() []progCase {
 			expect: expectAllPass,
 		},
 		{
+			// Migration FK-action guard — the behavioral migration-DDL diff.
+			// Comment.post carries ON DELETE CASCADE in both the velox and ent
+			// parity schemas. Deleting a post that HAS a comment must succeed by
+			// cascading the delete on all three executors. If velox's generated
+			// migration emitted the wrong ON DELETE action (e.g. NoAction — the
+			// schema.CASCADE bug class reported downstream), velox's DeletePost
+			// would FK-fail while ent and the reference model succeed, surfacing
+			// as a VeloxBug verdict. This catches migration-DDL divergence through
+			// observable behavior — no schema introspection required.
+			name: "migration_fk_cascade_on_delete",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},                 // 0
+				op.CreatePost{Title: "P", Status: "draft", AuthorRef: 0}, // 1
+				op.CreateComment{Content: "c", PostRef: 1, AuthorRef: 0}, // 2
+				op.DeletePost{PostRef: 1},                                // 3 — cascade, must not FK-fail
+				op.CountPosts{},                                          // 4 — 0 after delete
+			},
+			expect: expectAllPass,
+		},
+		{
 			// M2O author pre-population: after creating a post, a read that
 			// loads the author edge must resolve the owner Ref.
 			name: "m2o_author_prepopulation",

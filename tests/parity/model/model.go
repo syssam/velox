@@ -161,6 +161,16 @@ func (st *State) deletePost(ref int) Result {
 		return Result{Err: ErrNotFound}
 	}
 	p.deleted = true
+	// Comment.post has ON DELETE CASCADE (parity schema), so deleting a post also
+	// removes its comments. Modeling the cascade keeps the oracle consistent with
+	// the real databases: with the correct migration, deleting a post that has a
+	// comment succeeds on all three; if velox's migration emitted the wrong FK
+	// action it would FK-fail instead, surfacing as a VeloxBug.
+	for handle, c := range st.comments {
+		if c.postRef == ref {
+			delete(st.comments, handle)
+		}
+	}
 	return Result{Err: ErrOK}
 }
 

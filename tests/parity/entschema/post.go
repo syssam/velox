@@ -3,6 +3,7 @@ package entschema
 import (
 	"entgo.io/contrib/entgql"
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -40,7 +41,12 @@ func (Post) Edges() []ent.Edge {
 			Ref("posts").
 			Unique().
 			Required(),
-		edge.To("comments", Comment.Type),
+		// OnDelete(Cascade) on the assoc (O2M) edge — Ent reads the referential
+		// action only from the assoc side (entc/gen/graph.go skips inverse edges
+		// when building foreign keys), so the annotation must live here, not on
+		// Comment's inverse edge. Deleting a Post cascade-deletes its Comments.
+		edge.To("comments", Comment.Type).
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("tags", Tag.Type),
 	}
 }

@@ -28,6 +28,9 @@ func (Comment) Fields() []ent.Field {
 // Edges of the Comment.
 func (Comment) Edges() []ent.Edge {
 	return []ent.Edge{
+		// The post->comments cascade is declared on the assoc edge in Post (Ent
+		// reads OnDelete only from the assoc side). The inverse edge here just
+		// names the back-reference.
 		edge.From("post", Post.Type).
 			Ref("comments").
 			Unique().

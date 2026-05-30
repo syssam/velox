@@ -153,45 +153,55 @@ func TestValidate_AllowsMutationOnDeletedPost(t *testing.T) {
 	assert.NoError(t, gen.Validate(prog), "mutation/tag ops on a deleted post are valid (not-found path)")
 }
 
-// TestBuild_NoDeleteOfLiveCommentedPost pins the generator-side fix for the
-// third finding class: the comments->posts FK is OnDelete NoAction (RESTRICT),
-// so hard-deleting a LIVE post that still has a comment fails in both ORMs while
-// the oracle soft-deletes happily. Build must never emit a DeletePost targeting
-// a live post that has received a comment. (Posts with only tags delete fine —
-// post_tags is OnDelete Cascade — so this rule keys on comments alone.)
-func TestBuild_NoDeleteOfLiveCommentedPost(t *testing.T) {
+// TestBuild_DeletesCommentedPosts_AllValid pins the cascade relaxation. The
+// comments->posts FK is OnDelete: Cascade (declared on the parent's assoc edge,
+// matching Ent), so hard-deleting a LIVE post that still has a comment is a VALID
+// program: the delete cascades to the comment rows in both ORMs and the oracle
+// models the same cascade. Build is now allowed — and expected — to emit such
+// programs. This asserts two things: every emitted program passes Validate (the
+// cascade case included), and the corpus actually exercises the cascade path at
+// least once (a live commented post is deleted), so the relaxation is not dead
+// weight. Deleting a commented post is the "hard case" for the migration FK
+// action — a wrong ON DELETE would FK-fail in velox only, a VeloxBug.
+func TestBuild_DeletesCommentedPosts_AllValid(t *testing.T) {
 	r := rand.New(rand.NewSource(4))
+	sawCascadeDelete := false
 	for iter := 0; iter < 4000; iter++ {
 		buf := make([]byte, r.Intn(200))
 		r.Read(buf)
 		prog := gen.Build(buf)
+		require.NoErrorf(t, gen.Validate(prog),
+			"iter %d: Build emitted an invalid program:\n%s", iter, op.Format(prog))
 		deleted := map[int]bool{}
 		hasComment := map[int]bool{}
-		for i, o := range prog {
+		for _, o := range prog {
 			switch v := o.(type) {
 			case op.CreateComment:
 				hasComment[v.PostRef] = true
 			case op.DeletePost:
-				live := !deleted[v.PostRef]
-				require.Falsef(t, live && hasComment[v.PostRef],
-					"iter %d op %d DeletePost targets live commented post %d (RESTRICT FK):\n%s",
-					iter, i, v.PostRef, op.Format(prog))
+				if !deleted[v.PostRef] && hasComment[v.PostRef] {
+					sawCascadeDelete = true
+				}
 				deleted[v.PostRef] = true
 			}
 		}
 	}
+	require.True(t, sawCascadeDelete,
+		"expected Build to emit at least one delete of a live commented post (the cascade path); the relaxation is not exercised")
 }
 
-// TestValidate_RejectsDeleteOfLiveCommentedPost pins that Validate rejects a
-// hand-built program that deletes a live post which has a comment.
-func TestValidate_RejectsDeleteOfLiveCommentedPost(t *testing.T) {
+// TestValidate_AcceptsDeleteOfLiveCommentedPost pins that Validate accepts a
+// program that deletes a live post which still has a comment: the comments->posts
+// FK cascades, so the delete succeeds in both ORMs (cascade-deleting the comment)
+// and the oracle models the same cascade.
+func TestValidate_AcceptsDeleteOfLiveCommentedPost(t *testing.T) {
 	prog := op.Program{
 		op.CreateAuthor{Name: "A", Role: "user"},
 		op.CreatePost{Title: "P", Status: "draft", AuthorRef: 0},
 		op.CreateComment{Content: "c", PostRef: 1, AuthorRef: 0},
-		op.DeletePost{PostRef: 1}, // RESTRICT FK: blocked
+		op.DeletePost{PostRef: 1}, // cascade: deletes the comment too
 	}
-	assert.Error(t, gen.Validate(prog), "delete of a live commented post must be rejected")
+	assert.NoError(t, gen.Validate(prog), "delete of a live commented post is valid (cascade FK)")
 }
 
 func intp(i int) *int { return &i }

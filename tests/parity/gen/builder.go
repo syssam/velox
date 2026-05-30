@@ -71,20 +71,19 @@ func (c *cursor) more() bool { return c.pos < len(c.data) }
 // disagreement is a generator validity artifact, not a bug, so the builder
 // draws those refs from livePosts() only.
 //
-// hasComment records posts that have a comment. The comments->posts FK is
-// OnDelete: NoAction (RESTRICT), so hard-deleting a post that still has a
-// comment FAILS in both ORMs (FK constraint), while the oracle soft-deletes
-// happily and reports ok. (The post_tags M2M FK is OnDelete: Cascade, so a post
-// with tags deletes fine — only comments block deletion.) Comments are never
-// removed by any op, so once a post receives a comment it is permanently
-// delete-unsafe; the builder draws DeletePost targets from deletablePosts() only.
+// The comments->posts FK is OnDelete: Cascade in both schemas (declared on the
+// parent's assoc edge, matching Ent), so hard-deleting a post that still has a
+// comment SUCCEEDS in both ORMs — the comment rows are cascade-deleted — and the
+// oracle models the same cascade. DeletePost may therefore target ANY created
+// post; doing so also exercises the migration's FK action end to end: a wrong ON
+// DELETE would FK-fail in velox only, surfacing as a VeloxBug. (The post_tags M2M
+// FK is likewise OnDelete: Cascade.)
 type state struct {
-	authors    []int
-	posts      []int
-	tags       []int
-	comments   []int
-	deleted    map[int]bool
-	hasComment map[int]bool
+	authors  []int
+	posts    []int
+	tags     []int
+	comments []int
+	deleted  map[int]bool
 }
 
 // markDeleted records that the post at handle h has been hard-deleted.
@@ -95,15 +94,6 @@ func (s *state) markDeleted(h int) {
 	s.deleted[h] = true
 }
 
-// markCommented records that the post at handle h has a comment (and is thus
-// permanently delete-unsafe while live).
-func (s *state) markCommented(h int) {
-	if s.hasComment == nil {
-		s.hasComment = map[int]bool{}
-	}
-	s.hasComment[h] = true
-}
-
 // livePosts returns the post handles that have not been deleted, in creation
 // order. Used for refs that require a live row (CreateComment FK parent,
 // pagination cursor anchor).
@@ -111,21 +101,6 @@ func (s *state) livePosts() []int {
 	out := make([]int, 0, len(s.posts))
 	for _, h := range s.posts {
 		if !s.deleted[h] {
-			out = append(out, h)
-		}
-	}
-	return out
-}
-
-// deletablePosts returns the post handles a DeletePost may safely target so the
-// three executors agree: any post that is NOT (live AND has a comment). A
-// live-commented post would FK-violate the DELETE (comments->posts is RESTRICT);
-// an already-deleted post is fine (re-delete hits the agreed not-found path); a
-// live post with no comment deletes cleanly.
-func (s *state) deletablePosts() []int {
-	out := make([]int, 0, len(s.posts))
-	for _, h := range s.posts {
-		if s.deleted[h] || !s.hasComment[h] {
 			out = append(out, h)
 		}
 	}
@@ -185,9 +160,10 @@ func (s *state) satisfiable() []opKind {
 	if len(s.posts) > 0 {
 		out = append(out, kSetPostLabels, kAppendPostLabels, kUpdatePostViewCount)
 	}
-	// DeletePost on a live post that still has a comment FK-violates (RESTRICT),
-	// so it may only target a deletable post.
-	if len(s.deletablePosts()) > 0 {
+	// DeletePost may target any created post: the comments->posts FK cascades, so
+	// deleting a commented post succeeds (and exercises the cascade), and
+	// re-deleting an already-deleted post hits the agreed not-found path.
+	if len(s.posts) > 0 {
 		out = append(out, kDeletePost)
 	}
 	return out
@@ -238,7 +214,6 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 		// PostRef is an FK parent that must point to a LIVE post (satisfiable
 		// guarantees >=1 live post). A deleted post would FK-violate the INSERT.
 		postRef := ref(c, st.livePosts())
-		st.markCommented(postRef) // post now has a RESTRICT child; no longer delete-safe
 		return op.CreateComment{
 			Content:   name(c, "C"),
 			Labels:    labels(c),
@@ -264,9 +239,10 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 	case kUpdatePostViewCount:
 		return op.UpdatePostViewCount{PostRef: ref(c, st.posts), ViewCount: c.next(1001)}
 	case kDeletePost:
-		// Draw only from deletable posts: a live post with a comment would
-		// FK-violate the DELETE (comments->posts is RESTRICT).
-		target := ref(c, st.deletablePosts())
+		// Any created post is a valid target: the comments->posts FK cascades, so
+		// deleting a commented post succeeds (cascade-deleting its comments), and a
+		// re-delete of an already-deleted post hits the agreed not-found path.
+		target := ref(c, st.posts)
 		st.markDeleted(target)
 		return op.DeletePost{PostRef: target}
 	case kQueryPostsByStatus:
@@ -374,14 +350,15 @@ func labels(c *cursor) []string {
 //     post: a deleted post is physically gone, so the ORMs FK-violate (comment)
 //     or compute a cursor with no anchor row (pagination) while the oracle
 //     reports a different outcome — a generator validity artifact, not a bug.
-//   - DeletePost on a LIVE post that still has a comment FK-violates (the
-//     comments->posts FK is RESTRICT); a deletable post is one that is already
-//     deleted or has no comment.
+//   - DeletePost may target any created post, including a live one that still
+//     has a comment: the comments->posts FK is OnDelete: Cascade, so the delete
+//     succeeds in both ORMs (cascade-deleting the comments) and the oracle models
+//     the same cascade. Re-deleting an already-deleted post hits the agreed
+//     not-found path.
 func Validate(prog op.Program) error {
 	authors := map[int]bool{}
 	posts := map[int]bool{}
 	deleted := map[int]bool{}
-	hasComment := map[int]bool{}
 	tags := map[int]bool{}
 	tagNames := map[string]bool{}
 	live := func(h int) bool { return posts[h] && !deleted[h] }
@@ -411,7 +388,6 @@ func Validate(prog op.Program) error {
 			if !authors[v.AuthorRef] {
 				return fmt.Errorf("op %d CreateComment: AuthorRef %d is not an existing author handle", i, v.AuthorRef)
 			}
-			hasComment[v.PostRef] = true
 		case op.AddTagToPost:
 			if !posts[v.PostRef] {
 				return fmt.Errorf("op %d AddTagToPost: PostRef %d is not an existing post handle", i, v.PostRef)
@@ -435,10 +411,8 @@ func Validate(prog op.Program) error {
 			if !posts[v.PostRef] {
 				return fmt.Errorf("op %d DeletePost: PostRef %d is not an existing post handle", i, v.PostRef)
 			}
-			// A live post with a comment cannot be hard-deleted (RESTRICT FK).
-			if live(v.PostRef) && hasComment[v.PostRef] {
-				return fmt.Errorf("op %d DeletePost: post %d has a comment and is live (RESTRICT FK blocks delete)", i, v.PostRef)
-			}
+			// Any created post may be deleted: the comments->posts FK cascades, so
+			// deleting a commented post succeeds in both ORMs and the oracle.
 			deleted[v.PostRef] = true
 		case op.LoadAuthorPosts:
 			if !authors[v.AuthorRef] {

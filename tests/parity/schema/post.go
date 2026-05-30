@@ -3,6 +3,7 @@ package schema
 import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -43,7 +44,15 @@ func (Post) Edges() []velox.Edge {
 			Ref("posts").
 			Unique().
 			Required(),
-		edge.To("comments", Comment.Type),
+		// OnDelete(Cascade) on the assoc (O2M) edge — mirrors Ent's canonical
+		// placement (the referential action is read from the assoc side). Deleting
+		// a Post cascade-deletes its Comments. This makes the migration's FK action
+		// observable through behavior: if the generated migration emits the wrong
+		// ON DELETE action, deleting a post that has a comment FK-fails instead of
+		// cascading, surfacing as a VeloxBug in the differential harness — the
+		// migration-DDL guard.
+		edge.To("comments", Comment.Type).
+			Annotations(sqlschema.OnDelete(sqlschema.Cascade)),
 		edge.To("tags", Tag.Type),
 	}
 }
