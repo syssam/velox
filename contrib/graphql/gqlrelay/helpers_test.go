@@ -554,6 +554,69 @@ func TestMultiCursorsPredicate_MultiField(t *testing.T) {
 	assert.Contains(t, query, "OR")
 }
 
+// TestMultiCursorsPredicate_Before_Composite_ASC pins that the `before`
+// cursor produces the MIRROR comparison of `after` — the same inversion that
+// CursorsPredicate applies (after+ASC → GT, before+ASC → LT). Before this fix
+// the before cursor reused the after-direction, so backward multi-order
+// pagination selected rows on the WRONG side of the cursor (e.g. ordering
+// name ASC with before=cursor(D) returned rows after D, not before it).
+func TestMultiCursorsPredicate_Before_Composite_ASC(t *testing.T) {
+	before := &Cursor{ID: 5, Value: []any{"Alice"}}
+	preds, err := MultiCursorsPredicate(nil, before, &MultiCursorsOptions{
+		FieldID:     "id",
+		DirectionID: OrderDirectionAsc,
+		Fields:      []string{"name"},
+		Directions:  []OrderDirection{OrderDirectionAsc},
+	})
+	require.NoError(t, err)
+	require.Len(t, preds, 1)
+
+	s := sql.Select("*").From(sql.Table("users"))
+	preds[0](s)
+	query, _ := s.Query()
+	// before + ASC restricts to rows BEFORE the cursor → "<", never ">".
+	assert.Contains(t, query, "<", "before+ASC must use LT (mirror of the after-direction)")
+	assert.NotContains(t, query, ">", "before+ASC must NOT use GT — that selects the after-side")
+}
+
+// TestMultiCursorsPredicate_Before_Composite_DESC is the DESC mirror: before +
+// DESC must use GT (CursorsPredicate after+DESC → LT, before+DESC → GT).
+func TestMultiCursorsPredicate_Before_Composite_DESC(t *testing.T) {
+	before := &Cursor{ID: 5, Value: []any{"Alice"}}
+	preds, err := MultiCursorsPredicate(nil, before, &MultiCursorsOptions{
+		FieldID:     "id",
+		DirectionID: OrderDirectionDesc,
+		Fields:      []string{"name"},
+		Directions:  []OrderDirection{OrderDirectionDesc},
+	})
+	require.NoError(t, err)
+	require.Len(t, preds, 1)
+
+	s := sql.Select("*").From(sql.Table("users"))
+	preds[0](s)
+	query, _ := s.Query()
+	assert.Contains(t, query, ">", "before+DESC must use GT (mirror of the after-direction)")
+	assert.NotContains(t, query, "<", "before+DESC must NOT use LT — that selects the after-side")
+}
+
+// TestMultiCursorsPredicate_Before_IDOnly_ASC pins the same inversion for the
+// ID-only (nil Value) before path, which previously also reused the
+// after-direction.
+func TestMultiCursorsPredicate_Before_IDOnly_ASC(t *testing.T) {
+	before := &Cursor{ID: 10}
+	preds, err := MultiCursorsPredicate(nil, before, &MultiCursorsOptions{
+		FieldID:     "id",
+		DirectionID: OrderDirectionAsc,
+	})
+	require.NoError(t, err)
+	require.Len(t, preds, 1)
+
+	s := sql.Select("*").From(sql.Table("users"))
+	preds[0](s)
+	query, _ := s.Query()
+	assert.Contains(t, query, "<", "before+ASC ID-only must use LT (mirror of after)")
+}
+
 func TestMultiCursorsPredicate_InvalidCursorType(t *testing.T) {
 	after := &Cursor{ID: 5, Value: "not-a-slice"}
 	_, err := MultiCursorsPredicate(after, nil, &MultiCursorsOptions{

@@ -189,18 +189,28 @@ type MultiCursorsOptions struct {
 // This is equivalent to Ent's entgql.MultiCursorsPredicate.
 func MultiCursorsPredicate(after, before *Cursor, opts *MultiCursorsOptions) ([]func(s *sql.Selector), error) {
 	var predicates []func(s *sql.Selector)
-	for _, cursor := range []*Cursor{after, before} {
+	// The `before` cursor restricts to rows BEFORE it, which is the mirror of
+	// the `after` cursor's "rows after it" — so every comparison direction is
+	// inverted for `before`. This matches CursorsPredicate (after+ASC → GT,
+	// before+ASC → LT). Without the flip, backward multi-order pagination
+	// selects rows on the wrong side of the cursor.
+	for i, cursor := range []*Cursor{after, before} {
 		if cursor == nil {
 			continue
 		}
+		invert := i == 1 // before
 		if cursor.Value != nil {
-			predicate, err := multiPredicate(cursor, opts)
+			predicate, err := multiPredicate(cursor, opts, invert)
 			if err != nil {
 				return nil, err
 			}
 			predicates = append(predicates, predicate)
 		} else {
-			if opts.DirectionID == OrderDirectionAsc {
+			asc := opts.DirectionID == OrderDirectionAsc
+			if invert {
+				asc = !asc
+			}
+			if asc {
 				predicates = append(predicates, func(s *sql.Selector) {
 					s.Where(sql.GT(s.C(opts.FieldID), cursor.ID))
 				})
@@ -214,7 +224,7 @@ func MultiCursorsPredicate(after, before *Cursor, opts *MultiCursorsOptions) ([]
 	return predicates, nil
 }
 
-func multiPredicate(cursor *Cursor, opts *MultiCursorsOptions) (func(*sql.Selector), error) {
+func multiPredicate(cursor *Cursor, opts *MultiCursorsOptions, invert bool) (func(*sql.Selector), error) {
 	values, ok := cursor.Value.([]any)
 	if !ok {
 		return nil, fmt.Errorf("cursor %T is not a slice", cursor.Value)
@@ -247,7 +257,11 @@ func multiPredicate(cursor *Cursor, opts *MultiCursorsOptions) (func(*sql.Select
 			for j := range i {
 				ands = append(ands, sql.EQ(s.C(fields[j]), vals[j]))
 			}
-			if directions[i] == OrderDirectionAsc {
+			asc := directions[i] == OrderDirectionAsc
+			if invert {
+				asc = !asc
+			}
+			if asc {
 				ands = append(ands, sql.GT(s.C(fields[i]), vals[i]))
 			} else {
 				ands = append(ands, sql.LT(s.C(fields[i]), vals[i]))
