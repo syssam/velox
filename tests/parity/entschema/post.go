@@ -6,7 +6,6 @@ import (
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"entgo.io/ent/schema/mixin"
 )
 
 // Post holds the schema definition for the Post entity.
@@ -15,7 +14,7 @@ type Post struct{ ent.Schema }
 // Mixin of the Post.
 func (Post) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		mixin.Time{},
+		timeMixin{},
 	}
 }
 

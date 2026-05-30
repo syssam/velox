@@ -5,7 +5,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"entgo.io/ent/schema/mixin"
 )
 
 // Author holds the schema definition for the Author entity.
@@ -14,7 +13,7 @@ type Author struct{ ent.Schema }
 // Mixin of the Author.
 func (Author) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		mixin.Time{},
+		timeMixin{},
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"entgo.io/ent/schema/mixin"
 )
 
 // Comment holds the schema definition for the Comment entity.
@@ -13,7 +12,7 @@ type Comment struct{ ent.Schema }
 // Mixin of the Comment.
 func (Comment) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		mixin.Time{},
+		timeMixin{},
 	}
 }
 
