@@ -82,6 +82,12 @@ func ensureMySQLDatabases(ctx context.Context, dsn, baseDB string) error {
 // connected to. FK checks are disabled around the truncate so circular FK
 // graphs tear down in any order, then re-enabled. TRUNCATE resets AUTO_INCREMENT
 // so ids restart at 1 each program, matching SQLite's fresh-client behavior.
+//
+// SET FOREIGN_KEY_CHECKS is a per-connection session variable, so the entire
+// disable → TRUNCATE-loop → re-enable bracket is pinned to a SINGLE pooled
+// connection via db.Conn. Running it on the *sql.DB pool directly would let the
+// TRUNCATE statements land on a different connection where FK checks are still
+// ON, and InnoDB would reject truncating an FK-referenced table.
 func truncateMySQL(ctx context.Context, db *sql.DB) error {
 	tables, err := listMySQLTables(ctx, db)
 	if err != nil {
@@ -90,12 +96,17 @@ func truncateMySQL(ctx context.Context, db *sql.DB) error {
 	if len(tables) == 0 {
 		return nil
 	}
-	if _, err := db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0"); err != nil {
+	conn, err := db.Conn(ctx)
+	if err != nil {
 		return err
 	}
-	defer func() { _, _ = db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1") }()
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0"); err != nil {
+		return err
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1") }()
 	for _, t := range tables {
-		if _, err := db.ExecContext(ctx, "TRUNCATE TABLE "+quoteMySQLIdent(t)); err != nil {
+		if _, err := conn.ExecContext(ctx, "TRUNCATE TABLE "+quoteMySQLIdent(t)); err != nil {
 			return err
 		}
 	}

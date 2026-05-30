@@ -134,26 +134,33 @@ type Report struct {
 	Ops     []OpReport
 }
 
-// dialectCacheKey identifies the reusable (velox, ent) client pair for one
-// (test, backend). PG/MySQL migrate once per test and truncate between programs,
-// so the pair is cached here rather than reopened per RunParity call.
+// dialectCacheKey identifies the (velox, ent) client pair for one (test,
+// backend) scope. The cache lets multiple RunParity calls within the SAME test
+// scope share one migrated pair, with tables truncated between programs. In
+// practice TestCuratedSuite gives each case its own t.Run, so each case opens a
+// FRESH pair (stored then Cleanup-deleted per case); the reuse path is correct
+// and harmless but not exercised by the suite.
 type dialectCacheKey struct {
 	tb      testing.TB
 	backend Backend
 }
 
-// dialectCache holds the per-(test, backend) reusable client pairs. It is a
-// startup-style registry: written on the first RunParity for a (test, backend)
-// and read by later calls in the same test. The entry's clients register their
-// own t.Cleanup via openDialectPair, and the cache entry is dropped on test end.
+// dialectCache holds the (velox, ent) client pairs keyed by (test, backend)
+// scope. It is a startup-style registry: written on the first RunParity for a
+// scope and read by any later calls in the SAME scope. The entry's clients
+// register their own t.Cleanup via openDialectPair, and the cache entry is
+// dropped on scope end — so a per-case t.Run gets a fresh pair. The real
+// isolation comes from the open-time truncate plus the per-program truncate, not
+// from cross-program client reuse.
 var dialectCache sync.Map // map[dialectCacheKey]*dialectPair
 
 // RunParity runs all three executors (reference, velox, ent) for the backend and
 // classifies each op's outcome per the verdict table. SQLite uses fresh
-// in-memory clients per call; Postgres/MySQL reuse a per-test migrated client
-// pair, truncating all tables on BOTH ORMs before each program so state never
-// bleeds between programs. SQL from both ORMs is captured per op so a non-Pass op
-// prints the failing op, the structured mismatches, and the two SQL statements.
+// in-memory clients per call; Postgres/MySQL get a migrated (velox, ent) pair for
+// the current test scope, truncating all tables on BOTH ORMs before each program
+// so state never bleeds between programs. SQL from both ORMs is captured per op so
+// a non-Pass op prints the failing op, the structured mismatches, and the two SQL
+// statements.
 func RunParity(t testing.TB, backend Backend, prog op.Program) Report {
 	t.Helper()
 
@@ -194,13 +201,13 @@ func RunParity(t testing.TB, backend Backend, prog op.Program) Report {
 	return rep
 }
 
-// runDialectProgram runs prog against the per-test (velox, ent) pair for a
-// PG/MySQL backend. It lazily opens and caches the pair on the first call for a
-// (test, backend), truncates BOTH databases before running so the program starts
-// from empty, executes the program on both ORMs, and returns the normalized
-// results plus the pair's SQL-trace sinks (cleared per program). If the backend
-// is configured but unreachable / unprivileged, the pair open path skips the
-// test rather than failing.
+// runDialectProgram runs prog against the (velox, ent) pair for the current
+// test scope on a PG/MySQL backend. It lazily opens (and caches within the
+// scope) the pair on the first call, truncates BOTH databases before running so
+// the program starts from empty, executes the program on both ORMs, and returns
+// the normalized results plus the pair's SQL-trace sinks (cleared per program).
+// If the backend is configured but unreachable / unprivileged, the pair open
+// path skips the test rather than failing.
 func runDialectProgram(t testing.TB, backend Backend, prog op.Program) (veloxRes, entRes []model.Result, veloxSink, entSink *sqlSink) {
 	t.Helper()
 	pair := getDialectPair(t, backend)

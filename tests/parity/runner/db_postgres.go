@@ -113,11 +113,11 @@ func createPostgresDBIfMissing(ctx context.Context, maint *sql.DB, db string) er
 }
 
 // truncatePostgres empties every table in the public schema of the database the
-// given *sql.DB is connected to. FK checks are deferred per-statement via
-// TRUNCATE ... CASCADE so circular FK graphs tear down in any order, and
-// RESTART IDENTITY resets sequences so ids restart at 1 each program — matching
-// SQLite's fresh-client behavior. It discovers tables from pg_tables so it stays
-// in sync with the schema automatically.
+// given *sql.DB is connected to. TRUNCATE ... CASCADE transitively truncates any
+// FK-dependent tables along with the listed ones, so circular FK graphs tear
+// down in any order, and RESTART IDENTITY resets sequences so ids restart at 1
+// each program — matching SQLite's fresh-client behavior. It discovers tables
+// from pg_tables so it stays in sync with the schema automatically.
 func truncatePostgres(ctx context.Context, db *sql.DB) error {
 	tables, err := listPostgresTables(ctx, db)
 	if err != nil {
