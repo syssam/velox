@@ -1,8 +1,9 @@
-// This file (run_ent.go) is one of the only two files in the runner package
-// permitted to import the Ent ORM — the architecture guard
+// run_ent.go is one of the only two files in the runner package permitted to
+// import the Ent ORM — the architecture guard
 // (architecture_test.go::TestBrainHasNoORMImports) excludes files prefixed
 // "run_velox" / "run_ent". It mirrors run_velox.go against the Ent client API:
 // the in-memory client harness, the op→ent-call executor, and the normalizer.
+
 package runner
 
 import (

@@ -19,7 +19,7 @@ func paginateProg() op.Program {
 		prog = append(prog, op.CreatePost{Title: "P", Status: "draft", ViewCount: i, AuthorRef: 0})
 	}
 	order := []op.OrderTerm{{Field: "view_count", Desc: false}}
-	prog = append(prog, op.PaginatePosts{First: intp(4), OrderBy: order})                   // forward
+	prog = append(prog, op.PaginatePosts{First: intp(4), OrderBy: order})                    // forward
 	prog = append(prog, op.PaginatePosts{Last: intp(2), BeforeRef: intp(4), OrderBy: order}) // backward
 	return prog
 }

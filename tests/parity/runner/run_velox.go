@@ -1,9 +1,10 @@
-// This file (run_velox.go) is one of the only two files in the runner package
-// permitted to import the velox ORM — the architecture guard
+// run_velox.go is one of the only two files in the runner package permitted to
+// import the velox ORM — the architecture guard
 // (architecture_test.go::TestBrainHasNoORMImports) excludes files prefixed
-// "run_velox" / "run_ent". Everything ORM-specific to velox lives here:
-// the in-memory client harness, the op→velox-call executor, and the result
+// "run_velox" / "run_ent". Everything ORM-specific to velox lives here: the
+// in-memory client harness, the op→velox-call executor, and the result
 // normalizer that maps velox entities back into ORM-neutral model.Result.
+
 package runner
 
 import (

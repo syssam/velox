@@ -22,12 +22,12 @@ import (
 // ent's own SQLite bug.
 func crudEntProg() op.Program {
 	return op.Program{
-		op.CreateAuthor{Name: "Alice", Age: 30, Role: "user"}, // 0
+		op.CreateAuthor{Name: "Alice", Age: 30, Role: "user"},                                           // 0
 		op.CreatePost{Title: "T1", Status: "draft", ViewCount: 5, AuthorRef: 0, Labels: []string{"go"}}, // 1
-		op.SetPostLabels{PostRef: 1, Labels: []string{"go", "orm"}}, // 2 (replace, not append)
-		op.UpdatePostViewCount{PostRef: 1, ViewCount: 9},            // 3
-		op.QueryPostsByStatus{Status: "draft"},                     // 4
-		op.SumViewCount{},                                          // 5
+		op.SetPostLabels{PostRef: 1, Labels: []string{"go", "orm"}},                                     // 2 (replace, not append)
+		op.UpdatePostViewCount{PostRef: 1, ViewCount: 9},                                                // 3
+		op.QueryPostsByStatus{Status: "draft"},                                                          // 4
+		op.SumViewCount{},                                                                               // 5
 	}
 }
 

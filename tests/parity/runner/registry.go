@@ -23,8 +23,8 @@ const (
 // It is ORM-free (operates on plain ints), so it lives outside run_velox.go /
 // run_ent.go and is shared by both executors.
 type handleRegistry struct {
-	handleToID map[int]int       // op index (handle) -> db id
-	idToHandle map[kindID]int    // (kind, db id) -> op index (handle)
+	handleToID map[int]int    // op index (handle) -> db id
+	idToHandle map[kindID]int // (kind, db id) -> op index (handle)
 }
 
 // kindID is the composite key disambiguating per-table db ids.
@@ -44,13 +44,6 @@ func newHandleRegistry() *handleRegistry {
 func (r *handleRegistry) record(k kind, handle, id int) {
 	r.handleToID[handle] = id
 	r.idToHandle[kindID{k, id}] = handle
-}
-
-// idForHandle returns the db id created at the given handle and whether it
-// exists.
-func (r *handleRegistry) idForHandle(handle int) (int, bool) {
-	id, ok := r.handleToID[handle]
-	return id, ok
 }
 
 // handleForID returns the creation handle of the entity of kind k with the
