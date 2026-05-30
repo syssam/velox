@@ -36,6 +36,33 @@ func NewVeloxSQLite(t testing.TB) *velox.Client {
 	return c
 }
 
+// newVeloxSQLiteTraced opens a fresh velox client whose SQL is captured into
+// sink via the debug driver's log hook. Used by the three-way driver to record
+// the SQL each op emits.
+func newVeloxSQLiteTraced(t testing.TB, sink *sqlSink) *velox.Client {
+	t.Helper()
+	c, err := velox.Open(dialect.SQLite, sqliteMemoryDSN(), velox.Log(sink.record), velox.Debug())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+	require.NoError(t, c.Schema.Create(context.Background()))
+	return c
+}
+
+// runVeloxTraced opens a traced velox client, runs prog while tagging each
+// captured statement with its op index, and returns the normalized results.
+// This is the ORM-free entry point the driver calls.
+func runVeloxTraced(t testing.TB, sink *sqlSink, prog op.Program) []model.Result {
+	t.Helper()
+	c := newVeloxSQLiteTraced(t, sink)
+	x := &veloxExec{c: c, reg: newHandleRegistry(), sink: sink}
+	results := make([]model.Result, len(prog))
+	for i, o := range prog {
+		sink.setOp(i)
+		results[i] = x.step(context.Background(), i, o)
+	}
+	return results
+}
+
 // RunVelox executes prog against a velox client and normalizes every op's
 // outcome into a model.Result, one per op index. It maintains the
 // handle↔db-id registry and injects the deterministic parity clock so that
@@ -51,8 +78,9 @@ func RunVelox(ctx context.Context, c *velox.Client, prog op.Program) ([]model.Re
 
 // veloxExec carries the per-program executor state.
 type veloxExec struct {
-	c   *velox.Client
-	reg *handleRegistry
+	c    *velox.Client
+	reg  *handleRegistry
+	sink *sqlSink // optional SQL-trace sink (nil when untraced)
 }
 
 // step applies one op and returns its normalized Result.

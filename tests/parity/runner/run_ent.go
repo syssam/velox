@@ -41,6 +41,34 @@ func NewEntSQLite(t testing.TB) *ent.Client {
 	return c
 }
 
+// newEntSQLiteTraced opens a fresh Ent client whose SQL is captured into sink
+// via the debug driver's log hook.
+func newEntSQLiteTraced(t testing.TB, sink *sqlSink) *ent.Client {
+	t.Helper()
+	db, err := sql.Open(sqliteDriverName, sqliteMemoryDSN())
+	require.NoError(t, err)
+	drv := entsql.OpenDB(entDialect, db)
+	c := ent.NewClient(ent.Driver(drv), ent.Log(sink.record), ent.Debug())
+	t.Cleanup(func() { _ = c.Close() })
+	require.NoError(t, c.Schema.Create(context.Background()))
+	return c
+}
+
+// runEntTraced opens a traced Ent client, runs prog while tagging each captured
+// statement with its op index, and returns the normalized results. ORM-free
+// entry point for the driver.
+func runEntTraced(t testing.TB, sink *sqlSink, prog op.Program) []model.Result {
+	t.Helper()
+	c := newEntSQLiteTraced(t, sink)
+	x := &entExec{c: c, reg: newHandleRegistry(), sink: sink}
+	results := make([]model.Result, len(prog))
+	for i, o := range prog {
+		sink.setOp(i)
+		results[i] = x.step(context.Background(), i, o)
+	}
+	return results
+}
+
 // RunEnt executes prog against an Ent client and normalizes every op's outcome
 // into a model.Result, one per op index. Same handle↔db-id registry, parity
 // clock, and normalization as RunVelox.
@@ -54,8 +82,9 @@ func RunEnt(ctx context.Context, c *ent.Client, prog op.Program) ([]model.Result
 }
 
 type entExec struct {
-	c   *ent.Client
-	reg *handleRegistry
+	c    *ent.Client
+	reg  *handleRegistry
+	sink *sqlSink // optional SQL-trace sink (nil when untraced)
 }
 
 func (x *entExec) step(ctx context.Context, idx int, o op.Op) model.Result {
