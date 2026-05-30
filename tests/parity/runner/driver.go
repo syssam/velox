@@ -219,6 +219,7 @@ func (r Report) String() string {
 		if len(o.EntDiff) > 0 {
 			fmt.Fprintf(&b, "   ent≠ref:   %s\n", formatMismatches(o.EntDiff))
 		}
+		writeValueTriples(&b, o.VeloxDiff, o.EntDiff)
 		writeSQL(&b, "velox SQL", o.VeloxSQL)
 		writeSQL(&b, "ent SQL  ", o.EntSQL)
 	}
@@ -246,6 +247,59 @@ func formatMismatches(ms []compare.Mismatch) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// writeValueTriples prints, per mismatched field, a one-line `ref / velox / ent`
+// value triple so a VeloxBug is instantly legible without mentally joining the
+// separate velox≠ref and ent≠ref lines. veloxDiff/entDiff are both diffed
+// against the reference, so each Mismatch's A is the reference value and B is the
+// ORM value; a field absent from a diff means that ORM matched the reference
+// (printed as "ref"). Fields are joined by (rowIndex, field) and emitted in a
+// stable order.
+func writeValueTriples(b *strings.Builder, veloxDiff, entDiff []compare.Mismatch) {
+	type key struct {
+		row   int
+		field string
+	}
+	refVal := map[key]any{}
+	veloxVal := map[key]any{}
+	entVal := map[key]any{}
+	var order []key
+	seen := map[key]bool{}
+
+	note := func(m compare.Mismatch, vals map[key]any) {
+		k := key{row: m.RowIndex, field: m.Field}
+		if !seen[k] {
+			seen[k] = true
+			order = append(order, k)
+		}
+		refVal[k] = m.A
+		vals[k] = m.B
+	}
+	for _, m := range veloxDiff {
+		note(m, veloxVal)
+	}
+	for _, m := range entDiff {
+		note(m, entVal)
+	}
+	if len(order) == 0 {
+		return
+	}
+
+	dump := func(vals map[key]any, k key) string {
+		if v, ok := vals[k]; ok {
+			return fmt.Sprintf("%v", v)
+		}
+		return "ref" // this ORM matched the reference for this field
+	}
+	for _, k := range order {
+		label := k.field
+		if k.row >= 0 {
+			label = fmt.Sprintf("row %d %s", k.row, k.field)
+		}
+		fmt.Fprintf(b, "   values [%s]: ref=%v / velox=%s / ent=%s\n",
+			label, refVal[k], dump(veloxVal, k), dump(entVal, k))
+	}
 }
 
 func writeSQL(b *strings.Builder, label string, stmts []string) {

@@ -12,10 +12,12 @@ import (
 )
 
 // crudEntProg mirrors crudJSONProg but uses SetPostLabels (JSON replace) instead
-// of AppendPostLabels. Ent's generated JSON-array APPEND is broken on SQLite —
-// it stores `labels` as a BLOB and then runs JSON_INSERT(labels, '$[#]', ?),
-// which SQLite rejects as "malformed JSON" (velox CASTs to TEXT first and
-// works). That genuine EntDivergent is surfaced by the curated three-way suite
+// of AppendPostLabels. Ent's generated JSON-array APPEND is broken on SQLite: it
+// runs JSON_INSERT(labels, '$[#]', ?), which SQLite rejects as "malformed JSON"
+// on the blob-stored JSON value (velox CASTs to TEXT first, then json_each, and
+// works). The labels column is declared json in both schemas; the value is
+// blob-stored because of the []byte bind param, not a column-type difference.
+// That genuine EntDivergent is surfaced by the curated three-way suite
 // (TestCuratedSuite_SQLite::json_append), not silenced. This executor sanity
 // test exercises the rest of ent's CRUD+JSON-replace path, which ent handles
 // correctly, so it validates the ent executor wiring without tripping over

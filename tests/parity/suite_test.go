@@ -16,9 +16,12 @@ import (
 //     default and the strongest assertion.
 //   - expectVeloxCorrect: velox must match the reference on every op (zero
 //     VeloxBugs and velox is never the outlier), but ent is allowed to diverge.
-//     This is used ONLY for the JSON-array-append case, where ent's generated
-//     SQLite SQL (JSON_INSERT on a BLOB-typed labels column) is genuinely broken
-//     while velox's (json_each over a CAST-to-TEXT value) is correct — a real
+//     This is used ONLY for the JSON-array-append case. The `labels` column is
+//     declared json in both schemas; the value is blob-stored because both ORMs
+//     bind it as a []byte param (no column-type asymmetry between them). The real
+//     differentiator is the append SQL: ent emits JSON_INSERT(labels, '$[#]', ?)
+//     which SQLite rejects ("malformed JSON") on the blob-stored JSON value,
+//     while velox emits CAST(labels AS TEXT) + json_each, which succeeds — a real
 //     EntDivergent the harness SURFACES rather than silences. The driver's SQL
 //     trace pinpoints the divergence; see README and the case comment.
 func TestCuratedSuite_SQLite(t *testing.T) {
@@ -114,11 +117,14 @@ func curatedPrograms() []progCase {
 			expect: expectAllPass,
 		},
 		{
-			// JSON append: AppendPostLabels. velox is correct; ent's SQLite
-			// JSON_INSERT on a BLOB-typed json column is broken (malformed
-			// JSON), so this is a documented EntDivergent surfaced by the
-			// harness — the same class as the Postgres JSON-append bug A3b
-			// exercises against Postgres.
+			// JSON append: AppendPostLabels. velox is correct; ent's append SQL
+			// — JSON_INSERT(labels, '$[#]', ?) — is rejected by SQLite as
+			// malformed JSON on the blob-stored JSON value, whereas velox's
+			// CAST-to-TEXT + json_each succeeds. (The labels column is declared
+			// json in both; it is blob-stored because of the []byte bind param,
+			// not a column-type difference.) This is a documented EntDivergent
+			// surfaced by the harness — the same class as the Postgres JSON-append
+			// bug A3b exercises against Postgres.
 			name: "json_append",
 			prog: op.Program{
 				op.CreateAuthor{Name: "A", Role: "user"},
