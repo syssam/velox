@@ -717,12 +717,26 @@ func pascal(s string) string {
 }
 
 // fkSymbolForEdge returns the FK constraint symbol for O2O/O2M/M2O edges,
-// matching the runtime fkSymbol() in graph_tables.go (BUG 1 fix).
+// matching the runtime fkSymbol() in graph_tables.go and Ent (entc/gen/graph.go).
+//
+// The name component is the ASSOC (non-inverse) edge's name. velox emits the FK
+// from the M2O / FK-owning side, but both graph_tables.go::fkSymbol and Ent build
+// the FK from the assoc edge, so the symbol must use the assoc name to agree. For
+// a bidirectional O2M/M2O pair the M2O side is inverse, and its assoc-edge name is
+// e.Inverse; a standalone M2O has no inverse and uses its own name. Without this,
+// a bidirectional FK got the M2O edge name (e.g. comments_posts_post) instead of
+// the assoc name (comments_posts_comments) — a silent drift from both the
+// graph_tables reference builder and Ent. StorageKey symbols are honored first;
+// e.StorageKey() already resolves to the assoc edge's key for inverse edges.
 func fkSymbolForEdge(e *gen.Edge, ownerTable, refTable string) string {
 	if k, _ := e.StorageKey(); k != nil && len(k.Symbols) == 1 {
 		return k.Symbols[0]
 	}
-	return fmt.Sprintf("%s_%s_%s", ownerTable, refTable, e.Name)
+	name := e.Name
+	if e.IsInverse() {
+		name = e.Inverse
+	}
+	return fmt.Sprintf("%s_%s_%s", ownerTable, refTable, name)
 }
 
 // m2mFKSymbols returns the two FK constraint symbols for an M2M join table,

@@ -974,9 +974,37 @@ func TestGenForeignKeysSchema_WithM2OEdge(t *testing.T) {
 	f := jen.NewFile("test")
 	f.Var().Id("fks").Op("=").Add(code)
 	output := f.GoString()
-	// Symbol format: {ownerTable}_{refTable}_{edgeName} (matches graph_tables.go fkSymbol)
+	// Symbol format: {ownerTable}_{refTable}_{assocEdgeName} (matches graph_tables.go
+	// fkSymbol and Ent). This M2O edge is standalone (no inverse), so the assoc name
+	// is the edge's own name "author". A bidirectional M2O (inverse side) instead
+	// uses e.Inverse — see TestGenForeignKeysSchema_BidiM2OUsesAssocName.
 	assert.Contains(t, output, "Symbol")
 	assert.Contains(t, output, "posts_users_author")
+}
+
+// TestGenForeignKeysSchema_BidiM2OUsesAssocName pins the assoc-name rule for the
+// bidirectional case — the one the standalone WithM2OEdge test never exercised, so
+// the M2O FK constraint symbol silently drifted from graph_tables.go and Ent. For a
+// bidirectional O2M/M2O pair the FK is emitted from the M2O (inverse) side, but the
+// symbol must use the assoc edge name (e.Inverse), not the M2O edge's own name.
+func TestGenForeignKeysSchema_BidiM2OUsesAssocName(t *testing.T) {
+	t.Parallel()
+	postType := createTestType("Post")
+	commentType := createTestType("Comment")
+	// Comment.post: the M2O / FK-owning side of Post --O2M--> Comment. It is an
+	// inverse edge whose assoc-edge name (on Post) is "comments".
+	edge := createM2OEdge("post", postType, "comments", "post_comments")
+	edge.Inverse = "comments"
+	commentType.Edges = []*gen.Edge{edge}
+	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
+
+	f := jen.NewFile("test")
+	f.Var().Id("fks").Op("=").Add(genForeignKeysSchema(commentType, schemaPkgPath))
+	code := f.GoString()
+	assert.Contains(t, code, "comments_posts_comments",
+		"bidirectional M2O FK symbol must use the assoc edge name (matches graph_tables.go + Ent)")
+	assert.NotContains(t, code, "comments_posts_post",
+		"must NOT use the M2O edge name — that was the silent drift from the reference builder and Ent")
 }
 
 func TestGenForeignKeysSchema_SkipsO2M(t *testing.T) {
