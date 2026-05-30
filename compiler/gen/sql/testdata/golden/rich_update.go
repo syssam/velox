@@ -229,11 +229,22 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 			}
 			switch d {
 			case dialect.MySQL:
-				u.Set(colCopy, sql.Expr(fmt.Sprintf("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ?)", colCopy), string(appendJSON)))
+				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ", colCopy))
+					b.Arg(string(appendJSON))
+					b.WriteString(")")
+				}))
 			case dialect.SQLite:
-				u.Set(colCopy, sql.Expr(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(?)))", colCopy), string(appendJSON)))
+				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(", colCopy))
+					b.Arg(string(appendJSON))
+					b.WriteString(")))")
+				}))
 			default:
-				u.Set(colCopy, sql.Expr(fmt.Sprintf("COALESCE(%s, '[]') || ?", colCopy), string(appendJSON)))
+				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("COALESCE(%s, '[]') || ", colCopy))
+					b.Arg(string(appendJSON))
+				}))
 			}
 		})
 	}
@@ -537,11 +548,22 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 			}
 			switch d {
 			case dialect.MySQL:
-				u.Set(colCopy, sql.Expr(fmt.Sprintf("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ?)", colCopy), string(appendJSON)))
+				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ", colCopy))
+					b.Arg(string(appendJSON))
+					b.WriteString(")")
+				}))
 			case dialect.SQLite:
-				u.Set(colCopy, sql.Expr(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(?)))", colCopy), string(appendJSON)))
+				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(", colCopy))
+					b.Arg(string(appendJSON))
+					b.WriteString(")))")
+				}))
 			default:
-				u.Set(colCopy, sql.Expr(fmt.Sprintf("COALESCE(%s, '[]') || ?", colCopy), string(appendJSON)))
+				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
+					b.WriteString(fmt.Sprintf("COALESCE(%s, '[]') || ", colCopy))
+					b.Arg(string(appendJSON))
+				}))
 			}
 		})
 	}

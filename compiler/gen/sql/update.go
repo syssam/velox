@@ -603,6 +603,29 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 	}
 }
 
+// jsonAppendSet emits `u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {...}))`
+// for a JSON array-append expression split around its single value placeholder.
+// prefix is a fmt.Sprintf template containing one %s for the column name;
+// suffix is a literal appended after the bound value. The value is written via
+// b.Arg() so the placeholder is dialect-correct ($N on Postgres, ? elsewhere) —
+// a literal "?" in a raw sql.Expr is not rewritten for Postgres and breaks.
+func jsonAppendSet(h gen.GeneratorHelper, prefix, suffix string) *jen.Statement {
+	return jen.Id("u").Dot("Set").Call(
+		jen.Id("colCopy"),
+		jen.Qual(h.SQLPkg(), "ExprFunc").Call(
+			jen.Func().Params(jen.Id("b").Op("*").Qual(h.SQLPkg(), "Builder")).BlockFunc(func(g *jen.Group) {
+				g.Id("b").Dot("WriteString").Call(
+					jen.Qual("fmt", "Sprintf").Call(jen.Lit(prefix), jen.Id("colCopy")),
+				)
+				g.Id("b").Dot("Arg").Call(jen.String().Call(jen.Id("appendJSON")))
+				if suffix != "" {
+					g.Id("b").Dot("WriteString").Call(jen.Lit(suffix))
+				}
+			}),
+		),
+	)
+}
+
 // genUpdateEdgesAndModifiers emits the code that appends EdgeSpecs to
 // spec.Edges.Add / spec.Edges.Clear based on the mutation edge state, handles
 // JSON append modifiers, and applies user modifiers. Mirrors Ent's generated
@@ -628,37 +651,24 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 						jen.Id("u").Dot("AddError").Call(jen.Qual("fmt", "Errorf").Call(jen.Lit("marshal append value for %q: %w"), jen.Id("colCopy"), jen.Id("err"))),
 						jen.Return(),
 					),
+					// The append value is bound via b.Arg(), which emits the
+					// dialect-correct placeholder ($N on Postgres, ? on
+					// MySQL/SQLite). A raw "?" inside sql.Expr is NOT rewritten
+					// for Postgres — it survives literally and is parsed as the
+					// jsonb key-existence operator, producing a syntax error.
 					jen.Switch(jen.Id("d")).Block(
 						jen.Case(jen.Qual(dialectPkg(), "MySQL")).Block(
-							jen.Id("u").Dot("Set").Call(
-								jen.Id("colCopy"),
-								jen.Qual(h.SQLPkg(), "Expr").Call(
-									jen.Qual("fmt", "Sprintf").Call(jen.Lit("JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ?)"), jen.Id("colCopy")),
-									jen.String().Call(jen.Id("appendJSON")),
-								),
-							),
+							jsonAppendSet(h, "JSON_MERGE_PRESERVE(COALESCE(%s, '[]'), ", ")"),
 						),
 						jen.Case(jen.Qual(dialectPkg(), "SQLite")).Block(
 							// SQLite has no JSON array concat operator. Build the merged
 							// array by unioning json_each over the existing column and the
 							// incoming value, then re-packing with json_group_array.
-							jen.Id("u").Dot("Set").Call(
-								jen.Id("colCopy"),
-								jen.Qual(h.SQLPkg(), "Expr").Call(
-									jen.Qual("fmt", "Sprintf").Call(jen.Lit("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(?)))"), jen.Id("colCopy")),
-									jen.String().Call(jen.Id("appendJSON")),
-								),
-							),
+							jsonAppendSet(h, "(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(", ")))"),
 						),
 						jen.Default().Block(
 							// PostgreSQL: jsonb || jsonb concatenates arrays.
-							jen.Id("u").Dot("Set").Call(
-								jen.Id("colCopy"),
-								jen.Qual(h.SQLPkg(), "Expr").Call(
-									jen.Qual("fmt", "Sprintf").Call(jen.Lit("COALESCE(%s, '[]') || ?"), jen.Id("colCopy")),
-									jen.String().Call(jen.Id("appendJSON")),
-								),
-							),
+							jsonAppendSet(h, "COALESCE(%s, '[]') || ", ""),
 						),
 					),
 				),
