@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"fmt"
 
 	"velox.test/parity/ent"
 	"velox.test/parity/model"
@@ -52,6 +53,13 @@ func (x *entExec) entCaptureCursors(ctx context.Context, orderOpts []ent.PostPag
 	conn, err := x.c.Post.Query().Paginate(ctx, nil, &window, nil, nil, orderOpts...)
 	if err != nil {
 		return nil, err
+	}
+	// If the capture page filled to the cap, the live set may exceed the window
+	// and the target handle's cursor could be silently missing — after/before
+	// would become nil and the real window would diverge with no error. Fail
+	// loudly instead of producing a wrong window.
+	if len(conn.Edges) >= captureWindow {
+		return nil, fmt.Errorf("parity: cursor capture page hit the %d-row cap; harness cannot recover cursors for >%d rows", captureWindow, captureWindow)
 	}
 	out := make(map[int]*ent.Cursor, len(conn.Edges))
 	for _, e := range conn.Edges {
