@@ -691,15 +691,26 @@ func TestFieldTypeCode(t *testing.T) {
 func TestDeleteAction(t *testing.T) {
 	t.Parallel()
 	t.Run("optional_edge_defaults_to_SetNull", func(t *testing.T) {
+		// A nullable (optional) FK with no explicit annotation defaults to SET NULL,
+		// matching Ent. Assert the RENDERED action — the prior non-nil check could
+		// not tell SetNull from any other action, leaving this default unpinned.
 		edge := &gen.Edge{Name: "profile", Optional: true}
-		code := deleteAction(edge)
-		require.NotNil(t, code)
+		rendered := fmt.Sprintf("%#v", deleteAction(edge))
+		assert.Contains(t, rendered, "schema.SetNull",
+			"optional/nullable FK defaults to SetNull (matches Ent)")
 	})
 
-	t.Run("required_edge_defaults_to_Cascade", func(t *testing.T) {
+	t.Run("required_edge_defaults_to_NoAction", func(t *testing.T) {
+		// A required (non-nullable) FK with no annotation defaults to NO ACTION,
+		// matching Ent — NOT Cascade. The prior subtest was misnamed
+		// ("..._to_Cascade") and only checked non-nil, so it asserted nothing and
+		// the wrong name went unnoticed.
 		edge := &gen.Edge{Name: "author", Optional: false}
-		code := deleteAction(edge)
-		require.NotNil(t, code)
+		rendered := fmt.Sprintf("%#v", deleteAction(edge))
+		assert.Contains(t, rendered, "schema.NoAction",
+			"required/non-nullable FK defaults to NoAction (matches Ent)")
+		assert.NotContains(t, rendered, "schema.Cascade",
+			"required FK must NOT default to Cascade")
 	})
 }
 
