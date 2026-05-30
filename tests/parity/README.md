@@ -102,9 +102,61 @@ A `VeloxBug` verdict on **any** dialect (velox ≠ reference while ent = referen
 is a real velox bug the harness is designed to catch — it fails the suite and CI
 rather than being silenced.
 
+## Generative testing
+
+Beyond the curated suite, the harness **synthesizes** programs and runs them
+through the same three-way driver, so it finds cases nobody wrote by hand.
+
+- **`gen.Build([]byte) op.Program`** is a pure function that consumes a byte
+  stream to make deterministic choices and emit a program. It is
+  **referentially valid by construction**: it tracks created handles per kind as
+  it emits and draws every ref only from existing handles of the right kind, so
+  any divergence the harness reports is a real bug, not a validity artifact. The
+  validity rules (enforced by `gen.Validate` and pinned by a 2000-iteration
+  random test) are:
+  - FK refs point to an existing earlier handle of the correct kind;
+  - tag names are unique (`Tag.name` is `UNIQUE`);
+  - a `CreateComment` FK parent and a pagination cursor anchor reference a
+    **live** (undeleted) post; a `DeletePost` never targets a live post that has
+    a comment (the `comments→posts` FK is `RESTRICT`);
+  - enum/range params come from valid domains only (`role`, `status`,
+    `view_count ∈ [0,1000]`, `first`/`last ∈ [0,20]` and never both,
+    `OrderBy` field = `view_count`).
+
+- **`TestGenerative_NoDivergence`** runs every build: 400 seeded programs
+  (`math/rand`, fixed seed → deterministic) through `RunParity` on SQLite. A
+  `VeloxBug` or `ReferenceSuspect` fails the test with the exact program printed
+  for repro. `EntDivergent` is tolerated (it documents an Ent-side defect).
+
+- **`FuzzParity`** is a native `testing.F` target: Go's coverage-guided fuzzer
+  generates byte streams, `gen.Build` turns each into a program, and a `VeloxBug`
+  or `ReferenceSuspect` fails the input — Go then **minimizes the failing
+  `[]byte` automatically** (no hand-rolled shrinker). Run locally:
+
+  ```bash
+  cd tests/parity
+  go run generate.go                              # regenerate clients first
+  go test -run x -fuzz FuzzParity -fuzztime 5m    # coverage-guided search
+  ```
+
+  When the fuzzer finds a failure it writes a **minimized reproducer** under
+  `tests/parity/testdata/fuzz/FuzzParity/`; that file is replayed on every
+  subsequent `go test` (the seed corpus also runs under a plain `go test`, no
+  `-fuzz` needed). Decode a reproducer by feeding its bytes back through
+  `gen.Build` and printing with `op.Format`. CI runs a bounded
+  `-fuzztime=60s` pass in the `fuzz` job on SQLite.
+
+The generative leg has already paid for itself: it surfaced two real velox
+JSON-array-append bugs (appending an empty slice, and appending onto a column a
+prior `SetLabels(nil)` left as the JSON scalar `null`, both injected a spurious
+`null` element on SQLite) — fixed in the codegen and pinned by the curated
+`json_append_empty_is_noop` / `json_set_empty_then_append` cases.
+
 ## Layout
 
 - `op/` — typed operation model and `Program`.
+- `gen/` — the byte-stream program builder (`Build`) and validity invariant
+  (`Validate`). Imports only `op` (no ORMs) — pinned by `architecture_test.go`.
 - `model/` — the reference oracle and normalized result types (`Value`, `Row`,
   `Ref`, `Result`, `PageInfo`).
 - `compare/` — structured `Diff`, error taxonomy, and verdict `Classify`.
