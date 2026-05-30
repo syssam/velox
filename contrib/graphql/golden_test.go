@@ -327,6 +327,83 @@ func TestGolden_SDL_FullSchema(t *testing.T) {
 	checkGoldenFile(t, filepath.Join("testdata", "golden", "schema.graphql"), sdl)
 }
 
+// =============================================================================
+// Pagination generator golden tests
+// =============================================================================
+//
+// Three codegen changes in this area landed without snapshot coverage:
+//   - receiver name unification (`typeReceiver` always returns `_m`)
+//   - `buildLast` removal (always pass nil to BuildXxxConnection)
+//   - multi-order branch with composite cursors + MultiCursorsPredicate
+//
+// These tests snapshot the emitted code so future regressions surface at
+// unit-test time, not only when a downstream regen catches them. Both
+// single-order and multi-order paths are covered.
+
+// goldenTestTypePaginationSingle returns a minimal User with single-order
+// pagination — exercises the most common pagination shape.
+func goldenTestTypePaginationSingle() (*Generator, *entgen.Type) {
+	userType := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+			{Name: "created_at", Type: &field.TypeInfo{Type: field.TypeTime}},
+		},
+		Annotations: map[string]any{
+			AnnotationName: Annotation{RelayConnection: true},
+		},
+	}
+	gen := newTestGeneratorWithConfig(Config{
+		ORMPackage:      "example.com/app/velox",
+		Package:         "velox",
+		RelayConnection: true,
+		Ordering:        true,
+		RelaySpec:       true,
+	}, userType)
+	return gen, userType
+}
+
+// goldenTestTypePaginationMulti returns the same User with MultiOrder
+// enabled — exercises the composite-cursor branch.
+func goldenTestTypePaginationMulti() (*Generator, *entgen.Type) {
+	userType := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+			{Name: "created_at", Type: &field.TypeInfo{Type: field.TypeTime}},
+		},
+		Annotations: map[string]any{
+			AnnotationName: Annotation{RelayConnection: true, MultiOrder: true},
+		},
+	}
+	gen := newTestGeneratorWithConfig(Config{
+		ORMPackage:      "example.com/app/velox",
+		Package:         "velox",
+		RelayConnection: true,
+		Ordering:        true,
+		RelaySpec:       true,
+	}, userType)
+	return gen, userType
+}
+
+func TestGolden_Pagination_Single(t *testing.T) {
+	t.Parallel()
+	g, userType := goldenTestTypePaginationSingle()
+	f := g.genEntityPagination(userType)
+	require.NotNil(t, f)
+	checkGoldenFile(t, filepath.Join("testdata", "golden", "pagination_single.go"), f.GoString())
+}
+
+func TestGolden_Pagination_Multi(t *testing.T) {
+	t.Parallel()
+	g, userType := goldenTestTypePaginationMulti()
+	f := g.genEntityPagination(userType)
+	require.NotNil(t, f)
+	checkGoldenFile(t, filepath.Join("testdata", "golden", "pagination_multi.go"), f.GoString())
+}
+
 func TestGolden_SDL_CreateInput(t *testing.T) {
 	t.Parallel()
 	g, userType := goldenTestType()

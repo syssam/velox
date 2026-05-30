@@ -507,6 +507,12 @@ func (g *Generator) genWhereInputEdgePredicateChecks(group *jen.Group, edge *gen
 			jen.Len(jen.Id("i").Dot(hasWithField)),
 		),
 		jen.For(jen.List(jen.Id("_"), jen.Id("w")).Op(":=").Range().Id("i").Dot(hasWithField)).Block(
+			// Skip nil elements — a JSON payload like `{"hasXxxWith":[null,{...}]}`
+			// is legal input but would nil-panic the `.p(...)` call below.
+			// Mirrors the same guard in the Or / And loops above.
+			jen.If(jen.Id("w").Op("==").Nil()).Block(
+				jen.Continue(),
+			),
 			jen.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("w").Dot("p").Call(jen.Id("depth").Op("+").Lit(1)),
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
@@ -813,6 +819,14 @@ func (g *Generator) skipFieldInWhereInput(t *gen.Type, fld *gen.Field) bool {
 // skipEdgeInWhereInput returns true if the edge should be skipped in WhereInput.
 func (g *Generator) skipEdgeInWhereInput(t *gen.Type, e *gen.Edge) bool {
 	if e.Type == nil {
+		return true
+	}
+	// Composite-ID targets have no single-column ID predicate to build
+	// `hasXxxWith` against. The SDL path skips them at schema_input.go; the
+	// Go path must skip them too so the emitted struct doesn't reference
+	// predicates that were never generated (which would cause a compile
+	// error in the per-entity predicate package).
+	if e.Type.HasCompositeID() {
 		return true
 	}
 	ann := g.getTypeAnnotation(e.Type)

@@ -2,14 +2,28 @@ package graphql
 
 import (
 	"bytes"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	entgen "github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/schema/field"
 )
+
+// mustParseGo asserts that the emitted Go source parses cleanly. Generator
+// tests that use only `assert.Contains` on the source string can miss compile
+// errors like undeclared `err` or `:=` re-declaration with no new LHS names —
+// the actual bugs that landed in NodeDescriptor codegen before this guard
+// existed.
+func mustParseGo(t *testing.T, src string) {
+	t.Helper()
+	_, err := parser.ParseFile(token.NewFileSet(), "generated.go", src, parser.AllErrors)
+	require.NoError(t, err, "generated Go must parse cleanly:\n%s", src)
+}
 
 // =============================================================================
 // graphqlTypeName Tests
@@ -1275,6 +1289,123 @@ func TestGenerator_GenEntityPagination_DelegatesToBuildConnection(t *testing.T) 
 			"belongs inside BuildUserConnection")
 }
 
+// TestPagination_MultiOrder_EmitsCompositeCursors pins the multi-order
+// generator path so secondary order keys are honored by BOTH the SQL
+// ORDER BY and the cursor predicate. Before this fix, multi-order mode
+// silently dropped cfg.Order[1:] in both Paginate (only Order[0] reached
+// ORDER BY) and BuildXxxConnection (cursorFn only captured Order[0]'s
+// value), producing duplicated rows between pages whenever the primary
+// order key had ties.
+//
+// What this regression-guards:
+//   - Paginate body iterates `cfg.Order` to apply per-entry q.Order(...).
+//   - Paginate body uses gqlrelay.MultiCursorsPredicate (not the
+//     single-field CursorsPredicate) when multi-order is active.
+//   - genModelBuildConnection's cursorFn produces a composite Cursor with
+//     Value: []any of len(order) when multi-order is active.
+//
+// If multi-order ever regresses to single-key behavior, callers using
+// `WithUserOrder([]*UserOrder{byName, byAge})` get silently wrong pages.
+func TestPagination_MultiOrder_EmitsCompositeCursors(t *testing.T) {
+	typ := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+			{Name: "age", Type: &field.TypeInfo{Type: field.TypeInt}},
+		},
+		Annotations: map[string]any{
+			AnnotationName: Annotation{MultiOrder: true},
+		},
+	}
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{typ},
+	}
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		ORMPackage:      "example/ent",
+		RelayConnection: true,
+		Ordering:        true,
+	})
+
+	// Paginate body — must iterate cfg.Order for ORDER BY and call
+	// MultiCursorsPredicate for the cursor branch.
+	pagFile := gen.genEntityPagination(typ)
+	var pagBuf bytes.Buffer
+	if err := pagFile.Render(&pagBuf); err != nil {
+		t.Fatalf("render paginate: %v", err)
+	}
+	pagCode := pagBuf.String()
+
+	assert.Contains(t, pagCode, "for _, o := range cfg.Order",
+		"multi-order Paginate must iterate cfg.Order to apply each ORDER BY term — "+
+			"single Order[0] application drops secondary keys and produces wrong pages on ties")
+	assert.Contains(t, pagCode, "gqlrelay.MultiCursorsPredicate",
+		"multi-order Paginate must use gqlrelay.MultiCursorsPredicate for composite "+
+			"row-value cursor comparison — CursorsPredicate alone only handles single-field cursors")
+	assert.Contains(t, pagCode, "MultiCursorsOptions",
+		"multi-order Paginate must populate gqlrelay.MultiCursorsOptions with Fields/Directions slices")
+	// Negative: must NOT fall back to single-field CursorsPredicate as the
+	// only cursor path. (It's still emitted in the empty-fields fallback,
+	// so we only check that MultiCursorsPredicate is preferred when fields exist.)
+	assert.NotContains(t, pagCode, "cursorGrp.Var().Id(\"orderField\")",
+		"multi-order Paginate must not declare the single-field orderField variable")
+
+	// BuildUserConnection — cursorFn must produce composite cursors.
+	typesFile := gen.genModelPaginationTypes([]*entgen.Type{typ})
+	var typesBuf bytes.Buffer
+	if err := typesFile.Render(&typesBuf); err != nil {
+		t.Fatalf("render pagination types: %v", err)
+	}
+	typesCode := typesBuf.String()
+
+	assert.Contains(t, typesCode, "values := make([]any, 0, len(order))",
+		"multi-order cursorFn must build a []any cursor value spanning all order fields — "+
+			"single-field Value would mismatch MultiCursorsOptions.Fields and fail at decode")
+	assert.Contains(t, typesCode, "o.Field.ToCursor(n).Value",
+		"multi-order cursorFn must collect each order field's ToCursor(n).Value into the composite slice")
+}
+
+// TestPagination_SingleOrder_PreservesSingleFieldCursor guards the inverse
+// invariant: when multi-order is NOT enabled, the generator continues to
+// emit the single-field CursorsPredicate path. A regression that always
+// emits MultiCursorsPredicate (even when the entity has a single Order
+// pointer) would cause runtime errors because cursor.Value would not be
+// []any.
+func TestPagination_SingleOrder_PreservesSingleFieldCursor(t *testing.T) {
+	typ := &entgen.Type{
+		Name: "User",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{},
+	}
+	g := &entgen.Graph{
+		Config: &entgen.Config{Package: "example/ent"},
+		Nodes:  []*entgen.Type{typ},
+	}
+	gen := NewGenerator(g, Config{
+		Package:         "graphql",
+		ORMPackage:      "example/ent",
+		RelayConnection: true,
+		Ordering:        true,
+	})
+
+	pagFile := gen.genEntityPagination(typ)
+	var pagBuf bytes.Buffer
+	if err := pagFile.Render(&pagBuf); err != nil {
+		t.Fatalf("render paginate: %v", err)
+	}
+	pagCode := pagBuf.String()
+
+	assert.Contains(t, pagCode, "gqlrelay.CursorsPredicate(",
+		"single-order Paginate must still use CursorsPredicate — that's the single-field path")
+	assert.NotContains(t, pagCode, "gqlrelay.MultiCursorsPredicate",
+		"single-order Paginate must NOT use MultiCursorsPredicate — cursor.Value is scalar, not []any")
+}
+
 // TestPagination_OnlyFilterOption_NoPredicate pins the 2026-04-27 collapse
 // of the dual pagination options: WithXxxPredicate was removed, leaving
 // WithXxxFilter as the SOLE public entry point for predicate threading.
@@ -1796,6 +1927,53 @@ func TestGenEntityNode_WithNodeDescriptor(t *testing.T) {
 	assert.Contains(t, code2, "NodeDescriptor")
 	assert.Contains(t, code2, `"name"`)
 	assert.Contains(t, code2, `"email"`)
+	// Regression guard: previously the fields loop emitted `buf, err = ...`
+	// without declaring err in scope, so this generator silently produced
+	// uncompilable Go for any entity with ≥1 field. Parsing the output
+	// catches that class of bug without a full integration build.
+	mustParseGo(t, code2)
+}
+
+// TestGenEntityNode_NodeDescriptor_MultiEdgeCompiles is a focused regression
+// guard for the second NodeDescriptor bug: emitting `ids, err := ...` for
+// every edge produced "no new variables on left side of :=" on edge[1+]
+// because both names already existed in the function scope. The fix block-
+// scopes each edge so the `:=` declares fresh locals. This test makes sure a
+// type with multiple edges still parses.
+func TestGenEntityNode_NodeDescriptor_MultiEdgeCompiles(t *testing.T) {
+	postType := &entgen.Type{
+		Name: "Post",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "title", Type: &field.TypeInfo{Type: field.TypeString}},
+		},
+		Annotations: map[string]any{},
+	}
+	// Two edges with distinct names so each block-scope produces a fresh
+	// `ids` decl. Edge targets minimal — we only exercise codegen shape.
+	tagType := &entgen.Type{
+		Name:        "Tag",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Annotations: map[string]any{},
+	}
+	commentType := &entgen.Type{
+		Name:        "Comment",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Annotations: map[string]any{},
+	}
+	postType.Edges = []*entgen.Edge{
+		{Name: "tags", Type: tagType},
+		{Name: "comments", Type: commentType},
+	}
+
+	gen := newTestGeneratorWithConfig(Config{
+		ORMPackage:     "example.com/app/velox",
+		Package:        "velox",
+		RelaySpec:      true,
+		NodeDescriptor: true,
+	}, postType, tagType, commentType)
+	f := gen.genEntityNode(postType)
+	mustParseGo(t, f.GoString())
 }
 
 func TestGenNodeShared_WithNodeDescriptor(t *testing.T) {

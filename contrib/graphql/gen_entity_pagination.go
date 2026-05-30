@@ -14,7 +14,10 @@ import (
 	"github.com/syssam/velox/compiler/gen"
 )
 
-const gqlrelayPkg = "github.com/syssam/velox/contrib/graphql/gqlrelay"
+const (
+	gqlrelayPkg   = "github.com/syssam/velox/contrib/graphql/gqlrelay"
+	dialectSQLPkg = "github.com/syssam/velox/dialect/sql"
+)
 
 // genEntityPagination generates a Paginate method on the query/ package query type.
 // Direct style (like Ent): apply order → apply cursors → count → fetch → build connection.
@@ -34,17 +37,37 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 	f.ImportName("context", "context")
 	f.ImportName("fmt", "fmt")
 	f.ImportName(gqlrelayPkg, "gqlrelay")
-	f.ImportName("github.com/syssam/velox/dialect/sql", "sql")
+	f.ImportName(dialectSQLPkg, "sql")
 	f.ImportName(entityPkg, "entity")
 	f.ImportName(subEntityPkg, g.entityPkgName(t))
 
 	typeName := g.graphqlTypeName(t)
 	queryName := t.QueryName()
+	multiOrder := g.hasMultiOrder(t)
 
 	// Pagination types are now in entity/ package.
 	connName := typeName + "Connection"
 	optName := typeName + "PaginateOption"
-	pagerCfg := typeName + "PagerConfig"
+	pagerConfigName := typeName + "PagerConfig"
+
+	// orderExpr / orderPresent generate the per-call expression for
+	// "the primary *XxxOrder" given cfg.Order, which is either *XxxOrder
+	// (single) or []*XxxOrder (multi). For multi-order, the primary entry
+	// drives the default sqlDir reversal direction. Composite ORDER BY and
+	// composite cursor predicates iterate over the full slice — see the
+	// `multiOrder` branches below.
+	orderExpr := func() *jen.Statement {
+		if multiOrder {
+			return jen.Id("cfg").Dot("Order").Index(jen.Lit(0))
+		}
+		return jen.Id("cfg").Dot("Order")
+	}
+	orderPresent := func() *jen.Statement {
+		if multiOrder {
+			return jen.Len(jen.Id("cfg").Dot("Order")).Op(">").Lit(0)
+		}
+		return jen.Id("cfg").Dot("Order").Op("!=").Nil()
+	}
 
 	// idColumn is the Go identifier for the entity's ID field constant in
 	// the per-entity predicate package (e.g., `todo.FieldID` or
@@ -76,7 +99,7 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		)
 
 		// Apply options
-		grp.Id("cfg").Op(":=").Op("&").Qual(entityPkg, pagerCfg).Values()
+		grp.Id("cfg").Op(":=").Op("&").Qual(entityPkg, pagerConfigName).Values()
 		grp.For(jen.List(jen.Id("_"), jen.Id("opt")).Op(":=").Range().Id("opts")).Block(
 			jen.Id("opt").Call(jen.Id("cfg")),
 		)
@@ -112,50 +135,117 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		// Cursor predicates (below) still use the NATURAL direction because
 		// cursors are issued against natural display order.
 		grp.Var().Id("sqlDir").Qual(gqlrelayPkg, "OrderDirection").Op("=").Qual(gqlrelayPkg, "OrderDirectionAsc")
-		grp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).Block(
-			jen.Id("sqlDir").Op("=").Id("cfg").Dot("Order").Dot("Direction"),
+		grp.If(orderPresent().Op("&&").Add(orderExpr()).Dot("Field").Op("!=").Nil()).Block(
+			jen.Id("sqlDir").Op("=").Add(orderExpr()).Dot("Direction"),
 		)
 		grp.If(jen.Id("last").Op("!=").Nil()).Block(
 			jen.Id("sqlDir").Op("=").Id("sqlDir").Dot("Reverse").Call(),
 		)
 
-		// Apply order — use query builder methods directly (same package).
-		grp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).BlockFunc(func(orderGrp *jen.Group) {
-			orderGrp.Id("q").Dot("Order").Call(
-				jen.Qual("github.com/syssam/velox/dialect/sql", "OrderByField").Call(
-					jen.Id("cfg").Dot("Order").Dot("Field").Dot("Column"),
-					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
-				).Dot("ToFunc").Call(),
-			)
-			orderGrp.Id("q").Dot("Order").Call(
-				jen.Qual("github.com/syssam/velox/dialect/sql", "OrderByField").Call(
+		// Apply ORDER BY. Single-order: primary field (if any) + ID tiebreak.
+		// Multi-order: iterate every cfg.Order entry, each in its own ORDER BY
+		// term (flipped under `last`), then ID tiebreak with the PRIMARY
+		// direction (multiPredicate ties ID-direction to the primary order).
+		if multiOrder {
+			grp.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("cfg").Dot("Order")).BlockFunc(func(orderGrp *jen.Group) {
+				orderGrp.If(jen.Id("o").Op("==").Nil().Op("||").Id("o").Dot("Field").Op("==").Nil()).Block(jen.Continue())
+				orderGrp.Id("dir").Op(":=").Id("o").Dot("Direction")
+				orderGrp.If(jen.Id("last").Op("!=").Nil()).Block(
+					jen.Id("dir").Op("=").Id("dir").Dot("Reverse").Call(),
+				)
+				orderGrp.Id("q").Dot("Order").Call(
+					jen.Qual(dialectSQLPkg, "OrderByField").Call(
+						jen.Id("o").Dot("Field").Dot("Column"),
+						jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("dir")),
+					).Dot("ToFunc").Call(),
+				)
+			})
+			grp.Id("q").Dot("Order").Call(
+				jen.Qual(dialectSQLPkg, "OrderByField").Call(
 					jen.Qual(subEntityPkg, idColumn),
 					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
 				).Dot("ToFunc").Call(),
 			)
-		}).Else().Block(
-			jen.Id("q").Dot("Order").Call(
-				jen.Qual("github.com/syssam/velox/dialect/sql", "OrderByField").Call(
-					jen.Qual(subEntityPkg, idColumn),
-					jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
-				).Dot("ToFunc").Call(),
-			),
-		)
+		} else {
+			grp.If(orderPresent().Op("&&").Add(orderExpr()).Dot("Field").Op("!=").Nil()).BlockFunc(func(orderGrp *jen.Group) {
+				orderGrp.Id("q").Dot("Order").Call(
+					jen.Qual(dialectSQLPkg, "OrderByField").Call(
+						orderExpr().Dot("Field").Dot("Column"),
+						jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
+					).Dot("ToFunc").Call(),
+				)
+				orderGrp.Id("q").Dot("Order").Call(
+					jen.Qual(dialectSQLPkg, "OrderByField").Call(
+						jen.Qual(subEntityPkg, idColumn),
+						jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
+					).Dot("ToFunc").Call(),
+				)
+			}).Else().Block(
+				jen.Id("q").Dot("Order").Call(
+					jen.Qual(dialectSQLPkg, "OrderByField").Call(
+						jen.Qual(subEntityPkg, idColumn),
+						jen.Qual(gqlrelayPkg, "DirectionOrderTerm").Call(jen.Id("sqlDir")),
+					).Dot("ToFunc").Call(),
+				),
+			)
+		}
 
-		// Apply cursor predicates — using the NATURAL direction (cursors
-		// are issued against natural display order).
+		// Apply cursor predicates — NATURAL direction (cursors are issued
+		// against natural display order). Single-order uses CursorsPredicate
+		// (composite (orderField, id)). Multi-order uses MultiCursorsPredicate
+		// for true composite (orderField₀, orderField₁, …, id) row-value
+		// comparison so secondary order keys are honored by the cursor.
 		grp.If(jen.Id("after").Op("!=").Nil().Op("||").Id("before").Op("!=").Nil()).BlockFunc(func(cursorGrp *jen.Group) {
-			cursorGrp.Var().Id("orderField").String()
-			cursorGrp.Var().Id("orderDir").Qual(gqlrelayPkg, "OrderDirection").Op("=").Qual(gqlrelayPkg, "OrderDirectionAsc")
-			cursorGrp.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).Block(
-				jen.Id("orderField").Op("=").Id("cfg").Dot("Order").Dot("Field").Dot("Column"),
-				jen.Id("orderDir").Op("=").Id("cfg").Dot("Order").Dot("Direction"),
-			)
-			cursorGrp.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Qual(gqlrelayPkg, "CursorsPredicate").Call(
-				jen.Id("after"), jen.Id("before"), jen.Qual(subEntityPkg, idColumn), jen.Id("orderField"), jen.Id("orderDir"),
-			)).Block(
-				jen.Id("q").Dot("Where").Call(jen.Id("p")),
-			)
+			if multiOrder {
+				cursorGrp.Id("fields").Op(":=").Make(jen.Index().String(), jen.Lit(0), jen.Len(jen.Id("cfg").Dot("Order")))
+				cursorGrp.Id("directions").Op(":=").Make(jen.Index().Qual(gqlrelayPkg, "OrderDirection"), jen.Lit(0), jen.Len(jen.Id("cfg").Dot("Order")))
+				cursorGrp.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("cfg").Dot("Order")).Block(
+					jen.If(jen.Id("o").Op("==").Nil().Op("||").Id("o").Dot("Field").Op("==").Nil()).Block(jen.Continue()),
+					jen.Id("fields").Op("=").Append(jen.Id("fields"), jen.Id("o").Dot("Field").Dot("Column")),
+					jen.Id("directions").Op("=").Append(jen.Id("directions"), jen.Id("o").Dot("Direction")),
+				)
+				cursorGrp.Var().Id("idDir").Qual(gqlrelayPkg, "OrderDirection").Op("=").Qual(gqlrelayPkg, "OrderDirectionAsc")
+				cursorGrp.If(jen.Len(jen.Id("directions")).Op(">").Lit(0)).Block(
+					jen.Id("idDir").Op("=").Id("directions").Index(jen.Lit(0)),
+				)
+				cursorGrp.If(jen.Len(jen.Id("fields")).Op(">").Lit(0)).BlockFunc(func(multiGrp *jen.Group) {
+					multiGrp.List(jen.Id("preds"), jen.Id("err")).Op(":=").Qual(gqlrelayPkg, "MultiCursorsPredicate").Call(
+						jen.Id("after"), jen.Id("before"),
+						jen.Op("&").Qual(gqlrelayPkg, "MultiCursorsOptions").Values(jen.Dict{
+							jen.Id("FieldID"):     jen.Qual(subEntityPkg, idColumn),
+							jen.Id("DirectionID"): jen.Id("idDir"),
+							jen.Id("Fields"):      jen.Id("fields"),
+							jen.Id("Directions"):  jen.Id("directions"),
+						}),
+					)
+					multiGrp.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Nil(), jen.Id("err")),
+					)
+					multiGrp.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Id("preds")).Block(
+						jen.Id("q").Dot("Where").Call(jen.Id("p")),
+					)
+				}).Else().BlockFunc(func(idOnly *jen.Group) {
+					// No usable order entries: fall back to ID-only cursor
+					// (matches the single-order empty-orderField branch).
+					idOnly.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Qual(gqlrelayPkg, "CursorsPredicate").Call(
+						jen.Id("after"), jen.Id("before"), jen.Qual(subEntityPkg, idColumn), jen.Lit(""), jen.Id("idDir"),
+					)).Block(
+						jen.Id("q").Dot("Where").Call(jen.Id("p")),
+					)
+				})
+			} else {
+				cursorGrp.Var().Id("orderField").String()
+				cursorGrp.Var().Id("orderDir").Qual(gqlrelayPkg, "OrderDirection").Op("=").Qual(gqlrelayPkg, "OrderDirectionAsc")
+				cursorGrp.If(orderPresent().Op("&&").Add(orderExpr()).Dot("Field").Op("!=").Nil()).Block(
+					jen.Id("orderField").Op("=").Add(orderExpr()).Dot("Field").Dot("Column"),
+					jen.Id("orderDir").Op("=").Add(orderExpr()).Dot("Direction"),
+				)
+				cursorGrp.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Qual(gqlrelayPkg, "CursorsPredicate").Call(
+					jen.Id("after"), jen.Id("before"), jen.Qual(subEntityPkg, idColumn), jen.Id("orderField"), jen.Id("orderDir"),
+				)).Block(
+					jen.Id("q").Dot("Where").Call(jen.Id("p")),
+				)
+			}
 		})
 
 		// Apply limit (+1 probe row for hasNext/hasPrev detection).
@@ -195,13 +285,11 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		})
 
 		// Delegate assembly to entity.BuildXxxConnection — the SAME helper
-		// used by edge-resolver fast paths. For backward pagination we pass
-		// last=nil because we've already trimmed and reversed; otherwise the
-		// helper would re-trim and re-reverse. HasPreviousPage is set below.
-		grp.Var().Id("buildLast").Op("*").Int()
-		grp.If(jen.Id("last").Op("==").Nil()).Block(
-			jen.Id("buildLast").Op("=").Id("last"),
-		)
+		// used by edge-resolver fast paths. We always pass last=nil because
+		// the backward branch above has already trimmed the probe row and
+		// reversed `nodes` to natural display order; passing the real `last`
+		// would make the helper re-trim and re-reverse. HasPreviousPage is
+		// restored below from the locally-tracked flag.
 		grp.Id("conn").Op(":=").Qual(entityPkg, "Build"+connName).Call(
 			jen.Id("nodes"),
 			jen.Id("totalCount"),
@@ -209,7 +297,7 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Id("after"),
 			jen.Id("first"),
 			jen.Id("before"),
-			jen.Id("buildLast"),
+			jen.Nil(),
 		)
 		grp.If(jen.Id("backwardHasPrev")).Block(
 			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
@@ -233,7 +321,7 @@ func (g *Generator) isOrderableField(field *gen.Field) bool {
 		}
 		return true
 	}
-	return field.IsTime() || field.IsInt() || field.IsInt64() || field.IsBool() || field.IsEnum() || field.Type.Type.Float()
+	return field.IsTime() || field.IsInt() || field.IsInt64() || field.IsBool() || field.IsEnum() || field.IsFloat()
 }
 
 // orderableFields returns the orderable fields for a type, filtering out skipped fields.
@@ -248,23 +336,14 @@ func (g *Generator) orderableFields(t *gen.Type) []*gen.Field {
 	return result
 }
 
-// typeReceiver generates a receiver name for a type following Ent's convention.
-func typeReceiver(name string) string {
-	s := toSnakeCase(name)
-	parts := strings.Split(s, "_")
-
-	var r strings.Builder
-	for _, part := range parts {
-		if part != "" {
-			r.WriteByte(part[0])
-		}
-	}
-
-	result := r.String()
-	if result == "" {
-		return strings.ToLower(name[:1])
-	}
-	return result
+// typeReceiver returns the receiver name for generated methods on a type.
+// Matches Ent's convention (Type.Receiver in entc/gen/type.go): always "_m".
+// The leading underscore guarantees no collision with Go keywords, predeclared
+// identifiers, or imported package names — sidestepping bugs like the
+// MarketplaceAppPermission case where snake-case initials spelled "map".
+// The name argument is retained for API stability but ignored.
+func typeReceiver(_ string) string {
+	return "_m"
 }
 
 // genPaginationShared generates shared pagination type aliases for the entity/ package.
@@ -355,8 +434,6 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 		jen.Id("PageInfo").Qual(gqlrelayPkg, "PageInfo").Tag(map[string]string{"json": "pageInfo"}),
 		jen.Id("TotalCount").Int().Tag(map[string]string{"json": "totalCount"}),
 	)
-	f.Line()
-
 	f.Line()
 
 	// --- PaginateOption type ---
@@ -646,15 +723,6 @@ func (g *Generator) genPaginatableInterface(f *jen.File, t *gen.Type) {
 	)
 }
 
-// genRootPaginationHelpers generates root-package helpers for pagination
-// (WithXxxOrder, WithXxxFilter convenience re-exports).
-// Returns nil when no helpers are needed (@goModel points directly to entity/).
-func (g *Generator) genRootPaginationHelpers(_ []*gen.Type) *jen.File {
-	// @goModel directives point directly to entity/ sub-package.
-	// No root re-exports needed.
-	return nil
-}
-
 // genModelBuildConnection emits BuildXxxConnection — the shared in-memory
 // assembly helper used by both the slow path (full Paginate with fresh DB
 // query) and the fast path (edge resolvers reusing eager-loaded edges).
@@ -733,38 +801,52 @@ func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, 
 			jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").True(),
 		)
 
-		// Resolve the cursor-generation function ONCE outside the edge
-		// loop. Before this hoist, the loop had 3 nil checks per iteration
-		// (order/order.Field/order.Field.ToCursor) which predictably
-		// short-circuit to the same branch across all edges — branch
-		// prediction handles it but the code is cleaner this way, and
-		// matches Ent's pager.toCursor abstraction. Also critical for
-		// the `last` handling below — we index backward through the
-		// same function.
-		var orderExpr *jen.Statement
-		if multiOrder {
-			orderExpr = jen.Id("order").Index(jen.Lit(0))
-		} else {
-			orderExpr = jen.Id("order")
-		}
-		var orderPresent *jen.Statement
-		if multiOrder {
-			orderPresent = jen.Len(jen.Id("order")).Op(">").Lit(0)
-		} else {
-			orderPresent = jen.Id("order").Op("!=").Nil()
-		}
+		// Resolve the cursor-generation function ONCE outside the edge loop.
+		// Hoisted out for clarity and to keep the `last`-branch indexing
+		// identical to the forward branch (the function is the only thing
+		// that varies, and it's resolved up front).
+		//
+		// Single-order: cursor is whatever order.Field.ToCursor returns —
+		// gqlrelay.Cursor{ID, Value: <scalar>}.
+		//
+		// Multi-order: cursor is composite — gqlrelay.Cursor{ID, Value: []any}
+		// where Value[i] = order[i].Field.ToCursor(node).Value. This matches
+		// the MultiCursorsOptions.Fields ordering used by the Paginate body's
+		// cursor predicate, so encode and decode stay aligned.
 		grp.Var().Id("cursorFn").Func().Params(jen.Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor")
-		grp.If(
-			orderPresent.Op("&&").Add(orderExpr.Clone().Dot("Field")).Op("!=").Nil().Op("&&").Add(orderExpr.Clone().Dot("Field").Dot("ToCursor")).Op("!=").Nil(),
-		).Block(
-			jen.Id("cursorFn").Op("=").Add(orderExpr.Clone()).Dot("Field").Dot("ToCursor"),
-		).Else().Block(
-			jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
-				jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
-					jen.Id("ID"): jen.Id("n").Dot(idField),
-				})),
-			),
-		)
+		if multiOrder {
+			grp.If(jen.Len(jen.Id("order")).Op(">").Lit(0)).Block(
+				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+					jen.Id("values").Op(":=").Make(jen.Index().Any(), jen.Lit(0), jen.Len(jen.Id("order"))),
+					jen.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("order")).Block(
+						jen.If(jen.Id("o").Op("==").Nil().Op("||").Id("o").Dot("Field").Op("==").Nil().Op("||").Id("o").Dot("Field").Dot("ToCursor").Op("==").Nil()).Block(jen.Continue()),
+						jen.Id("values").Op("=").Append(jen.Id("values"), jen.Id("o").Dot("Field").Dot("ToCursor").Call(jen.Id("n")).Dot("Value")),
+					),
+					jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
+						jen.Id("ID"):    jen.Id("n").Dot(idField),
+						jen.Id("Value"): jen.Id("values"),
+					})),
+				),
+			).Else().Block(
+				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+					jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
+						jen.Id("ID"): jen.Id("n").Dot(idField),
+					})),
+				),
+			)
+		} else {
+			grp.If(
+				jen.Id("order").Op("!=").Nil().Op("&&").Id("order").Dot("Field").Op("!=").Nil().Op("&&").Id("order").Dot("Field").Dot("ToCursor").Op("!=").Nil(),
+			).Block(
+				jen.Id("cursorFn").Op("=").Id("order").Dot("Field").Dot("ToCursor"),
+			).Else().Block(
+				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+					jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
+						jen.Id("ID"): jen.Id("n").Dot(idField),
+					})),
+				),
+			)
+		}
 
 		// Build edges. For `last != nil`, we index backward through the
 		// input slice WITHOUT mutating it — nodes may be pointer-shared

@@ -595,14 +595,6 @@ func (g *Generator) Generate(ctx context.Context) error {
 					}
 					return nil
 				})
-				// Root re-exports WithXxxOrder/WithXxxFilter for resolver convenience.
-				// Type aliases removed — @goModel points directly to entity/.
-				errg.Go(func() error {
-					if f := g.genRootPaginationHelpers(relayNodes); f != nil {
-						return g.writeFileSubdir(ctx, f, "", "gql_pagination.go")
-					}
-					return nil
-				})
 			}
 		}
 

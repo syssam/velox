@@ -776,7 +776,7 @@ type Query {
     """
     Ordering options for Users returned from the connection.
     """
-    orderBy: UserOrder
+    orderBy: [UserOrder!]
 
     """
     Filtering options for Users returned from the connection.

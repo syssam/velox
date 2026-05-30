@@ -118,6 +118,16 @@ func (g *Generator) filterEdges(edges []*gen.Edge, skip SkipMode) []*gen.Edge {
 
 // filterFields filters out fields that should not be included in the GraphQL schema.
 // Fields with SkipType are excluded from all GraphQL surfaces (not just the type itself).
+//
+// NOTE: this is field-level semantics; it differs from *entity*-level SkipType.
+// At the entity level, `Skip(SkipType)` deliberately preserves WhereInput so
+// the PII / projection-type pattern works (a sensitive entity can be hidden
+// from the output graph while still being filterable through a foreign-key
+// edge). At the field level, however, a hidden field has no addressable
+// representation in any input type either — so `Skip(SkipType)` on a field
+// also removes it from WhereInput, OrderBy, and mutation inputs. Use
+// `Skip(SkipWhereInput)` alone if you only want to suppress WhereInput.
+//
 // Equivalent to Ent's filterFields function.
 func (g *Generator) filterFields(fields []*gen.Field, skip SkipMode) []*gen.Field {
 	filteredFields := make([]*gen.Field, 0, len(fields))

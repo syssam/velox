@@ -64,52 +64,57 @@ func (g *Generator) genEntityNodeDescriptor(f *jen.File, t *gen.Type) {
 			jen.Id("Edges"):  jen.Make(jen.Index().Op("*").Qual(gqlrelayPkg, "EdgeDescriptor"), jen.Lit(0), jen.Lit(len(edges))),
 		})
 
-		// Marshal each field value to JSON
-		if len(fields) > 0 {
-			grp.Var().Id("buf").Index().Byte()
-			for _, fd := range fields {
-				fieldName := pascal(fd.Name)
-				grp.List(jen.Id("buf"), jen.Id("err")).Op("=").Qual("encoding/json", "Marshal").Call(
-					jen.Id("e").Dot(fieldName),
-				)
-				grp.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
-						jen.Lit("marshal field "+fd.Name+": %w"), jen.Id("err"),
-					)),
-				)
-				grp.Id("node").Dot("Fields").Op("=").Append(
-					jen.Id("node").Dot("Fields"),
-					jen.Op("&").Qual(gqlrelayPkg, "FieldDescriptor").Values(jen.Dict{
-						jen.Id("Name"):  jen.Lit(fd.Name),
-						jen.Id("Type"):  jen.Lit(fd.Type.String()),
-						jen.Id("Value"): jen.String().Call(jen.Id("buf")),
-					}),
-				)
+		// Marshal each field value to JSON. Declare `buf, err` once with `:=`
+		// on the first iteration; subsequent iterations reuse them via `=` so
+		// repeated `:=` doesn't trip Go's "no new variables on left" rule.
+		for i, fd := range fields {
+			fieldName := pascal(fd.Name)
+			marshalCall := jen.Qual("encoding/json", "Marshal").Call(jen.Id("e").Dot(fieldName))
+			if i == 0 {
+				grp.List(jen.Id("buf"), jen.Id("err")).Op(":=").Add(marshalCall)
+			} else {
+				grp.List(jen.Id("buf"), jen.Id("err")).Op("=").Add(marshalCall)
 			}
+			grp.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("marshal field "+fd.Name+": %w"), jen.Id("err"),
+				)),
+			)
+			grp.Id("node").Dot("Fields").Op("=").Append(
+				jen.Id("node").Dot("Fields"),
+				jen.Op("&").Qual(gqlrelayPkg, "FieldDescriptor").Values(jen.Dict{
+					jen.Id("Name"):  jen.Lit(fd.Name),
+					jen.Id("Type"):  jen.Lit(fd.Type.String()),
+					jen.Id("Value"): jen.String().Call(jen.Id("buf")),
+				}),
+			)
 		}
 
-		// Load edge IDs
+		// Load edge IDs. Each iteration scopes `ids, err` in its own block so
+		// edges with heterogeneous ID types (e.g., int-keyed User + uuid-keyed
+		// Post on the same entity) get fresh `:=` declarations and the
+		// generator doesn't need to know the cross-edge ID-type compatibility.
 		for _, e := range edges {
 			edgeName := pascal(e.Name)
 			grp.Id("edge"+edgeName).Op(":=").Op("&").Qual(gqlrelayPkg, "EdgeDescriptor").Values(jen.Dict{
 				jen.Id("Name"): jen.Lit(e.Name),
 				jen.Id("Type"): jen.Lit(e.Type.Name),
 			})
-			// Use QueryXxx().IDs(ctx) to load edge IDs
-			grp.List(jen.Id("ids"), jen.Id("err")).Op(":=").Id("e").Dot("Query" + edgeName).Call().Dot("IDs").Call(jen.Id("ctx"))
-			grp.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Id("err")),
-			)
-			// Convert to []any for the descriptor
-			grp.Id("edgeIDs").Op(":=").Make(jen.Index().Any(), jen.Len(jen.Id("ids")))
-			grp.For(jen.List(jen.Id("i"), jen.Id("v")).Op(":=").Range().Id("ids")).Block(
-				jen.Id("edgeIDs").Index(jen.Id("i")).Op("=").Id("v"),
-			)
-			grp.Id("edge" + edgeName).Dot("IDs").Op("=").Id("edgeIDs")
-			grp.Id("node").Dot("Edges").Op("=").Append(
-				jen.Id("node").Dot("Edges"),
-				jen.Id("edge"+edgeName),
-			)
+			grp.BlockFunc(func(eg *jen.Group) {
+				eg.List(jen.Id("ids"), jen.Id("err")).Op(":=").Id("e").Dot("Query" + edgeName).Call().Dot("IDs").Call(jen.Id("ctx"))
+				eg.If(jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("err")),
+				)
+				eg.Id("edgeIDs").Op(":=").Make(jen.Index().Any(), jen.Len(jen.Id("ids")))
+				eg.For(jen.List(jen.Id("i"), jen.Id("v")).Op(":=").Range().Id("ids")).Block(
+					jen.Id("edgeIDs").Index(jen.Id("i")).Op("=").Id("v"),
+				)
+				eg.Id("edge" + edgeName).Dot("IDs").Op("=").Id("edgeIDs")
+				eg.Id("node").Dot("Edges").Op("=").Append(
+					jen.Id("node").Dot("Edges"),
+					jen.Id("edge"+edgeName),
+				)
+			})
 		}
 
 		grp.Return(jen.Id("node"), jen.Nil())

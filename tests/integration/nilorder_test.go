@@ -11,7 +11,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	"github.com/syssam/velox/dialect"
 	integration "github.com/syssam/velox/tests/integration"
-	"github.com/syssam/velox/tests/integration/entity"
 	"github.com/syssam/velox/tests/integration/user"
 
 	_ "modernc.org/sqlite"
@@ -46,7 +45,7 @@ func TestPaginate_NilOrderBy_SecondPage(t *testing.T) {
 	// Page 1 with nil orderBy — exactly what the gqlgen resolver does.
 	page1, err := client.User.Query().Paginate(
 		ctx, nil, &first, nil, nil,
-		entity.WithUserOrder(nil), // orderBy=nil, falls back to DefaultUserOrder
+		withUserOrder(t), // orderBy=nil, falls back to DefaultUserOrder
 	)
 	require.NoError(t, err)
 	require.Len(t, page1.Edges, 5, "page 1 should return 5 users")
@@ -63,7 +62,7 @@ func TestPaginate_NilOrderBy_SecondPage(t *testing.T) {
 	// Page 2 — this is what the gqlgen resolver does on the next request.
 	page2, err := client.User.Query().Paginate(
 		ctx, &afterCursor, &first, nil, nil,
-		entity.WithUserOrder(nil), // still nil orderBy
+		withUserOrder(t), // still nil orderBy
 	)
 	require.NoError(t, err)
 	require.Len(t, page2.Edges, 5,

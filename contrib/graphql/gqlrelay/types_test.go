@@ -107,13 +107,14 @@ func TestOrderDirection_OrderTermOption(t *testing.T) {
 }
 
 func TestOrderDirection_MarshalGQL(t *testing.T) {
+	// Output is JSON-quoted so it embeds correctly into a GraphQL response.
 	var buf bytes.Buffer
 	OrderDirectionAsc.MarshalGQL(&buf)
-	assert.Equal(t, "ASC", buf.String())
+	assert.Equal(t, `"ASC"`, buf.String())
 
 	buf.Reset()
 	OrderDirectionDesc.MarshalGQL(&buf)
-	assert.Equal(t, "DESC", buf.String())
+	assert.Equal(t, `"DESC"`, buf.String())
 }
 
 func TestOrderDirection_UnmarshalGQL(t *testing.T) {
@@ -149,6 +150,35 @@ func TestCursor_MarshalGQL_EmptyCursor(t *testing.T) {
 	// Should produce a valid base64-encoded quoted string (not empty).
 	assert.NotEmpty(t, buf.String())
 	assert.True(t, buf.Len() > 2, "expected quoted string, got: %s", buf.String())
+}
+
+// TestCursor_MarshalGQL_UnencodableValue pins the failure-mode contract:
+// when msgpack encoding fails (programming bug — an unencodable Value type),
+// MarshalGQL must emit a clean empty token `""`, never a partial/corrupt
+// base64 stream that decodes to garbage msgpack on the next request.
+//
+// Regression class blocked: someone "optimizes" the function to stream
+// directly into `w` (skipping the buffer), reintroducing the half-flush
+// problem where deferred wc.Close() writes base64 padding into the
+// response after the encode error.
+func TestCursor_MarshalGQL_UnencodableValue(t *testing.T) {
+	// A channel is not msgpack-encodable. Storing one in Value forces
+	// msgpack.Encode to return an error.
+	c := Cursor{ID: 42, Value: make(chan int)}
+	var buf bytes.Buffer
+	c.MarshalGQL(&buf)
+
+	// Output must be exactly `""` — two quote bytes, nothing between.
+	// Anything else means the base64 writer flushed partial state.
+	assert.Equal(t, `""`, buf.String(),
+		"on encode failure, MarshalGQL must emit an empty cursor token, "+
+			"not a half-flushed base64 stream that decodes to garbage")
+
+	// And it must round-trip: UnmarshalGQL("") → zero-value cursor, no error.
+	var out Cursor
+	require.NoError(t, out.UnmarshalGQL(""),
+		"empty cursor token must UnmarshalGQL into the zero value without error")
+	assert.Zero(t, out, "round-tripped empty cursor must be zero-valued")
 }
 
 func TestCursor_UnmarshalGQL_InvalidMsgpack(t *testing.T) {

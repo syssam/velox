@@ -341,6 +341,20 @@ func TestGenerator_GenWhereInputGo_RenderedOutput(t *testing.T) {
 			t.Errorf("WhereInput Go code missing %s: want %q", tc.name, tc.want)
 		}
 	}
+
+	// Regression guard: every recursive predicate loop (Or, And, HasXxxWith)
+	// must skip nil elements before dereferencing. The HasXxxWith loop used
+	// to lack this guard, panicking on JSON input like
+	// `{"hasPostsWith":[null,{...}]}` (the Or/And loops always had it).
+	// Count "if w == nil" occurrences: at minimum 2 per entity (Or + And),
+	// plus one per edge with hasWith. mockGraph yields User and Post with
+	// User.posts → posts (1 edge each w/ HasWith), so we expect ≥ (2+1)*2 = 6
+	// guards across the two entities.
+	nilGuards := strings.Count(code, "if w == nil {")
+	if nilGuards < 6 {
+		t.Errorf("WhereInput Go code expected ≥6 `if w == nil` guards (Or/And/HasXxxWith × entities), got %d:\n%s",
+			nilGuards, code)
+	}
 }
 
 // =============================================================================
@@ -390,6 +404,90 @@ func TestGenerator_GenEntitySchemaFile_Content(t *testing.T) {
 			t.Errorf("entity schema file should NOT contain %q", notwant)
 		}
 	}
+}
+
+// TestBuildGoFieldDirective_BugClasses pins the two name-divergence cases
+// that buildGoFieldDirective must handle. Both classes silently break
+// gqlgen autobind if not corrected with `@goField(name: ...)`:
+//
+//  1. RENAME — `field.Int("user_id").Annotations(graphql.FieldName("authorId"))`.
+//     SDL field `authorId` autobinds to Go `AuthorID` by gqlgen's ToGo —
+//     missing the real Go field `UserID`. The directive must point gqlgen
+//     at the real field.
+//
+//  2. ACRONYM DIVERGENCE — schema field uses a velox-custom acronym that
+//     gqlgen doesn't know. The default SDL camel name autobinds to a Go
+//     name that has the wrong casing. The directive must point gqlgen at
+//     the real field.
+//
+// And the negative case: when the SDL name's ToGo result equals the Go
+// struct field, NO directive should be emitted — that's just noise.
+func TestBuildGoFieldDirective_BugClasses(t *testing.T) {
+	g := newTestGenerator(&entgen.Type{
+		Name:   "Tmp",
+		ID:     &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}}},
+	})
+
+	t.Run("rename_to_unrelated_camel_emits_directive", func(t *testing.T) {
+		// field user_id renamed to "authorId" in SDL. Go struct field stays
+		// UserID. Without the directive, gqlgen would bind authorId → AuthorID
+		// and miss the real field.
+		f := &entgen.Field{
+			Name: "user_id",
+			Type: &field.TypeInfo{Type: field.TypeInt64},
+			Annotations: map[string]any{
+				AnnotationName: Annotation{FieldName: "authorId"},
+			},
+		}
+		got := g.buildGoFieldDirective(f)
+		assert.Equal(t, ` @goField(name: "UserID")`, got,
+			"rename to non-default name must emit @goField(name:) pointing at the real Go field")
+	})
+
+	t.Run("default_camel_with_no_acronym_divergence_emits_nothing", func(t *testing.T) {
+		// field user_id with no FieldName annotation. SDL is `userId`,
+		// gqlgen ToGo("userId") = "UserID", matches velox StructField "UserID".
+		// No directive needed — autobind already works.
+		f := &entgen.Field{
+			Name: "user_id",
+			Type: &field.TypeInfo{Type: field.TypeInt64},
+		}
+		got := g.buildGoFieldDirective(f)
+		assert.Empty(t, got,
+			"default SDL name with no acronym divergence must not emit @goField (would be noise)")
+	})
+
+	t.Run("explicit_fieldname_matching_default_camel_emits_nothing", func(t *testing.T) {
+		// User restates the default `userId` via FieldName — same SDL name as
+		// auto-derived. gqlgen autobind still works; no directive needed.
+		f := &entgen.Field{
+			Name: "user_id",
+			Type: &field.TypeInfo{Type: field.TypeInt64},
+			Annotations: map[string]any{
+				AnnotationName: Annotation{FieldName: "userId"},
+			},
+		}
+		got := g.buildGoFieldDirective(f)
+		assert.Empty(t, got,
+			"FieldName equal to default camel form must not emit @goField (redundant)")
+	})
+
+	t.Run("rename_preserving_struct_field_emits_directive", func(t *testing.T) {
+		// field email renamed to "userEmail". Go struct field stays Email.
+		// gqlgen ToGo("userEmail") = "UserEmail", which is NOT Email — the
+		// directive must point gqlgen at Email.
+		f := &entgen.Field{
+			Name: "email",
+			Type: &field.TypeInfo{Type: field.TypeString},
+			Annotations: map[string]any{
+				AnnotationName: Annotation{FieldName: "userEmail"},
+			},
+		}
+		got := g.buildGoFieldDirective(f)
+		assert.Equal(t, ` @goField(name: "Email")`, got,
+			"rename of single-word field to multi-word name must emit @goField pointing at the original Go field")
+	})
 }
 
 func TestGenPerEntityRootSchema_NoEntityTypes(t *testing.T) {

@@ -310,12 +310,12 @@ func TestMultiDialect_Pagination(t *testing.T) {
 		// Postgres/MySQL, which order NULLs differently from SQLite.
 		t.Run("nil_order_page2", func(t *testing.T) {
 			first := 5
-			p1, err := client.User.Query().Paginate(ctx, nil, &first, nil, nil, entity.WithUserOrder(nil))
+			p1, err := client.User.Query().Paginate(ctx, nil, &first, nil, nil, withUserOrder(t))
 			require.NoError(t, err)
 			require.Len(t, p1.Edges, 5)
 
 			after := roundTripCursor(t, p1.PageInfo.EndCursor)
-			p2, err := client.User.Query().Paginate(ctx, &after, &first, nil, nil, entity.WithUserOrder(nil))
+			p2, err := client.User.Query().Paginate(ctx, &after, &first, nil, nil, withUserOrder(t))
 			require.NoError(t, err)
 			require.Len(t, p2.Edges, 5,
 				"nil-order page 2 must return 5 — 0 rows means the composite NULL comparison diverges on this dialect")
@@ -326,12 +326,12 @@ func TestMultiDialect_Pagination(t *testing.T) {
 		t.Run("explicit_asc_composite_cursor", func(t *testing.T) {
 			orderBy := userOrderBy(t, "NAME", entity.OrderDirectionAsc)
 			first := 3
-			fa, err := client.User.Query().Paginate(ctx, nil, &first, nil, nil, entity.WithUserOrder(orderBy))
+			fa, err := client.User.Query().Paginate(ctx, nil, &first, nil, nil, withUserOrder(t, orderBy))
 			require.NoError(t, err)
 			assert.Equal(t, []int{1, 2, 3}, ids(fa))
 
 			after := roundTripCursor(t, fa.PageInfo.EndCursor)
-			fb, err := client.User.Query().Paginate(ctx, &after, &first, nil, nil, entity.WithUserOrder(orderBy))
+			fb, err := client.User.Query().Paginate(ctx, &after, &first, nil, nil, withUserOrder(t, orderBy))
 			require.NoError(t, err)
 			assert.Equal(t, []int{4, 5, 6}, ids(fb),
 				"composite name-ASC cursor must page correctly on every dialect")

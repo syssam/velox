@@ -112,6 +112,13 @@ func (User) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		graphql.QueryField(),
 		graphql.RelayConnection(),
+		// MultiOrder switches User's Paginate to the composite multi-column
+		// cursor path (gqlrelay.MultiCursorsPredicate). User is the only
+		// testschema entity on that path, so the existing backward-pagination
+		// cases in pagination_test.go run end-to-end through the multi-order
+		// predicate — the guard against the `before`-cursor direction bug that
+		// went uncaught because no schema reached this path.
+		graphql.MultiOrder(),
 	}
 }
 

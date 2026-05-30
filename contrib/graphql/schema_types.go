@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	gqlgenTemplates "github.com/99designs/gqlgen/codegen/templates"
+
 	"github.com/syssam/velox/compiler/gen"
 )
 
@@ -564,14 +566,41 @@ func (g *Generator) genField(t *gen.Type, f *gen.Field) string {
 }
 
 // buildGoFieldDirective consolidates all @goField params for a field.
+//
+// Emits `@goField(name: <go-struct-field>)` whenever gqlgen's default
+// autobind would NOT resolve the SDL field to velox's actual Go struct
+// field — i.e. when there's a name divergence between gqlgen's ToGo
+// algorithm (which knows a fixed set of common initialisms) and velox's
+// gen.Pascal (which honors user-registered acronyms via gen.AddAcronym).
+//
+// Two bug classes this guards against:
+//
+//  1. Rename mismatch (the original case): user writes
+//     `field.Int("user_id").Annotations(graphql.FieldName("authorId"))`.
+//     SDL field is `authorId`, but the Go struct field stays `UserID`.
+//     gqlgen autobind of `authorId` resolves to `AuthorID`, missing the
+//     real field. We must emit `@goField(name: "UserID")`.
+//
+//  2. Acronym divergence (the subtle case): user calls
+//     `gen.AddAcronym("FOO")` and writes `field.String("foo_bar")`.
+//     SDL default is `fooBar`. velox's struct field is `FOOBar`.
+//     gqlgen's autobind would resolve to `FooBar` (FOO is not in
+//     gqlgen's CommonInitialisms). We must emit `@goField(name: "FOOBar")`
+//     even without an explicit FieldName annotation.
+//
+// The single comparison `gqlgenToGo(sdlName) != structField` catches
+// both classes without per-case heuristics.
 func (g *Generator) buildGoFieldDirective(f *gen.Field) string {
-	ann := g.getFieldAnnotation(f)
 	var parts []string
 
-	// Field name mapping: emit @goField(name: "GoFieldName") so gqlgen
-	// maps the GraphQL field to the correct Go struct field.
-	if ann.GetFieldName() != "" && ann.GetFieldName() != camel(f.Name) {
-		parts = append(parts, fmt.Sprintf("name: %q", pascal(ann.GetFieldName())))
+	ann := g.getFieldAnnotation(f)
+	sdlName := ann.GetFieldName()
+	if sdlName == "" {
+		sdlName = camel(f.Name)
+	}
+	structField := f.StructField()
+	if gqlgenTemplates.ToGo(sdlName) != structField {
+		parts = append(parts, fmt.Sprintf("name: %q", structField))
 	}
 
 	if len(parts) == 0 {
