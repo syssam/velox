@@ -155,6 +155,7 @@ func (m *UserMutation) ResetEmail() {
 // SetAge sets the "age" field.
 func (m *UserMutation) SetAge(v int) {
 	m._age = &v
+	m._addage = nil
 }
 
 // Age returns the value of the "age" field in the mutation.

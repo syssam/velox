@@ -233,13 +233,22 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 	// Fields like "type" and "op" would shadow the generated Type()/Op() methods.
 	conflictsWithInterface := fieldPascal == "Type" || fieldPascal == "Op"
 
-	// SetXxx — writes the typed pointer field.
+	// SetXxx — writes the typed pointer field. Resets any pending AddXxx delta
+	// (numeric) or AppendXxx slice (JSON) so the literal Set wins — Ent parity.
 	f.Commentf("Set%s sets the %q field.", fieldPascal, column)
 	f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id("Set" + fieldPascal).Params(
 		jen.Id("v").Add(h.BaseType(fd)),
-	).Block(
-		jen.Id("m").Dot(typedField).Op("=").Op("&").Id("v"),
-	)
+	).BlockFunc(func(body *jen.Group) {
+		body.Id("m").Dot(typedField).Op("=").Op("&").Id("v")
+		if fd.SupportsMutationAdd() {
+			body.Id("m").Dot(addField).Op("=").Nil()
+		}
+		if fd.IsJSON() {
+			body.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
+				jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(column)),
+			)
+		}
+	})
 
 	// Xxx returns the field value and whether it was set.
 	// Reads from typed field — no type assertion, no panic risk.
@@ -309,6 +318,11 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 			if fd.SupportsMutationAdd() {
 				body.Id("m").Dot(addField).Op("=").Nil()
 			}
+			if fd.IsJSON() {
+				body.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
+					jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(column)),
+				)
+			}
 			body.If(jen.Id("m").Dot("clearedFields").Op("==").Nil()).Block(
 				jen.Id("m").Dot("clearedFields").Op("=").Make(jen.Map(jen.String()).Struct()),
 			)
@@ -322,12 +336,21 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 		)
 	}
 
-	// ResetXxx — clears the typed field pointer and any pending increment/clear.
+	// ResetXxx — clears the typed field pointer, any pending AddXxx delta,
+	// any pending JSON AppendXxx, and the clearedFields entry. Symmetric
+	// with SetXxx so a Reset truly returns the field to its un-mutated
+	// baseline (otherwise an Append + Reset would silently re-emit the
+	// append at Save time).
 	f.Commentf("Reset%s resets all changes to the %q field.", fieldPascal, column)
 	f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id("Reset" + fieldPascal).Params().BlockFunc(func(body *jen.Group) {
 		body.Id("m").Dot(typedField).Op("=").Nil()
 		if fd.SupportsMutationAdd() {
 			body.Id("m").Dot(addField).Op("=").Nil()
+		}
+		if fd.IsJSON() {
+			body.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
+				jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(column)),
+			)
 		}
 		body.Delete(jen.Id("m").Dot("clearedFields"), jen.Lit(column))
 	})
@@ -690,6 +713,11 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 						if fd.SupportsMutationAdd() {
 							blk.Id("m").Dot("_add" + fd.Name).Op("=").Nil()
 						}
+						if fd.IsJSON() {
+							blk.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
+								jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(fd.Name)),
+							)
+						}
 					})
 				}
 			}
@@ -715,6 +743,11 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 					blk.Id("m").Dot("_" + fd.Name).Op("=").Nil()
 					if fd.SupportsMutationAdd() {
 						blk.Id("m").Dot("_add" + fd.Name).Op("=").Nil()
+					}
+					if fd.IsJSON() {
+						blk.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
+							jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(fd.Name)),
+						)
 					}
 					blk.Delete(jen.Id("m").Dot("clearedFields"), jen.Lit(fd.Name))
 				})

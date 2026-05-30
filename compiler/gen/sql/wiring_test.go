@@ -801,6 +801,90 @@ func TestMutationTypedStateInvariants(t *testing.T) {
 	}
 }
 
+// TestMutationJSONAppendsSymmetry pins the invariant that every code path which
+// nils a JSON field's typed pointer ALSO clears `m.appends[col]`. Without this,
+// `AppendXxx(v)` followed by `ResetXxx()` / `ClearXxx()` / `ResetField("col")` /
+// `ClearField("col")` leaves `m.appends["col"] == v` while `m._col == nil` —
+// the Save builder then re-emits the JSON append even though the caller reset
+// the field. SetXxx already had this. The five symmetric sites are pinned here.
+//
+// Regression history: SetXxx gained the appends-delete in this change cycle;
+// the four sibling sites were initially missed.
+func TestMutationJSONAppendsSymmetry(t *testing.T) {
+	// Fixture uses a Nillable JSON field so ClearXxx is emitted (only Nillable
+	// fields get a ClearXxx method). The goldenTestTypeRich fixture's "tags"
+	// field is Optional-not-Nillable, so it would not exercise ClearTags.
+	noteType := createTestTypeWithFields("Note", []*gen.Field{
+		createTestField("title", field.TypeString),
+		{
+			Name:     "data",
+			Type:     &field.TypeInfo{Type: field.TypeJSON},
+			Optional: true,
+			Nillable: true,
+		},
+	})
+	helper := newFeatureMockHelper()
+	helper.graph.Nodes = []*gen.Type{noteType}
+	src := genMutation(helper, noteType).GoString()
+
+	// methodBody returns the source between a method header and the next
+	// top-level `\nfunc ` declaration — enough to isolate one method's body.
+	methodBody := func(header string) string {
+		idx := strings.Index(src, header)
+		if idx < 0 {
+			return ""
+		}
+		tail := src[idx:]
+		if next := strings.Index(tail[1:], "\nfunc "); next > 0 {
+			return tail[:next+1]
+		}
+		return tail
+	}
+
+	cases := []struct {
+		site       string
+		header     string
+		whyItFails string
+	}{
+		{
+			site:       "SetData",
+			header:     "func (m *NoteMutation) SetData(",
+			whyItFails: "SetXxx must clear pending appends so a literal Set wins (Ent parity).",
+		},
+		{
+			site:       "ClearData",
+			header:     "func (m *NoteMutation) ClearData(",
+			whyItFails: "ClearXxx (Nillable) must clear pending appends — Append+Clear would silently re-emit the append at Save time.",
+		},
+		{
+			site:       "ResetData",
+			header:     "func (m *NoteMutation) ResetData(",
+			whyItFails: "ResetXxx must clear pending appends — Append+Reset would silently re-emit the append at Save time.",
+		},
+		{
+			site:       "ClearField generic switch",
+			header:     "func (m *NoteMutation) ClearField(",
+			whyItFails: "Generic ClearField(\"data\") must clear pending appends — same invariant as ClearXxx, but reachable via the velox.Mutation interface (hooks/privacy).",
+		},
+		{
+			site:       "ResetField generic switch",
+			header:     "func (m *NoteMutation) ResetField(",
+			whyItFails: "Generic ResetField(\"data\") must clear pending appends — same invariant as ResetXxx, but reachable via the velox.Mutation interface (hooks/privacy).",
+		},
+	}
+	for _, tc := range cases {
+		body := methodBody(tc.header)
+		if body == "" {
+			t.Errorf("%s: method header %q not found in generated mutation", tc.site, tc.header)
+			continue
+		}
+		if !strings.Contains(body, `delete(m.appends, "data")`) {
+			t.Errorf("%s: missing `delete(m.appends, \"data\")` — %s\n--- body ---\n%s",
+				tc.site, tc.whyItFails, body)
+		}
+	}
+}
+
 func findStruct(t *testing.T, file *ast.File, name string) *ast.StructType {
 	t.Helper()
 	var st *ast.StructType

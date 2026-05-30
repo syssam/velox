@@ -497,11 +497,23 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 				jen.Id("k"),
 			),
 		)
-		// Note: for M2O/O2O-inverse (OwnFK), sqlgraph materializes the FK column
-		// on the insert statement. The returned _node will not have that FK field
-		// populated, but the ID is in mutation state and the user's Save caller
-		// can re-query if needed. This matches Velox's behavior before this refactor.
-		_ = nodeVar
+		// For OwnFK edges (the FK column lives on this entity's row →
+		// single-pointer edge target on the entity's Edges struct),
+		// pre-populate _node.Edges.<EdgeName> with a stub carrying just the
+		// ID so callers can navigate via Edges.XxxOrErr() right after
+		// Create.Save without an extra DB round-trip. Matches Ent's
+		// `_node.<edge_field> = &nodes[0]` pattern adapted to velox's
+		// Edges-struct architecture. Other field values on the stub stay
+		// zero; callers needing the full target must call .QueryXxx().
+		// Uses Edge.OwnFK() (M2O || O2O+inverse/Bidi) — see type_edge.go.
+		if edge.OwnFK() && targetType != nil {
+			sharedEntityPkg := h.SharedEntityPkg()
+			blk.Id(nodeVar).Dot("Edges").Dot("Set" + edge.StructField()).Call(
+				jen.Op("&").Qual(sharedEntityPkg, targetType.Name).Values(jen.Dict{
+					jen.Id(targetType.ID.StructField()): jen.Id("nodes").Index(jen.Lit(0)),
+				}),
+			)
+		}
 		blk.Id(specVar).Dot("Edges").Op("=").Append(
 			jen.Id(specVar).Dot("Edges"),
 			jen.Id("edge"),

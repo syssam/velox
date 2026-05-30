@@ -302,6 +302,9 @@ func (f Field) IsInt64() bool { return f.Type != nil && f.Type.Type == field.Typ
 // IsEnum returns true if the field is an enum field.
 func (f Field) IsEnum() bool { return f.Type != nil && f.Type.Type == field.TypeEnum }
 
+// IsFloat returns true if the field is a float field (float32 or float64).
+func (f Field) IsFloat() bool { return f.Type != nil && f.Type.Type.Float() }
+
 // IsEdgeField reports if the given field is an edge-field (i.e. a foreign-key)
 // that was referenced by one of the edges.
 func (f Field) IsEdgeField() bool { return f.fk != nil }

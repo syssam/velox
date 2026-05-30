@@ -59,6 +59,29 @@ func TestUpdate_AddNumericField(t *testing.T) {
 	assert.Equal(t, 35, got.Age)
 }
 
+// TestUpdate_SetAfterAdd_OverridesDelta verifies that calling SetXxx after
+// AddXxx on the same numeric field discards the pending delta — matches Ent's
+// semantics: the latter call wins. Without the SetXxx reset, the generated
+// UPDATE would emit both `age = 99` and `age = age + 5`, yielding 104.
+func TestUpdate_SetAfterAdd_OverridesDelta(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	alice := createUser(t, client, "Alice", "alice@example.com")
+	assert.Equal(t, 30, alice.Age)
+
+	_, err := client.User.UpdateOneID(alice.ID).
+		AddAge(5).
+		SetAge(99).
+		SetUpdatedAt(now).
+		Save(ctx)
+	require.NoError(t, err)
+
+	got, err := client.User.Get(ctx, alice.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 99, got.Age)
+}
+
 // TestUpdate_BulkByPredicate verifies bulk update with where predicate.
 func TestUpdate_BulkByPredicate(t *testing.T) {
 	client := openTestClient(t)

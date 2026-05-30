@@ -210,6 +210,9 @@ func (m *ArticleMutation) ResetUpdatedAt() {
 // SetTags sets the "tags" field.
 func (m *ArticleMutation) SetTags(v any) {
 	m._tags = &v
+	if m.appends != nil {
+		delete(m.appends, "tags")
+	}
 }
 
 // Tags returns the value of the "tags" field in the mutation.
@@ -231,6 +234,9 @@ func (m *ArticleMutation) AppendTags(v any) {
 // ResetTags resets all changes to the "tags" field.
 func (m *ArticleMutation) ResetTags() {
 	m._tags = nil
+	if m.appends != nil {
+		delete(m.appends, "tags")
+	}
 	delete(m.clearedFields, "tags")
 }
 
@@ -434,6 +440,9 @@ func (m *ArticleMutation) ClearField(name string) error {
 		m._content = nil
 	case "tags":
 		m._tags = nil
+		if m.appends != nil {
+			delete(m.appends, "tags")
+		}
 	default:
 		return fmt.Errorf("unknown Article nullable field %s", name)
 	}
@@ -461,6 +470,9 @@ func (m *ArticleMutation) ResetField(name string) error {
 		delete(m.clearedFields, "updated_at")
 	case "tags":
 		m._tags = nil
+		if m.appends != nil {
+			delete(m.appends, "tags")
+		}
 		delete(m.clearedFields, "tags")
 	case "status":
 		m._status = nil
