@@ -10,14 +10,18 @@ import (
 // so it is obviously correct. Cursors are creation handles, not opaque bytes.
 //
 // Algorithm (Relay spec, on a totally-ordered slice):
+//  0. Validate: reject first+last together and negative first/last with
+//     ErrValidation (both velox and ent do this before touching data).
 //  1. Sort a copy of the live posts by the OrderBy terms, each followed by a
-//     final total-order tiebreak on handle ascending. Default order (empty
-//     OrderBy) = handle ascending. The total order removes tie ambiguity.
+//     final total-order tiebreak on handle in the PRIMARY term's direction.
+//     Default order (empty OrderBy) = handle ascending. The total order removes
+//     tie ambiguity.
 //  2. after: drop all elements up to and including the element whose handle ==
 //     *AfterRef. before: drop all elements from the element whose handle ==
 //     *BeforeRef onward.
-//  3. HasPrev/HasNext baseline = whether the cursor step dropped elements on
-//     the left/right.
+//  3. HasPrev/HasNext baseline = cursor PRESENCE (HasPrev when AfterRef != nil,
+//     HasNext when BeforeRef != nil), unconditional on the handle being found —
+//     cursor pagination is predicate-based, matching both ORMs.
 //  4. first: if len > *First, keep the first *First and set HasNext. last: if
 //     len > *Last, keep the LAST *Last and set HasPrev.
 //  5. Rows are the survivors in display (sorted) order, each with its id Ref
@@ -27,6 +31,20 @@ import (
 // the tail of what remains — no separate direction-reversal logic, so the
 // before-cursor mirror is correct by construction.
 func paginate(posts []*post, p op.PaginatePosts) Result {
+	// Step 0: validation. Both velox and ent reject first+last together and
+	// negative first/last with a validation error (velox: gqlrelay
+	// ValidateFirstLast; ent: errInvalidPagination). The oracle mirrors that so
+	// it never disagrees with either ORM on bad input.
+	if p.First != nil && p.Last != nil {
+		return Result{Err: ErrValidation}
+	}
+	if p.First != nil && *p.First < 0 {
+		return Result{Err: ErrValidation}
+	}
+	if p.Last != nil && *p.Last < 0 {
+		return Result{Err: ErrValidation}
+	}
+
 	sorted := make([]*post, len(posts))
 	copy(sorted, posts)
 	sortPosts(sorted, p.OrderBy)
@@ -34,20 +52,24 @@ func paginate(posts []*post, p op.PaginatePosts) Result {
 	hasPrev := false
 	hasNext := false
 
-	// Step 2 + 3: cursor trimming, tracking whether anything was dropped.
+	// Step 2 + 3: cursor trimming. Both ORMs set HasPreviousPage = (after !=
+	// nil) and HasNextPage = (before != nil) UNCONDITIONALLY — cursor
+	// pagination is predicate-based, so the flag reflects cursor PRESENCE, not
+	// whether the cursor handle exists in the data. The trim still happens when
+	// the handle is found.
 	if p.AfterRef != nil {
+		hasPrev = true
 		if i := indexOfHandle(sorted, *p.AfterRef); i >= 0 {
 			// Dropped elements 0..i (the cursor element and everything before
-			// it), so there are previous pages.
-			hasPrev = true
+			// it).
 			sorted = sorted[i+1:]
 		}
 	}
 	if p.BeforeRef != nil {
+		hasNext = true
 		if i := indexOfHandle(sorted, *p.BeforeRef); i >= 0 {
 			// Dropped elements i..end (the cursor element and everything after
-			// it), so there are next pages.
-			hasNext = true
+			// it).
 			sorted = sorted[:i]
 		}
 	}
@@ -77,8 +99,11 @@ func paginate(posts []*post, p op.PaginatePosts) Result {
 	return Result{Rows: rows, Page: page, Err: ErrOK}
 }
 
-// sortPosts sorts in place by the order terms, with a final handle-ascending
-// tiebreak so the ordering is always total.
+// sortPosts sorts in place by the order terms, with a final handle tiebreak so
+// the ordering is always total. The tiebreak follows the PRIMARY order term's
+// direction: both ORMs append the id term with the first order term's direction
+// (velox: idDir = directions[0]; ent: applyOrder emits the id term in the same
+// direction). An empty/default OrderBy ties handle ascending.
 func sortPosts(posts []*post, terms []op.OrderTerm) {
 	sort.SliceStable(posts, func(i, j int) bool {
 		a, b := posts[i], posts[j]
@@ -92,7 +117,11 @@ func sortPosts(posts []*post, terms []op.OrderTerm) {
 			}
 			return c < 0
 		}
-		// Total-order tiebreak: handle ascending.
+		// Total-order tiebreak: handle in the primary order term's direction.
+		desc := len(terms) > 0 && terms[0].Desc
+		if desc {
+			return a.handle > b.handle
+		}
 		return a.handle < b.handle
 	})
 }

@@ -144,7 +144,7 @@ func (PaginatePosts) isOp()       {}
 func Format(prog Program) string {
 	var b strings.Builder
 	for i, o := range prog {
-		b.WriteString(fmt.Sprintf("%d: %s\n", i, formatOp(o)))
+		fmt.Fprintf(&b, "%d: %s\n", i, formatOp(o))
 	}
 	return b.String()
 }

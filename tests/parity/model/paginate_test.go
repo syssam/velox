@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"velox.test/parity/compare"
 	"velox.test/parity/model"
 	"velox.test/parity/op"
 )
@@ -55,4 +56,34 @@ func TestModel_Paginate_MultiOrderBackward(t *testing.T) {
 	assert.Equal(t, []int{2, 3}, handles(res[8]),
 		"backward must return rows BEFORE the cursor (mirror), not after")
 	assert.True(t, res[8].Page.HasPrev)
+}
+
+func TestModel_Paginate_DescTiebreak(t *testing.T) {
+	// 3 posts tied on view_count=5; ORDER BY view_count DESC must tie by handle DESC.
+	prog := op.Program{op.CreateAuthor{Name: "A", Role: "user"}}
+	for i := 0; i < 3; i++ {
+		prog = append(prog, op.CreatePost{Title: "P", Status: "draft", ViewCount: 5, AuthorRef: 0})
+	}
+	prog = append(prog, op.PaginatePosts{OrderBy: []op.OrderTerm{{Field: "view_count", Desc: true}}})
+	res, err := model.Run(prog)
+	require.NoError(t, err)
+	assert.Equal(t, []int{3, 2, 1}, handles(res[len(res)-1]),
+		"DESC primary order must break ties by handle DESC, matching velox+ent")
+}
+
+func TestModel_Paginate_NonexistentAfterStillHasPrev(t *testing.T) {
+	prog := append(seed(3), op.PaginatePosts{First: intp(2), AfterRef: intp(999)})
+	res, err := model.Run(prog)
+	require.NoError(t, err)
+	p := res[len(res)-1]
+	require.NotNil(t, p.Page)
+	assert.True(t, p.Page.HasPrev, "after-cursor present => HasPrev true even if handle not found, matching both ORMs")
+}
+
+func TestModel_Paginate_FirstAndLastIsValidationError(t *testing.T) {
+	prog := append(seed(3), op.PaginatePosts{First: intp(1), Last: intp(1)})
+	res, err := model.Run(prog)
+	require.NoError(t, err)
+	assert.Equal(t, compare.ErrValidation, res[len(res)-1].Err,
+		"first+last must be a validation error, matching both ORMs")
 }
