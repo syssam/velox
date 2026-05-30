@@ -11,10 +11,10 @@ import (
 
 func TestModel_JSONAppendConcatenates(t *testing.T) {
 	prog := op.Program{
-		op.CreateAuthor{Name: "A", Role: "user"},                                  // 0
+		op.CreateAuthor{Name: "A", Role: "user"},                                         // 0
 		op.CreatePost{Title: "P", Status: "draft", AuthorRef: 0, Labels: []string{"go"}}, // 1
-		op.AppendPostLabels{PostRef: 1, Labels: []string{"orm", "x"}},             // 2
-		op.QueryPostsByStatus{Status: "draft"},                                    // 3
+		op.AppendPostLabels{PostRef: 1, Labels: []string{"orm", "x"}},                    // 2
+		op.QueryPostsByStatus{Status: "draft"},                                           // 3
 	}
 	res, err := model.Run(prog)
 	require.NoError(t, err)
@@ -23,11 +23,11 @@ func TestModel_JSONAppendConcatenates(t *testing.T) {
 
 func TestModel_SetLabelsOverwrites(t *testing.T) {
 	prog := op.Program{
-		op.CreateAuthor{Name: "A", Role: "user"},                                  // 0
+		op.CreateAuthor{Name: "A", Role: "user"},                                         // 0
 		op.CreatePost{Title: "P", Status: "draft", AuthorRef: 0, Labels: []string{"go"}}, // 1
-		op.AppendPostLabels{PostRef: 1, Labels: []string{"orm"}},                   // 2
-		op.SetPostLabels{PostRef: 1, Labels: []string{"reset"}},                    // 3
-		op.QueryPostsByStatus{Status: "draft"},                                    // 4
+		op.AppendPostLabels{PostRef: 1, Labels: []string{"orm"}},                         // 2
+		op.SetPostLabels{PostRef: 1, Labels: []string{"reset"}},                          // 3
+		op.QueryPostsByStatus{Status: "draft"},                                           // 4
 	}
 	res, err := model.Run(prog)
 	require.NoError(t, err)
@@ -36,10 +36,10 @@ func TestModel_SetLabelsOverwrites(t *testing.T) {
 
 func TestModel_SumViewCount(t *testing.T) {
 	prog := op.Program{
-		op.CreateAuthor{Name: "A", Role: "user"},                                   // 0
-		op.CreatePost{Title: "P1", Status: "draft", ViewCount: 3, AuthorRef: 0},    // 1
-		op.CreatePost{Title: "P2", Status: "draft", ViewCount: 4, AuthorRef: 0},    // 2
-		op.SumViewCount{},                                                          // 3
+		op.CreateAuthor{Name: "A", Role: "user"},                                // 0
+		op.CreatePost{Title: "P1", Status: "draft", ViewCount: 3, AuthorRef: 0}, // 1
+		op.CreatePost{Title: "P2", Status: "draft", ViewCount: 4, AuthorRef: 0}, // 2
+		op.SumViewCount{}, // 3
 	}
 	res, err := model.Run(prog)
 	require.NoError(t, err)
@@ -48,10 +48,10 @@ func TestModel_SumViewCount(t *testing.T) {
 
 func TestModel_LoadAuthorPosts(t *testing.T) {
 	prog := op.Program{
-		op.CreateAuthor{Name: "A", Role: "user"},                                   // 0
-		op.CreatePost{Title: "P1", Status: "draft", AuthorRef: 0},                  // 1
-		op.CreatePost{Title: "P2", Status: "draft", AuthorRef: 0},                  // 2
-		op.LoadAuthorPosts{AuthorRef: 0},                                           // 3
+		op.CreateAuthor{Name: "A", Role: "user"},                  // 0
+		op.CreatePost{Title: "P1", Status: "draft", AuthorRef: 0}, // 1
+		op.CreatePost{Title: "P2", Status: "draft", AuthorRef: 0}, // 2
+		op.LoadAuthorPosts{AuthorRef: 0},                          // 3
 	}
 	res, err := model.Run(prog)
 	require.NoError(t, err)
