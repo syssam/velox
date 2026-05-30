@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/dave/jennifer/jen"
@@ -13,6 +14,43 @@ import (
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
+
+// TestDeleteAction_OnDeleteAnnotationRendersConstName pins that an explicit
+// OnDelete annotation renders to the Go CONSTANT name (schema.Cascade), not the
+// SQL literal value (schema.CASCADE — undefined; or schema.SET NULL — invalid
+// Go). Regression for a build break a downstream consumer hit: migrate.go used
+// string(ant.OnDelete) instead of ant.OnDelete.ConstName(). The pre-existing
+// deleteAction tests only asserted the result was non-nil, so they never
+// rendered the output and missed this.
+func TestDeleteAction_OnDeleteAnnotationRendersConstName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		action     sqlschema.CascadeAction
+		wantConst  string // the Go constant name that must be emitted
+		badLiteral string // the SQL literal it must NOT emit
+	}{
+		{sqlschema.Cascade, "Cascade", "CASCADE"},
+		{sqlschema.SetNull, "SetNull", "SET NULL"},
+		{sqlschema.Restrict, "Restrict", "RESTRICT"},
+		{sqlschema.NoAction, "NoAction", "NO ACTION"},
+		{sqlschema.SetDefault, "SetDefault", "SET DEFAULT"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.action), func(t *testing.T) {
+			edge := &gen.Edge{
+				Name: "children",
+				Annotations: gen.Annotations{
+					sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: tc.action},
+				},
+			}
+			rendered := fmt.Sprintf("%#v", deleteAction(edge))
+			assert.Contains(t, rendered, "schema."+tc.wantConst,
+				"OnDelete %q must render the Go constant schema.%s", tc.action, tc.wantConst)
+			assert.NotContains(t, rendered, "schema."+tc.badLiteral,
+				"OnDelete %q must NOT emit the SQL literal schema.%s (undefined / invalid Go)", tc.action, tc.badLiteral)
+		})
+	}
+}
 
 // =============================================================================
 // genMigrate Tests

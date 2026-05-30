@@ -780,9 +780,13 @@ func genTableAnnotationDict(ant *sqlschema.Annotation) jen.Dict {
 func deleteAction(e *gen.Edge) jen.Code {
 	schemaPkg := "github.com/syssam/velox/dialect/sql/schema"
 
-	// Check for explicit annotation
+	// Check for explicit annotation. OnDelete's value is the SQL literal
+	// (e.g. "CASCADE", "SET NULL"); the emitted Go constant is named differently
+	// (schema.Cascade, schema.SetNull). ConstName() maps the literal to the Go
+	// constant name — string(ant.OnDelete) would emit an undefined identifier
+	// (schema.CASCADE) or invalid Go (schema.SET NULL).
 	if ant := e.EntSQL(); ant != nil && ant.OnDelete != "" {
-		return jen.Qual(schemaPkg, string(ant.OnDelete))
+		return jen.Qual(schemaPkg, ant.OnDelete.ConstName())
 	}
 
 	// Default behavior: SetNull for optional (nullable FK), NoAction for required.
