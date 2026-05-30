@@ -8,7 +8,9 @@ require (
 	entgo.io/contrib v0.7.0
 	entgo.io/ent v0.14.6
 	github.com/99designs/gqlgen v0.17.86
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/hashicorp/go-multierror v1.1.1
+	github.com/lib/pq v1.12.3
 	github.com/stretchr/testify v1.11.1
 	github.com/syssam/velox v0.0.0-00010101000000-000000000000
 	github.com/vektah/gqlparser/v2 v2.5.31
@@ -18,6 +20,7 @@ require (
 
 require (
 	ariga.io/atlas v1.0.0 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
