@@ -19,6 +19,19 @@ import (
 // only their ordering effect matters. It is ORM-free, so it lives here.
 var parityEpoch = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// parityClock returns the deterministic timestamp injected for op index i.
+func parityClock(i int) time.Time {
+	return parityEpoch.Add(time.Duration(i) * time.Second)
+}
+
+// opIndexFromClock inverts parityClock: it maps a stored timestamp back to the
+// op index that produced it, recovering the reference's monotone integer clock
+// from the DB's time.Time so created_at / updated_at compare equal. Shared by
+// both executors' normalizers.
+func opIndexFromClock(t time.Time) int {
+	return int(t.UTC().Sub(parityEpoch) / time.Second)
+}
+
 // sqliteDriverName is the database/sql driver registered by modernc.org/sqlite.
 // It is "sqlite" (NOT "sqlite3" — that is the CGO mattn driver velox does not
 // use). Both executors open through this name.
