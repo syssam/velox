@@ -147,7 +147,7 @@ func TestValidate_AllowsMutationOnDeletedPost(t *testing.T) {
 		op.UpdatePostViewCount{PostRef: 1, ViewCount: 9}, // not-found, agreed
 		op.SetPostLabels{PostRef: 1, Labels: []string{"x"}},
 		op.AppendPostLabels{PostRef: 1, Labels: []string{"y"}},
-		op.DeletePost{PostRef: 1},        // not-found, agreed
+		op.DeletePost{PostRef: 1},              // not-found, agreed
 		op.AddTagToPost{PostRef: 1, TagRef: 2}, // not-found, agreed
 	}
 	assert.NoError(t, gen.Validate(prog), "mutation/tag ops on a deleted post are valid (not-found path)")
