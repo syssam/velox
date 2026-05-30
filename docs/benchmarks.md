@@ -97,14 +97,24 @@ Velox uses more total CPU (~110s user vs ~68s user) because the Go compiler proc
 
 Both have exactly **57 Go packages**.
 
-#### Incremental build (cached, 3 runs)
+#### Incremental rebuild — change one entity, recompile (5 runs)
+
+This is the everyday dev-loop cost, and where the per-entity-package architecture
+pays off. **It must be measured by forcing an actual recompile.** Go's build
+cache is content-addressed, so a fixed `touch` marker produces a file
+byte-identical to a prior run — a cache *hit* that measures a no-op. (An earlier
+version of this doc reported a bogus "both ~0.2s, tie" for exactly this reason.)
+`./benchmarks/run.sh inc` appends a unique token to one entity's generated file
+to force recompilation:
 
 | | Ent | Velox |
 |---|-----|-------|
-| Avg wall time | 0.20s | 0.24s |
-| Peak RSS | ~50 MB | ~52 MB |
+| Avg wall time | ~8s | **~0.7s** |
+| What recompiles | the flat `ent/` package — all 50 entities, 262 files | one small per-entity package |
 
-No practical difference.
+**Velox is ~12x faster here on this 50-entity schema, and the gap widens with
+schema size:** Ent's single package grows with every entity added, while velox's
+per-entity package stays constant. This is the architectural reason Velox exists.
 
 ### Generated Code Metrics
 
@@ -213,7 +223,7 @@ go test -bench=BenchmarkGraph_Gen -benchmem -count=3 ./compiler/gen/
 | Generation consistency | **Velox** | 0.08s range vs 0.88s |
 | Cold compile wall time | **Ent** | 9% faster |
 | Cold compile memory | **Velox** | 2.2x less |
-| Incremental build | Tie | Both < 0.25s |
+| Incremental rebuild | **Velox** | ~12x faster (grows with schema) |
 | Total generated code | **Velox** | 31% fewer lines |
 | Max file size | **Velox** | 5.9x smaller |
 | File count | **Ent** | 2.2x fewer files |

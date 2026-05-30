@@ -1001,7 +1001,7 @@ Both use a similar SQL builder pattern. Velox's builder is in `dialect/sql/`.
 |--------|-----|-------|--------|
 | Cold build wall time | **12.37s** | 13.54s | Ent (9%) |
 | Cold build memory | 3.31 GB | **1.54 GB** | Velox (2.2x) |
-| Incremental build | 0.20s | 0.24s | Tie |
+| Incremental rebuild (change 1 entity) | ~8s | **~0.7s** | Velox (~12x, grows with schema) |
 
 ### Generated Code Size
 

@@ -53,6 +53,7 @@ Benchmarked with identical 50-entity schemas including GraphQL (Relay connection
 
 | Metric | Ent | Velox | Delta |
 |--------|-----|-------|-------|
+| **Incremental rebuild** (change 1 entity) | ~8–18s | **~0.7s** | **10–25x faster** |
 | **Code generation time** | 6.32s | 2.00s | 3.2x faster |
 | **Generation peak memory** | 1.86 GB | 0.89 GB | 2.1x less |
 | **Total generated lines** | 335,365 | 230,280 | 31% fewer |
@@ -61,9 +62,11 @@ Benchmarked with identical 50-entity schemas including GraphQL (Relay connection
 | **Cold compile time** | 12.4s | 13.5s | Ent 9% faster |
 | **Cold compile memory** | 3.31 GB | 1.54 GB | 2.2x less |
 
-Velox generates faster with less memory, but cold compilation takes slightly longer due to more packages. Incremental builds are identical (~0.2s). Generated files are dramatically smaller — Ent's `mutation.go` alone is 56K lines vs Velox's largest file at 9.4K lines.
+The headline is **incremental rebuild** — the cost of the everyday dev loop (change one entity, recompile). Velox generates one small package per entity, so a one-entity change recompiles just that package (~0.7s). Ent generates a single flat `ent/` package (262 files for this schema), so any one-entity change recompiles **all 50 entities' code** (~8s, and it grows with schema size). On this 50-entity schema that's ~12x; the gap widens as the schema grows. Reproduce with [`./benchmarks/run.sh inc`](benchmarks/run.sh).
 
-If you have a small-to-medium schema, **use Ent**. Velox only makes sense if you're hitting code generation performance limits with 50+ entity types.
+The trade-off is honest: a *cold* full build is ~9% slower (more packages to compile from scratch), and codegen is ~3x faster with ~2x less memory. Generated files are also dramatically smaller — Ent's `mutation.go` alone is 56K lines vs Velox's largest file at 9.4K lines.
+
+**When Velox makes sense:** large, actively-developed schemas where the incremental rebuild loop is the bottleneck. For a small-to-medium schema you iterate on rarely, **use Ent** — it's mature, battle-tested, and the build-time gap won't matter to you.
 
 ## Features
 
