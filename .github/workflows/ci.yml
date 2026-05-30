@@ -517,3 +517,14 @@ jobs:
           go test -fuzz='^FuzzSnake$' -fuzztime=2m ./compiler/gen/
           go test -fuzz='^FuzzCamel$' -fuzztime=2m ./compiler/gen/
           go test -fuzz='^FuzzPascalSnakeRoundTrip$' -fuzztime=2m ./compiler/gen/
+
+      - name: Parity generative fuzz (bounded, sqlite)
+        # The parity harness is a separate module; generate its velox + ent
+        # clients first, then fuzz the byte-stream program builder through the
+        # three-way differential harness. Runs on in-memory SQLite, so no PG /
+        # MySQL services are needed. fuzztime is short — this is regression
+        # coverage and minimization, not exhaustive search.
+        working-directory: tests/parity
+        run: |
+          go run generate.go
+          go test -run='^$' -fuzz='^FuzzParity$' -fuzztime=60s .
