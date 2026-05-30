@@ -156,6 +156,24 @@ func curatedPrograms() []progCase {
 			expect: expectVeloxCorrect,
 		},
 		{
+			// Comment + tag + M2M attach: exercises CreateComment, CreateTag, and
+			// AddTagToPost (the edge-write ops not covered by the CRUD/pagination
+			// cases), then reads the post back so the three executors agree on the
+			// post's surviving state after the edge writes. Pinned for coverage by
+			// coverage_test.go::TestCoverage_AllOpKindsExercised.
+			name: "comment_tag_attach",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},
+				op.CreatePost{Title: "P", Status: "published", ViewCount: 7, AuthorRef: 0},
+				op.CreateTag{Name: "go"},
+				op.AddTagToPost{PostRef: 1, TagRef: 2},
+				op.CreateComment{Content: "nice", PostRef: 1, AuthorRef: 0},
+				op.QueryPostsByStatus{Status: "published"},
+				op.CountPosts{},
+			},
+			expect: expectAllPass,
+		},
+		{
 			name: "predicate_query_by_status",
 			prog: op.Program{
 				op.CreateAuthor{Name: "A", Role: "user"},
