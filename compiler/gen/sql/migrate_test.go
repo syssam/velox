@@ -2,6 +2,8 @@ package sql
 
 import (
 	"fmt"
+	"go/parser"
+	"go/token"
 	"testing"
 
 	"github.com/dave/jennifer/jen"
@@ -14,6 +16,43 @@ import (
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
+
+// TestGenMigrateSchema_OnDeleteAnnotationCompilesAndRendersConstName guards the
+// FULL migrate generation path (not just the isolated deleteAction): an M2O
+// edge carrying an OnDelete annotation must produce a ForeignKey whose OnDelete
+// is the Go constant (schema.Cascade) and the whole generated file must be
+// valid Go. This catches both failure modes the prior bug had — an undefined
+// identifier (schema.CASCADE, syntactically valid so caught by the string
+// assertion) and invalid syntax (schema.SET NULL, caught by the parser). The
+// path was unguarded because no test schema used an explicit OnDelete.
+func TestGenMigrateSchema_OnDeleteAnnotationCompilesAndRendersConstName(t *testing.T) {
+	t.Parallel()
+	helper := newMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	postType.Edges = []*gen.Edge{{
+		Name:   "author",
+		Type:   userType,
+		Unique: true,
+		Rel: gen.Relation{
+			Type:    gen.M2O,
+			Table:   "posts",
+			Columns: []string{"author_id"},
+		},
+		Annotations: gen.Annotations{
+			sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: sqlschema.Cascade},
+		},
+	}}
+	helper.graph.Nodes = []*gen.Type{userType, postType}
+
+	code := genMigrateSchema(helper).GoString()
+	assert.Contains(t, code, "schema.Cascade",
+		"FK OnDelete must render the Go constant schema.Cascade")
+	assert.NotContains(t, code, "schema.CASCADE",
+		"FK OnDelete must NOT emit the SQL literal schema.CASCADE (undefined identifier)")
+	_, err := parser.ParseFile(token.NewFileSet(), "schema.go", code, parser.AllErrors)
+	require.NoError(t, err, "generated migrate schema must be valid Go syntax")
+}
 
 // TestDeleteAction_OnDeleteAnnotationRendersConstName pins that an explicit
 // OnDelete annotation renders to the Go CONSTANT name (schema.Cascade), not the

@@ -252,6 +252,35 @@ func TestMultiDialect_AggregateSum(t *testing.T) {
 	})
 }
 
+// TestMultiDialect_OnDeleteCascade pins ON DELETE CASCADE behavior across
+// dialects. Comment.post carries sqlschema.OnDelete(Cascade) (testschema), so
+// deleting a Post must cascade-delete its Comments at the DB level on every
+// engine. This is both the behavioral guard for cascade and — because the
+// generated migrate FK must compile — the guard that an explicit OnDelete
+// annotation renders to valid Go (schema.Cascade, not schema.CASCADE).
+func TestMultiDialect_OnDeleteCascade(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+
+		author := createUser(t, client, "CascadeOwner", "cascade@multi.com")
+		p := createPost(t, client, author, "to-delete", "body")
+		_ = createComment(t, client, author, p, "c1")
+		_ = createComment(t, client, author, p, "c2")
+
+		before, err := client.Comment.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, before, "two comments exist before the post delete")
+
+		// Deleting the post must cascade-delete its comments (FK ON DELETE CASCADE).
+		require.NoError(t, client.Post.DeleteOneID(p.ID).Exec(ctx))
+
+		after, err := client.Comment.Query().Count(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, 0, after,
+			"deleting a post must cascade-delete its comments on every dialect")
+	})
+}
+
 // seedUsers inserts n users named User01..UserNN (so lexicographic name order
 // matches insertion/ID order) on a freshly-migrated client. Because each
 // dialect lane opens a fresh client whose tables were just (re)created,
