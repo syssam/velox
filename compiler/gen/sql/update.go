@@ -651,6 +651,15 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 						jen.Id("u").Dot("AddError").Call(jen.Qual("fmt", "Errorf").Call(jen.Lit("marshal append value for %q: %w"), jen.Id("colCopy"), jen.Id("err"))),
 						jen.Return(),
 					),
+					// A nil/empty append slice marshals to JSON "null". Feeding
+					// "null" through the append expression injects a spurious NULL
+					// element (json_each('null') yields a NULL row; `|| 'null'` and
+					// JSON_MERGE_PRESERVE(x, 'null') likewise corrupt the array)
+					// instead of being a no-op. Skip the modifier so appending an
+					// empty slice leaves the column unchanged — matching Ent.
+					jen.If(jen.String().Call(jen.Id("appendJSON")).Op("==").Lit("null")).Block(
+						jen.Return(),
+					),
 					// The append value is bound via b.Arg(), which emits the
 					// dialect-correct placeholder ($N on Postgres, ? on
 					// MySQL/SQLite). A raw "?" inside sql.Expr is NOT rewritten
@@ -664,7 +673,14 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 							// SQLite has no JSON array concat operator. Build the merged
 							// array by unioning json_each over the existing column and the
 							// incoming value, then re-packing with json_group_array.
-							jsonAppendSet(h, "(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(", ")))"),
+							//
+							// A column holding the JSON scalar null (e.g. a prior
+							// SetLabels(nil), which marshals to "null") is NOT caught by
+							// COALESCE — that only swaps SQL NULL — so json_each('null')
+							// would inject a spurious NULL element. Normalize a json_type
+							// of 'null' to an empty array first so an empty/null column
+							// appends cleanly (matches Ent's CASE-WHEN JSON_TYPE guard).
+							jsonAppendSet(h, "(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CASE WHEN json_type(CAST(COALESCE(%[1]s, '[]') AS TEXT)) = 'null' THEN '[]' ELSE CAST(COALESCE(%[1]s, '[]') AS TEXT) END) UNION ALL SELECT value FROM json_each(", ")))"),
 						),
 						jen.Default().Block(
 							// PostgreSQL: jsonb || jsonb concatenates arrays.

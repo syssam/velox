@@ -227,6 +227,9 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 				u.AddError(fmt.Errorf("marshal append value for %q: %w", colCopy, err))
 				return
 			}
+			if string(appendJSON) == "null" {
+				return
+			}
 			switch d {
 			case dialect.MySQL:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
@@ -236,7 +239,7 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 				}))
 			case dialect.SQLite:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(", colCopy))
+					b.WriteString(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CASE WHEN json_type(CAST(COALESCE(%[1]s, '[]') AS TEXT)) = 'null' THEN '[]' ELSE CAST(COALESCE(%[1]s, '[]') AS TEXT) END) UNION ALL SELECT value FROM json_each(", colCopy))
 					b.Arg(string(appendJSON))
 					b.WriteString(")))")
 				}))
@@ -546,6 +549,9 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 				u.AddError(fmt.Errorf("marshal append value for %q: %w", colCopy, err))
 				return
 			}
+			if string(appendJSON) == "null" {
+				return
+			}
 			switch d {
 			case dialect.MySQL:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
@@ -555,7 +561,7 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 				}))
 			case dialect.SQLite:
 				u.Set(colCopy, sql.ExprFunc(func(b *sql.Builder) {
-					b.WriteString(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CAST(COALESCE(%s, '[]') AS TEXT)) UNION ALL SELECT value FROM json_each(", colCopy))
+					b.WriteString(fmt.Sprintf("(SELECT json_group_array(value) FROM (SELECT value FROM json_each(CASE WHEN json_type(CAST(COALESCE(%[1]s, '[]') AS TEXT)) = 'null' THEN '[]' ELSE CAST(COALESCE(%[1]s, '[]') AS TEXT) END) UNION ALL SELECT value FROM json_each(", colCopy))
 					b.Arg(string(appendJSON))
 					b.WriteString(")))")
 				}))
