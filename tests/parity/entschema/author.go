@@ -1,5 +1,5 @@
-// Package schema defines the Ent parity schema (mirror of the velox schema).
-package schema
+// Package entschema defines the Ent parity schema (mirror of the velox schema).
+package entschema
 
 import (
 	"entgo.io/ent"

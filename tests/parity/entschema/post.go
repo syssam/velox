@@ -1,4 +1,4 @@
-package schema
+package entschema
 
 import (
 	"entgo.io/contrib/entgql"
