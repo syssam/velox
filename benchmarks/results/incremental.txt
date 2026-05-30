@@ -1,0 +1,9 @@
+Velox vs Ent — incremental rebuild (1-entity change)
+Schema: 50 entities  |  Runs: 5  |  2026-05-30 12:04 UTC
+Platform: Darwin 25.5.0 arm64  |  go1.26.2
+---
+velox runs (s): 0.63 0.69 0.65 0.69 2.22
+ent   runs (s): 15.92 14.74 17.76 99.87 21.34
+velox median: 0.69s
+ent   median: 17.76s
+ratio: 25.7x faster incremental rebuild for velox
