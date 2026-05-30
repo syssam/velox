@@ -8,8 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox/compiler/load"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
+
+// TestEdge_DeleteAction pins the single source of truth for the FK ON DELETE
+// action, which both graph_tables.go and sql/migrate.go now delegate to:
+// explicit OnDelete annotation wins; otherwise SetNull when nullable, NoAction
+// when not. Matches Ent's deleteAction.
+func TestEdge_DeleteAction(t *testing.T) {
+	t.Parallel()
+	plain := Edge{}
+	assert.Equal(t, sqlschema.NoAction, plain.DeleteAction(false), "required (non-nullable) FK defaults to NoAction")
+	assert.Equal(t, sqlschema.SetNull, plain.DeleteAction(true), "optional (nullable) FK defaults to SetNull")
+
+	annotated := Edge{Annotations: Annotations{
+		sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: sqlschema.Cascade},
+	}}
+	assert.Equal(t, sqlschema.Cascade, annotated.DeleteAction(false), "explicit annotation wins over the non-nullable default")
+	assert.Equal(t, sqlschema.Cascade, annotated.DeleteAction(true), "explicit annotation wins over the nullable default")
+}
 
 func TestType(t *testing.T) {
 	require := require.New(t)

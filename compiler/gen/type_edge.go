@@ -311,6 +311,23 @@ func (e Edge) EntSQL() *sqlschema.Annotation {
 	return sqlAnnotate(e.Annotations)
 }
 
+// DeleteAction returns the referential ON DELETE action for this edge's foreign
+// key: the explicit sqlschema.OnDelete annotation if set, otherwise SetNull when
+// the FK column is nullable, otherwise NoAction. This is the single source of
+// truth for the delete action — both the graph-level table builder
+// (graph_tables.go) and the SQL migrate generator (sql/migrate.go) delegate here
+// so the logic cannot drift (a prior duplicate in sql/migrate.go is what caused
+// the OnDelete-rendering bug). Matches Ent's deleteAction (entc/gen/graph.go).
+func (e Edge) DeleteAction(nullable bool) sqlschema.CascadeAction {
+	if ant := e.EntSQL(); ant != nil && ant.OnDelete != "" {
+		return ant.OnDelete
+	}
+	if nullable {
+		return sqlschema.SetNull
+	}
+	return sqlschema.NoAction
+}
+
 // Index returns the index of the edge in the schema.
 // Used mainly to extract its position in the "loadedTypes" array.
 func (e Edge) Index() (int, error) {

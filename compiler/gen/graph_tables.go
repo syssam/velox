@@ -286,14 +286,9 @@ func ensureUniqueFKs(tables map[string]*schema.Table) error {
 	return nil
 }
 
-// deleteAction returns the referential action for DELETE operations of the given edge.
+// deleteAction returns the referential action for DELETE operations of the given
+// edge. Delegates to Edge.DeleteAction (the single source of truth) keyed on the
+// FK column's nullability.
 func deleteAction(e *Edge, c *schema.Column) schema.ReferenceOption {
-	action := schema.NoAction
-	if c.Nullable {
-		action = schema.SetNull
-	}
-	if ant := e.EntSQL(); ant != nil && ant.OnDelete != "" {
-		action = ant.OnDelete
-	}
-	return action
+	return e.DeleteAction(c.Nullable)
 }

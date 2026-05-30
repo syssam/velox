@@ -780,19 +780,11 @@ func genTableAnnotationDict(ant *sqlschema.Annotation) jen.Dict {
 func deleteAction(e *gen.Edge) jen.Code {
 	schemaPkg := "github.com/syssam/velox/dialect/sql/schema"
 
-	// Check for explicit annotation. OnDelete's value is the SQL literal
-	// (e.g. "CASCADE", "SET NULL"); the emitted Go constant is named differently
-	// (schema.Cascade, schema.SetNull). ConstName() maps the literal to the Go
-	// constant name — string(ant.OnDelete) would emit an undefined identifier
-	// (schema.CASCADE) or invalid Go (schema.SET NULL).
-	if ant := e.EntSQL(); ant != nil && ant.OnDelete != "" {
-		return jen.Qual(schemaPkg, ant.OnDelete.ConstName())
-	}
-
-	// Default behavior: SetNull for optional (nullable FK), NoAction for required.
-	// This is conservative — users must explicitly opt into Cascade.
-	if e.Optional {
-		return jen.Qual(schemaPkg, "SetNull")
-	}
-	return jen.Qual(schemaPkg, "NoAction")
+	// Delegate the decision to Edge.DeleteAction (the single source of truth,
+	// shared with the graph-level table builder) keyed on the FK column's
+	// nullability — which this generator builds as e.Optional (see edgeFKColumn).
+	// ConstName() maps the SQL literal value ("CASCADE", "SET NULL") to the Go
+	// constant name (schema.Cascade, schema.SetNull); rendering the raw literal
+	// would emit an undefined identifier (schema.CASCADE) or invalid Go.
+	return jen.Qual(schemaPkg, e.DeleteAction(e.Optional).ConstName())
 }
