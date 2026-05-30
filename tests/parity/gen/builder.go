@@ -56,14 +56,80 @@ func (c *cursor) next(mod int) int {
 func (c *cursor) more() bool { return c.pos < len(c.data) }
 
 // state tracks the handles created so far, per kind. A handle is the program
-// index of the op that created the entity. Deleted posts remain in posts:
-// referencing a deleted post is allowed (it exercises not-found, which all
-// three executors agree on).
+// index of the op that created the entity.
+//
+// posts retains EVERY created post handle, including deleted ones: the
+// post-mutation ops (SetPostLabels, AppendPostLabels, UpdatePostViewCount,
+// DeletePost) and AddTagToPost may reference a deleted post — they exercise the
+// not-found path, which all three executors agree on.
+//
+// deleted records hard-deleted posts. Ops that require a LIVE post row — a
+// CreateComment FK parent, or a pagination cursor anchor — must NOT reference a
+// deleted post: the post is physically gone, so the ORMs FK-violate (comment)
+// or compute a cursor with no anchor row (pagination), while the oracle, which
+// does not model deletion at those sites, reports a different outcome. That
+// disagreement is a generator validity artifact, not a bug, so the builder
+// draws those refs from livePosts() only.
+//
+// hasComment records posts that have a comment. The comments->posts FK is
+// OnDelete: NoAction (RESTRICT), so hard-deleting a post that still has a
+// comment FAILS in both ORMs (FK constraint), while the oracle soft-deletes
+// happily and reports ok. (The post_tags M2M FK is OnDelete: Cascade, so a post
+// with tags deletes fine — only comments block deletion.) Comments are never
+// removed by any op, so once a post receives a comment it is permanently
+// delete-unsafe; the builder draws DeletePost targets from deletablePosts() only.
 type state struct {
-	authors  []int
-	posts    []int
-	tags     []int
-	comments []int
+	authors    []int
+	posts      []int
+	tags       []int
+	comments   []int
+	deleted    map[int]bool
+	hasComment map[int]bool
+}
+
+// markDeleted records that the post at handle h has been hard-deleted.
+func (s *state) markDeleted(h int) {
+	if s.deleted == nil {
+		s.deleted = map[int]bool{}
+	}
+	s.deleted[h] = true
+}
+
+// markCommented records that the post at handle h has a comment (and is thus
+// permanently delete-unsafe while live).
+func (s *state) markCommented(h int) {
+	if s.hasComment == nil {
+		s.hasComment = map[int]bool{}
+	}
+	s.hasComment[h] = true
+}
+
+// livePosts returns the post handles that have not been deleted, in creation
+// order. Used for refs that require a live row (CreateComment FK parent,
+// pagination cursor anchor).
+func (s *state) livePosts() []int {
+	out := make([]int, 0, len(s.posts))
+	for _, h := range s.posts {
+		if !s.deleted[h] {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// deletablePosts returns the post handles a DeletePost may safely target so the
+// three executors agree: any post that is NOT (live AND has a comment). A
+// live-commented post would FK-violate the DELETE (comments->posts is RESTRICT);
+// an already-deleted post is fine (re-delete hits the agreed not-found path); a
+// live post with no comment deletes cleanly.
+func (s *state) deletablePosts() []int {
+	out := make([]int, 0, len(s.posts))
+	for _, h := range s.posts {
+		if s.deleted[h] || !s.hasComment[h] {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // opKind enumerates the generable op kinds for selection.
@@ -93,10 +159,11 @@ const (
 //	CreateAuthor, CreateTag, QueryPostsByStatus, CountPosts, SumViewCount,
 //	  PaginatePosts          -> always
 //	CreatePost               -> >=1 author
-//	CreateComment            -> >=1 post AND >=1 author
-//	AddTagToPost             -> >=1 post AND >=1 tag
-//	SetPostLabels, AppendPostLabels, UpdatePostViewCount, DeletePost
-//	                         -> >=1 post (deleted handles allowed)
+//	CreateComment            -> >=1 LIVE post AND >=1 author (FK parent must exist)
+//	AddTagToPost             -> >=1 post AND >=1 tag (deleted handle -> not-found, agreed)
+//	SetPostLabels, AppendPostLabels, UpdatePostViewCount
+//	                         -> >=1 post (deleted handle -> not-found, agreed)
+//	DeletePost               -> >=1 deletable post (no live-commented post: RESTRICT FK)
 //	LoadAuthorPosts          -> >=1 author
 func (s *state) satisfiable() []opKind {
 	out := []opKind{
@@ -106,15 +173,22 @@ func (s *state) satisfiable() []opKind {
 	if len(s.authors) > 0 {
 		out = append(out, kCreatePost, kLoadAuthorPosts)
 	}
-	if len(s.posts) > 0 && len(s.authors) > 0 {
+	// CreateComment writes an FK to its parent post, so the parent must be a
+	// LIVE row — a deleted post is physically gone and the INSERT would
+	// FK-violate in both ORMs while the oracle stores it happily.
+	if len(s.livePosts()) > 0 && len(s.authors) > 0 {
 		out = append(out, kCreateComment)
 	}
 	if len(s.posts) > 0 && len(s.tags) > 0 {
 		out = append(out, kAddTagToPost)
 	}
 	if len(s.posts) > 0 {
-		out = append(out,
-			kSetPostLabels, kAppendPostLabels, kUpdatePostViewCount, kDeletePost)
+		out = append(out, kSetPostLabels, kAppendPostLabels, kUpdatePostViewCount)
+	}
+	// DeletePost on a live post that still has a comment FK-violates (RESTRICT),
+	// so it may only target a deletable post.
+	if len(s.deletablePosts()) > 0 {
+		out = append(out, kDeletePost)
 	}
 	return out
 }
@@ -161,15 +235,26 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 		}
 	case kCreateComment:
 		st.comments = append(st.comments, idx)
+		// PostRef is an FK parent that must point to a LIVE post (satisfiable
+		// guarantees >=1 live post). A deleted post would FK-violate the INSERT.
+		postRef := ref(c, st.livePosts())
+		st.markCommented(postRef) // post now has a RESTRICT child; no longer delete-safe
 		return op.CreateComment{
 			Content:   name(c, "C"),
 			Labels:    labels(c),
-			PostRef:   ref(c, st.posts),
+			PostRef:   postRef,
 			AuthorRef: ref(c, st.authors),
 		}
 	case kCreateTag:
 		st.tags = append(st.tags, idx)
-		return op.CreateTag{Name: name(c, "T")}
+		// Tag.name carries a UNIQUE constraint in both schemas. Derive the name
+		// from the creation handle (op index), which is unique across the whole
+		// program, so a CreateTag never collides — a duplicate name would fail
+		// the unique constraint in BOTH ORMs while the oracle (which does not
+		// model the constraint) reports ok, a spurious ReferenceSuspect. Keeping
+		// names unique is a validity rule, the uniqueness cousin of referential
+		// validity, enforced by Validate.
+		return op.CreateTag{Name: fmt.Sprintf("T%d", idx)}
 	case kAddTagToPost:
 		return op.AddTagToPost{PostRef: ref(c, st.posts), TagRef: ref(c, st.tags)}
 	case kSetPostLabels:
@@ -179,7 +264,11 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 	case kUpdatePostViewCount:
 		return op.UpdatePostViewCount{PostRef: ref(c, st.posts), ViewCount: c.next(1001)}
 	case kDeletePost:
-		return op.DeletePost{PostRef: ref(c, st.posts)}
+		// Draw only from deletable posts: a live post with a comment would
+		// FK-violate the DELETE (comments->posts is RESTRICT).
+		target := ref(c, st.deletablePosts())
+		st.markDeleted(target)
+		return op.DeletePost{PostRef: target}
 	case kQueryPostsByStatus:
 		return op.QueryPostsByStatus{Status: pick(c, statuses)}
 	case kCountPosts:
@@ -197,24 +286,32 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 
 // paginateOp builds a PaginatePosts op. It picks at most one direction (never
 // First and Last together), draws the limit from [0, 20], optionally attaches a
-// cursor chosen from existing post handles, and optionally orders by
-// view_count.
+// cursor chosen from LIVE post handles, and optionally orders by view_count.
+//
+// The cursor anchor (AfterRef/BeforeRef) must be a live post: both ORMs encode
+// the cursor from the anchor row's (view_count, id) and derive HasPrev/HasNext
+// from rows on either side of that value. With a deleted anchor the row is gone
+// and the ORMs produce different page flags than the oracle, whose
+// cursor-presence rule (HasPrev when AfterRef!=nil, HasNext when BeforeRef!=nil)
+// assumes the anchor resolves to a real position. Drawing from livePosts() keeps
+// the cursor semantics aligned across all three.
 func paginateOp(c *cursor, st *state) op.Op {
 	var p op.PaginatePosts
+	live := st.livePosts()
 	// Choose direction: 0 => first, 1 => last. (Always pick one; the limit can
 	// still be 0, which both ORMs accept.)
 	if c.next(2) == 0 {
 		first := c.next(21) // [0, 20]
 		p.First = &first
-		if len(st.posts) > 0 && c.next(2) == 0 {
-			after := ref(c, st.posts)
+		if len(live) > 0 && c.next(2) == 0 {
+			after := ref(c, live)
 			p.AfterRef = &after
 		}
 	} else {
 		last := c.next(21)
 		p.Last = &last
-		if len(st.posts) > 0 && c.next(2) == 0 {
-			before := ref(c, st.posts)
+		if len(live) > 0 && c.next(2) == 0 {
+			before := ref(c, live)
 			p.BeforeRef = &before
 		}
 	}
@@ -268,19 +365,39 @@ func labels(c *cursor) []string {
 // executable invariant the 2000-iteration random test enforces, and an internal
 // sanity check on Build's output.
 //
-// Deletion is intentionally NOT tracked here: referencing a deleted post is
-// referentially valid (it exercises not-found, which all three executors agree
-// on). Validate only checks that the handle was created as a post at all.
+// Deletion handling is asymmetric, by design:
+//   - The post-mutation ops (SetPostLabels, AppendPostLabels,
+//     UpdatePostViewCount, DeletePost) and AddTagToPost MAY reference a deleted
+//     post — they exercise the not-found path, which all three executors agree
+//     on. Validate only checks the handle was created as a post.
+//   - CreateComment's FK parent and a pagination cursor anchor MUST be a LIVE
+//     post: a deleted post is physically gone, so the ORMs FK-violate (comment)
+//     or compute a cursor with no anchor row (pagination) while the oracle
+//     reports a different outcome — a generator validity artifact, not a bug.
+//   - DeletePost on a LIVE post that still has a comment FK-violates (the
+//     comments->posts FK is RESTRICT); a deletable post is one that is already
+//     deleted or has no comment.
 func Validate(prog op.Program) error {
 	authors := map[int]bool{}
 	posts := map[int]bool{}
+	deleted := map[int]bool{}
+	hasComment := map[int]bool{}
 	tags := map[int]bool{}
+	tagNames := map[string]bool{}
+	live := func(h int) bool { return posts[h] && !deleted[h] }
 
 	for i, o := range prog {
 		switch v := o.(type) {
 		case op.CreateAuthor:
 			authors[i] = true
 		case op.CreateTag:
+			// Tag.name is UNIQUE in both schemas; a duplicate name fails in both
+			// ORMs while the oracle reports ok (a spurious ReferenceSuspect), so a
+			// valid program must never repeat a tag name.
+			if tagNames[v.Name] {
+				return fmt.Errorf("op %d CreateTag: duplicate tag name %q violates the unique constraint", i, v.Name)
+			}
+			tagNames[v.Name] = true
 			tags[i] = true
 		case op.CreatePost:
 			if !authors[v.AuthorRef] {
@@ -288,12 +405,13 @@ func Validate(prog op.Program) error {
 			}
 			posts[i] = true
 		case op.CreateComment:
-			if !posts[v.PostRef] {
-				return fmt.Errorf("op %d CreateComment: PostRef %d is not an existing post handle", i, v.PostRef)
+			if !live(v.PostRef) {
+				return fmt.Errorf("op %d CreateComment: PostRef %d is not a LIVE post handle (FK parent must exist)", i, v.PostRef)
 			}
 			if !authors[v.AuthorRef] {
 				return fmt.Errorf("op %d CreateComment: AuthorRef %d is not an existing author handle", i, v.AuthorRef)
 			}
+			hasComment[v.PostRef] = true
 		case op.AddTagToPost:
 			if !posts[v.PostRef] {
 				return fmt.Errorf("op %d AddTagToPost: PostRef %d is not an existing post handle", i, v.PostRef)
@@ -317,12 +435,17 @@ func Validate(prog op.Program) error {
 			if !posts[v.PostRef] {
 				return fmt.Errorf("op %d DeletePost: PostRef %d is not an existing post handle", i, v.PostRef)
 			}
+			// A live post with a comment cannot be hard-deleted (RESTRICT FK).
+			if live(v.PostRef) && hasComment[v.PostRef] {
+				return fmt.Errorf("op %d DeletePost: post %d has a comment and is live (RESTRICT FK blocks delete)", i, v.PostRef)
+			}
+			deleted[v.PostRef] = true
 		case op.LoadAuthorPosts:
 			if !authors[v.AuthorRef] {
 				return fmt.Errorf("op %d LoadAuthorPosts: AuthorRef %d is not an existing author handle", i, v.AuthorRef)
 			}
 		case op.PaginatePosts:
-			if err := validatePaginate(i, v, posts); err != nil {
+			if err := validatePaginate(i, v, live); err != nil {
 				return err
 			}
 		case op.QueryPostsByStatus, op.CountPosts, op.SumViewCount:
@@ -335,9 +458,10 @@ func Validate(prog op.Program) error {
 }
 
 // validatePaginate checks a PaginatePosts op's invariants: never First and Last
-// together, non-negative limits, and any cursor ref points to an existing post
-// handle. OrderBy fields must be in the generated domain.
-func validatePaginate(i int, p op.PaginatePosts, posts map[int]bool) error {
+// together, non-negative limits, and any cursor anchor points to a LIVE post
+// handle (live reports whether a handle is an undeleted post). OrderBy fields
+// must be in the generated domain.
+func validatePaginate(i int, p op.PaginatePosts, live func(int) bool) error {
 	if p.First != nil && p.Last != nil {
 		return fmt.Errorf("op %d PaginatePosts: First and Last both set", i)
 	}
@@ -347,11 +471,11 @@ func validatePaginate(i int, p op.PaginatePosts, posts map[int]bool) error {
 	if p.Last != nil && *p.Last < 0 {
 		return fmt.Errorf("op %d PaginatePosts: negative Last %d", i, *p.Last)
 	}
-	if p.AfterRef != nil && !posts[*p.AfterRef] {
-		return fmt.Errorf("op %d PaginatePosts: AfterRef %d is not an existing post handle", i, *p.AfterRef)
+	if p.AfterRef != nil && !live(*p.AfterRef) {
+		return fmt.Errorf("op %d PaginatePosts: AfterRef %d is not a LIVE post handle (cursor anchor must exist)", i, *p.AfterRef)
 	}
-	if p.BeforeRef != nil && !posts[*p.BeforeRef] {
-		return fmt.Errorf("op %d PaginatePosts: BeforeRef %d is not an existing post handle", i, *p.BeforeRef)
+	if p.BeforeRef != nil && !live(*p.BeforeRef) {
+		return fmt.Errorf("op %d PaginatePosts: BeforeRef %d is not a LIVE post handle (cursor anchor must exist)", i, *p.BeforeRef)
 	}
 	for _, term := range p.OrderBy {
 		ok := false

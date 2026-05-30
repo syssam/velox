@@ -156,6 +156,40 @@ func curatedPrograms() []progCase {
 			expect: expectVeloxCorrect,
 		},
 		{
+			// Regression for a velox JSON-append bug the generative leg (Stage B)
+			// surfaced: appending an EMPTY label list used to marshal the nil
+			// slice to JSON "null" and bind it, so json_each('null') injected a
+			// spurious empty element. The fix skips the modifier when the value
+			// marshals to "null". Appending [] here must be a no-op, leaving the
+			// labels unchanged and the later non-empty append clean.
+			name: "json_append_empty_is_noop",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},
+				op.CreatePost{Title: "P", Status: "draft", ViewCount: 1, AuthorRef: 0, Labels: []string{"e"}},
+				op.AppendPostLabels{PostRef: 1, Labels: nil},                     // no-op
+				op.AppendPostLabels{PostRef: 1, Labels: []string{"c", "b", "e"}}, // -> [e c b e]
+				op.QueryPostsByStatus{Status: "draft"},
+			},
+			expect: expectVeloxCorrect,
+		},
+		{
+			// Regression for the partner velox bug: SetLabels(nil) stores the JSON
+			// scalar null in the column, and the SQLite append expression's
+			// COALESCE did NOT normalize a json-null column (only SQL NULL), so a
+			// later append injected a leading empty element. The fix maps a
+			// json_type of 'null' to '[]' before json_each. SET-empty then append
+			// must yield exactly the appended values.
+			name: "json_set_empty_then_append",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},
+				op.CreatePost{Title: "P", Status: "draft", ViewCount: 1, AuthorRef: 0, Labels: []string{"x"}},
+				op.SetPostLabels{PostRef: 1, Labels: nil},                        // column -> json null
+				op.AppendPostLabels{PostRef: 1, Labels: []string{"a", "a", "a"}}, // -> [a a a]
+				op.QueryPostsByStatus{Status: "draft"},
+			},
+			expect: expectVeloxCorrect,
+		},
+		{
 			// Comment + tag + M2M attach: exercises CreateComment, CreateTag, and
 			// AddTagToPost (the edge-write ops not covered by the CRUD/pagination
 			// cases), then reads the post back so the three executors agree on the
