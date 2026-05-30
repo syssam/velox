@@ -54,6 +54,49 @@ func TestGenMigrateSchema_OnDeleteAnnotationCompilesAndRendersConstName(t *testi
 	require.NoError(t, err, "generated migrate schema must be valid Go syntax")
 }
 
+// TestGenMigrateSchema_OnDeleteOnAssocEdgeRendersOnM2OSide guards the Ent-style
+// placement of the OnDelete annotation. velox emits the FK from the M2O /
+// FK-owning edge, but Ent (and users porting an Ent schema) declare the
+// referential action on the assoc edge (the parent's edge.To). The annotation
+// then lives on the M2O edge's paired edge (e.Ref), NOT on the M2O edge itself.
+// Without honoring e.Ref the cascade is silently dropped — the CASCADE-class
+// data-integrity divergence the parity migration-DDL guard surfaced. This pins
+// the full generator path: assoc-side annotation must still render schema.Cascade
+// on the M2O foreign key.
+func TestGenMigrateSchema_OnDeleteOnAssocEdgeRendersOnM2OSide(t *testing.T) {
+	t.Parallel()
+	helper := newMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	postType.Edges = []*gen.Edge{{
+		Name:   "author",
+		Type:   userType,
+		Unique: true,
+		Rel: gen.Relation{
+			Type:    gen.M2O,
+			Table:   "posts",
+			Columns: []string{"author_id"},
+		},
+		// No annotation on the M2O edge itself — it lives on the paired assoc
+		// edge (the parent's edge.To), mirroring Ent's placement convention.
+		Ref: &gen.Edge{
+			Name: "posts",
+			Type: postType,
+			Rel:  gen.Relation{Type: gen.O2M},
+			Annotations: gen.Annotations{
+				sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: sqlschema.Cascade},
+			},
+		},
+	}}
+	helper.graph.Nodes = []*gen.Type{userType, postType}
+
+	code := genMigrateSchema(helper).GoString()
+	assert.Contains(t, code, "schema.Cascade",
+		"assoc-side (e.Ref) OnDelete annotation must render schema.Cascade on the M2O FK")
+	_, err := parser.ParseFile(token.NewFileSet(), "schema.go", code, parser.AllErrors)
+	require.NoError(t, err, "generated migrate schema must be valid Go syntax")
+}
+
 // TestDeleteAction_OnDeleteAnnotationRendersConstName pins that an explicit
 // OnDelete annotation renders to the Go CONSTANT name (schema.Cascade), not the
 // SQL literal value (schema.CASCADE — undefined; or schema.SET NULL — invalid

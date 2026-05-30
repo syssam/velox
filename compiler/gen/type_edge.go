@@ -318,9 +318,22 @@ func (e Edge) EntSQL() *sqlschema.Annotation {
 // (graph_tables.go) and the SQL migrate generator (sql/migrate.go) delegate here
 // so the logic cannot drift (a prior duplicate in sql/migrate.go is what caused
 // the OnDelete-rendering bug). Matches Ent's deleteAction (entc/gen/graph.go).
+//
+// The annotation may be declared on either end of the relationship. velox emits
+// the FK from the M2O / FK-owning side, so it checks this edge first; Ent reads
+// the action from the assoc edge (e.g. the parent's edge.To), so velox also
+// honors the annotation on the paired edge (e.Ref). Without this fallback an
+// Ent-authored schema that declares OnDelete on the assoc side would silently
+// lose its referential action in velox — a CASCADE-class data-integrity
+// divergence. The edge's own annotation takes precedence over the paired edge's.
 func (e Edge) DeleteAction(nullable bool) sqlschema.CascadeAction {
 	if ant := e.EntSQL(); ant != nil && ant.OnDelete != "" {
 		return ant.OnDelete
+	}
+	if e.Ref != nil {
+		if ant := e.Ref.EntSQL(); ant != nil && ant.OnDelete != "" {
+			return ant.OnDelete
+		}
 	}
 	if nullable {
 		return sqlschema.SetNull

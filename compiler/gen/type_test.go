@@ -27,6 +27,25 @@ func TestEdge_DeleteAction(t *testing.T) {
 	}}
 	assert.Equal(t, sqlschema.Cascade, annotated.DeleteAction(false), "explicit annotation wins over the non-nullable default")
 	assert.Equal(t, sqlschema.Cascade, annotated.DeleteAction(true), "explicit annotation wins over the nullable default")
+
+	// Ent-compat: the OnDelete annotation may be declared on the paired edge.
+	// Ent reads the referential action from the assoc edge (e.g. the parent's
+	// edge.To); velox emits the FK from the M2O side, so without this the
+	// annotation on the assoc end would be silently dropped — a CASCADE-class
+	// data-integrity divergence. DeleteAction honors it on either end via e.Ref.
+	cascadeRef := &Edge{Annotations: Annotations{
+		sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: sqlschema.Cascade},
+	}}
+	viaRef := Edge{Ref: cascadeRef}
+	assert.Equal(t, sqlschema.Cascade, viaRef.DeleteAction(false), "annotation on the paired (assoc) edge is honored on the M2O side")
+	assert.Equal(t, sqlschema.Cascade, viaRef.DeleteAction(true), "paired-edge annotation wins over the nullable default")
+
+	// The edge's own annotation takes precedence over the paired edge's.
+	ownWins := Edge{
+		Annotations: Annotations{sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: sqlschema.SetNull}},
+		Ref:         cascadeRef,
+	}
+	assert.Equal(t, sqlschema.SetNull, ownWins.DeleteAction(false), "the edge's own annotation wins over the paired edge's")
 }
 
 func TestType(t *testing.T) {
