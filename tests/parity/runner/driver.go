@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -11,22 +13,49 @@ import (
 	"velox.test/parity/op"
 )
 
-// Backend selects the database engine the three-way driver runs against. Only
-// SQLite is wired in A3a; Postgres and MySQL are added in A3b.
+// Backend selects the database engine the three-way driver runs against.
 type Backend int
 
 const (
 	// SQLite runs the parity programs against in-memory SQLite (velox via the
-	// modernc "sqlite" driver, ent via the same).
+	// modernc "sqlite" driver, ent via the same). Always available — no env.
 	SQLite Backend = iota
+	// Postgres runs against the server named by VELOX_TEST_POSTGRES (velox→base
+	// db, ent→"<base>_ent" db). Skipped when that env var is unset/unreachable.
+	Postgres
+	// MySQL runs against the server named by VELOX_TEST_MYSQL, same
+	// separate-database convention as Postgres.
+	MySQL
 )
 
 func (b Backend) String() string {
 	switch b {
 	case SQLite:
 		return "sqlite"
+	case Postgres:
+		return "postgres"
+	case MySQL:
+		return "mysql"
 	default:
 		return fmt.Sprintf("backend(%d)", int(b))
+	}
+}
+
+// HasBackend reports whether the given backend can run: SQLite is always
+// available; Postgres / MySQL require their DSN env var to be set (the actual
+// reachability check happens when RunParity opens the clients, which skips the
+// test on failure). This lets callers cheaply branch on configuration before
+// spending a connection attempt.
+func HasBackend(b Backend) bool {
+	switch b {
+	case SQLite:
+		return true
+	case Postgres:
+		return os.Getenv(pgEnvVar) != ""
+	case MySQL:
+		return os.Getenv(mysqlEnvVar) != ""
+	default:
+		return false
 	}
 }
 
@@ -58,6 +87,16 @@ func newSQLSink() *sqlSink {
 func (s *sqlSink) setOp(i int) {
 	s.mu.Lock()
 	s.op = i
+	s.mu.Unlock()
+}
+
+// clear resets the sink to empty so a long-lived (cached) ORM client's sink can
+// be reused for the next program without carrying over prior statements. Used by
+// the dialect driver, whose clients live for the whole test.
+func (s *sqlSink) clear() {
+	s.mu.Lock()
+	s.op = 0
+	s.log = map[int][]string{}
 	s.mu.Unlock()
 }
 
@@ -95,23 +134,47 @@ type Report struct {
 	Ops     []OpReport
 }
 
-// RunParity runs all three executors (reference, velox, ent) on fresh, isolated
-// clients for the backend and classifies each op's outcome per the verdict
-// table. SQL from both ORMs is captured per op so a non-Pass op prints the
-// failing op, the structured mismatches, and the two SQL statements.
+// dialectCacheKey identifies the reusable (velox, ent) client pair for one
+// (test, backend). PG/MySQL migrate once per test and truncate between programs,
+// so the pair is cached here rather than reopened per RunParity call.
+type dialectCacheKey struct {
+	tb      testing.TB
+	backend Backend
+}
+
+// dialectCache holds the per-(test, backend) reusable client pairs. It is a
+// startup-style registry: written on the first RunParity for a (test, backend)
+// and read by later calls in the same test. The entry's clients register their
+// own t.Cleanup via openDialectPair, and the cache entry is dropped on test end.
+var dialectCache sync.Map // map[dialectCacheKey]*dialectPair
+
+// RunParity runs all three executors (reference, velox, ent) for the backend and
+// classifies each op's outcome per the verdict table. SQLite uses fresh
+// in-memory clients per call; Postgres/MySQL reuse a per-test migrated client
+// pair, truncating all tables on BOTH ORMs before each program so state never
+// bleeds between programs. SQL from both ORMs is captured per op so a non-Pass op
+// prints the failing op, the structured mismatches, and the two SQL statements.
 func RunParity(t testing.TB, backend Backend, prog op.Program) Report {
 	t.Helper()
-	if backend != SQLite {
-		t.Fatalf("RunParity: unsupported backend %s (A3b adds Postgres/MySQL)", backend)
-	}
 
 	ref := Reference(t, prog)
 
-	veloxSink := newSQLSink()
-	veloxRes := runVeloxTraced(t, veloxSink, prog)
+	var veloxSink, entSink *sqlSink
+	var veloxRes, entRes []model.Result
 
-	entSink := newSQLSink()
-	entRes := runEntTraced(t, entSink, prog)
+	switch backend {
+	case SQLite:
+		veloxSink = newSQLSink()
+		entSink = newSQLSink()
+		veloxRes = runVeloxTraced(t, veloxSink, prog)
+		entRes = runEntTraced(t, entSink, prog)
+	case Postgres, MySQL:
+		// PG/MySQL reuse a per-test pair whose traced clients log into the
+		// pair's own sinks; those sinks (cleared per program) carry the SQL.
+		veloxRes, entRes, veloxSink, entSink = runDialectProgram(t, backend, prog)
+	default:
+		t.Fatalf("RunParity: unsupported backend %s", backend)
+	}
 
 	rep := Report{Backend: backend, Prog: prog, Ops: make([]OpReport, len(prog))}
 	for i := range prog {
@@ -129,6 +192,52 @@ func RunParity(t testing.TB, backend Backend, prog op.Program) Report {
 		}
 	}
 	return rep
+}
+
+// runDialectProgram runs prog against the per-test (velox, ent) pair for a
+// PG/MySQL backend. It lazily opens and caches the pair on the first call for a
+// (test, backend), truncates BOTH databases before running so the program starts
+// from empty, executes the program on both ORMs, and returns the normalized
+// results plus the pair's SQL-trace sinks (cleared per program). If the backend
+// is configured but unreachable / unprivileged, the pair open path skips the
+// test rather than failing.
+func runDialectProgram(t testing.TB, backend Backend, prog op.Program) (veloxRes, entRes []model.Result, veloxSink, entSink *sqlSink) {
+	t.Helper()
+	pair := getDialectPair(t, backend)
+	if pair == nil {
+		t.Skipf("%s backend not reachable; skipping", backend)
+	}
+
+	// Isolate this program from the previous one on the shared, long-lived pair.
+	ctx := context.Background()
+	if err := pair.reset(ctx); err != nil {
+		t.Fatalf("%s: truncate between programs failed: %v", backend, err)
+	}
+	pair.veloxSink.clear()
+	pair.entSink.clear()
+
+	veloxRes = runVeloxOnClient(pair.velox, pair.veloxSink, prog)
+	entRes = runEntOnClient(pair.ent, pair.entSink, prog)
+	return veloxRes, entRes, pair.veloxSink, pair.entSink
+}
+
+// getDialectPair returns the cached (velox, ent) pair for (t, backend), opening
+// it on first use. Returns nil when the backend is configured but cannot be
+// opened (caller skips). The cache entry is dropped on test cleanup so a later
+// test with the same testing.TB pointer (subtests reuse parents) re-opens fresh.
+func getDialectPair(t testing.TB, backend Backend) *dialectPair {
+	t.Helper()
+	key := dialectCacheKey{tb: t, backend: backend}
+	if v, ok := dialectCache.Load(key); ok {
+		return v.(*dialectPair)
+	}
+	pair, ok := newTracedDialectPair(t, backend)
+	if !ok {
+		return nil
+	}
+	dialectCache.Store(key, pair)
+	t.Cleanup(func() { dialectCache.Delete(key) })
+	return pair
 }
 
 // diffOp compares one op's results (reference vs other), after stripping

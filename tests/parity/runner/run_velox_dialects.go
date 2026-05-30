@@ -22,6 +22,8 @@ import (
 	"github.com/syssam/velox/dialect"
 
 	"velox.test/parity/ent"
+	"velox.test/parity/model"
+	"velox.test/parity/op"
 	velox "velox.test/parity/velox"
 )
 
@@ -36,6 +38,12 @@ type dialectPair struct {
 	entDB     *sql.DB // separate connection to ent's database, for truncation
 	truncateV func(ctx context.Context, db *sql.DB) error
 	truncateE func(ctx context.Context, db *sql.DB) error
+	// veloxSink/entSink are the long-lived SQL-trace sinks the pair's traced
+	// clients log into. The driver clears them before each program (the clients
+	// live for the whole test) so each program's SQL trace is isolated. They are
+	// nil for the untraced test-facing constructors.
+	veloxSink *sqlSink
+	entSink   *sqlSink
 }
 
 // reset truncates both ORMs' databases so the next program starts clean. Used by
@@ -223,4 +231,58 @@ func NewMySQLClients(t testing.TB) (*velox.Client, *ent.Client, bool) {
 		return nil, nil, false
 	}
 	return pair.velox, pair.ent, true
+}
+
+// newTracedDialectPair opens a (velox, ent) pair for the backend whose clients
+// log every SQL statement into the given sinks (via the ORM Debug+Log options),
+// so the three-way driver can attach the failing SQL to a non-Pass op exactly as
+// it does for SQLite. Returns ok=false when the backend is not configured.
+func newTracedDialectPair(t testing.TB, backend Backend) (*dialectPair, bool) {
+	t.Helper()
+	veloxSink := newSQLSink()
+	entSink := newSQLSink()
+	veloxOpts := []velox.Option{velox.Log(veloxSink.record), velox.Debug()}
+	entOpts := []ent.Option{ent.Log(entSink.record), ent.Debug()}
+	var (
+		pair *dialectPair
+		ok   bool
+	)
+	switch backend {
+	case Postgres:
+		pair, ok = newPostgresPair(t, veloxOpts, entOpts)
+	case MySQL:
+		pair, ok = newMySQLPair(t, veloxOpts, entOpts)
+	default:
+		return nil, false
+	}
+	if !ok {
+		return nil, false
+	}
+	pair.veloxSink = veloxSink
+	pair.entSink = entSink
+	return pair, true
+}
+
+// runVeloxOnClient runs prog against an already-opened velox client, tagging
+// each captured statement with its op index. Shared by the SQLite traced path
+// and the dialect driver so there is one program-execution loop per ORM.
+func runVeloxOnClient(c *velox.Client, sink *sqlSink, prog op.Program) []model.Result {
+	x := &veloxExec{c: c, reg: newHandleRegistry(), sink: sink}
+	results := make([]model.Result, len(prog))
+	for i, o := range prog {
+		sink.setOp(i)
+		results[i] = x.step(context.Background(), i, o)
+	}
+	return results
+}
+
+// runEntOnClient is the ent analogue of runVeloxOnClient.
+func runEntOnClient(c *ent.Client, sink *sqlSink, prog op.Program) []model.Result {
+	x := &entExec{c: c, reg: newHandleRegistry(), sink: sink}
+	results := make([]model.Result, len(prog))
+	for i, o := range prog {
+		sink.setOp(i)
+		results[i] = x.step(context.Background(), i, o)
+	}
+	return results
 }
