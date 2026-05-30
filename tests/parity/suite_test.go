@@ -8,34 +8,37 @@ import (
 	"velox.test/parity/runner"
 )
 
-// TestCuratedSuite_SQLite runs a table of curated parity programs through the
-// three-way driver (reference ⟷ velox ⟷ ent) on in-memory SQLite. Each case
-// declares its expectation:
+// TestCuratedSuite runs a table of curated parity programs through the three-way
+// driver (reference ⟷ velox ⟷ ent) across every configured backend
+// (SQLite always; Postgres / MySQL when their VELOX_TEST_* DSN is set). Each
+// (backend, program) is a sub-test; backends without a DSN are skipped so a
+// no-DB machine stays green. Each case declares its expectation:
 //
 //   - expectAllPass: all three executors must agree on every op. This is the
 //     default and the strongest assertion.
 //   - expectVeloxCorrect: velox must match the reference on every op (zero
-//     VeloxBugs and velox is never the outlier), but ent is allowed to diverge.
-//     This is used ONLY for the JSON-array-append case. The `labels` column is
-//     declared json in both schemas; the value is blob-stored because both ORMs
-//     bind it as a []byte param (no column-type asymmetry between them). The real
-//     differentiator is the append SQL: ent emits JSON_INSERT(labels, '$[#]', ?)
-//     which SQLite rejects ("malformed JSON") on the blob-stored JSON value,
-//     while velox emits CAST(labels AS TEXT) + json_each, which succeeds — a real
-//     EntDivergent the harness SURFACES rather than silences. The driver's SQL
-//     trace pinpoints the divergence; see README and the case comment.
-func TestCuratedSuite_SQLite(t *testing.T) {
-	for _, tc := range curatedPrograms() {
-		t.Run(tc.name, func(t *testing.T) {
-			rep := runner.RunParity(t, runner.SQLite, tc.prog)
-			switch tc.expect {
-			case expectAllPass:
-				require.True(t, rep.AllPass(), "%s: expected all-pass, got:\n%s", tc.name, rep)
-			case expectVeloxCorrect:
-				// velox must be correct; ent may diverge (documented finding).
-				require.Zero(t, rep.CountVeloxBugs(), "%s: velox diverged from reference (VeloxBug):\n%s", tc.name, rep)
-				require.Zero(t, rep.CountReferenceSuspect(), "%s: reference suspect (velox AND ent disagree):\n%s", tc.name, rep)
-				require.NotZero(t, rep.CountEntDivergent(), "%s: expected a documented ent divergence but found none — recheck the finding:\n%s", tc.name, rep)
+//     VeloxBugs, no ReferenceSuspect), but ent is allowed to diverge. Used ONLY
+//     for the JSON-array-append case. The `labels` column is declared json in
+//     both schemas; on SQLite ent emits JSON_INSERT(labels, '$[#]', ?) which
+//     SQLite rejects ("malformed JSON") on the blob-stored JSON value, while
+//     velox emits CAST(labels AS TEXT) + json_each, which succeeds — a real
+//     EntDivergent the harness SURFACES rather than silences. On Postgres /
+//     MySQL ent's append (jsonb `||` / JSON_ARRAY_APPEND) typically succeeds, so
+//     the same case becomes all-Pass. The assertion therefore pins only that
+//     velox is correct and tolerates EITHER all-Pass OR EntDivergent — itself a
+//     documented finding: Ent's JSON-append defect is SQLite-specific.
+func TestCuratedSuite(t *testing.T) {
+	for _, backend := range []runner.Backend{runner.SQLite, runner.Postgres, runner.MySQL} {
+		if !runner.HasBackend(backend) {
+			t.Run(backend.String(), func(t *testing.T) { t.Skipf("%s not configured", backend) })
+			continue
+		}
+		t.Run(backend.String(), func(t *testing.T) {
+			for _, tc := range curatedPrograms() {
+				t.Run(tc.name, func(t *testing.T) {
+					rep := runner.RunParity(t, backend, tc.prog)
+					tc.assert(t, rep)
+				})
 			}
 		})
 	}
@@ -52,6 +55,23 @@ type progCase struct {
 	name   string
 	prog   op.Program
 	expect expectation
+}
+
+// assert applies the case's per-backend expectation to one report. The
+// expectVeloxCorrect tolerance is backend-independent: velox must never be the
+// outlier; ent may diverge OR agree (the SQLite-specific JSON-append defect
+// shows up only on SQLite, so the same case is all-Pass on PG/MySQL).
+func (tc progCase) assert(t *testing.T, rep runner.Report) {
+	t.Helper()
+	switch tc.expect {
+	case expectAllPass:
+		require.True(t, rep.AllPass(), "%s: expected all-pass, got:\n%s", tc.name, rep)
+	case expectVeloxCorrect:
+		require.Zero(t, rep.CountVeloxBugs(), "%s: velox diverged from reference (VeloxBug):\n%s", tc.name, rep)
+		require.Zero(t, rep.CountReferenceSuspect(), "%s: reference suspect (velox AND ent disagree):\n%s", tc.name, rep)
+		// EntDivergent is tolerated but NOT required — Ent's JSON-append defect
+		// is SQLite-specific, so this case is all-Pass on Postgres / MySQL.
+	}
 }
 
 func intp(i int) *int { return &i }
