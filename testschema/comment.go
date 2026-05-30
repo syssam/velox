@@ -2,6 +2,8 @@ package schema
 
 import (
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
@@ -25,6 +27,11 @@ func (Comment) Fields() []velox.Field {
 		field.Text("content").
 			NotEmpty(),
 	}
+}
+
+// Annotations of the Comment (repro of multi-order edge-target gap).
+func (Comment) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.MultiOrder()}
 }
 
 // Edges of the Comment.

@@ -98,7 +98,7 @@ type Post implements Node @goModel(model: "github.com/syssam/velox/tests/integra
     """
     Ordering options for Comments returned from the connection.
     """
-    orderBy: CommentOrder
+    orderBy: [CommentOrder!]
 
   ): CommentConnection!
   tags(
@@ -246,7 +246,7 @@ type User implements Node @goModel(model: "github.com/syssam/velox/tests/integra
     """
     Ordering options for Comments returned from the connection.
     """
-    orderBy: CommentOrder
+    orderBy: [CommentOrder!]
 
   ): CommentConnection!
 }
@@ -664,7 +664,7 @@ type Query {
     """
     Ordering options for Comments returned from the connection.
     """
-    orderBy: CommentOrder
+    orderBy: [CommentOrder!]
 
   ): CommentConnection!
   posts(

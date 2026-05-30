@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,6 +86,26 @@ func userOrderBy(t *testing.T, gqlField string, dir entity.OrderDirection) *enti
 	var field entity.UserOrderField
 	require.NoError(t, field.UnmarshalGQL(gqlField))
 	return &entity.UserOrder{Direction: dir, Field: &field}
+}
+
+// commentOrderBy builds a *entity.CommentOrder for the multi-order Comment
+// entity (testschema/comment.go carries graphql.MultiOrder()). Comment is an
+// edge-connection target (Post.comments, User.comments), so it guards the
+// edge-method multi-order path.
+func commentOrderBy(t *testing.T, gqlField string, dir entity.OrderDirection) *entity.CommentOrder {
+	t.Helper()
+	var field entity.CommentOrderField
+	require.NoError(t, field.UnmarshalGQL(gqlField))
+	return &entity.CommentOrder{Direction: dir, Field: &field}
+}
+
+// commentIDs extracts node IDs from a CommentConnection's edges.
+func commentIDs(conn *entity.CommentConnection) []int {
+	out := make([]int, len(conn.Edges))
+	for i, e := range conn.Edges {
+		out[i] = e.Node.ID
+	}
+	return out
 }
 
 // withUserOrder wraps the multi-order WithUserOrder([]*UserOrder) (opt, error)
@@ -310,6 +331,50 @@ func TestPaginate_MultiField_Backward(t *testing.T) {
 	assert.Equal(t, []int{2, 3}, ids(bwd),
 		"multi-field backward must return the rows BEFORE the cursor (composite mirror), not after it")
 	assert.True(t, bwd.PageInfo.HasPreviousPage, "User01 precedes the [User02,User03] window")
+}
+
+// TestPaginate_EdgeConnection_MultiOrder_Backward exercises the multi-order
+// path through an EDGE-connection method (Post.Comments) rather than a
+// top-level query. Comment is graphql.MultiOrder() AND an edge-connection
+// target, so the generated (*Post).Comments method must accept []*CommentOrder
+// and thread it through WithCommentOrder (which returns an error for
+// multi-order). Before the generator fix, the entity/ package did not even
+// compile for this combination. This pins both that it compiles and that the
+// before-cursor mirror is correct when reached via an edge method.
+func TestPaginate_EdgeConnection_MultiOrder_Backward(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+	author := createUser(t, client, "EdgeAuthor", "edge@mo.com")
+	p := createPost(t, client, author, "p", "body")
+
+	// Six comments with distinct created_at ⇒ CREATED_AT ASC = insertion order
+	// (comment ids 1..6, since Comment is a fresh table on this client).
+	for i := 1; i <= 6; i++ {
+		_, err := client.Comment.Create().
+			SetContent(fmt.Sprintf("c%02d", i)).
+			SetPostID(p.ID).
+			SetAuthorID(author.ID).
+			SetCreatedAt(now.Add(time.Duration(i) * time.Second)).
+			SetUpdatedAt(now).
+			Save(ctx)
+		require.NoError(t, err)
+	}
+
+	order := []*entity.CommentOrder{commentOrderBy(t, "CREATED_AT", entity.OrderDirectionAsc)}
+
+	// Forward first=4 via the edge method (slice orderBy param).
+	first := 4
+	fwd, err := p.Comments(ctx, nil, &first, nil, nil, order)
+	require.NoError(t, err)
+	require.Equal(t, []int{1, 2, 3, 4}, commentIDs(fwd), "edge-connection multi-order forward")
+
+	// Backward before=endCursor(comment 4), last=2 ⇒ comments 2,3 (the mirror).
+	before := roundTripCursor(t, fwd.PageInfo.EndCursor)
+	last := 2
+	bwd, err := p.Comments(ctx, nil, nil, &before, &last, order)
+	require.NoError(t, err)
+	assert.Equal(t, []int{2, 3}, commentIDs(bwd),
+		"edge-connection multi-order backward must return rows BEFORE the cursor")
 }
 
 // TestPaginate_TotalCount verifies that TotalCount reflects the full dataset

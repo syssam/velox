@@ -181,6 +181,11 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 	edgeOrErr := edgePascal + "OrErr"
 
 	wantsWhere := g.config.WhereInputs && g.hasWhereInput(e)
+	// When the TARGET entity is graphql.MultiOrder(), its WithXxxOrder takes a
+	// []*XxxOrder and returns (opt, error), and BuildXxxConnection takes the
+	// slice — so the edge method's orderBy parameter and order wiring must
+	// match, or the generated entity/ package fails to compile.
+	multiOrder := g.hasMultiOrder(e.Type)
 
 	f.Func().Params(
 		jen.Id("m").Op("*").Id(typeName),
@@ -190,7 +195,11 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 		params.Id("first").Op("*").Int()
 		params.Id("before").Op("*").Qual(gqlrelayPkg, "Cursor")
 		params.Id("last").Op("*").Int()
-		params.Id("orderBy").Op("*").Id(orderName)
+		if multiOrder {
+			params.Id("orderBy").Index().Op("*").Id(orderName)
+		} else {
+			params.Id("orderBy").Op("*").Id(orderName)
+		}
 		if wantsWhere {
 			filterPkg := g.config.ORMPackage + "/filter"
 			whereInputName := e.Type.Name + "WhereInput"
@@ -224,9 +233,18 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 			),
 		)
 
-		body.Id("opts").Op(":=").Index().Id(optName).Values(
-			jen.Id(withOrderFunc).Call(jen.Id("orderBy")),
-		)
+		if multiOrder {
+			// Multi-order WithXxxOrder returns (opt, error); propagate the error.
+			body.List(jen.Id("orderOpt"), jen.Id("err")).Op(":=").Id(withOrderFunc).Call(jen.Id("orderBy"))
+			body.If(jen.Id("err").Op("!=").Nil()).Block(
+				jen.Return(jen.Nil(), jen.Id("err")),
+			)
+			body.Id("opts").Op(":=").Index().Id(optName).Values(jen.Id("orderOpt"))
+		} else {
+			body.Id("opts").Op(":=").Index().Id(optName).Values(
+				jen.Id(withOrderFunc).Call(jen.Id("orderBy")),
+			)
+		}
 		if wantsWhere {
 			body.If(jen.Id("where").Op("!=").Nil()).Block(
 				jen.Id("opts").Op("=").Append(
