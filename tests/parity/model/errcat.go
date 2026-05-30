@@ -24,4 +24,9 @@ const (
 	ErrValidation ErrCat = "validation"
 	// ErrNotLoaded means an edge was accessed without being loaded.
 	ErrNotLoaded ErrCat = "not_loaded"
+	// ErrInternal means the operation failed with an unexpected/internal error
+	// that does not map to any known category. It must NOT be conflated with
+	// ErrValidation: relabeling an unexpected error as a validation failure on a
+	// validation-expected op would let a genuine crash falsely Pass.
+	ErrInternal ErrCat = "internal"
 )

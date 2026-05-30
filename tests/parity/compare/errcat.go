@@ -27,4 +27,7 @@ const (
 	ErrValidation = model.ErrValidation
 	// ErrNotLoaded means an edge was accessed without being loaded.
 	ErrNotLoaded = model.ErrNotLoaded
+	// ErrInternal means the operation failed with an unexpected/internal error
+	// that does not map to any known category.
+	ErrInternal = model.ErrInternal
 )

@@ -9,11 +9,13 @@ package runner
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/stretchr/testify/require"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"velox.test/parity/ent"
 	"velox.test/parity/ent/author"
@@ -147,11 +149,15 @@ func (x *entExec) createAuthor(ctx context.Context, idx int, v op.CreateAuthor) 
 }
 
 func (x *entExec) createPost(ctx context.Context, idx int, v op.CreatePost) model.Result {
+	authorID, ok := x.reg.handleToID[v.AuthorRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
 	b := x.c.Post.Create().
 		SetTitle(v.Title).
 		SetStatus(post.Status(v.Status)).
 		SetViewCount(v.ViewCount).
-		SetAuthorID(x.reg.handleToID[v.AuthorRef]).
+		SetAuthorID(authorID).
 		SetCreatedAt(parityClock(idx)).
 		SetUpdatedAt(parityClock(idx))
 	if len(v.Labels) > 0 {
@@ -166,10 +172,18 @@ func (x *entExec) createPost(ctx context.Context, idx int, v op.CreatePost) mode
 }
 
 func (x *entExec) createComment(ctx context.Context, idx int, v op.CreateComment) model.Result {
+	postID, ok := x.reg.handleToID[v.PostRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
+	authorID, ok := x.reg.handleToID[v.AuthorRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
 	b := x.c.Comment.Create().
 		SetContent(v.Content).
-		SetPostID(x.reg.handleToID[v.PostRef]).
-		SetAuthorID(x.reg.handleToID[v.AuthorRef]).
+		SetPostID(postID).
+		SetAuthorID(authorID).
 		SetCreatedAt(parityClock(idx)).
 		SetUpdatedAt(parityClock(idx))
 	if len(v.Labels) > 0 {
@@ -355,17 +369,26 @@ func entErrResult(err error) model.Result {
 	return model.Result{Err: classifyEntErr(err)}
 }
 
-// classifyEntErr maps an Ent runtime error to the canonical ErrCat. Ent's
-// pagination validation (first+last) surfaces as a plain error; not-found is
-// a typed *ent.NotFoundError.
+// classifyEntErr maps an Ent runtime error to the canonical ErrCat. Only the
+// KNOWN error shapes are mapped to a specific category: typed not-found
+// (*ent.NotFoundError) and pagination validation. Ent's pagination validation
+// (first+last, negative first/last) surfaces as a *gqlerror.Error returned by
+// validateFirstLast in ent/gql_pagination.go — the first+last case carries no
+// errcode, so the typed error is the reliable discriminator. Everything else is
+// ErrInternal: an unexpected/internal failure must NOT be relabeled
+// ErrValidation, or a genuine crash on a validation-expected op would falsely
+// Pass.
 func classifyEntErr(err error) model.ErrCat {
+	var gqlErr *gqlerror.Error
 	switch {
 	case err == nil:
 		return model.ErrOK
 	case ent.IsNotFound(err):
 		return model.ErrNotFound
-	default:
+	case errors.As(err, &gqlErr):
 		return model.ErrValidation
+	default:
+		return model.ErrInternal
 	}
 }
 

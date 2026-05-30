@@ -144,11 +144,15 @@ func (x *veloxExec) createAuthor(ctx context.Context, idx int, v op.CreateAuthor
 }
 
 func (x *veloxExec) createPost(ctx context.Context, idx int, v op.CreatePost) model.Result {
+	authorID, ok := x.reg.handleToID[v.AuthorRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
 	b := x.c.Post.Create().
 		SetTitle(v.Title).
 		SetStatus(post.Status(v.Status)).
 		SetViewCount(v.ViewCount).
-		SetAuthorID(x.reg.handleToID[v.AuthorRef]).
+		SetAuthorID(authorID).
 		SetCreatedAt(parityClock(idx)).
 		SetUpdatedAt(parityClock(idx))
 	if len(v.Labels) > 0 {
@@ -163,10 +167,18 @@ func (x *veloxExec) createPost(ctx context.Context, idx int, v op.CreatePost) mo
 }
 
 func (x *veloxExec) createComment(ctx context.Context, idx int, v op.CreateComment) model.Result {
+	postID, ok := x.reg.handleToID[v.PostRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
+	authorID, ok := x.reg.handleToID[v.AuthorRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
 	b := x.c.Comment.Create().
 		SetContent(v.Content).
-		SetPostID(x.reg.handleToID[v.PostRef]).
-		SetAuthorID(x.reg.handleToID[v.AuthorRef]).
+		SetPostID(postID).
+		SetAuthorID(authorID).
 		SetCreatedAt(parityClock(idx)).
 		SetUpdatedAt(parityClock(idx))
 	if len(v.Labels) > 0 {
@@ -376,7 +388,11 @@ func veloxErrResult(err error) model.Result {
 	return model.Result{Err: classifyVeloxErr(err)}
 }
 
-// classifyVeloxErr maps a velox runtime error to the canonical ErrCat.
+// classifyVeloxErr maps a velox runtime error to the canonical ErrCat. Only the
+// KNOWN error shapes are mapped to a specific category: typed not-found and the
+// pagination-validation sentinel. Everything else is ErrInternal — an
+// unexpected/internal failure must NOT be relabeled ErrValidation, or a genuine
+// crash on a validation-expected op would falsely Pass.
 func classifyVeloxErr(err error) model.ErrCat {
 	switch {
 	case err == nil:
@@ -386,6 +402,6 @@ func classifyVeloxErr(err error) model.ErrCat {
 	case errors.Is(err, gqlrelay.ErrInvalidPagination):
 		return model.ErrValidation
 	default:
-		return model.ErrValidation
+		return model.ErrInternal
 	}
 }
