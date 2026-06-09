@@ -115,33 +115,34 @@ func TestRealworld_WorkspaceTaskFlow_EdgeResolution(t *testing.T) {
 	})
 
 	t.Run("TxCreatedTaskEdgeReadsAfterUnwrap", func(t *testing.T) {
-		var createdTask *entity.Task
+		// Use a tx-LOADED task (not tx-created): Create.Save now pre-populates
+		// the M2O owner edge as a stub so the fast path bypasses the DB — correct
+		// behavior, but it means the tx-driver is never exercised for that case.
+		// A tx-loaded task has config.Driver = txDriver with no edge pre-population,
+		// so Workspace() falls to the slow path and tests the commit-boundary contract.
+		var txTask *entity.Task
 
 		err := velox.WithTx(ctx, client, func(tx *velox.Tx) error {
-			ct, terr := tx.Task.Create().
-				SetInput(taskclient.CreateTaskInput{
-					Title:       "Tx-created",
-					WorkspaceID: ws.ID,
-				}).
-				Save(ctx)
+			tasks, terr := tx.Task.Query().All(ctx)
 			if terr != nil {
 				return terr
 			}
-			createdTask = ct
+			require.NotEmpty(t, tasks)
+			txTask = tasks[0]
 			return nil
 		})
 		require.NoError(t, err)
-		require.NotNil(t, createdTask)
+		require.NotNil(t, txTask)
 
-		// Without Unwrap, edge reads on a tx-created entity must fail
-		// post-commit — this is the documented Unwrap() contract.
-		_, readErr := createdTask.Workspace(ctx)
+		// Without Unwrap, edge reads on a tx entity must fail post-commit —
+		// this is the documented Unwrap() contract.
+		_, readErr := txTask.Workspace(ctx)
 		require.Error(t, readErr, "edge read on un-Unwrapped tx entity must fail post-commit")
 
 		// After Unwrap, the entity is detached from the committed
 		// tx driver and reads succeed.
-		createdTask.Unwrap()
-		gotWS, err := createdTask.Workspace(ctx)
+		txTask.Unwrap()
+		gotWS, err := txTask.Workspace(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, gotWS)
 		require.Equal(t, ws.ID, gotWS.ID)
