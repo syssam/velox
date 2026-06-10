@@ -277,7 +277,9 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 						fkCols = append(fkCols, jen.Lit(col))
 					}
 
-					d.Lit(edgeName).Op(":").Qual(runtimePkgPath, "EdgeMeta").Values(jen.Dict{
+					// Bare {...} value, not runtime.EdgeMeta{...} — keeps the
+					// output gofmt -s simplified so format passes don't churn it.
+					d.Lit(edgeName).Op(":").Values(jen.Dict{
 						jen.Id("Name"):      jen.Lit(e.Name),
 						jen.Id("Target"):    jen.Lit(e.Type.Table()),
 						jen.Id("Unique"):    jen.Lit(e.Unique),

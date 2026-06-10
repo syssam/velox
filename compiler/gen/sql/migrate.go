@@ -25,12 +25,17 @@ func genMigrate(h gen.GeneratorHelper) gen.MigrateFiles {
 	}
 }
 
+// migrateSchemaPkg is the import path of the migration schema package
+// referenced throughout the generated migrate/schema.go. (Not to be confused
+// with helper.go's schemaPkg(), which returns the schema/field package.)
+const migrateSchemaPkg = "github.com/syssam/velox/dialect/sql/schema"
+
 // genMigrateSchema generates migrate/schema.go with table definitions.
 func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 	f := h.NewFile("migrate")
 
 	// Imports
-	schemaPkg := "github.com/syssam/velox/dialect/sql/schema"
+	schemaPkg := migrateSchemaPkg
 	fieldPkg := "github.com/syssam/velox/schema/field"
 	f.ImportName(schemaPkg, "schema")
 	f.ImportName(fieldPkg, "field")
@@ -44,11 +49,14 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 
 		// Generate columns slice
 		f.Comment("// " + columnsVar + " holds the columns for the \"" + t.Table() + "\" table.")
+		// Elements are bare composite literals ({...}, not &schema.Column{...})
+		// so the output is already gofmt -s simplified — otherwise the regen
+		// script's format pass and the generator ping-pong the file forever.
 		f.Var().Id(columnsVar).Op("=").Index().Op("*").Qual(schemaPkg, "Column").ValuesFunc(func(g *jen.Group) {
 			// ID/Primary key column
 			if t.ID != nil {
 				pk := t.ID.PK()
-				g.Op("&").Qual(schemaPkg, "Column").Values(genColumnDict(pk, fieldPkg))
+				g.Values(genColumnDict(pk, fieldPkg))
 			}
 
 			// Other columns — skip fields annotated with sqlschema.Skip()
@@ -57,13 +65,13 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 					continue
 				}
 				col := fld.Column()
-				g.Op("&").Qual(schemaPkg, "Column").Values(genColumnDict(col, fieldPkg))
+				g.Values(genColumnDict(col, fieldPkg))
 			}
 
 			// Edge FK columns (M2O and O2O edges that own the FK)
 			for _, e := range t.Edges {
 				if fkCol := edgeFKColumn(e, t); fkCol != nil {
-					g.Op("&").Qual(schemaPkg, "Column").Values(genColumnDict(fkCol, fieldPkg))
+					g.Values(genColumnDict(fkCol, fieldPkg))
 				}
 			}
 		})
@@ -75,7 +83,7 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 			jen.Id("Name"):        jen.Lit(t.Table()),
 			jen.Id("Columns"):     jen.Id(columnsVar),
 			jen.Id("PrimaryKey"):  genPrimaryKey(t, columnsVar, schemaPkg),
-			jen.Id("ForeignKeys"): genForeignKeysSchema(t, schemaPkg),
+			jen.Id("ForeignKeys"): genForeignKeysSchema(t),
 			jen.Id("Indexes"):     genIndexesSchema(t, schemaPkg),
 		}
 		if comment := t.TableComment(); comment != "" {
@@ -144,12 +152,14 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 				col2Type = e.Type.ID.Type.ConstName()
 			}
 			f.Commentf("// %s holds the columns for the %q join table.", colsVar, j.tableName)
+			// Bare {...} elements — gofmt -s simplified, same as the entity
+			// columns slice above.
 			f.Var().Id(colsVar).Op("=").Index().Op("*").Qual(schemaPkg, "Column").Values(
-				jen.Op("&").Qual(schemaPkg, "Column").Values(jen.Dict{
+				jen.Values(jen.Dict{
 					jen.Id("Name"): jen.Lit(j.col1),
 					jen.Id("Type"): jen.Qual(fieldPkg, col1Type),
 				}),
-				jen.Op("&").Qual(schemaPkg, "Column").Values(jen.Dict{
+				jen.Values(jen.Dict{
 					jen.Id("Name"): jen.Lit(j.col2),
 					jen.Id("Type"): jen.Qual(fieldPkg, col2Type),
 				}),
@@ -163,14 +173,16 @@ func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
 				jen.Id("Name"):       jen.Lit(j.tableName),
 				jen.Id("Columns"):    jen.Id(colsVar),
 				jen.Id("PrimaryKey"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(0)), jen.Id(colsVar).Index(jen.Lit(1))),
+				// Bare {...} elements — gofmt -s simplified, matching
+				// genForeignKeysSchema's entity-table FK emission.
 				jen.Id("ForeignKeys"): jen.Index().Op("*").Qual(schemaPkg, "ForeignKey").Values(
-					jen.Op("&").Qual(schemaPkg, "ForeignKey").Values(jen.Dict{
+					jen.Values(jen.Dict{
 						jen.Id("Columns"):    jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(0))),
 						jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(j.ref1).Dot("PrimaryKey").Index(jen.Lit(0))),
 						jen.Id("OnDelete"):   jen.Qual(schemaPkg, "Cascade"),
 						jen.Id("Symbol"):     jen.Lit(sym1),
 					}),
-					jen.Op("&").Qual(schemaPkg, "ForeignKey").Values(jen.Dict{
+					jen.Values(jen.Dict{
 						jen.Id("Columns"):    jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(1))),
 						jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(j.ref2).Dot("PrimaryKey").Index(jen.Lit(0))),
 						jen.Id("OnDelete"):   jen.Qual(schemaPkg, "Cascade"),
@@ -446,7 +458,7 @@ func genPrimaryKey(t *gen.Type, columnsVar string, schemaPkg string) jen.Code {
 }
 
 // genForeignKeysSchema generates foreign key definitions for a type.
-func genForeignKeysSchema(t *gen.Type, schemaPkg string) jen.Code {
+func genForeignKeysSchema(t *gen.Type) jen.Code {
 	var fks []jen.Code
 	columnsVar := pascal(t.Name) + "Columns"
 
@@ -494,10 +506,10 @@ func genForeignKeysSchema(t *gen.Type, schemaPkg string) jen.Code {
 
 		fks = append(fks, jen.Values(jen.Dict{
 			jen.Id("Symbol"): jen.Lit(fkSymbol),
-			jen.Id("Columns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(
+			jen.Id("Columns"): jen.Index().Op("*").Qual(migrateSchemaPkg, "Column").Values(
 				jen.Id(columnsVar).Index(jen.Lit(fkColIdx)),
 			),
-			jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(
+			jen.Id("RefColumns"): jen.Index().Op("*").Qual(migrateSchemaPkg, "Column").Values(
 				jen.Id(refColumnsVar).Index(jen.Lit(0)), // Reference ID column
 			),
 			jen.Id("OnDelete"): onDelete,
@@ -507,7 +519,7 @@ func genForeignKeysSchema(t *gen.Type, schemaPkg string) jen.Code {
 	if len(fks) == 0 {
 		return jen.Nil()
 	}
-	return jen.Index().Op("*").Qual(schemaPkg, "ForeignKey").Values(fks...)
+	return jen.Index().Op("*").Qual(migrateSchemaPkg, "ForeignKey").Values(fks...)
 }
 
 // genIndexesSchema generates index definitions for a type.

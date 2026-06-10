@@ -226,6 +226,42 @@ func TestGenMigrateSchema_WithEdges(t *testing.T) {
 	assert.Contains(t, code, "func init()")
 }
 
+// TestGenMigrateSchema_GofmtSimplifiedLiterals pins that the migrate schema
+// output is already gofmt -s canonical: slice elements use bare composite
+// literals ({...}), never the redundant &schema.Column{...} /
+// &schema.ForeignKey{...} forms. The repo formats with gofmt -s (regen.sh's
+// final pass, the style rule, golangci's gofmt simplify) — un-simplified
+// generator output makes the format pass and the next regeneration ping-pong
+// the same files forever, defeating the write-if-changed mtime stability.
+// Covers both the entity-table path (columns + FK slices) and the M2M
+// join-table path (its own literal emission sites).
+func TestGenMigrateSchema_GofmtSimplifiedLiterals(t *testing.T) {
+	t.Parallel()
+	helper := newMockHelper()
+	postType := createTestType("Post")
+	tagType := createTestType("Tag")
+
+	postType.Edges = []*gen.Edge{{
+		Name: "tags", Type: tagType, Unique: false,
+		Rel: gen.Relation{Type: gen.M2M, Table: "post_tags", Columns: []string{"post_id", "tag_id"}},
+	}}
+	tagType.Edges = []*gen.Edge{{
+		Name: "posts", Type: postType, Unique: false, Inverse: "tags",
+		Rel: gen.Relation{Type: gen.M2M, Table: "post_tags", Columns: []string{"post_id", "tag_id"}},
+	}}
+	helper.graph.Nodes = []*gen.Type{postType, tagType}
+
+	file := genMigrateSchema(helper)
+	require.NotNil(t, file)
+	code := file.GoString()
+
+	require.Contains(t, code, "PostTagsColumns", "fixture must reach the join-table path")
+	assert.NotContains(t, code, "&schema.Column{",
+		"column slice elements must be bare {...} literals (gofmt -s form)")
+	assert.NotContains(t, code, "&schema.ForeignKey{",
+		"foreign-key slice elements must be bare {...} literals (gofmt -s form)")
+}
+
 func TestGenMigrateSchema_WithM2OEdgeAndFK(t *testing.T) {
 	t.Parallel()
 	helper := newMockHelper()
@@ -938,9 +974,8 @@ func BenchmarkPascal(b *testing.B) {
 func TestGenPrimaryKey(t *testing.T) {
 	t.Parallel()
 	userType := createTestType("User")
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
-	code := genPrimaryKey(userType, "UserColumns", schemaPkgPath)
+	code := genPrimaryKey(userType, "UserColumns", migrateSchemaPkg)
 	assert.NotNil(t, code)
 
 	// Render the code to verify structure
@@ -959,9 +994,8 @@ func TestGenForeignKeysSchema_NoEdges(t *testing.T) {
 	t.Parallel()
 	userType := createTestType("User")
 	userType.Edges = nil
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
-	code := genForeignKeysSchema(userType, schemaPkgPath)
+	code := genForeignKeysSchema(userType)
 	assert.NotNil(t, code)
 
 	f := jen.NewFile("test")
@@ -977,9 +1011,8 @@ func TestGenForeignKeysSchema_WithM2OEdge(t *testing.T) {
 
 	edge := createM2OEdge("author", userType, "posts", "author_id")
 	postType.Edges = []*gen.Edge{edge}
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
-	code := genForeignKeysSchema(postType, schemaPkgPath)
+	code := genForeignKeysSchema(postType)
 	assert.NotNil(t, code)
 
 	f := jen.NewFile("test")
@@ -1007,10 +1040,9 @@ func TestGenForeignKeysSchema_BidiM2OUsesAssocName(t *testing.T) {
 	edge := createM2OEdge("post", postType, "comments", "post_comments")
 	edge.Inverse = "comments"
 	commentType.Edges = []*gen.Edge{edge}
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
 	f := jen.NewFile("test")
-	f.Var().Id("fks").Op("=").Add(genForeignKeysSchema(commentType, schemaPkgPath))
+	f.Var().Id("fks").Op("=").Add(genForeignKeysSchema(commentType))
 	code := f.GoString()
 	assert.Contains(t, code, "comments_posts_comments",
 		"bidirectional M2O FK symbol must use the assoc edge name (matches graph_tables.go + Ent)")
@@ -1025,9 +1057,8 @@ func TestGenForeignKeysSchema_SkipsO2M(t *testing.T) {
 
 	edge := createO2MEdge("posts", postType, "posts", "user_id")
 	userType.Edges = []*gen.Edge{edge}
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
-	code := genForeignKeysSchema(userType, schemaPkgPath)
+	code := genForeignKeysSchema(userType)
 	assert.NotNil(t, code)
 
 	f := jen.NewFile("test")
@@ -1045,9 +1076,8 @@ func TestGenIndexesSchema_NoIndexes(t *testing.T) {
 	t.Parallel()
 	userType := createTestType("User")
 	userType.Indexes = nil
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
-	code := genIndexesSchema(userType, schemaPkgPath)
+	code := genIndexesSchema(userType, migrateSchemaPkg)
 	assert.NotNil(t, code)
 
 	f := jen.NewFile("test")
@@ -1063,9 +1093,8 @@ func TestGenIndexesSchema_WithIndexes(t *testing.T) {
 		{Name: "user_email", Unique: true, Columns: []string{"email"}},
 		{Name: "user_status_name", Unique: false, Columns: []string{"status", "name"}},
 	}
-	schemaPkgPath := "github.com/syssam/velox/dialect/sql/schema"
 
-	code := genIndexesSchema(userType, schemaPkgPath)
+	code := genIndexesSchema(userType, migrateSchemaPkg)
 	assert.NotNil(t, code)
 
 	f := jen.NewFile("test")
