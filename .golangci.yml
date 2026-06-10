@@ -3,7 +3,10 @@
 version: "2"
 
 run:
-  timeout: 5m
+  # A full-repo run (incl. generated example submodules) exceeds 5m on a laptop;
+  # a too-short timeout prints "0 issues" for completed linters and then fails,
+  # which reads as a clean pass when piped through tail/CI log truncation.
+  timeout: 25m
   tests: true
 
 formatters:
