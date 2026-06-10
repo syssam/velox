@@ -184,6 +184,7 @@ type User implements Node @goModel(model: "github.com/syssam/velox/tests/integra
   name: String!
   email: String!
   age: Int
+  nickname: String
   role: UserRole!
   """
   Posts written by this user
@@ -436,6 +437,7 @@ enum UserOrderField @goModel(model: "github.com/syssam/velox/tests/integration/e
   NAME
   EMAIL
   AGE
+  NICKNAME
   ROLE
 }
 

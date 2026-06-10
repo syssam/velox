@@ -190,6 +190,10 @@ var UserSchema = EntitySchema{
 		Name:   "age",
 		Type:   "TypeInt",
 	}, {
+		Column: "nickname",
+		Name:   "nickname",
+		Type:   "TypeString",
+	}, {
 		Column: "role",
 		Name:   "role",
 		Type:   "TypeEnum",

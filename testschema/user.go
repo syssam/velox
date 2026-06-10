@@ -82,6 +82,19 @@ func (User) Fields() []velox.Field {
 		field.Int("age").
 			Optional().
 			Positive(),
+		// nickname is the only Nillable field in testschema — the NULL-path
+		// guard. It keeps the compiled integration prototype exercising the
+		// clear-to-NULL chain end-to-end (typed ClearNickname → clearedFields
+		// → spec.ClearField → SET nickname = NULL), NULL-aware aggregates and
+		// ordering, and cursor pagination over a NULL-able order column (it
+		// auto-joins the NICKNAME order field, and User is MultiOrder). Before
+		// it existed, that entire surface had zero e2e coverage — the same
+		// blind spot that let the MultiOrder before-cursor bug ship. Do NOT
+		// remove it without relocating e2e_multidialect_null_test.go coverage.
+		field.String("nickname").
+			Optional().
+			Nillable().
+			MaxLen(50),
 		field.Enum("role").
 			Values("admin", "user", "guest").
 			Default("user").
