@@ -708,11 +708,9 @@ func (g *Generator) writeSchema(ctx context.Context, content, subdir, filename s
 		return err
 	}
 	path := filepath.Join(dir, filename)
-	// Skip write if content unchanged — preserves mtime for gqlgen incremental builds
-	existing, err := os.ReadFile(path)
-	if err == nil && string(existing) == content {
-		return nil
-	}
+	// atomicWriteFile skips the write when content is unchanged — preserves
+	// the SDL's mtime so make rules gating `gqlgen generate` on schema.graphql
+	// don't re-fire after a no-op velox regen.
 	return atomicWriteFile(path, []byte(content), 0o644)
 }
 
