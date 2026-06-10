@@ -408,6 +408,34 @@ defer cancel()
 
 ## Performance Issues
 
+### Slow rebuilds after `make generate` / regeneration feels wasteful
+
+Two facts determine what a regeneration actually costs:
+
+1. **velox only rewrites files whose content changed.** Every artifact writer
+   goes through a write-if-changed gate: a no-op regeneration (schema
+   untouched) rewrites **zero** files and a one-field schema change rewrites
+   only the files whose bytes differ — unchanged files keep both content and
+   mtime, so `make` rules, file watchers, and editor indexers stay quiet.
+   Pinned by `compiler/gen/write_test.go::TestGen_NoopRegen_PreservesMtimes`.
+2. **Go's build cache is content-addressed, not mtime-based.** Even a file
+   rewritten with identical bytes would not invalidate compiled packages.
+   Recompilation happens only for packages whose source content actually
+   changed — and velox's per-entity package split keeps that blast radius
+   small (the measured 10–25× incremental-rebuild advantage).
+
+To also skip the *generation step itself* when no schema changed, use a
+standard make stamp — declarative and immune to stale-skip bugs, which is why
+velox doesn't build input-hashing into the generator:
+
+```make
+.velox.stamp: schema/*.go
+	go run ./generate.go
+	@touch $@
+
+generate: .velox.stamp
+```
+
 ### Slow queries
 
 **Solutions**:

@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Versioned-migration output was silently lost: `FeatureVersionedMigration` and the core migration generator both wrote `migrate/migrate.go` concurrently, racing on the final rename — the feature's types (`Migration`, `MigrationDir`, `LocalDir`) now live in their own `migrate/versioned.go`, and `TestOptionalFeatureSpecs_UniqueOutputs` pins that no two writers ever share an output path
+- `internal/globalid.go` was rewritten on every generation when Snapshot+GlobalID were enabled (`ResolveIncrementStartsConflict` wrote unconditionally even with no conflict markers)
+
 ### Added
+- Write-if-changed for all generated artifacts: a no-op regeneration rewrites zero files (preserving mtimes for make rules, file watchers, and editor indexers); a one-field schema change rewrites only the files whose bytes differ — measured 1 of 145 files in the integration prototype. Pinned by `TestGen_NoopRegen_PreservesMtimes`
+- `docs/troubleshooting.md` section on generation/build caching, including the make-stamp pattern for skipping generation when the schema is unchanged
 - ROADMAP.md — stage-promotion criteria, the v1.0.0 checklist, and deliberate non-goals
 - Multi-dialect e2e coverage for predicate-scoped bulk UPDATE, clear-to-NULL (`ClearXxx`), NULL-aware aggregates (`MIN`/`MAX` skip NULLs, `SUM` over the empty set scans as `nil`), `ORDER BY` over nullable columns, and cursor pagination ordered by a nullable column (`tests/integration/e2e_multidialect_null_test.go`)
 - testschema `User.nickname` (`Optional().Nillable()`) — the prototype's NULL-path guard; previously the entire clear-to-NULL chain had zero e2e coverage
