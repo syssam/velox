@@ -196,7 +196,7 @@ func (d *Dialect) GenPrivacy() (*jen.File, error) { return genPrivacy(d.helper),
 // GenSnapshot generates the internal/schema.go file.
 func (d *Dialect) GenSnapshot() (*jen.File, error) { return genSnapshot(d.helper), nil }
 
-// GenVersionedMigration generates the migrate/migrate.go file.
+// GenVersionedMigration generates the migrate/versioned.go file.
 func (d *Dialect) GenVersionedMigration() (*jen.File, error) {
 	return genVersionedMigration(d.helper), nil
 }

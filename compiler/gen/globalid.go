@@ -129,32 +129,25 @@ func (IncrementStarts) Name() string {
 }
 
 // WriteToDisk writes the increment starts to the disk atomically.
-// It writes to a temporary file first, then renames to avoid corrupt state on failure.
+// The write is skipped (preserving mtime) when the rendered content is
+// unchanged, and otherwise goes through temp-file + rename to avoid corrupt
+// state on failure.
 func (i IncrementStarts) WriteToDisk(target string) error {
 	initTemplates()
 	p := IncrementStartsFilePath(target)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(p), "globalid.*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
+	var buf bytes.Buffer
 	if err := templates.Lookup("internal/globalid").
-		Execute(tmp, &Config{
+		Execute(&buf, &Config{
 			Target:      target,
 			Annotations: Annotations{"IncrementStarts": i},
 		}); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
 		return err
 	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return os.Rename(tmpPath, p)
+	_, err := WriteFileIfChanged(p, buf.Bytes(), 0o644)
+	return err
 }
 
 // IncrementStartsFilePath returns the file path for the global ID increment starts file.
@@ -190,7 +183,13 @@ func ResolveIncrementStartsConflict(dir string) error {
 			fixed = append(fixed, l)
 		}
 	}
-	return os.WriteFile(p, bytes.Join(fixed, []byte("\n")), fi.Mode())
+	// No conflict markers → fixed reassembles to the original bytes and the
+	// write is skipped, preserving mtime. This path runs on EVERY generation
+	// when Snapshot+GlobalID are enabled (IncrementStartAnnotation), not just
+	// on real conflicts — an unconditional write here churned internal/
+	// globalid.go on every no-op regen.
+	_, err = WriteFileIfChanged(p, bytes.Join(fixed, []byte("\n")), fi.Mode().Perm())
+	return err
 }
 
 // ToMap converts a sqlschema.Annotation to a map representation.

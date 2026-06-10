@@ -758,33 +758,11 @@ func (g *Generator) writeFileSubdir(ctx context.Context, f *jen.File, subdir, fi
 // atomicWriteFile writes data to a temp file then renames it to path.
 // This prevents partial/corrupt files if the process crashes mid-write.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".velox-gen-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() {
-		// Clean up temp file on error.
-		if err != nil {
-			os.Remove(tmpName)
-		}
-	}()
-	if _, err = tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err = tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err = tmp.Close(); err != nil {
-		return err
-	}
-	if err = os.Chmod(tmpName, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
+	// Delegates to the shared write-if-changed helper so GraphQL artifacts
+	// (SDL, generated Go, gqlgen config) get the same no-op-regen mtime
+	// stability as the core Jennifer output.
+	_, err := gen.WriteFileIfChanged(path, data, perm)
+	return err
 }
 
 // Helper methods, annotation extraction, string utilities, and ORM type helpers

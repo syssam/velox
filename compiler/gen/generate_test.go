@@ -31,10 +31,17 @@ func testGenerator() Generator {
 		pkg := filepath.Base(g.Target)
 		content := []byte("package " + pkg + "\n")
 		internalContent := []byte("package internal\n")
+		// Mirror production write semantics: the real dialect generator goes
+		// through WriteFileIfChanged, so the mock must too — the no-op-regen
+		// mtime pin (write_test.go) runs through this mock.
+		write := func(path string, data []byte) error {
+			_, err := WriteFileIfChanged(path, data, 0o644)
+			return err
+		}
 
 		// Write graph-level files.
 		for _, name := range []string{"velox.go", "client.go", "tx.go", "runtime.go"} {
-			if err := os.WriteFile(filepath.Join(g.Target, name), content, 0o644); err != nil {
+			if err := write(filepath.Join(g.Target, name), content); err != nil {
 				return err
 			}
 		}
@@ -43,14 +50,14 @@ func testGenerator() Generator {
 		if err := os.MkdirAll(predDir, 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(predDir, "predicate.go"), []byte("package predicate\n"), 0o644); err != nil {
+		if err := write(filepath.Join(predDir, "predicate.go"), []byte("package predicate\n")); err != nil {
 			return err
 		}
 		// Write per-entity files.
 		for _, n := range g.Nodes {
 			lower := n.PackageDir()
 			for _, suffix := range []string{".go", "_create.go", "_update.go", "_delete.go", "_query.go", "_mutation.go"} {
-				if err := os.WriteFile(filepath.Join(g.Target, lower+suffix), content, 0o644); err != nil {
+				if err := write(filepath.Join(g.Target, lower+suffix), content); err != nil {
 					return err
 				}
 			}
@@ -59,10 +66,10 @@ func testGenerator() Generator {
 				return err
 			}
 			entityPkg := []byte("package " + lower + "\n")
-			if err := os.WriteFile(filepath.Join(entityDir, lower+".go"), entityPkg, 0o644); err != nil {
+			if err := write(filepath.Join(entityDir, lower+".go"), entityPkg); err != nil {
 				return err
 			}
-			if err := os.WriteFile(filepath.Join(entityDir, "where.go"), entityPkg, 0o644); err != nil {
+			if err := write(filepath.Join(entityDir, "where.go"), entityPkg); err != nil {
 				return err
 			}
 		}
@@ -71,7 +78,7 @@ func testGenerator() Generator {
 			if err := os.MkdirAll(filepath.Join(g.Target, dir), 0o755); err != nil {
 				return err
 			}
-			return os.WriteFile(filepath.Join(g.Target, dir, file), data, 0o644)
+			return write(filepath.Join(g.Target, dir, file), data)
 		}
 		if enabled, _ := g.FeatureEnabled(FeatureSnapshot.Name); enabled {
 			if err := writeFeature("internal", "schema.go", internalContent); err != nil {
@@ -110,7 +117,7 @@ func testGenerator() Generator {
 				if err := rootT.ExecuteTemplate(&buf, name, g); err != nil {
 					return err
 				}
-				if err := os.WriteFile(outPath, buf.Bytes(), 0o644); err != nil {
+				if err := write(outPath, buf.Bytes()); err != nil {
 					return err
 				}
 			}
@@ -1201,7 +1208,9 @@ func TestGenerateOptionalFeatures(t *testing.T) {
 	assert.FileExists(t, filepath.Join(target, "intercept", "intercept.go"))
 	assert.FileExists(t, filepath.Join(target, "privacy", "privacy.go"))
 	assert.FileExists(t, filepath.Join(target, "internal", "schema.go"))
-	assert.FileExists(t, filepath.Join(target, "migrate", "migrate.go"))
+	// Versioned-migration types live in their own file — migrate/migrate.go
+	// is owned by generateMigrations (see TestOptionalFeatureSpecs_UniqueOutputs).
+	assert.FileExists(t, filepath.Join(target, "migrate", "versioned.go"))
 	assert.FileExists(t, filepath.Join(target, "internal", "globalid.go"))
 	assert.FileExists(t, filepath.Join(target, "querylanguage.go"))
 }

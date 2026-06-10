@@ -135,7 +135,12 @@ var optionalFeatureSpecs = []optionalFeatureSpec{
 	{FeatureIntercept, "intercept", "intercept.go", OptionalFeatureGenerator.GenIntercept},
 	{FeaturePrivacy, "privacy", "privacy.go", OptionalFeatureGenerator.GenPrivacy},
 	{FeatureSnapshot, "internal", "schema.go", OptionalFeatureGenerator.GenSnapshot},
-	{FeatureVersionedMigration, "migrate", "migrate.go", OptionalFeatureGenerator.GenVersionedMigration},
+	// NOTE: migrate/migrate.go is owned by generateMigrations (the Schema.Create
+	// auto-migration API). The versioned-migration types live in their own file —
+	// pointing this spec at migrate.go made two concurrent writers race on one
+	// path, and the feature's output was silently lost whenever the migration
+	// writer's rename landed last. Pinned by TestOptionalFeatureSpecs_UniqueOutputs.
+	{FeatureVersionedMigration, "migrate", "versioned.go", OptionalFeatureGenerator.GenVersionedMigration},
 	{FeatureGlobalID, "internal", "globalid.go", OptionalFeatureGenerator.GenGlobalID},
 	{FeatureEntQL, "", "querylanguage.go", OptionalFeatureGenerator.GenEntQL},
 }
@@ -431,23 +436,8 @@ func (g *JenniferGenerator) generateExternalTemplates() error {
 		if err != nil {
 			return fmt.Errorf("format template %q: %w", tmpl.Name, err)
 		}
-		// Atomic write via temp-file + rename to prevent partial outputs.
-		tmp, err := os.CreateTemp(dir, filepath.Base(outPath)+".*.tmp")
-		if err != nil {
-			return err
-		}
-		tmpPath := tmp.Name()
-		if _, err := tmp.Write(formatted); err != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
-			return err
-		}
-		if err := tmp.Close(); err != nil {
-			os.Remove(tmpPath)
-			return err
-		}
-		if err := os.Rename(tmpPath, outPath); err != nil {
-			os.Remove(tmpPath)
+		// Atomic write, skipped when content is unchanged (preserves mtime).
+		if _, err := WriteFileIfChanged(outPath, formatted, 0o644); err != nil {
 			return err
 		}
 		// Track external template files in the manifest so they are
@@ -522,30 +512,14 @@ func (g *JenniferGenerator) cleanupStaleFiles() error {
 }
 
 // writeManifest writes the current set of generated files to the manifest file.
-// Uses atomic temp-file + rename to prevent corruption on crash.
+// Uses atomic temp-file + rename (skipped when unchanged) to prevent
+// corruption on crash.
 func (g *JenniferGenerator) writeManifest() error {
 	slices.Sort(g.generatedFiles)
 	data := strings.Join(g.generatedFiles, "\n") + "\n"
 	outPath := filepath.Join(g.outDir, manifestFile)
-	tmp, err := os.CreateTemp(g.outDir, manifestFile+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.WriteString(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, outPath); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	_, err := WriteFileIfChanged(outPath, []byte(data), 0o644)
+	return err
 }
 
 // readManifest reads the previous manifest file and returns the list of relative paths.
@@ -585,9 +559,11 @@ func (g *JenniferGenerator) genAndWrite(ctx context.Context, gen func() (*jen.Fi
 	}
 }
 
-// writeFile writes a Jennifer file to disk atomically using temp-file + rename.
-// It checks for context cancellation first, which provides early exit
-// when errgroup cancels the context on first error.
+// writeFile writes a Jennifer file to disk atomically via WriteFileIfChanged,
+// which skips the write (preserving mtime) when the rendered content is
+// byte-identical to what's already on disk. It checks for context
+// cancellation first, which provides early exit when errgroup cancels the
+// context on first error.
 func (g *JenniferGenerator) writeFile(ctx context.Context, f *jen.File, subdir, filename string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -605,25 +581,11 @@ func (g *JenniferGenerator) writeFile(ctx context.Context, f *jen.File, subdir, 
 	if err != nil {
 		return fmt.Errorf("format %s: %w", outPath, err)
 	}
-	tmp, err := os.CreateTemp(dir, filename+".*.tmp")
-	if err != nil {
+	if _, err := WriteFileIfChanged(outPath, formatted, 0o644); err != nil {
 		return err
 	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(formatted); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, outPath); err != nil {
-		os.Remove(tmpPath) // Clean up temp file on rename failure.
-		return err
-	}
-	// Track the generated file for manifest-based cleanup.
+	// Track the generated file for manifest-based cleanup — also when the
+	// write was skipped: the file is still part of the generated set.
 	rel, _ := filepath.Rel(g.outDir, outPath)
 	if rel != "" {
 		g.manifestMu.Lock()

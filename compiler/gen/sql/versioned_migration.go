@@ -6,7 +6,11 @@ import (
 	"github.com/syssam/velox/compiler/gen"
 )
 
-// genVersionedMigration generates the migrate/migrate.go file with versioned migration support.
+// genVersionedMigration generates the migrate/versioned.go file with the
+// versioned-migration types (Migration, MigrationDir, LocalDir). It must NOT
+// target migrate/migrate.go — that file is owned by genMigrateMigrate via
+// generateMigrations, and a second writer on the same path races (the loser's
+// content is silently discarded).
 // This is part of the sql/versioned-migration feature.
 func genVersionedMigration(h gen.GeneratorHelper) *jen.File {
 	f := h.NewFile("migrate")

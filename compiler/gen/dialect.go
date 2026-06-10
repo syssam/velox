@@ -55,7 +55,7 @@ type OptionalFeatureGenerator interface {
 	GenPrivacy() (*jen.File, error)
 	// GenSnapshot generates internal/schema.go.
 	GenSnapshot() (*jen.File, error)
-	// GenVersionedMigration generates migrate/migrate.go.
+	// GenVersionedMigration generates migrate/versioned.go.
 	GenVersionedMigration() (*jen.File, error)
 	// GenGlobalID generates internal/globalid.go.
 	GenGlobalID() (*jen.File, error)

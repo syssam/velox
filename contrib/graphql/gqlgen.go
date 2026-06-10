@@ -8,6 +8,8 @@ import (
 	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/syssam/velox/compiler/gen"
 )
 
 // GQLGenConfig represents a subset of gqlgen.yml configuration.
@@ -164,12 +166,13 @@ func SaveGQLGenConfig(path string, cfg *GQLGenConfig) error {
 
 	// Ensure directory exists
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("create directory: %w", err)
+		if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+			return fmt.Errorf("create directory: %w", mkErr)
 		}
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	_, err = gen.WriteFileIfChanged(path, data, 0o644)
+	return err
 }
 
 // AddSchemaPath adds a schema path to the configuration if not already present.
