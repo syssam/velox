@@ -654,7 +654,9 @@ To enable Omittable for **all** nullable fields globally, set `nullable_input_om
 | Document | Description |
 |----------|-------------|
 | [Getting Started](docs/getting-started.md) | Step-by-step tutorial from zero to working app |
+| [Architecture Overview](docs/architecture-overview.md) | **Start here after the README** — generated-code walkthrough: package topology, why the layout exists, curated gotchas |
 | [Architecture](docs/architecture.md) | System design, pipeline stages, generated code structure |
+| [Roadmap](ROADMAP.md) | Feature stability stages and the path to v1.0 |
 | [Privacy & Authorization](docs/privacy.md) | Policy-based access control, row-level filtering, multi-tenancy |
 | [Hooks & Interceptors](docs/hooks-and-interceptors.md) | Mutation middleware and query interceptors |
 | [Reference](docs/reference.md) | Schema annotations, field types, validation, generated code patterns |

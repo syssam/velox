@@ -328,6 +328,23 @@ func (User) Annotations() []velox.Annotation {
 }
 ```
 
+### Pagination returns an empty page even though `hasNextPage` was true
+
+**Cause**: ordering by a NULL-able column. When a page boundary lands on a
+row whose order value is NULL, the cursor carries that NULL and the composite
+cursor predicate (`col = ? / col > ?`) can never match — SQL three-valued
+logic evaluates every arm to NULL. Pagination dead-ends; rows after the NULL
+block are unreachable. Ent (entgql) behaves identically — the limitation is
+inherited, not a velox bug.
+
+**Solutions**:
+
+1. Order by a `NOT NULL` column (`created_at`, `id`, or any non-`Optional`,
+   non-`Nillable` field).
+2. Give the nullable column a `Default()` so stored values are never NULL.
+
+Pinned by `tests/integration/e2e_multidialect_null_test.go::TestPaginate_NullableOrder_NullCursorDeadEnds`.
+
 ---
 
 ## Database Issues

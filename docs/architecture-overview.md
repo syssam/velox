@@ -18,11 +18,12 @@ the schema DSL, hook/interceptor model, and privacy layer almost verbatim.
 The main divergence is _generated layout_: where Ent emits a single
 flat package, velox emits a graph of small per-entity sub-packages. This
 keeps incremental rebuilds fast and memory-light at large schema sizes —
-the headline number from the post-cycle-break scale report is roughly
-**3.4× faster incremental rebuild and ~75% lower peak RSS than Ent at 100
-entities**, and the curve stays linear out to 328 entities. See
-[`docs/scale-performance-2026-04-25.md`](scale-performance-2026-04-25.md)
-for the methodology and numbers.
+the measured headline numbers are a **10–25× faster incremental rebuild
+(~0.7s vs ~8–18s at 50 entities) and ~75% lower peak codegen RSS than
+Ent**, and the curve stays linear out to 328 entities. See
+[`docs/benchmarks.md`](benchmarks.md) for the current methodology and
+numbers, and [`docs/scale-performance-2026-04-25.md`](scale-performance-2026-04-25.md)
+for the scale study.
 
 If your schema has fewer than ~50 entities and you are not building a
 GraphQL API, plain Ent is probably a better fit — its single-package
@@ -258,6 +259,29 @@ client.User.CreateBulk(builders...).
 
 Pinned by `tests/integration/e2e_bulk_create_test.go:566` (DoNothing failure
 case) and `:646` (ResolveWithIgnore correct case).
+
+### 4.8. Don't paginate by a nullable column
+
+Cursor (Relay) pagination ordered by a NULL-able field dead-ends when a page
+boundary lands on a row whose order value is NULL: the cursor carries the
+NULL, every arm of the composite row-value predicate compares against `NULL`,
+and SQL three-valued logic makes the next page come back **empty** even
+though `hasNextPage` was `true`. Ent (entgql) has the identical behavior —
+this is inherited, not a velox regression.
+
+Safe patterns:
+
+- order by a `NOT NULL` column (any non-`Optional`, non-`Nillable` field, or
+  the always-present `created_at`/`id`),
+- or give the nullable column a `Default()` so stored values are never NULL.
+
+Plain (non-cursor) `ORDER BY` over nullable columns is fine — but note NULL
+placement is dialect-divergent: SQLite and MySQL sort NULLs first under
+`ASC`, Postgres sorts them last.
+
+Pinned by `tests/integration/e2e_multidialect_null_test.go::TestPaginate_NullableOrder_NullCursorDeadEnds`
+(the dead-end) and `::TestMultiDialect_PaginateNullableOrder_NonNullCursors`
+(the supported all-values case).
 
 ---
 

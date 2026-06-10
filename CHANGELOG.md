@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- ROADMAP.md — stage-promotion criteria, the v1.0.0 checklist, and deliberate non-goals
+- Multi-dialect e2e coverage for predicate-scoped bulk UPDATE, clear-to-NULL (`ClearXxx`), NULL-aware aggregates (`MIN`/`MAX` skip NULLs, `SUM` over the empty set scans as `nil`), `ORDER BY` over nullable columns, and cursor pagination ordered by a nullable column (`tests/integration/e2e_multidialect_null_test.go`)
+- testschema `User.nickname` (`Optional().Nillable()`) — the prototype's NULL-path guard; previously the entire clear-to-NULL chain had zero e2e coverage
+- Documented + pinned Ent-parity limitation: cursor pagination ordered by a nullable column dead-ends when a page boundary lands on a NULL value (`docs/architecture-overview.md` §4.8, `docs/troubleshooting.md`)
 - Comprehensive CLI integration tests for `cmd/velox`
 - DataLoader utilities tests for `contrib/dataloader`
 - CHANGELOG.md for tracking version history
@@ -28,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Incorrect CLI commands in README.md (`velox init`, target flags)
 
 ### Changed
+- Raised golangci-lint run timeout from 5m to 25m — a full-repo run exceeds 5m and the truncated run misleadingly printed "0 issues" before failing
+- README documentation table now links the architecture overview (generated-code walkthrough) and roadmap; `docs/architecture-overview.md` headline numbers updated to the measured 10–25× incremental-rebuild figures
 - Updated golangci-lint configuration compatibility
 - Improved error handling with explicit error ignoring in debug paths
 - Replaced `log.Printf` with `log/slog` across all core packages
