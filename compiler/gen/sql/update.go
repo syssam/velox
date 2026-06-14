@@ -355,6 +355,11 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		)
 		// Build UpdateSpec from typed mutation fields — selectFields-aware for UpdateOne.
 		genUpdateSpecBuild(h, grp, t, recv, true)
+		// Apply the by-ID predicate AND any chained .Where() predicates from the
+		// mutation. Without merging PredicatesFuncs, UpdateOneID(...).Where(...)
+		// silently drops the guard, turning optimistic-lock / status-guard
+		// conditional updates into unconditional ones (a lost-update footgun).
+		grp.Id("ps").Op(":=").Id(recv).Dot("mutation").Dot("PredicatesFuncs").Call()
 		grp.Id("spec").Dot("Predicate").Op("=").Func().Params(
 			jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector"),
 		).Block(
@@ -362,14 +367,23 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 				jen.Id("s").Dot("C").Call(jen.Qual(entityPkg, "FieldID")),
 				jen.Id("id"),
 			)),
+			jen.For(jen.Id("i").Op(":=").Range().Id("ps")).Block(
+				jen.Id("ps").Index(jen.Id("i")).Call(jen.Id("s")),
+			),
 		)
 		// Emit edge operations into spec.Edges.Add / spec.Edges.Clear and apply modifiers.
 		genUpdateEdgesAndModifiers(h, grp, t, recv, true)
-		grp.List(jen.Id("_"), jen.Id("err")).Op(":=").Qual(h.SQLGraphPkg(), "UpdateNodes").Call(
+		grp.List(jen.Id("affected"), jen.Id("err")).Op(":=").Qual(h.SQLGraphPkg(), "UpdateNodes").Call(
 			jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id("spec"),
 		)
 		grp.If(jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "MayWrapConstraintError").Call(jen.Id("err"))),
+		)
+		// No row matched id AND the chained .Where() predicates — the optimistic
+		// guard failed. Surface NotFound so callers' velox.IsNotFound checks fire,
+		// instead of re-querying by id and returning the unchanged row.
+		grp.If(jen.Id("affected").Op("==").Lit(0)).Block(
+			jen.Return(jen.Nil(), jen.Qual(h.VeloxPkg(), "NewNotFoundError").Call(jen.Lit(t.Name))),
 		)
 		// Re-query the entity to return the updated version.
 		// When selectFields is set, only query those columns (plus ID which is always needed).
