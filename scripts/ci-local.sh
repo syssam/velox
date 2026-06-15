@@ -10,8 +10,17 @@
 #   test-integration — needs Postgres + MySQL service containers. Provide
 #                    VELOX_TEST_POSTGRES / VELOX_TEST_MYSQL env vars and
 #                    pass --integration to run.
-#   fuzz           — 20 minutes total; pass --fuzz to include.
+#   fuzz           — 20 minutes total; pass --fuzz to include (also runs the
+#                    parity generative fuzz).
 #   macos matrix   — CI-only.
+#
+# Partial vs. CI (no local DBs):
+#   parity         — always runs the SQLite arm; the Postgres/MySQL dialect
+#                    cases skip without VELOX_TEST_* (set them + --integration
+#                    for the full three-dialect matrix CI runs).
+#
+# NOTE: the `examples` list below mirrors the ci.yml `examples` matrix — keep
+# the two in sync when adding/removing a tier-1 example.
 #
 # Usage:
 #   scripts/ci-local.sh              Run the fast jobs.
@@ -123,8 +132,22 @@ fi
 # ---------- drift-check job ----------
 echo
 echo "==> drift-check job"
+# regen.sh --check compares the regenerated tree against the COMMITTED state.
+# Uncommitted edits therefore look like "drift" — a false positive on the very
+# change you're about to push. If the tree is already dirty, run it for the
+# generate/build coverage but don't count a drift diff as a hard failure.
+DIRTY_TREE=0
+[[ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]] && DIRTY_TREE=1
+if [[ ${DIRTY_TREE} -eq 1 ]]; then
+    echo "  ⚠ working tree has uncommitted changes — drift-check compares against"
+    echo "    committed state, so it reports YOUR edits as drift. Commit, then"
+    echo "    re-run for a real drift verdict. Running for generate/build coverage…"
+fi
 if bash scripts/regen.sh --check >/tmp/ci-local-drift.log 2>&1; then
     record_pass "drift-check"
+elif [[ ${DIRTY_TREE} -eq 1 ]]; then
+    echo "  ⚠ drift-check diff present, but the tree was already dirty before regen —"
+    echo "    NOT counted as a failure. Commit your changes and re-run to verify."
 else
     tail -10 /tmp/ci-local-drift.log
     record_fail "drift-check"
@@ -138,23 +161,62 @@ if command -v govulncheck >/dev/null 2>&1; then
         record_pass "security"
     else
         tail -20 /tmp/ci-local-vuln.log
+        # govulncheck reports against the LOCAL Go toolchain. Stdlib findings
+        # "Fixed in: goX.Y.Z" usually mean your Go is behind CI's, not a real
+        # velox issue — CI pins go-version '1.26' (latest 1.26.x). If every
+        # finding is "Standard library", update Go to match CI and re-run.
+        echo "  note: local toolchain is $(go version | awk '{print $3}'); if findings are"
+        echo "        stdlib-only ('Fixed in: goX.Y.Z'), update Go to CI's 1.26.x and re-run."
         record_fail "security"
     fi
 else
     echo "  govulncheck not installed — skipping (install: go install golang.org/x/vuln/cmd/govulncheck@latest)"
 fi
 
-# ---------- examples matrix (mode=test entries only) ----------
+# ---------- examples matrix (mirrors ci.yml `examples` job exactly) ----------
 echo
-echo "==> examples (basic, fullgql, integration-test)"
-for ex in basic fullgql integration-test; do
-    if (cd "examples/${ex}" && go run generate.go >/dev/null 2>&1 && go test -race ./... >/tmp/ci-local-ex-${ex}.log 2>&1); then
-        record_pass "examples:${ex}"
+echo "==> examples matrix"
+# path:mode — KEEP IN SYNC with .github/workflows/ci.yml examples matrix.
+# examples/erp and examples/realworld are NOT here: erp is gitignored/excluded
+# from CI, realworld is exercised by the root `test` job's fixture generation.
+EXAMPLES=(
+    "examples/basic:test"
+    "examples/edge-schema:test"
+    "examples/fullgql:test"
+    "examples/fulltest:build"
+    "examples/globalid:test"
+    "examples/json-field:test"
+    "examples/tree:test"
+    "examples/versioned-migration:test"
+    "tests/external-module:test"
+)
+for entry in "${EXAMPLES[@]}"; do
+    dir="${entry%:*}"; mode="${entry#*:}"
+    log="/tmp/ci-local-ex-${dir//\//-}.log"
+    if (
+        cd "${dir}"
+        go run generate.go
+        if [[ -f gqlgen.yml ]]; then go run github.com/99designs/gqlgen generate; fi
+        if [[ "${mode}" == "test" ]]; then go test -race ./...; else go build ./...; fi
+    ) >"${log}" 2>&1; then
+        record_pass "examples:${dir} (${mode})"
     else
-        tail -15 "/tmp/ci-local-ex-${ex}.log" 2>/dev/null || true
-        record_fail "examples:${ex}"
+        tail -20 "${log}" 2>/dev/null || true
+        record_fail "examples:${dir}"
     fi
 done
+
+# ---------- parity job (merge-blocking; SQLite always, PG/MySQL with env) ----------
+echo
+echo "==> parity job (differential harness)"
+# Without VELOX_TEST_POSTGRES/MYSQL the suite runs SQLite only and the
+# PG/MySQL dialect cases skip cleanly — still a real correctness net.
+if (cd tests/parity && go run generate.go && go test ./... -count=1) >/tmp/ci-local-parity.log 2>&1; then
+    record_pass "parity"
+else
+    tail -25 /tmp/ci-local-parity.log
+    record_fail "parity"
+fi
 
 # ---------- benchmark job ----------
 echo
@@ -191,6 +253,13 @@ if [[ ${RUN_FUZZ} -eq 1 ]]; then
             record_fail "fuzz:${name}"
         fi
     done
+    # Parity generative fuzz (bounded, sqlite) — mirrors ci.yml fuzz job.
+    if (cd tests/parity && go run generate.go && go test -run='^$' -fuzz='^FuzzParity$' -fuzztime=60s .) >/tmp/ci-local-fuzz-parity.log 2>&1; then
+        record_pass "fuzz:FuzzParity"
+    else
+        tail -10 /tmp/ci-local-fuzz-parity.log
+        record_fail "fuzz:FuzzParity"
+    fi
 else
     echo
     echo "==> fuzz job (skipped — pass --fuzz to run)"
