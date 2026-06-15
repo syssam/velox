@@ -2398,9 +2398,9 @@ func WithLockClause(clause string) LockOption {
 // statement with the `FOR [SHARE | UPDATE] ...` clause.
 func (s *Selector) For(l LockStrength, opts ...LockOption) *Selector {
 	if s.Dialect() == dialect.SQLite {
-		// SQLite serialises writes and has no row-level locking, so a
+		// SQLite serializes writes and has no row-level locking, so a
 		// FOR UPDATE/SHARE clause is meaningless there. Treat it as a no-op
-		// (matching ent's behaviour) rather than emitting invalid SQL or a
+		// (matching ent's behavior) rather than emitting invalid SQL or a
 		// hard error, so service code that uses ForUpdate/ForShare can be
 		// exercised against an in-memory SQLite database in tests.
 		return s

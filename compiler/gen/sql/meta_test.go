@@ -38,6 +38,44 @@ func TestGenRuntimeCombined_WithNodes(t *testing.T) {
 }
 
 // =============================================================================
+// genModuleProvenance Tests
+// =============================================================================
+
+// TestGenModuleProvenance_ChecksumNotSum pins the fix for the root-package
+// `Sum` collision: the go.sum checksum const MUST be named Checksum, never Sum,
+// because the root package also declares the aggregate helper `func Sum` (in
+// velox.go). A `const Sum` there is a "Sum redeclared in this block" compile
+// error. This path is invisible to the golden suite — every fixture pulls velox
+// via a `replace` directive, so ModuleInfo().Sum is empty and the const block is
+// never emitted. The non-empty-checksum case (real versioned dependency) is the
+// case that actually breaks, so it is exercised here directly.
+func TestGenModuleProvenance_ChecksumNotSum(t *testing.T) {
+	t.Parallel()
+
+	f := jen.NewFile("ent")
+	genModuleProvenance(f, "v1.2.3", "h1:abc123=")
+	code := f.GoString()
+
+	assert.Contains(t, code, "Version", "version const must be emitted")
+	assert.Contains(t, code, "Checksum", "checksum const must be named Checksum")
+	assert.Contains(t, code, `"h1:abc123="`, "checksum value must be emitted")
+	// The colliding form `Sum =` (capital S) must never appear — that is the bug.
+	assert.NotContains(t, code, "Sum =", "must not declare a `Sum` const (collides with func Sum)")
+}
+
+// TestGenModuleProvenance_EmptyNoOutput verifies no const block is emitted when
+// both fields are empty (the replace-directive case every in-repo example hits).
+func TestGenModuleProvenance_EmptyNoOutput(t *testing.T) {
+	t.Parallel()
+
+	f := jen.NewFile("ent")
+	genModuleProvenance(f, "", "")
+	code := f.GoString()
+
+	assert.NotContains(t, code, "const", "no provenance const block when module info is empty")
+}
+
+// =============================================================================
 // genEntityRuntime Tests
 // =============================================================================
 

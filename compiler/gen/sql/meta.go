@@ -13,20 +13,40 @@ func genRuntimeCombined(h gen.GeneratorHelper, _ []*gen.Type) *jen.File {
 
 	graph := h.Graph()
 
-	// Version/Sum constants
+	// Module provenance constants (Version/Checksum).
 	module := graph.ModuleInfo()
-	if module.Version != "" || module.Sum != "" {
-		f.Const().DefsFunc(func(g *jen.Group) {
-			if module.Version != "" {
-				g.Id("Version").Op("=").Lit(module.Version).Comment("// Version of velox codegen.")
-			}
-			if module.Sum != "" {
-				g.Id("Sum").Op("=").Lit(module.Sum).Comment("// Sum of velox codegen.")
-			}
-		})
-	}
+	genModuleProvenance(f, module.Version, module.Sum)
 
 	return f
+}
+
+// genModuleProvenance emits the provenance constants for the velox module that
+// generated the assets, into the root package's runtime.go.
+//
+// The go.sum checksum constant is named Checksum, NOT Sum: the root package
+// already declares the aggregate-function helper `func Sum(field string)
+// AggregateFunc` (genAggregateFunctions in velox.go). A `const Sum` here would
+// collide with it ("Sum redeclared in this block"). Ent sidesteps this by
+// emitting Version/Sum into a separate `runtime` sub-package; velox emits into
+// the root package, so the checksum const is renamed instead.
+//
+// The constants are only emitted when present. ModuleInfo().Sum is non-empty
+// only when velox is consumed as a real versioned module dependency (a go.sum
+// entry exists); it is empty when velox is pulled via a `replace` directive,
+// which is why every in-repo example/golden has no const block and never
+// exercised the collision.
+func genModuleProvenance(f *jen.File, version, sum string) {
+	if version == "" && sum == "" {
+		return
+	}
+	f.Const().DefsFunc(func(g *jen.Group) {
+		if version != "" {
+			g.Id("Version").Op("=").Lit(version).Comment("// Version of velox codegen.")
+		}
+		if sum != "" {
+			g.Id("Checksum").Op("=").Lit(sum).Comment("// go.sum checksum of the velox module used for codegen.")
+		}
+	})
 }
 
 // genEntityRuntime generates the per-entity runtime.go file with init() for
