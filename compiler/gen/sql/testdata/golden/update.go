@@ -498,8 +498,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (*entity.User, error) {
 			spec.ClearField("nickname", field.TypeString)
 		}
 	}
+	ps := _u.mutation.PredicatesFuncs()
 	spec.Predicate = func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(user.FieldID), id))
+		for i := range ps {
+			ps[i](s)
+		}
 	}
 	if _u.mutation.PostsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -552,9 +556,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (*entity.User, error) {
 	if len(_u.modifiers) > 0 {
 		spec.AddModifiers(_u.modifiers...)
 	}
-	_, err := sqlgraph.UpdateNodes(ctx, _u.config.Driver, spec)
+	affected, err := sqlgraph.UpdateNodes(ctx, _u.config.Driver, spec)
 	if err != nil {
 		return nil, runtime.MayWrapConstraintError(err)
+	}
+	if affected == 0 {
+		return nil, velox.NewNotFoundError("User")
 	}
 	columns := user.Columns
 	if len(_u.selectFields) > 0 {

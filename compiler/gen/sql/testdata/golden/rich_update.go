@@ -536,8 +536,12 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 			spec.ClearField("content", field.TypeString)
 		}
 	}
+	ps := _u.mutation.PredicatesFuncs()
 	spec.Predicate = func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(article.FieldID), id))
+		for i := range ps {
+			ps[i](s)
+		}
 	}
 	for col, val := range _u.mutation.appends {
 		colCopy := col
@@ -607,9 +611,12 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 	if len(_u.modifiers) > 0 {
 		spec.AddModifiers(_u.modifiers...)
 	}
-	_, err := sqlgraph.UpdateNodes(ctx, _u.config.Driver, spec)
+	affected, err := sqlgraph.UpdateNodes(ctx, _u.config.Driver, spec)
 	if err != nil {
 		return nil, runtime.MayWrapConstraintError(err)
+	}
+	if affected == 0 {
+		return nil, velox.NewNotFoundError("Article")
 	}
 	columns := article.Columns
 	if len(_u.selectFields) > 0 {

@@ -1774,13 +1774,17 @@ func TestSelectWithLock(t *testing.T) {
 	require.Equal(t, "SELECT * FROM `users` WHERE `id` = ? LOCK IN SHARE MODE", query)
 	require.Equal(t, 20, args[0])
 
+	// SQLite has no row-level locking, so FOR UPDATE/SHARE is a no-op
+	// (matching ent): no error is set and no lock clause is emitted.
 	s := Dialect(dialect.SQLite).
 		Select().
 		From(Table("users")).
 		Where(EQ("id", 1)).
 		ForUpdate()
-	s.Query()
-	require.EqualError(t, s.Err(), "sql: SELECT .. FOR UPDATE/SHARE not supported in SQLite")
+	query, args = s.Query()
+	require.NoError(t, s.Err())
+	require.Equal(t, "SELECT * FROM `users` WHERE `id` = ?", query)
+	require.Equal(t, 1, args[0])
 }
 
 func TestSelector_UnionOrderBy(t *testing.T) {
