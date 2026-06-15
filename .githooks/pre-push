@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Pre-push hook: run the fast local-CI tier before every push so CI-only
+# failures (golden drift, lint, drift-check, test breaks) are caught in
+# ~6-9 min locally instead of ~22 min on GitHub.
+#
+# Activate (one-time, per clone):
+#   git config core.hooksPath .githooks
+#
+# Bypass for a single push (WIP branch, docs-only, etc.):
+#   SKIP_CI_LOCAL=1 git push
+#
+# For the full local suite (examples tests, parity, security, benchmark), run
+# `scripts/ci-local.sh` manually; `--all` adds live-DB + fuzz.
+
+set -euo pipefail
+
+if [[ -n "${SKIP_CI_LOCAL:-}" ]]; then
+    echo "pre-push: SKIP_CI_LOCAL set — skipping ci-local.sh" >&2
+    exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)"
+cd "${root}"
+
+if [[ ! -x scripts/ci-local.sh ]]; then
+    echo "pre-push: scripts/ci-local.sh missing or not executable — skipping" >&2
+    exit 0
+fi
+
+echo "pre-push: running scripts/ci-local.sh --fast (SKIP_CI_LOCAL=1 to bypass)" >&2
+exec scripts/ci-local.sh --fast

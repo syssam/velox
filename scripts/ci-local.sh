@@ -23,7 +23,10 @@
 # the two in sync when adding/removing a tier-1 example.
 #
 # Usage:
-#   scripts/ci-local.sh              Run the fast jobs.
+#   scripts/ci-local.sh              All no-DB jobs (test, build, lint, drift,
+#                                    security, examples, parity, benchmark).
+#   scripts/ci-local.sh --fast       Pre-push tier: test + build + lint + drift
+#                                    only (~6-9 min). Used by the git pre-push hook.
 #   scripts/ci-local.sh --integration  Also run live-DB integration tests.
 #   scripts/ci-local.sh --fuzz       Also run the full 10x 2min fuzz suite.
 #   scripts/ci-local.sh --all        Run everything.
@@ -37,11 +40,17 @@ fi
 
 RUN_INTEGRATION=0
 RUN_FUZZ=0
+FAST=0
 for arg in "$@"; do
     case "${arg}" in
         --integration) RUN_INTEGRATION=1 ;;
         --fuzz) RUN_FUZZ=1 ;;
         --all) RUN_INTEGRATION=1; RUN_FUZZ=1 ;;
+        # --fast: the pre-push tier. Runs only test + build + lint + drift-check
+        # (drift-check already regenerates and BUILDS all examples), skipping
+        # security/examples-tests/parity/benchmark/fuzz/integration. ~6-9 min vs
+        # ~15-20 min for the full run, so the git hook actually gets used.
+        --fast) FAST=1 ;;
         *) echo "unknown flag: ${arg}" >&2; exit 2 ;;
     esac
 done
@@ -153,6 +162,11 @@ else
     record_fail "drift-check"
 fi
 
+if [[ ${FAST} -eq 1 ]]; then
+    echo
+    echo "==> security / examples / parity / benchmark (skipped in --fast)"
+else
+
 # ---------- security job ----------
 echo
 echo "==> security job (govulncheck)"
@@ -227,6 +241,8 @@ else
     tail -15 /tmp/ci-local-bench.log
     record_fail "benchmark"
 fi
+
+fi  # end: heavy jobs skipped under --fast
 
 # ---------- optional: fuzz (long) ----------
 if [[ ${RUN_FUZZ} -eq 1 ]]; then
