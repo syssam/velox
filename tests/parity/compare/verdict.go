@@ -5,16 +5,16 @@ package compare
 type Verdict string
 
 const (
-	// Pass: both velox and ent match the reference. No divergence.
+	// Pass means both velox and ent match the reference. No divergence.
 	Pass Verdict = "pass"
-	// VeloxBug: ent matches the reference but velox does not — the divergence
-	// is velox's.
+	// VeloxBug means ent matches the reference but velox does not — the
+	// divergence is velox's.
 	VeloxBug Verdict = "velox_bug"
-	// ReferenceSuspect: neither velox nor ent matches the reference — the
+	// ReferenceSuspect means neither velox nor ent matches the reference — the
 	// reference oracle (or the op program) is more likely wrong than both ORMs.
 	ReferenceSuspect Verdict = "reference_suspect"
-	// EntDivergent: velox matches the reference but ent does not — ent is the
-	// outlier.
+	// EntDivergent means velox matches the reference but ent does not — ent is
+	// the outlier.
 	EntDivergent Verdict = "ent_divergent"
 )
 

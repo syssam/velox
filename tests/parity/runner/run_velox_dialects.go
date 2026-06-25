@@ -47,7 +47,7 @@ type dialectPair struct {
 }
 
 // reset truncates both ORMs' databases so the next program starts clean. Used by
-// the driver before each program (the PG/MySQL analogue of SQLite's fresh
+// the driver before each program (the PG/MySQL analog of SQLite's fresh
 // in-memory client per program).
 func (p *dialectPair) reset(ctx context.Context) error {
 	if err := p.truncateV(ctx, p.veloxDB); err != nil {
@@ -108,7 +108,7 @@ func newPostgresPair(t testing.TB, veloxOpts []velox.Option, entOpts []ent.Optio
 	return pair, true
 }
 
-// newMySQLPair is the MySQL analogue of newPostgresPair.
+// newMySQLPair is the MySQL analog of newPostgresPair.
 func newMySQLPair(t testing.TB, veloxOpts []velox.Option, entOpts []ent.Option) (*dialectPair, bool) {
 	t.Helper()
 	dsn := os.Getenv(mysqlEnvVar)
@@ -222,7 +222,7 @@ func NewPostgresClients(t testing.TB) (*velox.Client, *ent.Client, bool) {
 	return pair.velox, pair.ent, true
 }
 
-// NewMySQLClients is the MySQL analogue of NewPostgresClients (gated on
+// NewMySQLClients is the MySQL analog of NewPostgresClients (gated on
 // VELOX_TEST_MYSQL).
 func NewMySQLClients(t testing.TB) (*velox.Client, *ent.Client, bool) {
 	t.Helper()
@@ -276,7 +276,7 @@ func runVeloxOnClient(c *velox.Client, sink *sqlSink, prog op.Program) []model.R
 	return results
 }
 
-// runEntOnClient is the ent analogue of runVeloxOnClient.
+// runEntOnClient is the ent analog of runVeloxOnClient.
 func runEntOnClient(c *ent.Client, sink *sqlSink, prog op.Program) []model.Result {
 	x := &entExec{c: c, reg: newHandleRegistry(), sink: sink}
 	results := make([]model.Result, len(prog))

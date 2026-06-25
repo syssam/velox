@@ -1,0 +1,30 @@
+# The parity harness is a SEPARATE Go module, so `golangci-lint run` here does
+# NOT inherit the repo-root .golangci.yml. This config re-applies the relevant
+# root exclusions plus a few specific to differential-test infrastructure:
+#
+#   - gosec G201/G202/G701: the runner builds CREATE DATABASE / TRUNCATE DDL from
+#     controlled, code-generated identifiers (db/table names), never user input.
+#   - staticcheck SA5011: getDialectPair / runDialectProgram skip via t.Skipf
+#     (terminal — runtime.Goexit) when the backend pair is nil; staticcheck does
+#     not model t.Skipf as terminal, so it reports a nil deref that cannot occur.
+#   - govet shadow: err/ctx are intentionally shadowed in isolated if-scopes (the
+#     same pattern the root config excludes for the main module).
+version: "2"
+
+linters:
+  settings:
+    govet:
+      disable:
+        - shadow
+    misspell:
+      locale: US
+  exclusions:
+    rules:
+      - path: runner/db_(mysql|postgres)\.go
+        linters:
+          - gosec
+      - path: runner/driver\.go
+        text: "SA5011"
+      - path: runner/driver\.go
+        linters:
+          - errcheck
