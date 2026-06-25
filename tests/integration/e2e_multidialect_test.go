@@ -13,6 +13,7 @@ import (
 	integration "github.com/syssam/velox/tests/integration"
 	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/entity"
+	"github.com/syssam/velox/tests/integration/tag"
 	"github.com/syssam/velox/tests/integration/user"
 )
 
@@ -96,6 +97,62 @@ func TestMultiDialect_CRUD(t *testing.T) {
 
 		_, err = client.User.Get(ctx, u.ID)
 		require.Error(t, err, "Get after Delete must error on every dialect")
+	})
+}
+
+// TestMultiDialect_UpdateOneNoOp pins that a no-op UpdateOne (setting a field to
+// its current value) returns the row, not NotFound, on EVERY dialect. velox used
+// to decide UpdateOne existence from RowsAffected, which on MySQL counts CHANGED
+// rows (no clientFoundRows): a no-op update has 0 changed rows there and was
+// wrongly reported as NotFound, while SQLite/Postgres (matched-rows) returned the
+// row. Tag has no updated_at, so the update is a true no-op with no timestamp
+// masking. Fixed by generating sqlgraph.UpdateNode (singular) for UpdateOne,
+// whose ensureExists re-checks existence via the id + chained predicates.
+func TestMultiDialect_UpdateOneNoOp(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		tg, err := client.Tag.Create().SetName("noop-tag").Save(ctx)
+		require.NoError(t, err)
+
+		// Set name to its CURRENT value: zero changed rows on MySQL.
+		got, err := client.Tag.UpdateOneID(tg.ID).SetName("noop-tag").Save(ctx)
+		require.NoError(t, err, "no-op UpdateOne must return the row, not NotFound")
+		require.Equal(t, tg.ID, got.ID)
+		assert.Equal(t, "noop-tag", got.Name)
+	})
+}
+
+// TestMultiDialect_UpdateOneWhereGuard pins that a chained .Where() predicate on
+// UpdateOne still guards the update across dialects: a non-matching predicate
+// yields NotFound (not a silent no-op that drops the guard), the row is left
+// unchanged, and a matching predicate updates. This is the optimistic-lock /
+// status-guard contract (commit 4139019) that the UpdateNode (ensureExists)
+// switch must preserve — ensureExists re-checks the id AND the chained predicate,
+// so a no-op update returns the row while a non-matching guard returns NotFound.
+func TestMultiDialect_UpdateOneWhereGuard(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		tg, err := client.Tag.Create().SetName("guard-orig").Save(ctx)
+		require.NoError(t, err)
+
+		// Non-matching guard → NotFound, and the row must be untouched.
+		_, err = client.Tag.UpdateOneID(tg.ID).
+			Where(tag.NameField.EQ("wrong-name")).
+			SetName("guard-new").
+			Save(ctx)
+		require.True(t, integration.IsNotFound(err),
+			"non-matching .Where() guard must yield NotFound, got %v", err)
+		reloaded, err := client.Tag.Get(ctx, tg.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "guard-orig", reloaded.Name, "a failed guard must not modify the row")
+
+		// Matching guard → update succeeds.
+		updated, err := client.Tag.UpdateOneID(tg.ID).
+			Where(tag.NameField.EQ("guard-orig")).
+			SetName("guard-new").
+			Save(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "guard-new", updated.Name)
 	})
 }
 

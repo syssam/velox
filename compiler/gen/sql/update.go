@@ -355,6 +355,10 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		)
 		// Build UpdateSpec from typed mutation fields — selectFields-aware for UpdateOne.
 		genUpdateSpecBuild(h, grp, t, recv, true)
+		// sqlgraph.UpdateNode (used below) builds its WHERE from spec.Node.ID.Value
+		// and runs ensureExists on zero affected rows; set the id so the single-node
+		// path and its existence re-check target the right row.
+		grp.Id("spec").Dot("Node").Dot("ID").Dot("Value").Op("=").Id("id")
 		// Apply the by-ID predicate AND any chained .Where() predicates from the
 		// mutation. Without merging PredicatesFuncs, UpdateOneID(...).Where(...)
 		// silently drops the guard, turning optimistic-lock / status-guard
@@ -373,17 +377,26 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		)
 		// Emit edge operations into spec.Edges.Add / spec.Edges.Clear and apply modifiers.
 		genUpdateEdgesAndModifiers(h, grp, t, recv, true)
-		grp.List(jen.Id("affected"), jen.Id("err")).Op(":=").Qual(h.SQLGraphPkg(), "UpdateNodes").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id("spec"),
-		)
-		grp.If(jen.Id("err").Op("!=").Nil()).Block(
+		// Single-node update: sqlgraph.UpdateNode runs the UPDATE and, on zero
+		// affected rows, calls ensureExists — re-selecting by id AND the chained
+		// .Where() predicates to tell "no row matched" (→ NotFound) apart from
+		// "row matched but nothing changed". The latter is what MySQL reports for a
+		// no-op update (its RowsAffected counts CHANGED, not matched, rows); the bulk
+		// UpdateNodes + a raw affected==0 check would misreport it as NotFound. This
+		// matches Ent's generated UpdateOne.
+		grp.If(
+			jen.Id("err").Op(":=").Qual(h.SQLGraphPkg(), "UpdateNode").Call(
+				jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id("spec"),
+			),
+			jen.Id("err").Op("!=").Nil(),
+		).Block(
+			jen.If(
+				jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("err").Assert(jen.Op("*").Qual(h.SQLGraphPkg(), "NotFoundError")),
+				jen.Id("ok"),
+			).Block(
+				jen.Return(jen.Nil(), jen.Qual(h.VeloxPkg(), "NewNotFoundError").Call(jen.Lit(t.Name))),
+			),
 			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "MayWrapConstraintError").Call(jen.Id("err"))),
-		)
-		// No row matched id AND the chained .Where() predicates — the optimistic
-		// guard failed. Surface NotFound so callers' velox.IsNotFound checks fire,
-		// instead of re-querying by id and returning the unchanged row.
-		grp.If(jen.Id("affected").Op("==").Lit(0)).Block(
-			jen.Return(jen.Nil(), jen.Qual(h.VeloxPkg(), "NewNotFoundError").Call(jen.Lit(t.Name))),
 		)
 		// Re-query the entity to return the updated version.
 		// When selectFields is set, only query those columns (plus ID which is always needed).

@@ -331,6 +331,7 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (*entity.Post, error) {
 			spec.SetField("content", field.TypeString, *_u.mutation._content)
 		}
 	}
+	spec.Node.ID.Value = id
 	ps := _u.mutation.PredicatesFuncs()
 	spec.Predicate = func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(post.FieldID), id))
@@ -372,12 +373,11 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (*entity.Post, error) {
 	if len(_u.modifiers) > 0 {
 		spec.AddModifiers(_u.modifiers...)
 	}
-	affected, err := sqlgraph.UpdateNodes(ctx, _u.config.Driver, spec)
-	if err != nil {
+	if err := sqlgraph.UpdateNode(ctx, _u.config.Driver, spec); err != nil {
+		if _, ok := err.(*sqlgraph.NotFoundError); ok {
+			return nil, velox.NewNotFoundError("Post")
+		}
 		return nil, runtime.MayWrapConstraintError(err)
-	}
-	if affected == 0 {
-		return nil, velox.NewNotFoundError("Post")
 	}
 	columns := post.Columns
 	if len(_u.selectFields) > 0 {

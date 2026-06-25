@@ -517,6 +517,61 @@ func TestUpdateOneSelectFieldsRestriction(t *testing.T) {
 	}
 }
 
+// TestUpdateOneUsesSingleNodeUpdate guards that UpdateOne.sqlSave uses
+// sqlgraph.UpdateNode (singular) — whose ensureExists re-checks the id AND the
+// chained .Where() predicates, distinguishing "no row matched" (→ NotFound) from
+// "row matched but nothing changed" — rather than the bulk UpdateNodes (plural)
+// plus a raw affected==0 check. The latter misreports a no-op update as NotFound
+// on MySQL, whose RowsAffected counts CHANGED rows, not matched. The bulk
+// UserUpdate.sqlSave must still use UpdateNodes (plural) for the affected count.
+func TestUpdateOneUsesSingleNodeUpdate(t *testing.T) {
+	graph, userType, _ := buildWiringTestGraph(t)
+	helper := newMockHelper()
+	helper.graph = graph
+
+	file, err := genUpdate(helper, userType)
+	if err != nil {
+		t.Fatalf("genUpdate: %v", err)
+	}
+	src := file.GoString()
+
+	body := func(sig string) string {
+		i := strings.Index(src, sig)
+		if i < 0 {
+			t.Fatalf("could not find %q in generated code", sig)
+		}
+		rest := src[i+1:]
+		if n := strings.Index(rest, "\nfunc "); n >= 0 {
+			return rest[:n]
+		}
+		return rest
+	}
+
+	one := body("func (_u *UserUpdateOne) sqlSave(")
+	if !strings.Contains(one, "sqlgraph.UpdateNode(ctx") {
+		t.Error("UpdateOne.sqlSave must use sqlgraph.UpdateNode (singular) so ensureExists " +
+			"distinguishes not-found from not-changed; otherwise a no-op update on MySQL " +
+			"(changed-rows RowsAffected) is misreported as NotFound")
+	}
+	if strings.Contains(one, "sqlgraph.UpdateNodes(ctx") {
+		t.Error("UpdateOne.sqlSave still uses the bulk sqlgraph.UpdateNodes (plural)")
+	}
+	if !strings.Contains(one, "*sqlgraph.NotFoundError") {
+		t.Error("UpdateOne.sqlSave must handle *sqlgraph.NotFoundError returned by UpdateNode")
+	}
+	if !strings.Contains(one, "spec.Node.ID.Value = id") {
+		t.Error("UpdateOne.sqlSave must set spec.Node.ID.Value so UpdateNode/ensureExists target the right row")
+	}
+	if strings.Contains(one, "affected == 0") {
+		t.Error("UpdateOne.sqlSave still does a raw affected==0 NotFound check (unsound on MySQL)")
+	}
+
+	bulk := body("func (_u *UserUpdate) sqlSave(")
+	if !strings.Contains(bulk, "sqlgraph.UpdateNodes(ctx") {
+		t.Error("bulk UserUpdate.sqlSave must keep sqlgraph.UpdateNodes (plural) for the affected count")
+	}
+}
+
 // TestSelectScanUsesDirectInters guards that Select.Scan and GroupBy.Scan
 // always access q.inters.<Entity> directly, regardless of whether the
 // entity has a privacy policy. Privacy is evaluated at prepareQuery time
