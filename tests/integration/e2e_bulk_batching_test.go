@@ -27,6 +27,7 @@ type countingDriver struct {
 	dialect.Driver
 	mu      sync.Mutex
 	inserts []string
+	all     []string // every statement (for kind-by-prefix counts)
 }
 
 func (d *countingDriver) Exec(ctx context.Context, query string, args, v any) error {
@@ -48,14 +49,27 @@ func (d *countingDriver) Tx(ctx context.Context) (dialect.Tx, error) {
 }
 
 func (d *countingDriver) recordIfInsert(query string) {
-	// Only count INSERTs into the target table, not schema-create or
-	// unrelated writes.
-	if !strings.HasPrefix(strings.TrimSpace(query), "INSERT") {
-		return
-	}
+	q := strings.TrimSpace(query)
 	d.mu.Lock()
-	d.inserts = append(d.inserts, query)
+	d.all = append(d.all, q)
+	if strings.HasPrefix(q, "INSERT") {
+		d.inserts = append(d.inserts, q)
+	}
 	d.mu.Unlock()
+}
+
+// countByPrefix returns how many recorded statements start with prefix
+// (e.g. "UPDATE", "SELECT"), case-sensitive.
+func (d *countingDriver) countByPrefix(prefix string) int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	n := 0
+	for _, q := range d.all {
+		if strings.HasPrefix(q, prefix) {
+			n++
+		}
+	}
+	return n
 }
 
 func (d *countingDriver) insertCount() int {
@@ -92,12 +106,70 @@ func openCountingClient(t *testing.T) (*integration.Client, *countingDriver) {
 	client := integration.NewClient(integration.Driver(cd))
 	t.Cleanup(func() { client.Close() })
 	require.NoError(t, client.Schema.Create(context.Background()))
-	// Reset the counter AFTER schema create so we don't include its
-	// statements in the insert count.
+	// Reset the counters AFTER schema create so we don't include its
+	// statements in the counts.
 	cd.mu.Lock()
 	cd.inserts = nil
+	cd.all = nil
 	cd.mu.Unlock()
 	return client, cd
+}
+
+// TestUpdateOne_HappyPath_NoExtraQuery pins that a normal UpdateOne emits
+// exactly one UPDATE and one re-query SELECT — no extra existence query. The
+// UpdateNode/ensureExists switch (the MySQL no-op-NotFound fix) only runs the
+// existence re-check when zero rows are affected; on the happy path it is
+// skipped, so the statement count must stay at UPDATE + SELECT.
+func TestUpdateOne_HappyPath_NoExtraQuery(t *testing.T) {
+	client, cd := openCountingClient(t)
+	ctx := context.Background()
+
+	tg, err := client.Tag.Create().SetName("orig").Save(ctx)
+	require.NoError(t, err)
+
+	// Count only the UpdateOne's statements.
+	cd.mu.Lock()
+	cd.all = nil
+	cd.mu.Unlock()
+
+	got, err := client.Tag.UpdateOneID(tg.ID).SetName("changed").Save(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "changed", got.Name)
+
+	assert.Equal(t, 1, cd.countByPrefix("UPDATE"), "UpdateOne must emit exactly one UPDATE")
+	assert.Equal(t, 1, cd.countByPrefix("SELECT"),
+		"UpdateOne happy path must emit one re-query SELECT and no ensureExists query")
+}
+
+// TestEagerLoad_BatchedNoNPlus1 pins that WithXxx eager loading batches the edge
+// query: loading N parents with their O2M children emits a BOUNDED number of
+// SELECTs (one for the parents + one for all children via WHERE fk IN (...)),
+// not 1+N. This is the classic ORM N+1 regression guard.
+func TestEagerLoad_BatchedNoNPlus1(t *testing.T) {
+	client, cd := openCountingClient(t)
+	ctx := context.Background()
+
+	// 3 users, each with 2 posts.
+	for i := range 3 {
+		suffix := string(rune('0' + i))
+		u := createUser(t, client, "u"+suffix, "u"+suffix+"@x.com")
+		createPost(t, client, u, "a", "c")
+		createPost(t, client, u, "b", "c")
+	}
+
+	// Count only the eager-load query's statements.
+	cd.mu.Lock()
+	cd.all = nil
+	cd.mu.Unlock()
+
+	users, err := client.User.Query().WithPosts().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, users, 3)
+
+	// One SELECT for the users + one batched SELECT for all posts = 2, regardless
+	// of the number of users. An N+1 implementation would emit 1 + 3 = 4.
+	assert.Equal(t, 2, cd.countByPrefix("SELECT"),
+		"eager load must batch the edge query (WHERE fk IN ...), not emit one SELECT per parent")
 }
 
 // TestCreateBulk_BatchingUnderHooks_IsOneStatement is the structural
