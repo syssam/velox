@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/tests/integration/tag"
 )
 
@@ -83,6 +84,58 @@ func TestUpsert_OnConflictUpdateNewValues(t *testing.T) {
 	count, err := client.Tag.Query().Where(tag.NameField.EQ("go")).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
+}
+
+// TestUpsert_SetField_EagerConflictBinding exercises the per-column SetXxx /
+// Update upsert path. Every other upsert test uses UpdateNewValues / DoNothing /
+// Ignore, which append a single resolver to create.conflict directly — so the
+// SetXxx / Update path had ZERO coverage.
+//
+// The bug class it pins: each upsert setter binds its mutator into its OWN
+// sql.ResolveWith conflict option eagerly, closing over the immutable argument.
+// The old design instead accumulated mutators into a struct field, folded them
+// into one resolver later, and cleared the field — but sql.ResolveWith is lazy
+// (the closure runs while the INSERT is written), so the deferred read hit the
+// cleared (nil) field and rendered an EMPTY "DO UPDATE SET" → "syntax error at
+// or near \"RETURNING\"". The eager design makes that unrepresentable: no shared
+// mutable state exists to clear.
+//
+// This asserts the setter actually MUTATES the row on conflict (not merely that
+// the statement parses): an empty DO UPDATE SET would either error or no-op.
+func TestUpsert_SetField_EagerConflictBinding(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	firstID, err := client.Tag.Create().
+		SetName("eager-before").
+		OnConflict().
+		UpdateNewValues().
+		ID(ctx)
+	require.NoError(t, err)
+	assert.NotZero(t, firstID)
+
+	// Same unique name → conflict. Resolve through the SetXxx / Update path and
+	// have the resolver rewrite the row to a new value, proving the eager
+	// ResolveWith mutator runs at SQL-build time.
+	secondID, err := client.Tag.Create().
+		SetName("eager-before").
+		OnConflict().
+		Update(func(s *sql.UpdateSet) {
+			s.Set(tag.FieldName, "eager-after")
+		}).
+		ID(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, firstID, secondID,
+		"per-column Update upsert must resolve the existing row, not error")
+
+	// The DO UPDATE SET actually ran: the row was rewritten, not left untouched.
+	afterCount, err := client.Tag.Query().Where(tag.NameField.EQ("eager-after")).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, afterCount, "eager Update setter must rewrite the row on conflict")
+
+	beforeCount, err := client.Tag.Query().Where(tag.NameField.EQ("eager-before")).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, beforeCount, "old value must be gone after the conflict update")
 }
 
 // TestUpsert_OnConflictDoNothing verifies the DO NOTHING resolution

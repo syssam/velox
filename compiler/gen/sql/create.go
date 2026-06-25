@@ -1013,8 +1013,24 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 	f.Commentf("%s is the builder for \"upsert\"-ing %s nodes.", upsertName, t.Name)
 	f.Type().Id(upsertName).Struct(
 		jen.Id("create").Op("*").Id(builderName),
-		jen.Id("update").Index().Func().Params(jen.Op("*").Qual(sqlPkg, "UpdateSet")),
 	)
+
+	// eagerConflict wraps a single UpdateSet mutator into its own
+	// sql.ResolveWith conflict option and appends it to the underlying
+	// Create immediately, at the moment the setter is called. The closure
+	// captures only its own immutable argument — never mutable builder
+	// state. sql.ResolveWith is lazy (the func runs when the INSERT is
+	// written, not now), so reading an accumulator field inside it and
+	// clearing that field afterward would strand the closure on a nil
+	// slice → empty "DO UPDATE SET" → "syntax error near RETURNING".
+	// Binding eagerly per setter (Ent's design) makes that class of bug
+	// unrepresentable: there is no shared mutable state to clear.
+	eagerConflict := func(mutator jen.Code) jen.Code {
+		return jen.Id("u").Dot("create").Dot("conflict").Op("=").Append(
+			jen.Id("u").Dot("create").Dot("conflict"),
+			jen.Qual(sqlPkg, "ResolveWith").Call(mutator),
+		)
+	}
 
 	// UpdateNewValues method
 	f.Comment("UpdateNewValues updates the mutable fields using the new values that were set on create.")
@@ -1046,12 +1062,12 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 		jen.Return(jen.Id("u")),
 	)
 
-	// Update method — applies custom update functions
+	// Update method — applies a custom update function
 	f.Comment("Update allows overriding fields `ON CONFLICT` clause.")
 	f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("Update").Params(
 		jen.Id("set").Func().Params(jen.Op("*").Qual(sqlPkg, "UpdateSet")),
 	).Add(upserterRet.Clone()).Block(
-		jen.Id("u").Dot("update").Op("=").Append(jen.Id("u").Dot("update"), jen.Id("set")),
+		eagerConflict(jen.Id("set")),
 		jen.Return(jen.Id("u")),
 	)
 
@@ -1063,7 +1079,7 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 		f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("Set"+fieldPascal).Params(
 			jen.Id("v").Add(h.BaseType(fd)),
 		).Add(upserterRet.Clone()).Block(
-			jen.Id("u").Dot("update").Op("=").Append(jen.Id("u").Dot("update"),
+			eagerConflict(
 				jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "UpdateSet")).Block(
 					jen.Id("s").Dot("Set").Call(jen.Lit(column), jen.Id("v")),
 				),
@@ -1075,7 +1091,7 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 		if fd.Nillable {
 			f.Commentf("Clear%s clears the value of the %q field.", fieldPascal, column)
 			f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("Clear"+fieldPascal).Params().Add(upserterRet.Clone()).Block(
-				jen.Id("u").Dot("update").Op("=").Append(jen.Id("u").Dot("update"),
+				eagerConflict(
 					jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "UpdateSet")).Block(
 						jen.Id("s").Dot("SetNull").Call(jen.Lit(column)),
 					),
@@ -1090,7 +1106,7 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 			f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("Add"+fieldPascal).Params(
 				jen.Id("v").Add(h.BaseType(fd)),
 			).Add(upserterRet.Clone()).Block(
-				jen.Id("u").Dot("update").Op("=").Append(jen.Id("u").Dot("update"),
+				eagerConflict(
 					jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "UpdateSet")).Block(
 						jen.Id("s").Dot("Add").Call(jen.Lit(column), jen.Id("v")),
 					),
@@ -1100,34 +1116,11 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 		}
 	}
 
-	// applyConflictOpts — private helper on the upsert builder that
-	// folds any accumulated SetXxx / Update callbacks into a single
-	// sql.ResolveWith conflict option. Called by both Exec and ID so
-	// they share the same conflict-resolver assembly logic.
-	f.Comment("applyConflictOpts folds any accumulated SetXxx / Update callbacks")
-	f.Comment("into a single sql.ResolveWith option on the underlying Create.")
-	f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("applyConflictOpts").Params().Block(
-		jen.If(jen.Len(jen.Id("u").Dot("update")).Op(">").Lit(0)).Block(
-			jen.Id("u").Dot("create").Dot("conflict").Op("=").Append(
-				jen.Id("u").Dot("create").Dot("conflict"),
-				jen.Qual(sqlPkg, "ResolveWith").Call(
-					jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "UpdateSet")).Block(
-						jen.For(jen.List(jen.Id("_"), jen.Id("fn")).Op(":=").Range().Id("u").Dot("update")).Block(
-							jen.Id("fn").Call(jen.Id("s")),
-						),
-					),
-				),
-			),
-			jen.Id("u").Dot("update").Op("=").Nil(),
-		),
-	)
-
 	// Exec method on Upsert builder
 	f.Comment("Exec executes the upsert query.")
 	f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("Exec").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Error().Block(
-		jen.Id("u").Dot("applyConflictOpts").Call(),
 		jen.Return(jen.Id("u").Dot("create").Dot("Exec").Call(jen.Id("ctx"))),
 	)
 
@@ -1152,7 +1145,6 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 		f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("ID").Params(
 			jen.Id("ctx").Qual("context", "Context"),
 		).Params(jen.Id("id").Add(idType), jen.Id("err").Error()).BlockFunc(func(body *jen.Group) {
-			body.Id("u").Dot("applyConflictOpts").Call()
 			body.List(jen.Id("node"), jen.Id("saveErr")).Op(":=").
 				Id("u").Dot("create").Dot("Save").Call(jen.Id("ctx"))
 			body.If(jen.Id("saveErr").Op("!=").Nil()).Block(
