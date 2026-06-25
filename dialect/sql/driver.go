@@ -6,7 +6,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -208,8 +207,6 @@ func (c Conn) Query(ctx context.Context, query string, args, v any) error {
 	}
 	rows, err := ex.QueryContext(ctx, query, argv...)
 	if err != nil {
-		// Debug: log the failing SQL query
-		log.Printf("[SQL-ERROR] query=%s args=%v err=%v", query, argv, err)
 		if cf != nil {
 			err = errors.Join(err, cf())
 		}

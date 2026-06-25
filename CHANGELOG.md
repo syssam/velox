@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Driver no longer writes failing SQL statements and their arguments to the process-wide default logger on query errors — a leftover debug `log.Printf` in `dialect/sql/driver.go` leaked query args (often PII) to stderr and spammed logs on normal `context.Canceled`/`DeadlineExceeded`. The error is still returned to the caller (wrapped via `%w`); opt-in query logging remains available via `LogDriver`/`DebugDriver`. Pinned by `dialect/sql/driver_logging_test.go`; context-cancellation propagation across reads/writes/tx pinned by `tests/integration/e2e_context_cancel_test.go`
 - Versioned-migration output was silently lost: `FeatureVersionedMigration` and the core migration generator both wrote `migrate/migrate.go` concurrently, racing on the final rename — the feature's types (`Migration`, `MigrationDir`, `LocalDir`) now live in their own `migrate/versioned.go`, and `TestOptionalFeatureSpecs_UniqueOutputs` pins that no two writers ever share an output path
 - `internal/globalid.go` was rewritten on every generation when Snapshot+GlobalID were enabled (`ResolveIncrementStartsConflict` wrote unconditionally even with no conflict markers)
 
