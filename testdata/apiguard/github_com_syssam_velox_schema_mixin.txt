@@ -1,0 +1,83 @@
+  field Audit.Schema Schema
+  field CreateTime.Schema Schema
+  field ID.Schema Schema
+  field SoftDelete.Schema Schema
+  field TenantID.Schema Schema
+  field Time.Schema Schema
+  field TimeSoftDelete.Schema Schema
+  field UpdateTime.Schema Schema
+  method Audit.Annotations() []github.com/syssam/velox/schema.Annotation
+  method Audit.Edges() []github.com/syssam/velox.Edge
+  method Audit.Fields() []github.com/syssam/velox.Field
+  method Audit.Hooks() []github.com/syssam/velox.Hook
+  method Audit.Indexes() []github.com/syssam/velox.Index
+  method Audit.Interceptors() []github.com/syssam/velox.Interceptor
+  method Audit.Policy() github.com/syssam/velox.Policy
+  method CreateTime.Annotations() []github.com/syssam/velox/schema.Annotation
+  method CreateTime.Edges() []github.com/syssam/velox.Edge
+  method CreateTime.Fields() []github.com/syssam/velox.Field
+  method CreateTime.Hooks() []github.com/syssam/velox.Hook
+  method CreateTime.Indexes() []github.com/syssam/velox.Index
+  method CreateTime.Interceptors() []github.com/syssam/velox.Interceptor
+  method CreateTime.Policy() github.com/syssam/velox.Policy
+  method ID.Annotations() []github.com/syssam/velox/schema.Annotation
+  method ID.Edges() []github.com/syssam/velox.Edge
+  method ID.Fields() []github.com/syssam/velox.Field
+  method ID.Hooks() []github.com/syssam/velox.Hook
+  method ID.Indexes() []github.com/syssam/velox.Index
+  method ID.Interceptors() []github.com/syssam/velox.Interceptor
+  method ID.Policy() github.com/syssam/velox.Policy
+  method Schema.Annotations() []github.com/syssam/velox/schema.Annotation
+  method Schema.Edges() []github.com/syssam/velox.Edge
+  method Schema.Fields() []github.com/syssam/velox.Field
+  method Schema.Hooks() []github.com/syssam/velox.Hook
+  method Schema.Indexes() []github.com/syssam/velox.Index
+  method Schema.Interceptors() []github.com/syssam/velox.Interceptor
+  method Schema.Policy() github.com/syssam/velox.Policy
+  method SoftDelete.Annotations() []github.com/syssam/velox/schema.Annotation
+  method SoftDelete.Edges() []github.com/syssam/velox.Edge
+  method SoftDelete.Fields() []github.com/syssam/velox.Field
+  method SoftDelete.Hooks() []github.com/syssam/velox.Hook
+  method SoftDelete.Indexes() []github.com/syssam/velox.Index
+  method SoftDelete.Interceptors() []github.com/syssam/velox.Interceptor
+  method SoftDelete.Policy() github.com/syssam/velox.Policy
+  method TenantID.Annotations() []github.com/syssam/velox/schema.Annotation
+  method TenantID.Edges() []github.com/syssam/velox.Edge
+  method TenantID.Fields() []github.com/syssam/velox.Field
+  method TenantID.Hooks() []github.com/syssam/velox.Hook
+  method TenantID.Indexes() []github.com/syssam/velox.Index
+  method TenantID.Interceptors() []github.com/syssam/velox.Interceptor
+  method TenantID.Policy() github.com/syssam/velox.Policy
+  method Time.Annotations() []github.com/syssam/velox/schema.Annotation
+  method Time.Edges() []github.com/syssam/velox.Edge
+  method Time.Fields() []github.com/syssam/velox.Field
+  method Time.Hooks() []github.com/syssam/velox.Hook
+  method Time.Indexes() []github.com/syssam/velox.Index
+  method Time.Interceptors() []github.com/syssam/velox.Interceptor
+  method Time.Policy() github.com/syssam/velox.Policy
+  method TimeSoftDelete.Annotations() []github.com/syssam/velox/schema.Annotation
+  method TimeSoftDelete.Edges() []github.com/syssam/velox.Edge
+  method TimeSoftDelete.Fields() []github.com/syssam/velox.Field
+  method TimeSoftDelete.Hooks() []github.com/syssam/velox.Hook
+  method TimeSoftDelete.Indexes() []github.com/syssam/velox.Index
+  method TimeSoftDelete.Interceptors() []github.com/syssam/velox.Interceptor
+  method TimeSoftDelete.Policy() github.com/syssam/velox.Policy
+  method UpdateTime.Annotations() []github.com/syssam/velox/schema.Annotation
+  method UpdateTime.Edges() []github.com/syssam/velox.Edge
+  method UpdateTime.Fields() []github.com/syssam/velox.Field
+  method UpdateTime.Hooks() []github.com/syssam/velox.Hook
+  method UpdateTime.Indexes() []github.com/syssam/velox.Index
+  method UpdateTime.Interceptors() []github.com/syssam/velox.Interceptor
+  method UpdateTime.Policy() github.com/syssam/velox.Policy
+func AnnotateEdges(github.com/syssam/velox.Mixin, ...github.com/syssam/velox/schema.Annotation) github.com/syssam/velox.Mixin
+func AnnotateFields(github.com/syssam/velox.Mixin, ...github.com/syssam/velox/schema.Annotation) github.com/syssam/velox.Mixin
+func AuditHook(func(context.Context) string) github.com/syssam/velox.Hook
+type Audit struct
+type CreateTime struct
+type ID struct
+type Schema struct
+type SoftDelete struct
+type TenantID struct
+type Time struct
+type TimeSoftDelete struct
+type UpdateTime struct

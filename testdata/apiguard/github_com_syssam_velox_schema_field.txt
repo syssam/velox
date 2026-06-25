@@ -1,0 +1,134 @@
+  field Annotation.ID []string
+  field Annotation.StructTag map[string]string
+  field Descriptor.Annotations []github.com/syssam/velox/schema.Annotation
+  field Descriptor.Comment string
+  field Descriptor.Default any
+  field Descriptor.Deprecated bool
+  field Descriptor.DeprecatedReason string
+  field Descriptor.Enums []struct{N string; V string}
+  field Descriptor.Err error
+  field Descriptor.Immutable bool
+  field Descriptor.Info *TypeInfo
+  field Descriptor.Name string
+  field Descriptor.Nillable bool
+  field Descriptor.Optional bool
+  field Descriptor.SchemaType map[string]string
+  field Descriptor.Sensitive bool
+  field Descriptor.Size int
+  field Descriptor.StorageKey string
+  field Descriptor.Tag string
+  field Descriptor.Unique bool
+  field Descriptor.UpdateDefault any
+  field Descriptor.Validators []any
+  field Descriptor.ValueScanner any
+  field RType.Ident string
+  field RType.Kind reflect.Kind
+  field RType.Methods map[string]struct{In []*RType; Out []*RType}
+  field RType.Name string
+  field RType.PkgPath string
+  field TypeInfo.Ident string
+  field TypeInfo.Nillable bool
+  field TypeInfo.PkgName string
+  field TypeInfo.PkgPath string
+  field TypeInfo.RType *RType
+  field TypeInfo.Type Type
+  field ValueScannerFunc.S func(S) (T, error)
+  field ValueScannerFunc.V func(T) (database/sql/driver.Value, error)
+  method Annotation.Merge(github.com/syssam/velox/schema.Annotation) github.com/syssam/velox/schema.Annotation
+  method Annotation.Name() string
+  method BinaryValueScanner.FromValue(database/sql/driver.Value) (T, error)
+  method BinaryValueScanner.ScanValue() ValueScanner
+  method BinaryValueScanner.Value(T) (database/sql/driver.Value, error)
+  method EnumValues.Values() []string
+  method RType.Implements(reflect.Type) bool
+  method RType.IsPtr() bool
+  method RType.String() string
+  method RType.TypeEqual(reflect.Type) bool
+  method TextValueScanner.FromValue(database/sql/driver.Value) (T, error)
+  method TextValueScanner.ScanValue() ValueScanner
+  method TextValueScanner.Value(T) (database/sql/driver.Value, error)
+  method Type.ConstName() string
+  method Type.Float() bool
+  method Type.Integer() bool
+  method Type.IsStandardType() bool
+  method Type.Numeric() bool
+  method Type.String() string
+  method Type.Valid() bool
+  method TypeInfo.Comparable() bool
+  method TypeInfo.ConstName() string
+  method TypeInfo.Numeric() bool
+  method TypeInfo.String() string
+  method TypeInfo.Stringer() bool
+  method TypeInfo.Valid() bool
+  method TypeInfo.Validator() bool
+  method TypeInfo.ValueScanner() bool
+  method TypeInfo.Valuer() bool
+  method TypeValueScanner.FromValue(database/sql/driver.Value) (T, error)
+  method TypeValueScanner.ScanValue() ValueScanner
+  method TypeValueScanner.Value(T) (database/sql/driver.Value, error)
+  method Validator.Validate() error
+  method ValueScanner.Scan(any) error
+  method ValueScanner.Value() (database/sql/driver.Value, error)
+  method ValueScannerFunc.FromValue(database/sql/driver.Value) (T, error)
+  method ValueScannerFunc.ScanValue() ValueScanner
+  method ValueScannerFunc.Value(T) (database/sql/driver.Value, error)
+const TypeBool Type
+const TypeBytes Type
+const TypeEnum Type
+const TypeFloat32 Type
+const TypeFloat64 Type
+const TypeInt Type
+const TypeInt16 Type
+const TypeInt32 Type
+const TypeInt64 Type
+const TypeInt8 Type
+const TypeInvalid Type
+const TypeJSON Type
+const TypeOther Type
+const TypeString Type
+const TypeTime Type
+const TypeUUID Type
+const TypeUint Type
+const TypeUint16 Type
+const TypeUint32 Type
+const TypeUint64 Type
+const TypeUint8 Type
+func Any(string) *jsonBuilder
+func Bool(string) *boolBuilder
+func Bytes(string) *bytesBuilder
+func Enum(string) *enumBuilder
+func Float(string) *float64Builder
+func Float32(string) *float32Builder
+func Float64(string) *float64Builder
+func Floats(string) *sliceBuilder[float64]
+func ID(string, string, ...string) *Annotation
+func Int(string) *intBuilder
+func Int16(string) *int16Builder
+func Int32(string) *int32Builder
+func Int64(string) *int64Builder
+func Int8(string) *int8Builder
+func Ints(string) *sliceBuilder[int]
+func JSON(string, any) *jsonBuilder
+func Other(string, database/sql/driver.Valuer) *otherBuilder
+func String(string) *stringBuilder
+func Strings(string) *sliceBuilder[string]
+func Text(string) *stringBuilder
+func Time(string) *timeBuilder
+func UUID(string, database/sql/driver.Valuer) *uuidBuilder
+func Uint(string) *uintBuilder
+func Uint16(string) *uint16Builder
+func Uint32(string) *uint32Builder
+func Uint64(string) *uint64Builder
+func Uint8(string) *uint8Builder
+type Annotation struct
+type BinaryValueScanner[T interface{encoding.BinaryMarshaler; encoding.BinaryUnmarshaler}] struct
+type Descriptor struct
+type EnumValues interface
+type RType struct
+type TextValueScanner[T interface{encoding.TextMarshaler; encoding.TextUnmarshaler}] struct
+type Type uint8
+type TypeInfo struct
+type TypeValueScanner[T any] interface
+type Validator interface
+type ValueScanner interface
+type ValueScannerFunc[T any, S ValueScanner] struct

@@ -1,0 +1,302 @@
+  field CollectMeta.Edges map[string]EdgeMeta
+  field CollectMeta.FieldColumns map[string]string
+  field Config.Debug bool
+  field Config.Driver github.com/syssam/velox/dialect.Driver
+  field Config.HookStore any
+  field Config.InterStore any
+  field Config.Log func(...any)
+  field DeleterBase.Driver github.com/syssam/velox/dialect.Driver
+  field DeleterBase.FieldTypes map[string]github.com/syssam/velox/schema/field.Type
+  field DeleterBase.IDColumn string
+  field DeleterBase.IDType github.com/syssam/velox/schema/field.Type
+  field DeleterBase.Predicates []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field DeleterBase.Schema string
+  field DeleterBase.Table string
+  field EdgeLoad.Label string
+  field EdgeLoad.Name string
+  field EdgeLoad.Opts []LoadOption
+  field EdgeMeta.FKColumns []string
+  field EdgeMeta.Inverse string
+  field EdgeMeta.Name string
+  field EdgeMeta.Relay bool
+  field EdgeMeta.Target string
+  field EdgeMeta.Unique bool
+  field EdgePlan.Args []any
+  field EdgePlan.Name string
+  field EdgePlan.SQL string
+  field EdgeQuery.Config Config
+  field EntityRegistration.Client EntityClientFunc
+  field EntityRegistration.Mutator MutatorFunc
+  field EntityRegistration.Name string
+  field EntityRegistration.Table string
+  field EntityRegistration.TypeInfo *RegisteredTypeInfo
+  field EntityRegistration.ValidColumn func(string) bool
+  field LoadConfig.Edges map[string][]LoadOption
+  field LoadConfig.Fields []string
+  field LoadConfig.Limit *int
+  field LoadConfig.Offset *int
+  field LoadConfig.Orders []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field LoadConfig.Predicates []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field NodeResolver.Resolve func(ctx context.Context, id any) (any, error)
+  field NodeResolver.Type string
+  field QueryBase.Columns []string
+  field QueryBase.Ctx *QueryContext
+  field QueryBase.Driver github.com/syssam/velox/dialect.Driver
+  field QueryBase.Edges []EdgeLoad
+  field QueryBase.FKColumns []string
+  field QueryBase.IDColumn string
+  field QueryBase.IDFieldType github.com/syssam/velox/schema/field.Type
+  field QueryBase.Inters []Interceptor
+  field QueryBase.Modifiers []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field QueryBase.Order []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field QueryBase.Path func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  field QueryBase.Predicates []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field QueryBase.Table string
+  field QueryBase.WithFKs bool
+  field QueryContext.Fields []string
+  field QueryContext.Limit *int
+  field QueryContext.Offset *int
+  field QueryContext.Type string
+  field QueryContext.Unique *bool
+  field QueryPlan.Args []any
+  field QueryPlan.Edges []EdgePlan
+  field QueryPlan.Interceptors []string
+  field QueryPlan.SQL string
+  field RegisteredTypeInfo.Assign func(entity any, columns []string, values []any) error
+  field RegisteredTypeInfo.Columns []string
+  field RegisteredTypeInfo.GetID func(entity any) any
+  field RegisteredTypeInfo.IDColumn string
+  field RegisteredTypeInfo.IDFieldType github.com/syssam/velox/schema/field.Type
+  field RegisteredTypeInfo.New func() any
+  field RegisteredTypeInfo.ScanValues func(columns []string) ([]any, error)
+  field RegisteredTypeInfo.Table string
+  field ScanConfig.Assign func(entity any, columns []string, values []any) error
+  field ScanConfig.Columns []string
+  field ScanConfig.GetID func(entity any) any
+  field ScanConfig.IDColumn string
+  field ScanConfig.IDFieldType github.com/syssam/velox/schema/field.Type
+  field ScanConfig.New func() any
+  field ScanConfig.ScanValues func(columns []string) ([]any, error)
+  field ScanConfig.SetDriver func(entity any, drv github.com/syssam/velox/dialect.Driver)
+  field ScanConfig.Table string
+  method EdgeQuery.AllAny(context.Context) ([]any, error)
+  method EdgeQuery.Clone() *EdgeQuery
+  method EdgeQuery.Count(context.Context) (int, error)
+  method EdgeQuery.CountX(context.Context) int
+  method EdgeQuery.Exist(context.Context) (bool, error)
+  method EdgeQuery.ExistX(context.Context) bool
+  method EdgeQuery.FirstAny(context.Context) (any, error)
+  method EdgeQuery.FirstID(context.Context) (any, error)
+  method EdgeQuery.FirstIDX(context.Context) any
+  method EdgeQuery.GetCtx() *QueryContext
+  method EdgeQuery.GetDriver() github.com/syssam/velox/dialect.Driver
+  method EdgeQuery.GetInters() []Interceptor
+  method EdgeQuery.GetModifiers() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method EdgeQuery.GetOrder() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method EdgeQuery.GetPath() func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  method EdgeQuery.GetPredicates() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method EdgeQuery.GetWithFKs() bool
+  method EdgeQuery.IDs(context.Context) ([]any, error)
+  method EdgeQuery.IDsX(context.Context) []any
+  method EdgeQuery.Limit(int) *EdgeQuery
+  method EdgeQuery.Modify(...func(*github.com/syssam/velox/dialect/sql.Selector)) *EdgeQuery
+  method EdgeQuery.Offset(int) *EdgeQuery
+  method EdgeQuery.OnlyAny(context.Context) (any, error)
+  method EdgeQuery.OnlyID(context.Context) (any, error)
+  method EdgeQuery.OnlyIDX(context.Context) any
+  method EdgeQuery.Order(...func(*github.com/syssam/velox/dialect/sql.Selector)) *EdgeQuery
+  method EdgeQuery.Scan(context.Context, any) error
+  method EdgeQuery.ScanX(context.Context, any)
+  method EdgeQuery.Select(...string) *EdgeQuery
+  method EdgeQuery.Unique(bool) *EdgeQuery
+  method EdgeQuery.Where(...func(*github.com/syssam/velox/dialect/sql.Selector)) *EdgeQuery
+  method EdgeQuery.WithEdge(string, ...LoadOption) *EdgeQuery
+  method FieldCollectable.GetCtx() *QueryContext
+  method FieldCollectable.GetIDColumn() string
+  method FieldCollectable.WithEdgeLoad(string, ...LoadOption)
+  method PredicateAdder.AddPredicate(func(*github.com/syssam/velox/dialect/sql.Selector))
+  method QueryBase.AddModifier(...func(*github.com/syssam/velox/dialect/sql.Selector))
+  method QueryBase.AddOrder(...func(*github.com/syssam/velox/dialect/sql.Selector))
+  method QueryBase.BuildQuery(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  method QueryBase.BuildSelector(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  method QueryBase.Clone() *QueryBase
+  method QueryBase.ForKeyShare(...github.com/syssam/velox/dialect/sql.LockOption)
+  method QueryBase.ForNoKeyUpdate(...github.com/syssam/velox/dialect/sql.LockOption)
+  method QueryBase.ForShare(...github.com/syssam/velox/dialect/sql.LockOption)
+  method QueryBase.ForUpdate(...github.com/syssam/velox/dialect/sql.LockOption)
+  method QueryBase.GetColumns() []string
+  method QueryBase.GetCtx() *QueryContext
+  method QueryBase.GetDriver() github.com/syssam/velox/dialect.Driver
+  method QueryBase.GetFKColumns() []string
+  method QueryBase.GetIDColumn() string
+  method QueryBase.GetIDFieldType() github.com/syssam/velox/schema/field.Type
+  method QueryBase.GetModifiers() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method QueryBase.GetOrder() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method QueryBase.GetPath() func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  method QueryBase.GetPredicates() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method QueryBase.GetTable() string
+  method QueryBase.GetWithFKs() bool
+  method QueryBase.QuerySpec(github.com/syssam/velox/schema/field.Type) *github.com/syssam/velox/dialect/sql/sqlgraph.QuerySpec
+  method QueryBase.SetLimit(int)
+  method QueryBase.SetOffset(int)
+  method QueryBase.SetUnique(bool)
+  method QueryBase.Where(...func(*github.com/syssam/velox/dialect/sql.Selector))
+  method QueryBase.WithEdgeLoad(string, ...LoadOption)
+  method QueryBase.WithNamedEdgeLoad(string, string, ...LoadOption)
+  method QueryContext.AppendFieldOnce(string)
+  method QueryContext.Clone() *QueryContext
+  method QueryReader.GetColumns() []string
+  method QueryReader.GetCtx() *QueryContext
+  method QueryReader.GetDriver() github.com/syssam/velox/dialect.Driver
+  method QueryReader.GetFKColumns() []string
+  method QueryReader.GetIDColumn() string
+  method QueryReader.GetIDFieldType() github.com/syssam/velox/schema/field.Type
+  method QueryReader.GetModifiers() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method QueryReader.GetOrder() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method QueryReader.GetPath() func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  method QueryReader.GetPredicates() []func(*github.com/syssam/velox/dialect/sql.Selector)
+  method QueryReader.GetTable() string
+  method QueryReader.GetWithFKs() bool
+  method Scannable.AssignValues([]string, []any) error
+  method Scannable.ScanValues([]string) ([]any, error)
+  method ScannableOf.AssignValues([]string, []any) error
+  method ScannableOf.ScanValues([]string) ([]any, error)
+  method Selector.AppendFns(...AggregateFunc)
+  method Selector.Bool(context.Context) (bool, error)
+  method Selector.BoolX(context.Context) bool
+  method Selector.Bools(context.Context) ([]bool, error)
+  method Selector.BoolsX(context.Context) []bool
+  method Selector.Float64(context.Context) (float64, error)
+  method Selector.Float64X(context.Context) float64
+  method Selector.Float64s(context.Context) ([]float64, error)
+  method Selector.Float64sX(context.Context) []float64
+  method Selector.Fns() []AggregateFunc
+  method Selector.Int(context.Context) (int, error)
+  method Selector.IntX(context.Context) int
+  method Selector.Ints(context.Context) ([]int, error)
+  method Selector.IntsX(context.Context) []int
+  method Selector.ScanX(context.Context, any)
+  method Selector.String(context.Context) (string, error)
+  method Selector.StringX(context.Context) string
+  method Selector.Strings(context.Context) ([]string, error)
+  method Selector.StringsX(context.Context) []string
+  method TxDriverUnwrapper.BaseDriver() github.com/syssam/velox/dialect.Driver
+const OpCreate github.com/syssam/velox.Op
+const OpDelete github.com/syssam/velox.Op
+const OpDeleteOne github.com/syssam/velox.Op
+const OpUpdate github.com/syssam/velox.Op
+const OpUpdateOne github.com/syssam/velox.Op
+func BuildQueryFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
+func BuildSelectorFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
+func CloneSlice[T any]([]T) []T
+func CollectFields(context.Context, FieldCollectable, map[string]string, map[string]EdgeMeta, ...string) error
+func ConfigFromContext(context.Context) Config
+func DeleteNodes(context.Context, *DeleterBase) (int, error)
+func DriverFromContext(context.Context) github.com/syssam/velox/dialect.Driver
+func EntityPolicy(string) github.com/syssam/velox.Policy
+func ExtractID(any, github.com/syssam/velox/schema/field.Type) (any, error)
+func FindMutator(string) MutatorFunc
+func FindRegisteredType(string) *RegisteredTypeInfo
+func IDScanValues(github.com/syssam/velox/schema/field.Type) []any
+func IsConstraintError(error) bool
+func IsNotFound(error) bool
+func IsNotLoaded(error) bool
+func IsNotSingular(error) bool
+func IsValidationError(error) bool
+func Limit(int) LoadOption
+func MakeQuerySpec(QueryReader, github.com/syssam/velox/schema/field.Type) *github.com/syssam/velox/dialect/sql/sqlgraph.QuerySpec
+func MaskNotFound(error) error
+func MayWrapConstraintError(error) error
+func NewEdgeQuery(Config, *QueryBase, *ScanConfig) *EdgeQuery
+func NewEntityClient(string, Config) any
+func NewEntityQuery(string, Config) any
+func NewQueryBase(github.com/syssam/velox/dialect.Driver, string, []string, string, []string, string) *QueryBase
+func NewSelector(string, *[]string, func(context.Context, any) error) Selector
+func NodeResolvers() map[string]NodeResolver
+func Offset(int) LoadOption
+func OrderBy(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
+func QueryAllSC(context.Context, QueryReader, *ScanConfig) ([]any, error)
+func QueryCount(context.Context, QueryReader, github.com/syssam/velox/schema/field.Type) (int, error)
+func QueryExist(context.Context, QueryReader, github.com/syssam/velox/schema/field.Type) (bool, error)
+func QueryFirstIDOnly(context.Context, *QueryBase) (any, error)
+func QueryGroupBy(context.Context, QueryReader, []string, []AggregateFunc, any) error
+func QueryIDsOnly(context.Context, *QueryBase) ([]any, error)
+func QueryOnlyIDOnly(context.Context, *QueryBase) (any, error)
+func QueryScan(context.Context, QueryReader, any) error
+func QuerySelect(context.Context, QueryReader, []AggregateFunc, any) error
+func RegisterColumns(string, func(string) bool)
+func RegisterEntity(EntityRegistration)
+func RegisterEntityClient(string, EntityClientFunc)
+func RegisterEntityPolicy(string, github.com/syssam/velox.Policy)
+func RegisterMutator(string, MutatorFunc)
+func RegisterNodeResolver(string, NodeResolver)
+func RegisterQueryFactory(string, QueryFunc)
+func RegisterTypeInfo(string, *RegisteredTypeInfo)
+func RegisteredTypeNames() []string
+func RunTraversers(context.Context, Query, []Interceptor) error
+func ScanAll[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)) ([]*T, error)
+func ScanFirst[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error), string) (*T, error)
+func ScanMapRows(context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)) ([]map[string]any, error)
+func ScanOnly[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error), string) (*T, error)
+func ScanWithInterceptors(context.Context, Query, []Interceptor, func(context.Context, any) error, any) error
+func Select(...string) LoadOption
+func SetFieldCollector(func(ctx context.Context, q FieldCollectable, fields map[string]string, edges map[string]EdgeMeta, satisfies []string) error)
+func ValidColumn(string, string) error
+func ValidateRegistries() error
+func Where(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
+func WithConfigContext(context.Context, Config) context.Context
+func WithDriverContext(context.Context, github.com/syssam/velox/dialect.Driver) context.Context
+func WithEdge(string, ...LoadOption) LoadOption
+type AggregateFunc = AggregateFunc
+type CollectMeta struct
+type Config struct
+type ConstraintError = ConstraintError
+type DeleterBase struct
+type EdgeLoad struct
+type EdgeMeta struct
+type EdgePlan struct
+type EdgeQuery struct
+type EntityClientFunc func(cfg Config) any
+type EntityRegistration struct
+type FieldCollectable interface
+type Hook = Hook
+type InterceptFunc = InterceptFunc
+type Interceptor = Interceptor
+type LoadConfig struct
+type LoadOption func(*LoadConfig)
+type MutateFunc = MutateFunc
+type Mutation = Mutation
+type Mutator = Mutator
+type MutatorFunc func(ctx context.Context, cfg Config, m any) (any, error)
+type NodeResolver struct
+type NotFoundError = NotFoundError
+type NotLoadedError = NotLoadedError
+type NotSingularError = NotSingularError
+type Op = Op
+type PredicateAdder interface
+type Querier = Querier
+type QuerierFunc = QuerierFunc
+type Query = Query
+type QueryBase struct
+type QueryContext struct
+type QueryFunc func(cfg Config) any
+type QueryPlan struct
+type QueryReader interface
+type RegisteredTypeInfo struct
+type ScanConfig struct
+type Scannable interface
+type ScannableOf[T any] interface
+type Selector struct
+type TraverseFunc = TraverseFunc
+type Traverser = Traverser
+type TxDriverUnwrapper interface
+type ValidationError = ValidationError
+type Value = Value
+var ErrNotFound error
+var ErrNotSingular error
+var ErrTxStarted error
+var NewConstraintError func(msg string, wrap error) *github.com/syssam/velox.ConstraintError
+var NewNotFoundError func(label string) *github.com/syssam/velox.NotFoundError
+var NewNotLoadedError func(edge string) *github.com/syssam/velox.NotLoadedError
+var NewNotSingularError func(label string) *github.com/syssam/velox.NotSingularError
+var NewValidationError func(name string, err error) *github.com/syssam/velox.ValidationError

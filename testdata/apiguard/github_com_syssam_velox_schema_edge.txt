@@ -1,0 +1,32 @@
+  field Annotation.StructTag string
+  field Descriptor.Annotations []github.com/syssam/velox/schema.Annotation
+  field Descriptor.Comment string
+  field Descriptor.Err error
+  field Descriptor.Field string
+  field Descriptor.Immutable bool
+  field Descriptor.Inverse bool
+  field Descriptor.Name string
+  field Descriptor.Ref *Descriptor
+  field Descriptor.RefName string
+  field Descriptor.Required bool
+  field Descriptor.StorageKey *StorageKey
+  field Descriptor.Tag string
+  field Descriptor.Through *struct{N string; T string}
+  field Descriptor.Type string
+  field Descriptor.Unique bool
+  field StorageKey.Columns []string
+  field StorageKey.Symbols []string
+  field StorageKey.Table string
+  method Annotation.Merge(github.com/syssam/velox/schema.Annotation) github.com/syssam/velox/schema.Annotation
+  method Annotation.Name() string
+func Column(string) StorageOption
+func Columns(string, string) StorageOption
+func From(string, any) *inverseBuilder
+func Symbol(string) StorageOption
+func Symbols(string, string) StorageOption
+func Table(string) StorageOption
+func To(string, any) *assocBuilder
+type Annotation struct
+type Descriptor struct
+type StorageKey struct
+type StorageOption func(*StorageKey)

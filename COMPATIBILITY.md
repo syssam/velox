@@ -10,6 +10,30 @@ Velox follows [Go module versioning](https://go.dev/doc/modules/version-numbers)
   Regenerate after upgrading: `go generate ./...`
 - **`internal/` packages** are not part of the public API and may change at any time.
 
+### Enforcement
+
+The exported surface of the consumer-facing packages — the root `velox` package,
+`privacy`, `schema/field`, `schema/edge`, `schema/index`, `schema/mixin`,
+`dialect/sql`, and `runtime` — is protected by two complementary layers (same
+package set):
+
+- **`apiguard_test.go` (blocking):** golden snapshots in `testdata/apiguard/`,
+  checked by `go test ./...` on **every push, including direct pushes to `main`**.
+  Any change to an exported function, method, type, struct field, or interface
+  fails the build — so an accidental break can't ship silently.
+- **the `apidiff` CI job (advisory):** a semantic Go-compatibility diff against the
+  pull-request base, surfaced as a reviewer warning. PR-only.
+
+When you change the public API **intentionally**, regenerate the snapshot and call
+the change out in `CHANGELOG.md`:
+
+```bash
+go test . -run TestPublicAPIGuard -update-api
+```
+
+A failing `TestPublicAPIGuard` with no intended API change means you introduced an
+unintended break — revert it rather than updating the golden.
+
 ## Database Support
 
 | Database | Version | Driver | Status |

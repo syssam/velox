@@ -1,0 +1,976 @@
+  field ColumnBuilder.Builder Builder
+  field Conn.ExecQuerier ExecQuerier
+  field DeleteBuilder.Builder Builder
+  field Driver.Conn Conn
+  field Func.Builder Builder
+  field InsertBuilder.Builder Builder
+  field LockOptions.Action LockAction
+  field LockOptions.Strength LockStrength
+  field LockOptions.Tables []string
+  field LogDriver.Driver *Driver
+  field LogTx.Tx github.com/syssam/velox/dialect.Tx
+  field NullScanner.S database/sql.Scanner
+  field NullScanner.Valid bool
+  field OrderExprTerm.Expr func(*Selector) Querier
+  field OrderExprTerm.OrderTermOptions OrderTermOptions
+  field OrderFieldTerm.Field string
+  field OrderFieldTerm.OrderTermOptions OrderTermOptions
+  field OrderTermOptions.As string
+  field OrderTermOptions.Desc bool
+  field OrderTermOptions.NullsFirst bool
+  field OrderTermOptions.NullsLast bool
+  field OrderTermOptions.Selected bool
+  field Predicate.Builder Builder
+  field QueryStats.Errors sync/atomic.Int64
+  field QueryStats.SlowQueries sync/atomic.Int64
+  field QueryStats.TotalDuration sync/atomic.Int64
+  field QueryStats.TotalExecs sync/atomic.Int64
+  field QueryStats.TotalQueries sync/atomic.Int64
+  field Rows.ColumnScanner ColumnScanner
+  field SelectTable.Builder Builder
+  field Selector.Builder Builder
+  field StatsDriver.Driver *Driver
+  field StatsSnapshot.Errors int64
+  field StatsSnapshot.SlowQueries int64
+  field StatsSnapshot.TotalDuration time.Duration
+  field StatsSnapshot.TotalExecs int64
+  field StatsSnapshot.TotalQueries int64
+  field StatsTx.Tx github.com/syssam/velox/dialect.Tx
+  field StmtInfo.Dialect string
+  field Tx.Conn Conn
+  field Tx.Tx database/sql/driver.Tx
+  field UpdateBuilder.Builder Builder
+  field UpdateSet.UpdateBuilder *UpdateBuilder
+  field ViewBuilder.Builder Builder
+  field WindowBuilder.Builder Builder
+  field WithBuilder.Builder Builder
+  method BoolField.EQ(bool) P
+  method BoolField.IsNil() P
+  method BoolField.IsNull() P
+  method BoolField.NEQ(bool) P
+  method BoolField.Name() string
+  method BoolField.NotNil() P
+  method BoolField.NotNull() P
+  method Builder.AddError(error) *Builder
+  method Builder.Arg(any) *Builder
+  method Builder.Argf(string, any) *Builder
+  method Builder.Args(...any) *Builder
+  method Builder.Byte(byte) *Builder
+  method Builder.Comma() *Builder
+  method Builder.Dialect() string
+  method Builder.Err() error
+  method Builder.Ident(string) *Builder
+  method Builder.IdentComma(...string) *Builder
+  method Builder.Join(...Querier) *Builder
+  method Builder.JoinComma(...Querier) *Builder
+  method Builder.Len() int
+  method Builder.Pad() *Builder
+  method Builder.Query() (string, []any)
+  method Builder.Quote(string) string
+  method Builder.Reset() *Builder
+  method Builder.S(string) *Builder
+  method Builder.SetDialect(string)
+  method Builder.SetTotal(int)
+  method Builder.String() string
+  method Builder.Total() int
+  method Builder.Wrap(func(*Builder)) *Builder
+  method Builder.WriteOp(Op) *Builder
+  method Builder.WriteString(string) *Builder
+  method ColumnBuilder.AddError(error) *Builder
+  method ColumnBuilder.Arg(any) *Builder
+  method ColumnBuilder.Argf(string, any) *Builder
+  method ColumnBuilder.Args(...any) *Builder
+  method ColumnBuilder.Byte(byte) *Builder
+  method ColumnBuilder.Comma() *Builder
+  method ColumnBuilder.Dialect() string
+  method ColumnBuilder.Err() error
+  method ColumnBuilder.Ident(string) *Builder
+  method ColumnBuilder.IdentComma(...string) *Builder
+  method ColumnBuilder.Join(...Querier) *Builder
+  method ColumnBuilder.JoinComma(...Querier) *Builder
+  method ColumnBuilder.Len() int
+  method ColumnBuilder.Pad() *Builder
+  method ColumnBuilder.Query() (string, []any)
+  method ColumnBuilder.Quote(string) string
+  method ColumnBuilder.Reset() *Builder
+  method ColumnBuilder.S(string) *Builder
+  method ColumnBuilder.SetDialect(string)
+  method ColumnBuilder.SetTotal(int)
+  method ColumnBuilder.String() string
+  method ColumnBuilder.Total() int
+  method ColumnBuilder.Type(string) *ColumnBuilder
+  method ColumnBuilder.Wrap(func(*Builder)) *Builder
+  method ColumnBuilder.WriteOp(Op) *Builder
+  method ColumnBuilder.WriteString(string) *Builder
+  method ColumnScanner.Close() error
+  method ColumnScanner.ColumnTypes() ([]*database/sql.ColumnType, error)
+  method ColumnScanner.Columns() ([]string, error)
+  method ColumnScanner.Err() error
+  method ColumnScanner.Next() bool
+  method ColumnScanner.NextResultSet() bool
+  method ColumnScanner.Scan(...any) error
+  method Conn.Exec(context.Context, string, any, any) error
+  method Conn.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
+  method Conn.Query(context.Context, string, any, any) error
+  method Conn.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method DeleteBuilder.AddError(error) *Builder
+  method DeleteBuilder.Arg(any) *Builder
+  method DeleteBuilder.Argf(string, any) *Builder
+  method DeleteBuilder.Args(...any) *Builder
+  method DeleteBuilder.Byte(byte) *Builder
+  method DeleteBuilder.Comma() *Builder
+  method DeleteBuilder.Dialect() string
+  method DeleteBuilder.Err() error
+  method DeleteBuilder.FromSelect(*Selector) *DeleteBuilder
+  method DeleteBuilder.Ident(string) *Builder
+  method DeleteBuilder.IdentComma(...string) *Builder
+  method DeleteBuilder.Join(...Querier) *Builder
+  method DeleteBuilder.JoinComma(...Querier) *Builder
+  method DeleteBuilder.Len() int
+  method DeleteBuilder.Pad() *Builder
+  method DeleteBuilder.Query() (string, []any)
+  method DeleteBuilder.Quote(string) string
+  method DeleteBuilder.Reset() *Builder
+  method DeleteBuilder.S(string) *Builder
+  method DeleteBuilder.Schema(string) *DeleteBuilder
+  method DeleteBuilder.SetDialect(string)
+  method DeleteBuilder.SetTotal(int)
+  method DeleteBuilder.String() string
+  method DeleteBuilder.Total() int
+  method DeleteBuilder.Where(*Predicate) *DeleteBuilder
+  method DeleteBuilder.Wrap(func(*Builder)) *Builder
+  method DeleteBuilder.WriteOp(Op) *Builder
+  method DeleteBuilder.WriteString(string) *Builder
+  method DialectBuilder.Column(string) *ColumnBuilder
+  method DialectBuilder.CreateView(string) *ViewBuilder
+  method DialectBuilder.Delete(string) *DeleteBuilder
+  method DialectBuilder.Expr(func(*Builder)) Querier
+  method DialectBuilder.Insert(string) *InsertBuilder
+  method DialectBuilder.Select(...string) *Selector
+  method DialectBuilder.SelectExpr(...Querier) *Selector
+  method DialectBuilder.String(func(*Builder)) string
+  method DialectBuilder.Table(string) *SelectTable
+  method DialectBuilder.Update(string) *UpdateBuilder
+  method DialectBuilder.With(string) *WithBuilder
+  method Driver.BeginTx(context.Context, *TxOptions) (github.com/syssam/velox/dialect.Tx, error)
+  method Driver.Close() error
+  method Driver.DB() *database/sql.DB
+  method Driver.Dialect() string
+  method Driver.Exec(context.Context, string, any, any) error
+  method Driver.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
+  method Driver.Query(context.Context, string, any, any) error
+  method Driver.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method Driver.Tx(context.Context) (github.com/syssam/velox/dialect.Tx, error)
+  method EnumField.EQ(T) P
+  method EnumField.In(...T) P
+  method EnumField.IsNil() P
+  method EnumField.IsNull() P
+  method EnumField.NEQ(T) P
+  method EnumField.Name() string
+  method EnumField.NotIn(...T) P
+  method EnumField.NotNil() P
+  method EnumField.NotNull() P
+  method ExecQuerier.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
+  method ExecQuerier.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method Float64Field.EQ(float64) P
+  method Float64Field.GT(float64) P
+  method Float64Field.GTE(float64) P
+  method Float64Field.In(...float64) P
+  method Float64Field.IsNil() P
+  method Float64Field.IsNull() P
+  method Float64Field.LT(float64) P
+  method Float64Field.LTE(float64) P
+  method Float64Field.NEQ(float64) P
+  method Float64Field.Name() string
+  method Float64Field.NotIn(...float64) P
+  method Float64Field.NotNil() P
+  method Float64Field.NotNull() P
+  method Func.AddError(error) *Builder
+  method Func.Append(func(*Builder)) *Func
+  method Func.Arg(any) *Builder
+  method Func.Argf(string, any) *Builder
+  method Func.Args(...any) *Builder
+  method Func.Avg(string)
+  method Func.Byte(byte) *Builder
+  method Func.Comma() *Builder
+  method Func.Count(string)
+  method Func.Dialect() string
+  method Func.Err() error
+  method Func.Ident(string) *Builder
+  method Func.IdentComma(...string) *Builder
+  method Func.Join(...Querier) *Builder
+  method Func.JoinComma(...Querier) *Builder
+  method Func.Len() int
+  method Func.Lower(string)
+  method Func.Max(string)
+  method Func.Min(string)
+  method Func.Pad() *Builder
+  method Func.Query() (string, []any)
+  method Func.Quote(string) string
+  method Func.Reset() *Builder
+  method Func.S(string) *Builder
+  method Func.SetDialect(string)
+  method Func.SetTotal(int)
+  method Func.String() string
+  method Func.Sum(string)
+  method Func.Total() int
+  method Func.Wrap(func(*Builder)) *Builder
+  method Func.WriteOp(Op) *Builder
+  method Func.WriteString(string) *Builder
+  method InsertBuilder.AddError(error) *Builder
+  method InsertBuilder.Arg(any) *Builder
+  method InsertBuilder.Argf(string, any) *Builder
+  method InsertBuilder.Args(...any) *Builder
+  method InsertBuilder.Byte(byte) *Builder
+  method InsertBuilder.Columns(...string) *InsertBuilder
+  method InsertBuilder.Comma() *Builder
+  method InsertBuilder.Default() *InsertBuilder
+  method InsertBuilder.Dialect() string
+  method InsertBuilder.Err() error
+  method InsertBuilder.Ident(string) *Builder
+  method InsertBuilder.IdentComma(...string) *Builder
+  method InsertBuilder.Join(...Querier) *Builder
+  method InsertBuilder.JoinComma(...Querier) *Builder
+  method InsertBuilder.Len() int
+  method InsertBuilder.OnConflict(...ConflictOption) *InsertBuilder
+  method InsertBuilder.Pad() *Builder
+  method InsertBuilder.Query() (string, []any)
+  method InsertBuilder.QueryErr() (string, []any, error)
+  method InsertBuilder.Quote(string) string
+  method InsertBuilder.Reset() *Builder
+  method InsertBuilder.Returning(...string) *InsertBuilder
+  method InsertBuilder.S(string) *Builder
+  method InsertBuilder.Schema(string) *InsertBuilder
+  method InsertBuilder.Set(string, any) *InsertBuilder
+  method InsertBuilder.SetDialect(string)
+  method InsertBuilder.SetTotal(int)
+  method InsertBuilder.String() string
+  method InsertBuilder.Total() int
+  method InsertBuilder.Values(...any) *InsertBuilder
+  method InsertBuilder.Wrap(func(*Builder)) *Builder
+  method InsertBuilder.WriteOp(Op) *Builder
+  method InsertBuilder.WriteString(string) *Builder
+  method Int64Field.EQ(int64) P
+  method Int64Field.GT(int64) P
+  method Int64Field.GTE(int64) P
+  method Int64Field.In(...int64) P
+  method Int64Field.IsNil() P
+  method Int64Field.IsNull() P
+  method Int64Field.LT(int64) P
+  method Int64Field.LTE(int64) P
+  method Int64Field.NEQ(int64) P
+  method Int64Field.Name() string
+  method Int64Field.NotIn(...int64) P
+  method Int64Field.NotNil() P
+  method Int64Field.NotNull() P
+  method IntField.EQ(int) P
+  method IntField.GT(int) P
+  method IntField.GTE(int) P
+  method IntField.In(...int) P
+  method IntField.IsNil() P
+  method IntField.IsNull() P
+  method IntField.LT(int) P
+  method IntField.LTE(int) P
+  method IntField.NEQ(int) P
+  method IntField.Name() string
+  method IntField.NotIn(...int) P
+  method IntField.NotNil() P
+  method IntField.NotNull() P
+  method LogDriver.BeginTx(context.Context, *TxOptions) (github.com/syssam/velox/dialect.Tx, error)
+  method LogDriver.Close() error
+  method LogDriver.DB() *database/sql.DB
+  method LogDriver.Dialect() string
+  method LogDriver.Exec(context.Context, string, any, any) error
+  method LogDriver.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
+  method LogDriver.Query(context.Context, string, any, any) error
+  method LogDriver.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method LogDriver.Tx(context.Context) (github.com/syssam/velox/dialect.Tx, error)
+  method LogTx.Commit() error
+  method LogTx.Exec(context.Context, string, any, any) error
+  method LogTx.Query(context.Context, string, any, any) error
+  method LogTx.Rollback() error
+  method NullScanner.Scan(any) error
+  method OrderFieldTerm.ToFunc() func(*Selector)
+  method OtherField.EQ(T) P
+  method OtherField.GT(T) P
+  method OtherField.GTE(T) P
+  method OtherField.In(...T) P
+  method OtherField.IsNil() P
+  method OtherField.IsNull() P
+  method OtherField.LT(T) P
+  method OtherField.LTE(T) P
+  method OtherField.NEQ(T) P
+  method OtherField.Name() string
+  method OtherField.NotIn(...T) P
+  method OtherField.NotNil() P
+  method OtherField.NotNull() P
+  method ParamFormatter.FormatParam(string, *StmtInfo) string
+  method Predicate.AddError(error) *Builder
+  method Predicate.Append(func(*Builder)) *Predicate
+  method Predicate.Arg(any) *Builder
+  method Predicate.Argf(string, any) *Builder
+  method Predicate.Args(...any) *Builder
+  method Predicate.Byte(byte) *Builder
+  method Predicate.ColumnsEQ(string, string) *Predicate
+  method Predicate.ColumnsGT(string, string) *Predicate
+  method Predicate.ColumnsGTE(string, string) *Predicate
+  method Predicate.ColumnsHasPrefix(string, string) *Predicate
+  method Predicate.ColumnsLT(string, string) *Predicate
+  method Predicate.ColumnsLTE(string, string) *Predicate
+  method Predicate.ColumnsNEQ(string, string) *Predicate
+  method Predicate.ColumnsOp(string, string, Op) *Predicate
+  method Predicate.Comma() *Builder
+  method Predicate.CompositeGT([]string, ...any) *Predicate
+  method Predicate.CompositeLT([]string, ...any) *Predicate
+  method Predicate.Contains(string, string) *Predicate
+  method Predicate.ContainsFold(string, string) *Predicate
+  method Predicate.Dialect() string
+  method Predicate.EQ(string, any) *Predicate
+  method Predicate.EqualFold(string, string) *Predicate
+  method Predicate.Err() error
+  method Predicate.Exists(Querier) *Predicate
+  method Predicate.False() *Predicate
+  method Predicate.GT(string, any) *Predicate
+  method Predicate.GTE(string, any) *Predicate
+  method Predicate.HasPrefix(string, string) *Predicate
+  method Predicate.HasPrefixFold(string, string) *Predicate
+  method Predicate.HasSuffix(string, string) *Predicate
+  method Predicate.HasSuffixFold(string, string) *Predicate
+  method Predicate.Ident(string) *Builder
+  method Predicate.IdentComma(...string) *Builder
+  method Predicate.In(string, ...any) *Predicate
+  method Predicate.InInts(string, ...int) *Predicate
+  method Predicate.InValues(string, ...database/sql/driver.Value) *Predicate
+  method Predicate.IsFalse(string) *Predicate
+  method Predicate.IsNull(string) *Predicate
+  method Predicate.IsTrue(string) *Predicate
+  method Predicate.Join(...Querier) *Builder
+  method Predicate.JoinComma(...Querier) *Builder
+  method Predicate.LT(string, any) *Predicate
+  method Predicate.LTE(string, any) *Predicate
+  method Predicate.Len() int
+  method Predicate.Like(string, string) *Predicate
+  method Predicate.NEQ(string, any) *Predicate
+  method Predicate.Not() *Predicate
+  method Predicate.NotExists(Querier) *Predicate
+  method Predicate.NotIn(string, ...any) *Predicate
+  method Predicate.NotNull(string) *Predicate
+  method Predicate.Pad() *Builder
+  method Predicate.Query() (string, []any)
+  method Predicate.Quote(string) string
+  method Predicate.Reset() *Builder
+  method Predicate.S(string) *Builder
+  method Predicate.SetDialect(string)
+  method Predicate.SetTotal(int)
+  method Predicate.String() string
+  method Predicate.Total() int
+  method Predicate.Wrap(func(*Builder)) *Builder
+  method Predicate.WriteOp(Op) *Builder
+  method Predicate.WriteString(string) *Builder
+  method Querier.Query() (string, []any)
+  method Queries.Query() (string, []any)
+  method QueryStats.Reset() StatsSnapshot
+  method QueryStats.Stats() StatsSnapshot
+  method Rows.Close() error
+  method Rows.ColumnTypes() ([]*database/sql.ColumnType, error)
+  method Rows.Columns() ([]string, error)
+  method Rows.Err() error
+  method Rows.Next() bool
+  method Rows.NextResultSet() bool
+  method Rows.Scan(...any) error
+  method SelectTable.AddError(error) *Builder
+  method SelectTable.Arg(any) *Builder
+  method SelectTable.Argf(string, any) *Builder
+  method SelectTable.Args(...any) *Builder
+  method SelectTable.As(string) *SelectTable
+  method SelectTable.Byte(byte) *Builder
+  method SelectTable.C(string) string
+  method SelectTable.Columns(...string) []string
+  method SelectTable.Comma() *Builder
+  method SelectTable.Dialect() string
+  method SelectTable.Err() error
+  method SelectTable.Ident(string) *Builder
+  method SelectTable.IdentComma(...string) *Builder
+  method SelectTable.Join(...Querier) *Builder
+  method SelectTable.JoinComma(...Querier) *Builder
+  method SelectTable.Len() int
+  method SelectTable.Pad() *Builder
+  method SelectTable.Query() (string, []any)
+  method SelectTable.Quote(string) string
+  method SelectTable.Reset() *Builder
+  method SelectTable.S(string) *Builder
+  method SelectTable.Schema(string) *SelectTable
+  method SelectTable.SetDialect(string)
+  method SelectTable.SetTotal(int)
+  method SelectTable.String() string
+  method SelectTable.Total() int
+  method SelectTable.Unquote() *SelectTable
+  method SelectTable.Wrap(func(*Builder)) *Builder
+  method SelectTable.WriteOp(Op) *Builder
+  method SelectTable.WriteString(string) *Builder
+  method SelectValues.Get(string) (any, error)
+  method SelectValues.Set(string, any)
+  method Selector.AddError(error) *Builder
+  method Selector.AppendFrom(TableView) *Selector
+  method Selector.AppendFromExpr(Querier) *Selector
+  method Selector.AppendSelect(...string) *Selector
+  method Selector.AppendSelectAs(string, string) *Selector
+  method Selector.AppendSelectExpr(...Querier) *Selector
+  method Selector.AppendSelectExprAs(Querier, string) *Selector
+  method Selector.Arg(any) *Builder
+  method Selector.Argf(string, any) *Builder
+  method Selector.Args(...any) *Builder
+  method Selector.As(string) *Selector
+  method Selector.Byte(byte) *Builder
+  method Selector.C(string) string
+  method Selector.ClearOrder() *Selector
+  method Selector.Clone() *Selector
+  method Selector.CollectPredicates() *Selector
+  method Selector.CollectedPredicates() []*Predicate
+  method Selector.Columns(...string) []string
+  method Selector.Comma() *Builder
+  method Selector.Context() context.Context
+  method Selector.Count(...string) *Selector
+  method Selector.Dialect() string
+  method Selector.Distinct() *Selector
+  method Selector.Err() error
+  method Selector.Except(TableView) *Selector
+  method Selector.ExceptAll(TableView) *Selector
+  method Selector.FindSelection(string) []string
+  method Selector.For(LockStrength, ...LockOption) *Selector
+  method Selector.ForShare(...LockOption) *Selector
+  method Selector.ForUpdate(...LockOption) *Selector
+  method Selector.From(TableView) *Selector
+  method Selector.FromExpr(Querier) *Selector
+  method Selector.FromSelect(*Selector) *Selector
+  method Selector.FullJoin(TableView) *Selector
+  method Selector.GroupBy(...string) *Selector
+  method Selector.HasJoins() bool
+  method Selector.Having(*Predicate) *Selector
+  method Selector.Ident(string) *Builder
+  method Selector.IdentComma(...string) *Builder
+  method Selector.Intersect(TableView) *Selector
+  method Selector.IntersectAll(TableView) *Selector
+  method Selector.Join(TableView) *Selector
+  method Selector.JoinComma(...Querier) *Builder
+  method Selector.JoinedTable(string) (*SelectTable, bool)
+  method Selector.JoinedTableView(string) (TableView, bool)
+  method Selector.LeftJoin(TableView) *Selector
+  method Selector.Len() int
+  method Selector.Limit(int) *Selector
+  method Selector.New() *Selector
+  method Selector.Not() *Selector
+  method Selector.Offset(int) *Selector
+  method Selector.On(string, string) *Selector
+  method Selector.OnP(*Predicate) *Selector
+  method Selector.Or() *Selector
+  method Selector.OrderBy(...string) *Selector
+  method Selector.OrderColumns() []string
+  method Selector.OrderExpr(...Querier) *Selector
+  method Selector.OrderExprFunc(func(*Builder)) *Selector
+  method Selector.P() *Predicate
+  method Selector.Pad() *Builder
+  method Selector.Prefix(...Querier) *Selector
+  method Selector.Query() (string, []any)
+  method Selector.Quote(string) string
+  method Selector.Reset() *Builder
+  method Selector.RightJoin(TableView) *Selector
+  method Selector.S(string) *Builder
+  method Selector.Select(...string) *Selector
+  method Selector.SelectDistinct(...string) *Selector
+  method Selector.SelectExpr(...Querier) *Selector
+  method Selector.SelectedColumns() []string
+  method Selector.SetDialect(string)
+  method Selector.SetDistinct(bool) *Selector
+  method Selector.SetP(*Predicate) *Selector
+  method Selector.SetTotal(int)
+  method Selector.String() string
+  method Selector.Table() *SelectTable
+  method Selector.TableName() string
+  method Selector.Total() int
+  method Selector.UncollectedPredicates() *Selector
+  method Selector.Union(TableView) *Selector
+  method Selector.UnionAll(TableView) *Selector
+  method Selector.UnqualifiedColumns() []string
+  method Selector.Where(*Predicate) *Selector
+  method Selector.WithContext(context.Context) *Selector
+  method Selector.Wrap(func(*Builder)) *Builder
+  method Selector.WriteOp(Op) *Builder
+  method Selector.WriteString(string) *Builder
+  method StatsDriver.BeginTx(context.Context, *TxOptions) (github.com/syssam/velox/dialect.Tx, error)
+  method StatsDriver.Close() error
+  method StatsDriver.DB() *database/sql.DB
+  method StatsDriver.Dialect() string
+  method StatsDriver.Exec(context.Context, string, any, any) error
+  method StatsDriver.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
+  method StatsDriver.Query(context.Context, string, any, any) error
+  method StatsDriver.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method StatsDriver.QueryStats() *QueryStats
+  method StatsDriver.SetSlowThreshold(time.Duration)
+  method StatsDriver.SlowThreshold() time.Duration
+  method StatsDriver.Tx(context.Context) (github.com/syssam/velox/dialect.Tx, error)
+  method StatsSnapshot.AvgQueryDuration() time.Duration
+  method StatsSnapshot.String() string
+  method StatsTx.Commit() error
+  method StatsTx.Exec(context.Context, string, any, any) error
+  method StatsTx.Query(context.Context, string, any, any) error
+  method StatsTx.Rollback() error
+  method StringField.Contains(string) P
+  method StringField.ContainsFold(string) P
+  method StringField.EQ(string) P
+  method StringField.EqualFold(string) P
+  method StringField.GT(string) P
+  method StringField.GTE(string) P
+  method StringField.HasPrefix(string) P
+  method StringField.HasSuffix(string) P
+  method StringField.In(...string) P
+  method StringField.IsNil() P
+  method StringField.IsNull() P
+  method StringField.LT(string) P
+  method StringField.LTE(string) P
+  method StringField.NEQ(string) P
+  method StringField.Name() string
+  method StringField.NotIn(...string) P
+  method StringField.NotNil() P
+  method StringField.NotNull() P
+  method TableView.C(string) string
+  method TimeField.EQ(T) P
+  method TimeField.GT(T) P
+  method TimeField.GTE(T) P
+  method TimeField.In(...T) P
+  method TimeField.IsNil() P
+  method TimeField.IsNull() P
+  method TimeField.LT(T) P
+  method TimeField.LTE(T) P
+  method TimeField.NEQ(T) P
+  method TimeField.Name() string
+  method TimeField.NotIn(...T) P
+  method TimeField.NotNil() P
+  method TimeField.NotNull() P
+  method Tx.Commit() error
+  method Tx.Exec(context.Context, string, any, any) error
+  method Tx.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
+  method Tx.Query(context.Context, string, any, any) error
+  method Tx.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method Tx.Rollback() error
+  method UUIDField.EQ(T) P
+  method UUIDField.GT(T) P
+  method UUIDField.GTE(T) P
+  method UUIDField.In(...T) P
+  method UUIDField.IsNil() P
+  method UUIDField.IsNull() P
+  method UUIDField.LT(T) P
+  method UUIDField.LTE(T) P
+  method UUIDField.NEQ(T) P
+  method UUIDField.Name() string
+  method UUIDField.NotIn(...T) P
+  method UUIDField.NotNil() P
+  method UUIDField.NotNull() P
+  method UpdateBuilder.Add(string, any) *UpdateBuilder
+  method UpdateBuilder.AddError(error) *Builder
+  method UpdateBuilder.Arg(any) *Builder
+  method UpdateBuilder.Argf(string, any) *Builder
+  method UpdateBuilder.Args(...any) *Builder
+  method UpdateBuilder.Byte(byte) *Builder
+  method UpdateBuilder.Comma() *Builder
+  method UpdateBuilder.Dialect() string
+  method UpdateBuilder.Empty() bool
+  method UpdateBuilder.Err() error
+  method UpdateBuilder.FromSelect(*Selector) *UpdateBuilder
+  method UpdateBuilder.Ident(string) *Builder
+  method UpdateBuilder.IdentComma(...string) *Builder
+  method UpdateBuilder.Join(...Querier) *Builder
+  method UpdateBuilder.JoinComma(...Querier) *Builder
+  method UpdateBuilder.Len() int
+  method UpdateBuilder.Limit(int) *UpdateBuilder
+  method UpdateBuilder.OrderBy(...string) *UpdateBuilder
+  method UpdateBuilder.Pad() *Builder
+  method UpdateBuilder.Prefix(...Querier) *UpdateBuilder
+  method UpdateBuilder.Query() (string, []any)
+  method UpdateBuilder.Quote(string) string
+  method UpdateBuilder.Reset() *Builder
+  method UpdateBuilder.Returning(...string) *UpdateBuilder
+  method UpdateBuilder.S(string) *Builder
+  method UpdateBuilder.Schema(string) *UpdateBuilder
+  method UpdateBuilder.Set(string, any) *UpdateBuilder
+  method UpdateBuilder.SetDialect(string)
+  method UpdateBuilder.SetNull(string) *UpdateBuilder
+  method UpdateBuilder.SetTotal(int)
+  method UpdateBuilder.String() string
+  method UpdateBuilder.Total() int
+  method UpdateBuilder.Where(*Predicate) *UpdateBuilder
+  method UpdateBuilder.Wrap(func(*Builder)) *Builder
+  method UpdateBuilder.WriteOp(Op) *Builder
+  method UpdateBuilder.WriteString(string) *Builder
+  method UpdateSet.Add(string, any) *UpdateSet
+  method UpdateSet.AddError(error) *Builder
+  method UpdateSet.Arg(any) *Builder
+  method UpdateSet.Argf(string, any) *Builder
+  method UpdateSet.Args(...any) *Builder
+  method UpdateSet.Byte(byte) *Builder
+  method UpdateSet.Columns() []string
+  method UpdateSet.Comma() *Builder
+  method UpdateSet.Dialect() string
+  method UpdateSet.Empty() bool
+  method UpdateSet.Err() error
+  method UpdateSet.FromSelect(*Selector) *UpdateBuilder
+  method UpdateSet.Ident(string) *Builder
+  method UpdateSet.IdentComma(...string) *Builder
+  method UpdateSet.Join(...Querier) *Builder
+  method UpdateSet.JoinComma(...Querier) *Builder
+  method UpdateSet.Len() int
+  method UpdateSet.Limit(int) *UpdateBuilder
+  method UpdateSet.OrderBy(...string) *UpdateBuilder
+  method UpdateSet.Pad() *Builder
+  method UpdateSet.Prefix(...Querier) *UpdateBuilder
+  method UpdateSet.Query() (string, []any)
+  method UpdateSet.Quote(string) string
+  method UpdateSet.Reset() *Builder
+  method UpdateSet.Returning(...string) *UpdateBuilder
+  method UpdateSet.S(string) *Builder
+  method UpdateSet.Schema(string) *UpdateBuilder
+  method UpdateSet.Set(string, any) *UpdateSet
+  method UpdateSet.SetDialect(string)
+  method UpdateSet.SetExcluded(string) *UpdateSet
+  method UpdateSet.SetIgnore(string) *UpdateSet
+  method UpdateSet.SetNull(string) *UpdateSet
+  method UpdateSet.SetTotal(int)
+  method UpdateSet.String() string
+  method UpdateSet.Table() *SelectTable
+  method UpdateSet.Total() int
+  method UpdateSet.UpdateColumns() []string
+  method UpdateSet.Where(*Predicate) *UpdateBuilder
+  method UpdateSet.Wrap(func(*Builder)) *Builder
+  method UpdateSet.WriteOp(Op) *Builder
+  method UpdateSet.WriteString(string) *Builder
+  method ViewBuilder.AddError(error) *Builder
+  method ViewBuilder.Arg(any) *Builder
+  method ViewBuilder.Argf(string, any) *Builder
+  method ViewBuilder.Args(...any) *Builder
+  method ViewBuilder.As(Querier) *ViewBuilder
+  method ViewBuilder.Byte(byte) *Builder
+  method ViewBuilder.Column(*ColumnBuilder) *ViewBuilder
+  method ViewBuilder.Columns(...*ColumnBuilder) *ViewBuilder
+  method ViewBuilder.Comma() *Builder
+  method ViewBuilder.Dialect() string
+  method ViewBuilder.Err() error
+  method ViewBuilder.Ident(string) *Builder
+  method ViewBuilder.IdentComma(...string) *Builder
+  method ViewBuilder.IfNotExists() *ViewBuilder
+  method ViewBuilder.Join(...Querier) *Builder
+  method ViewBuilder.JoinComma(...Querier) *Builder
+  method ViewBuilder.Len() int
+  method ViewBuilder.Pad() *Builder
+  method ViewBuilder.Query() (string, []any)
+  method ViewBuilder.Quote(string) string
+  method ViewBuilder.Reset() *Builder
+  method ViewBuilder.S(string) *Builder
+  method ViewBuilder.Schema(string) *ViewBuilder
+  method ViewBuilder.SetDialect(string)
+  method ViewBuilder.SetTotal(int)
+  method ViewBuilder.String() string
+  method ViewBuilder.Total() int
+  method ViewBuilder.Wrap(func(*Builder)) *Builder
+  method ViewBuilder.WriteOp(Op) *Builder
+  method ViewBuilder.WriteString(string) *Builder
+  method WindowBuilder.AddError(error) *Builder
+  method WindowBuilder.Arg(any) *Builder
+  method WindowBuilder.Argf(string, any) *Builder
+  method WindowBuilder.Args(...any) *Builder
+  method WindowBuilder.Byte(byte) *Builder
+  method WindowBuilder.Comma() *Builder
+  method WindowBuilder.Dialect() string
+  method WindowBuilder.Err() error
+  method WindowBuilder.Ident(string) *Builder
+  method WindowBuilder.IdentComma(...string) *Builder
+  method WindowBuilder.Join(...Querier) *Builder
+  method WindowBuilder.JoinComma(...Querier) *Builder
+  method WindowBuilder.Len() int
+  method WindowBuilder.OrderBy(...string) *WindowBuilder
+  method WindowBuilder.OrderExpr(...Querier) *WindowBuilder
+  method WindowBuilder.Pad() *Builder
+  method WindowBuilder.PartitionBy(...string) *WindowBuilder
+  method WindowBuilder.PartitionExpr(Querier) *WindowBuilder
+  method WindowBuilder.Query() (string, []any)
+  method WindowBuilder.Quote(string) string
+  method WindowBuilder.Reset() *Builder
+  method WindowBuilder.S(string) *Builder
+  method WindowBuilder.SetDialect(string)
+  method WindowBuilder.SetTotal(int)
+  method WindowBuilder.String() string
+  method WindowBuilder.Total() int
+  method WindowBuilder.Wrap(func(*Builder)) *Builder
+  method WindowBuilder.WriteOp(Op) *Builder
+  method WindowBuilder.WriteString(string) *Builder
+  method WithBuilder.AddError(error) *Builder
+  method WithBuilder.Arg(any) *Builder
+  method WithBuilder.Argf(string, any) *Builder
+  method WithBuilder.Args(...any) *Builder
+  method WithBuilder.As(*Selector) *WithBuilder
+  method WithBuilder.Byte(byte) *Builder
+  method WithBuilder.C(string) string
+  method WithBuilder.Comma() *Builder
+  method WithBuilder.Dialect() string
+  method WithBuilder.Err() error
+  method WithBuilder.Ident(string) *Builder
+  method WithBuilder.IdentComma(...string) *Builder
+  method WithBuilder.Join(...Querier) *Builder
+  method WithBuilder.JoinComma(...Querier) *Builder
+  method WithBuilder.Len() int
+  method WithBuilder.Name() string
+  method WithBuilder.Pad() *Builder
+  method WithBuilder.Query() (string, []any)
+  method WithBuilder.Quote(string) string
+  method WithBuilder.Reset() *Builder
+  method WithBuilder.S(string) *Builder
+  method WithBuilder.SetDialect(string)
+  method WithBuilder.SetTotal(int)
+  method WithBuilder.String() string
+  method WithBuilder.Total() int
+  method WithBuilder.With(string, ...string) *WithBuilder
+  method WithBuilder.Wrap(func(*Builder)) *Builder
+  method WithBuilder.WriteOp(Op) *Builder
+  method WithBuilder.WriteString(string) *Builder
+  method Wrapper.Dialect() string
+  method Wrapper.Query() (string, []any)
+  method Wrapper.SetDialect(string)
+  method Wrapper.SetTotal(int)
+  method Wrapper.Total() int
+const LockKeyShare LockStrength
+const LockNoKeyUpdate LockStrength
+const LockShare LockStrength
+const LockUpdate LockStrength
+const NoWait LockAction
+const OpAdd Op
+const OpDiv Op
+const OpEQ Op
+const OpGT Op
+const OpGTE Op
+const OpIn Op
+const OpIsNull Op
+const OpLT Op
+const OpLTE Op
+const OpLike Op
+const OpMod Op
+const OpMul Op
+const OpNEQ Op
+const OpNotIn Op
+const OpNotNull Op
+const OpSub Op
+const SkipLocked LockAction
+func And(...*Predicate) *Predicate
+func AndFuncs(...func(*Selector)) func(*Selector)
+func AndPredicates[P ~func(*Selector)](...P) func(*Selector)
+func As(string, string) string
+func Asc(string) string
+func Avg(string) string
+func Column(string) *ColumnBuilder
+func ColumnsEQ(string, string) *Predicate
+func ColumnsGT(string, string) *Predicate
+func ColumnsGTE(string, string) *Predicate
+func ColumnsHasPrefix(string, string) *Predicate
+func ColumnsLT(string, string) *Predicate
+func ColumnsLTE(string, string) *Predicate
+func ColumnsNEQ(string, string) *Predicate
+func ColumnsOp(string, string, Op) *Predicate
+func CompositeGT([]string, ...any) *Predicate
+func CompositeLT([]string, ...any) *Predicate
+func ConflictColumns(...string) ConflictOption
+func ConflictConstraint(string) ConflictOption
+func ConflictWhere(*Predicate) ConflictOption
+func Contains(string, string) *Predicate
+func ContainsFold(string, string) *Predicate
+func Count(string) string
+func CreateView(string) *ViewBuilder
+func Delete(string) *DeleteBuilder
+func Desc(string) string
+func DescExpr(Querier) Querier
+func Dialect(string) *DialectBuilder
+func Distinct(...string) string
+func DoNothing() ConflictOption
+func EQ(string, any) *Predicate
+func EqualFold(string, string) *Predicate
+func Exists(Querier) *Predicate
+func Expr(string, ...any) Querier
+func ExprFunc(func(*Builder)) Querier
+func ExprP(string, ...any) *Predicate
+func False() *Predicate
+func FieldContains(string, string) func(*Selector)
+func FieldContainsFold(string, string) func(*Selector)
+func FieldEQ(string, any) func(*Selector)
+func FieldEqualFold(string, string) func(*Selector)
+func FieldGT(string, any) func(*Selector)
+func FieldGTE(string, any) func(*Selector)
+func FieldHasPrefix(string, string) func(*Selector)
+func FieldHasPrefixFold(string, string) func(*Selector)
+func FieldHasSuffix(string, string) func(*Selector)
+func FieldHasSuffixFold(string, string) func(*Selector)
+func FieldInGeneric[T any](string, ...T) func(*Selector)
+func FieldInValues(string, ...any) func(*Selector)
+func FieldIn[T any](string, ...T) func(*Selector)
+func FieldIsNull(string) func(*Selector)
+func FieldLT(string, any) func(*Selector)
+func FieldLTE(string, any) func(*Selector)
+func FieldNEQ(string, any) func(*Selector)
+func FieldNotInGeneric[T any](string, ...T) func(*Selector)
+func FieldNotInValues(string, ...any) func(*Selector)
+func FieldNotIn[T any](string, ...T) func(*Selector)
+func FieldNotNull(string) func(*Selector)
+func FieldsEQ(string, string) func(*Selector)
+func FieldsGT(string, string) func(*Selector)
+func FieldsGTE(string, string) func(*Selector)
+func FieldsHasPrefix(string, string) func(*Selector)
+func FieldsLT(string, string) func(*Selector)
+func FieldsLTE(string, string) func(*Selector)
+func FieldsNEQ(string, string) func(*Selector)
+func GT(string, any) *Predicate
+func GTE(string, any) *Predicate
+func HasPrefix(string, string) *Predicate
+func HasPrefixFold(string, string) *Predicate
+func HasSuffix(string, string) *Predicate
+func HasSuffixFold(string, string) *Predicate
+func In(string, ...any) *Predicate
+func InInts(string, ...int) *Predicate
+func InValues(string, ...database/sql/driver.Value) *Predicate
+func Insert(string) *InsertBuilder
+func IsFalse(string) *Predicate
+func IsNull(string) *Predicate
+func IsTrue(string) *Predicate
+func LT(string, any) *Predicate
+func LTE(string, any) *Predicate
+func Like(string, string) *Predicate
+func LogWithFunc(func(context.Context, ...any)) LogOption
+func Lower(string) string
+func Max(string) string
+func Min(string) string
+func NEQ(string, any) *Predicate
+func NewColumnCheck(map[string]func(string) bool) ColumnCheck
+func NewDriver(string, Conn) *Driver
+func NewLogDriver(*Driver, ...LogOption) *LogDriver
+func NewOrderTermOptions(...OrderTermOption) *OrderTermOptions
+func NewStatsDriver(*Driver, ...StatsOption) *StatsDriver
+func Not(*Predicate) *Predicate
+func NotExists(Querier) *Predicate
+func NotFuncs(...func(*Selector)) func(*Selector)
+func NotIn(string, ...any) *Predicate
+func NotNull(string) *Predicate
+func NotPredicates[P ~func(*Selector)](...P) func(*Selector)
+func Open(string, string) (*Driver, error)
+func OpenDB(string, *database/sql.DB) *Driver
+func OpenWithStats(string, string, ...StatsOption) (*StatsDriver, *QueryStats, error)
+func Or(...*Predicate) *Predicate
+func OrFuncs(...func(*Selector)) func(*Selector)
+func OrPredicates[P ~func(*Selector)](...P) func(*Selector)
+func OrderAs(string) OrderTermOption
+func OrderAsc() OrderTermOption
+func OrderByCount(string, ...OrderTermOption) *OrderExprTerm
+func OrderByField(string, ...OrderTermOption) *OrderFieldTerm
+func OrderByRand() func(*Selector)
+func OrderBySum(string, ...OrderTermOption) *OrderExprTerm
+func OrderDesc() OrderTermOption
+func OrderNullsFirst() OrderTermOption
+func OrderNullsLast() OrderTermOption
+func OrderSelectAs(string) OrderTermOption
+func OrderSelected() OrderTermOption
+func P(...func(*Builder)) *Predicate
+func PredicateAnd[P ~func(*Selector)](...P) P
+func PredicateNot[P ~func(*Selector)](...P) P
+func PredicateOr[P ~func(*Selector)](...P) P
+func Raw(string) Querier
+func ResolveWith(func(*UpdateSet)) ConflictOption
+func ResolveWithIgnore() ConflictOption
+func ResolveWithNewValues() ConflictOption
+func RowNumber() *WindowBuilder
+func ScanBool(ColumnScanner) (bool, error)
+func ScanInt(ColumnScanner) (int, error)
+func ScanInt64(ColumnScanner) (int64, error)
+func ScanOne(ColumnScanner, any) error
+func ScanSlice(ColumnScanner, any) error
+func ScanString(ColumnScanner) (string, error)
+func ScanTypeOf(*Rows, int) any
+func ScanValue(ColumnScanner) (database/sql/driver.Value, error)
+func Select(...string) *Selector
+func SelectExpr(...Querier) *Selector
+func Sum(string) string
+func Table(string) *SelectTable
+func Update(string) *UpdateBuilder
+func UpdateWhere(*Predicate) ConflictOption
+func VarFromContext(context.Context, string) (string, bool)
+func Window(func(*Builder)) *WindowBuilder
+func With(string, ...string) *WithBuilder
+func WithIntVar(context.Context, string, int) context.Context
+func WithLockAction(LockAction) LockOption
+func WithLockClause(string) LockOption
+func WithLockTables(...string) LockOption
+func WithRecursive(string, ...string) *WithBuilder
+func WithSlowQueryHook(SlowQueryHook) StatsOption
+func WithSlowQueryLog() StatsOption
+func WithSlowThreshold(time.Duration) StatsOption
+func WithVar(context.Context, string, string) context.Context
+type BoolField[P PredicateFunc] string
+type Builder struct
+type ColumnBuilder struct
+type ColumnCheck func(table string, column string) error
+type ColumnScanner interface
+type ConflictOption func(*conflict)
+type Conn struct
+type DeleteBuilder struct
+type DialectBuilder struct
+type Driver struct
+type EnumField[P PredicateFunc, T ~string] string
+type ExecQuerier interface
+type Float64Field[P PredicateFunc] string
+type Func struct
+type InsertBuilder struct
+type Int64Field[P PredicateFunc] string
+type IntField[P PredicateFunc] string
+type LockAction string
+type LockOption func(*LockOptions)
+type LockOptions struct
+type LockStrength string
+type LogDriver struct
+type LogOption func(*LogDriver)
+type LogTx struct
+type NullBool = NullBool
+type NullFloat64 = NullFloat64
+type NullInt64 = NullInt64
+type NullScanner struct
+type NullString = NullString
+type NullTime = NullTime
+type Op int
+type OrderExprTerm struct
+type OrderFieldTerm struct
+type OrderTerm interface
+type OrderTermOption func(*OrderTermOptions)
+type OrderTermOptions struct
+type OtherField[P PredicateFunc, T any] string
+type ParamFormatter interface
+type Predicate struct
+type PredicateFunc interface
+type Querier interface
+type Queries []Querier
+type QueryStats struct
+type Result = Result
+type Rows struct
+type SelectTable struct
+type SelectValues map[string]any
+type Selector struct
+type SlowQueryHook func(ctx context.Context, query string, args []any, duration time.Duration)
+type StatsDriver struct
+type StatsOption func(*StatsDriver)
+type StatsSnapshot struct
+type StatsTx struct
+type StmtInfo struct
+type StringField[P PredicateFunc] string
+type TableView interface
+type TimeField[P PredicateFunc, T any] string
+type Tx struct
+type TxOptions = TxOptions
+type UUIDField[P PredicateFunc, T any] string
+type UnknownType interface
+type UpdateBuilder struct
+type UpdateSet struct
+type ViewBuilder struct
+type WindowBuilder struct
+type WithBuilder struct
+type Wrapper struct

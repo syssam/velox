@@ -1,0 +1,218 @@
+  field AggregateError.Errors []error
+  field CacheKey.Limit int
+  field CacheKey.Offset int
+  field CacheKey.Operation string
+  field CacheKey.OrderBy string
+  field CacheKey.Predicates string
+  field CacheKey.Table string
+  field Config.Table string
+  field MutationError.Entity string
+  field MutationError.Err error
+  field MutationError.Op string
+  field PrivacyError.Cause error
+  field PrivacyError.Entity string
+  field PrivacyError.Op string
+  field PrivacyError.Rule string
+  field QueryContext.Fields []string
+  field QueryContext.Limit *int
+  field QueryContext.Offset *int
+  field QueryContext.Op string
+  field QueryContext.Type string
+  field QueryContext.Unique *bool
+  field QueryError.Entity string
+  field QueryError.Err error
+  field QueryError.Op string
+  field RollbackError.Err error
+  field Schema.Interface Interface
+  field ValidationError.Entity string
+  field ValidationError.Err error
+  field ValidationError.Field string
+  field ValidationError.Name string
+  field View.Schema Schema
+  method AggregateError.Error() string
+  method AggregateError.Unwrap() []error
+  method Cache.Clear(context.Context) error
+  method Cache.Delete(context.Context, string) error
+  method Cache.DeletePrefix(context.Context, string) error
+  method Cache.Get(context.Context, string) ([]byte, error)
+  method Cache.Set(context.Context, string, []byte, time.Duration) error
+  method CacheKey.String() string
+  method ConstraintError.Error() string
+  method ConstraintError.Message() string
+  method ConstraintError.Unwrap() error
+  method Edge.Descriptor() *github.com/syssam/velox/schema/edge.Descriptor
+  method Field.Descriptor() *github.com/syssam/velox/schema/field.Descriptor
+  method Index.Descriptor() *github.com/syssam/velox/schema/index.Descriptor
+  method InterceptFunc.Intercept(Querier) Querier
+  method Interceptor.Intercept(Querier) Querier
+  method Interface.Annotations() []github.com/syssam/velox/schema.Annotation
+  method Interface.Config() Config
+  method Interface.Edges() []Edge
+  method Interface.Fields() []Field
+  method Interface.Hooks() []Hook
+  method Interface.Indexes() []Index
+  method Interface.Interceptors() []Interceptor
+  method Interface.Mixin() []Mixin
+  method Interface.Policy() Policy
+  method Interface.Type()
+  method Mixin.Annotations() []github.com/syssam/velox/schema.Annotation
+  method Mixin.Edges() []Edge
+  method Mixin.Fields() []Field
+  method Mixin.Hooks() []Hook
+  method Mixin.Indexes() []Index
+  method Mixin.Interceptors() []Interceptor
+  method Mixin.Policy() Policy
+  method MutateFunc.Mutate(context.Context, Mutation) (Value, error)
+  method Mutation.AddField(string, Value) error
+  method Mutation.AddedEdges() []string
+  method Mutation.AddedField(string) (Value, bool)
+  method Mutation.AddedFields() []string
+  method Mutation.AddedIDs(string) []Value
+  method Mutation.ClearEdge(string) error
+  method Mutation.ClearField(string) error
+  method Mutation.ClearedEdges() []string
+  method Mutation.ClearedFields() []string
+  method Mutation.EdgeCleared(string) bool
+  method Mutation.Field(string) (Value, bool)
+  method Mutation.FieldCleared(string) bool
+  method Mutation.Fields() []string
+  method Mutation.OldField(context.Context, string) (Value, error)
+  method Mutation.Op() Op
+  method Mutation.RemovedEdges() []string
+  method Mutation.RemovedIDs(string) []Value
+  method Mutation.ResetEdge(string) error
+  method Mutation.ResetField(string) error
+  method Mutation.SetField(string, Value) error
+  method Mutation.Type() string
+  method MutationError.Error() string
+  method MutationError.Unwrap() error
+  method Mutator.Mutate(context.Context, Mutation) (Value, error)
+  method NotFoundError.Error() string
+  method NotFoundError.ID() any
+  method NotFoundError.Is(error) bool
+  method NotFoundError.Label() string
+  method NotLoadedError.Edge() string
+  method NotLoadedError.Error() string
+  method NotSingularError.Count() int
+  method NotSingularError.Error() string
+  method NotSingularError.Is(error) bool
+  method NotSingularError.Label() string
+  method Op.Is(Op) bool
+  method Op.String() string
+  method Policy.EvalMutation(context.Context, Mutation) error
+  method Policy.EvalQuery(context.Context, Query) error
+  method PrivacyError.Error() string
+  method PrivacyError.Unwrap() error
+  method Querier.Query(context.Context, Query) (Value, error)
+  method QuerierFunc.Query(context.Context, Query) (Value, error)
+  method QueryContext.AppendFieldOnce(string) *QueryContext
+  method QueryContext.Clone() *QueryContext
+  method QueryError.Error() string
+  method QueryError.Unwrap() error
+  method RollbackError.Error() string
+  method RollbackError.Unwrap() error
+  method Schema.Annotations() []github.com/syssam/velox/schema.Annotation
+  method Schema.Config() Config
+  method Schema.Edges() []Edge
+  method Schema.Fields() []Field
+  method Schema.Hooks() []Hook
+  method Schema.Indexes() []Index
+  method Schema.Interceptors() []Interceptor
+  method Schema.Mixin() []Mixin
+  method Schema.Policy() Policy
+  method Schema.Type()
+  method TraverseFunc.Intercept(Querier) Querier
+  method TraverseFunc.Traverse(context.Context, Query) error
+  method Traverser.Traverse(context.Context, Query) error
+  method ValidationError.Error() string
+  method ValidationError.Unwrap() error
+  method View.Annotations() []github.com/syssam/velox/schema.Annotation
+  method View.Config() Config
+  method View.Edges() []Edge
+  method View.Fields() []Field
+  method View.Hooks() []Hook
+  method View.Indexes() []Index
+  method View.Interceptors() []Interceptor
+  method View.Mixin() []Mixin
+  method View.Policy() Policy
+  method View.Type()
+const OpCreate Op
+const OpDelete Op
+const OpDeleteOne Op
+const OpQueryAll untyped string
+const OpQueryCount untyped string
+const OpQueryExist untyped string
+const OpQueryFirst untyped string
+const OpQueryFirstID untyped string
+const OpQueryGroupBy untyped string
+const OpQueryIDs untyped string
+const OpQueryOnly untyped string
+const OpQueryOnlyID untyped string
+const OpQuerySelect untyped string
+const OpUpdate Op
+const OpUpdateOne Op
+func IsConstraintError(error) bool
+func IsMutationError(error) bool
+func IsNotFound(error) bool
+func IsNotLoaded(error) bool
+func IsNotSingular(error) bool
+func IsPrivacyError(error) bool
+func IsQueryError(error) bool
+func IsRollbackError(error) bool
+func IsValidationError(error) bool
+func NewAggregateError(...error) error
+func NewConstraintError(string, error) *ConstraintError
+func NewMutationError(string, string, error) *MutationError
+func NewNotFoundError(string) *NotFoundError
+func NewNotFoundErrorWithID(string, any) *NotFoundError
+func NewNotLoadedError(string) *NotLoadedError
+func NewNotSingularError(string) *NotSingularError
+func NewNotSingularErrorWithCount(string, int) *NotSingularError
+func NewPrivacyError(string, string, string) *PrivacyError
+func NewPrivacyErrorWithCause(string, string, string, error) *PrivacyError
+func NewQueryContext(context.Context, *QueryContext) context.Context
+func NewQueryError(string, string, error) *QueryError
+func NewRollbackError(error) *RollbackError
+func NewValidationError(string, error) *ValidationError
+func QueryFromContext(context.Context) *QueryContext
+func WithHooks[V Value, M any, PM interface{*M; Mutation}](context.Context, func(context.Context) (V, error), PM, []Hook) (V, error)
+func WithInterceptors[V Value](context.Context, Query, Querier, []Interceptor) (V, error)
+type AggregateError struct
+type Cache interface
+type CacheKey struct
+type Config struct
+type ConstraintError struct
+type Edge interface
+type Field interface
+type Hook func(Mutator) Mutator
+type Index interface
+type InterceptFunc func(Querier) Querier
+type Interceptor interface
+type Interface interface
+type Mixin interface
+type MutateFunc func(context.Context, Mutation) (Value, error)
+type Mutation interface
+type MutationError struct
+type Mutator interface
+type NotFoundError struct
+type NotLoadedError struct
+type NotSingularError struct
+type Op uint
+type Policy interface
+type PrivacyError struct
+type Querier interface
+type QuerierFunc func(context.Context, Query) (Value, error)
+type Query interface
+type QueryContext struct
+type QueryError struct
+type RollbackError struct
+type Schema struct
+type TraverseFunc func(context.Context, Query) error
+type Traverser interface
+type ValidationError struct
+type Value interface
+type View struct
+type Viewer interface
+var ErrNotFound error
+var ErrNotSingular error
+var ErrTxStarted error

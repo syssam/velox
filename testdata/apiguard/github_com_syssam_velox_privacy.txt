@@ -1,0 +1,81 @@
+  field Policy.Mutation MutationPolicy
+  field Policy.Query QueryPolicy
+  field SimpleViewer.UserID string
+  field SimpleViewer.UserRoles []string
+  field SimpleViewer.UserTenant string
+  field TraceEntry.Decision string
+  field TraceEntry.Rule string
+  method Decision.Error() string
+  method Filter.WhereP(...func(*github.com/syssam/velox/dialect/sql.Selector))
+  method FilterFunc.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method FilterFunc.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method Filterable.Filter() Filter
+  method MutationPolicy.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method MutationRule.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method MutationRuleFunc.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method Policies.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method Policies.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method Policy.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method Policy.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method PolicyProvider.Policy() github.com/syssam/velox.Policy
+  method QueryMutationRule.EvalMutation(context.Context, github.com/syssam/velox.Mutation) error
+  method QueryMutationRule.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method QueryPolicy.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method QueryRule.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method QueryRuleFunc.EvalQuery(context.Context, github.com/syssam/velox.Query) error
+  method SimpleViewer.ID() string
+  method SimpleViewer.Roles() []string
+  method SimpleViewer.TenantID() string
+  method TenantIDer.TenantID() string
+  method Viewer.ID() string
+  method Viewer.Roles() []string
+func AllowMutationOperationRule(github.com/syssam/velox.Op) MutationRule
+func Allowf(string, ...any) error
+func AlwaysAllowRule() QueryMutationRule
+func AlwaysDenyRule() QueryMutationRule
+func And(...QueryMutationRule) QueryMutationRule
+func ContextQueryMutationRule(func(context.Context) error) QueryMutationRule
+func DecisionContext(context.Context, error) context.Context
+func DecisionFromContext(context.Context) (error, bool)
+func DenyIfNoViewer() QueryMutationRule
+func DenyMutationOperationRule(github.com/syssam/velox.Op) MutationRule
+func Denyf(string, ...any) error
+func HasAnyRole(...string) QueryMutationRule
+func HasRole(string) QueryMutationRule
+func IsDecision(error) bool
+func IsOwner(string) MutationRule
+func IsOwnerOnCreate(string) MutationRule
+func NewPolicies(...PolicyProvider) github.com/syssam/velox.Policy
+func Not(QueryMutationRule) QueryMutationRule
+func OnMutationOperation(MutationRule, github.com/syssam/velox.Op) MutationRule
+func Or(...QueryMutationRule) QueryMutationRule
+func OwnerQueryRule() QueryRule
+func RecordTrace(context.Context, string, string)
+func Skipf(string, ...any) error
+func TenantQueryRule() QueryRule
+func TenantRule(string) MutationRule
+func TraceFrom(context.Context) []TraceEntry
+func ViewerFromContext(context.Context) Viewer
+func WithTrace(context.Context) context.Context
+func WithViewer(context.Context, Viewer) context.Context
+type Decision struct
+type Filter interface
+type FilterFunc func(context.Context, Filter) error
+type Filterable interface
+type MutationPolicy []MutationRule
+type MutationRule interface
+type MutationRuleFunc func(context.Context, github.com/syssam/velox.Mutation) error
+type Policies []github.com/syssam/velox.Policy
+type Policy struct
+type PolicyProvider interface
+type QueryMutationRule interface
+type QueryPolicy []QueryRule
+type QueryRule interface
+type QueryRuleFunc func(context.Context, github.com/syssam/velox.Query) error
+type SimpleViewer struct
+type TenantIDer interface
+type TraceEntry struct
+type Viewer interface
+var Allow *Decision
+var Deny *Decision
+var Skip *Decision

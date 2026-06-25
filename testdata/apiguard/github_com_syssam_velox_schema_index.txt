@@ -1,0 +1,15 @@
+  field Descriptor.Annotations []github.com/syssam/velox/schema.Annotation
+  field Descriptor.Edges []string
+  field Descriptor.Fields []string
+  field Descriptor.StorageKey string
+  field Descriptor.Unique bool
+  method Builder.Annotations(...github.com/syssam/velox/schema.Annotation) *Builder
+  method Builder.Descriptor() *Descriptor
+  method Builder.Edges(...string) *Builder
+  method Builder.Fields(...string) *Builder
+  method Builder.StorageKey(string) *Builder
+  method Builder.Unique() *Builder
+func Edges(...string) *Builder
+func Fields(...string) *Builder
+type Builder struct
+type Descriptor struct
