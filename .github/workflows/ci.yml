@@ -307,6 +307,22 @@ jobs:
             go build ./...
           fi
 
+  contrib-modules:
+    # contrib/* modules carry isolated dependencies (kept out of the root module)
+    # and need no codegen, so they don't fit the examples matrix. otelvelox is the
+    # runnable proof that docs/observability.md's otelsql tracing wiring compiles
+    # and emits spans against a real otelsql release.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Test contrib/otelvelox
+        run: go -C contrib/otelvelox test -race ./...
+
   test-integration:
     # Mirrors ent's pattern of covering multiple DB versions: pin latest +
     # one older widely-used version per engine. Broader matrices (ent has

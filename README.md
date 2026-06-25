@@ -659,6 +659,7 @@ To enable Omittable for **all** nullable fields globally, set `nullable_input_om
 | [Roadmap](ROADMAP.md) | Feature stability stages and the path to v1.0 |
 | [Privacy & Authorization](docs/privacy.md) | Policy-based access control, row-level filtering, multi-tenancy |
 | [Hooks & Interceptors](docs/hooks-and-interceptors.md) | Mutation middleware and query interceptors |
+| [Observability](docs/observability.md) | Tracing (OpenTelemetry), metrics, slow-query detection, query logging |
 | [Reference](docs/reference.md) | Schema annotations, field types, validation, generated code patterns |
 | [DataLoader](docs/dataloader.md) | Batch loading helpers for GraphQL N+1 |
 | [Migration](docs/migration.md) | Database migration strategies and Atlas integration |
