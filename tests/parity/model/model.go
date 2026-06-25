@@ -34,10 +34,12 @@ type comment struct {
 	authorRef int
 }
 
-// tag is the in-memory tag entity, keyed by its creation handle.
+// tag is the in-memory tag entity, keyed by its creation handle. name carries a
+// UNIQUE constraint in both schemas, so usageCount is keyed by name for upsert.
 type tag struct {
-	handle int
-	name   string
+	handle     int
+	name       string
+	usageCount int
 }
 
 // State is the mutable world the interpreter walks. Entities are keyed by
@@ -49,6 +51,7 @@ type State struct {
 	tags      map[int]*tag
 	postTags  map[int]map[int]bool // post handle -> set of tag handles
 	postOrder []int                // post handles in insertion order
+	synthSeq  int                  // monotonic key source for handle-less rows (bulk)
 }
 
 func newState() *State {
@@ -101,8 +104,18 @@ func (st *State) step(idx int, o op.Op) Result {
 	case op.CreateTag:
 		st.tags[idx] = &tag{handle: idx, name: v.Name}
 		return Result{Err: ErrOK}
+	case op.UpsertTag:
+		return st.upsertTag(idx, v)
+	case op.BulkCreateTags:
+		return st.bulkCreateTags(v)
+	case op.SumTagUsage:
+		return st.sumTagUsage()
 	case op.AddTagToPost:
 		return st.addTagToPost(v)
+	case op.RemoveTagFromPost:
+		return st.removeTagFromPost(v)
+	case op.CountPostTags:
+		return st.countPostTags(v.PostRef)
 	case op.SetPostLabels:
 		return st.mutatePost(idx, v.PostRef, func(p *post) {
 			p.labels = cloneStrings(v.Labels)
@@ -115,8 +128,16 @@ func (st *State) step(idx int, o op.Op) Result {
 		return st.mutatePost(idx, v.PostRef, func(p *post) {
 			p.viewCount = v.ViewCount
 		})
+	case op.SetAuthorBio:
+		return st.setAuthorBio(v)
+	case op.CountAuthorsWithBio:
+		return st.countAuthorsWithBio()
+	case op.BulkAddViewCountByStatus:
+		return st.bulkAddViewCountByStatus(idx, v)
 	case op.DeletePost:
 		return st.deletePost(v.PostRef)
+	case op.BulkDeletePostsByStatus:
+		return st.bulkDeletePostsByStatus(v.Status)
 	case op.QueryPostsByStatus:
 		return st.queryPostsByStatus(v.Status)
 	case op.CountPosts:
@@ -155,6 +176,34 @@ func (st *State) mutatePost(idx, ref int, mut func(*post)) Result {
 	return Result{Err: ErrOK}
 }
 
+// bulkAddViewCountByStatus adds Delta to every live post matching status,
+// stamping updatedAt, and returns the affected-row count. Delta>=1 so matched ==
+// changed (dialect-robust).
+func (st *State) bulkAddViewCountByStatus(idx int, v op.BulkAddViewCountByStatus) Result {
+	n := 0
+	for _, p := range st.livePosts() {
+		if p.status == v.Status {
+			p.viewCount += v.Delta
+			p.updatedAt = idx
+			n++
+		}
+	}
+	return Result{Scalar: &n, Err: ErrOK}
+}
+
+// bulkDeletePostsByStatus deletes every live post matching status (cascading
+// comments, via deletePost) and returns the deleted-row count.
+func (st *State) bulkDeletePostsByStatus(status string) Result {
+	n := 0
+	for _, p := range st.livePosts() {
+		if p.status == status {
+			st.deletePost(p.handle)
+			n++
+		}
+	}
+	return Result{Scalar: &n, Err: ErrOK}
+}
+
 func (st *State) deletePost(ref int) Result {
 	p := st.livePost(ref)
 	if p == nil {
@@ -174,6 +223,43 @@ func (st *State) deletePost(ref int) Result {
 	return Result{Err: ErrOK}
 }
 
+// upsertTag inserts a tag with the unique name, or adds AddUsage onto the
+// usage_count of the existing tag of that name. Returns the resulting
+// usage_count as a Scalar — the value the real DBs' DO UPDATE SET must produce.
+func (st *State) upsertTag(idx int, v op.UpsertTag) Result {
+	for _, tg := range st.tags {
+		if tg.name == v.Name {
+			tg.usageCount += v.AddUsage
+			n := tg.usageCount
+			return Result{Scalar: &n, Err: ErrOK}
+		}
+	}
+	st.tags[idx] = &tag{handle: idx, name: v.Name, usageCount: v.AddUsage}
+	n := v.AddUsage
+	return Result{Scalar: &n, Err: ErrOK}
+}
+
+// bulkCreateTags inserts every spec as a tag in one logical batch. Rows are
+// keyed by a synthetic monotonic sequence (not a program handle) since they are
+// observed only in aggregate. Tag names are unique program-wide by construction.
+func (st *State) bulkCreateTags(v op.BulkCreateTags) Result {
+	for _, spec := range v.Specs {
+		st.synthSeq--
+		st.tags[st.synthSeq] = &tag{handle: st.synthSeq, name: spec.Name, usageCount: spec.UsageCount}
+	}
+	return Result{Err: ErrOK}
+}
+
+// sumTagUsage returns the sum of usage_count across every tag (single, upserted,
+// and bulk), mirroring SUM(usage_count) over the tags table.
+func (st *State) sumTagUsage() Result {
+	sum := 0
+	for _, tg := range st.tags {
+		sum += tg.usageCount
+	}
+	return Result{Scalar: &sum, Err: ErrOK}
+}
+
 func (st *State) addTagToPost(v op.AddTagToPost) Result {
 	p := st.livePost(v.PostRef)
 	if p == nil {
@@ -189,6 +275,61 @@ func (st *State) addTagToPost(v op.AddTagToPost) Result {
 	}
 	set[v.TagRef] = true
 	return Result{Err: ErrOK}
+}
+
+// setAuthorBio sets (Bio non-nil) or clears to NULL (Bio nil) the author's bio.
+// A missing author handle yields ErrNotFound.
+func (st *State) setAuthorBio(v op.SetAuthorBio) Result {
+	a, ok := st.authors[v.AuthorRef]
+	if !ok {
+		return Result{Err: ErrNotFound}
+	}
+	if v.Bio == nil {
+		a.bio = nil
+	} else {
+		b := *v.Bio
+		a.bio = &b
+	}
+	return Result{Err: ErrOK}
+}
+
+// countAuthorsWithBio counts authors whose bio is non-NULL, mirroring
+// SELECT COUNT(*) ... WHERE bio IS NOT NULL.
+func (st *State) countAuthorsWithBio() Result {
+	n := 0
+	for _, a := range st.authors {
+		if a.bio != nil {
+			n++
+		}
+	}
+	return Result{Scalar: &n, Err: ErrOK}
+}
+
+// removeTagFromPost detaches TagRef from PostRef's tag set. Detaching a tag that
+// is not attached is a no-op (matching the ORMs). Missing/deleted post or
+// missing tag handle yields ErrNotFound, mirroring addTagToPost.
+func (st *State) removeTagFromPost(v op.RemoveTagFromPost) Result {
+	p := st.livePost(v.PostRef)
+	if p == nil {
+		return Result{Err: ErrNotFound}
+	}
+	if _, ok := st.tags[v.TagRef]; !ok {
+		return Result{Err: ErrNotFound}
+	}
+	if set := st.postTags[v.PostRef]; set != nil {
+		delete(set, v.TagRef)
+	}
+	return Result{Err: ErrOK}
+}
+
+// countPostTags returns the number of tags attached to a live post (its M2M edge
+// degree). A missing/deleted post yields ErrNotFound.
+func (st *State) countPostTags(ref int) Result {
+	if st.livePost(ref) == nil {
+		return Result{Err: ErrNotFound}
+	}
+	n := len(st.postTags[ref])
+	return Result{Scalar: &n, Err: ErrOK}
 }
 
 // livePosts returns live posts in insertion order.

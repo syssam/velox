@@ -74,7 +74,8 @@ func (tc progCase) assert(t *testing.T, rep runner.Report) {
 	}
 }
 
-func intp(i int) *int { return &i }
+func intp(i int) *int       { return &i }
+func strp(s string) *string { return &s }
 
 // curatedPrograms returns the curated parity programs covering each bug class.
 func curatedPrograms() []progCase {
@@ -224,6 +225,111 @@ func curatedPrograms() []progCase {
 				op.CreateComment{Content: "nice", PostRef: 1, AuthorRef: 0},
 				op.QueryPostsByStatus{Status: "published"},
 				op.CountPosts{},
+			},
+			expect: expectAllPass,
+		},
+		{
+			// Upsert (ON CONFLICT DO UPDATE SET) via the per-column AddXxx path:
+			// insert-or-increment a tag counter keyed by its unique name. This is
+			// the surface the empty-"DO UPDATE SET" bug broke — the SetXxx/AddXxx
+			// upsert resolver had ZERO differential coverage. Each UpsertTag returns
+			// the resulting usage_count as a Scalar, so all three executors must
+			// agree on the value DO UPDATE SET produced on both the insert and the
+			// conflict branches. Pinned for coverage by
+			// coverage_test.go::TestCoverage_AllOpKindsExercised.
+			name: "upsert_tag_insert_then_increment",
+			prog: op.Program{
+				op.UpsertTag{Name: "go", AddUsage: 5},   // insert   -> usage_count 5
+				op.UpsertTag{Name: "go", AddUsage: 3},   // conflict -> usage_count 8
+				op.UpsertTag{Name: "rust", AddUsage: 2}, // insert   -> usage_count 2
+				op.UpsertTag{Name: "go", AddUsage: 1},   // conflict -> usage_count 9
+			},
+			expect: expectAllPass,
+		},
+		{
+			// CreateBulk: a single batch INSERT of several tags via the mutator
+			// chain, observed by the order-independent SumTagUsage aggregate. An
+			// UpsertTag increment on a bulk-created row is interleaved so the case
+			// pins that batch INSERT, per-column upsert, and the aggregate read all
+			// agree across reference ⟷ velox ⟷ ent. Pinned for coverage by
+			// coverage_test.go::TestCoverage_AllOpKindsExercised.
+			name: "bulk_create_tags_sum_usage",
+			prog: op.Program{
+				op.BulkCreateTags{Specs: []op.TagSpec{
+					{Name: "k0", UsageCount: 3},
+					{Name: "k1", UsageCount: 5},
+					{Name: "k2", UsageCount: 7},
+				}},
+				op.SumTagUsage{},                       // -> 15
+				op.UpsertTag{Name: "k1", AddUsage: 10}, // k1 -> 15
+				op.SumTagUsage{},                       // -> 25
+			},
+			expect: expectAllPass,
+		},
+		{
+			// M2M edge add/remove, observed by CountPostTags (the edge degree).
+			// M2M attachment was previously unobserved (AddTagToPost only checked
+			// no-error); this covers RemoveTagIDs and the no-op of detaching an
+			// already-detached tag. All three executors must agree on the degree
+			// after each mutation. Pinned for coverage by
+			// coverage_test.go::TestCoverage_AllOpKindsExercised.
+			name: "m2m_edge_add_remove_count",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},
+				op.CreatePost{Title: "P", Status: "draft", AuthorRef: 0},
+				op.CreateTag{Name: "e0"},
+				op.CreateTag{Name: "e1"},
+				op.CreateTag{Name: "e2"},
+				op.AddTagToPost{PostRef: 1, TagRef: 2},
+				op.AddTagToPost{PostRef: 1, TagRef: 3},
+				op.AddTagToPost{PostRef: 1, TagRef: 4},
+				op.CountPostTags{PostRef: 1},                // -> 3
+				op.RemoveTagFromPost{PostRef: 1, TagRef: 3}, // detach e1
+				op.CountPostTags{PostRef: 1},                // -> 2
+				op.RemoveTagFromPost{PostRef: 1, TagRef: 3}, // no-op (already detached)
+				op.CountPostTags{PostRef: 1},                // -> 2
+			},
+			expect: expectAllPass,
+		},
+		{
+			// Nillable field clear: bio is the schema's only Optional().Nillable()
+			// field. Set it on one author, then CLEAR it to SQL NULL via the
+			// generated ClearBio update path, observed by the order-independent
+			// CountAuthorsWithBio. All three executors must agree on the NULL vs
+			// non-NULL distinction. Pinned for coverage by
+			// coverage_test.go::TestCoverage_AllOpKindsExercised.
+			name: "nillable_bio_set_clear_count",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user", Bio: strp("hi")},
+				op.CreateAuthor{Name: "B", Role: "user"},       // bio NULL
+				op.CountAuthorsWithBio{},                       // -> 1
+				op.SetAuthorBio{AuthorRef: 1, Bio: strp("yo")}, // set B's bio
+				op.CountAuthorsWithBio{},                       // -> 2
+				op.SetAuthorBio{AuthorRef: 0, Bio: nil},        // clear A's bio -> NULL
+				op.CountAuthorsWithBio{},                       // -> 1
+			},
+			expect: expectAllPass,
+		},
+		{
+			// Multi-row mutation by predicate. Every other mutation is single-row
+			// (UpdateOneID / DeleteOneID); this exercises Post.Update().Where()
+			// (affected-row count) and Post.Delete().Where() (deleted-row count, with
+			// comment cascade). AddViewCount guarantees every matched row changes, so
+			// the affected count is dialect-robust (MySQL counts changed, not matched
+			// rows). The QueryPostsByStatus in between checks the updated rows' values
+			// AND deterministic updated_at agree across executors. Pinned for coverage
+			// by coverage_test.go::TestCoverage_AllOpKindsExercised.
+			name: "multirow_update_delete_by_predicate",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},
+				op.CreatePost{Title: "d0", Status: "draft", ViewCount: 1, AuthorRef: 0},
+				op.CreatePost{Title: "p0", Status: "published", ViewCount: 10, AuthorRef: 0},
+				op.CreatePost{Title: "d1", Status: "draft", ViewCount: 2, AuthorRef: 0},
+				op.BulkAddViewCountByStatus{Status: "draft", Delta: 100}, // -> 2 affected
+				op.SumViewCount{},                           // -> 101+102+10 = 213
+				op.QueryPostsByStatus{Status: "draft"},      // updated rows agree
+				op.BulkDeletePostsByStatus{Status: "draft"}, // -> 2 deleted
+				op.CountPosts{},                             // -> 1
 			},
 			expect: expectAllPass,
 		},

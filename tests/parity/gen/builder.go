@@ -115,14 +115,22 @@ const (
 	kCreatePost
 	kCreateComment
 	kCreateTag
+	kUpsertTag
+	kBulkCreateTags
 	kAddTagToPost
+	kRemoveTagFromPost
 	kSetPostLabels
 	kAppendPostLabels
 	kUpdatePostViewCount
+	kSetAuthorBio
+	kBulkAddViewCountByStatus
 	kDeletePost
 	kQueryPostsByStatus
 	kCountPosts
+	kCountPostTags
+	kCountAuthorsWithBio
 	kSumViewCount
+	kSumTagUsage
 	kLoadAuthorPosts
 	kPaginatePosts
 )
@@ -142,11 +150,12 @@ const (
 //	LoadAuthorPosts          -> >=1 author
 func (s *state) satisfiable() []opKind {
 	out := []opKind{
-		kCreateAuthor, kCreateTag,
-		kQueryPostsByStatus, kCountPosts, kSumViewCount, kPaginatePosts,
+		kCreateAuthor, kCreateTag, kUpsertTag, kBulkCreateTags,
+		kQueryPostsByStatus, kCountPosts, kSumViewCount, kSumTagUsage,
+		kCountAuthorsWithBio, kPaginatePosts,
 	}
 	if len(s.authors) > 0 {
-		out = append(out, kCreatePost, kLoadAuthorPosts)
+		out = append(out, kCreatePost, kLoadAuthorPosts, kSetAuthorBio)
 	}
 	// CreateComment writes an FK to its parent post, so the parent must be a
 	// LIVE row — a deleted post is physically gone and the INSERT would
@@ -155,10 +164,10 @@ func (s *state) satisfiable() []opKind {
 		out = append(out, kCreateComment)
 	}
 	if len(s.posts) > 0 && len(s.tags) > 0 {
-		out = append(out, kAddTagToPost)
+		out = append(out, kAddTagToPost, kRemoveTagFromPost)
 	}
 	if len(s.posts) > 0 {
-		out = append(out, kSetPostLabels, kAppendPostLabels, kUpdatePostViewCount)
+		out = append(out, kSetPostLabels, kAppendPostLabels, kUpdatePostViewCount, kCountPostTags, kBulkAddViewCountByStatus)
 	}
 	// DeletePost may target any created post: the comments->posts FK cascades, so
 	// deleting a commented post succeeds (and exercises the cascade), and
@@ -230,14 +239,54 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 		// names unique is a validity rule, the uniqueness cousin of referential
 		// validity, enforced by Validate.
 		return op.CreateTag{Name: fmt.Sprintf("T%d", idx)}
+	case kUpsertTag:
+		// UpsertTag is keyed by name, NOT by creation handle, so it is not added
+		// to st.tags (AddTagToPost only references CreateTag handles). The name is
+		// drawn from a small pool ("U0".."U3") disjoint from CreateTag's "T%d", so
+		// repeated UpsertTags COLLIDE — exercising the ON CONFLICT DO UPDATE branch
+		// — without ever colliding with a CreateTag's unique name. Duplicate upsert
+		// names are valid by design (that is the conflict), so Validate allows them.
+		return op.UpsertTag{Name: fmt.Sprintf("U%d", c.next(4)), AddUsage: c.next(10)}
+	case kBulkCreateTags:
+		// Batch INSERT of 1..3 tags. Names are "B<idx>_<row>" — globally unique
+		// (idx is unique per op) and disjoint from CreateTag's "T%d" and UpsertTag's
+		// "U%d", so a bulk row never collides with the unique constraint. Bulk rows
+		// register no handle (observed only via SumTagUsage).
+		n := c.next(3) + 1
+		specs := make([]op.TagSpec, n)
+		for r := range n {
+			specs[r] = op.TagSpec{Name: fmt.Sprintf("B%d_%d", idx, r), UsageCount: c.next(10)}
+		}
+		return op.BulkCreateTags{Specs: specs}
+	case kSumTagUsage:
+		return op.SumTagUsage{}
 	case kAddTagToPost:
 		return op.AddTagToPost{PostRef: ref(c, st.posts), TagRef: ref(c, st.tags)}
+	case kRemoveTagFromPost:
+		return op.RemoveTagFromPost{PostRef: ref(c, st.posts), TagRef: ref(c, st.tags)}
+	case kCountPostTags:
+		return op.CountPostTags{PostRef: ref(c, st.posts)}
 	case kSetPostLabels:
 		return op.SetPostLabels{PostRef: ref(c, st.posts), Labels: labels(c)}
 	case kAppendPostLabels:
 		return op.AppendPostLabels{PostRef: ref(c, st.posts), Labels: labels(c)}
 	case kUpdatePostViewCount:
 		return op.UpdatePostViewCount{PostRef: ref(c, st.posts), ViewCount: c.next(1001)}
+	case kSetAuthorBio:
+		// optString yields a *string that is nil ~half the time, so the fuzzer
+		// exercises both the SET and the CLEAR-to-NULL branches.
+		return op.SetAuthorBio{AuthorRef: ref(c, st.authors), Bio: optString(c, "bio")}
+	case kBulkAddViewCountByStatus:
+		// Predicate-scoped UPDATE. Delta>=1 so every matched row changes, keeping
+		// the affected count dialect-robust. Updates never change row liveness, so
+		// no FK / handle tracking is needed — unlike BulkDeletePostsByStatus, which
+		// is deliberately NOT fuzzed (it removes posts by status, and neither the
+		// builder state nor Validate track post status, so a later CreateComment on
+		// a status-deleted post could not be ruled out). Bulk delete is covered
+		// differentially by the curated suite instead.
+		return op.BulkAddViewCountByStatus{Status: pick(c, statuses), Delta: c.next(10) + 1}
+	case kCountAuthorsWithBio:
+		return op.CountAuthorsWithBio{}
 	case kDeletePost:
 		// Any created post is a valid target: the comments->posts FK cascades, so
 		// deleting a commented post succeeds (cascade-deleting its comments), and a
@@ -376,6 +425,21 @@ func Validate(prog op.Program) error {
 			}
 			tagNames[v.Name] = true
 			tags[i] = true
+		case op.UpsertTag:
+			// UpsertTag resolves name collisions via ON CONFLICT DO UPDATE, so a
+			// repeated name is VALID (that is the conflict path being exercised) and
+			// must not be checked against tagNames. It is keyed by name, not handle,
+			// so it registers no tag handle for later AddTagToPost references.
+		case op.BulkCreateTags:
+			// Each batch row is a plain INSERT under the UNIQUE name constraint, so
+			// every Spec.Name must be globally unique (like CreateTag). Rows register
+			// no handle (observed only via SumTagUsage).
+			for _, spec := range v.Specs {
+				if tagNames[spec.Name] {
+					return fmt.Errorf("op %d BulkCreateTags: duplicate tag name %q violates the unique constraint", i, spec.Name)
+				}
+				tagNames[spec.Name] = true
+			}
 		case op.CreatePost:
 			if !authors[v.AuthorRef] {
 				return fmt.Errorf("op %d CreatePost: AuthorRef %d is not an existing author handle", i, v.AuthorRef)
@@ -394,6 +458,17 @@ func Validate(prog op.Program) error {
 			}
 			if !tags[v.TagRef] {
 				return fmt.Errorf("op %d AddTagToPost: TagRef %d is not an existing tag handle", i, v.TagRef)
+			}
+		case op.RemoveTagFromPost:
+			if !posts[v.PostRef] {
+				return fmt.Errorf("op %d RemoveTagFromPost: PostRef %d is not an existing post handle", i, v.PostRef)
+			}
+			if !tags[v.TagRef] {
+				return fmt.Errorf("op %d RemoveTagFromPost: TagRef %d is not an existing tag handle", i, v.TagRef)
+			}
+		case op.CountPostTags:
+			if !posts[v.PostRef] {
+				return fmt.Errorf("op %d CountPostTags: PostRef %d is not an existing post handle", i, v.PostRef)
 			}
 		case op.SetPostLabels:
 			if !posts[v.PostRef] {
@@ -418,11 +493,20 @@ func Validate(prog op.Program) error {
 			if !authors[v.AuthorRef] {
 				return fmt.Errorf("op %d LoadAuthorPosts: AuthorRef %d is not an existing author handle", i, v.AuthorRef)
 			}
+		case op.SetAuthorBio:
+			if !authors[v.AuthorRef] {
+				return fmt.Errorf("op %d SetAuthorBio: AuthorRef %d is not an existing author handle", i, v.AuthorRef)
+			}
 		case op.PaginatePosts:
 			if err := validatePaginate(i, v, live); err != nil {
 				return err
 			}
-		case op.QueryPostsByStatus, op.CountPosts, op.SumViewCount:
+		case op.BulkAddViewCountByStatus, op.BulkDeletePostsByStatus:
+			// Predicate-scoped mutations: no handle refs, always valid (an empty
+			// match is an agreed 0-row no-op). BulkDeletePostsByStatus is
+			// curated-only, never fuzzed — see buildOp's kBulkAddViewCountByStatus
+			// note for why a status-scoped delete needs status tracking to fuzz.
+		case op.QueryPostsByStatus, op.CountPosts, op.SumViewCount, op.SumTagUsage, op.CountAuthorsWithBio:
 			// Always satisfiable; no refs.
 		default:
 			return fmt.Errorf("op %d: Validate saw unknown op type %T", i, o)

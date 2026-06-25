@@ -14,6 +14,8 @@ func (Tag) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").
 			Unique(),
+		field.Int("usage_count").
+			Default(0),
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"velox.test/parity/ent"
 	"velox.test/parity/ent/author"
 	"velox.test/parity/ent/post"
+	"velox.test/parity/ent/tag"
 	"velox.test/parity/model"
 	"velox.test/parity/op"
 )
@@ -100,16 +101,34 @@ func (x *entExec) step(ctx context.Context, idx int, o op.Op) model.Result {
 		return x.createComment(ctx, idx, v)
 	case op.CreateTag:
 		return x.createTag(ctx, idx, v)
+	case op.UpsertTag:
+		return x.upsertTag(ctx, v)
+	case op.BulkCreateTags:
+		return x.bulkCreateTags(ctx, v)
+	case op.SumTagUsage:
+		return x.sumTagUsage(ctx)
 	case op.AddTagToPost:
 		return x.addTagToPost(ctx, v)
+	case op.RemoveTagFromPost:
+		return x.removeTagFromPost(ctx, v)
+	case op.CountPostTags:
+		return x.countPostTags(ctx, v)
 	case op.SetPostLabels:
 		return x.setPostLabels(ctx, idx, v)
 	case op.AppendPostLabels:
 		return x.appendPostLabels(ctx, idx, v)
 	case op.UpdatePostViewCount:
 		return x.updateViewCount(ctx, idx, v)
+	case op.SetAuthorBio:
+		return x.setAuthorBio(ctx, idx, v)
+	case op.CountAuthorsWithBio:
+		return x.countAuthorsWithBio(ctx)
+	case op.BulkAddViewCountByStatus:
+		return x.bulkAddViewCountByStatus(ctx, idx, v)
 	case op.DeletePost:
 		return x.deletePost(ctx, v)
+	case op.BulkDeletePostsByStatus:
+		return x.bulkDeletePostsByStatus(ctx, v)
 	case op.QueryPostsByStatus:
 		return x.queryPostsByStatus(ctx, v)
 	case op.CountPosts:
@@ -206,6 +225,53 @@ func (x *entExec) createTag(ctx context.Context, idx int, v op.CreateTag) model.
 	return model.Result{Err: model.ErrOK}
 }
 
+// upsertTag mirrors veloxExec.upsertTag against the ent client: insert-by-unique-
+// name or add AddUsage onto the existing usage_count, then read it back so the
+// comparator checks ent's DO UPDATE SET result against velox and the reference.
+func (x *entExec) upsertTag(ctx context.Context, v op.UpsertTag) model.Result {
+	if _, err := x.c.Tag.Create().
+		SetName(v.Name).
+		SetUsageCount(v.AddUsage).
+		OnConflictColumns(tag.FieldName).
+		AddUsageCount(v.AddUsage).
+		ID(ctx); err != nil {
+		return entErrResult(err)
+	}
+	tg, err := x.c.Tag.Query().Where(tag.NameEQ(v.Name)).Only(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	n := tg.UsageCount
+	return model.Result{Scalar: &n, Err: model.ErrOK}
+}
+
+// bulkCreateTags mirrors veloxExec.bulkCreateTags against the ent client.
+func (x *entExec) bulkCreateTags(ctx context.Context, v op.BulkCreateTags) model.Result {
+	builders := make([]*ent.TagCreate, len(v.Specs))
+	for i, spec := range v.Specs {
+		builders[i] = x.c.Tag.Create().SetName(spec.Name).SetUsageCount(spec.UsageCount)
+	}
+	if _, err := x.c.Tag.CreateBulk(builders...).Save(ctx); err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Err: model.ErrOK}
+}
+
+// sumTagUsage returns SUM(usage_count) over the tags table, NULL-defaulted to 0.
+func (x *entExec) sumTagUsage(ctx context.Context) model.Result {
+	var rows []struct {
+		Sum *int `json:"sum"`
+	}
+	if err := x.c.Tag.Query().Aggregate(ent.Sum(tag.FieldUsageCount)).Scan(ctx, &rows); err != nil {
+		return entErrResult(err)
+	}
+	sum := 0
+	if len(rows) > 0 && rows[0].Sum != nil {
+		sum = *rows[0].Sum
+	}
+	return model.Result{Scalar: &sum, Err: model.ErrOK}
+}
+
 // --- Edge / mutation ops --------------------------------------------------
 
 func (x *entExec) addTagToPost(ctx context.Context, v op.AddTagToPost) model.Result {
@@ -221,6 +287,39 @@ func (x *entExec) addTagToPost(ctx context.Context, v op.AddTagToPost) model.Res
 		return entErrResult(err)
 	}
 	return model.Result{Err: model.ErrOK}
+}
+
+// removeTagFromPost mirrors veloxExec.removeTagFromPost against the ent client.
+func (x *entExec) removeTagFromPost(ctx context.Context, v op.RemoveTagFromPost) model.Result {
+	postID, ok := x.reg.handleToID[v.PostRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
+	tagID, ok := x.reg.handleToID[v.TagRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
+	if err := x.c.Post.UpdateOneID(postID).RemoveTagIDs(tagID).Exec(ctx); err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Err: model.ErrOK}
+}
+
+// countPostTags returns the post's M2M edge degree by traversing post -> tags.
+func (x *entExec) countPostTags(ctx context.Context, v op.CountPostTags) model.Result {
+	postID, ok := x.reg.handleToID[v.PostRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
+	p, err := x.c.Post.Get(ctx, postID)
+	if err != nil {
+		return entErrResult(err)
+	}
+	n, err := x.c.Post.QueryTags(p).Count(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Scalar: &n, Err: model.ErrOK}
 }
 
 func (x *entExec) setPostLabels(ctx context.Context, idx int, v op.SetPostLabels) model.Result {
@@ -268,6 +367,34 @@ func (x *entExec) updateViewCount(ctx context.Context, idx int, v op.UpdatePostV
 	return model.Result{Err: model.ErrOK}
 }
 
+// setAuthorBio mirrors veloxExec.setAuthorBio against the ent client, pinning
+// updated_at to the deterministic parity clock (see the velox doc comment).
+func (x *entExec) setAuthorBio(ctx context.Context, idx int, v op.SetAuthorBio) model.Result {
+	id, ok := x.reg.handleToID[v.AuthorRef]
+	if !ok {
+		return model.Result{Err: model.ErrNotFound}
+	}
+	u := x.c.Author.UpdateOneID(id).SetUpdatedAt(parityClock(idx))
+	if v.Bio != nil {
+		u.SetBio(*v.Bio)
+	} else {
+		u.ClearBio()
+	}
+	if err := u.Exec(ctx); err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Err: model.ErrOK}
+}
+
+// countAuthorsWithBio counts authors whose bio IS NOT NULL.
+func (x *entExec) countAuthorsWithBio(ctx context.Context) model.Result {
+	n, err := x.c.Author.Query().Where(author.BioNotNil()).Count(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Scalar: &n, Err: model.ErrOK}
+}
+
 func (x *entExec) deletePost(ctx context.Context, v op.DeletePost) model.Result {
 	id, ok := x.reg.handleToID[v.PostRef]
 	if !ok {
@@ -277,6 +404,30 @@ func (x *entExec) deletePost(ctx context.Context, v op.DeletePost) model.Result 
 		return entErrResult(err)
 	}
 	return model.Result{Err: model.ErrOK}
+}
+
+// bulkAddViewCountByStatus mirrors veloxExec.bulkAddViewCountByStatus.
+func (x *entExec) bulkAddViewCountByStatus(ctx context.Context, idx int, v op.BulkAddViewCountByStatus) model.Result {
+	n, err := x.c.Post.Update().
+		Where(post.StatusEQ(post.Status(v.Status))).
+		AddViewCount(v.Delta).
+		SetUpdatedAt(parityClock(idx)).
+		Save(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Scalar: &n, Err: model.ErrOK}
+}
+
+// bulkDeletePostsByStatus mirrors veloxExec.bulkDeletePostsByStatus.
+func (x *entExec) bulkDeletePostsByStatus(ctx context.Context, v op.BulkDeletePostsByStatus) model.Result {
+	n, err := x.c.Post.Delete().
+		Where(post.StatusEQ(post.Status(v.Status))).
+		Exec(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Scalar: &n, Err: model.ErrOK}
 }
 
 // --- Query / read ops -----------------------------------------------------

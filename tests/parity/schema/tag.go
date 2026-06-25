@@ -16,6 +16,8 @@ func (Tag) Fields() []velox.Field {
 	return []velox.Field{
 		field.String("name").
 			Unique(),
+		field.Int("usage_count").
+			Default(0),
 	}
 }
 
