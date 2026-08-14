@@ -48,6 +48,13 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	// Entity package path for interface types.
 	entityPkg := h.SharedEntityPkg()
 
+	// A concrete entity name to reference from the Use/Intercept docs, so the
+	// per-entity registration path is discoverable from the fan-out method.
+	exampleNode := "Node"
+	if len(graph.Nodes) > 0 {
+		exampleNode = graph.Nodes[0].Name
+	}
+
 	// Client struct
 	f.Comment("Client is the client that holds all entity clients.")
 	f.Type().Id("Client").StructFunc(func(group *jen.Group) {
@@ -248,6 +255,8 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	// Use delegates to HookStore.AppendAll — O(1) generated code regardless of entity count.
 	f.Comment("Use adds the mutation hooks to all the entity clients.")
 	f.Comment("")
+	f.Commentf("In order to add hooks to a specific client, call: `client.%s.Use(...)`.", exampleNode)
+	f.Comment("")
 	f.Comment("All Use calls must complete before concurrent query or mutation")
 	f.Comment("execution begins. Use is intended for application startup (e.g. in")
 	f.Comment("main or TestMain), not for runtime registration. No synchronization")
@@ -259,6 +268,11 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	)
 
 	f.Comment("Intercept adds the query interceptors to all the entity clients.")
+	f.Comment("")
+	f.Commentf("In order to add interceptors to a specific client, call: `client.%s.Intercept(...)`.", exampleNode)
+	f.Commentf("Typed interceptors from the intercept package (e.g. intercept.Traverse%s)", exampleNode)
+	f.Comment("MUST be registered this way — registering one here applies it to every")
+	f.Comment("entity, and it will reject the first query of any other type.")
 	f.Comment("")
 	f.Comment("All Intercept calls must complete before concurrent query execution")
 	f.Comment("begins. Intercept is intended for application startup (e.g. in")

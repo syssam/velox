@@ -136,6 +136,8 @@ func (c *Client) Close() error {
 
 // Use adds the mutation hooks to all the entity clients.
 //
+// In order to add hooks to a specific client, call: `client.User.Use(...)`.
+//
 // All Use calls must complete before concurrent query or mutation
 // execution begins. Use is intended for application startup (e.g. in
 // main or TestMain), not for runtime registration. No synchronization
@@ -145,6 +147,11 @@ func (c *Client) Use(hooks ...Hook) {
 }
 
 // Intercept adds the query interceptors to all the entity clients.
+//
+// In order to add interceptors to a specific client, call: `client.User.Intercept(...)`.
+// Typed interceptors from the intercept package (e.g. intercept.TraverseUser)
+// MUST be registered this way — registering one here applies it to every
+// entity, and it will reject the first query of any other type.
 //
 // All Intercept calls must complete before concurrent query execution
 // begins. Intercept is intended for application startup (e.g. in
