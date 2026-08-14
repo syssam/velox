@@ -554,11 +554,12 @@ func genEdgeStepFunction(h gen.GeneratorHelper, f *jen.File, t *gen.Type, edge *
 // defaults, and validators in the per-entity package file.
 func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, graph *gen.Graph) {
 	numHooks := t.NumHooks()
-	numInterceptors := t.NumInterceptors()
 	numPolicy := t.NumPolicy()
 
-	// Generate runtime comment if hooks or interceptors are present
-	if numHooks > 0 || numInterceptors > 0 {
+	// Generate runtime comment if hooks are present. Schema-level
+	// Interceptors() is rejected by Graph.Validate, so there is no
+	// interceptor array to declare here.
+	if numHooks > 0 {
 		f.Comment("Note that the variables below are initialized by the runtime")
 		f.Comment("package on the initialization of the application. Therefore,")
 		f.Comment("it should be imported in the main as follows:")
@@ -592,13 +593,10 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 		}
 	}
 
-	if numHooks > 0 || numInterceptors > 0 || numPolicy > 0 || hasDefaults || hasValidators {
+	if numHooks > 0 || numPolicy > 0 || hasDefaults || hasValidators {
 		f.Var().DefsFunc(func(defs *jen.Group) {
 			if numHooks > 0 {
 				defs.Id("Hooks").Index(jen.Lit(numHooks)).Qual(h.VeloxPkg(), "Hook")
-			}
-			if numInterceptors > 0 {
-				defs.Id("Interceptors").Index(jen.Lit(numInterceptors)).Qual(h.VeloxPkg(), "Interceptor")
 			}
 			if numPolicy > 0 {
 				defs.Id("Policy").Qual(h.VeloxPkg(), "Policy")

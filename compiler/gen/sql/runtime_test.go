@@ -262,63 +262,6 @@ func TestGenRuntimeHooks_WithPolicyOffset(t *testing.T) {
 }
 
 // =============================================================================
-// genRuntimeInterceptors Tests
-// =============================================================================
-
-func TestGenRuntimeInterceptors_NoInterceptors(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
-	grp := &jen.Group{}
-	genRuntimeInterceptors(helper, grp, userType, "schema", "entity", "pkg")
-	// No interceptors, should be a no-op
-}
-
-func TestGenRuntimeInterceptors_WithSchemaInterceptors(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithInterceptors(t, "User", []*load.Position{
-		{Index: 0, MixedIn: false},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeInterceptors(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-func TestGenRuntimeInterceptors_WithMixinInterceptors(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithInterceptors(t, "User", []*load.Position{
-		{Index: 0, MixedIn: true, MixinIndex: 0},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeInterceptors(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-func TestGenRuntimeInterceptors_MixedSchemaAndMixin(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithInterceptors(t, "User", []*load.Position{
-		{Index: 0, MixedIn: true, MixinIndex: 0},
-		{Index: 0, MixedIn: false},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeInterceptors(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-// =============================================================================
 // genRuntimePolicies Tests
 // =============================================================================
 

@@ -136,5 +136,36 @@ func (g *Graph) Validate() error {
 		}
 	}
 
+	// Schema- and mixin-level Interceptors() are rejected outright.
+	//
+	// velox used to accept them: the loader read them, codegen emitted
+	// `<pkg>.Interceptors[i] = <schema>.Interceptors()[i]` into the init(),
+	// and nothing ever read that array back — every query executes against
+	// the client's *entity.InterceptorStore. A schema that declared them
+	// compiled, generated, and silently did nothing, which is the worst
+	// possible outcome for a hook whose usual job is authorization.
+	//
+	// Wiring them up was considered and deliberately rejected. A
+	// schema-level interceptor necessarily applies to every client in the
+	// process, including the client an application uses for internal
+	// invariant checks — a dependency Exist() before a delete, a uniqueness
+	// probe, a lock acquisition. Narrowing those does not leak data, it
+	// corrupts it: the guard reports "no dependents" for rows outside the
+	// scope and the delete proceeds, with nothing to detect it afterwards.
+	// A hard error is both safer and more honest than a global hook that
+	// looks correct.
+	for _, t := range g.Nodes {
+		if t.NumInterceptors() == 0 {
+			continue
+		}
+		errs = append(errs, &SchemaValidationError{
+			Type: t.Name,
+			Message: "schema-level Interceptors() is not supported: it would apply to every " +
+				"client in the process, including clients used for internal invariant checks. " +
+				"Use Policy() for row-level authorization (it covers reads and writes), or " +
+				"client." + t.Name + ".Intercept(...) to scope interceptors to one client",
+		})
+	}
+
 	return errors.Join(errs...)
 }

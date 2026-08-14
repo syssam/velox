@@ -315,7 +315,13 @@ func TestGenPackage_WithHooks(t *testing.T) {
 	assert.Contains(t, code, "import _")
 }
 
-func TestGenPackage_WithInterceptors(t *testing.T) {
+// Schema-level Interceptors() is rejected by Graph.Validate, so no
+// Interceptors array is declared in the entity package. This asserts the
+// absence: the array used to be emitted and assigned in the generated
+// init() while nothing ever read it back, which made a schema-level
+// interceptor look wired up when it was inert. Pinned in
+// compiler/gen/schema_interceptors_test.go.
+func TestGenPackage_DeclaresNoInterceptorsArray(t *testing.T) {
 	t.Parallel()
 	helper := newMockHelper()
 	userType := createTypeWithInterceptors(t, "User", []*load.Position{{Index: 0}})
@@ -324,7 +330,8 @@ func TestGenPackage_WithInterceptors(t *testing.T) {
 	f := genPackage(helper, userType, buildEntityPkgEnumRegistry(helper.graph.Nodes))
 	code := f.GoString()
 
-	assert.Contains(t, code, "Interceptors")
+	assert.NotContains(t, code, "Interceptors [1]",
+		"no interceptor array may be declared — nothing reads it")
 }
 
 func TestGenPackage_WithPolicies(t *testing.T) {

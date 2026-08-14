@@ -10,7 +10,7 @@ import (
 
 // genRuntimeEntityInit generates the runtime initialization for a single entity.
 // It follows Ent's template logic for handling mixins and field positions.
-// Order: Mixin → Policies → Hooks → Interceptors → Fields
+// Order: Mixin → Policies → Hooks → Fields
 func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schemaPkg string) {
 	entityPkg := h.LeafPkgPath(t)
 	pkg := t.Package() // lowercase package name (e.g., "abtestevent")
@@ -36,7 +36,6 @@ func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, sc
 	genRuntimeHooks(h, grp, t, schemaPkg, entityPkg, pkg)
 
 	// 4. Generate interceptors initialization
-	genRuntimeInterceptors(h, grp, t, schemaPkg, entityPkg, pkg)
 
 	// 5. Generate fields initialization (defaults, validators)
 	if hasRuntimeFields {
@@ -203,44 +202,6 @@ func genRuntimeHooks(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schemaP
 		} else {
 			grp.Qual(entityPkg, "Hooks").Index(jen.Lit(i)).Op("=").
 				Id(pkg + "Hooks").Index(jen.Lit(p.Index))
-		}
-	}
-}
-
-// genRuntimeInterceptors generates the interceptors initialization for an entity.
-func genRuntimeInterceptors(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schemaPkg, entityPkg, pkg string) {
-	interceptorPositions := t.InterceptorPositions()
-	if len(interceptorPositions) == 0 {
-		return
-	}
-
-	// Load interceptors from mixins
-	mixedInInterceptors := t.MixedInInterceptors()
-	for _, mixinIdx := range mixedInInterceptors {
-		grp.Id(pkg + "MixinInters" + itoa(mixinIdx)).Op(":=").Id(pkg + "Mixin").Index(jen.Lit(mixinIdx)).Dot("Interceptors").Call()
-	}
-
-	// Check if there are interceptors defined directly in the schema (not from mixins)
-	hasSchemaInterceptors := false
-	for _, p := range interceptorPositions {
-		if !p.MixedIn {
-			hasSchemaInterceptors = true
-			break
-		}
-	}
-
-	if hasSchemaInterceptors {
-		grp.Id(pkg+"Inters").Op(":=").Qual(schemaPkg, t.Name).Values().Dot("Interceptors").Call()
-	}
-
-	// Assign interceptors to the entity's Interceptors slice
-	for i, p := range interceptorPositions {
-		if p.MixedIn {
-			grp.Qual(entityPkg, "Interceptors").Index(jen.Lit(i)).Op("=").
-				Id(pkg + "MixinInters" + itoa(p.MixinIndex)).Index(jen.Lit(p.Index))
-		} else {
-			grp.Qual(entityPkg, "Interceptors").Index(jen.Lit(i)).Op("=").
-				Id(pkg + "Inters").Index(jen.Lit(p.Index))
 		}
 	}
 }
