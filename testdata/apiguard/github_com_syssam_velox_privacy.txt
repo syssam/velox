@@ -26,6 +26,7 @@
   method SimpleViewer.ID() string
   method SimpleViewer.Roles() []string
   method SimpleViewer.TenantID() string
+  method TenantIDValuer.TenantIDValue() any
   method TenantIDer.TenantID() string
   method Viewer.ID() string
   method Viewer.Roles() []string
@@ -52,6 +53,7 @@ func Or(...QueryMutationRule) QueryMutationRule
 func OwnerQueryRule() QueryRule
 func RecordTrace(context.Context, string, string)
 func Skipf(string, ...any) error
+func TenantFilterRule(string) QueryMutationRule
 func TenantQueryRule() QueryRule
 func TenantRule(string) MutationRule
 func TraceFrom(context.Context) []TraceEntry
@@ -73,6 +75,7 @@ type QueryPolicy []QueryRule
 type QueryRule interface
 type QueryRuleFunc func(context.Context, github.com/syssam/velox.Query) error
 type SimpleViewer struct
+type TenantIDValuer interface
 type TenantIDer interface
 type TraceEntry struct
 type Viewer interface

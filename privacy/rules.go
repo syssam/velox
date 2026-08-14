@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql"
 )
 
 // Viewer represents the authenticated user making a request.
@@ -24,6 +25,17 @@ type Viewer interface {
 type TenantIDer interface {
 	// TenantID returns the viewer's tenant identifier for multi-tenancy.
 	TenantID() string
+}
+
+// TenantIDValuer is an optional interface for viewers whose tenant column
+// is not a string. TenantFilterRule prefers it over TenantIDer when
+// building the predicate, so an int or uuid tenant column binds with its
+// own type — Postgres rejects comparisons like `integer = text`, which a
+// string-only path would produce.
+type TenantIDValuer interface {
+	// TenantIDValue returns the viewer's tenant identifier as the value to
+	// compare the tenant column against (int, uuid.UUID, string, ...).
+	TenantIDValue() any
 }
 
 // viewerCtxKey is the context key for storing the viewer.
@@ -314,8 +326,98 @@ func TenantRule(field string) MutationRule {
 	})
 }
 
+// TenantFilterRule returns a rule that constrains every query and every
+// predicate-based mutation to the viewer's tenant, by appending
+// `WHERE <column> = <tenant>` to the statement.
+//
+// This is the rule that performs the isolation. TenantQueryRule only
+// checks that a tenant is present and TenantRule only validates the
+// tenant on create — neither of them filters rows.
+//
+// It is a QueryMutationRule, so the same call covers reads, bulk
+// UPDATE and bulk DELETE:
+//
+//	func (Invoice) Policy() velox.Policy {
+//	    return privacy.Policy{
+//	        Query: privacy.QueryPolicy{
+//	            privacy.DenyIfNoViewer(),
+//	            privacy.TenantFilterRule("tenant_id"),
+//	        },
+//	        Mutation: privacy.MutationPolicy{
+//	            privacy.DenyIfNoViewer(),
+//	            privacy.TenantFilterRule("tenant_id"),
+//	            privacy.TenantRule("tenant_id"),
+//	        },
+//	    }
+//	}
+//
+// The rule denies rather than skips when the viewer is missing or carries
+// no tenant: a tenant-scoped entity read without a tenant must fail, not
+// return every tenant's rows.
+//
+// Scope note: the predicate is attached to the statement being built, so
+// it does not reach a subquery produced by an edge predicate such as
+// HasInvoicesWith(...). Those subqueries are constructed directly on a
+// *sql.Selector and never become a Query, so no privacy rule observes
+// them.
+//
+// Operational note: this narrows EVERY read on the entity, including
+// reads that exist to guard an invariant (a dependency Exist() before a
+// delete, a uniqueness probe, a lock acquisition). Narrowing those does
+// not leak data, it corrupts it — the guard silently answers "no
+// dependents" for rows outside the tenant. Run such reads through a
+// client that does not carry the tenant policy, or under a viewer whose
+// role bypasses it; do not rely on remembering an opt-out at each call
+// site.
+func TenantFilterRule(column string) QueryMutationRule {
+	return FilterFunc(func(ctx context.Context, f Filter) error {
+		viewer := ViewerFromContext(ctx)
+		if viewer == nil {
+			return Denyf("privacy: viewer required for tenant-filtered access to %q", column)
+		}
+		value, err := viewerTenantValue(viewer)
+		if err != nil {
+			return err
+		}
+		f.WhereP(func(s *sql.Selector) {
+			s.Where(sql.EQ(s.C(column), value))
+		})
+		return Skip
+	})
+}
+
+// viewerTenantValue extracts the tenant value to compare the column
+// against, preferring TenantIDValuer so that non-string tenant columns
+// (int, uuid) bind with the right type. Postgres rejects `int = text`,
+// so a string-only path would work on SQLite and MySQL and fail on
+// Postgres.
+func viewerTenantValue(viewer Viewer) (any, error) {
+	if tv, ok := viewer.(TenantIDValuer); ok {
+		value := tv.TenantIDValue()
+		if value == nil {
+			return nil, Denyf("privacy: viewer %T returned a nil tenant value", viewer)
+		}
+		return value, nil
+	}
+	tv, ok := viewer.(TenantIDer)
+	if !ok {
+		return nil, Denyf("privacy: viewer %T implements neither privacy.TenantIDer nor privacy.TenantIDValuer", viewer)
+	}
+	if tv.TenantID() == "" {
+		return nil, Denyf("privacy: viewer %T has an empty tenant id", viewer)
+	}
+	return tv.TenantID(), nil
+}
+
 // TenantQueryRule returns a query rule that denies queries if no viewer
-// or tenant is present. Use this as a guard for tenant-filtered queries.
+// or tenant is present.
+//
+// It is a GUARD ONLY — it appends no predicate and performs no isolation.
+// Pair it with TenantFilterRule, or use TenantFilterRule alone (it denies
+// on a missing viewer or tenant too).
+//
+// Deprecated: use TenantFilterRule, which both guards and filters. This
+// rule's name suggests it scopes reads; it does not.
 //
 // Example:
 //
