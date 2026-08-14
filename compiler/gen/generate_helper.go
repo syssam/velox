@@ -45,7 +45,16 @@ func (g *JenniferGenerator) IDType(t *Type) jen.Code {
 }
 
 // StructTags returns the struct tags for a field.
+//
+// Sensitive fields are tagged `json:"-"` so the value never reaches an
+// API response, a log line, or anything else that marshals the entity.
+// Matching Ent, a sensitive field may not declare its own struct tag —
+// Type.check rejects that at codegen time — so there is no conflict to
+// resolve here.
 func (g *JenniferGenerator) StructTags(f *Field) map[string]string {
+	if f.Sensitive() {
+		return map[string]string{"json": "-"}
+	}
 	if f.StructTag != "" {
 		return parseStructTags(f.StructTag)
 	}

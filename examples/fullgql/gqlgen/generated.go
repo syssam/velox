@@ -127,14 +127,13 @@ type ComplexityRoot struct {
 	}
 
 	Member struct {
-		Accepted    func(childComplexity int) int
-		CreatedAt   func(childComplexity int) int
-		ID          func(childComplexity int) int
-		InviteToken func(childComplexity int) int
-		Role        func(childComplexity int) int
-		UpdatedAt   func(childComplexity int) int
-		User        func(childComplexity int) int
-		Workspace   func(childComplexity int) int
+		Accepted  func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		ID        func(childComplexity int) int
+		Role      func(childComplexity int) int
+		UpdatedAt func(childComplexity int) int
+		User      func(childComplexity int) int
+		Workspace func(childComplexity int) int
 	}
 
 	Mutation struct {
@@ -629,12 +628,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Member.ID(childComplexity), true
-	case "Member.inviteToken":
-		if e.complexity.Member.InviteToken == nil {
-			break
-		}
-
-		return e.complexity.Member.InviteToken(childComplexity), true
 	case "Member.role":
 		if e.complexity.Member.Role == nil {
 			break
@@ -1892,7 +1885,6 @@ type Member implements Node @goModel(model: "example.com/fullgql/velox/entity.Me
   """
   updatedAt: Time!
   role: MemberRole!
-  inviteToken: String
   accepted: Boolean!
   workspace: Workspace!
   user: User!
@@ -5809,35 +5801,6 @@ func (ec *executionContext) fieldContext_Member_role(_ context.Context, field gr
 	return fc, nil
 }
 
-func (ec *executionContext) _Member_inviteToken(ctx context.Context, field graphql.CollectedField, obj *entity.Member) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Member_inviteToken,
-		func(ctx context.Context) (any, error) {
-			return obj.InviteToken, nil
-		},
-		nil,
-		ec.marshalOString2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Member_inviteToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Member",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Member_accepted(ctx context.Context, field graphql.CollectedField, obj *entity.Member) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6336,8 +6299,6 @@ func (ec *executionContext) fieldContext_Mutation_createMember(ctx context.Conte
 				return ec.fieldContext_Member_updatedAt(ctx, field)
 			case "role":
 				return ec.fieldContext_Member_role(ctx, field)
-			case "inviteToken":
-				return ec.fieldContext_Member_inviteToken(ctx, field)
 			case "accepted":
 				return ec.fieldContext_Member_accepted(ctx, field)
 			case "workspace":
@@ -6395,8 +6356,6 @@ func (ec *executionContext) fieldContext_Mutation_updateMember(ctx context.Conte
 				return ec.fieldContext_Member_updatedAt(ctx, field)
 			case "role":
 				return ec.fieldContext_Member_role(ctx, field)
-			case "inviteToken":
-				return ec.fieldContext_Member_inviteToken(ctx, field)
 			case "accepted":
 				return ec.fieldContext_Member_accepted(ctx, field)
 			case "workspace":
@@ -7937,8 +7896,6 @@ func (ec *executionContext) fieldContext_Query_members(_ context.Context, field 
 				return ec.fieldContext_Member_updatedAt(ctx, field)
 			case "role":
 				return ec.fieldContext_Member_role(ctx, field)
-			case "inviteToken":
-				return ec.fieldContext_Member_inviteToken(ctx, field)
 			case "accepted":
 				return ec.fieldContext_Member_accepted(ctx, field)
 			case "workspace":
@@ -9796,8 +9753,6 @@ func (ec *executionContext) fieldContext_User_memberships(_ context.Context, fie
 				return ec.fieldContext_Member_updatedAt(ctx, field)
 			case "role":
 				return ec.fieldContext_Member_role(ctx, field)
-			case "inviteToken":
-				return ec.fieldContext_Member_inviteToken(ctx, field)
 			case "accepted":
 				return ec.fieldContext_Member_accepted(ctx, field)
 			case "workspace":
@@ -10284,8 +10239,6 @@ func (ec *executionContext) fieldContext_Workspace_members(_ context.Context, fi
 				return ec.fieldContext_Member_updatedAt(ctx, field)
 			case "role":
 				return ec.fieldContext_Member_role(ctx, field)
-			case "inviteToken":
-				return ec.fieldContext_Member_inviteToken(ctx, field)
 			case "accepted":
 				return ec.fieldContext_Member_accepted(ctx, field)
 			case "workspace":
@@ -15687,8 +15640,6 @@ func (ec *executionContext) _Member(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "inviteToken":
-			out.Values[i] = ec._Member_inviteToken(ctx, field, obj)
 		case "accepted":
 			out.Values[i] = ec._Member_accepted(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

@@ -133,6 +133,11 @@ func (m *mockHelper) StructTags(f *gen.Field) map[string]string {
 	if f == nil {
 		return map[string]string{}
 	}
+	// Mirror JenniferGenerator.StructTags: a mock that disagrees with the
+	// production helper hides real generator bugs from every test using it.
+	if f.Sensitive() {
+		return map[string]string{"json": "-"}
+	}
 	return map[string]string{"json": f.Name + ",omitempty"}
 }
 

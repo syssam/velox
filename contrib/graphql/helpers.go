@@ -132,6 +132,9 @@ func (g *Generator) filterEdges(edges []*gen.Edge, skip SkipMode) []*gen.Edge {
 func (g *Generator) filterFields(fields []*gen.Field, skip SkipMode) []*gen.Field {
 	filteredFields := make([]*gen.Field, 0, len(fields))
 	for _, f := range fields {
+		if skipSensitiveRead(f.Sensitive(), skip) {
+			continue
+		}
 		ann := g.getFieldAnnotation(f)
 		annSkip := g.annotationSkipMode(ann)
 		// SkipType implies exclusion from all GraphQL surfaces (OrderField, WhereInput, etc.)
@@ -141,6 +144,23 @@ func (g *Generator) filterFields(fields []*gen.Field, skip SkipMode) []*gen.Fiel
 		filteredFields = append(filteredFields, f)
 	}
 	return filteredFields
+}
+
+// skipSensitiveRead reports whether a field.Sensitive() field must be
+// dropped from the surface currently being generated.
+//
+// Sensitive fields are unreadable through the graph: they are excluded
+// from the output type (otherwise the secret is queryable by any client)
+// and from ordering (ordering by a secret is an oracle — a client can
+// binary-search the value from the row order alone). WhereInput exclusion
+// lives in where_input.go::skipFieldInWhereInput.
+//
+// They stay available on mutation inputs on purpose: a password must be
+// settable even though it is never returned. This split matches
+// ent-contrib/entgql, which checks Sensitive() on the type, order and
+// where paths but not on the mutation-input path.
+func skipSensitiveRead(sensitive bool, skip SkipMode) bool {
+	return sensitive && (skip == SkipType || skip == SkipOrderField)
 }
 
 // annotationSkipMode returns the SkipMode from an Annotation.

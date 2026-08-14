@@ -544,6 +544,14 @@ func genEntityPkgStringMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 	// writeField emits the fastest serialization for the field type.
 	// String fields use WriteString (no format parsing). Others use Fprintf.
 	writeField := func(grp *jen.Group, fld *gen.Field, accessor jen.Code) {
+		// Sensitive fields print a placeholder, never the value. String()
+		// is what `%v` on an entity reaches, so without this a field marked
+		// Sensitive still lands in every log line that formats the entity.
+		// Matches Ent (entc/gen/template/ent.tmpl).
+		if fld.Sensitive() {
+			grp.Id("b").Dot("WriteString").Call(jen.Lit(fld.Name + "=<sensitive>"))
+			return
+		}
 		if fld.IsString() && !fld.IsEnum() {
 			// Fast path: string fields — avoid fmt.Fprintf overhead.
 			grp.Id("b").Dot("WriteString").Call(jen.Lit(fld.Name + "="))

@@ -1420,3 +1420,20 @@ func TestTypeNames(t *testing.T) {
 		assert.Equal(t, "UserClient", typ.ClientName())
 	})
 }
+
+// TestStructTags_SensitiveFieldIsOmittedFromJSON pins the production
+// helper (the mock in compiler/gen/sql mirrors it). A field marked
+// Sensitive must not carry a marshalable json tag: velox validates that
+// such a field declares no struct tag of its own, so json:"-" is
+// unambiguous here. Matches Ent's model/omittags template.
+func TestStructTags_SensitiveFieldIsOmittedFromJSON(t *testing.T) {
+	g := &JenniferGenerator{}
+
+	sensitive := Field{def: &load.Field{Sensitive: true}, Name: "password"}
+	assert.Equal(t, map[string]string{"json": "-"}, g.StructTags(&sensitive),
+		"a sensitive field must never be marshaled")
+
+	normal := Field{def: &load.Field{}, Name: "email"}
+	assert.Equal(t, map[string]string{"json": "email,omitempty"}, g.StructTags(&normal),
+		"non-sensitive fields keep the default tag")
+}
