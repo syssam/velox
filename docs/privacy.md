@@ -104,18 +104,83 @@ func (Todo) Policy() velox.Policy {
 
 ```go
 func (Todo) Policy() velox.Policy {
-    return velox.Policy{
+    return privacy.Policy{
         Query: privacy.QueryPolicy{
             privacy.DenyIfNoViewer(),
-            privacy.TenantQueryRule("tenant_id"),
+            privacy.TenantFilterRule("tenant_id"),
         },
-        Mutation: velox.MutationPolicy{
+        Mutation: privacy.MutationPolicy{
             privacy.DenyIfNoViewer(),
-            privacy.TenantRule("tenant_id"),
+            privacy.TenantFilterRule("tenant_id"), // scopes UPDATE/DELETE
+            privacy.TenantRule("tenant_id"),       // rejects a mismatched tenant on CREATE
         },
     }
 }
 ```
+
+`TenantFilterRule` is the rule that isolates: it appends
+`WHERE tenant_id = <viewer tenant>` to the statement, and it is a
+`QueryMutationRule`, so the same call covers reads, bulk `UPDATE` and
+bulk `DELETE`. It denies when the viewer or tenant is missing, so a
+tenant-scoped read without a tenant fails instead of returning every
+tenant's rows.
+
+`TenantRule` complements it on `CREATE` by rejecting a row whose
+`tenant_id` does not match the viewer. `TenantQueryRule` is a
+presence guard only — it appends no predicate and is deprecated in
+favour of `TenantFilterRule`.
+
+**Stamp the tenant column from a hook, do not accept it from the caller.**
+`TenantRule` skips when the field is not set, and a policy whose rules all
+skip allows the operation — so a `CREATE` that simply omits `tenant_id`
+passes every rule and lands a row with a zero tenant, invisible to every
+tenant afterwards. Set the column from the viewer instead:
+
+```go
+func (Todo) Hooks() []velox.Hook {
+    return []velox.Hook{
+        func(next velox.Mutator) velox.Mutator {
+            return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+                if m.Op().Is(velox.OpCreate) {
+                    viewer, ok := privacy.ViewerFromContext(ctx).(privacy.TenantIDer)
+                    if !ok {
+                        return nil, errors.New("todo: create requires a tenant viewer")
+                    }
+                    if err := m.SetField("tenant_id", viewer.TenantID()); err != nil {
+                        return nil, err
+                    }
+                }
+                return next.Mutate(ctx, m)
+            })
+        },
+    }
+}
+```
+
+The hook makes the column unspoofable (it overwrites whatever the caller
+supplied) and unomittable; `TenantRule` then remains as a defence in
+depth rather than the only check.
+
+If the tenant column is not a string, implement `privacy.TenantIDValuer`
+on the viewer so the predicate binds with the column's own type;
+Postgres rejects `integer = text`.
+
+**Two reads, one mechanism.** A row filter cannot tell a read whose rows
+are returned to the caller from a read that guards an invariant — a
+dependency `Exist()` before a delete, a uniqueness probe, a lock
+acquisition. Narrowing the second kind does not leak data, it corrupts
+it: the guard answers "no dependents" for rows outside the tenant and the
+delete proceeds. Only the call site knows which kind it is.
+
+Run invariant checks through a client that does not carry the tenant
+policy, or under a viewer whose role bypasses it. Do not rely on
+remembering a per-call-site opt-out: an opt-out that is forgotten fails
+in the destructive direction, and nothing detects it afterwards.
+
+**Edge predicates are not scoped.** `HasTodosWith(...)` compiles to an
+EXISTS subquery built directly on a `*sql.Selector`; it never becomes a
+Query, so no privacy rule observes it. A caller can therefore learn
+whether out-of-scope rows exist by filtering through an edge.
 
 The tenant viewer must implement `privacy.TenantIDer`:
 
