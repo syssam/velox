@@ -24,7 +24,7 @@ func (c *Client) Noder(ctx context.Context, id int) (Noder, error) {
 	for _, resolver := range runtime.NodeResolvers() {
 		result, err := resolver.Resolve(ctx, id)
 		if err != nil {
-			if runtime.IsNotFound(err) {
+			if runtime.IsNotFound(err) || runtime.IsNodeIDTypeMismatch(err) {
 				continue
 			}
 			return nil, err
@@ -46,7 +46,7 @@ func (c *Client) Noders(ctx context.Context, ids []int) ([]Noder, error) {
 		for _, resolver := range resolvers {
 			result, err := resolver.Resolve(ctx, id)
 			if err != nil {
-				if runtime.IsNotFound(err) {
+				if runtime.IsNotFound(err) || runtime.IsNodeIDTypeMismatch(err) {
 					continue
 				}
 				return nil, err

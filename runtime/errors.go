@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"errors"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect/sql/sqlgraph"
 )
@@ -35,6 +37,22 @@ var (
 	ErrNotSingular = velox.ErrNotSingular
 	ErrTxStarted   = velox.ErrTxStarted
 )
+
+// ErrNodeIDTypeMismatch is returned by a generated NodeResolver when the
+// id it was handed is not of that entity's ID type.
+//
+// Noder/Noders try every registered resolver in turn, so in a schema that
+// mixes ID types (int for some entities, uuid.UUID for others) a mismatch
+// is the normal outcome for every resolver but one. It must be skipped
+// like a not-found error rather than aborting the lookup — otherwise
+// resolution succeeds or fails depending on map iteration order.
+var ErrNodeIDTypeMismatch = errors.New("velox: NodeResolver: id type mismatch")
+
+// IsNodeIDTypeMismatch reports whether err came from a NodeResolver that
+// does not handle the given id type.
+func IsNodeIDTypeMismatch(err error) bool {
+	return errors.Is(err, ErrNodeIDTypeMismatch)
+}
 
 // IsNotFound returns true if the error is a NotFoundError.
 // Delegates to velox.IsNotFound which checks both AsType and errors.Is.

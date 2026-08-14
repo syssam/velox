@@ -161,8 +161,11 @@ func (g *Generator) genNodeShared() *jen.File {
 		jen.For(jen.List(jen.Id("_"), jen.Id("resolver")).Op(":=").Range().Qual(runtimePkgPath, "NodeResolvers").Call()).Block(
 			jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("resolver").Dot("Resolve").Call(jen.Id("ctx"), jen.Id("id")),
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(
-				// Only skip not-found errors; return real errors immediately
-				jen.If(jen.Qual(runtimePkgPath, "IsNotFound").Call(jen.Id("err"))).Block(
+				// Skip resolvers that cannot handle this id: not-found, and
+				// id-type mismatch in schemas that mix ID types. Everything
+				// else is a real error and aborts the lookup.
+				jen.If(jen.Qual(runtimePkgPath, "IsNotFound").Call(jen.Id("err")).
+					Op("||").Qual(runtimePkgPath, "IsNodeIDTypeMismatch").Call(jen.Id("err"))).Block(
 					jen.Continue(),
 				),
 				jen.Return(jen.Nil(), jen.Id("err")),
@@ -198,7 +201,8 @@ func (g *Generator) genNodeShared() *jen.File {
 			jen.For(jen.List(jen.Id("_"), jen.Id("resolver")).Op(":=").Range().Id("resolvers")).Block(
 				jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("resolver").Dot("Resolve").Call(jen.Id("ctx"), jen.Id("id")),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.If(jen.Qual(runtimePkgPath, "IsNotFound").Call(jen.Id("err"))).Block(
+					jen.If(jen.Qual(runtimePkgPath, "IsNotFound").Call(jen.Id("err")).
+						Op("||").Qual(runtimePkgPath, "IsNodeIDTypeMismatch").Call(jen.Id("err"))).Block(
 						jen.Continue(),
 					),
 					jen.Return(jen.Nil(), jen.Id("err")),

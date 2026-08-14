@@ -155,9 +155,13 @@ func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.
 					)),
 				),
 				jen.List(jen.Id("typedID"), jen.Id("ok")).Op(":=").Id("id").Assert(idType),
+				// Wrap the sentinel so Noder/Noders can skip this resolver and
+				// try the next one. Schemas that mix ID types make a mismatch
+				// the normal case for every resolver but one.
 				jen.If(jen.Op("!").Id("ok")).Block(
 					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
-						jen.Lit("velox: NodeResolver: unexpected id type %T"),
+						jen.Lit("%w: unexpected id type %T"),
+						jen.Qual(runtimePkg, "ErrNodeIDTypeMismatch"),
 						jen.Id("id"),
 					)),
 				),

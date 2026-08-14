@@ -199,6 +199,7 @@ func FindMutator(string) MutatorFunc
 func FindRegisteredType(string) *RegisteredTypeInfo
 func IDScanValues(github.com/syssam/velox/schema/field.Type) []any
 func IsConstraintError(error) bool
+func IsNodeIDTypeMismatch(error) bool
 func IsNotFound(error) bool
 func IsNotLoaded(error) bool
 func IsNotSingular(error) bool
@@ -292,6 +293,7 @@ type Traverser = Traverser
 type TxDriverUnwrapper interface
 type ValidationError = ValidationError
 type Value = Value
+var ErrNodeIDTypeMismatch error
 var ErrNotFound error
 var ErrNotSingular error
 var ErrTxStarted error

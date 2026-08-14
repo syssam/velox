@@ -54,7 +54,7 @@ func init() {
 			}
 			typedID, ok := id.(int64)
 			if !ok {
-				return nil, fmt.Errorf("velox: NodeResolver: unexpected id type %T", id)
+				return nil, fmt.Errorf("%w: unexpected id type %T", runtime.ErrNodeIDTypeMismatch, id)
 			}
 			return NewUserClient(cfg).Get(ctx, typedID)
 		},
