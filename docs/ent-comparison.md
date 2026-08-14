@@ -917,7 +917,6 @@ Both use a similar SQL builder pattern. Velox's builder is in `dialect/sql/`.
 | `sql.Insert(table)` | Yes | Yes | |
 | `sql.Update(table)` | Yes | Yes | |
 | `sql.Delete(table)` | Yes | Yes | |
-| `sql.CreateTable(table)` | Yes | Yes | DDL |
 | `.Where(predicates)` | Yes | Yes | |
 | `.Join(table)` | Yes | Yes | |
 | `.LeftJoin(table)` | Yes | Yes | |

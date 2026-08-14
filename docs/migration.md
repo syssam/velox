@@ -197,8 +197,9 @@ if err := client.Schema.Create(ctx); err != nil {
 ```go
 import "github.com/syssam/velox/dialect/sql/schema"
 
-// Create tables only (no modifications)
-client.Schema.Create(ctx, schema.WithCreateOnly())
+// Create is additive by default: it creates missing tables and columns and
+// never drops anything unless told to.
+client.Schema.Create(ctx)
 
 // Drop columns that are no longer in schema
 client.Schema.Create(ctx, schema.WithDropColumn(true))
