@@ -25,7 +25,7 @@
 //	            privacy.AlwaysDenyRule(),       // Deny by default
 //	        ),
 //	        policy.Query(
-//	            privacy.AlwaysAllowQueryRule(), // Allow all queries
+//	            privacy.AlwaysAllowRule(), // Allow all queries
 //	        ),
 //	    )
 //	}

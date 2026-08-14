@@ -68,7 +68,7 @@
 //
 //	func (User) Policy() velox.Policy {
 //		return privacy.Policy{
-//			Query:    privacy.QueryPolicy{privacy.AlwaysAllowQueryRule()},
+//			Query:    privacy.QueryPolicy{privacy.AlwaysAllowRule()},
 //			Mutation: privacy.MutationPolicy{privacy.DenyIfNoViewer()},
 //		}
 //	}

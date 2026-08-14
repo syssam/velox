@@ -260,7 +260,7 @@ if err := tx.Commit(); err != nil {
    func (User) Policy() velox.Policy {
        return policy.Policy{
            Query: policy.QueryPolicy{
-               privacy.AlwaysAllowQueryRule(), // Debug: allow all
+               privacy.AlwaysAllowRule(), // Debug: allow all
            },
        }
    }
