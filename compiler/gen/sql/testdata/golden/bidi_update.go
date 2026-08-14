@@ -18,6 +18,10 @@ import (
 )
 
 // PostUpdate is the update builder for Post entities.
+//
+// Query interceptors do NOT run on mutations. A row filter registered
+// with Intercept() leaves this builder unscoped, so express row-level
+// authorization as a schema Policy() — it covers reads and writes.
 type PostUpdate struct {
 	config    runtime.Config
 	mutation  *PostMutation

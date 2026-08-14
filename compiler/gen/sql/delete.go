@@ -31,6 +31,10 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 
 	// ----- DeleteName (multi-entity) -----
 	f.Commentf("%s is the builder for deleting a %s entity.", deleteName, t.Name)
+	f.Comment("")
+	f.Comment("Query interceptors do NOT run on mutations. A row filter registered")
+	f.Comment("with Intercept() leaves this builder unscoped, so express row-level")
+	f.Comment("authorization as a schema Policy() — it covers reads and writes.")
 	f.Type().Id(deleteName).StructFunc(func(group *jen.Group) {
 		group.Id("config").Qual(runtimePkg, "Config")
 		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {

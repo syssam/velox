@@ -22,6 +22,10 @@ import (
 )
 
 // ArticleUpdate is the update builder for Article entities.
+//
+// Query interceptors do NOT run on mutations. A row filter registered
+// with Intercept() leaves this builder unscoped, so express row-level
+// authorization as a schema Policy() — it covers reads and writes.
 type ArticleUpdate struct {
 	config            runtime.Config
 	mutation          *ArticleMutation

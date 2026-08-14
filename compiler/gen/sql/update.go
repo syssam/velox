@@ -52,6 +52,10 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 
 	// --- Struct ---
 	f.Commentf("%s is the update builder for %s entities.", updateName, t.Name)
+	f.Comment("")
+	f.Comment("Query interceptors do NOT run on mutations. A row filter registered")
+	f.Comment("with Intercept() leaves this builder unscoped, so express row-level")
+	f.Comment("authorization as a schema Policy() — it covers reads and writes.")
 	f.Type().Id(updateName).StructFunc(func(group *jen.Group) {
 		group.Id("config").Qual(runtimePkg, "Config")
 		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {

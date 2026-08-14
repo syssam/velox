@@ -177,6 +177,12 @@ func (g *JenniferGenerator) Generate(ctx context.Context) error {
 		return err
 	}
 
+	// AGENTS.md is written before cleanup so it is present in the manifest
+	// and is not treated as a stale file.
+	if err := g.writeAgentDocs(); err != nil {
+		return err
+	}
+
 	var cleanupErrs []error
 	if err := g.cleanupFeatures(); err != nil {
 		cleanupErrs = append(cleanupErrs, err)

@@ -12,6 +12,10 @@ import (
 )
 
 // UserDelete is the builder for deleting a User entity.
+//
+// Query interceptors do NOT run on mutations. A row filter registered
+// with Intercept() leaves this builder unscoped, so express row-level
+// authorization as a schema Policy() — it covers reads and writes.
 type UserDelete struct {
 	config   runtime.Config
 	hooks    []runtime.Hook

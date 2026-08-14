@@ -18,6 +18,10 @@ import (
 )
 
 // UserUpdate is the update builder for User entities.
+//
+// Query interceptors do NOT run on mutations. A row filter registered
+// with Intercept() leaves this builder unscoped, so express row-level
+// authorization as a schema Policy() — it covers reads and writes.
 type UserUpdate struct {
 	config    runtime.Config
 	mutation  *UserMutation
