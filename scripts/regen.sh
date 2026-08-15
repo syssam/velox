@@ -39,6 +39,7 @@ DRIFT_CHECK_MODULES=(
     examples/fulltest
     examples/globalid
     examples/json-field
+    examples/multitenant
     examples/tree
     examples/versioned-migration
     tests/external-module
