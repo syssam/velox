@@ -508,7 +508,7 @@ func (q *ArticleQuery) OnlyIDX(ctx context.Context) int64 {
 // updated, deleted or "selected ... for update" by other sessions, until the transaction is
 // either committed or rolled-back.
 func (q *ArticleQuery) ForUpdate(opts ...sql.LockOption) entity.ArticleQuerier {
-	if q.config.Driver.Dialect() == dialect.Postgres {
+	if caps := dialect.GetCapabilities(q.config.Driver.Dialect()); caps.Has(dialect.CapForUpdate) && !caps.Has(dialect.CapLockWithDistinct) {
 		q.Unique(false)
 	}
 	q.modifiers = append(q.modifiers, func(s *sql.Selector) {
@@ -521,7 +521,7 @@ func (q *ArticleQuery) ForUpdate(opts ...sql.LockOption) entity.ArticleQuerier {
 // on any rows that are read. Other sessions can read the rows, but cannot modify them
 // until your transaction commits.
 func (q *ArticleQuery) ForShare(opts ...sql.LockOption) entity.ArticleQuerier {
-	if q.config.Driver.Dialect() == dialect.Postgres {
+	if caps := dialect.GetCapabilities(q.config.Driver.Dialect()); caps.Has(dialect.CapForShare) && !caps.Has(dialect.CapLockWithDistinct) {
 		q.Unique(false)
 	}
 	q.modifiers = append(q.modifiers, func(s *sql.Selector) {

@@ -510,3 +510,38 @@ func TestMultiDialect_JSON(t *testing.T) {
 			"AppendLabels must concatenate JSON arrays identically on every dialect")
 	})
 }
+
+// TestMultiDialect_LockWithDistinct pins the DISTINCT/lock interplay in the
+// generated ForUpdate/ForShare builders. Postgres rejects "FOR UPDATE is not
+// allowed with DISTINCT clause", so on a dialect that supports row locking
+// but lacks dialect.CapLockWithDistinct the builder drops DISTINCT. MySQL
+// accepts the combination and keeps DISTINCT; SQLite treats the lock as a
+// no-op. Two paths are covered: an explicit Unique(true) on a root query
+// (sqlAll → BuildSelectorFrom) and an edge traversal's IDs(), which defaults
+// to Unique(true) when a path is set (sqlIDs → sqlgraph.QueryNodes).
+func TestMultiDialect_LockWithDistinct(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+
+		u := createUser(t, client, "Locker", "locker@multi.com")
+		_ = createPost(t, client, u, "locked", "p1")
+
+		tx, err := client.Tx(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback() }()
+
+		users, err := tx.User.Query().
+			Where(user.IDField.EQ(u.ID)).
+			Unique(true).
+			ForUpdate().
+			All(ctx)
+		require.NoError(t, err, "Unique(true).ForUpdate().All() must not emit DISTINCT + FOR UPDATE on a dialect that rejects it")
+		require.Len(t, users, 1)
+
+		ids, err := tx.User.QueryPosts(u).
+			ForShare().
+			IDs(ctx)
+		require.NoError(t, err, "traversal IDs() defaults to DISTINCT; ForShare must drop it where the dialect rejects the combination")
+		require.Len(t, ids, 1)
+	})
+}

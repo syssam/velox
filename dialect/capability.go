@@ -31,6 +31,13 @@ const (
 	CapWindowFunctions
 	// CapLastInsertID indicates support for LastInsertId() on sql.Result (MySQL, SQLite).
 	CapLastInsertID
+	// CapLockWithDistinct indicates that a row-locking clause (FOR UPDATE /
+	// FOR SHARE) may be combined with SELECT DISTINCT. Postgres rejects the
+	// combination ("FOR UPDATE is not allowed with DISTINCT clause"), so the
+	// generated ForUpdate/ForShare builders drop DISTINCT on dialects that
+	// support locking but lack this capability. MySQL accepts it. SQLite has
+	// no row locking at all (no CapForUpdate), so the flag is not consulted.
+	CapLockWithDistinct
 )
 
 // Capabilities describes the feature set of a database dialect.
@@ -68,7 +75,7 @@ var dialectCaps = map[string]Capabilities{
 	},
 	MySQL: {
 		CapUpsert | CapJSONOperators |
-			CapForUpdate | CapForShare |
+			CapForUpdate | CapForShare | CapLockWithDistinct |
 			CapSchemas | CapEnumType |
 			CapCTE | CapWindowFunctions |
 			CapLastInsertID,

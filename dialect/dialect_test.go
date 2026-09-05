@@ -40,6 +40,26 @@ func TestCapabilities_HasAny(t *testing.T) {
 	}
 }
 
+// TestCapabilities_LockWithDistinct pins the flag the generated
+// ForUpdate/ForShare builders consult instead of comparing the dialect
+// name: Postgres supports row locks but rejects them on SELECT DISTINCT,
+// MySQL supports both, SQLite has no row locks at all.
+func TestCapabilities_LockWithDistinct(t *testing.T) {
+	t.Parallel()
+	pg := GetCapabilities(Postgres)
+	if !pg.Has(CapForUpdate) || pg.Has(CapLockWithDistinct) {
+		t.Error("Postgres must support FOR UPDATE but NOT combined with DISTINCT")
+	}
+	my := GetCapabilities(MySQL)
+	if !my.Has(CapForUpdate, CapForShare, CapLockWithDistinct) {
+		t.Error("MySQL must support FOR UPDATE/SHARE combined with DISTINCT")
+	}
+	lite := GetCapabilities(SQLite)
+	if lite.HasAny(CapForUpdate, CapForShare, CapLockWithDistinct) {
+		t.Error("SQLite has no row-level locking; none of the lock flags apply")
+	}
+}
+
 func TestGetCapabilities_Unknown(t *testing.T) {
 	t.Parallel()
 	caps := GetCapabilities("cockroach")

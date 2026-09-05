@@ -1153,9 +1153,7 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("ForUpdate").Params(
 		jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
 	).Qual(entityPkgPath, querierIface).Block(
-		jen.If(jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call().Op("==").Qual(dialectPkg(), "Postgres")).Block(
-			jen.Id(recv).Dot("Unique").Call(jen.False()),
-		),
+		lockDropsDistinct(recv, "CapForUpdate"),
 		jen.Id(recv).Dot("modifiers").Op("=").Append(
 			jen.Id(recv).Dot("modifiers"),
 			jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
@@ -1171,9 +1169,7 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("ForShare").Params(
 		jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
 	).Qual(entityPkgPath, querierIface).Block(
-		jen.If(jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call().Op("==").Qual(dialectPkg(), "Postgres")).Block(
-			jen.Id(recv).Dot("Unique").Call(jen.False()),
-		),
+		lockDropsDistinct(recv, "CapForShare"),
 		jen.Id(recv).Dot("modifiers").Op("=").Append(
 			jen.Id(recv).Dot("modifiers"),
 			jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
@@ -2170,4 +2166,26 @@ func genQueryHelpers(h gen.GeneratorHelper) *jen.File {
 	)
 
 	return f
+}
+
+// lockDropsDistinct emits the guard at the top of ForUpdate/ForShare:
+//
+//	if caps := dialect.GetCapabilities(q.config.Driver.Dialect()); caps.Has(dialect.<lockCap>) && !caps.Has(dialect.CapLockWithDistinct) {
+//		q.Unique(false)
+//	}
+//
+// Postgres rejects a locking clause on SELECT DISTINCT, so the builder
+// drops DISTINCT there (Ent does the same, keyed on the dialect name).
+// The decision is a capability lookup rather than a name comparison so a
+// new dialect only has to declare its flags.
+func lockDropsDistinct(recv, lockCap string) jen.Code {
+	return jen.If(
+		jen.Id("caps").Op(":=").Qual(dialectPkg(), "GetCapabilities").Call(
+			jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call(),
+		),
+		jen.Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), lockCap)).Op("&&").
+			Op("!").Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), "CapLockWithDistinct")),
+	).Block(
+		jen.Id(recv).Dot("Unique").Call(jen.False()),
+	)
 }

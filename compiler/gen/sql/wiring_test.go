@@ -1440,3 +1440,28 @@ func TestQuerierInterfaceAlwaysHasForUpdateForShare(t *testing.T) {
 		t.Errorf("UserQuerier interface missing ForShare — callers of Query() cannot reach row-level locking\n%s", src)
 	}
 }
+
+// TestLockingUsesCapabilityFlags pins that the generated ForUpdate/ForShare
+// decide whether to drop DISTINCT via dialect.Capability flags, not by
+// comparing the dialect name. Postgres rejects a locking clause on SELECT
+// DISTINCT; the guard must key on CapLockWithDistinct so a new dialect only
+// has to declare its flags rather than be special-cased in generated code.
+func TestLockingUsesCapabilityFlags(t *testing.T) {
+	graph, userType, _ := buildWiringTestGraph(t)
+	helper := newMockHelper()
+	helper.graph = graph
+
+	src := genQueryPkg(helper, userType, graph.Nodes, helper.LeafPkgPath(userType)).GoString()
+
+	for _, forbidden := range []string{"== dialect.Postgres", "== dialect.MySQL", "== dialect.SQLite"} {
+		if strings.Contains(src, forbidden) {
+			t.Errorf("generated query compares the dialect name (%q); use a dialect.Capability flag instead", forbidden)
+		}
+	}
+	for _, method := range []struct{ name, cap string }{{"ForUpdate", "CapForUpdate"}, {"ForShare", "CapForShare"}} {
+		want := "caps.Has(dialect." + method.cap + ") && !caps.Has(dialect.CapLockWithDistinct)"
+		if !strings.Contains(src, want) {
+			t.Errorf("%s must guard Unique(false) with %q\n%s", method.name, want, src)
+		}
+	}
+}
