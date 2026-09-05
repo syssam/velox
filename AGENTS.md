@@ -53,6 +53,21 @@ byte-compares then does an atomic temp+rename, so a no-op regeneration
 rewrites zero files and leaves mtimes alone. A direct `os.WriteFile` breaks
 that for every watcher and make rule downstream.
 
+**Generated files are formatted without import resolution.**
+`gen.FormatGoBytes` runs `x/tools/imports` with `FormatOnly`: Jennifer
+already tracks every import, and a resolving pass spawns one `go env`
+subprocess per file. It also means a missing or unused import in
+generator output is a compile error in the generated project rather than
+something silently patched over — which is what you want. Never run
+`goimports -w` over `testdata/`: golden import paths do not resolve, so it
+strips them and corrupts the pins (`scripts/regen.sh` prunes `testdata`).
+
+**One generator, several source files is fine.** `genQueryPkg` is a
+`queryGen` struct whose section methods live in `query_pkg.go`,
+`query_pkg_terminals.go` and `query_pkg_select.go`. They all append to
+the same `*jen.File` in a fixed order; the rule above is about output
+paths, not source files.
+
 **Generated content must not depend on the output path.** `velox generate
 --check` renders into a temporary directory and compares, so anything
 varying with `outDir` reads as drift.

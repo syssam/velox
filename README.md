@@ -42,7 +42,7 @@ Velox is **API-compatible with Ent** — same schema definition patterns, same g
 | | Ent | Velox |
 |---|---|---|
 | Code generation | `text/template` | [Jennifer](https://github.com/dave/jennifer) (programmatic) |
-| Import management | `goimports` post-process | Auto-tracked at generation time |
+| Import management | `goimports` post-process (resolves imports per file) | Tracked by Jennifer; format-only grouping pass, no import resolution |
 | File writes | Buffer then write | Streaming to disk |
 | Parallel generation | Sequential | `errgroup` + semaphore |
 | Generated predicates | Verbose functions per field | Generic predicates (~97% less code) |
