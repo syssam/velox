@@ -57,7 +57,7 @@ that for every watcher and make rule downstream.
 `gen.FormatGoBytes` regroups the import block textually (stdlib above
 third-party, sorted by path) — the only thing goimports ever changed in
 Jennifer output — and falls back to `x/tools/imports` in `FormatOnly`
-mode for a block it does not recognise. Jennifer already tracks every
+mode for a block it does not recognize. Jennifer already tracks every
 import and already runs gofmt; a resolving pass spawned one `go env`
 subprocess per file and a parsing pass printed every file twice more. It
 also means a missing or unused import in generator output is a compile

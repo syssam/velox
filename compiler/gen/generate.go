@@ -618,7 +618,7 @@ func FormatJenFile(f *jen.File, filename string) ([]byte, error) {
 
 // formatOnlyOptions mirrors the defaults imports.Process applies for a nil
 // *Options, plus FormatOnly. It is the fallback path of FormatGoBytes for
-// source whose import block regroupImports does not recognise. Jennifer
+// source whose import block regroupImports does not recognize. Jennifer
 // already tracks every import a generated file needs, so import resolution
 // is never wanted here — and it is expensive: with resolution on,
 // imports.Process builds a fresh ProcessEnv per call and spawns one `go env`
@@ -642,7 +642,7 @@ var formatOnlyOptions = &imports.Options{
 // file twice more (once for its own printer, once through format.Source),
 // so the parsing pass was the single largest cost of generation: three
 // parse+print rounds per file. Source with an import block the textual
-// pass does not recognise (comments, blank lines, cgo) falls back to
+// pass does not recognize (comments, blank lines, cgo) falls back to
 // imports.Process in format-only mode so the output is never wrong, only
 // slower. Pinned byte-for-byte by every golden in compiler/gen/sql and
 // contrib/graphql.

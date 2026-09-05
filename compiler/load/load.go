@@ -441,12 +441,12 @@ func filename(pkg string, content []byte) string {
 func gobuild(target string, buildFlags []string) (string, error) {
 	binPath := target + ".bin"
 	tmpPath := binPath + ".tmp"
-	args := make([]string, 0, 3+len(buildFlags)+2)
-	args = append(args, "build")
 	// The loader binary runs once per generation; DWARF and the symbol
-	// table are dead weight that make the link ~30% slower. Placed before
-	// the caller's flags so an explicit -ldflags in BuildFlags wins.
-	args = append(args, "-ldflags=-s -w")
+	// table are dead weight that make the link ~30% slower. -ldflags is
+	// placed before the caller's flags so an explicit -ldflags in
+	// BuildFlags wins.
+	args := make([]string, 0, 3+len(buildFlags)+2)
+	args = append(args, "build", "-ldflags=-s -w")
 	args = append(args, buildFlags...)
 	args = append(args, "-o", tmpPath, target)
 	cmd := exec.Command("go", args...)

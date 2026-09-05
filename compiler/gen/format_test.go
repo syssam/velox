@@ -75,11 +75,11 @@ func TestFormatGoBytes_SingleImportUnchanged(t *testing.T) {
 	}
 }
 
-// TestFormatGoBytes_FallsBackOnUnrecognisedBlock pins the safety net: an
+// TestFormatGoBytes_FallsBackOnUnrecognizedBlock pins the safety net: an
 // import block the textual regroup does not understand (here, a comment
 // inside the block) is handed to the parser-backed format-only pass, which
 // still groups stdlib apart from third-party imports.
-func TestFormatGoBytes_FallsBackOnUnrecognisedBlock(t *testing.T) {
+func TestFormatGoBytes_FallsBackOnUnrecognizedBlock(t *testing.T) {
 	src := []byte(`package x
 
 import (
