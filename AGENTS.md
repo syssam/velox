@@ -53,14 +53,23 @@ byte-compares then does an atomic temp+rename, so a no-op regeneration
 rewrites zero files and leaves mtimes alone. A direct `os.WriteFile` breaks
 that for every watcher and make rule downstream.
 
-**Generated files are formatted without import resolution.**
-`gen.FormatGoBytes` runs `x/tools/imports` with `FormatOnly`: Jennifer
-already tracks every import, and a resolving pass spawns one `go env`
-subprocess per file. It also means a missing or unused import in
-generator output is a compile error in the generated project rather than
-something silently patched over — which is what you want. Never run
-`goimports -w` over `testdata/`: golden import paths do not resolve, so it
-strips them and corrupts the pins (`scripts/regen.sh` prunes `testdata`).
+**Generated files are not re-parsed after Jennifer renders them.**
+`gen.FormatGoBytes` regroups the import block textually (stdlib above
+third-party, sorted by path) — the only thing goimports ever changed in
+Jennifer output — and falls back to `x/tools/imports` in `FormatOnly`
+mode for a block it does not recognise. Jennifer already tracks every
+import and already runs gofmt; a resolving pass spawned one `go env`
+subprocess per file and a parsing pass printed every file twice more. It
+also means a missing or unused import in generator output is a compile
+error in the generated project rather than something silently patched
+over — which is what you want. Never run `goimports -w` over `testdata/`:
+golden import paths do not resolve, so it strips them and corrupts the
+pins (`scripts/regen.sh` prunes `testdata`).
+
+**The schema loader source is named by content hash, not timestamp.**
+The build cache keys `go build file.go` on the file name; a per-run name
+forces a full compile+link of the loader binary every generation. Keep
+`compiler/load.filename` content-derived.
 
 **One generator, several source files is fine.** `genQueryPkg` is a
 `queryGen` struct whose section methods live in `query_pkg.go`,
