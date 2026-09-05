@@ -112,7 +112,11 @@ func (t Transactioner) MutateOperationContext(_ context.Context, oc *graphql.Ope
 // InterceptResponse runs graphql mutations under a transaction.
 // It automatically commits on success and rolls back on errors or panics.
 func (t Transactioner) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
-	if t.skipTx(graphql.GetOperationContext(ctx).Operation) {
+	// GetOperationContext panics when the context carries no operation
+	// (a handler invoked outside gqlgen's request path, e.g. a custom
+	// transport or a test); there is nothing to wrap in that case.
+	// Mirrors ent/contrib#630.
+	if !graphql.HasOperationContext(ctx) || t.skipTx(graphql.GetOperationContext(ctx).Operation) {
 		return next(ctx)
 	}
 	txCtx, tx, err := t.OpenTx(ctx)

@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"testing"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -92,4 +93,23 @@ func TestTransactioner_SkipTx_QueryOp(t *testing.T) {
 	// Query operations should be skipped (not wrapped in tx)
 	tr := Transactioner{TxOpener: &mockTxOpener{}}
 	_ = tr
+}
+
+// TestTransactioner_InterceptResponse_NoOperationContext pins that the
+// response interceptor tolerates a context without a gqlgen operation
+// (custom transports, tests, non-gqlgen callers): it must pass the request
+// through instead of panicking in GetOperationContext. Ports ent/contrib#630.
+func TestTransactioner_InterceptResponse_NoOperationContext(t *testing.T) {
+	tr := Transactioner{TxOpener: TxOpenerFunc(func(ctx context.Context) (context.Context, driver.Tx, error) {
+		t.Fatal("OpenTx must not be called without an operation context")
+		return nil, nil, nil
+	})}
+	called := false
+	resp := tr.InterceptResponse(context.Background(), func(ctx context.Context) *graphql.Response {
+		called = true
+		return &graphql.Response{}
+	})
+	if !called || resp == nil {
+		t.Fatalf("InterceptResponse must delegate to next without an operation context (called=%v, resp=%v)", called, resp)
+	}
 }
