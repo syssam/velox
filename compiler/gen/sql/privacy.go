@@ -124,7 +124,7 @@ func genPrivacyEntityTypes(h gen.GeneratorHelper, f *jen.File, n *gen.Type, entP
 	// after the cycle-break refactor.
 	queryTypePkg := h.QueryPkg()
 	mutationTypePkg := h.RootPkg() + "/client/" + n.PackageDir()
-	f.ImportName(mutationTypePkg, n.PackageDir()+"client")
+	f.ImportAlias(mutationTypePkg, n.PackageDir()+"client")
 	queryType := jen.Op("*").Qual(queryTypePkg, n.QueryName())
 	mutationType := jen.Op("*").Qual(mutationTypePkg, n.MutationName())
 

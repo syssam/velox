@@ -1465,3 +1465,35 @@ func TestLockingUsesCapabilityFlags(t *testing.T) {
 		}
 	}
 }
+
+// TestClientPackageImportsAreAliased pins that every generated import of a
+// client/<entity> package carries an explicit alias (userclient "…/client/user").
+// The package is named <entity>client while its path ends in <entity>, so an
+// unaliased import is valid Go but fragile: any goimports run that cannot
+// resolve the path (a sub-module formatted from another module's CWD, an
+// editor with a stale cache) decides the import is unused and deletes it.
+// The old resolving format pass used to add the alias; the generator must
+// now emit it itself.
+func TestClientPackageImportsAreAliased(t *testing.T) {
+	graph, _, _ := buildWiringTestGraph(t)
+	helper := newFeatureMockHelper().withFeatures("privacy", "intercept")
+	helper.graph = graph
+
+	for name, src := range map[string]string{
+		"client.go":  genClient(helper).GoString(),
+		"tx.go":      genTx(helper).GoString(),
+		"privacy.go": genPrivacy(helper).GoString(),
+	} {
+		for _, line := range strings.Split(src, "\n") {
+			if !strings.Contains(line, `/client/`) || !strings.Contains(line, `"`) {
+				continue
+			}
+			if strings.HasPrefix(strings.TrimSpace(line), `"`) {
+				t.Errorf("%s: client package import must be aliased, got %q", name, strings.TrimSpace(line))
+			}
+		}
+		if !strings.Contains(src, `client "`) {
+			t.Errorf("%s: expected at least one aliased client/<entity> import\n%s", name, src)
+		}
+	}
+}

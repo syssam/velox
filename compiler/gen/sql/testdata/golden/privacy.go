@@ -7,8 +7,8 @@ import (
 
 	"github.com/syssam/velox/privacy"
 	ent "github.com/test/project/ent"
-	"github.com/test/project/ent/client/post"
-	"github.com/test/project/ent/client/user"
+	postclient "github.com/test/project/ent/client/post"
+	userclient "github.com/test/project/ent/client/user"
 	ormquery "github.com/test/project/ent/query"
 )
 

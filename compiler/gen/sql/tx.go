@@ -89,7 +89,7 @@ func genTx(h gen.GeneratorHelper) *jen.File {
 		// Per-entity fields: concrete types from client/{entity}/ sub-packages.
 		for _, t := range graph.Nodes {
 			clientPkg := graph.Package + "/client/" + t.PackageDir()
-			f.ImportName(clientPkg, t.PackageDir()+"client")
+			f.ImportAlias(clientPkg, t.PackageDir()+"client")
 			group.Id(t.Name).Op("*").Qual(clientPkg, t.ClientName())
 		}
 		group.Comment("lazily loaded.")
@@ -155,7 +155,7 @@ func genTx(h gen.GeneratorHelper) *jen.File {
 		grp.Id("cfg").Op(":=").Id("tx").Dot("config").Dot("runtimeConfig").Call()
 		for _, t := range graph.Nodes {
 			clientPkg := graph.Package + "/client/" + t.PackageDir()
-			f.ImportName(clientPkg, t.PackageDir()+"client")
+			f.ImportAlias(clientPkg, t.PackageDir()+"client")
 			grp.Id("tx").Dot(t.Name).Op("=").Qual(clientPkg, "New"+t.ClientName()).Call(
 				jen.Id("cfg"),
 			)

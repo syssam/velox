@@ -66,7 +66,7 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 		// Per-entity client fields: concrete types from client/{entity}/ sub-packages.
 		for _, t := range graph.Nodes {
 			clientPkg := graph.Package + "/client/" + t.PackageDir()
-			f.ImportName(clientPkg, t.PackageDir()+"client")
+			f.ImportAlias(clientPkg, t.PackageDir()+"client")
 			group.Id(t.Name).Op("*").Qual(clientPkg, t.ClientName())
 		}
 	})
@@ -293,7 +293,7 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 		grp.Id("cfg").Op(":=").Id("c").Dot("config").Dot("runtimeConfig").Call()
 		for _, t := range graph.Nodes {
 			clientPkg := graph.Package + "/client/" + t.PackageDir()
-			f.ImportName(clientPkg, t.PackageDir()+"client")
+			f.ImportAlias(clientPkg, t.PackageDir()+"client")
 			grp.Id("c").Dot(t.Name).Op("=").Qual(clientPkg, "New"+t.ClientName()).Call(
 				jen.Id("cfg"),
 			)

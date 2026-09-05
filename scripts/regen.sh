@@ -102,11 +102,41 @@ done < <(find . \
 if [[ ${#FMT_TARGETS[@]} -gt 0 ]]; then
     gofmt -s -w "${FMT_TARGETS[@]}"
     if command -v goimports >/dev/null 2>&1; then
-        goimports -w "${FMT_TARGETS[@]}"
+        # Never goimports generator output. It is written already formatted,
+        # and goimports resolves import paths against the module of the CWD:
+        # for a sub-module's generated file (tests/parity, examples/*) an
+        # import it cannot resolve whose package name differs from the path
+        # base (client/user -> userclient) is "unused" to it and gets
+        # deleted — every example module was broken this way once.
+        HANDWRITTEN=()
+        for path in "${FMT_TARGETS[@]}"; do
+            if ! head -c 512 "${path}" | grep -q 'Code generated .* DO NOT EDIT'; then
+                HANDWRITTEN+=("${path}")
+            fi
+        done
+        if [[ ${#HANDWRITTEN[@]} -gt 0 ]]; then
+            goimports -w "${HANDWRITTEN[@]}"
+        fi
     else
         echo "warning: goimports not installed; skipping import ordering" >&2
     fi
 fi
+
+# The builds above ran BEFORE formatting; a formatting pass that corrupts
+# generated output would otherwise leave every module broken while the
+# script still reports success. Cached rebuilds are cheap.
+echo "==> verifying builds after formatting"
+for dir in "${DRIFT_CHECK_MODULES[@]}"; do
+    [[ -f "${dir}/generate.go" ]] || continue
+    BUILD_TARGETS=(./...)
+    if [[ "${dir}" == "tests/parity" ]]; then
+        BUILD_TARGETS=(./velox/... ./ent/...)
+    fi
+    if ! (cd "${dir}" && go build "${BUILD_TARGETS[@]}"); then
+        echo "warning: ${dir} build failed after formatting" >&2
+        FAILED_EXAMPLES+=("${dir}")
+    fi
+done
 
 if [[ ${CHECK_MODE} -eq 1 ]]; then
     # Ignore submodules: .references/ent and .references/ent-contrib are
