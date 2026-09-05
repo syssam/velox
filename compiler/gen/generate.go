@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"text/template/parse"
@@ -615,12 +617,13 @@ func FormatJenFile(f *jen.File, filename string) ([]byte, error) {
 }
 
 // formatOnlyOptions mirrors the defaults imports.Process applies for a nil
-// *Options, plus FormatOnly. Jennifer already tracks every import a
-// generated file needs, so import resolution is pure overhead — and an
-// expensive one: with resolution on, imports.Process builds a fresh
-// ProcessEnv per call and spawns one `go env` subprocess per generated
-// file. FormatOnly skips that path entirely while keeping the sort/group
-// layout. Pinned by TestFormatGoBytes_DoesNotResolveImports.
+// *Options, plus FormatOnly. It is the fallback path of FormatGoBytes for
+// source whose import block regroupImports does not recognise. Jennifer
+// already tracks every import a generated file needs, so import resolution
+// is never wanted here — and it is expensive: with resolution on,
+// imports.Process builds a fresh ProcessEnv per call and spawns one `go env`
+// subprocess per generated file. Pinned by
+// TestFormatGoBytes_DoesNotResolveImports.
 var formatOnlyOptions = &imports.Options{
 	FormatOnly: true,
 	Comments:   true,
@@ -628,10 +631,107 @@ var formatOnlyOptions = &imports.Options{
 	TabWidth:   8,
 }
 
-// FormatGoBytes applies gofmt-style formatting plus import grouping to Go
-// source bytes without adding or removing imports. Exposed so golden tests
-// (which compare jen.File.GoString()) can match the on-disk layout that
-// writeFile produces via FormatJenFile.
+// FormatGoBytes applies the import grouping goimports would produce —
+// stdlib imports in their own block above third-party ones, each block
+// sorted by path — to Go source that is already gofmt-formatted (Jennifer
+// output is). Exposed so golden tests (which compare jen.File.GoString())
+// can match the on-disk layout that writeFile produces via FormatJenFile.
+//
+// It rewrites the import block textually. Jennifer's Render already runs
+// go/format.Source, and imports.Process would parse and print the whole
+// file twice more (once for its own printer, once through format.Source),
+// so the parsing pass was the single largest cost of generation: three
+// parse+print rounds per file. Source with an import block the textual
+// pass does not recognise (comments, blank lines, cgo) falls back to
+// imports.Process in format-only mode so the output is never wrong, only
+// slower. Pinned byte-for-byte by every golden in compiler/gen/sql and
+// contrib/graphql.
 func FormatGoBytes(filename string, src []byte) ([]byte, error) {
+	if out, ok := regroupImports(src); ok {
+		return out, nil
+	}
 	return imports.Process(filename, src, formatOnlyOptions)
+}
+
+// importLine matches one gofmt-formatted import spec inside a block:
+// an optional name (identifier, "." or "_") and the quoted path.
+var importLine = regexp.MustCompile(`^\t(?:([A-Za-z_][A-Za-z0-9_]*|\.) )?"([^"]+)"$`)
+
+// importSpec is one parsed line of an import block.
+type importSpec struct {
+	line []byte // the full line, tab-indented, as it will be written back
+	path []byte // the quoted path's contents
+}
+
+// regroupImports splits the first parenthesised import block of src into a
+// stdlib group and a third-party group (goimports' rule: a path whose first
+// element contains no dot is stdlib), sorts each by path, and returns the
+// rewritten source. ok is false when there is a block the function does
+// not fully understand — the caller then uses the parsing fallback. Source
+// with no parenthesised block (no imports, or a single one-line import) is
+// returned unchanged: there is nothing to group.
+func regroupImports(src []byte) (out []byte, ok bool) {
+	const open, closing = "\nimport (\n", "\n)\n"
+	start := bytes.Index(src, []byte(open))
+	if start < 0 {
+		return src, true
+	}
+	bodyStart := start + len(open)
+	bodyLen := bytes.Index(src[bodyStart:], []byte(closing))
+	if bodyLen < 0 {
+		return nil, false
+	}
+	body := src[bodyStart : bodyStart+bodyLen]
+	var std, other []importSpec
+	for line := range bytes.SplitSeq(body, []byte("\n")) {
+		m := importLine.FindSubmatch(line)
+		if m == nil {
+			// Blank line (an existing grouping), comment, or anything
+			// else: leave it to the parser-backed path.
+			return nil, false
+		}
+		spec := importSpec{line: line, path: m[2]}
+		first, _, _ := bytes.Cut(spec.path, []byte("/"))
+		if bytes.IndexByte(first, '.') < 0 {
+			std = append(std, spec)
+		} else {
+			other = append(other, spec)
+		}
+	}
+	sortImportSpecs(std)
+	sortImportSpecs(other)
+
+	buf := make([]byte, 0, len(src)+1)
+	buf = append(buf, src[:bodyStart]...)
+	buf = appendImportSpecs(buf, std)
+	if len(std) > 0 && len(other) > 0 {
+		buf = append(buf, '\n', '\n')
+	}
+	buf = appendImportSpecs(buf, other)
+	buf = append(buf, src[bodyStart+bodyLen:]...)
+	return buf, true
+}
+
+// sortImportSpecs orders import specs by path, then by the full line (so a
+// named and an unnamed import of the same path keep a deterministic order),
+// matching go/ast.SortImports within one group.
+func sortImportSpecs(specs []importSpec) {
+	sort.SliceStable(specs, func(i, j int) bool {
+		if c := bytes.Compare(specs[i].path, specs[j].path); c != 0 {
+			return c < 0
+		}
+		return bytes.Compare(specs[i].line, specs[j].line) < 0
+	})
+}
+
+// appendImportSpecs writes the specs' lines newline-separated (no trailing
+// newline) to buf.
+func appendImportSpecs(buf []byte, specs []importSpec) []byte {
+	for i, spec := range specs {
+		if i > 0 {
+			buf = append(buf, '\n')
+		}
+		buf = append(buf, spec.line...)
+	}
+	return buf
 }
