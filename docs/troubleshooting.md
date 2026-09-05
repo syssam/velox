@@ -436,6 +436,26 @@ velox doesn't build input-hashing into the generator:
 generate: .velox.stamp
 ```
 
+### A `.velox/` directory appeared next to my generate.go
+
+That is the schema loader's cache, and it is meant to stay. velox reads
+your schema the way Ent does: it compiles a small helper program that
+imports your schema package, runs it, and reads back the descriptors.
+Ent deletes its helper after every run; velox keeps it, for two reasons
+measured on macOS:
+
+- `go build` skips the link when the previous binary is current (about
+  0.5s saved).
+- The first execution of any freshly written executable pays 0.4 to 0.7s of
+  code-signature validation. A binary that was not rewritten pays nothing.
+
+On an unchanged schema that turns a ~1.4s load into ~0.3s. The directory
+contains a `.gitignore` that ignores everything in it, so it never shows
+up as untracked files. It is safe to delete at any time; the next run
+recreates it. It must live next to where generation runs (inside your
+module) because a helper outside the module tree could not import
+`internal/` schema packages.
+
 ### Slow queries
 
 **Solutions**:

@@ -66,10 +66,15 @@ over — which is what you want. Never run `goimports -w` over `testdata/`:
 golden import paths do not resolve, so it strips them and corrupts the
 pins (`scripts/regen.sh` prunes `testdata`).
 
-**The schema loader source is named by content hash, not timestamp.**
-The build cache keys `go build file.go` on the file name; a per-run name
-forces a full compile+link of the loader binary every generation. Keep
-`compiler/load.filename` content-derived.
+**The schema loader cache (`.velox/`) persists on purpose.** The
+loader source is named by content hash (the build cache keys
+`go build file.go` on the file name), the directory is kept between runs,
+and a rebuilt binary only replaces the old one when its bytes differ —
+`go build -o` rewrites its output even on a cache hit, and macOS charges
+0.4–0.7s to validate a freshly written executable on first exec. Do not
+reintroduce `os.RemoveAll` of the directory or a per-run file name; both
+turn a 0.3s load into a 1.4s one. Pinned by
+`compiler/load/load_test.go::TestLoad_CacheDirPersistsAndReuses`.
 
 **One generator, several source files is fine.** `genQueryPkg` is a
 `queryGen` struct whose section methods live in `query_pkg.go`,
