@@ -706,7 +706,7 @@
   method WithBuilder.Arg(any) *Builder
   method WithBuilder.Argf(string, any) *Builder
   method WithBuilder.Args(...any) *Builder
-  method WithBuilder.As(*Selector) *WithBuilder
+  method WithBuilder.As(Querier) *WithBuilder
   method WithBuilder.Byte(byte) *Builder
   method WithBuilder.C(string) string
   method WithBuilder.Comma() *Builder
@@ -790,6 +790,8 @@ func Distinct(...string) string
 func DoNothing() ConflictOption
 func EQ(string, any) *Predicate
 func EqualFold(string, string) *Predicate
+func Except(...*Selector) Querier
+func ExceptAll(...*Selector) Querier
 func Exists(Querier) *Predicate
 func Expr(string, ...any) Querier
 func ExprFunc(func(*Builder)) Querier
@@ -833,6 +835,8 @@ func In(string, ...any) *Predicate
 func InInts(string, ...int) *Predicate
 func InValues(string, ...database/sql/driver.Value) *Predicate
 func Insert(string) *InsertBuilder
+func Intersect(...*Selector) Querier
+func IntersectAll(...*Selector) Querier
 func IsFalse(string) *Predicate
 func IsNull(string) *Predicate
 func IsTrue(string) *Predicate
@@ -893,6 +897,8 @@ func Select(...string) *Selector
 func SelectExpr(...Querier) *Selector
 func Sum(string) string
 func Table(string) *SelectTable
+func Union(...*Selector) Querier
+func UnionAll(...*Selector) Querier
 func Update(string) *UpdateBuilder
 func UpdateWhere(*Predicate) ConflictOption
 func VarFromContext(context.Context, string) (string, bool)

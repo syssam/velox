@@ -2386,3 +2386,60 @@ func TestSelector_WithContext_Nil(t *testing.T) {
 	// Context falls back to background.
 	require.NotNil(t, s.Context())
 }
+
+// TestSetOpFuncs pins the package-level Union / UnionAll / Except / Intersect
+// constructors (ported from ent #4503, #4505, #4506): every branch is wrapped
+// in parentheses so per-branch ORDER BY / LIMIT / OFFSET are legal (MySQL,
+// Postgres, SQL standard); the dialect is inferred from the first selector;
+// SQLite, which rejects parenthesized compound-select branches, gets plain
+// branches with those clauses stripped.
+func TestSetOpFuncs(t *testing.T) {
+	t.Run("MySQL_BothBranchesParenthesized", func(t *testing.T) {
+		migSel := Select("id", "kind").From(Table("migration_deployments")).OrderBy(Desc("end_time"), Desc("id")).Limit(20)
+		schemaSel := Select("id", "kind").From(Table("schema_deployments")).OrderBy(Desc("end_time"), Desc("id")).Limit(20)
+		query, args := UnionAll(migSel, schemaSel).Query()
+		require.Equal(t,
+			"(SELECT `id`, `kind` FROM `migration_deployments` ORDER BY `end_time` DESC, `id` DESC LIMIT 20) UNION ALL (SELECT `id`, `kind` FROM `schema_deployments` ORDER BY `end_time` DESC, `id` DESC LIMIT 20)",
+			query)
+		require.Nil(t, args)
+	})
+	t.Run("Postgres_DialectInferredFromSelectors", func(t *testing.T) {
+		migSel := Dialect(dialect.Postgres).Select("id").From(Table("t1")).Where(GT("n", 1)).Limit(5)
+		schemaSel := Dialect(dialect.Postgres).Select("id").From(Table("t2")).Where(GT("n", 2)).Limit(5)
+		query, args := UnionAll(migSel, schemaSel).Query()
+		require.Equal(t, `(SELECT "id" FROM "t1" WHERE "n" > $1 LIMIT 5) UNION ALL (SELECT "id" FROM "t2" WHERE "n" > $2 LIMIT 5)`, query,
+			"placeholders must keep counting across branches")
+		require.Equal(t, []any{1, 2}, args)
+	})
+	t.Run("SQLite_NoParensAndBranchClausesStripped", func(t *testing.T) {
+		migSel := Dialect(dialect.SQLite).Select("id").From(Table("t1")).OrderBy(Desc("end_time")).Limit(20).Offset(5)
+		schemaSel := Dialect(dialect.SQLite).Select("id").From(Table("t2")).OrderBy(Desc("end_time")).Limit(20)
+		query, _ := UnionAll(migSel, schemaSel).Query()
+		require.Equal(t, "SELECT `id` FROM `t1` UNION ALL SELECT `id` FROM `t2`", query)
+		require.NotNil(t, migSel.limit, "stripping must act on a copy, not mutate the caller's selector")
+	})
+	t.Run("Union_Except_Intersect_Ops", func(t *testing.T) {
+		a := func() *Selector { return Select("*").From(Table("t1")).OrderBy("x") }
+		b := func() *Selector { return Select("*").From(Table("t2")).OrderBy("x") }
+		for op, fn := range map[string]func(...*Selector) Querier{
+			"UNION": Union, "UNION ALL": UnionAll, "EXCEPT": Except, "EXCEPT ALL": ExceptAll,
+			"INTERSECT": Intersect, "INTERSECT ALL": IntersectAll,
+		} {
+			query, _ := fn(a(), b()).Query()
+			require.Equal(t, "(SELECT * FROM `t1` ORDER BY `x`) "+op+" (SELECT * FROM `t2` ORDER BY `x`)", query, op)
+		}
+	})
+	t.Run("With_As_AcceptsSetOp", func(t *testing.T) {
+		// ent #4504: a CTE body may be any Querier, so the idiomatic
+		// "push LIMIT into each branch, then order the union" reads as one chain.
+		migSel := Select("id", "kind").From(Table("t1")).OrderBy(Desc("end_time")).Limit(20)
+		schemaSel := Select("id", "kind").From(Table("t2")).OrderBy(Desc("end_time")).Limit(20)
+		query, _ := Queries{
+			With("all").As(UnionAll(migSel, schemaSel)),
+			Select("id", "kind").From(Table("all")).OrderBy(Desc("end_time")).Limit(10).Offset(0),
+		}.Query()
+		require.Equal(t,
+			"WITH `all` AS ((SELECT `id`, `kind` FROM `t1` ORDER BY `end_time` DESC LIMIT 20) UNION ALL (SELECT `id`, `kind` FROM `t2` ORDER BY `end_time` DESC LIMIT 20)) SELECT `id`, `kind` FROM `all` ORDER BY `end_time` DESC LIMIT 10 OFFSET 0",
+			query)
+	})
+}

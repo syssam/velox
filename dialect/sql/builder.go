@@ -2247,6 +2247,91 @@ func (s *Selector) IntersectAll(t TableView) *Selector {
 	return s
 }
 
+// setOpQuerier implements Querier for a compound set operation (UNION, EXCEPT,
+// INTERSECT) where every branch is wrapped in parentheses. This is required
+// when branches contain ORDER BY, LIMIT, or OFFSET (MySQL, Postgres, and the
+// SQL standard). SQLite does not support parenthesized branches; on that
+// dialect the parentheses — and any per-branch ORDER BY / LIMIT / OFFSET,
+// which SQLite cannot honor inside a compound SELECT — are silently omitted.
+// Use the package-level Union / UnionAll / Except / ExceptAll / Intersect /
+// IntersectAll functions to build one. Ported from ent (#4503, #4505, #4506).
+type setOpQuerier struct {
+	Builder
+	op        string
+	selectors []*Selector
+}
+
+// Query returns the compound query and its arguments.
+func (q *setOpQuerier) Query() (string, []any) {
+	b := q.clone()
+	// If no dialect was set explicitly on the querier (the common case — users
+	// call UnionAll(sel1, sel2) without a DialectBuilder), inherit it from the
+	// first selector so that b.sqlite() / b.postgres() return the right value.
+	if b.dialect == "" && len(q.selectors) > 0 {
+		b.SetDialect(q.selectors[0].dialect)
+	}
+	sqlite := b.sqlite()
+	for i, s := range q.selectors {
+		if i > 0 {
+			b.WriteString(" " + q.op + " ")
+		}
+		if sqlite {
+			// SQLite does not allow parenthesized compound-select branches and
+			// cannot honor per-branch ORDER BY / LIMIT / OFFSET. Emit a plain
+			// branch with those clauses stripped; the push-down is a no-op here.
+			clone := *s
+			clone.order = nil
+			clone.limit = nil
+			clone.offset = nil
+			b.Join(&clone)
+		} else {
+			b.WriteString("(")
+			b.Join(s)
+			b.WriteString(")")
+		}
+	}
+	return b.String(), b.args
+}
+
+// Union returns a Querier that combines selectors with UNION (DISTINCT),
+// wrapping every branch in parentheses. Use this instead of the chaining
+// method when branches carry their own ORDER BY, LIMIT, or OFFSET — MySQL,
+// Postgres and the SQL standard require parentheses in that case.
+func Union(selectors ...*Selector) Querier {
+	return &setOpQuerier{op: string(setOpTypeUnion), selectors: selectors}
+}
+
+// UnionAll returns a Querier that combines selectors with UNION ALL, wrapping
+// every branch in parentheses. Use this instead of the chaining method when
+// branches carry their own ORDER BY, LIMIT, or OFFSET.
+func UnionAll(selectors ...*Selector) Querier {
+	return &setOpQuerier{op: string(setOpTypeUnion) + " ALL", selectors: selectors}
+}
+
+// Except returns a Querier that combines selectors with EXCEPT, wrapping every
+// branch in parentheses.
+func Except(selectors ...*Selector) Querier {
+	return &setOpQuerier{op: string(setOpTypeExcept), selectors: selectors}
+}
+
+// ExceptAll returns a Querier that combines selectors with EXCEPT ALL, wrapping
+// every branch in parentheses.
+func ExceptAll(selectors ...*Selector) Querier {
+	return &setOpQuerier{op: string(setOpTypeExcept) + " ALL", selectors: selectors}
+}
+
+// Intersect returns a Querier that combines selectors with INTERSECT, wrapping
+// every branch in parentheses.
+func Intersect(selectors ...*Selector) Querier {
+	return &setOpQuerier{op: string(setOpTypeIntersect), selectors: selectors}
+}
+
+// IntersectAll returns a Querier that combines selectors with INTERSECT ALL,
+// wrapping every branch in parentheses.
+func IntersectAll(selectors ...*Selector) Querier {
+	return &setOpQuerier{op: string(setOpTypeIntersect) + " ALL", selectors: selectors}
+}
+
 // Prefix prefixes the query with list of queries.
 func (s *Selector) Prefix(queries ...Querier) *Selector {
 	s.prefix = append(s.prefix, queries...)
@@ -2743,7 +2828,7 @@ type WithBuilder struct {
 	ctes      []struct {
 		name    string
 		columns []string
-		s       *Selector
+		s       Querier
 	}
 }
 
@@ -2759,7 +2844,7 @@ func With(name string, columns ...string) *WithBuilder {
 		ctes: []struct {
 			name    string
 			columns []string
-			s       *Selector
+			s       Querier
 		}{
 			{name: name, columns: columns},
 		},
@@ -2784,8 +2869,9 @@ func (w *WithBuilder) Name() string {
 	return w.ctes[0].name
 }
 
-// As sets the view sub query.
-func (w *WithBuilder) As(s *Selector) *WithBuilder {
+// As sets the view sub-query. Accepts any Querier — including *Selector and
+// the set-operation builders returned by Union, UnionAll, Intersect, etc.
+func (w *WithBuilder) As(s Querier) *WithBuilder {
 	w.ctes[len(w.ctes)-1].s = s
 	return w
 }

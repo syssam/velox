@@ -545,3 +545,43 @@ func TestMultiDialect_LockWithDistinct(t *testing.T) {
 		require.Len(t, ids, 1)
 	})
 }
+
+// TestMultiDialect_SetOpFuncs runs the package-level sql.UnionAll with
+// per-branch ORDER BY / LIMIT against every configured dialect. It pins two
+// things the unit tests cannot: Postgres placeholders keep counting across
+// parenthesized branches ($1 in the first, $2 in the second), and the
+// SQLite fallback (no parentheses, per-branch clauses stripped) is accepted
+// by the engine. MySQL and Postgres honor the per-branch LIMIT 1, so two
+// rows come back; SQLite returns every match of both branches.
+func TestMultiDialect_SetOpFuncs(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		for i, n := range []string{"Ada", "Bob", "Cyd"} {
+			_ = createUser(t, client, n, fmt.Sprintf("setop%d@multi.com", i))
+		}
+		d := client.RuntimeConfig().Driver.Dialect()
+		older := sql.Dialect(d).Select("name").From(sql.Table("users")).
+			Where(sql.Like("email", "setop%")).Where(sql.NEQ("name", "Ada")).OrderBy(sql.Asc("name")).Limit(1)
+		younger := sql.Dialect(d).Select("name").From(sql.Table("users")).
+			Where(sql.Like("email", "setop%")).Where(sql.NEQ("name", "Cyd")).OrderBy(sql.Desc("name")).Limit(1)
+
+		query, args := sql.UnionAll(older, younger).Query()
+		rows, err := client.QueryContext(ctx, query, args...)
+		require.NoError(t, err, "query: %s", query)
+		defer rows.Close()
+		var names []string
+		for rows.Next() {
+			var n string
+			require.NoError(t, rows.Scan(&n))
+			names = append(names, n)
+		}
+		require.NoError(t, rows.Err())
+
+		if d == "sqlite" {
+			// Branch LIMIT/ORDER stripped: both branches return every match.
+			assert.ElementsMatch(t, []string{"Bob", "Cyd", "Ada", "Bob"}, names, "sqlite fallback: %s", query)
+		} else {
+			assert.ElementsMatch(t, []string{"Bob", "Bob"}, names, "per-branch LIMIT must be honored: %s", query)
+		}
+	})
+}
