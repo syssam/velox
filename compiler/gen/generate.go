@@ -602,10 +602,10 @@ func (g *JenniferGenerator) writeFile(ctx context.Context, f *jen.File, subdir, 
 }
 
 // FormatJenFile renders a Jennifer file and post-processes the output with
-// goimports (x/tools/imports), which groups stdlib imports separately from
-// third-party imports — matching Ent's assets.format() pass. Jennifer alone
-// emits one flat alphabetical import block that mixes stdlib with external
-// packages. filename is only used for diagnostics by imports.Process.
+// x/tools/imports in format-only mode, which groups stdlib imports
+// separately from third-party imports — matching Ent's assets.format()
+// pass. Jennifer alone emits one flat alphabetical import block that mixes
+// stdlib with external packages. filename is only used for diagnostics.
 func FormatJenFile(f *jen.File, filename string) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := f.Render(&buf); err != nil {
@@ -614,9 +614,24 @@ func FormatJenFile(f *jen.File, filename string) ([]byte, error) {
 	return FormatGoBytes(filename, buf.Bytes())
 }
 
-// FormatGoBytes applies goimports to Go source bytes. Exposed so golden
-// tests (which compare jen.File.GoString()) can match the on-disk layout
-// that writeFile produces via FormatJenFile.
+// formatOnlyOptions mirrors the defaults imports.Process applies for a nil
+// *Options, plus FormatOnly. Jennifer already tracks every import a
+// generated file needs, so import resolution is pure overhead — and an
+// expensive one: with resolution on, imports.Process builds a fresh
+// ProcessEnv per call and spawns one `go env` subprocess per generated
+// file. FormatOnly skips that path entirely while keeping the sort/group
+// layout. Pinned by TestFormatGoBytes_DoesNotResolveImports.
+var formatOnlyOptions = &imports.Options{
+	FormatOnly: true,
+	Comments:   true,
+	TabIndent:  true,
+	TabWidth:   8,
+}
+
+// FormatGoBytes applies gofmt-style formatting plus import grouping to Go
+// source bytes without adding or removing imports. Exposed so golden tests
+// (which compare jen.File.GoString()) can match the on-disk layout that
+// writeFile produces via FormatJenFile.
 func FormatGoBytes(filename string, src []byte) ([]byte, error) {
-	return imports.Process(filename, src, nil)
+	return imports.Process(filename, src, formatOnlyOptions)
 }

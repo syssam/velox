@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	dialect "github.com/syssam/velox/dialect"
+	"github.com/test/project/ent/client/post"
+	"github.com/test/project/ent/client/user"
 )
 
 // Committer is the interface that wraps the Commit method.

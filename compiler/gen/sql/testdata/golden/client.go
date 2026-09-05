@@ -12,6 +12,8 @@ import (
 	dialect "github.com/syssam/velox/dialect"
 	sql "github.com/syssam/velox/dialect/sql"
 	runtime "github.com/syssam/velox/runtime"
+	"github.com/test/project/ent/client/post"
+	"github.com/test/project/ent/client/user"
 	entity "github.com/test/project/ent/entity"
 	migrate "github.com/test/project/ent/migrate"
 	_ "github.com/test/project/ent/query"

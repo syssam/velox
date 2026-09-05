@@ -90,11 +90,14 @@ echo "==> formatting"
 # Format only velox-owned code. .references/ent and .references/ent-contrib
 # are upstream read-only reference checkouts; recursive gofmt on "." would
 # silently rewrite their files and cause ghost "modified content" drift.
+# testdata/ is pruned too: golden files pin generator output byte-for-byte
+# and their import paths (github.com/test/project/...) do not resolve, so
+# goimports would strip the imports it cannot find and corrupt the pins.
 FMT_TARGETS=()
 while IFS= read -r -d '' path; do
     FMT_TARGETS+=("${path}")
 done < <(find . \
-    -type d \( -name .references -o -name .git -o -name node_modules \) -prune \
+    -type d \( -name .references -o -name .git -o -name node_modules -o -name testdata \) -prune \
     -o -type f -name '*.go' -print0)
 if [[ ${#FMT_TARGETS[@]} -gt 0 ]]; then
     gofmt -s -w "${FMT_TARGETS[@]}"

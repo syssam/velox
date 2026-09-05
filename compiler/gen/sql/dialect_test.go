@@ -22,6 +22,7 @@ type mockHelper struct {
 func newMockHelper() *mockHelper {
 	return &mockHelper{
 		pkg:       "ent",
+		rootPkg:   "github.com/test/project/ent",
 		generated: make(map[string]bool),
 		graph: &gen.Graph{
 			Config: &gen.Config{

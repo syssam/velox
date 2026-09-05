@@ -8,8 +8,8 @@ import (
 
 	velox "github.com/syssam/velox"
 	ent "github.com/test/project/ent"
-	post "github.com/test/project/ent/post"
-	user "github.com/test/project/ent/user"
+	post "github.com/test/project/ent/client/post"
+	user "github.com/test/project/ent/client/user"
 )
 
 // The UserFunc type is an adapter to allow the use of ordinary
@@ -21,7 +21,7 @@ func (f UserFunc) Mutate(ctx context.Context, m velox.Mutation) (velox.Value, er
 	if mv, ok := m.(*user.UserMutation); ok {
 		return f(ctx, mv)
 	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *github.com/test/project/ent/user.UserMutation", m)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *github.com/test/project/ent/client/user.UserMutation", m)
 }
 
 // The PostFunc type is an adapter to allow the use of ordinary
@@ -33,7 +33,7 @@ func (f PostFunc) Mutate(ctx context.Context, m velox.Mutation) (velox.Value, er
 	if mv, ok := m.(*post.PostMutation); ok {
 		return f(ctx, mv)
 	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *github.com/test/project/ent/post.PostMutation", m)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *github.com/test/project/ent/client/post.PostMutation", m)
 }
 
 // Condition is a hook condition function.
