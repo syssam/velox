@@ -127,10 +127,11 @@ jobs:
         # module and have root-level files (test or main) that import
         # their own gitignored velox/ output. Any command that compiles
         # the full module (go test ./..., go build ./..., golangci-lint)
-        # needs these generated first. benchmarks/fixtures/stress-100 has no root
-        # Go files so its missing velox/ is harmless. Tier-1 examples
-        # (basic/fullgql) and tests/external-module live in their own
-        # sub-modules and are handled by the examples CI job.
+        # needs these generated first. The benchmark stress fixtures
+        # (benchmarks/fixtures/stress-*) are their own modules, so their
+        # generated velox/ output never joins the root module. Tier-1
+        # examples (basic/fullgql) and tests/external-module live in their
+        # own sub-modules and are handled by the examples CI job.
         #
         # realworld's generate.go uses relative paths (gen.WithTarget
         # "./velox"), so it must run with examples/realworld as CWD.
@@ -158,10 +159,11 @@ jobs:
         # module and have root-level files (test or main) that import
         # their own gitignored velox/ output. Any command that compiles
         # the full module (go test ./..., go build ./..., golangci-lint)
-        # needs these generated first. benchmarks/fixtures/stress-100 has no root
-        # Go files so its missing velox/ is harmless. Tier-1 examples
-        # (basic/fullgql) and tests/external-module live in their own
-        # sub-modules and are handled by the examples CI job.
+        # needs these generated first. The benchmark stress fixtures
+        # (benchmarks/fixtures/stress-*) are their own modules, so their
+        # generated velox/ output never joins the root module. Tier-1
+        # examples (basic/fullgql) and tests/external-module live in their
+        # own sub-modules and are handled by the examples CI job.
         #
         # realworld's generate.go uses relative paths (gen.WithTarget
         # "./velox"), so it must run with examples/realworld as CWD.
@@ -205,10 +207,11 @@ jobs:
         # module and have root-level files (test or main) that import
         # their own gitignored velox/ output. Any command that compiles
         # the full module (go test ./..., go build ./..., golangci-lint)
-        # needs these generated first. benchmarks/fixtures/stress-100 has no root
-        # Go files so its missing velox/ is harmless. Tier-1 examples
-        # (basic/fullgql) and tests/external-module live in their own
-        # sub-modules and are handled by the examples CI job.
+        # needs these generated first. The benchmark stress fixtures
+        # (benchmarks/fixtures/stress-*) are their own modules, so their
+        # generated velox/ output never joins the root module. Tier-1
+        # examples (basic/fullgql) and tests/external-module live in their
+        # own sub-modules and are handled by the examples CI job.
         #
         # realworld's generate.go uses relative paths (gen.WithTarget
         # "./velox"), so it must run with examples/realworld as CWD.
@@ -372,10 +375,11 @@ jobs:
         # module and have root-level files (test or main) that import
         # their own gitignored velox/ output. Any command that compiles
         # the full module (go test ./..., go build ./..., golangci-lint)
-        # needs these generated first. benchmarks/fixtures/stress-100 has no root
-        # Go files so its missing velox/ is harmless. Tier-1 examples
-        # (basic/fullgql) and tests/external-module live in their own
-        # sub-modules and are handled by the examples CI job.
+        # needs these generated first. The benchmark stress fixtures
+        # (benchmarks/fixtures/stress-*) are their own modules, so their
+        # generated velox/ output never joins the root module. Tier-1
+        # examples (basic/fullgql) and tests/external-module live in their
+        # own sub-modules and are handled by the examples CI job.
         #
         # realworld's generate.go uses relative paths (gen.WithTarget
         # "./velox"), so it must run with examples/realworld as CWD.
