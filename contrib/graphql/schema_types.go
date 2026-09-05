@@ -59,10 +59,7 @@ func (g *Generator) collectTypedJSONScalars() map[string]typedJSONScalar {
 				}
 
 				// Skip nested slices, maps, and generic types
-				if strings.HasPrefix(elemType, "[]") ||
-					strings.HasPrefix(elemType, "map[") ||
-					elemType == "interface{}" ||
-					elemType == "any" {
+				if isGenericGoType(elemType) {
 					continue
 				}
 
@@ -71,9 +68,7 @@ func (g *Generator) collectTypedJSONScalars() map[string]typedJSONScalar {
 			}
 
 			// Skip maps and generic types
-			if strings.HasPrefix(ident, "map[") ||
-				ident == "interface{}" ||
-				ident == "any" {
+			if isGenericGoType(ident) {
 				continue
 			}
 
@@ -113,6 +108,22 @@ func (g *Generator) collectTypedJSONScalars() map[string]typedJSONScalar {
 	return scalars
 }
 
+// isGenericGoType reports whether a Go type identifier is a generic container
+// or bare interface, which cannot become a named GraphQL scalar.
+//
+// Both spellings of the empty interface must be handled: go/types renders it
+// as "interface {}" with a space, while source and the `any` alias render it
+// without. Matching only the unspaced form let []any slip through every skip
+// check below and produced `func Unmarshalinterface {}(...)` — not valid Go,
+// which failed the whole generation run at the formatting step.
+func isGenericGoType(ident string) bool {
+	switch strings.TrimSpace(ident) {
+	case "any", "interface{}", "interface {}":
+		return true
+	}
+	return strings.HasPrefix(ident, "[]") || strings.HasPrefix(ident, "map[")
+}
+
 // getTypedJSONScalarName returns the custom scalar name for a typed JSON field,
 // or empty string if it's a generic JSON field.
 func (g *Generator) getTypedJSONScalarName(f *gen.Field) string {
@@ -125,10 +136,7 @@ func (g *Generator) getTypedJSONScalarName(f *gen.Field) string {
 
 	// Skip generic JSON types
 	ident := f.Type.Ident
-	if strings.HasPrefix(ident, "map[") ||
-		strings.HasPrefix(ident, "[]") ||
-		ident == "interface{}" ||
-		ident == "any" {
+	if isGenericGoType(ident) {
 		return ""
 	}
 
