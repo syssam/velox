@@ -68,15 +68,20 @@ type FieldCollectable interface {
 	WithEdgeLoad(name string, opts ...LoadOption)
 }
 
+// FieldCollector is the GraphQL field collection function contrib/graphql
+// registers at init time: it inspects the gqlgen field context and
+// configures column projection and edge eager-loading on q from meta.
+type FieldCollector func(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies []string) error
+
 // fieldCollector holds the registered GraphQL field collection function.
 // Set by contrib/graphql at init time when GraphQL support is active.
 // Uses atomic.Pointer for safe concurrent access (even though init() runs
 // before goroutines, tests may register collectors concurrently).
-var fieldCollector atomic.Pointer[func(ctx context.Context, q FieldCollectable, fields map[string]string, edges map[string]EdgeMeta, satisfies []string) error]
+var fieldCollector atomic.Pointer[FieldCollector]
 
 // SetFieldCollector registers the GraphQL field collection function.
 // Called by contrib/graphql's init() when GraphQL support is active.
-func SetFieldCollector(fn func(ctx context.Context, q FieldCollectable, fields map[string]string, edges map[string]EdgeMeta, satisfies []string) error) {
+func SetFieldCollector(fn FieldCollector) {
 	fieldCollector.Store(&fn)
 }
 
@@ -86,12 +91,21 @@ func SetFieldCollector(fn func(ctx context.Context, q FieldCollectable, fields m
 // the gqlgen FieldContext and configures column projection and edge eager-loading.
 // The satisfies parameter specifies additional GraphQL interface names the entity
 // implements (for union/interface type resolution).
+//
+// It carries only field columns and edges; generated code calls
+// CollectFieldsMeta, which also passes CollectedFor mappings.
 func CollectFields(ctx context.Context, q FieldCollectable, fields map[string]string, edges map[string]EdgeMeta, satisfies ...string) error {
+	return CollectFieldsMeta(ctx, q, &CollectMeta{FieldColumns: fields, Edges: edges}, satisfies...)
+}
+
+// CollectFieldsMeta is CollectFields with the entity's full CollectMeta,
+// including CollectedFor mappings. Generated CollectFields methods call it.
+func CollectFieldsMeta(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies ...string) error {
 	fn := fieldCollector.Load()
-	if fn == nil {
+	if fn == nil || meta == nil {
 		return nil
 	}
-	return (*fn)(ctx, q, fields, edges, satisfies)
+	return (*fn)(ctx, q, meta, satisfies)
 }
 
 // CollectMeta holds GraphQL field collection metadata for an entity.
@@ -105,4 +119,11 @@ type CollectMeta struct {
 	FieldColumns map[string]string
 	// Edges maps GraphQL edge names to edge metadata for eager loading.
 	Edges map[string]EdgeMeta
+	// CollectedFor maps a GraphQL field name that has no column of its own
+	// (a custom resolver such as fullName) to the database columns the
+	// resolver needs. Populated from graphql.CollectedFor annotations; a
+	// column annotated for several names appears under each of them, and
+	// several columns can be collected for one name. Without an entry the
+	// collector treats the field as unknown and falls back to SELECT *.
+	CollectedFor map[string][]string
 }

@@ -329,3 +329,39 @@ func TestCollectFields_EmptySelections(t *testing.T) {
 	// However, the ID is always included but selectedFields only adds it.
 	assert.Empty(t, q.Edges)
 }
+
+// TestCollectFields_CollectedFor pins that a GraphQL field with no column of
+// its own — a custom resolver declared via graphql.CollectedFor — selects
+// exactly the columns it was declared for instead of falling back to
+// SELECT *. Before this the annotation was parsed and never consulted.
+func TestCollectFields_CollectedFor(t *testing.T) {
+	selections := ast.SelectionSet{
+		&ast.Field{Name: "fullName", Alias: "fullName"},
+	}
+	ctx := newGQLContext(t, selections)
+	q := runtime.NewQueryBase(nil, "users", []string{"id", "first_name", "last_name", "age"}, "id", nil, "User")
+	meta := &runtime.CollectMeta{
+		FieldColumns: map[string]string{"age": "age"},
+		CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}},
+	}
+
+	require.NoError(t, runtime.CollectFieldsMeta(ctx, q, meta))
+
+	assert.ElementsMatch(t, []string{"id", "first_name", "last_name"}, q.Ctx.Fields,
+		"only the id and the columns collected for fullName may be projected")
+}
+
+// TestCollectFields_CollectedFor_UnknownStillFallsBack pins the boundary:
+// a resolver field without a CollectedFor entry still disables projection.
+func TestCollectFields_CollectedFor_UnknownStillFallsBack(t *testing.T) {
+	selections := ast.SelectionSet{
+		&ast.Field{Name: "fullName", Alias: "fullName"},
+		&ast.Field{Name: "initials", Alias: "initials"},
+	}
+	ctx := newGQLContext(t, selections)
+	q := runtime.NewQueryBase(nil, "users", []string{"id", "first_name", "last_name"}, "id", nil, "User")
+	meta := &runtime.CollectMeta{CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}}}
+
+	require.NoError(t, runtime.CollectFieldsMeta(ctx, q, meta))
+	assert.Empty(t, q.Ctx.Fields, "an unknown resolver field must keep the SELECT * fallback")
+}

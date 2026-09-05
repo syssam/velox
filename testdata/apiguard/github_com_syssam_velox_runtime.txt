@@ -1,3 +1,4 @@
+  field CollectMeta.CollectedFor map[string][]string
   field CollectMeta.Edges map[string]EdgeMeta
   field CollectMeta.FieldColumns map[string]string
   field Config.Debug bool
@@ -190,6 +191,7 @@ func BuildQueryFrom(context.Context, QueryReader) (*github.com/syssam/velox/dial
 func BuildSelectorFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func CloneSlice[T any]([]T) []T
 func CollectFields(context.Context, FieldCollectable, map[string]string, map[string]EdgeMeta, ...string) error
+func CollectFieldsMeta(context.Context, FieldCollectable, *CollectMeta, ...string) error
 func ConfigFromContext(context.Context) Config
 func DeleteNodes(context.Context, *DeleterBase) (int, error)
 func DriverFromContext(context.Context) github.com/syssam/velox/dialect.Driver
@@ -241,7 +243,7 @@ func ScanMapRows(context.Context, github.com/syssam/velox/dialect.Driver, func(c
 func ScanOnly[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error), string) (*T, error)
 func ScanWithInterceptors(context.Context, Query, []Interceptor, func(context.Context, any) error, any) error
 func Select(...string) LoadOption
-func SetFieldCollector(func(ctx context.Context, q FieldCollectable, fields map[string]string, edges map[string]EdgeMeta, satisfies []string) error)
+func SetFieldCollector(FieldCollector)
 func ValidColumn(string, string) error
 func ValidateRegistries() error
 func Where(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
@@ -260,6 +262,7 @@ type EdgeQuery struct
 type EntityClientFunc func(cfg Config) any
 type EntityRegistration struct
 type FieldCollectable interface
+type FieldCollector func(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies []string) error
 type Hook = Hook
 type InterceptFunc = InterceptFunc
 type Interceptor = Interceptor

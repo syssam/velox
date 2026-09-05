@@ -2,6 +2,8 @@ package graphql
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	gqlgenGraphql "github.com/99designs/gqlgen/graphql"
 	"github.com/dave/jennifer/jen"
@@ -24,7 +26,7 @@ func RegisterFieldCollector() {
 // This is a generic implementation that replaces per-entity generated CollectFields
 // methods, eliminating cross-entity imports and reducing generated code by ~220K lines
 // for large schemas.
-func gqlCollectFields(ctx context.Context, q runtime.FieldCollectable, fields map[string]string, edges map[string]runtime.EdgeMeta, satisfies []string) error {
+func gqlCollectFields(ctx context.Context, q runtime.FieldCollectable, meta *runtime.CollectMeta, satisfies []string) error {
 	fc := gqlgenGraphql.GetFieldContext(ctx)
 	if fc == nil {
 		return nil
@@ -32,19 +34,19 @@ func gqlCollectFields(ctx context.Context, q runtime.FieldCollectable, fields ma
 	// GetOperationContext panics if not set, but if FieldContext exists,
 	// OperationContext is always present (gqlgen sets both before resolvers).
 	opCtx := gqlgenGraphql.GetOperationContext(ctx)
-	return gqlCollectField(q, fields, edges, opCtx, fc.Field, satisfies)
+	return gqlCollectField(q, meta, opCtx, fc.Field, satisfies)
 }
 
 // gqlCollectField processes GraphQL field selections and configures the query.
 // The satisfies parameter lists additional GraphQL interfaces for union/interface resolution.
 func gqlCollectField(
 	q runtime.FieldCollectable,
-	fields map[string]string,
-	edges map[string]runtime.EdgeMeta,
+	meta *runtime.CollectMeta,
 	opCtx *gqlgenGraphql.OperationContext,
 	collected gqlgenGraphql.CollectedField,
 	satisfies []string,
 ) error {
+	fields, edges := meta.FieldColumns, meta.Edges
 	unknownSeen := false
 	selectedFields := make([]string, 0, len(fields))
 
@@ -84,6 +86,13 @@ func gqlCollectField(
 				selectedFields = append(selectedFields, edge.FKColumns...)
 
 				q.WithEdgeLoad(edge.Name, opts...)
+				continue
+			}
+
+			// A custom resolver whose columns were declared via
+			// graphql.CollectedFor: select exactly those.
+			if cols, ok := meta.CollectedFor[field.Name]; ok {
+				selectedFields = append(selectedFields, cols...)
 				continue
 			}
 
@@ -229,11 +238,10 @@ func (g *Generator) genCollectionQueries(nodes []*gen.Type) *jen.File {
 		).Block(
 			jen.Return(
 				jen.Id("q"),
-				jen.Qual(runtimePkgPath, "CollectFields").Call(
+				jen.Qual(runtimePkgPath, "CollectFieldsMeta").Call(
 					jen.Id("ctx"),
 					jen.Id("q"),
-					jen.Qual(entityPkg, metaVar).Dot("FieldColumns"),
-					jen.Qual(entityPkg, metaVar).Dot("Edges"),
+					jen.Op("&").Qual(entityPkg, metaVar),
 					jen.Id("satisfies").Op("..."),
 				),
 			),
@@ -264,6 +272,22 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 			}
 		})
 
+		// CollectedFor: GraphQL field name (a custom resolver) → the columns
+		// it needs, from graphql.CollectedFor annotations. Iterates every
+		// field, not just the exposed ones — hiding a column from the
+		// GraphQL type while collecting it for a resolver is the point.
+		if collected := collectedForColumns(g, t); len(collected) > 0 {
+			grp.Id(metaVar).Dot("CollectedFor").Op("=").Map(jen.String()).Index().String().ValuesFunc(func(d *jen.Group) {
+				for _, name := range slices.Sorted(maps.Keys(collected)) {
+					cols := make([]jen.Code, 0, len(collected[name]))
+					for _, col := range collected[name] {
+						cols = append(cols, jen.Id("Field"+pascal(col)))
+					}
+					d.Lit(name).Op(":").Values(cols...)
+				}
+			})
+		}
+
 		// Edges: map GraphQL edge name → EdgeMeta.
 		if len(filteredEdges) > 0 {
 			grp.Id(metaVar).Dot("Edges").Op("=").Map(jen.String()).Qual(runtimePkgPath, "EdgeMeta").ValuesFunc(func(d *jen.Group) {
@@ -291,4 +315,17 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 			})
 		}
 	})
+}
+
+// collectedForColumns returns, for each GraphQL field name named in a
+// graphql.CollectedFor annotation on t's fields, the schema field names to
+// collect for it, in schema declaration order.
+func collectedForColumns(g *Generator, t *gen.Type) map[string][]string {
+	out := map[string][]string{}
+	for _, fld := range t.Fields {
+		for _, name := range g.getFieldAnnotation(fld).GetCollectedFor() {
+			out[name] = append(out[name], fld.Name)
+		}
+	}
+	return out
 }

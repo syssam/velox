@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syssam/velox/compiler/gen"
+	"github.com/syssam/velox/schema/field"
 )
 
 // TestGenEntityCollection_GofmtSimplifiedLiterals pins that the generated
@@ -32,4 +34,44 @@ func TestGenEntityCollection_GofmtSimplifiedLiterals(t *testing.T) {
 				"%s: Edges map values must be bare {...} literals (gofmt -s form)", typ.Name)
 		}
 	}
+}
+
+// TestGenEntityCollection_EmitsCollectedFor pins that graphql.CollectedFor
+// annotations reach the generated CollectMeta: every annotated field is
+// listed under each name it names, in declaration order, and a field hidden
+// from the GraphQL type (Skip(SkipType)) is still collected — hiding a
+// column while feeding it to a resolver is the annotation's purpose.
+func TestGenEntityCollection_EmitsCollectedFor(t *testing.T) {
+	graph := mockGraph()
+	g := NewGenerator(graph, Config{
+		ORMPackage: "example.com/app/velox",
+		Package:    "velox",
+	})
+	typ := graph.Nodes[0]
+	ann := func(a Annotation) map[string]any { return map[string]any{AnnotationName: a} }
+	typ.Fields = append(typ.Fields,
+		&gen.Field{Name: "first_name", Type: &field.TypeInfo{Type: field.TypeString},
+			Annotations: ann(Annotation{CollectedFor: []string{"fullName", "initials"}})},
+		&gen.Field{Name: "last_name", Type: &field.TypeInfo{Type: field.TypeString},
+			Annotations: ann(Annotation{CollectedFor: []string{"fullName"}, Skip: SkipType})},
+	)
+
+	code := g.genEntityCollection(typ).GoString()
+	require.Contains(t, code, `.CollectedFor = map[string][]string{`)
+	assert.Contains(t, code, `"fullName": {FieldFirstName, FieldLastName}`)
+	assert.Contains(t, code, `"initials": {FieldFirstName}`)
+	assert.NotContains(t, code, `"lastName":`, "a SkipType field must not appear in FieldColumns")
+}
+
+// TestGenCollectionQueries_UsesCollectFieldsMeta pins the generated call
+// site: CollectFields on each query must pass the entity's whole CollectMeta
+// (by pointer) through runtime.CollectFieldsMeta, not the two maps through
+// the legacy runtime.CollectFields — otherwise CollectedFor never reaches
+// the collector.
+func TestGenCollectionQueries_UsesCollectFieldsMeta(t *testing.T) {
+	graph := mockGraph()
+	g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
+	code := g.genCollectionQueries(graph.Nodes).GoString()
+	require.Contains(t, code, "runtime.CollectFieldsMeta(ctx, q, &")
+	assert.NotContains(t, code, "runtime.CollectFields(")
 }
