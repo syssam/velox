@@ -188,11 +188,41 @@ func (qg *queryGen) genSelectType() {
 	// UserSelect type and methods
 	// =========================================================================
 
+	// The query is a NAMED field, not an embedded one. Embedding *XxxQuery
+	// made the compiler emit a promoted-method wrapper for every one of
+	// its ~58 methods per entity (about a third of all functions in the
+	// query package at scale), while the public entity.XxxSelector
+	// interface needs only the 13 terminals forwarded below. The field
+	// keeps the query's type name so composite literals and s.XxxQuery
+	// accesses read the same as before. Pinned by TestSelectForwardsInsteadOfEmbedding.
 	qg.f.Commentf("%s is the builder for selecting fields of %s entities.", qg.selectName, qg.t.Name)
 	qg.f.Type().Id(qg.selectName).Struct(
-		jen.Op("*").Id(qg.queryName),
+		jen.Id(qg.queryName).Op("*").Id(qg.queryName),
 		jen.Qual(runtimePkg, "Selector"),
 	)
+
+	// Forwarders for the query terminals the Selector interface exposes
+	// (Ent's `Select(...).All(ctx)` shape).
+	ctxParam := jen.Id("ctx").Qual("context", "Context")
+	fwd := func(name string, results ...jen.Code) {
+		qg.f.Commentf("%s forwards to the underlying %s.", name, qg.queryName)
+		qg.f.Func().Params(jen.Id("s").Op("*").Id(qg.selectName)).Id(name).Params(ctxParam).Params(results...).Block(
+			jen.Return(jen.Id("s").Dot(qg.queryName).Dot(name).Call(jen.Id("ctx"))),
+		)
+	}
+	fwd("All", jen.Index().Op("*").Add(qg.entityType()), jen.Error())
+	fwd("AllX", jen.Index().Op("*").Add(qg.entityType()))
+	fwd("First", jen.Op("*").Add(qg.entityType()), jen.Error())
+	fwd("FirstX", jen.Op("*").Add(qg.entityType()))
+	fwd("Only", jen.Op("*").Add(qg.entityType()), jen.Error())
+	fwd("OnlyX", jen.Op("*").Add(qg.entityType()))
+	fwd("Count", jen.Int(), jen.Error())
+	fwd("CountX", jen.Int())
+	fwd("Exist", jen.Bool(), jen.Error())
+	fwd("ExistX", jen.Bool())
+	fwd("IDs", jen.Index().Add(qg.idType), jen.Error())
+	fwd("FirstID", jen.Add(qg.idType), jen.Error())
+	fwd("OnlyID", jen.Add(qg.idType), jen.Error())
 
 	qg.f.Comment("Aggregate adds the given aggregation functions to the selector query.")
 	qg.f.Func().Params(jen.Id("s").Op("*").Id(qg.selectName)).Id("Aggregate").Params(
@@ -219,9 +249,8 @@ func (qg *queryGen) genSelectType() {
 		)),
 	)
 
-	// Scan and ScanX on *XxxSelect — explicit methods disambiguate
-	// the promoted ScanX from runtime.Selector vs *XxxQuery (both
-	// embed into XxxSelect). Scan threads the call through the
+	// Scan and ScanX on *XxxSelect — explicit methods so the call is
+	// not the promoted runtime.Selector one. Scan threads the call through the
 	// parent UserQuery's interceptor chain before running sqlScan
 	// so client.Intercept() fires on .Strings() / .Int() / etc.
 	// Uses runtime.ScanWithInterceptors to avoid per-entity boilerplate.

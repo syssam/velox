@@ -627,8 +627,73 @@ func (q *PostQuery) ScanX(ctx context.Context, v any) {
 
 // PostSelect is the builder for selecting fields of Post entities.
 type PostSelect struct {
-	*PostQuery
+	PostQuery *PostQuery
 	runtime.Selector
+}
+
+// All forwards to the underlying PostQuery.
+func (s *PostSelect) All(ctx context.Context) ([]*entity.Post, error) {
+	return s.PostQuery.All(ctx)
+}
+
+// AllX forwards to the underlying PostQuery.
+func (s *PostSelect) AllX(ctx context.Context) []*entity.Post {
+	return s.PostQuery.AllX(ctx)
+}
+
+// First forwards to the underlying PostQuery.
+func (s *PostSelect) First(ctx context.Context) (*entity.Post, error) {
+	return s.PostQuery.First(ctx)
+}
+
+// FirstX forwards to the underlying PostQuery.
+func (s *PostSelect) FirstX(ctx context.Context) *entity.Post {
+	return s.PostQuery.FirstX(ctx)
+}
+
+// Only forwards to the underlying PostQuery.
+func (s *PostSelect) Only(ctx context.Context) (*entity.Post, error) {
+	return s.PostQuery.Only(ctx)
+}
+
+// OnlyX forwards to the underlying PostQuery.
+func (s *PostSelect) OnlyX(ctx context.Context) *entity.Post {
+	return s.PostQuery.OnlyX(ctx)
+}
+
+// Count forwards to the underlying PostQuery.
+func (s *PostSelect) Count(ctx context.Context) (int, error) {
+	return s.PostQuery.Count(ctx)
+}
+
+// CountX forwards to the underlying PostQuery.
+func (s *PostSelect) CountX(ctx context.Context) int {
+	return s.PostQuery.CountX(ctx)
+}
+
+// Exist forwards to the underlying PostQuery.
+func (s *PostSelect) Exist(ctx context.Context) (bool, error) {
+	return s.PostQuery.Exist(ctx)
+}
+
+// ExistX forwards to the underlying PostQuery.
+func (s *PostSelect) ExistX(ctx context.Context) bool {
+	return s.PostQuery.ExistX(ctx)
+}
+
+// IDs forwards to the underlying PostQuery.
+func (s *PostSelect) IDs(ctx context.Context) ([]int64, error) {
+	return s.PostQuery.IDs(ctx)
+}
+
+// FirstID forwards to the underlying PostQuery.
+func (s *PostSelect) FirstID(ctx context.Context) (int64, error) {
+	return s.PostQuery.FirstID(ctx)
+}
+
+// OnlyID forwards to the underlying PostQuery.
+func (s *PostSelect) OnlyID(ctx context.Context) (int64, error) {
+	return s.PostQuery.OnlyID(ctx)
 }
 
 // Aggregate adds the given aggregation functions to the selector query.

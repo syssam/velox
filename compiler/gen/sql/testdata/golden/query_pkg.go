@@ -626,8 +626,73 @@ func (q *UserQuery) ScanX(ctx context.Context, v any) {
 
 // UserSelect is the builder for selecting fields of User entities.
 type UserSelect struct {
-	*UserQuery
+	UserQuery *UserQuery
 	runtime.Selector
+}
+
+// All forwards to the underlying UserQuery.
+func (s *UserSelect) All(ctx context.Context) ([]*entity.User, error) {
+	return s.UserQuery.All(ctx)
+}
+
+// AllX forwards to the underlying UserQuery.
+func (s *UserSelect) AllX(ctx context.Context) []*entity.User {
+	return s.UserQuery.AllX(ctx)
+}
+
+// First forwards to the underlying UserQuery.
+func (s *UserSelect) First(ctx context.Context) (*entity.User, error) {
+	return s.UserQuery.First(ctx)
+}
+
+// FirstX forwards to the underlying UserQuery.
+func (s *UserSelect) FirstX(ctx context.Context) *entity.User {
+	return s.UserQuery.FirstX(ctx)
+}
+
+// Only forwards to the underlying UserQuery.
+func (s *UserSelect) Only(ctx context.Context) (*entity.User, error) {
+	return s.UserQuery.Only(ctx)
+}
+
+// OnlyX forwards to the underlying UserQuery.
+func (s *UserSelect) OnlyX(ctx context.Context) *entity.User {
+	return s.UserQuery.OnlyX(ctx)
+}
+
+// Count forwards to the underlying UserQuery.
+func (s *UserSelect) Count(ctx context.Context) (int, error) {
+	return s.UserQuery.Count(ctx)
+}
+
+// CountX forwards to the underlying UserQuery.
+func (s *UserSelect) CountX(ctx context.Context) int {
+	return s.UserQuery.CountX(ctx)
+}
+
+// Exist forwards to the underlying UserQuery.
+func (s *UserSelect) Exist(ctx context.Context) (bool, error) {
+	return s.UserQuery.Exist(ctx)
+}
+
+// ExistX forwards to the underlying UserQuery.
+func (s *UserSelect) ExistX(ctx context.Context) bool {
+	return s.UserQuery.ExistX(ctx)
+}
+
+// IDs forwards to the underlying UserQuery.
+func (s *UserSelect) IDs(ctx context.Context) ([]int64, error) {
+	return s.UserQuery.IDs(ctx)
+}
+
+// FirstID forwards to the underlying UserQuery.
+func (s *UserSelect) FirstID(ctx context.Context) (int64, error) {
+	return s.UserQuery.FirstID(ctx)
+}
+
+// OnlyID forwards to the underlying UserQuery.
+func (s *UserSelect) OnlyID(ctx context.Context) (int64, error) {
+	return s.UserQuery.OnlyID(ctx)
 }
 
 // Aggregate adds the given aggregation functions to the selector query.

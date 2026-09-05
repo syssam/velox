@@ -627,8 +627,73 @@ func (q *ArticleQuery) ScanX(ctx context.Context, v any) {
 
 // ArticleSelect is the builder for selecting fields of Article entities.
 type ArticleSelect struct {
-	*ArticleQuery
+	ArticleQuery *ArticleQuery
 	runtime.Selector
+}
+
+// All forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) All(ctx context.Context) ([]*entity.Article, error) {
+	return s.ArticleQuery.All(ctx)
+}
+
+// AllX forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) AllX(ctx context.Context) []*entity.Article {
+	return s.ArticleQuery.AllX(ctx)
+}
+
+// First forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) First(ctx context.Context) (*entity.Article, error) {
+	return s.ArticleQuery.First(ctx)
+}
+
+// FirstX forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) FirstX(ctx context.Context) *entity.Article {
+	return s.ArticleQuery.FirstX(ctx)
+}
+
+// Only forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) Only(ctx context.Context) (*entity.Article, error) {
+	return s.ArticleQuery.Only(ctx)
+}
+
+// OnlyX forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) OnlyX(ctx context.Context) *entity.Article {
+	return s.ArticleQuery.OnlyX(ctx)
+}
+
+// Count forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) Count(ctx context.Context) (int, error) {
+	return s.ArticleQuery.Count(ctx)
+}
+
+// CountX forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) CountX(ctx context.Context) int {
+	return s.ArticleQuery.CountX(ctx)
+}
+
+// Exist forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) Exist(ctx context.Context) (bool, error) {
+	return s.ArticleQuery.Exist(ctx)
+}
+
+// ExistX forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) ExistX(ctx context.Context) bool {
+	return s.ArticleQuery.ExistX(ctx)
+}
+
+// IDs forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) IDs(ctx context.Context) ([]int64, error) {
+	return s.ArticleQuery.IDs(ctx)
+}
+
+// FirstID forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) FirstID(ctx context.Context) (int64, error) {
+	return s.ArticleQuery.FirstID(ctx)
+}
+
+// OnlyID forwards to the underlying ArticleQuery.
+func (s *ArticleSelect) OnlyID(ctx context.Context) (int64, error) {
+	return s.ArticleQuery.OnlyID(ctx)
 }
 
 // Aggregate adds the given aggregation functions to the selector query.

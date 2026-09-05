@@ -1497,3 +1497,27 @@ func TestClientPackageImportsAreAliased(t *testing.T) {
 		}
 	}
 }
+
+// TestSelectForwardsInsteadOfEmbedding pins the build-time shape of the
+// generated XxxSelect: the query is a named field (`UserQuery *UserQuery`),
+// not an embedded one, and the 13 terminals the entity.XxxSelector interface
+// exposes are explicit forwarders. Embedding made the compiler emit a
+// promoted-method wrapper for every query method per entity — ~25k of the
+// 83k functions in a 328-entity query package — for 13 methods anyone can
+// reach through the interface.
+func TestSelectForwardsInsteadOfEmbedding(t *testing.T) {
+	graph, userType, _ := buildWiringTestGraph(t)
+	helper := newMockHelper()
+	helper.graph = graph
+	src := genQueryPkg(helper, userType, graph.Nodes, helper.LeafPkgPath(userType)).GoString()
+
+	if !strings.Contains(src, "type UserSelect struct {\n\tUserQuery *UserQuery\n\truntime.Selector\n}") {
+		t.Fatalf("UserSelect must hold the query as a named field, not embed it\n%s", src)
+	}
+	for _, m := range []string{"All", "AllX", "First", "FirstX", "Only", "OnlyX", "Count", "CountX", "Exist", "ExistX", "IDs", "FirstID", "OnlyID"} {
+		want := "func (s *UserSelect) " + m + "(ctx context.Context)"
+		if !strings.Contains(src, want) {
+			t.Errorf("missing forwarder %q — the Selector interface would no longer be satisfied", want)
+		}
+	}
+}
