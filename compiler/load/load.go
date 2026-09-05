@@ -3,6 +3,7 @@ package load
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"fmt"
@@ -20,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/syssam/velox"
 
@@ -91,7 +91,7 @@ func (c *Config) Load() (*SchemaSpec, error) {
 		return nil, fmt.Errorf("velox/load: create temp dir: %w", mkErr)
 	}
 	defer os.RemoveAll(tmpDir)
-	target := filepath.Join(tmpDir, filename(spec.PkgPath)+".go")
+	target := filepath.Join(tmpDir, filename(spec.PkgPath, buf)+".go")
 	if err = os.WriteFile(target, buf, 0o644); err != nil {
 		return nil, fmt.Errorf("velox/load: write file %s: %w", target, err)
 	}
@@ -349,9 +349,19 @@ func schemaTemplates() ([]string, error) {
 	}, nil
 }
 
-func filename(pkg string) string {
+// filename names the loader source after the schema package and a hash of
+// its content. The Go build cache keys a command-line-arguments package on
+// the file NAME as well as its bytes, so a per-run timestamp (Ent's scheme)
+// made every generation a cache miss: compile plus a full link of a binary
+// that pulls in velox and the schema package, ~0.8s on a laptop. The loader
+// source only embeds the schema package path and type names, so it is
+// byte-identical across runs until a schema type is added or removed —
+// with a content-derived name an unchanged schema rebuilds from cache in
+// ~0.2s, and after a schema edit only the link reruns.
+func filename(pkg string, content []byte) string {
 	name := strings.ReplaceAll(pkg, "/", "_")
-	return fmt.Sprintf("velox_%s_%d", name, time.Now().Unix())
+	sum := sha256.Sum256(content)
+	return fmt.Sprintf("velox_%s_%x", name, sum[:6])
 }
 
 // gobuild compiles the target Go file into a binary and executes it.
@@ -360,8 +370,12 @@ func filename(pkg string) string {
 func gobuild(target string, buildFlags []string) (string, error) {
 	binPath := target + ".bin"
 	// Build the binary.
-	args := make([]string, 0, 2+len(buildFlags)+2)
+	args := make([]string, 0, 3+len(buildFlags)+2)
 	args = append(args, "build")
+	// The loader binary is executed once and deleted; DWARF and the symbol
+	// table are dead weight that make the link ~30% slower. Placed before
+	// the caller's flags so an explicit -ldflags in BuildFlags wins.
+	args = append(args, "-ldflags=-s -w")
 	args = append(args, buildFlags...)
 	args = append(args, "-o", binPath, target)
 	cmd := exec.Command("go", args...)
