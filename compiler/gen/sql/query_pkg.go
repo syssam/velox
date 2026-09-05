@@ -17,90 +17,179 @@ import (
 // *runtime.QueryBase (no embedding). This makes query builders self-contained like Ent ORM.
 //
 // Output: query/{entity_name}.go
-func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entityPkgPath string) *jen.File {
-	f := h.NewFile(h.Pkg())
 
-	queryName := t.Name + "Query"
-	recv := "q"
-	sqlPkg := h.SQLPkg()
-	sqlgraphPkg := h.SQLGraphPkg()
+// queryGen carries the per-entity state shared by every section of the
+// generated query package. genQueryPkg builds one and calls the gen*
+// methods in emission order; each method appends to qg.f. The sections
+// live in three source files that all target the SAME output file:
+//
+//	query_pkg.go           struct, wiring, chainers, edges
+//	query_pkg_terminals.go sqlAll, prepareQuery, terminals, locking
+//	query_pkg_select.go    QueryReader, Select/GroupBy, clone
+//
+// That split is for readability only — there is still exactly one
+// generator per output file (see AGENTS.md).
+type queryGen struct {
+	h gen.GeneratorHelper
+	f *jen.File
+	t *gen.Type
 
-	// SP-2: import path for the central entity package that holds
-	// the shared *entity.InterceptorStore.
-	entityPkgImportPath := h.SharedEntityPkg()
-	// Per-entity sub-package import path; needed by many later emitters.
-	entitySubPkg := h.LeafPkgPath(t)
+	queryName    string // "UserQuery"
+	recv         string // receiver identifier in emitted methods
+	selectName   string // "UserSelect"
+	gbName       string // "UserGroupBy"
+	querierIface string // "UserQuerier", in the shared entity package
 
-	// intersField returns Jen for the effective interceptor slice the
-	// query should use at execute time — always the per-entity slice
-	// on the shared *InterceptorStore. Privacy is NO LONGER part of the
-	// interceptor chain: it is evaluated explicitly at prepareQuery time
-	// via q.policy.EvalQuery(). This unification means all entities
-	// (with or without policy) use the same direct access pattern.
-	hasPolicy := h.FeatureEnabled(gen.FeaturePrivacy.Name) && t.NumPolicy() > 0
-	intersField := func(receiver string) *jen.Statement {
-		return jen.Id(receiver).Dot("inters").Dot(t.Name)
+	sqlPkg      string
+	sqlgraphPkg string
+	// entityPkgPath is the package the XxxQuerier interface and entity
+	// types are qualified from (a parameter of genQueryPkg — callers pass
+	// the shared entity package or, in wiring tests, the leaf package).
+	entityPkgPath string
+	// entityPkgImportPath is the central entity package that holds the
+	// shared *entity.InterceptorStore (SP-2).
+	entityPkgImportPath string
+	// entitySubPkg is the per-entity leaf package (Table, Columns, FieldID).
+	entitySubPkg string
+
+	// hasPolicy is true when FeaturePrivacy is on AND the entity declares
+	// a policy. Privacy is evaluated explicitly in prepareQuery via
+	// q.policy.EvalQuery(); it is NOT part of the interceptor chain.
+	hasPolicy           bool
+	schemaConfigEnabled bool
+	namedEdgesEnabled   bool
+
+	idType jen.Code
+}
+
+func newQueryGen(h gen.GeneratorHelper, t *gen.Type, entityPkgPath string) *queryGen {
+	return &queryGen{
+		h:                   h,
+		f:                   h.NewFile(h.Pkg()),
+		t:                   t,
+		queryName:           t.Name + "Query",
+		recv:                "q",
+		selectName:          t.Name + "Select",
+		gbName:              t.Name + "GroupBy",
+		querierIface:        t.Name + "Querier",
+		sqlPkg:              h.SQLPkg(),
+		sqlgraphPkg:         h.SQLGraphPkg(),
+		entityPkgPath:       entityPkgPath,
+		entityPkgImportPath: h.SharedEntityPkg(),
+		entitySubPkg:        h.LeafPkgPath(t),
+		hasPolicy:           h.FeatureEnabled(gen.FeaturePrivacy.Name) && t.NumPolicy() > 0,
+		schemaConfigEnabled: h.FeatureEnabled(gen.FeatureSchemaConfig.Name),
+		namedEdgesEnabled:   h.FeatureEnabled(gen.FeatureNamedEdges.Name),
+		idType:              h.IDType(t),
 	}
-	_ = intersField // referenced below; alias to silence linter if a path drops out
+}
 
-	// Querier interface name in entity/ package
-	querierIface := t.Name + "Querier"
+// entityType returns the qualified entity type (entity.User).
+func (qg *queryGen) entityType() *jen.Statement {
+	return jen.Qual(qg.entityPkgPath, qg.t.Name)
+}
 
-	// Entity type reference (always qualified from query/ -> entity/)
-	entityType := func() *jen.Statement { return jen.Qual(entityPkgPath, t.Name) }
-	// entitySubPkg is hoisted to the top of the function (above intersField)
-	// so the policy-prepend path can reference it.
+// inters returns the expression for this entity's interceptor slice on the
+// shared *InterceptorStore: <receiver>.inters.<Entity>. Always the direct
+// per-entity slice — privacy is evaluated separately in prepareQuery.
+func (qg *queryGen) inters(receiver string) *jen.Statement {
+	return jen.Id(receiver).Dot("inters").Dot(qg.t.Name)
+}
 
-	// ID type from the entity definition
-	idType := h.IDType(t)
+// selectInters is inters for a select/group-by receiver that reaches the
+// query through s.<QueryName> or g.build.
+func (qg *queryGen) selectInters(queryAccess *jen.Statement) *jen.Statement {
+	return queryAccess.Clone().Dot("inters").Dot(qg.t.Name)
+}
 
+// genQueryPkg generates the self-contained XxxQuery for one entity.
+// Output: query/<entity>_query.go. The sections are emitted in a fixed
+// order; goldens pin the layout byte-for-byte.
+func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, _ []*gen.Type, entityPkgPath string) *jen.File {
+	qg := newQueryGen(h, t, entityPkgPath)
+
+	qg.genStruct()
+	qg.genConstructorAndWiring()
+	qg.genFieldCollectable()
+	qg.genFromEdge()
+	qg.genSpecBuilders()
+	qg.genChainers()
+	qg.genWithEdges()
+	qg.genWithNamedEdges()
+	qg.genQueryEdges()
+	qg.genClonePublic()
+	qg.genSQLAll()
+	qg.genPrepareQuery()
+	qg.genEntityTerminals()
+	qg.genCountExist()
+	qg.genSQLExplain()
+	qg.genIDTerminals()
+	qg.genLocking()
+	qg.genQueryReader()
+	qg.genSelectEntry()
+	qg.genSelectType()
+	qg.genGroupByType()
+	qg.genClonePrivate()
+
+	// Per-edge typed loader methods — called from sqlAll inline dispatch.
+	for _, edge := range t.Edges {
+		genTypedEdgeLoader(qg.f, h, t, edge, qg.recv, qg.queryName, entityPkgPath, qg.entityType)
+	}
+
+	// Verify interface compliance at compile time
+	qg.f.Commentf("Verify %s implements %s.%s at compile time.", qg.queryName, "entity", qg.querierIface)
+	qg.f.Var().Id("_").Qual(entityPkgPath, qg.querierIface).Op("=").Parens(jen.Op("*").Id(qg.queryName)).Call(jen.Nil())
+
+	return qg.f
+}
+
+// genStruct emits the XxxQuery struct: config, ctx, predicates, order,
+// modifiers, the shared interceptor-store pointer, the optional policy, and
+// one eager-load field per edge.
+func (qg *queryGen) genStruct() {
 	// =========================================================================
 	// Query struct — self-contained, no runtime type embedding
 	// =========================================================================
 
-	f.Commentf("%s is the query builder for %s entities.", queryName, t.Name)
-	f.Commentf("It implements %s.%s.", "entity", querierIface)
-	schemaConfigEnabled := h.FeatureEnabled(gen.FeatureSchemaConfig.Name)
-
-	namedEdgesEnabled := h.FeatureEnabled(gen.FeatureNamedEdges.Name)
-
-	f.Type().Id(queryName).StructFunc(func(group *jen.Group) {
+	qg.f.Commentf("%s is the query builder for %s entities.", qg.queryName, qg.t.Name)
+	qg.f.Commentf("It implements %s.%s.", "entity", qg.querierIface)
+	qg.f.Type().Id(qg.queryName).StructFunc(func(group *jen.Group) {
 		group.Id("config").Qual(runtimePkg, "Config")
-		if schemaConfigEnabled {
-			group.Id("schemaConfig").Qual(h.InternalPkg(), "SchemaConfig")
+		if qg.schemaConfigEnabled {
+			group.Id("schemaConfig").Qual(qg.h.InternalPkg(), "SchemaConfig")
 		}
 		group.Id("ctx").Op("*").Qual(runtimePkg, "QueryContext")
-		group.Id("predicates").Index().Func().Params(jen.Op("*").Qual(sqlPkg, "Selector"))
-		group.Id("order").Index().Func().Params(jen.Op("*").Qual(sqlPkg, "Selector"))
-		group.Id("modifiers").Index().Func().Params(jen.Op("*").Qual(sqlPkg, "Selector"))
+		group.Id("predicates").Index().Func().Params(jen.Op("*").Qual(qg.sqlPkg, "Selector"))
+		group.Id("order").Index().Func().Params(jen.Op("*").Qual(qg.sqlPkg, "Selector"))
+		group.Id("modifiers").Index().Func().Params(jen.Op("*").Qual(qg.sqlPkg, "Selector"))
 		// SP-2: shared-pointer interceptor wiring. The query holds a
 		// pointer to the central *entity.InterceptorStore, NOT a slice
 		// copy. client.Intercept(...) mutates the shared store and is
 		// immediately visible to every query holding the pointer —
 		// even queries constructed before the call. Read sites access
 		// q.inters.<EntityName> to enumerate this entity's chain.
-		group.Id("inters").Op("*").Qual(entityPkgImportPath, "InterceptorStore")
+		group.Id("inters").Op("*").Qual(qg.entityPkgImportPath, "InterceptorStore")
 		// policy is the entity's privacy policy (nil when the entity has
 		// no policy or when constructed via a code path that doesn't wire
 		// it). Evaluated explicitly in prepareQuery — NOT part of the
 		// interceptor chain.
-		if hasPolicy {
-			group.Id("policy").Qual(h.VeloxPkg(), "Policy")
+		if qg.hasPolicy {
+			group.Id("policy").Qual(qg.h.VeloxPkg(), "Policy")
 		}
 		group.Id("withFKs").Bool()
 		// Edge eager-loading: concrete *XxxQuery pointers (same package)
-		for _, edge := range t.Edges {
+		for _, edge := range qg.t.Edges {
 			targetQueryName := edge.Type.Name + "Query"
 			group.Id(edgeCallbackField(edge)).Op("*").Id(targetQueryName)
 		}
 		// loadTotal — registry of post-load hooks (Ent-style).
 		group.Id("loadTotal").Index().Func().Params(
 			jen.Qual("context", "Context"),
-			jen.Index().Op("*").Add(entityType()),
+			jen.Index().Op("*").Add(qg.entityType()),
 		).Error()
 		// Named edge variants (FeatureNamedEdges).
-		if namedEdgesEnabled {
-			for _, edge := range t.Edges {
+		if qg.namedEdgesEnabled {
+			for _, edge := range qg.t.Edges {
 				if !edge.Unique {
 					targetQueryName := edge.Type.Name + "Query"
 					group.Id("withNamed" + edge.StructField()).Map(jen.String()).Op("*").Id(targetQueryName)
@@ -108,21 +197,26 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 			}
 		}
 		group.Id("path").Func().Params(jen.Qual("context", "Context")).Params(
-			jen.Op("*").Qual(sqlPkg, "Selector"), jen.Error(),
+			jen.Op("*").Qual(qg.sqlPkg, "Selector"), jen.Error(),
 		)
 	})
+}
 
+// genConstructorAndWiring emits NewXxxQuery plus the setters other packages
+// use to wire a query: SetPath, SetInterStore, SetPolicy, AddPredicate /
+// Filter (privacy) and SetSchemaConfig.
+func (qg *queryGen) genConstructorAndWiring() {
 	// =========================================================================
 	// Constructor
 	// =========================================================================
 
-	f.Commentf("New%s creates a new %s.", queryName, queryName)
-	f.Func().Id("New" + queryName).Params(
+	qg.f.Commentf("New%s creates a new %s.", qg.queryName, qg.queryName)
+	qg.f.Func().Id("New" + qg.queryName).Params(
 		jen.Id("cfg").Qual(runtimePkg, "Config"),
-	).Op("*").Id(queryName).Block(
-		jen.Return(jen.Op("&").Id(queryName).Values(jen.Dict{
+	).Op("*").Id(qg.queryName).Block(
+		jen.Return(jen.Op("&").Id(qg.queryName).Values(jen.Dict{
 			jen.Id("config"): jen.Id("cfg"),
-			jen.Id("ctx"):    jen.Op("&").Qual(runtimePkg, "QueryContext").Values(jen.Dict{jen.Id("Type"): jen.Lit(t.Name)}),
+			jen.Id("ctx"):    jen.Op("&").Qual(runtimePkg, "QueryContext").Values(jen.Dict{jen.Id("Type"): jen.Lit(qg.t.Name)}),
 		})),
 	)
 
@@ -130,13 +224,13 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// SetPath — allows external callers (wrapper, contrib) to set the path
 	// =========================================================================
 
-	f.Comment("SetPath sets the graph traversal path for this query.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("SetPath").Params(
+	qg.f.Comment("SetPath sets the graph traversal path for this query.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("SetPath").Params(
 		jen.Id("p").Func().Params(jen.Qual("context", "Context")).Params(
-			jen.Op("*").Qual(sqlPkg, "Selector"), jen.Error(),
+			jen.Op("*").Qual(qg.sqlPkg, "Selector"), jen.Error(),
 		),
 	).Block(
-		jen.Id(recv).Dot("path").Op("=").Id("p"),
+		jen.Id(qg.recv).Dot("path").Op("=").Id("p"),
 	)
 
 	// SetInterStore — wires the shared *entity.InterceptorStore pointer
@@ -145,13 +239,13 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// constructor and by every code path that derives a child query.
 	// SP-2: replaces the previous SetInters([]Interceptor) slice setter
 	// — interceptors no longer get copied per-query.
-	f.Comment("SetInterStore wires the shared client-level interceptor store onto this query.")
-	f.Comment("Called by the entity client constructor and by query derivation code paths.")
-	f.Comment("Not for direct use — call via the SetInterStore inline interface assertion.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("SetInterStore").Params(
-		jen.Id("s").Op("*").Qual(entityPkgImportPath, "InterceptorStore"),
+	qg.f.Comment("SetInterStore wires the shared client-level interceptor store onto this query.")
+	qg.f.Comment("Called by the entity client constructor and by query derivation code paths.")
+	qg.f.Comment("Not for direct use — call via the SetInterStore inline interface assertion.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("SetInterStore").Params(
+		jen.Id("s").Op("*").Qual(qg.entityPkgImportPath, "InterceptorStore"),
 	).Block(
-		jen.Id(recv).Dot("inters").Op("=").Id("s"),
+		jen.Id(qg.recv).Dot("inters").Op("=").Id("s"),
 	)
 
 	// SetPolicy wires the entity's privacy policy onto this query so
@@ -159,14 +253,14 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// the entity client constructor (direct path) and by cross-package
 	// edge-query constructors (via runtime.EntityPolicy lookup). Only
 	// emitted for entities that declare a privacy policy.
-	if hasPolicy {
-		f.Comment("SetPolicy wires the entity's privacy policy onto this query.")
-		f.Comment("Called via an inline interface type assertion from code that")
-		f.Comment("constructs the query (entity client, edge query builders).")
-		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("SetPolicy").Params(
-			jen.Id("p").Qual(h.VeloxPkg(), "Policy"),
+	if qg.hasPolicy {
+		qg.f.Comment("SetPolicy wires the entity's privacy policy onto this query.")
+		qg.f.Comment("Called via an inline interface type assertion from code that")
+		qg.f.Comment("constructs the query (entity client, edge query builders).")
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("SetPolicy").Params(
+			jen.Id("p").Qual(qg.h.VeloxPkg(), "Policy"),
 		).Block(
-			jen.Id(recv).Dot("policy").Op("=").Id("p"),
+			jen.Id(qg.recv).Dot("policy").Op("=").Id("p"),
 		)
 	}
 
@@ -183,110 +277,118 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// deliberately exported despite being an internal-ish hook: the
 	// filter lives in a sibling generated package, so structural
 	// interface satisfaction requires an exported method.
-	if h.FeatureEnabled(gen.FeaturePrivacy.Name) {
+	if qg.h.FeatureEnabled(gen.FeaturePrivacy.Name) {
 		// After cycle-break, filter.go lives in client/{entity}/ (package {entity}client),
 		// not the {entity}/ leaf — the filter constructor must be qualified there.
-		clientPkgPath := h.RootPkg() + "/client/" + t.PackageDir()
+		clientPkgPath := qg.h.RootPkg() + "/client/" + qg.t.PackageDir()
 		const privacyPkgPath = "github.com/syssam/velox/privacy"
-		f.Commentf("AddPredicate appends a raw SQL-level predicate to the query.")
-		f.Comment("Satisfies runtime.PredicateAdder so privacy filters can write")
-		f.Comment("predicates through this method rather than touching internal state.")
-		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("AddPredicate").Params(
-			jen.Id("p").Func().Params(jen.Op("*").Qual(h.SQLPkg(), "Selector")),
+		qg.f.Commentf("AddPredicate appends a raw SQL-level predicate to the query.")
+		qg.f.Comment("Satisfies runtime.PredicateAdder so privacy filters can write")
+		qg.f.Comment("predicates through this method rather than touching internal state.")
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("AddPredicate").Params(
+			jen.Id("p").Func().Params(jen.Op("*").Qual(qg.h.SQLPkg(), "Selector")),
 		).Block(
-			jen.Id(recv).Dot("predicates").Op("=").Append(jen.Id(recv).Dot("predicates"), jen.Id("p")),
+			jen.Id(qg.recv).Dot("predicates").Op("=").Append(jen.Id(qg.recv).Dot("predicates"), jen.Id("p")),
 		)
 
-		f.Commentf("Filter returns a %sFilter that writes predicates through this query.", t.Name)
-		f.Comment("Implements privacy.Filterable so FilterFunc-based query rules")
-		f.Comment("can inject WHERE clauses without knowing the concrete query type.")
-		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Filter").Params().Qual(privacyPkgPath, "Filter").Block(
-			jen.Return(jen.Qual(clientPkgPath, "New"+t.Name+"Filter").Call(
-				jen.Id(recv).Dot("config"),
-				jen.Id(recv),
+		qg.f.Commentf("Filter returns a %sFilter that writes predicates through this query.", qg.t.Name)
+		qg.f.Comment("Implements privacy.Filterable so FilterFunc-based query rules")
+		qg.f.Comment("can inject WHERE clauses without knowing the concrete query type.")
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Filter").Params().Qual(privacyPkgPath, "Filter").Block(
+			jen.Return(jen.Qual(clientPkgPath, "New"+qg.t.Name+"Filter").Call(
+				jen.Id(qg.recv).Dot("config"),
+				jen.Id(qg.recv),
 			)),
 		)
 	}
 
 	// SetSchemaConfig — allows callers to inject the schema config for multi-tenancy.
-	if schemaConfigEnabled {
-		f.Comment("SetSchemaConfig sets the schema config for multi-tenancy support.")
-		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("SetSchemaConfig").Params(
-			jen.Id("sc").Qual(h.InternalPkg(), "SchemaConfig"),
+	if qg.schemaConfigEnabled {
+		qg.f.Comment("SetSchemaConfig sets the schema config for multi-tenancy support.")
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("SetSchemaConfig").Params(
+			jen.Id("sc").Qual(qg.h.InternalPkg(), "SchemaConfig"),
 		).Block(
-			jen.Id(recv).Dot("schemaConfig").Op("=").Id("sc"),
+			jen.Id(qg.recv).Dot("schemaConfig").Op("=").Id("sc"),
 		)
 	}
+}
 
+// genFieldCollectable emits the accessors the GraphQL field collector uses:
+// GetIDColumn, GetCtx and the by-name WithEdgeLoad switch.
+func (qg *queryGen) genFieldCollectable() {
 	// =========================================================================
 	// FieldCollectable interface — enables GraphQL field collection.
 	// =========================================================================
 
-	f.Commentf("GetIDColumn returns the primary key column name for %s.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetIDColumn").Params().String().Block(
-		jen.Return(jen.Qual(entitySubPkg, "FieldID")),
+	qg.f.Commentf("GetIDColumn returns the primary key column name for %s.", qg.t.Name)
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("GetIDColumn").Params().String().Block(
+		jen.Return(jen.Qual(qg.entitySubPkg, "FieldID")),
 	)
 
-	f.Comment("GetCtx returns the query context for field projection.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetCtx").Params().Op("*").Qual(runtimePkg, "QueryContext").Block(
-		jen.Return(jen.Id(recv).Dot("ctx")),
+	qg.f.Comment("GetCtx returns the query context for field projection.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("GetCtx").Params().Op("*").Qual(runtimePkg, "QueryContext").Block(
+		jen.Return(jen.Id(qg.recv).Dot("ctx")),
 	)
 
-	f.Comment("WithEdgeLoad adds an edge to be eagerly loaded by name.")
-	f.Comment("Used by GraphQL field collector for generic edge loading.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("WithEdgeLoad").Params(
+	qg.f.Comment("WithEdgeLoad adds an edge to be eagerly loaded by name.")
+	qg.f.Comment("Used by GraphQL field collector for generic edge loading.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("WithEdgeLoad").Params(
 		jen.Id("name").String(),
 		jen.Id("_").Op("...").Qual(runtimePkg, "LoadOption"),
 	).BlockFunc(func(body *jen.Group) {
 		// Switch on edge name to set the correct withXxx field.
 		body.Switch(jen.Id("name")).BlockFunc(func(sw *jen.Group) {
-			for _, edge := range t.Edges {
+			for _, edge := range qg.t.Edges {
 				targetQueryName := edge.Type.Name + "Query"
 				callbackField := edgeCallbackField(edge)
 				// Build case body: initialize query if nil, and enable FK columns
 				// only for edges where the FK resides on this entity's table (M2O, O2O inverse).
 				var caseStmts []jen.Code
 				caseStmts = append(caseStmts,
-					jen.If(jen.Id(recv).Dot(callbackField).Op("==").Nil()).Block(
-						jen.Id(recv).Dot(callbackField).Op("=").Id("New"+targetQueryName).Call(jen.Id(recv).Dot("config")),
+					jen.If(jen.Id(qg.recv).Dot(callbackField).Op("==").Nil()).Block(
+						jen.Id(qg.recv).Dot(callbackField).Op("=").Id("New"+targetQueryName).Call(jen.Id(qg.recv).Dot("config")),
 						// Thread the parent's interceptors into the child
 						// query so client.Intercept() fires on eager-loads
 						// as well as direct queries.
-						jen.Id(recv).Dot(callbackField).Dot("inters").Op("=").Id(recv).Dot("inters"),
+						jen.Id(qg.recv).Dot(callbackField).Dot("inters").Op("=").Id(qg.recv).Dot("inters"),
 					),
 				)
 				if edge.OwnFK() {
-					caseStmts = append(caseStmts, jen.Id(recv).Dot("withFKs").Op("=").True())
+					caseStmts = append(caseStmts, jen.Id(qg.recv).Dot("withFKs").Op("=").True())
 				}
 				sw.Case(jen.Lit(edge.Name)).Block(caseStmts...)
 			}
 		})
 	})
+}
 
+// genFromEdge emits NewXxxQueryFromEdge, which adapts a *runtime.EdgeQuery
+// into a self-contained query (used by contrib/graphql pagination).
+func (qg *queryGen) genFromEdge() {
 	// =========================================================================
 	// NewXxxQueryFromEdge — adapts a *runtime.EdgeQuery into a self-contained query.
 	// Used by GraphQL contrib (pagination) which receives an EdgeQuery from edge resolvers.
 	// =========================================================================
 
-	f.Commentf("New%sFromEdge creates a %s from an existing EdgeQuery.", queryName, queryName)
-	f.Commentf("The EdgeQuery fields are copied into the self-contained query struct via exported getters.")
-	f.Comment("SP-2: the inters field is a *entity.InterceptorStore pointer recovered")
-	f.Comment("from cfg.InterStore (type-asserted with nil-safe fallback). Callers that")
-	f.Comment("need a populated store must pass a Config built via the standard client")
-	f.Comment("constructor; the EdgeQuery's own inters slice is no longer carried.")
-	f.Func().Id("New"+queryName+"FromEdge").Params(
+	qg.f.Commentf("New%sFromEdge creates a %s from an existing EdgeQuery.", qg.queryName, qg.queryName)
+	qg.f.Commentf("The EdgeQuery fields are copied into the self-contained query struct via exported getters.")
+	qg.f.Comment("SP-2: the inters field is a *entity.InterceptorStore pointer recovered")
+	qg.f.Comment("from cfg.InterStore (type-asserted with nil-safe fallback). Callers that")
+	qg.f.Comment("need a populated store must pass a Config built via the standard client")
+	qg.f.Comment("constructor; the EdgeQuery's own inters slice is no longer carried.")
+	qg.f.Func().Id("New"+qg.queryName+"FromEdge").Params(
 		jen.Id("cfg").Qual(runtimePkg, "Config"),
 		jen.Id("eq").Op("*").Qual(runtimePkg, "EdgeQuery"),
-	).Op("*").Id(queryName).BlockFunc(func(g *jen.Group) {
+	).Op("*").Id(qg.queryName).BlockFunc(func(g *jen.Group) {
 		// inters, _ := cfg.InterStore.(*entity.InterceptorStore)
 		// if inters == nil { inters = &entity.InterceptorStore{} }
 		g.List(jen.Id("inters"), jen.Id("_")).Op(":=").Id("cfg").Dot("InterStore").Assert(
-			jen.Op("*").Qual(entityPkgImportPath, "InterceptorStore"),
+			jen.Op("*").Qual(qg.entityPkgImportPath, "InterceptorStore"),
 		)
 		g.If(jen.Id("inters").Op("==").Nil()).Block(
-			jen.Id("inters").Op("=").Op("&").Qual(entityPkgImportPath, "InterceptorStore").Values(),
+			jen.Id("inters").Op("=").Op("&").Qual(qg.entityPkgImportPath, "InterceptorStore").Values(),
 		)
-		g.Return(jen.Op("&").Id(queryName).Values(jen.Dict{
+		g.Return(jen.Op("&").Id(qg.queryName).Values(jen.Dict{
 			jen.Id("config"):     jen.Id("cfg"),
 			jen.Id("ctx"):        jen.Id("eq").Dot("GetCtx").Call(),
 			jen.Id("predicates"): jen.Id("eq").Dot("GetPredicates").Call(),
@@ -297,17 +399,22 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 			jen.Id("path"):       jen.Id("eq").Dot("GetPath").Call(),
 		}))
 	})
+}
 
+// genSpecBuilders emits querySpec, buildQuery and buildSelector — thin
+// delegations to the runtime helpers that read the query through
+// runtime.QueryReader.
+func (qg *queryGen) genSpecBuilders() {
 	// =========================================================================
 	// querySpec — builds a *sqlgraph.QuerySpec from the query's direct fields.
 	// Used by Count and IDs which call sqlgraph functions directly.
 	// =========================================================================
 
-	f.Comment("querySpec builds a *sqlgraph.QuerySpec from the query's direct fields.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("querySpec").Params().Op("*").Qual(sqlgraphPkg, "QuerySpec").Block(
+	qg.f.Comment("querySpec builds a *sqlgraph.QuerySpec from the query's direct fields.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("querySpec").Params().Op("*").Qual(qg.sqlgraphPkg, "QuerySpec").Block(
 		jen.Return(jen.Qual(runtimePkg, "MakeQuerySpec").Call(
-			jen.Id(recv),
-			jen.Qual(schemaPkg(), t.ID.Type.ConstName()),
+			jen.Id(qg.recv),
+			jen.Qual(schemaPkg(), qg.t.ID.Type.ConstName()),
 		)),
 	)
 
@@ -315,86 +422,95 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 	// buildQuery — construct selector for graph traversal
 	// =========================================================================
 
-	f.Comment("buildQuery constructs a *sql.Selector from the query state.")
-	f.Comment("Used by QueryXxx methods to create a sub-select for graph traversal.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("buildQuery").Params(
+	qg.f.Comment("buildQuery constructs a *sql.Selector from the query state.")
+	qg.f.Comment("Used by QueryXxx methods to create a sub-select for graph traversal.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("buildQuery").Params(
 		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Op("*").Qual(sqlPkg, "Selector"), jen.Error()).Block(
-		jen.Return(jen.Qual(runtimePkg, "BuildQueryFrom").Call(jen.Id("ctx"), jen.Id(recv))),
+	).Params(jen.Op("*").Qual(qg.sqlPkg, "Selector"), jen.Error()).Block(
+		jen.Return(jen.Qual(runtimePkg, "BuildQueryFrom").Call(jen.Id("ctx"), jen.Id(qg.recv))),
 	)
 
 	// =========================================================================
 	// buildSelector — fully-configured selector ready for execution
 	// =========================================================================
 
-	f.Comment("buildSelector constructs a fully-configured *sql.Selector ready for execution.")
-	f.Comment("Adds column selection, FK columns, and DISTINCT on top of buildQuery.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("buildSelector").Params(
+	qg.f.Comment("buildSelector constructs a fully-configured *sql.Selector ready for execution.")
+	qg.f.Comment("Adds column selection, FK columns, and DISTINCT on top of buildQuery.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("buildSelector").Params(
 		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Op("*").Qual(sqlPkg, "Selector"), jen.Error()).Block(
-		jen.Return(jen.Qual(runtimePkg, "BuildSelectorFrom").Call(jen.Id("ctx"), jen.Id(recv))),
+	).Params(jen.Op("*").Qual(qg.sqlPkg, "Selector"), jen.Error()).Block(
+		jen.Return(jen.Qual(runtimePkg, "BuildSelectorFrom").Call(jen.Id("ctx"), jen.Id(qg.recv))),
 	)
+}
 
+// genChainers emits the chainable builders: Where, Limit, Offset, Unique,
+// Order. Each returns the entity.XxxQuerier interface.
+func (qg *queryGen) genChainers() {
 	// =========================================================================
 	// Chainable methods (return entity.XxxQuerier interface)
 	// =========================================================================
 
 	// Where
-	f.Commentf("Where adds predicates to the %s.", queryName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Where").Params(
-		jen.Id("ps").Op("...").Qual(h.PredicatePkg(), t.Name),
-	).Qual(entityPkgPath, querierIface).BlockFunc(func(body *jen.Group) {
+	qg.f.Commentf("Where adds predicates to the %s.", qg.queryName)
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Where").Params(
+		jen.Id("ps").Op("...").Qual(qg.h.PredicatePkg(), qg.t.Name),
+	).Qual(qg.entityPkgPath, qg.querierIface).BlockFunc(func(body *jen.Group) {
 		body.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Id("ps")).Block(
-			jen.Id(recv).Dot("predicates").Op("=").Append(
-				jen.Id(recv).Dot("predicates"), jen.Id("p"),
+			jen.Id(qg.recv).Dot("predicates").Op("=").Append(
+				jen.Id(qg.recv).Dot("predicates"), jen.Id("p"),
 			),
 		)
-		body.Return(jen.Id(recv))
+		body.Return(jen.Id(qg.recv))
 	})
 
 	// Limit
-	f.Comment("Limit the number of records to be returned by this query.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Limit").Params(
+	qg.f.Comment("Limit the number of records to be returned by this query.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Limit").Params(
 		jen.Id("n").Int(),
-	).Qual(entityPkgPath, querierIface).Block(
-		jen.Id(recv).Dot("ctx").Dot("Limit").Op("=").Op("&").Id("n"),
-		jen.Return(jen.Id(recv)),
+	).Qual(qg.entityPkgPath, qg.querierIface).Block(
+		jen.Id(qg.recv).Dot("ctx").Dot("Limit").Op("=").Op("&").Id("n"),
+		jen.Return(jen.Id(qg.recv)),
 	)
 
 	// Offset
-	f.Comment("Offset to start from.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Offset").Params(
+	qg.f.Comment("Offset to start from.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Offset").Params(
 		jen.Id("n").Int(),
-	).Qual(entityPkgPath, querierIface).Block(
-		jen.Id(recv).Dot("ctx").Dot("Offset").Op("=").Op("&").Id("n"),
-		jen.Return(jen.Id(recv)),
+	).Qual(qg.entityPkgPath, qg.querierIface).Block(
+		jen.Id(qg.recv).Dot("ctx").Dot("Offset").Op("=").Op("&").Id("n"),
+		jen.Return(jen.Id(qg.recv)),
 	)
 
 	// Unique
-	f.Comment("Unique configures the query builder to filter duplicate records.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Unique").Params(
+	qg.f.Comment("Unique configures the query builder to filter duplicate records.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Unique").Params(
 		jen.Id("unique").Bool(),
-	).Qual(entityPkgPath, querierIface).Block(
-		jen.Id(recv).Dot("ctx").Dot("Unique").Op("=").Op("&").Id("unique"),
-		jen.Return(jen.Id(recv)),
+	).Qual(qg.entityPkgPath, qg.querierIface).Block(
+		jen.Id(qg.recv).Dot("ctx").Dot("Unique").Op("=").Op("&").Id("unique"),
+		jen.Return(jen.Id(qg.recv)),
 	)
 
 	// Order
-	f.Comment("Order specifies how the records should be ordered.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Order").Params(
-		jen.Id("o").Op("...").Func().Params(jen.Op("*").Qual(sqlPkg, "Selector")),
-	).Qual(entityPkgPath, querierIface).Block(
-		jen.Id(recv).Dot("order").Op("=").Append(
-			jen.Id(recv).Dot("order"), jen.Id("o").Op("..."),
+	qg.f.Comment("Order specifies how the records should be ordered.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Order").Params(
+		jen.Id("o").Op("...").Func().Params(jen.Op("*").Qual(qg.sqlPkg, "Selector")),
+	).Qual(qg.entityPkgPath, qg.querierIface).Block(
+		jen.Id(qg.recv).Dot("order").Op("=").Append(
+			jen.Id(qg.recv).Dot("order"), jen.Id("o").Op("..."),
 		),
-		jen.Return(jen.Id(recv)),
+		jen.Return(jen.Id(qg.recv)),
 	)
+}
 
+// genWithEdges emits one WithXxx eager-load method per edge. The child
+// query inherits the parent's interceptor store so client.Intercept()
+// fires on eager loads too.
+func (qg *queryGen) genWithEdges() {
 	// =========================================================================
 	// WithXxx edge eager-loading methods — stores concrete *XxxQuery
 	// =========================================================================
 
-	for _, edge := range t.Edges {
+	for _, edge := range qg.t.Edges {
 		edgeName := edge.StructField()
 		withName := "With" + edgeName
 		targetIface := edge.Type.Name + "Querier"
@@ -402,33 +518,37 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 		callbackField := edgeCallbackField(edge)
 		ownFK := edge.OwnFK()
 
-		f.Commentf("%s tells the query-builder to eager-load the %q edge.", withName, edge.Name)
-		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id(withName).Params(
-			jen.Id("opts").Op("...").Func().Params(jen.Qual(entityPkgPath, targetIface)),
-		).Qual(entityPkgPath, querierIface).BlockFunc(func(body *jen.Group) {
-			body.Id("tq").Op(":=").Id("New" + targetQueryName).Call(jen.Id(recv).Dot("config"))
+		qg.f.Commentf("%s tells the query-builder to eager-load the %q edge.", withName, edge.Name)
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id(withName).Params(
+			jen.Id("opts").Op("...").Func().Params(jen.Qual(qg.entityPkgPath, targetIface)),
+		).Qual(qg.entityPkgPath, qg.querierIface).BlockFunc(func(body *jen.Group) {
+			body.Id("tq").Op(":=").Id("New" + targetQueryName).Call(jen.Id(qg.recv).Dot("config"))
 			// Thread the parent's interceptors into the child query so
 			// client.Intercept() fires on eager-loads too.
-			body.Id("tq").Dot("inters").Op("=").Id(recv).Dot("inters")
+			body.Id("tq").Dot("inters").Op("=").Id(qg.recv).Dot("inters")
 			body.For(jen.List(jen.Id("_"), jen.Id("opt")).Op(":=").Range().Id("opts")).Block(
 				jen.Id("opt").Call(jen.Id("tq")),
 			)
-			body.Id(recv).Dot(callbackField).Op("=").Id("tq")
+			body.Id(qg.recv).Dot(callbackField).Op("=").Id("tq")
 			// Enable FK column selection for M2O and O2O-inverse edges
 			// where the FK resides on this entity's table.
 			if ownFK {
-				body.Id(recv).Dot("withFKs").Op("=").True()
+				body.Id(qg.recv).Dot("withFKs").Op("=").True()
 			}
-			body.Return(jen.Id(recv))
+			body.Return(jen.Id(qg.recv))
 		})
 	}
+}
 
+// genWithNamedEdges emits WithNamedXxx for non-unique edges when
+// FeatureNamedEdges is on.
+func (qg *queryGen) genWithNamedEdges() {
 	// =========================================================================
 	// WithNamedXxx — named edge loading (FeatureNamedEdges)
 	// =========================================================================
 
-	if namedEdgesEnabled {
-		for _, edge := range t.Edges {
+	if qg.namedEdgesEnabled {
+		for _, edge := range qg.t.Edges {
 			if edge.Unique {
 				continue // Named edges only apply to non-unique (O2M/M2M) edges.
 			}
@@ -437,58 +557,63 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 			targetQueryName := edge.Type.Name + "Query"
 			namedField := "withNamed" + edgeName
 
-			f.Commentf("%s tells the query-builder to eager-load the %q edge with the given name.", withNamedName, edge.Name)
-			f.Commentf("The optional arguments are used to configure the query builder of the edge.")
-			f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id(withNamedName).Params(
+			qg.f.Commentf("%s tells the query-builder to eager-load the %q edge with the given name.", withNamedName, edge.Name)
+			qg.f.Commentf("The optional arguments are used to configure the query builder of the edge.")
+			qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id(withNamedName).Params(
 				jen.Id("name").String(),
 				jen.Id("opts").Op("...").Func().Params(jen.Op("*").Id(targetQueryName)),
-			).Op("*").Id(queryName).BlockFunc(func(body *jen.Group) {
-				body.Id("query").Op(":=").Id("New" + targetQueryName).Call(jen.Id(recv).Dot("config"))
+			).Op("*").Id(qg.queryName).BlockFunc(func(body *jen.Group) {
+				body.Id("query").Op(":=").Id("New" + targetQueryName).Call(jen.Id(qg.recv).Dot("config"))
 				// Thread the parent's interceptors into the child query
 				// so client.Intercept() fires on named eager-loads too.
-				body.Id("query").Dot("inters").Op("=").Id(recv).Dot("inters")
+				body.Id("query").Dot("inters").Op("=").Id(qg.recv).Dot("inters")
 				body.For(jen.List(jen.Id("_"), jen.Id("opt")).Op(":=").Range().Id("opts")).Block(
 					jen.Id("opt").Call(jen.Id("query")),
 				)
-				body.If(jen.Id(recv).Dot(namedField).Op("==").Nil()).Block(
-					jen.Id(recv).Dot(namedField).Op("=").Make(jen.Map(jen.String()).Op("*").Id(targetQueryName)),
+				body.If(jen.Id(qg.recv).Dot(namedField).Op("==").Nil()).Block(
+					jen.Id(qg.recv).Dot(namedField).Op("=").Make(jen.Map(jen.String()).Op("*").Id(targetQueryName)),
 				)
-				body.Id(recv).Dot(namedField).Index(jen.Id("name")).Op("=").Id("query")
-				body.Return(jen.Id(recv))
+				body.Id(qg.recv).Dot(namedField).Index(jen.Id("name")).Op("=").Id("query")
+				body.Return(jen.Id(qg.recv))
 			})
 		}
 	}
+}
 
+// genQueryEdges emits one QueryXxx traversal per edge. The child query's
+// path closure builds the parent selector and steps across the edge via
+// sqlgraph.SetNeighbors.
+func (qg *queryGen) genQueryEdges() {
 	// =========================================================================
 	// QueryXxx edge traversal methods
 	// =========================================================================
 
-	for _, edge := range t.Edges {
+	for _, edge := range qg.t.Edges {
 		edgeName := edge.StructField()
 		methodName := "Query" + edgeName
 		targetIface := edge.Type.Name + "Querier"
 		targetQueryName := edge.Type.Name + "Query"
 
 		// Get the entity sub-package paths
-		srcEntitySubPkg := h.LeafPkgPath(t)
-		targetEntitySubPkg := h.LeafPkgPath(edge.Type)
+		srcEntitySubPkg := qg.h.LeafPkgPath(qg.t)
+		targetEntitySubPkg := qg.h.LeafPkgPath(edge.Type)
 
-		f.Commentf("%s chains the current query on the %q edge.", methodName, edge.Name)
-		f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id(methodName).Params().Qual(entityPkgPath, targetIface).BlockFunc(func(grp *jen.Group) {
+		qg.f.Commentf("%s chains the current query on the %q edge.", methodName, edge.Name)
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id(methodName).Params().Qual(qg.entityPkgPath, targetIface).BlockFunc(func(grp *jen.Group) {
 			// Create new target query (SAME PACKAGE!)
-			grp.Id("tq").Op(":=").Id("New" + targetQueryName).Call(jen.Id(recv).Dot("config"))
+			grp.Id("tq").Op(":=").Id("New" + targetQueryName).Call(jen.Id(qg.recv).Dot("config"))
 			// Thread the parent's interceptors into the child query so
 			// client.Intercept() fires on chained edge traversals too.
-			grp.Id("tq").Dot("inters").Op("=").Id(recv).Dot("inters")
+			grp.Id("tq").Dot("inters").Op("=").Id(qg.recv).Dot("inters")
 
 			// Set up the path closure for sub-select traversal
 			grp.Id("tq").Dot("path").Op("=").Func().Params(
 				jen.Id("ctx").Qual("context", "Context"),
 			).Params(
-				jen.Op("*").Qual(sqlPkg, "Selector"),
+				jen.Op("*").Qual(qg.sqlPkg, "Selector"),
 				jen.Error(),
 			).BlockFunc(func(body *jen.Group) {
-				body.List(jen.Id("from"), jen.Err()).Op(":=").Id(recv).Dot("buildQuery").Call(jen.Id("ctx"))
+				body.List(jen.Id("from"), jen.Err()).Op(":=").Id(qg.recv).Dot("buildQuery").Call(jen.Id("ctx"))
 				body.If(jen.Err().Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Err()),
 				)
@@ -502,14 +627,14 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 				}
 
 				// Target-package To (Ent style)
-				body.Id("step").Op(":=").Qual(sqlgraphPkg, "NewStep").Call(
-					jen.Qual(sqlgraphPkg, "From").Call(jen.Qual(srcEntitySubPkg, "Table"), jen.Qual(srcEntitySubPkg, t.ID.Constant())),
-					jen.Qual(sqlgraphPkg, "To").Call(
+				body.Id("step").Op(":=").Qual(qg.sqlgraphPkg, "NewStep").Call(
+					jen.Qual(qg.sqlgraphPkg, "From").Call(jen.Qual(srcEntitySubPkg, "Table"), jen.Qual(srcEntitySubPkg, qg.t.ID.Constant())),
+					jen.Qual(qg.sqlgraphPkg, "To").Call(
 						jen.Qual(targetEntitySubPkg, "Table"),
 						jen.Qual(targetEntitySubPkg, "FieldID"),
 					),
-					jen.Qual(sqlgraphPkg, "Edge").Call(
-						jen.Qual(sqlgraphPkg, h.EdgeRelType(edge)),
+					jen.Qual(qg.sqlgraphPkg, "Edge").Call(
+						jen.Qual(qg.sqlgraphPkg, qg.h.EdgeRelType(edge)),
 						jen.Lit(edge.IsInverse()),
 						jen.Qual(srcEntitySubPkg, edge.TableConstant()),
 						edgeColumns,
@@ -517,15 +642,15 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 				)
 				body.Id("step").Dot("From").Dot("V").Op("=").Id("from")
 				// Schema config stamping for multi-tenancy.
-				if schemaConfigEnabled {
-					body.Id("schemaConfig").Op(":=").Id(recv).Dot("schemaConfig")
-					for _, stmt := range genSchemaConfigStampStep(t, edge) {
+				if qg.schemaConfigEnabled {
+					body.Id("schemaConfig").Op(":=").Id(qg.recv).Dot("schemaConfig")
+					for _, stmt := range genSchemaConfigStampStep(qg.t, edge) {
 						body.Add(stmt)
 					}
 				}
 				body.Return(
-					jen.Qual(sqlgraphPkg, "SetNeighbors").Call(
-						jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call(),
+					jen.Qual(qg.sqlgraphPkg, "SetNeighbors").Call(
+						jen.Id(qg.recv).Dot("config").Dot("Driver").Dot("Dialect").Call(),
 						jen.Id("step"),
 					),
 					jen.Nil(),
@@ -534,1027 +659,18 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, allNodes []*gen.Type, entit
 			grp.Return(jen.Id("tq"))
 		})
 	}
+}
 
+// genClonePublic emits the interface-typed Clone wrapper over clone().
+func (qg *queryGen) genClonePublic() {
 	// =========================================================================
 	// Clone
 	// =========================================================================
 
-	f.Commentf("Clone returns a duplicate of the %s builder.", queryName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Clone").Params().Qual(entityPkgPath, querierIface).Block(
-		jen.Return(jen.Id(recv).Dot("clone").Call()),
+	qg.f.Commentf("Clone returns a duplicate of the %s builder.", qg.queryName)
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Clone").Params().Qual(qg.entityPkgPath, qg.querierIface).Block(
+		jen.Return(jen.Id(qg.recv).Dot("clone").Call()),
 	)
-
-	// =========================================================================
-	// Terminal methods
-	// =========================================================================
-
-	// sqlAll — actual scan + edge loading logic, extracted for interceptor support.
-	f.Commentf("sqlAll executes the SQL query and returns scanned %s entities.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("sqlAll").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Index().Op("*").Add(entityType()), jen.Error()).BlockFunc(func(allBody *jen.Group) {
-		// Push SchemaConfig into context so where predicates can read it.
-		if schemaConfigEnabled {
-			allBody.Id("ctx").Op("=").Qual(h.InternalPkg(), "NewSchemaConfigContext").Call(
-				jen.Id("ctx"),
-				jen.Id(recv).Dot("schemaConfig"),
-			)
-		}
-		allBody.List(jen.Id("nodes"), jen.Err()).Op(":=").Qual(runtimePkg, "ScanAll").Types(
-			entityType(), jen.Op("*").Add(entityType()),
-		).Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id(recv).Dot("buildSelector"),
-		)
-		allBody.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-		allBody.If(jen.Len(jen.Id("nodes")).Op("==").Lit(0)).Block(
-			jen.Return(jen.Id("nodes"), jen.Nil()),
-		)
-
-		// Phase 1 — Standard eager loading.
-		for _, edge := range t.Edges {
-			edgeField := edge.StructField()
-			callbackField := edgeCallbackField(edge)
-			loaderName := "load" + edgeField
-			targetEntityType := func() *jen.Statement { return jen.Qual(entityPkgPath, edge.Type.Name) }
-
-			allBody.If(jen.Id("query").Op(":=").Id(recv).Dot(callbackField), jen.Id("query").Op("!=").Nil()).BlockFunc(func(ifBody *jen.Group) {
-				// init callback
-				var initFn *jen.Statement
-				if edge.Unique {
-					// O2O/M2O: just mark loaded.
-					initFn = jen.Func().Params(jen.Id("n").Op("*").Add(entityType())).Block(
-						jen.Id("n").Dot("Edges").Dot("Mark" + edgeField + "Loaded").Call(),
-					)
-				} else {
-					// O2M/M2M: init empty slice + mark loaded.
-					initFn = jen.Func().Params(jen.Id("n").Op("*").Add(entityType())).Block(
-						jen.Id("n").Dot("Edges").Dot(edgeField).Op("=").Index().Op("*").Add(targetEntityType()).Values(),
-						jen.Id("n").Dot("Edges").Dot("Mark"+edgeField+"Loaded").Call(),
-					)
-				}
-
-				// assign callback
-				var assignFn *jen.Statement
-				if edge.Unique {
-					assignFn = jen.Func().Params(
-						jen.Id("n").Op("*").Add(entityType()),
-						jen.Id("e").Op("*").Add(targetEntityType()),
-					).BlockFunc(func(fnBody *jen.Group) {
-						fnBody.Id("n").Dot("Edges").Dot(edgeField).Op("=").Id("e")
-						// Back-reference: if the child has an inverse unique edge, set it.
-						if edge.Ref != nil && edge.Ref.Unique {
-							refField := edge.Ref.StructField()
-							fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
-								jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
-								jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
-							)
-						}
-					})
-				} else {
-					assignFn = jen.Func().Params(
-						jen.Id("n").Op("*").Add(entityType()),
-						jen.Id("e").Op("*").Add(targetEntityType()),
-					).BlockFunc(func(fnBody *jen.Group) {
-						fnBody.Id("n").Dot("Edges").Dot(edgeField).Op("=").Append(
-							jen.Id("n").Dot("Edges").Dot(edgeField), jen.Id("e"),
-						)
-						// Back-reference for O2M.
-						if edge.Ref != nil && edge.Ref.Unique {
-							refField := edge.Ref.StructField()
-							fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
-								jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
-								jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
-							)
-						}
-					})
-				}
-
-				ifBody.If(
-					jen.Err().Op(":=").Id(recv).Dot(loaderName).Call(
-						jen.Id("ctx"), jen.Id("query"), jen.Id("nodes"),
-						initFn, assignFn,
-					),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					jen.Return(jen.Nil(), jen.Err()),
-				)
-			})
-		}
-
-		// Phase 2 — Named edge variants (FeatureNamedEdges).
-		if namedEdgesEnabled {
-			for _, edge := range t.Edges {
-				if edge.Unique {
-					continue
-				}
-				edgeField := edge.StructField()
-				loaderName := "load" + edgeField
-				namedField := "withNamed" + edgeField
-				targetEntityType := func() *jen.Statement { return jen.Qual(entityPkgPath, edge.Type.Name) }
-
-				allBody.For(
-					jen.List(jen.Id("name"), jen.Id("query")).Op(":=").Range().Id(recv).Dot(namedField),
-				).BlockFunc(func(forBody *jen.Group) {
-					initFn := jen.Func().Params(jen.Id("n").Op("*").Add(entityType())).Block(
-						jen.Id("n").Dot("AppendNamed" + edgeField).Call(jen.Id("name")),
-					)
-					assignFn := jen.Func().Params(
-						jen.Id("n").Op("*").Add(entityType()),
-						jen.Id("e").Op("*").Add(targetEntityType()),
-					).BlockFunc(func(fnBody *jen.Group) {
-						fnBody.Id("n").Dot("AppendNamed"+edgeField).Call(jen.Id("name"), jen.Id("e"))
-						if edge.Ref != nil && edge.Ref.Unique {
-							refField := edge.Ref.StructField()
-							fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
-								jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
-								jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
-							)
-						}
-					})
-					forBody.If(
-						jen.Err().Op(":=").Id(recv).Dot(loaderName).Call(
-							jen.Id("ctx"), jen.Id("query"), jen.Id("nodes"),
-							initFn, assignFn,
-						),
-						jen.Err().Op("!=").Nil(),
-					).Block(
-						jen.Return(jen.Nil(), jen.Err()),
-					)
-				})
-			}
-		}
-
-		// Phase 3 — loadTotal registry loop.
-		allBody.For(jen.Id("i").Op(":=").Range().Id(recv).Dot("loadTotal")).Block(
-			jen.If(jen.Err().Op(":=").Id(recv).Dot("loadTotal").Index(jen.Id("i")).Call(jen.Id("ctx"), jen.Id("nodes")), jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Err()),
-			),
-		)
-
-		// Inject runtime config so entity-level methods can access the driver.
-		allBody.For(jen.List(jen.Id("_"), jen.Id("node")).Op(":=").Range().Id("nodes")).Block(
-			jen.Id("node").Dot(t.SetConfigMethodName()).Call(jen.Id(recv).Dot("config")),
-		)
-
-		allBody.Return(jen.Id("nodes"), jen.Nil())
-	})
-
-	// prepareQuery — evaluates the privacy policy (if any) and then runs
-	// Traversers from the interceptor list (Ent-style). Privacy is no
-	// longer part of the interceptor chain — it is invoked explicitly
-	// here via q.policy.EvalQuery(). Interceptors never see the privacy
-	// call at all.
-	f.Comment("prepareQuery evaluates the privacy policy (if any) and runs")
-	f.Comment("Traversers from the interceptor list. Privacy is invoked")
-	f.Comment("explicitly here — it is NOT part of the interceptor chain.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("prepareQuery").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Error().BlockFunc(func(body *jen.Group) {
-		if hasPolicy {
-			body.If(jen.Id(recv).Dot("policy").Op("!=").Nil()).Block(
-				jen.If(
-					jen.Err().Op(":=").Id(recv).Dot("policy").Dot("EvalQuery").Call(
-						jen.Id("ctx"), jen.Id(recv),
-					),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					jen.Return(jen.Err()),
-				),
-			)
-		}
-		body.Return(jen.Qual(runtimePkg, "RunTraversers").Call(
-			jen.Id("ctx"), jen.Id(recv), intersField(recv),
-		))
-	})
-
-	// All — wraps sqlAll with interceptor support (Ent-style).
-	f.Commentf("All executes the query and returns a list of %s.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("All").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Index().Op("*").Add(entityType()), jen.Error()).BlockFunc(func(allBody *jen.Group) {
-		veloxPkg := h.VeloxPkg()
-
-		// ctx = setContextOp(ctx, _q.ctx, velox.OpQueryAll)
-		allBody.Id("ctx").Op("=").Id("setContextOp").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(veloxPkg, "OpQueryAll"),
-		)
-		// prepareQuery first (runs Traversers), then interceptor chain.
-		allBody.If(jen.Err().Op(":=").Id(recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-		allBody.If(jen.Len(intersField(recv)).Op(">").Lit(0)).Block(
-			jen.Return(jen.Qual(veloxPkg, "WithInterceptors").Types(
-				jen.Index().Op("*").Add(entityType()),
-			).Call(
-				jen.Id("ctx"),
-				jen.Id(recv),
-				jen.Id("querierAll").Types(
-					jen.Index().Op("*").Add(entityType()),
-					jen.Op("*").Id(queryName),
-				).Call(),
-				intersField(recv),
-			)),
-		)
-		allBody.Return(jen.Id(recv).Dot("sqlAll").Call(jen.Id("ctx")))
-	})
-
-	// AllX — panics on error.
-	f.Commentf("AllX is like All, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("AllX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Index().Op("*").Add(entityType()).Block(
-		jen.List(jen.Id("nodes"), jen.Err()).Op(":=").Id(recv).Dot("All").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("nodes")),
-	)
-
-	// First — delegates to All with limit 1.
-	f.Commentf("First returns the first %s entity from the query.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("First").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Op("*").Add(entityType()), jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Id("clone").Op(":=").Id(recv).Dot("clone").Call()
-		body.Id("clone").Dot("ctx").Dot("Limit").Op("=").Id("intP").Call(jen.Lit(1))
-		body.List(jen.Id("nodes"), jen.Err()).Op(":=").Id("clone").Dot("All").Call(
-			jen.Id("setContextOp").Call(jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryFirst")),
-		)
-		body.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-		body.If(jen.Len(jen.Id("nodes")).Op("==").Lit(0)).Block(
-			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "NewNotFoundError").Call(jen.Lit(t.Name))),
-		)
-		body.Return(jen.Id("nodes").Index(jen.Lit(0)), jen.Nil())
-	})
-
-	// FirstX — panics on error.
-	f.Commentf("FirstX is like First, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("FirstX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Op("*").Add(entityType()).Block(
-		jen.List(jen.Id("node"), jen.Err()).Op(":=").Id(recv).Dot("First").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("node")),
-	)
-
-	// Only — delegates to All with limit 2.
-	f.Commentf("Only returns a single %s entity found by the query, ensuring it only returns one.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Only").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Op("*").Add(entityType()), jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Id("clone").Op(":=").Id(recv).Dot("clone").Call()
-		body.Id("clone").Dot("ctx").Dot("Limit").Op("=").Id("intP").Call(jen.Lit(2))
-		body.List(jen.Id("nodes"), jen.Err()).Op(":=").Id("clone").Dot("All").Call(
-			jen.Id("setContextOp").Call(jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryOnly")),
-		)
-		body.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-		body.Switch(jen.Len(jen.Id("nodes"))).Block(
-			jen.Case(jen.Lit(0)).Block(
-				jen.Return(jen.Nil(), jen.Qual(runtimePkg, "NewNotFoundError").Call(jen.Lit(t.Name))),
-			),
-			jen.Case(jen.Lit(1)).Block(
-				jen.Return(jen.Id("nodes").Index(jen.Lit(0)), jen.Nil()),
-			),
-			jen.Default().Block(
-				jen.Return(jen.Nil(), jen.Qual(runtimePkg, "NewNotSingularError").Call(jen.Lit(t.Name))),
-			),
-		)
-	})
-
-	// OnlyX — panics on error.
-	f.Commentf("OnlyX is like Only, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("OnlyX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Op("*").Add(entityType()).Block(
-		jen.List(jen.Id("node"), jen.Err()).Op(":=").Id(recv).Dot("Only").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("node")),
-	)
-
-	// sqlCount — actual count execution, extracted for interceptor support.
-	f.Comment("sqlCount executes the SQL COUNT query and returns the result.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("sqlCount").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Int(), jen.Error()).BlockFunc(func(body *jen.Group) {
-		// Resolve graph traversal path.
-		body.Var().Id("from").Op("*").Qual(sqlPkg, "Selector")
-		body.If(jen.Id(recv).Dot("path").Op("!=").Nil()).BlockFunc(func(ifBody *jen.Group) {
-			ifBody.Var().Id("err").Error()
-			ifBody.List(jen.Id("from"), jen.Id("err")).Op("=").Id(recv).Dot("path").Call(jen.Id("ctx"))
-			ifBody.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Lit(0), jen.Err()),
-			)
-		})
-		// Build a spec with nil columns so the SQL is COUNT(*).
-		body.Id("spec").Op(":=").Id(recv).Dot("querySpec").Call()
-		body.Id("spec").Dot("Node").Dot("Columns").Op("=").Nil()
-		body.Id("spec").Dot("From").Op("=").Id("from")
-		body.Return(jen.Qual(sqlgraphPkg, "CountNodes").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id("spec"),
-		))
-	})
-
-	// Count — wraps sqlCount with interceptor support (Ent-style).
-	f.Comment("Count returns the count of the given query.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Count").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Int(), jen.Error()).BlockFunc(func(body *jen.Group) {
-		veloxPkg := h.VeloxPkg()
-		// ctx = setContextOp(ctx, _q.ctx, velox.OpQueryCount)
-		body.Id("ctx").Op("=").Id("setContextOp").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(veloxPkg, "OpQueryCount"),
-		)
-		body.If(jen.Err().Op(":=").Id(recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Lit(0), jen.Err()),
-		)
-		body.If(jen.Len(intersField(recv)).Op(">").Lit(0)).Block(
-			jen.Return(jen.Qual(veloxPkg, "WithInterceptors").Types(
-				jen.Int(),
-			).Call(
-				jen.Id("ctx"),
-				jen.Id(recv),
-				jen.Id("querierCount").Types(
-					jen.Op("*").Id(queryName),
-				).Call(),
-				intersField(recv),
-			)),
-		)
-		body.Return(jen.Id(recv).Dot("sqlCount").Call(jen.Id("ctx")))
-	})
-
-	// CountX — panics on error.
-	f.Comment("CountX is like Count, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("CountX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Int().Block(
-		jen.List(jen.Id("count"), jen.Err()).Op(":=").Id(recv).Dot("Count").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("count")),
-	)
-
-	// Exist — uses FirstID (more efficient than Count — stops after 1 row).
-	f.Comment("Exist returns true if the query has results.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Exist").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Bool(), jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Id("ctx").Op("=").Id("setContextOp").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryExist"),
-		)
-		body.List(jen.Id("_"), jen.Err()).Op(":=").Id(recv).Dot("FirstID").Call(jen.Id("ctx"))
-		body.If(jen.Err().Op("==").Nil()).Block(
-			jen.Return(jen.True(), jen.Nil()),
-		)
-		body.If(jen.Qual(runtimePkg, "IsNotFound").Call(jen.Err())).Block(
-			jen.Return(jen.False(), jen.Nil()),
-		)
-		body.Return(jen.False(), jen.Qual("fmt", "Errorf").Call(jen.Lit("velox: check existence: %w"), jen.Err()))
-	})
-
-	// ExistX — panics on error.
-	f.Comment("ExistX is like Exist, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("ExistX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Bool().Block(
-		jen.List(jen.Id("exist"), jen.Err()).Op(":=").Id(recv).Dot("Exist").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("exist")),
-	)
-
-	// SQL — returns the generated SQL string and args without executing.
-	f.Comment("SQL returns the SQL query string and arguments for debugging.")
-	f.Comment("It runs prepareQuery (privacy traversers) and builds the selector,")
-	f.Comment("but does not execute the query.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("SQL").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.String(), jen.Index().Any(), jen.Error()).Block(
-		jen.If(jen.Err().Op(":=").Id(recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Lit(""), jen.Nil(), jen.Err()),
-		),
-		jen.List(jen.Id("selector"), jen.Err()).Op(":=").Id(recv).Dot("buildSelector").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Lit(""), jen.Nil(), jen.Err()),
-		),
-		jen.List(jen.Id("query"), jen.Id("args")).Op(":=").Id("selector").Dot("Query").Call(),
-		jen.Return(jen.Id("query"), jen.Id("args"), jen.Nil()),
-	)
-
-	// Explain — returns a *runtime.QueryPlan describing the query without executing.
-	f.Comment("Explain returns the query's execution plan without executing it.")
-	f.Comment("Includes the SQL, arguments, planned edge loads, and active interceptors.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Explain").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Op("*").Qual(runtimePkg, "QueryPlan"), jen.Error()).BlockFunc(func(body *jen.Group) {
-		// prepareQuery
-		body.If(jen.Err().Op(":=").Id(recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-
-		// Build selector
-		body.List(jen.Id("selector"), jen.Err()).Op(":=").Id(recv).Dot("buildSelector").Call(jen.Id("ctx"))
-		body.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-		body.List(jen.Id("query"), jen.Id("args")).Op(":=").Id("selector").Dot("Query").Call()
-
-		// Initialize plan
-		body.Id("plan").Op(":=").Op("&").Qual(runtimePkg, "QueryPlan").Values(jen.Dict{
-			jen.Id("SQL"):  jen.Id("query"),
-			jen.Id("Args"): jen.Id("args"),
-		})
-
-		// Collect interceptor type names
-		body.For(jen.List(jen.Id("_"), jen.Id("inter")).Op(":=").Range().Id(recv).Dot("inters").Dot(t.Name)).Block(
-			jen.Id("plan").Dot("Interceptors").Op("=").Append(
-				jen.Id("plan").Dot("Interceptors"),
-				jen.Qual("fmt", "Sprintf").Call(jen.Lit("%T"), jen.Id("inter")),
-			),
-		)
-
-		// Edge plans
-		for _, edge := range t.Edges {
-			edgeField := edgeCallbackField(edge)
-			body.If(jen.Id(recv).Dot(edgeField).Op("!=").Nil()).BlockFunc(func(inner *jen.Group) {
-				inner.List(jen.Id("eSel"), jen.Id("eErr")).Op(":=").Id(recv).Dot(edgeField).Dot("buildSelector").Call(jen.Id("ctx"))
-				inner.If(jen.Id("eErr").Op("==").Nil()).Block(
-					jen.List(jen.Id("eq"), jen.Id("ea")).Op(":=").Id("eSel").Dot("Query").Call(),
-					jen.Id("plan").Dot("Edges").Op("=").Append(
-						jen.Id("plan").Dot("Edges"),
-						jen.Qual(runtimePkg, "EdgePlan").Values(jen.Dict{
-							jen.Id("Name"): jen.Lit(edge.Name),
-							jen.Id("SQL"):  jen.Id("eq"),
-							jen.Id("Args"): jen.Id("ea"),
-						}),
-					),
-				)
-			})
-		}
-
-		body.Return(jen.Id("plan"), jen.Nil())
-	})
-
-	// IDs — user-facing method that wraps sqlIDs in the interceptor
-	// chain. sqlIDs contains the actual SQL execution.
-	f.Commentf("IDs executes the query and returns a list of %s IDs.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("IDs").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Index().Add(idType), jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Id("ctx").Op("=").Id("setContextOp").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryIDs"),
-		)
-		body.If(jen.Id("err").Op(":=").Id(recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Id("err")),
-		)
-		body.If(jen.Len(intersField(recv)).Op(">").Lit(0)).Block(
-			jen.Return(jen.Qual(h.VeloxPkg(), "WithInterceptors").Types(
-				jen.Index().Add(idType),
-			).Call(
-				jen.Id("ctx"),
-				jen.Id(recv),
-				jen.Id("querierIDs").Types(
-					jen.Index().Add(idType),
-					jen.Op("*").Id(queryName),
-				).Call(),
-				intersField(recv),
-			)),
-		)
-		body.Return(jen.Id(recv).Dot("sqlIDs").Call(jen.Id("ctx")))
-	})
-
-	// sqlIDs — the actual SQL execution, wrapped by IDs above.
-	f.Commentf("sqlIDs executes the ID-only SQL SELECT for %s.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("sqlIDs").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Index().Add(idType), jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Var().Id("from").Op("*").Qual(sqlPkg, "Selector")
-		body.If(jen.Id(recv).Dot("path").Op("!=").Nil()).BlockFunc(func(ifBody *jen.Group) {
-			ifBody.Var().Id("err").Error()
-			ifBody.List(jen.Id("from"), jen.Id("err")).Op("=").Id(recv).Dot("path").Call(jen.Id("ctx"))
-			ifBody.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Err()),
-			)
-			ifBody.If(jen.Id(recv).Dot("ctx").Dot("Unique").Op("==").Nil()).Block(
-				jen.Id(recv).Dot("Unique").Call(jen.True()),
-			)
-		})
-		body.Id("spec").Op(":=").Id(recv).Dot("querySpec").Call()
-		body.Id("spec").Dot("Node").Dot("Columns").Op("=").Index().String().Values(jen.Qual(entitySubPkg, "FieldID"))
-		body.Id("spec").Dot("From").Op("=").Id("from")
-		body.Var().Id("ids").Index().Add(idType)
-		body.Id("spec").Dot("ScanValues").Op("=").Func().Params(jen.Id("_").Index().String()).Params(jen.Index().Any(), jen.Error()).Block(
-			jen.Return(jen.Qual(runtimePkg, "IDScanValues").Call(jen.Qual(schemaPkg(), t.ID.Type.ConstName())), jen.Nil()),
-		)
-		body.Id("spec").Dot("Assign").Op("=").Func().Params(jen.Id("_").Index().String(), jen.Id("values").Index().Any()).Error().BlockFunc(func(fnBody *jen.Group) {
-			fnBody.If(jen.Len(jen.Id("values")).Op("==").Lit(0)).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("velox: IDs: no values returned"))),
-			)
-			fnBody.List(jen.Id("id"), jen.Id("err")).Op(":=").Qual(runtimePkg, "ExtractID").Call(jen.Id("values").Index(jen.Lit(0)), jen.Qual(schemaPkg(), t.ID.Type.ConstName()))
-			fnBody.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Err()),
-			)
-			fnBody.Id("ids").Op("=").Append(jen.Id("ids"), jen.Id("id").Assert(idType))
-			fnBody.Return(jen.Nil())
-		})
-		body.If(jen.Err().Op(":=").Qual(sqlgraphPkg, "QueryNodes").Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id("spec"),
-		), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
-		)
-		body.Return(jen.Id("ids"), jen.Nil())
-	})
-
-	// IDsX — panics on error.
-	f.Commentf("IDsX is like IDs, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("IDsX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Index().Add(idType).Block(
-		jen.List(jen.Id("ids"), jen.Err()).Op(":=").Id(recv).Dot("IDs").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("ids")),
-	)
-
-	// FirstID — clones, sets limit 1, calls IDs.
-	f.Commentf("FirstID returns the first %s ID from the query.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("FirstID").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(idType, jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Var().Id("zero").Add(idType)
-		body.Id("clone").Op(":=").Id(recv).Dot("clone").Call()
-		body.Id("clone").Dot("ctx").Dot("Limit").Op("=").Id("intP").Call(jen.Lit(1))
-		body.List(jen.Id("ids"), jen.Err()).Op(":=").Id("clone").Dot("IDs").Call(
-			jen.Id("setContextOp").Call(jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryFirstID")),
-		)
-		body.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Id("zero"), jen.Err()),
-		)
-		body.If(jen.Len(jen.Id("ids")).Op("==").Lit(0)).Block(
-			jen.Return(jen.Id("zero"), jen.Qual(runtimePkg, "NewNotFoundError").Call(jen.Lit(t.Name))),
-		)
-		body.Return(jen.Id("ids").Index(jen.Lit(0)), jen.Nil())
-	})
-
-	// FirstIDX — panics on error.
-	f.Commentf("FirstIDX is like FirstID, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("FirstIDX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Add(idType).Block(
-		jen.List(jen.Id("id"), jen.Err()).Op(":=").Id(recv).Dot("FirstID").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("id")),
-	)
-
-	// OnlyID — clones, sets limit 2, calls IDs.
-	f.Commentf("OnlyID returns the only %s ID in the query.", t.Name)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("OnlyID").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(idType, jen.Error()).BlockFunc(func(body *jen.Group) {
-		body.Var().Id("zero").Add(idType)
-		body.Id("clone").Op(":=").Id(recv).Dot("clone").Call()
-		body.Id("clone").Dot("ctx").Dot("Limit").Op("=").Id("intP").Call(jen.Lit(2))
-		body.List(jen.Id("ids"), jen.Err()).Op(":=").Id("clone").Dot("IDs").Call(
-			jen.Id("setContextOp").Call(jen.Id("ctx"), jen.Id(recv).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryOnlyID")),
-		)
-		body.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Id("zero"), jen.Err()),
-		)
-		body.Switch(jen.Len(jen.Id("ids"))).Block(
-			jen.Case(jen.Lit(0)).Block(
-				jen.Return(jen.Id("zero"), jen.Qual(runtimePkg, "NewNotFoundError").Call(jen.Lit(t.Name))),
-			),
-			jen.Case(jen.Lit(1)).Block(
-				jen.Return(jen.Id("ids").Index(jen.Lit(0)), jen.Nil()),
-			),
-			jen.Default().Block(
-				jen.Return(jen.Id("zero"), jen.Qual(runtimePkg, "NewNotSingularError").Call(jen.Lit(t.Name))),
-			),
-		)
-	})
-
-	// OnlyIDX — panics on error.
-	f.Commentf("OnlyIDX is like OnlyID, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("OnlyIDX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Add(idType).Block(
-		jen.List(jen.Id("id"), jen.Err()).Op(":=").Id(recv).Dot("OnlyID").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err())),
-		jen.Return(jen.Id("id")),
-	)
-
-	// =========================================================================
-	// ForUpdate and ForShare — row-level locking
-	// =========================================================================
-
-	f.Comment("ForUpdate locks the selected rows against concurrent updates, and prevent them from being")
-	f.Comment("updated, deleted or \"selected ... for update\" by other sessions, until the transaction is")
-	f.Comment("either committed or rolled-back.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("ForUpdate").Params(
-		jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
-	).Qual(entityPkgPath, querierIface).Block(
-		lockDropsDistinct(recv, "CapForUpdate"),
-		jen.Id(recv).Dot("modifiers").Op("=").Append(
-			jen.Id(recv).Dot("modifiers"),
-			jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
-				jen.Id("s").Dot("ForUpdate").Call(jen.Id("opts").Op("...")),
-			),
-		),
-		jen.Return(jen.Id(recv)),
-	)
-
-	f.Comment("ForShare behaves similarly to ForUpdate, except that it acquires a shared mode lock")
-	f.Comment("on any rows that are read. Other sessions can read the rows, but cannot modify them")
-	f.Comment("until your transaction commits.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("ForShare").Params(
-		jen.Id("opts").Op("...").Qual(sqlPkg, "LockOption"),
-	).Qual(entityPkgPath, querierIface).Block(
-		lockDropsDistinct(recv, "CapForShare"),
-		jen.Id(recv).Dot("modifiers").Op("=").Append(
-			jen.Id(recv).Dot("modifiers"),
-			jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
-				jen.Id("s").Dot("ForShare").Call(jen.Id("opts").Op("...")),
-			),
-		),
-		jen.Return(jen.Id(recv)),
-	)
-
-	// =========================================================================
-	// QueryReader getters — implement runtime.QueryReader interface
-	// =========================================================================
-
-	f.Comment("GetDriver returns the dialect driver. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetDriver").Params().Qual(dialectPkg(), "Driver").Block(
-		jen.Return(jen.Id(recv).Dot("config").Dot("Driver")),
-	)
-
-	f.Comment("GetTable returns the primary table name. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetTable").Params().String().Block(
-		jen.Return(jen.Qual(entitySubPkg, "Table")),
-	)
-
-	f.Comment("GetColumns returns the default column list. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetColumns").Params().Index().String().Block(
-		jen.Return(jen.Qual(entitySubPkg, "Columns")),
-	)
-
-	f.Comment("GetFKColumns returns the foreign-key columns. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetFKColumns").Params().Index().String().Block(
-		jen.Return(jen.Qual(entitySubPkg, "ForeignKeys")),
-	)
-
-	f.Comment("GetIDFieldType returns the schema type of the ID field. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetIDFieldType").Params().Qual(schemaPkg(), "Type").Block(
-		jen.Return(jen.Qual(schemaPkg(), t.ID.Type.ConstName())),
-	)
-
-	f.Comment("GetPath returns the graph-traversal path function. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetPath").Params().Func().Params(
-		jen.Qual("context", "Context"),
-	).Params(jen.Op("*").Qual(sqlPkg, "Selector"), jen.Error()).Block(
-		jen.Return(jen.Id(recv).Dot("path")),
-	)
-
-	f.Comment("GetPredicates returns the registered WHERE predicates. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetPredicates").Params().Index().Func().Params(
-		jen.Op("*").Qual(sqlPkg, "Selector"),
-	).Block(
-		jen.Return(jen.Id(recv).Dot("predicates")),
-	)
-
-	f.Comment("GetOrder returns the registered ORDER BY functions. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetOrder").Params().Index().Func().Params(
-		jen.Op("*").Qual(sqlPkg, "Selector"),
-	).Block(
-		jen.Return(jen.Id(recv).Dot("order")),
-	)
-
-	f.Comment("GetModifiers returns the registered query modifiers. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetModifiers").Params().Index().Func().Params(
-		jen.Op("*").Qual(sqlPkg, "Selector"),
-	).Block(
-		jen.Return(jen.Id(recv).Dot("modifiers")),
-	)
-
-	f.Comment("GetWithFKs returns whether FK columns should be included. Implements runtime.QueryReader.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GetWithFKs").Params().Bool().Block(
-		jen.Return(jen.Id(recv).Dot("withFKs")),
-	)
-
-	// =========================================================================
-	// Select — returns *UserSelect which embeds runtime.Selector for scalar methods
-	// =========================================================================
-
-	selectName := t.Name + "Select"
-	f.Commentf("Select allows the selection of one or more fields/columns for the given query,")
-	f.Commentf("returning a %s builder with scalar accessor methods (Strings, Ints, etc.).", selectName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Select").Params(
-		jen.Id("fields").Op("...").String(),
-	).Qual(entityPkgPath, t.Name+"Selector").Block(
-		jen.Id(recv).Dot("ctx").Dot("Fields").Op("=").Append(
-			jen.Id(recv).Dot("ctx").Dot("Fields"),
-			jen.Id("fields").Op("..."),
-		),
-		jen.Id("s").Op(":=").Op("&").Id(selectName).Values(jen.Dict{
-			jen.Id(queryName): jen.Id(recv),
-		}),
-		// Wire the public Scan method (which runs through the
-		// interceptor chain), NOT the raw sqlScan helper. This is what
-		// makes .Strings() / .Ints() / .Int() / etc. honor interceptors
-		// — all of those runtime.Selector terminal methods call the
-		// scan function stored here.
-		jen.Id("s").Dot("Selector").Op("=").Qual(runtimePkg, "NewSelector").Call(
-			jen.Lit(selectName),
-			jen.Op("&").Id(recv).Dot("ctx").Dot("Fields"),
-			jen.Id("s").Dot("Scan"),
-		),
-		jen.Return(jen.Id("s")),
-	)
-
-	// =========================================================================
-	// Modify — adds query modifier for attaching custom logic to queries
-	// =========================================================================
-
-	f.Commentf("Modify adds a query modifier for attaching custom logic to queries.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Modify").Params(
-		jen.Id("modifiers").Op("...").Func().Params(jen.Op("*").Qual(sqlPkg, "Selector")),
-	).Qual(entityPkgPath, querierIface).Block(
-		jen.Id(recv).Dot("modifiers").Op("=").Append(jen.Id(recv).Dot("modifiers"), jen.Id("modifiers").Op("...")),
-		jen.Return(jen.Id(recv)),
-	)
-
-	// =========================================================================
-	// Aggregate without GroupBy — routes through Select, matching Ent's API
-	// =========================================================================
-
-	f.Commentf("Aggregate returns a %s configured with the given aggregations.", selectName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Aggregate").Params(
-		jen.Id("fns").Op("...").Qual(runtimePkg, "AggregateFunc"),
-	).Qual(entityPkgPath, t.Name+"Selector").Block(
-		jen.Return(jen.Id(recv).Dot("Select").Call().Dot("Aggregate").Call(jen.Id("fns").Op("..."))),
-	)
-
-	// =========================================================================
-	// GroupBy — groups vertices by one or more fields/columns
-	// =========================================================================
-
-	gbName := t.Name + "GroupBy"
-	f.Commentf("GroupBy is used to group vertices by one or more fields/columns.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("GroupBy").Params(
-		jen.Id("field").String(),
-		jen.Id("fields").Op("...").String(),
-	).Qual(entityPkgPath, t.Name+"GroupByer").Block(
-		jen.Id("g").Op(":=").Op("&").Id(gbName).Values(jen.Dict{
-			jen.Id("build"):  jen.Id(recv),
-			jen.Id("fields"): jen.Append(jen.Index().String().Values(jen.Id("field")), jen.Id("fields").Op("...")),
-		}),
-		// Wire the public Scan method (which runs through the
-		// interceptor chain), NOT the raw sqlScan helper. Same
-		// rationale as UserSelect above.
-		jen.Id("g").Dot("Selector").Op("=").Qual(runtimePkg, "NewSelector").Call(
-			jen.Lit(gbName),
-			jen.Op("&").Id("g").Dot("fields"),
-			jen.Id("g").Dot("Scan"),
-		),
-		jen.Return(jen.Id("g")),
-	)
-
-	// =========================================================================
-	// Scan / ScanX — direct scan without Select
-	// =========================================================================
-
-	f.Comment("Scan applies the selector query and scans the result into the given value.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("Scan").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Error().Block(
-		jen.If(jen.Err().Op(":=").Id(recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Id("err")),
-		),
-		jen.Return(jen.Qual(runtimePkg, "QueryScan").Call(
-			jen.Id("ctx"), jen.Id(recv), jen.Id("v"),
-		)),
-	)
-
-	f.Comment("ScanX is like Scan, but panics if an error occurs.")
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("ScanX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Block(
-		jen.If(jen.Err().Op(":=").Id(recv).Dot("Scan").Call(jen.Id("ctx"), jen.Id("v")), jen.Err().Op("!=").Nil()).Block(
-			jen.Panic(jen.Err()),
-		),
-	)
-
-	// =========================================================================
-	// UserSelect type and methods
-	// =========================================================================
-
-	f.Commentf("%s is the builder for selecting fields of %s entities.", selectName, t.Name)
-	f.Type().Id(selectName).Struct(
-		jen.Op("*").Id(queryName),
-		jen.Qual(runtimePkg, "Selector"),
-	)
-
-	f.Comment("Aggregate adds the given aggregation functions to the selector query.")
-	f.Func().Params(jen.Id("s").Op("*").Id(selectName)).Id("Aggregate").Params(
-		jen.Id("fns").Op("...").Qual(runtimePkg, "AggregateFunc"),
-	).Qual(entityPkgPath, t.Name+"Selector").Block(
-		jen.Id("s").Dot("AppendFns").Call(jen.Id("fns").Op("...")),
-		jen.Return(jen.Id("s")),
-	)
-
-	// sqlScan for UserSelect — raw SQL execution that sqlScan is
-	// wired to via runtime.Selector.Scan. Uses QuerySelect (not
-	// QueryScan) to honor aggregate functions registered via
-	// Aggregate(...). When no aggregates are present, QuerySelect
-	// behaves identically to QueryScan.
-	f.Func().Params(jen.Id("s").Op("*").Id(selectName)).Id("sqlScan").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Error().Block(
-		jen.Return(jen.Qual(runtimePkg, "QuerySelect").Call(
-			jen.Id("ctx"),
-			jen.Id("s").Dot(queryName),
-			jen.Id("s").Dot("Fns").Call(),
-			jen.Id("v"),
-		)),
-	)
-
-	// selectIntersExpr returns the Jen expression for the interceptor slice
-	// when accessed through a select/groupby receiver that holds the query
-	// via s.{queryName} or g.build. Always the direct per-entity slice —
-	// privacy is no longer part of the interceptor chain (see prepareQuery).
-	selectIntersExpr := func(queryAccess *jen.Statement) *jen.Statement {
-		return queryAccess.Clone().Dot("inters").Dot(t.Name)
-	}
-
-	// Scan and ScanX on *XxxSelect — explicit methods disambiguate
-	// the promoted ScanX from runtime.Selector vs *XxxQuery (both
-	// embed into XxxSelect). Scan threads the call through the
-	// parent UserQuery's interceptor chain before running sqlScan
-	// so client.Intercept() fires on .Strings() / .Int() / etc.
-	// Uses runtime.ScanWithInterceptors to avoid per-entity boilerplate.
-	f.Comment("Scan applies the selector query and scans the result into the given value.")
-	f.Func().Params(jen.Id("s").Op("*").Id(selectName)).Id("Scan").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Error().BlockFunc(func(body *jen.Group) {
-		body.Id("ctx").Op("=").Id("setContextOp").Call(
-			jen.Id("ctx"), jen.Id("s").Dot(queryName).Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQuerySelect"),
-		)
-		body.If(jen.Err().Op(":=").Id("s").Dot(queryName).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Err()),
-		)
-		body.Return(jen.Qual(runtimePkg, "ScanWithInterceptors").Call(
-			jen.Id("ctx"),
-			jen.Id("s").Dot(queryName),
-			selectIntersExpr(jen.Id("s").Dot(queryName)),
-			jen.Id("s").Dot("sqlScan"),
-			jen.Id("v"),
-		))
-	})
-
-	f.Comment("ScanX is like Scan, but panics if an error occurs.")
-	f.Func().Params(jen.Id("s").Op("*").Id(selectName)).Id("ScanX").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Block(
-		jen.If(jen.Err().Op(":=").Id("s").Dot("Scan").Call(jen.Id("ctx"), jen.Id("v")), jen.Err().Op("!=").Nil()).Block(
-			jen.Panic(jen.Err()),
-		),
-	)
-
-	// =========================================================================
-	// UserGroupBy type and methods
-	// =========================================================================
-
-	f.Commentf("%s is the group-by builder for %s entities.", gbName, t.Name)
-	f.Type().Id(gbName).StructFunc(func(group *jen.Group) {
-		group.Qual(runtimePkg, "Selector")
-		group.Id("build").Op("*").Id(queryName)
-		group.Id("fields").Index().String()
-	})
-
-	f.Comment("Aggregate adds the given aggregation functions to the group-by query.")
-	f.Func().Params(jen.Id("g").Op("*").Id(gbName)).Id("Aggregate").Params(
-		jen.Id("fns").Op("...").Qual(runtimePkg, "AggregateFunc"),
-	).Qual(entityPkgPath, t.Name+"GroupByer").Block(
-		jen.Id("g").Dot("AppendFns").Call(jen.Id("fns").Op("...")),
-		jen.Return(jen.Id("g")),
-	)
-
-	// Scan applies the group-by query and scans the result into the given value.
-	// Uses runtime.ScanWithInterceptors to avoid per-entity boilerplate.
-	f.Comment("Scan applies the group-by query and scans the result into the given value.")
-	f.Func().Params(jen.Id("g").Op("*").Id(gbName)).Id("Scan").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Error().BlockFunc(func(body *jen.Group) {
-		body.Id("ctx").Op("=").Id("setContextOp").Call(
-			jen.Id("ctx"), jen.Id("g").Dot("build").Dot("ctx"), jen.Qual(h.VeloxPkg(), "OpQueryGroupBy"),
-		)
-		body.If(jen.Id("g").Dot("build").Op("==").Nil()).Block(
-			jen.Return(jen.Id("g").Dot("sqlScan").Call(jen.Id("ctx"), jen.Id("v"))),
-		)
-		body.If(jen.Err().Op(":=").Id("g").Dot("build").Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Err()),
-		)
-		body.Return(jen.Qual(runtimePkg, "ScanWithInterceptors").Call(
-			jen.Id("ctx"),
-			jen.Id("g").Dot("build"),
-			selectIntersExpr(jen.Id("g").Dot("build")),
-			jen.Id("g").Dot("sqlScan"),
-			jen.Id("v"),
-		))
-	})
-
-	// sqlScan for GroupBy — wired as Selector.scan
-	f.Func().Params(jen.Id("g").Op("*").Id(gbName)).Id("sqlScan").Params(
-		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("v").Any(),
-	).Error().Block(
-		jen.Return(jen.Qual(runtimePkg, "QueryGroupBy").Call(
-			jen.Id("ctx"),
-			jen.Id("g").Dot("build"),
-			jen.Id("g").Dot("fields"),
-			jen.Id("g").Dot("Fns").Call(),
-			jen.Id("v"),
-		)),
-	)
-
-	// =========================================================================
-	// clone (private, returns concrete type for First/Only)
-	// =========================================================================
-
-	f.Commentf("clone returns a concrete clone of the %s for internal use by First/Only.", queryName)
-	f.Func().Params(jen.Id(recv).Op("*").Id(queryName)).Id("clone").Params().Op("*").Id(queryName).BlockFunc(func(body *jen.Group) {
-		body.If(jen.Id(recv).Op("==").Nil()).Block(
-			jen.Return(jen.Nil()),
-		)
-		cloneDict := jen.Dict{
-			jen.Id("config"):     jen.Id(recv).Dot("config"),
-			jen.Id("ctx"):        jen.Id(recv).Dot("ctx").Dot("Clone").Call(),
-			jen.Id("predicates"): jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(recv).Dot("predicates")),
-			jen.Id("order"):      jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(recv).Dot("order")),
-			jen.Id("modifiers"):  jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(recv).Dot("modifiers")),
-			jen.Id("withFKs"):    jen.Id(recv).Dot("withFKs"),
-			jen.Id("path"):       jen.Id(recv).Dot("path"),
-			// SP-2: pointer copy of the shared *entity.InterceptorStore.
-			// Without this, clone()s lose all client-level interceptors
-			// and prepareQuery nil-derefs on q.inters.<EntityName>.
-			jen.Id("inters"): jen.Id(recv).Dot("inters"),
-		}
-		if schemaConfigEnabled {
-			cloneDict[jen.Id("schemaConfig")] = jen.Id(recv).Dot("schemaConfig")
-		}
-		// Policy must survive clone — First/Only/FirstID/OnlyID/Exist all
-		// call q.clone().IDs(ctx) which re-enters prepareQuery; without
-		// this, q.policy is nil in the clone and tenant/privacy filters
-		// are silently skipped.
-		if hasPolicy {
-			cloneDict[jen.Id("policy")] = jen.Id(recv).Dot("policy")
-		}
-		// Copy edge pointers (deep-cloned, like Ent)
-		for _, edge := range t.Edges {
-			field := edgeCallbackField(edge)
-			cloneDict[jen.Id(field)] = jen.Id(recv).Dot(field).Dot("clone").Call()
-		}
-		// Copy loadTotal slice.
-		cloneDict[jen.Id("loadTotal")] = jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(recv).Dot("loadTotal"))
-		body.Id("c").Op(":=").Op("&").Id(queryName).Values(cloneDict)
-		// Copy named edge maps (deep clone each query).
-		if h.FeatureEnabled(gen.FeatureNamedEdges.Name) {
-			for _, edge := range t.Edges {
-				if edge.Unique {
-					continue
-				}
-				namedField := "withNamed" + edge.StructField()
-				targetQueryName := edge.Type.Name + "Query"
-				body.If(jen.Id(recv).Dot(namedField).Op("!=").Nil()).Block(
-					jen.Id("c").Dot(namedField).Op("=").Make(jen.Map(jen.String()).Op("*").Id(targetQueryName), jen.Len(jen.Id(recv).Dot(namedField))),
-					jen.For(jen.List(jen.Id("name"), jen.Id("q")).Op(":=").Range().Id(recv).Dot(namedField)).Block(
-						jen.Id("c").Dot(namedField).Index(jen.Id("name")).Op("=").Id("q").Dot("clone").Call(),
-					),
-				)
-			}
-		}
-		body.Return(jen.Id("c"))
-	})
-
-	// =========================================================================
-	// Per-edge typed loader methods — called from sqlAll inline dispatch
-	// =========================================================================
-
-	for _, edge := range t.Edges {
-		genTypedEdgeLoader(f, h, t, edge, recv, queryName, entityPkgPath, entityType)
-	}
-
-	// Verify interface compliance at compile time
-	f.Commentf("Verify %s implements %s.%s at compile time.", queryName, "entity", querierIface)
-	f.Var().Id("_").Qual(entityPkgPath, querierIface).Op("=").Parens(jen.Op("*").Id(queryName)).Call(jen.Nil())
-
-	return f
 }
 
 // edgeCallbackField returns the unexported field name for edge loading callbacks.
@@ -2166,26 +1282,4 @@ func genQueryHelpers(h gen.GeneratorHelper) *jen.File {
 	)
 
 	return f
-}
-
-// lockDropsDistinct emits the guard at the top of ForUpdate/ForShare:
-//
-//	if caps := dialect.GetCapabilities(q.config.Driver.Dialect()); caps.Has(dialect.<lockCap>) && !caps.Has(dialect.CapLockWithDistinct) {
-//		q.Unique(false)
-//	}
-//
-// Postgres rejects a locking clause on SELECT DISTINCT, so the builder
-// drops DISTINCT there (Ent does the same, keyed on the dialect name).
-// The decision is a capability lookup rather than a name comparison so a
-// new dialect only has to declare its flags.
-func lockDropsDistinct(recv, lockCap string) jen.Code {
-	return jen.If(
-		jen.Id("caps").Op(":=").Qual(dialectPkg(), "GetCapabilities").Call(
-			jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call(),
-		),
-		jen.Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), lockCap)).Op("&&").
-			Op("!").Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), "CapLockWithDistinct")),
-	).Block(
-		jen.Id(recv).Dot("Unique").Call(jen.False()),
-	)
 }
