@@ -80,21 +80,28 @@ func (c *Config) Load() (*SchemaSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("velox/load: format template: %w", err)
 	}
-	// Create temp dir inside the working directory (not /tmp/) so that
-	// Go's internal/ package visibility rules are satisfied. Packages
-	// under internal/ can only be imported by code rooted at internal/'s
-	// parent — using /tmp/ would place the generated loader outside the
-	// module tree, breaking imports of internal/* schema packages.
-	// This matches Ent's approach of using .entc/ in the working directory.
-	tmpDir := ".velox"
-	if mkErr := os.MkdirAll(tmpDir, 0o755); mkErr != nil {
-		return nil, fmt.Errorf("velox/load: create temp dir: %w", mkErr)
+	// The loader lives in a cache dir inside the working directory (not
+	// /tmp/) so that Go's internal/ package visibility rules are satisfied:
+	// packages under internal/ can only be imported by code rooted at
+	// internal/'s parent, and a loader outside the module tree could not
+	// import internal/* schema packages. Ent does the same with .entc/.
+	//
+	// Unlike Ent, the directory is KEPT between runs. Two costs disappear
+	// when the previous binary is still there: `go build -o` compares the
+	// build ID of an existing output and skips the link when it matches
+	// (~0.5s), and macOS validates a freshly written executable on its
+	// first exec (~0.5s, measured 0.4-0.7s) — a binary that was not
+	// rewritten pays neither. On an unchanged schema that turns a ~1.4s
+	// load into ~0.3s. The directory ignores itself via .gitignore.
+	if err = prepareCacheDir(cacheDir); err != nil {
+		return nil, err
 	}
-	defer os.RemoveAll(tmpDir)
-	target := filepath.Join(tmpDir, filename(spec.PkgPath, buf)+".go")
-	if err = os.WriteFile(target, buf, 0o644); err != nil {
+	base := filename(spec.PkgPath, buf)
+	target := filepath.Join(cacheDir, base+".go")
+	if err = writeIfChanged(target, buf); err != nil {
 		return nil, fmt.Errorf("velox/load: write file %s: %w", target, err)
 	}
+	pruneStaleLoaders(cacheDir, spec.PkgPath, base)
 	out, err := gobuild(target, c.BuildFlags)
 	if err != nil {
 		return nil, err
@@ -349,6 +356,64 @@ func schemaTemplates() ([]string, error) {
 	}, nil
 }
 
+// cacheDir is where the loader source and binary live, relative to the
+// working directory. See Load for why it is inside the module and why it
+// persists across runs.
+const cacheDir = ".velox"
+
+// prepareCacheDir creates the loader cache dir and makes it ignore itself,
+// so a persisted .velox/ never shows up as untracked files in the user's
+// repository.
+func prepareCacheDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("velox/load: create cache dir: %w", err)
+	}
+	if err := writeIfChanged(filepath.Join(dir, ".gitignore"), []byte("*\n")); err != nil {
+		return fmt.Errorf("velox/load: write %s/.gitignore: %w", dir, err)
+	}
+	return nil
+}
+
+// writeIfChanged writes data to path unless the file already holds exactly
+// those bytes. Leaving an unchanged file alone keeps its mtime and, for the
+// loader source, keeps `go build -o` on its up-to-date fast path.
+func writeIfChanged(path string, data []byte) error {
+	if prev, err := os.ReadFile(path); err == nil && bytes.Equal(prev, data) {
+		return nil
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// pruneStaleLoaders removes earlier loader sources and binaries for the same
+// schema package (a different content hash, i.e. a schema type was added or
+// removed) so the cache dir holds one loader per package rather than
+// growing without bound. Loaders for other packages are left alone: several
+// schema packages may share a working directory.
+func pruneStaleLoaders(dir, pkg, keep string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	prefix := loaderPrefix(pkg)
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		// keep.go, keep.go.bin and the in-flight keep.go.bin.tmp.
+		if strings.HasPrefix(name, keep) {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, name))
+	}
+}
+
+// loaderPrefix is the filename prefix shared by every loader of one schema
+// package: velox_<pkg with / replaced by _>_.
+func loaderPrefix(pkg string) string {
+	return "velox_" + strings.ReplaceAll(pkg, "/", "_") + "_"
+}
+
 // filename names the loader source after the schema package and a hash of
 // its content. The Go build cache keys a command-line-arguments package on
 // the file NAME as well as its bytes, so a per-run timestamp (Ent's scheme)
@@ -359,33 +424,43 @@ func schemaTemplates() ([]string, error) {
 // with a content-derived name an unchanged schema rebuilds from cache in
 // ~0.2s, and after a schema edit only the link reruns.
 func filename(pkg string, content []byte) string {
-	name := strings.ReplaceAll(pkg, "/", "_")
 	sum := sha256.Sum256(content)
-	return fmt.Sprintf("velox_%s_%x", name, sum[:6])
+	return fmt.Sprintf("%s%x", loaderPrefix(pkg), sum[:6])
 }
 
 // gobuild compiles the target Go file into a binary and executes it.
 // Unlike 'go run', the binary is compiled from a single self-contained
 // file with no external module dependencies beyond the Go toolchain cache.
+//
+// The build goes to a temporary path and only replaces the cached binary
+// when the bytes differ. `go build -o` rewrites its output even when the
+// link was a cache hit, and on macOS the first exec of a freshly written
+// executable costs 0.4-0.7s in code-signature validation — keeping the
+// old, already-validated file when nothing changed avoids that. Go's own
+// build IDs decide staleness; this only decides whether to touch the file.
 func gobuild(target string, buildFlags []string) (string, error) {
 	binPath := target + ".bin"
-	// Build the binary.
+	tmpPath := binPath + ".tmp"
 	args := make([]string, 0, 3+len(buildFlags)+2)
 	args = append(args, "build")
-	// The loader binary is executed once and deleted; DWARF and the symbol
+	// The loader binary runs once per generation; DWARF and the symbol
 	// table are dead weight that make the link ~30% slower. Placed before
 	// the caller's flags so an explicit -ldflags in BuildFlags wins.
 	args = append(args, "-ldflags=-s -w")
 	args = append(args, buildFlags...)
-	args = append(args, "-o", binPath, target)
+	args = append(args, "-o", tmpPath, target)
 	cmd := exec.Command("go", args...)
 	stderr := bytes.NewBuffer(nil)
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
+		_ = os.Remove(tmpPath)
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
 			return "", fmt.Errorf("velox/load: %s", msg)
 		}
 		return "", fmt.Errorf("velox/load: build failed: %w", err)
+	}
+	if err := keepIfIdentical(tmpPath, binPath); err != nil {
+		return "", err
 	}
 	// Execute the compiled binary.
 	cmd = exec.Command(binPath)
@@ -400,6 +475,46 @@ func gobuild(target string, buildFlags []string) (string, error) {
 		return "", fmt.Errorf("velox/load: binary execution failed: %w", err)
 	}
 	return stdout.String(), nil
+}
+
+// keepIfIdentical moves the freshly built tmp over dst unless dst already
+// holds the same bytes, in which case tmp is discarded and dst — with its
+// mtime and, on macOS, its cached code-signature validation — is kept.
+func keepIfIdentical(tmp, dst string) error {
+	same, err := sameContent(tmp, dst)
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if same {
+		return os.Remove(tmp)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("velox/load: install loader binary: %w", err)
+	}
+	return nil
+}
+
+// sameContent reports whether both files exist and hold identical bytes.
+func sameContent(a, b string) (bool, error) {
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false, fmt.Errorf("velox/load: stat %s: %w", a, err)
+	}
+	fb, err := os.Stat(b)
+	if err != nil || fa.Size() != fb.Size() {
+		return false, nil
+	}
+	da, err := os.ReadFile(a)
+	if err != nil {
+		return false, err
+	}
+	db, err := os.ReadFile(b)
+	if err != nil {
+		return false, nil
+	}
+	return bytes.Equal(da, db), nil
 }
 
 // golist checks if 'go list' can be executed on the given target.
