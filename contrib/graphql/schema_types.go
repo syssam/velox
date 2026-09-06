@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -117,11 +118,31 @@ func (g *Generator) collectTypedJSONScalars() map[string]typedJSONScalar {
 // check below and produced `func Unmarshalinterface {}(...)` — not valid Go,
 // which failed the whole generation run at the formatting step.
 func isGenericGoType(ident string) bool {
-	switch strings.TrimSpace(ident) {
-	case "any", "interface{}", "interface {}":
-		return true
+	return !isNamedGoType(ident)
+}
+
+// namedGoType matches a (possibly pointer-to) NAMED Go type identifier as
+// reflect spells it: `schema.Address`, `*schema.Address`, `Address`,
+// `pkg.Name`. Everything else — `[]T`, `[3]T`, `map[K]V`, `struct{...}`,
+// `interface{}` in any spacing, `any`, `func(...)`, `chan T`, `*[]T` — is
+// unnamed and cannot be turned into a scalar type declaration.
+var namedGoType = regexp.MustCompile(`^\*?(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*$`)
+
+// isNamedGoType reports whether ident denotes a named type (after stripping
+// one leading `*`). A typed-JSON scalar can only be generated for a named
+// type: the scalar's Go declaration is `type <Name> = <ident>` and its
+// marshalers are `Marshal<Name>`, and an unnamed type has no <Name> to give
+// them — the generator would emit `func Unmarshalstruct { X int }(...)`
+// and the whole run would fail at the format step. `any` and `interface{}`
+// are excluded explicitly because they are identifiers by spelling but a
+// scalar over them is meaningless.
+func isNamedGoType(ident string) bool {
+	ident = strings.TrimSpace(ident)
+	switch ident {
+	case "any", "interface{}", "interface {}", "error":
+		return false
 	}
-	return strings.HasPrefix(ident, "[]") || strings.HasPrefix(ident, "map[")
+	return namedGoType.MatchString(ident)
 }
 
 // getTypedJSONScalarName returns the custom scalar name for a typed JSON field,
