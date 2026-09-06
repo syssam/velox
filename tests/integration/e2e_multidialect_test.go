@@ -549,10 +549,9 @@ func TestMultiDialect_LockWithDistinct(t *testing.T) {
 // TestMultiDialect_SetOpFuncs runs the package-level sql.UnionAll with
 // per-branch ORDER BY / LIMIT against every configured dialect. It pins two
 // things the unit tests cannot: Postgres placeholders keep counting across
-// parenthesized branches ($1 in the first, $2 in the second), and the
-// SQLite fallback (no parentheses, per-branch clauses stripped) is accepted
-// by the engine. MySQL and Postgres honor the per-branch LIMIT 1, so two
-// rows come back; SQLite returns every match of both branches.
+// parenthesized branches ($1 in the first, $2 in the second), and SQLite's
+// derived-table rendering is accepted by the engine and honors the
+// per-branch LIMIT 1 like the others — two rows on every dialect.
 func TestMultiDialect_SetOpFuncs(t *testing.T) {
 	forEachDialect(t, func(t *testing.T, client *integration.Client) {
 		ctx := context.Background()
@@ -577,11 +576,8 @@ func TestMultiDialect_SetOpFuncs(t *testing.T) {
 		}
 		require.NoError(t, rows.Err())
 
-		if d == "sqlite" {
-			// Branch LIMIT/ORDER stripped: both branches return every match.
-			assert.ElementsMatch(t, []string{"Bob", "Cyd", "Ada", "Bob"}, names, "sqlite fallback: %s", query)
-		} else {
-			assert.ElementsMatch(t, []string{"Bob", "Bob"}, names, "per-branch LIMIT must be honored: %s", query)
-		}
+		// Every dialect honors the per-branch ORDER BY / LIMIT: SQLite gets a
+		// derived table per branch instead of parentheses, same rows.
+		assert.ElementsMatch(t, []string{"Bob", "Bob"}, names, "per-branch LIMIT must be honored on %s: %s", d, query)
 	})
 }

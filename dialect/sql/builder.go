@@ -2248,13 +2248,15 @@ func (s *Selector) IntersectAll(t TableView) *Selector {
 }
 
 // setOpQuerier implements Querier for a compound set operation (UNION, EXCEPT,
-// INTERSECT) where every branch is wrapped in parentheses. This is required
-// when branches contain ORDER BY, LIMIT, or OFFSET (MySQL, Postgres, and the
-// SQL standard). SQLite does not support parenthesized branches; on that
-// dialect the parentheses — and any per-branch ORDER BY / LIMIT / OFFSET,
-// which SQLite cannot honor inside a compound SELECT — are silently omitted.
+// INTERSECT) whose branches may carry their own ORDER BY, LIMIT or OFFSET.
+// MySQL, Postgres and the SQL standard allow that only with parentheses
+// around each branch. SQLite rejects parenthesized compound-select branches,
+// so there every branch is rendered as `SELECT * FROM (<branch>)` instead —
+// a derived table keeps the branch's ORDER BY / LIMIT / OFFSET, so the
+// query returns the same rows on every dialect. (ent #4505 silently drops
+// those clauses on SQLite; velox does not diverge between dialects.)
 // Use the package-level Union / UnionAll / Except / ExceptAll / Intersect /
-// IntersectAll functions to build one. Ported from ent (#4503, #4505, #4506).
+// IntersectAll functions to build one.
 type setOpQuerier struct {
 	Builder
 	op        string
@@ -2263,27 +2265,26 @@ type setOpQuerier struct {
 
 // Query returns the compound query and its arguments.
 func (q *setOpQuerier) Query() (string, []any) {
-	b := q.clone()
 	// If no dialect was set explicitly on the querier (the common case — users
 	// call UnionAll(sel1, sel2) without a DialectBuilder), inherit it from the
-	// first selector so that b.sqlite() / b.postgres() return the right value.
-	if b.dialect == "" && len(q.selectors) > 0 {
-		b.SetDialect(q.selectors[0].dialect)
+	// first selector so that sqlite() / postgres() return the right value.
+	if q.dialect == "" && len(q.selectors) > 0 {
+		q.SetDialect(q.selectors[0].dialect)
 	}
-	sqlite := b.sqlite()
+	// Recorded on the querier itself (not the render clone) so Err() and the
+	// caller's Builder.Join see it — same contract as Selector.ExceptAll.
+	if q.sqlite() && (q.op == string(setOpTypeExcept)+" ALL" || q.op == string(setOpTypeIntersect)+" ALL") {
+		q.AddError(errors.New(q.op + " is not supported by SQLite"))
+	}
+	b := q.clone()
 	for i, s := range q.selectors {
 		if i > 0 {
 			b.WriteString(" " + q.op + " ")
 		}
-		if sqlite {
-			// SQLite does not allow parenthesized compound-select branches and
-			// cannot honor per-branch ORDER BY / LIMIT / OFFSET. Emit a plain
-			// branch with those clauses stripped; the push-down is a no-op here.
-			clone := *s
-			clone.order = nil
-			clone.limit = nil
-			clone.offset = nil
-			b.Join(&clone)
+		if b.sqlite() {
+			b.WriteString("SELECT * FROM (")
+			b.Join(s)
+			b.WriteString(")")
 		} else {
 			b.WriteString("(")
 			b.Join(s)

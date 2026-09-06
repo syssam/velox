@@ -2411,12 +2411,24 @@ func TestSetOpFuncs(t *testing.T) {
 			"placeholders must keep counting across branches")
 		require.Equal(t, []any{1, 2}, args)
 	})
-	t.Run("SQLite_NoParensAndBranchClausesStripped", func(t *testing.T) {
+	t.Run("SQLite_DerivedTablesKeepBranchClauses", func(t *testing.T) {
+		// SQLite rejects "(SELECT ...) UNION ALL (SELECT ...)" but accepts a
+		// derived table per branch, which keeps the per-branch ORDER BY /
+		// LIMIT / OFFSET — so the result set matches MySQL and Postgres
+		// instead of silently returning every row of both branches.
 		migSel := Dialect(dialect.SQLite).Select("id").From(Table("t1")).OrderBy(Desc("end_time")).Limit(20).Offset(5)
-		schemaSel := Dialect(dialect.SQLite).Select("id").From(Table("t2")).OrderBy(Desc("end_time")).Limit(20)
-		query, _ := UnionAll(migSel, schemaSel).Query()
-		require.Equal(t, "SELECT `id` FROM `t1` UNION ALL SELECT `id` FROM `t2`", query)
-		require.NotNil(t, migSel.limit, "stripping must act on a copy, not mutate the caller's selector")
+		schemaSel := Dialect(dialect.SQLite).Select("id").From(Table("t2")).Where(GT("n", 1)).OrderBy(Desc("end_time")).Limit(20)
+		query, args := UnionAll(migSel, schemaSel).Query()
+		require.Equal(t, "SELECT * FROM (SELECT `id` FROM `t1` ORDER BY `end_time` DESC LIMIT 20 OFFSET 5) UNION ALL SELECT * FROM (SELECT `id` FROM `t2` WHERE `n` > ? ORDER BY `end_time` DESC LIMIT 20)", query)
+		require.Equal(t, []any{1}, args)
+	})
+	t.Run("SQLite_RejectsAllVariants", func(t *testing.T) {
+		// Same contract as the chaining Selector.ExceptAll / IntersectAll.
+		for _, fn := range []func(...*Selector) Querier{ExceptAll, IntersectAll} {
+			q := fn(Dialect(dialect.SQLite).Select("id").From(Table("t1")), Dialect(dialect.SQLite).Select("id").From(Table("t2")))
+			q.Query()
+			require.Error(t, q.(*setOpQuerier).Err())
+		}
 	})
 	t.Run("Union_Except_Intersect_Ops", func(t *testing.T) {
 		a := func() *Selector { return Select("*").From(Table("t1")).OrderBy("x") }
