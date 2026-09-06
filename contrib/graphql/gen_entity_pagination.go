@@ -409,6 +409,7 @@ func (g *Generator) genModelPaginationTypes(nodes []*gen.Type) *jen.File {
 // Types are local to the root package — entity struct references use jen.Id (same package).
 func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	typeName := g.graphqlTypeName(t)
+	nodeType := g.goEntityName(t)
 	receiver := typeReceiver(t.Name)
 	multiOrder := g.hasMultiOrder(t)
 
@@ -423,7 +424,7 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	// --- Edge and Connection: non-generic structs to avoid monomorphization ---
 	f.Comment(fmt.Sprintf("%s is the edge representation of %s.", edgeName, typeName))
 	f.Type().Id(edgeName).Struct(
-		jen.Id("Node").Op("*").Id(typeName).Tag(map[string]string{"json": "node"}),
+		jen.Id("Node").Op("*").Id(nodeType).Tag(map[string]string{"json": "node"}),
 		jen.Id("Cursor").Qual(gqlrelayPkg, "Cursor").Tag(map[string]string{"json": "cursor"}),
 	)
 	f.Line()
@@ -458,7 +459,7 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	f.Comment(fmt.Sprintf("%s defines the ordering field of %s.", orderFieldName, t.Name))
 	f.Type().Id(orderFieldName).Struct(
 		jen.Id("Column").String(),
-		jen.Id("ToCursor").Func().Params(jen.Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor"),
+		jen.Id("ToCursor").Func().Params(jen.Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor"),
 	)
 	f.Line()
 
@@ -482,7 +483,7 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 	// --- ToEdge method on entity ---
 	f.Comment(fmt.Sprintf("ToEdge converts %s into %s.", typeName, edgeName))
 	f.Func().Params(
-		jen.Id(receiver).Op("*").Id(typeName),
+		jen.Id(receiver).Op("*").Id(nodeType),
 	).Id("ToEdge").Params(
 		jen.Id("order").Op("*").Id(orderName),
 	).Op("*").Id(edgeName).Block(
@@ -516,7 +517,9 @@ func (g *Generator) genModelPaginationDefs(f *jen.File, t *gen.Type) {
 }
 
 // genModelDefaultOrder generates the DefaultOrder variable in the root package.
-func (g *Generator) genModelDefaultOrder(f *jen.File, t *gen.Type, typeName, receiver, orderName, orderFieldName, defaultOrderName string) {
+func (g *Generator) genModelDefaultOrder(f *jen.File, t *gen.Type, _, receiver, orderName, orderFieldName, defaultOrderName string) {
+	// The node is the entity struct, named by the schema type.
+	nodeType := g.goEntityName(t)
 	if t.ID == nil {
 		return
 	}
@@ -532,7 +535,7 @@ func (g *Generator) genModelDefaultOrder(f *jen.File, t *gen.Type, typeName, rec
 		jen.Id("Direction").Op(":").Qual(gqlrelayPkg, "OrderDirectionAsc"),
 		jen.Id("Field").Op(":").Op("&").Id(orderFieldName).Values(
 			jen.Id("Column").Op(":").Lit(idStorageKey),
-			jen.Id("ToCursor").Op(":").Func().Params(jen.Id(receiver).Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+			jen.Id("ToCursor").Op(":").Func().Params(jen.Id(receiver).Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").Block(
 				jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Id("ID").Op(":").Id(receiver).Dot(idField))),
 			),
 		),
@@ -542,6 +545,8 @@ func (g *Generator) genModelDefaultOrder(f *jen.File, t *gen.Type, typeName, rec
 
 // genModelOrderFieldVars generates order field variables in the root package.
 func (g *Generator) genModelOrderFieldVars(f *jen.File, t *gen.Type, typeName, receiver, orderFieldName string) {
+	// The node is the entity struct, named by the schema type.
+	nodeType := g.goEntityName(t)
 	orderableFields := g.orderableFields(t)
 	if len(orderableFields) == 0 {
 		return
@@ -556,7 +561,7 @@ func (g *Generator) genModelOrderFieldVars(f *jen.File, t *gen.Type, typeName, r
 			storageKey := fld.StorageKey()
 			group.Id(varName).Op("=").Op("&").Id(orderFieldName).Values(
 				jen.Id("Column").Op(":").Lit(storageKey),
-				jen.Id("ToCursor").Op(":").Func().Params(jen.Id(receiver).Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").BlockFunc(func(blk *jen.Group) {
+				jen.Id("ToCursor").Op(":").Func().Params(jen.Id(receiver).Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").BlockFunc(func(blk *jen.Group) {
 					if fld.Nillable {
 						// Nillable fields are pointers — dereference safely to avoid nil in cursor serialization.
 						blk.Id("cv").Op(":=").Qual(gqlrelayPkg, "Cursor").Values(jen.Id("ID").Op(":").Id(receiver).Dot("ID"))
@@ -738,6 +743,8 @@ func (g *Generator) genPaginatableInterface(f *jen.File, t *gen.Type) {
 // pager; velox uses a free function plus the public *XxxOrder — mechanically
 // the same output.
 func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, connName, edgeName, orderName string, multiOrder bool) {
+	// The node is the entity struct, named by the schema type.
+	nodeType := g.goEntityName(t)
 	// BuildXxxConnection(nodes, totalCount, order, after, first, before, last) *XxxConnection
 	orderParamType := jen.Op("*").Id(orderName)
 	if multiOrder {
@@ -772,7 +779,7 @@ func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, 
 	f.Comment("    cursor comparator at the DB level.")
 
 	f.Func().Id("Build"+connName).Params(
-		jen.Id("nodes").Index().Op("*").Id(typeName),
+		jen.Id("nodes").Index().Op("*").Id(nodeType),
 		jen.Id("totalCount").Int(),
 		jen.Id("order").Add(orderParamType),
 		jen.Id("after").Op("*").Qual(gqlrelayPkg, "Cursor"),
@@ -813,10 +820,10 @@ func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, 
 		// where Value[i] = order[i].Field.ToCursor(node).Value. This matches
 		// the MultiCursorsOptions.Fields ordering used by the Paginate body's
 		// cursor predicate, so encode and decode stay aligned.
-		grp.Var().Id("cursorFn").Func().Params(jen.Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor")
+		grp.Var().Id("cursorFn").Func().Params(jen.Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor")
 		if multiOrder {
 			grp.If(jen.Len(jen.Id("order")).Op(">").Lit(0)).Block(
-				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").Block(
 					jen.Id("values").Op(":=").Make(jen.Index().Any(), jen.Lit(0), jen.Len(jen.Id("order"))),
 					jen.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("order")).Block(
 						jen.If(jen.Id("o").Op("==").Nil().Op("||").Id("o").Dot("Field").Op("==").Nil().Op("||").Id("o").Dot("Field").Dot("ToCursor").Op("==").Nil()).Block(jen.Continue()),
@@ -828,7 +835,7 @@ func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, 
 					})),
 				),
 			).Else().Block(
-				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").Block(
 					jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
 						jen.Id("ID"): jen.Id("n").Dot(idField),
 					})),
@@ -840,7 +847,7 @@ func (g *Generator) genModelBuildConnection(f *jen.File, t *gen.Type, typeName, 
 			).Block(
 				jen.Id("cursorFn").Op("=").Id("order").Dot("Field").Dot("ToCursor"),
 			).Else().Block(
-				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(typeName)).Qual(gqlrelayPkg, "Cursor").Block(
+				jen.Id("cursorFn").Op("=").Func().Params(jen.Id("n").Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").Block(
 					jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Dict{
 						jen.Id("ID"): jen.Id("n").Dot(idField),
 					})),

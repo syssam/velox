@@ -74,7 +74,7 @@ func (g *Generator) genRenameUniqueMethod(f *jen.File, e *gen.Edge, typeName, me
 	f.Commentf("%s returns the %s edge under its interface-field name.", method, e.Name)
 	f.Func().Params(jen.Id("m").Op("*").Id(typeName)).Id(method).Params(
 		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Op("*").Id(g.graphqlTypeName(e.Type)), jen.Error()).Block(
+	).Params(jen.Op("*").Id(g.goEntityName(e.Type)), jen.Error()).Block(
 		jen.Return(jen.Id("m").Dot(edgePascal).Call(jen.Id("ctx"))),
 	)
 }
@@ -84,7 +84,7 @@ func (g *Generator) genRenameListMethod(f *jen.File, e *gen.Edge, typeName, meth
 	f.Commentf("%s returns the %s edge under its interface-field name.", method, e.Name)
 	f.Func().Params(jen.Id("m").Op("*").Id(typeName)).Id(method).Params(
 		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Index().Op("*").Id(g.graphqlTypeName(e.Type)), jen.Error()).Block(
+	).Params(jen.Index().Op("*").Id(g.goEntityName(e.Type)), jen.Error()).Block(
 		jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgePascal+"OrErr").Call(),
 		jen.If(jen.Qual(runtimePkgPath, "IsNotLoaded").Call(jen.Id("err"))).Block(
 			jen.Return(jen.Id("m").Dot("Query"+edgePascal).Call().Dot("All").Call(jen.Id("ctx"))),
@@ -169,7 +169,9 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 		body.Switch().BlockFunc(func(sw *jen.Group) {
 			for _, e := range ifc.Edges {
 				edgePascal := pascal(e.Name)
-				target := g.graphqlTypeName(e.Type)
+				// The struct literal names the entity struct, not the
+				// GraphQL type: graphql.Type() may rename the latter.
+				target := g.goEntityName(e.Type)
 				sw.Case(jen.Id("m").Dot(fkFields[e.Name]).Op("!=").Nil()).Block(
 					jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgePascal+"OrErr").Call(),
 					jen.If(jen.Id("err").Op("==").Nil()).Block(jen.Return(jen.Id("result"), jen.Nil())),

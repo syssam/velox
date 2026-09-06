@@ -21,6 +21,22 @@ import (
 // GraphQL type/field name helpers
 // =============================================================================
 
+// goEntityName returns the Go name of the entity struct in the entity
+// package, which is always the schema type's name.
+//
+// It differs from graphqlTypeName exactly when graphql.Type() renames the
+// type for GraphQL: the SDL then says "Account" while the Go struct is
+// still User. Every type velox generates itself — Connection, Edge,
+// PaginateOption, the mutation inputs — is named after the GraphQL type,
+// because SDL and Go are generated together and agree. Only a reference to
+// the pre-existing entity struct must use this.
+func (g *Generator) goEntityName(t *gen.Type) string {
+	if t == nil {
+		return ""
+	}
+	return t.Name
+}
+
 func (g *Generator) graphqlTypeName(t *gen.Type) string {
 	if t == nil {
 		return ""

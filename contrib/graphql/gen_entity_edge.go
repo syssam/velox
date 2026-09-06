@@ -40,7 +40,8 @@ func (g *Generator) genEntityEdge(t *gen.Type) *jen.File {
 		f.ImportName(g.config.ORMPackage+"/filter", "filter")
 	}
 
-	typeName := g.graphqlTypeName(t)
+	// The receiver is the entity struct, so it is named by the schema type.
+	typeName := g.goEntityName(t)
 
 	for _, e := range edges {
 		if e.Unique {
@@ -75,7 +76,7 @@ func (g *Generator) genEntityEdge(t *gen.Type) *jen.File {
 //	}
 func (g *Generator) genSimpleEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typeName, _ string) {
 	edgePascal := pascal(e.Name)
-	targetType := g.graphqlTypeName(e.Type)
+	targetType := g.goEntityName(e.Type)
 
 	// Direct call: m.QueryXxx().Only(ctx). The entity-level QueryXxx()
 	// already encodes direction (M2O Step with Inverse=true) so the SQL
@@ -116,7 +117,7 @@ func (g *Generator) genSimpleEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, t
 //	}
 func (g *Generator) genListEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edge, typeName, _ string) {
 	edgePascal := pascal(e.Name)
-	targetType := g.graphqlTypeName(e.Type)
+	targetType := g.goEntityName(e.Type)
 
 	// Direct call to entity-level m.QueryXxx().All(ctx) — the generated
 	// QueryXxx() method in entity/ already holds correct SetPath +
