@@ -17,7 +17,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -352,7 +354,7 @@ func schemaTemplates() ([]string, error) {
 	}
 	return []string{
 		fmt.Sprintf(`{{ define "schema" }} %s {{ end }}`, code.String()),
-		fmt.Sprintf(`{{ define "imports" }} %s {{ end }}`, strings.Join(imports, "\n")),
+		fmt.Sprintf(`{{ define "imports" }} %s {{ end }}`, groupImports(imports)),
 	}, nil
 }
 
@@ -387,21 +389,20 @@ func writeIfChanged(path string, data []byte) error {
 // pruneStaleLoaders removes earlier loader sources and binaries for the same
 // schema package (a different content hash, i.e. a schema type was added or
 // removed) so the cache dir holds one loader per package rather than
-// growing without bound. Loaders for other packages are left alone: several
-// schema packages may share a working directory.
+// growing without bound. Only names that match this package's prefix
+// exactly followed by a hash are touched — a nested or `_`-suffixed
+// sibling package has a different prefix (the prefix carries a hash of the
+// import path, so `a/b_c` and `a_b/c` cannot collide) — and in-flight
+// temp binaries of concurrent loads are never removed.
 func pruneStaleLoaders(dir, pkg, keep string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	prefix := loaderPrefix(pkg)
+	re := regexp.MustCompile("^" + regexp.QuoteMeta(loaderPrefix(pkg)) + `[0-9a-f]{12}\.go(\.bin)?$`)
 	for _, e := range entries {
 		name := e.Name()
-		if !strings.HasPrefix(name, prefix) {
-			continue
-		}
-		// keep.go, keep.go.bin and the in-flight keep.go.bin.tmp.
-		if strings.HasPrefix(name, keep) {
+		if !re.MatchString(name) || strings.HasPrefix(name, keep+".") {
 			continue
 		}
 		_ = os.Remove(filepath.Join(dir, name))
@@ -409,9 +410,12 @@ func pruneStaleLoaders(dir, pkg, keep string) {
 }
 
 // loaderPrefix is the filename prefix shared by every loader of one schema
-// package: velox_<pkg with / replaced by _>_.
+// package: velox_<pkg with / replaced by _>_<8 hex of the import path>_.
+// The path hash makes the prefix injective: sanitizing alone maps both
+// `a/b_c` and `a_b/c` to `a_b_c`.
 func loaderPrefix(pkg string) string {
-	return "velox_" + strings.ReplaceAll(pkg, "/", "_") + "_"
+	sum := sha256.Sum256([]byte(pkg))
+	return fmt.Sprintf("velox_%s_%x_", strings.ReplaceAll(pkg, "/", "_"), sum[:4])
 }
 
 // filename names the loader source after the schema package and a hash of
@@ -432,22 +436,38 @@ func filename(pkg string, content []byte) string {
 // Unlike 'go run', the binary is compiled from a single self-contained
 // file with no external module dependencies beyond the Go toolchain cache.
 //
-// The build goes to a temporary path and only replaces the cached binary
-// when the bytes differ. `go build -o` rewrites its output even when the
-// link was a cache hit, and on macOS the first exec of a freshly written
-// executable costs 0.4-0.7s in code-signature validation — keeping the
-// old, already-validated file when nothing changed avoids that. Go's own
-// build IDs decide staleness; this only decides whether to touch the file.
+// The cached binary next to the source is reused whenever the toolchain
+// says it is current: `go build -n -o <bin>` reports the actions it would
+// run without running them, and prints no link step when the existing
+// output's build ID matches (~0.14s, versus ~0.5s for a link). That keeps
+// the file untouched, which matters twice over: no relink, and no macOS
+// first-exec code-signature validation (0.4-0.7s) on a rewritten file.
+// When a build is needed it goes to a per-process temp file (concurrent
+// loads in one directory do not share it) and is renamed over the cached
+// binary only if the bytes differ.
 func gobuild(target string, buildFlags []string) (string, error) {
 	binPath := target + ".bin"
-	tmpPath := binPath + ".tmp"
 	// The loader binary runs once per generation; DWARF and the symbol
 	// table are dead weight that make the link ~30% slower. -ldflags is
 	// placed before the caller's flags so an explicit -ldflags in
 	// BuildFlags wins.
-	args := make([]string, 0, 3+len(buildFlags)+2)
-	args = append(args, "build", "-ldflags=-s -w")
-	args = append(args, buildFlags...)
+	flags := make([]string, 0, 1+len(buildFlags))
+	flags = append(flags, "-ldflags=-s -w")
+	flags = append(flags, buildFlags...)
+
+	if _, err := os.Stat(binPath); err == nil && !needsLink(binPath, target, flags) {
+		return runLoader(binPath)
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(target), filepath.Base(target)+".bin.*.tmp")
+	if err != nil {
+		return "", fmt.Errorf("velox/load: create temp binary: %w", err)
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	args := make([]string, 0, 1+len(flags)+3)
+	args = append(args, "build")
+	args = append(args, flags...)
 	args = append(args, "-o", tmpPath, target)
 	cmd := exec.Command("go", args...)
 	stderr := bytes.NewBuffer(nil)
@@ -462,10 +482,34 @@ func gobuild(target string, buildFlags []string) (string, error) {
 	if err := keepIfIdentical(tmpPath, binPath); err != nil {
 		return "", err
 	}
-	// Execute the compiled binary.
-	cmd = exec.Command(binPath)
+	return runLoader(binPath)
+}
+
+// needsLink asks the go tool, without running anything, whether building
+// target to binPath would link. A current output produces no link step.
+// Any failure to answer is treated as "yes" so a real build decides.
+func needsLink(binPath, target string, flags []string) bool {
+	args := make([]string, 0, 2+len(flags)+3)
+	args = append(args, "build", "-n")
+	args = append(args, flags...)
+	args = append(args, "-o", binPath, target)
+	out, err := exec.Command("go", args...).CombinedOutput()
+	if err != nil {
+		return true
+	}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if strings.Contains(line, "/link ") || strings.HasPrefix(line, "link ") {
+			return true
+		}
+	}
+	return false
+}
+
+// runLoader executes the compiled loader and returns its stdout.
+func runLoader(binPath string) (string, error) {
+	cmd := exec.Command(binPath)
 	stdout := bytes.NewBuffer(nil)
-	stderr = bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
@@ -538,4 +582,29 @@ func gocmd(command, target string, buildFlags []string) (string, error) {
 		return "", errors.New(strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
+}
+
+// groupImports renders quoted import paths as goimports would lay them
+// out: standard library first, a blank line, then everything else, each
+// group sorted. The loader source persists in .velox/ and consumer lint
+// gates that walk dot-directories would otherwise flag it.
+func groupImports(paths []string) string {
+	var std, other []string
+	for _, p := range paths {
+		first, _, _ := strings.Cut(strings.Trim(p, `"`), "/")
+		if strings.Contains(first, ".") {
+			other = append(other, p)
+		} else {
+			std = append(std, p)
+		}
+	}
+	sort.Strings(std)
+	sort.Strings(other)
+	switch {
+	case len(std) == 0:
+		return strings.Join(other, "\n")
+	case len(other) == 0:
+		return strings.Join(std, "\n")
+	}
+	return strings.Join(std, "\n") + "\n\n" + strings.Join(other, "\n")
 }

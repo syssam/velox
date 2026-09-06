@@ -170,3 +170,78 @@ func TestLoad_CacheDirPersistsAndReuses(t *testing.T) {
 		t.Errorf("loader for another package must be left alone: %v", err)
 	}
 }
+
+// TestLoad_SecondLoadSkipsLink pins that an unchanged schema does not
+// relink: the go tool's own staleness answer (needsLink) is false for the
+// cached binary, and the binary's inode survives the second Load untouched.
+func TestLoad_SecondLoadSkipsLink(t *testing.T) {
+	t.Cleanup(func() { _ = os.RemoveAll(cacheDir) })
+	cfg := &Config{Path: "./testdata/valid"}
+	if _, err := cfg.Load(); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(cacheDir)
+	var src string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".go") {
+			src = filepath.Join(cacheDir, e.Name())
+		}
+	}
+	if src == "" {
+		t.Fatal("loader source missing")
+	}
+	if needsLink(src+".bin", src, []string{"-ldflags=-s -w"}) {
+		t.Fatal("go build -n reports a link for a binary that was just built; the cache skip is dead")
+	}
+	if err := os.WriteFile(src, append([]byte("// stale\n"), mustRead(t, src)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !needsLink(src+".bin", src, []string{"-ldflags=-s -w"}) {
+		t.Fatal("go build -n must report a link after the source changed")
+	}
+}
+
+// TestPruneStaleLoaders_Anchored pins that pruning only removes this
+// package's own stale loaders: a nested package, a `_`-suffixed sibling,
+// and an in-flight temp binary must all survive.
+func TestPruneStaleLoaders_Anchored(t *testing.T) {
+	dir := t.TempDir()
+	pkg := "example.com/a/schema"
+	keep := filename(pkg, []byte("current"))
+	touch := func(name string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	stale := touch(filename(pkg, []byte("old")) + ".go")
+	staleBin := touch(filename(pkg, []byte("old")) + ".go.bin")
+	current := touch(keep + ".go")
+	currentBin := touch(keep + ".go.bin")
+	inflight := touch(keep + ".go.bin.123456.tmp")
+	nested := touch(filename(pkg+"/v2", []byte("v2")) + ".go")
+	sibling := touch(filename(pkg+"_legacy", []byte("l")) + ".go")
+
+	pruneStaleLoaders(dir, pkg, keep)
+
+	for _, p := range []string{stale, staleBin} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("stale loader %s must be pruned", filepath.Base(p))
+		}
+	}
+	for _, p := range []string{current, currentBin, inflight, nested, sibling} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s must survive pruning: %v", filepath.Base(p), err)
+		}
+	}
+}
+
+func mustRead(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
