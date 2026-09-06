@@ -169,6 +169,64 @@ graphql.Resolvers(
 )
 ```
 
+## Interface Fields (polymorphic edges)
+
+`graphql.InterfaceField(name)` on an edge exposes it in GraphQL under `name`.
+Several edges on one type sharing the name form a single field typed as the
+GraphQL interface their targets have in common; a single edge with the name
+is a rename that keeps the edge's own field too. Ported from entgql.
+
+```go
+// Workspace and User both implement Principal and both rename their Member
+// edge to "relations". Sharing a renamed field is what makes velox GENERATE
+// `interface Principal { ... }` from the fields all implementors have in
+// common, plus the Go interface and IsPrincipal() markers gqlgen binds to.
+func (Workspace) Annotations() []schema.Annotation {
+    return []schema.Annotation{graphql.Implements("Principal")}
+}
+func (Workspace) Edges() []velox.Edge {
+    return []velox.Edge{
+        edge.To("members", Member.Type).Annotations(graphql.InterfaceField("relations")),
+    }
+}
+
+// Member exposes ONE `principal: Principal` field over its two edges.
+func (Member) Edges() []velox.Edge {
+    return []velox.Edge{
+        edge.From("workspace", Workspace.Type).Ref("members").Unique().
+            Annotations(graphql.InterfaceField("principal")),
+        edge.From("user", User.Type).Ref("memberships").Unique().
+            Annotations(graphql.InterfaceField("principal")),
+    }
+}
+
+// A standalone rename: Comment gains `subject: Todo` next to `todo: Todo!`.
+edge.From("todo", Todo.Type).Ref("comments").Unique().
+    Annotations(graphql.InterfaceField("subject"))
+```
+
+What is generated:
+
+- SDL: `principal: Principal` (to-one group), `relations: [Member!]!` (to-many
+  rename), `subject: Todo`; and `interface Principal @goModel(...)` listing the
+  argument-less fields every implementor exposes with the same type. Selecting
+  a field only one implementor has goes through an inline fragment (`... on
+  User { email }`).
+- Go: `entity/gql_interfaces.go` with `type Principal interface { IsPrincipal() }`
+  and the markers; resolver methods `(*Member).Principal(ctx)`,
+  `(*Comment).Subject(ctx)` that reuse an eager-loaded edge or query. When
+  every edge of a group stores a nullable foreign key on the owner, a selection
+  of only `__typename`/`id` is answered from the key without a query.
+- Field collection eager-loads every contributing edge when the field is
+  selected.
+
+Limits: a group over to-many edges is exposed as `<Interface>Connection` with
+pagination arguments, and its resolver is left to the application (ordering
+across heterogeneous members is not defined). An interface declared only via
+`graphql.Implements`, with no shared renamed field, is the application's to
+define in its own `.graphql`. Ordering and filtering on polymorphic fields are
+not generated.
+
 ## GraphQL Input Validation
 
 Uses go-playground/validator struct tags on generated input types:

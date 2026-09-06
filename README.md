@@ -79,6 +79,7 @@ The trade-off is honest: a *cold* full build is ~9% slower (more packages to com
 - **Eager Loading** — Efficient relationship loading with query options
 - **Generic Predicates** — Compact, type-safe predicates (~97% less generated code)
 - **Whitelist Filtering** — WhereInput fields opt-in by default (industry standard)
+- **GraphQL Interface Fields** — `graphql.InterfaceField` turns edges into polymorphic interface-typed fields, with the interface, Go markers and resolvers generated
 
 ### Feature Stability
 
