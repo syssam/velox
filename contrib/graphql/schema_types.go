@@ -520,6 +520,12 @@ func (g *Generator) genEntityType(t *gen.Type) string {
 		fmt.Fprintf(&buf, "  %s\n", g.genEdgeField(t, e))
 	}
 
+	// Interface fields (graphql.InterfaceField): renames and polymorphic
+	// fields. Validation errors surface at generation start (validateInterfaceFields).
+	if sdl, err := g.interfaceFieldSDL(t); err == nil {
+		buf.WriteString(sdl)
+	}
+
 	// Resolver mapping fields (add new fields with @goField(forceResolver: true))
 	entityAnn := g.getTypeAnnotation(t)
 	for _, rm := range entityAnn.ResolverMappings {

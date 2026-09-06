@@ -46,14 +46,18 @@ func (Member) Fields() []velox.Field {
 // Edges of the Member.
 func (Member) Edges() []velox.Edge {
 	return []velox.Edge{
+		// Both to-one edges share one polymorphic field, `principal`, typed as
+		// the Principal interface Workspace and User implement.
 		edge.From("workspace", Workspace.Type).
 			Ref("members").
 			Unique().
-			Required(),
+			Required().
+			Annotations(graphql.InterfaceField("principal")),
 		edge.From("user", User.Type).
 			Ref("memberships").
 			Unique().
-			Required(),
+			Required().
+			Annotations(graphql.InterfaceField("principal")),
 	}
 }
 

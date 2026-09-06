@@ -89,7 +89,8 @@ func (User) Edges() []velox.Edge {
 		edge.To("comments", Comment.Type).
 			Comment("Comments written by this user"),
 		edge.To("memberships", Member.Type).
-			Comment("Workspace memberships"),
+			Comment("Workspace memberships").
+			Annotations(graphql.InterfaceField("relations")),
 		edge.To("audit_logs", AuditLog.Type).
 			Comment("Audit trail"),
 	}
@@ -132,6 +133,7 @@ func (User) Annotations() []schema.Annotation {
 			graphql.MutationCreate(),
 			graphql.MutationUpdate(),
 		),
+		graphql.Implements("Principal"),
 		graphql.WhereInputEdges("todos", "memberships"),
 	}
 }

@@ -103,6 +103,10 @@ type EdgeMeta struct {
 	FKColumns []string
 	// Inverse is the back-reference edge name on the target entity (e.g., "user").
 	Inverse string
+	// OwnFK is true when the foreign key of this edge lives on the owning
+	// entity's table (M2O, inverse O2O): the target's id is known from the
+	// owner's row without querying the target.
+	OwnFK bool
 }
 
 // =============================================================================

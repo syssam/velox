@@ -34,6 +34,12 @@ func (g *Generator) genFullSchema() string {
 	buf.WriteString(g.genTypesSchema())
 	buf.WriteString("\n")
 
+	// Interfaces generated from graphql.InterfaceField groups
+	if sdl, err := g.genInterfaceDefsSchema(); err == nil && sdl != "" {
+		buf.WriteString(sdl)
+		buf.WriteString("\n")
+	}
+
 	// Input types
 	if g.config.WhereInputs || g.config.Mutations || g.config.Ordering {
 		buf.WriteString(g.genInputsSchema())
@@ -147,6 +153,13 @@ enum OrderDirection {
 	// are emitted in the root file so they appear exactly once.
 	if len(g.sharedEnums) > 0 {
 		buf.WriteString(g.genSharedEnumTypes())
+	}
+
+	// Interfaces generated from graphql.InterfaceField groups live in the
+	// root file: they span entities.
+	if sdl, err := g.genInterfaceDefsSchema(); err == nil && sdl != "" {
+		buf.WriteString(sdl)
+		buf.WriteString("\n")
 	}
 
 	// Query and Mutation types

@@ -40,7 +40,8 @@ func (Comment) Edges() []velox.Edge {
 			Ref("comments").
 			Unique().
 			Required().
-			Comment("The todo this comment belongs to"),
+			Comment("The todo this comment belongs to").
+			Annotations(graphql.InterfaceField("subject")),
 		edge.From("author", User.Type).
 			Ref("comments").
 			Unique().

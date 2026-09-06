@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/syssam/velox/contrib/graphql/gqlrelay"
+
 	gqlgenGraphql "github.com/99designs/gqlgen/graphql"
 	"github.com/dave/jennifer/jen"
 
@@ -86,6 +88,28 @@ func gqlCollectField(
 				selectedFields = append(selectedFields, edge.FKColumns...)
 
 				q.WithEdgeLoad(edge.Name, opts...)
+				continue
+			}
+
+			// An interface field (graphql.InterfaceField): eager-load every
+			// contributing edge. When all of them own their foreign key and the
+			// selection needs only __typename/id, the resolver builds the node
+			// from the key, so only the key columns are selected.
+			if ifm, ok := meta.InterfaceFields[field.Name]; ok {
+				allOwnFK := len(ifm.Edges) > 0
+				for _, key := range ifm.Edges {
+					em := edges[key]
+					selectedFields = append(selectedFields, em.FKColumns...)
+					if !em.OwnFK {
+						allOwnFK = false
+					}
+				}
+				if allOwnFK && gqlrelay.InterfaceFieldCoveredByID(field, opCtx, ifm.Satisfies...) {
+					continue
+				}
+				for _, key := range ifm.Edges {
+					q.WithEdgeLoad(edges[key].Name)
+				}
 				continue
 			}
 
@@ -288,6 +312,28 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 			})
 		}
 
+		// InterfaceFields: GraphQL interface field → contributing edge keys
+		// and the type conditions its selection may use.
+		if groups, err := g.interfaceFieldGroups(t); err == nil && len(groups) > 0 {
+			grp.Id(metaVar).Dot("InterfaceFields").Op("=").Map(jen.String()).Qual(runtimePkgPath, "InterfaceFieldMeta").ValuesFunc(func(d *jen.Group) {
+				for _, ifc := range groups {
+					keys := make([]jen.Code, 0, len(ifc.Edges))
+					sat := []jen.Code{}
+					if ifc.InterfaceName != "" {
+						sat = append(sat, jen.Lit(ifc.InterfaceName))
+					}
+					for _, e := range ifc.Edges {
+						keys = append(keys, jen.Lit(camel(e.Name)))
+						sat = append(sat, jen.Lit(g.graphqlTypeName(e.Type)))
+					}
+					d.Lit(ifc.FieldName).Op(":").Values(jen.Dict{
+						jen.Id("Edges"):     jen.Index().String().Values(keys...),
+						jen.Id("Satisfies"): jen.Index().String().Values(sat...),
+					})
+				}
+			})
+		}
+
 		// Edges: map GraphQL edge name → EdgeMeta.
 		if len(filteredEdges) > 0 {
 			grp.Id(metaVar).Dot("Edges").Op("=").Map(jen.String()).Qual(runtimePkgPath, "EdgeMeta").ValuesFunc(func(d *jen.Group) {
@@ -310,6 +356,7 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 						jen.Id("Relay"):     jen.Lit(relay),
 						jen.Id("FKColumns"): jen.Index().String().Values(fkCols...),
 						jen.Id("Inverse"):   jen.Lit(e.Inverse),
+						jen.Id("OwnFK"):     jen.Lit(e.OwnFK()),
 					})
 				}
 			})

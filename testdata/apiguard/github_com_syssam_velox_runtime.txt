@@ -1,6 +1,7 @@
   field CollectMeta.CollectedFor map[string][]string
   field CollectMeta.Edges map[string]EdgeMeta
   field CollectMeta.FieldColumns map[string]string
+  field CollectMeta.InterfaceFields map[string]InterfaceFieldMeta
   field Config.Debug bool
   field Config.Driver github.com/syssam/velox/dialect.Driver
   field Config.HookStore any
@@ -19,6 +20,7 @@
   field EdgeMeta.FKColumns []string
   field EdgeMeta.Inverse string
   field EdgeMeta.Name string
+  field EdgeMeta.OwnFK bool
   field EdgeMeta.Relay bool
   field EdgeMeta.Target string
   field EdgeMeta.Unique bool
@@ -32,6 +34,8 @@
   field EntityRegistration.Table string
   field EntityRegistration.TypeInfo *RegisteredTypeInfo
   field EntityRegistration.ValidColumn func(string) bool
+  field InterfaceFieldMeta.Edges []string
+  field InterfaceFieldMeta.Satisfies []string
   field LoadConfig.Edges map[string][]LoadOption
   field LoadConfig.Fields []string
   field LoadConfig.Limit *int
@@ -265,6 +269,7 @@ type FieldCollector func(ctx context.Context, q FieldCollectable, meta *CollectM
 type Hook = Hook
 type InterceptFunc = InterceptFunc
 type Interceptor = Interceptor
+type InterfaceFieldMeta struct
 type LoadConfig struct
 type LoadOption func(*LoadConfig)
 type MutateFunc = MutateFunc

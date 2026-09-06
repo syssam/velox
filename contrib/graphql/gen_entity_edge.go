@@ -52,6 +52,11 @@ func (g *Generator) genEntityEdge(t *gen.Type) *jen.File {
 		}
 	}
 
+	// Interface fields (graphql.InterfaceField). Validation errors surface
+	// at generation start (validateInterfaceFields), so a failure here is
+	// unreachable in a run that got this far.
+	_ = g.genInterfaceFieldMethods(f, t, typeName)
+
 	return f
 }
 

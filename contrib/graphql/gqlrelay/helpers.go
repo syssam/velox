@@ -299,3 +299,19 @@ func LimitPerRow(partitionBy string, limit int, orderBy ...sql.Querier) func(s *
 			Prefix(with)
 	}
 }
+
+// InterfaceFieldCoveredByID reports whether a selection on a polymorphic
+// interface field needs nothing beyond __typename and id — across every
+// inline fragment, hence satisfies lists the interface and its implementor
+// type names — so a resolver can build the node from the foreign key it
+// already holds instead of querying the target table.
+func InterfaceFieldCoveredByID(field graphql.CollectedField, oc *graphql.OperationContext, satisfies ...string) bool {
+	for _, f := range graphql.CollectFields(oc, field.Selections, satisfies) {
+		switch f.Name {
+		case "__typename", "id":
+		default:
+			return false
+		}
+	}
+	return true
+}

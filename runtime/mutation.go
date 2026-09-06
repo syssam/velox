@@ -119,4 +119,18 @@ type CollectMeta struct {
 	// several columns can be collected for one name. Without an entry the
 	// collector treats the field as unknown and falls back to SELECT *.
 	CollectedFor map[string][]string
+	// InterfaceFields maps a GraphQL interface field (graphql.InterfaceField)
+	// to the edges that back it, so selecting the field eager-loads every
+	// contributing edge — or, when the selection is covered by __typename and
+	// id and every edge owns its foreign key, only the key columns.
+	InterfaceFields map[string]InterfaceFieldMeta
+}
+
+// InterfaceFieldMeta describes one GraphQL interface field.
+type InterfaceFieldMeta struct {
+	// Edges are the keys into CollectMeta.Edges of the contributing edges.
+	Edges []string
+	// Satisfies lists the GraphQL interface and its implementor type names,
+	// the type conditions a selection on the field may use.
+	Satisfies []string
 }

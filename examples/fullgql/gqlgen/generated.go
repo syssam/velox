@@ -104,6 +104,7 @@ type ComplexityRoot struct {
 		Content   func(childComplexity int) int
 		CreatedAt func(childComplexity int) int
 		ID        func(childComplexity int) int
+		Subject   func(childComplexity int) int
 		Todo      func(childComplexity int) int
 		UpdatedAt func(childComplexity int) int
 	}
@@ -130,6 +131,7 @@ type ComplexityRoot struct {
 		Accepted  func(childComplexity int) int
 		CreatedAt func(childComplexity int) int
 		ID        func(childComplexity int) int
+		Principal func(childComplexity int) int
 		Role      func(childComplexity int) int
 		UpdatedAt func(childComplexity int) int
 		User      func(childComplexity int) int
@@ -261,6 +263,7 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 		Memberships func(childComplexity int) int
 		Name        func(childComplexity int) int
+		Relations   func(childComplexity int) int
 		Role        func(childComplexity int) int
 		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 		UpdatedAt   func(childComplexity int) int
@@ -285,6 +288,7 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 		Members     func(childComplexity int) int
 		Name        func(childComplexity int) int
+		Relations   func(childComplexity int) int
 		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 		UpdatedAt   func(childComplexity int) int
 	}
@@ -535,6 +539,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Comment.ID(childComplexity), true
+	case "Comment.subject":
+		if e.complexity.Comment.Subject == nil {
+			break
+		}
+
+		return e.complexity.Comment.Subject(childComplexity), true
 	case "Comment.todo":
 		if e.complexity.Comment.Todo == nil {
 			break
@@ -628,6 +638,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Member.ID(childComplexity), true
+	case "Member.principal":
+		if e.complexity.Member.Principal == nil {
+			break
+		}
+
+		return e.complexity.Member.Principal(childComplexity), true
 	case "Member.role":
 		if e.complexity.Member.Role == nil {
 			break
@@ -1353,6 +1369,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.User.Name(childComplexity), true
+	case "User.relations":
+		if e.complexity.User.Relations == nil {
+			break
+		}
+
+		return e.complexity.User.Relations(childComplexity), true
 	case "User.role":
 		if e.complexity.User.Role == nil {
 			break
@@ -1451,6 +1473,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Workspace.Name(childComplexity), true
+	case "Workspace.relations":
+		if e.complexity.Workspace.Relations == nil {
+			break
+		}
+
+		return e.complexity.Workspace.Relations(childComplexity), true
 	case "Workspace.todos":
 		if e.complexity.Workspace.Todos == nil {
 			break
@@ -1832,6 +1860,7 @@ type Comment implements Node @goModel(model: "example.com/fullgql/velox/entity.C
   The user who wrote this comment
   """
   author: User!
+  subject: Todo
 }
 
 type Label implements Node @goModel(model: "example.com/fullgql/velox/entity.Label") {
@@ -1888,6 +1917,7 @@ type Member implements Node @goModel(model: "example.com/fullgql/velox/entity.Me
   accepted: Boolean!
   workspace: Workspace!
   user: User!
+  principal: Principal
 }
 
 type Product implements Node @goModel(model: "example.com/fullgql/velox/entity.Product") {
@@ -2117,7 +2147,7 @@ type Todo implements Node @goModel(model: "example.com/fullgql/velox/entity.Todo
   workspace: Workspace
 }
 
-type User implements Node @goModel(model: "example.com/fullgql/velox/entity.User") {
+type User implements Node & Principal @goModel(model: "example.com/fullgql/velox/entity.User") {
   id: ID!
   """
   Timestamp when the entity was created
@@ -2179,9 +2209,10 @@ type User implements Node @goModel(model: "example.com/fullgql/velox/entity.User
   Audit trail
   """
   auditLogs: [AuditLog!]!
+  relations: [Member!]!
 }
 
-type Workspace implements Node @goModel(model: "example.com/fullgql/velox/entity.Workspace") {
+type Workspace implements Node & Principal @goModel(model: "example.com/fullgql/velox/entity.Workspace") {
   id: ID!
   """
   Timestamp when the entity was created
@@ -2233,8 +2264,21 @@ type Workspace implements Node @goModel(model: "example.com/fullgql/velox/entity
     """
     where: TodoWhereInput
   ): TodoConnection!
+  relations: [Member!]!
 }
 
+
+"""
+Principal is implemented by User, Workspace.
+"""
+interface Principal @goModel(model: "example.com/fullgql/velox/entity.Principal") {
+  active: Boolean!
+  createdAt: Time!
+  id: ID!
+  name: String!
+  relations: [Member!]!
+  updatedAt: Time!
+}
 
 # Input types
 
@@ -4666,6 +4710,8 @@ func (ec *executionContext) fieldContext_AuditLog_user(_ context.Context, field 
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -5371,8 +5417,73 @@ func (ec *executionContext) fieldContext_Comment_author(_ context.Context, field
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Comment_subject(ctx context.Context, field graphql.CollectedField, obj *entity.Comment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Comment_subject,
+		func(ctx context.Context) (any, error) {
+			return obj.Subject(ctx)
+		},
+		nil,
+		ec.marshalOTodo2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐTodo,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Comment_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Comment",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Todo_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Todo_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Todo_updatedAt(ctx, field)
+			case "title":
+				return ec.fieldContext_Todo_title(ctx, field)
+			case "description":
+				return ec.fieldContext_Todo_description(ctx, field)
+			case "status":
+				return ec.fieldContext_Todo_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Todo_priority(ctx, field)
+			case "dueDate":
+				return ec.fieldContext_Todo_dueDate(ctx, field)
+			case "completed":
+				return ec.fieldContext_Todo_completed(ctx, field)
+			case "estimatedHours":
+				return ec.fieldContext_Todo_estimatedHours(ctx, field)
+			case "owner":
+				return ec.fieldContext_Todo_owner(ctx, field)
+			case "comments":
+				return ec.fieldContext_Todo_comments(ctx, field)
+			case "tags":
+				return ec.fieldContext_Todo_tags(ctx, field)
+			case "category":
+				return ec.fieldContext_Todo_category(ctx, field)
+			case "labels":
+				return ec.fieldContext_Todo_labels(ctx, field)
+			case "workspace":
+				return ec.fieldContext_Todo_workspace(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Todo", field.Name)
 		},
 	}
 	return fc, nil
@@ -5872,6 +5983,8 @@ func (ec *executionContext) fieldContext_Member_workspace(_ context.Context, fie
 				return ec.fieldContext_Workspace_members(ctx, field)
 			case "todos":
 				return ec.fieldContext_Workspace_todos(ctx, field)
+			case "relations":
+				return ec.fieldContext_Workspace_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Workspace", field.Name)
 		},
@@ -5929,8 +6042,39 @@ func (ec *executionContext) fieldContext_Member_user(_ context.Context, field gr
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Member_principal(ctx context.Context, field graphql.CollectedField, obj *entity.Member) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Member_principal,
+		func(ctx context.Context) (any, error) {
+			return obj.Principal(ctx)
+		},
+		nil,
+		ec.marshalOPrincipal2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐPrincipal,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Member_principal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Member",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("FieldContext.Child cannot be called on type INTERFACE")
 		},
 	}
 	return fc, nil
@@ -6091,6 +6235,8 @@ func (ec *executionContext) fieldContext_Mutation_createComment(ctx context.Cont
 				return ec.fieldContext_Comment_todo(ctx, field)
 			case "author":
 				return ec.fieldContext_Comment_author(ctx, field)
+			case "subject":
+				return ec.fieldContext_Comment_subject(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -6146,6 +6292,8 @@ func (ec *executionContext) fieldContext_Mutation_updateComment(ctx context.Cont
 				return ec.fieldContext_Comment_todo(ctx, field)
 			case "author":
 				return ec.fieldContext_Comment_author(ctx, field)
+			case "subject":
+				return ec.fieldContext_Comment_subject(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -6305,6 +6453,8 @@ func (ec *executionContext) fieldContext_Mutation_createMember(ctx context.Conte
 				return ec.fieldContext_Member_workspace(ctx, field)
 			case "user":
 				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
 		},
@@ -6362,6 +6512,8 @@ func (ec *executionContext) fieldContext_Mutation_updateMember(ctx context.Conte
 				return ec.fieldContext_Member_workspace(ctx, field)
 			case "user":
 				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
 		},
@@ -6805,6 +6957,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -6874,6 +7028,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -6935,6 +7091,8 @@ func (ec *executionContext) fieldContext_Mutation_createWorkspace(ctx context.Co
 				return ec.fieldContext_Workspace_members(ctx, field)
 			case "todos":
 				return ec.fieldContext_Workspace_todos(ctx, field)
+			case "relations":
+				return ec.fieldContext_Workspace_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Workspace", field.Name)
 		},
@@ -6996,6 +7154,8 @@ func (ec *executionContext) fieldContext_Mutation_updateWorkspace(ctx context.Co
 				return ec.fieldContext_Workspace_members(ctx, field)
 			case "todos":
 				return ec.fieldContext_Workspace_todos(ctx, field)
+			case "relations":
+				return ec.fieldContext_Workspace_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Workspace", field.Name)
 		},
@@ -7808,6 +7968,8 @@ func (ec *executionContext) fieldContext_Query_comments(_ context.Context, field
 				return ec.fieldContext_Comment_todo(ctx, field)
 			case "author":
 				return ec.fieldContext_Comment_author(ctx, field)
+			case "subject":
+				return ec.fieldContext_Comment_subject(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -7902,6 +8064,8 @@ func (ec *executionContext) fieldContext_Query_members(_ context.Context, field 
 				return ec.fieldContext_Member_workspace(ctx, field)
 			case "user":
 				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
 		},
@@ -8929,6 +9093,8 @@ func (ec *executionContext) fieldContext_Todo_owner(_ context.Context, field gra
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -8972,6 +9138,8 @@ func (ec *executionContext) fieldContext_Todo_comments(_ context.Context, field 
 				return ec.fieldContext_Comment_todo(ctx, field)
 			case "author":
 				return ec.fieldContext_Comment_author(ctx, field)
+			case "subject":
+				return ec.fieldContext_Comment_subject(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -9166,6 +9334,8 @@ func (ec *executionContext) fieldContext_Todo_workspace(_ context.Context, field
 				return ec.fieldContext_Workspace_members(ctx, field)
 			case "todos":
 				return ec.fieldContext_Workspace_todos(ctx, field)
+			case "relations":
+				return ec.fieldContext_Workspace_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Workspace", field.Name)
 		},
@@ -9714,6 +9884,8 @@ func (ec *executionContext) fieldContext_User_comments(_ context.Context, field 
 				return ec.fieldContext_Comment_todo(ctx, field)
 			case "author":
 				return ec.fieldContext_Comment_author(ctx, field)
+			case "subject":
+				return ec.fieldContext_Comment_subject(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -9759,6 +9931,8 @@ func (ec *executionContext) fieldContext_User_memberships(_ context.Context, fie
 				return ec.fieldContext_Member_workspace(ctx, field)
 			case "user":
 				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
 		},
@@ -9810,6 +9984,53 @@ func (ec *executionContext) fieldContext_User_auditLogs(_ context.Context, field
 				return ec.fieldContext_AuditLog_user(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AuditLog", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _User_relations(ctx context.Context, field graphql.CollectedField, obj *entity.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_relations,
+		func(ctx context.Context) (any, error) {
+			return obj.Relations(ctx)
+		},
+		nil,
+		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_relations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Member_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Member_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Member_updatedAt(ctx, field)
+			case "role":
+				return ec.fieldContext_Member_role(ctx, field)
+			case "accepted":
+				return ec.fieldContext_Member_accepted(ctx, field)
+			case "workspace":
+				return ec.fieldContext_Member_workspace(ctx, field)
+			case "user":
+				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
 		},
 	}
 	return fc, nil
@@ -9968,6 +10189,8 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_memberships(ctx, field)
 			case "auditLogs":
 				return ec.fieldContext_User_auditLogs(ctx, field)
+			case "relations":
+				return ec.fieldContext_User_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -10245,6 +10468,8 @@ func (ec *executionContext) fieldContext_Workspace_members(_ context.Context, fi
 				return ec.fieldContext_Member_workspace(ctx, field)
 			case "user":
 				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
 		},
@@ -10297,6 +10522,53 @@ func (ec *executionContext) fieldContext_Workspace_todos(ctx context.Context, fi
 	if fc.Args, err = ec.field_Workspace_todos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Workspace_relations(ctx context.Context, field graphql.CollectedField, obj *entity.Workspace) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Workspace_relations,
+		func(ctx context.Context) (any, error) {
+			return obj.Relations(ctx)
+		},
+		nil,
+		ec.marshalNMember2ᚕᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐMemberᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Workspace_relations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Workspace",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Member_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Member_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Member_updatedAt(ctx, field)
+			case "role":
+				return ec.fieldContext_Member_role(ctx, field)
+			case "accepted":
+				return ec.fieldContext_Member_accepted(ctx, field)
+			case "workspace":
+				return ec.fieldContext_Member_workspace(ctx, field)
+			case "user":
+				return ec.fieldContext_Member_user(ctx, field)
+			case "principal":
+				return ec.fieldContext_Member_principal(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Member", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -10446,6 +10718,8 @@ func (ec *executionContext) fieldContext_WorkspaceEdge_node(_ context.Context, f
 				return ec.fieldContext_Workspace_members(ctx, field)
 			case "todos":
 				return ec.fieldContext_Workspace_todos(ctx, field)
+			case "relations":
+				return ec.fieldContext_Workspace_relations(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Workspace", field.Name)
 		},
@@ -14961,6 +15235,29 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 	}
 }
 
+func (ec *executionContext) _Principal(ctx context.Context, sel ast.SelectionSet, obj entity.Principal) graphql.Marshaler {
+	switch obj := (obj).(type) {
+	case nil:
+		return graphql.Null
+	case *entity.Workspace:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Workspace(ctx, sel, obj)
+	case *entity.User:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._User(ctx, sel, obj)
+	default:
+		if typedObj, ok := obj.(graphql.Marshaler); ok {
+			return typedObj
+		} else {
+			panic(fmt.Errorf("unexpected type %T; non-generated variants of Principal must implement graphql.Marshaler", obj))
+		}
+	}
+}
+
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
@@ -15417,6 +15714,39 @@ func (ec *executionContext) _Comment(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "subject":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Comment_subject(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -15694,6 +16024,39 @@ func (ec *executionContext) _Member(ctx context.Context, sel ast.SelectionSet, o
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "principal":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Member_principal(ctx, field, obj)
 				return res
 			}
 
@@ -17067,7 +17430,7 @@ func (ec *executionContext) _TodoEdge(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
-var userImplementors = []string{"User", "Node"}
+var userImplementors = []string{"User", "Node", "Principal"}
 
 func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj *entity.User) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, userImplementors)
@@ -17261,6 +17624,42 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "relations":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_relations(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -17371,7 +17770,7 @@ func (ec *executionContext) _UserEdge(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
-var workspaceImplementors = []string{"Workspace", "Node"}
+var workspaceImplementors = []string{"Workspace", "Node", "Principal"}
 
 func (ec *executionContext) _Workspace(ctx context.Context, sel ast.SelectionSet, obj *entity.Workspace) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, workspaceImplementors)
@@ -17457,6 +17856,42 @@ func (ec *executionContext) _Workspace(ctx context.Context, sel ast.SelectionSet
 					}
 				}()
 				res = ec._Workspace_todos(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "relations":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Workspace_relations(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -19631,6 +20066,13 @@ func (ec *executionContext) marshalONode2exampleᚗcomᚋfullgqlᚋveloxᚐNoder
 		return graphql.Null
 	}
 	return ec._Node(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOPrincipal2exampleᚗcomᚋfullgqlᚋveloxᚋentityᚐPrincipal(ctx context.Context, sel ast.SelectionSet, v entity.Principal) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Principal(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOProduct2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐProduct(ctx context.Context, sel ast.SelectionSet, v *entity.Product) graphql.Marshaler {

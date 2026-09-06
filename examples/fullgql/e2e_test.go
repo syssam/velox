@@ -1830,3 +1830,107 @@ func TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges(t *testing.T) {
 // autobind directly to the entity method; the fast path now lives entirely
 // in genConnectionEdgeMethod and is covered by
 // TestEntityEdgeMethod_FastPath_UsesEagerLoadedEdges above.)
+
+// TestInterfaceField_EndToEnd drives the graphql.InterfaceField feature
+// through gqlgen's real executor:
+//
+//   - Member.principal is a polymorphic field over the workspace and user
+//     edges, typed as the generated Principal interface (Workspace and User
+//     both rename their Member edge to "relations", which is what makes
+//     velox generate the interface and the Go markers gqlgen binds to).
+//   - User.relations / Workspace.relations are to-many renames.
+//   - Comment.subject is a standalone to-one rename of the todo edge.
+//
+// The queries use inline fragments on the interface, so gqlgen must resolve
+// the concrete type through the generated IsPrincipal marker, and the
+// collector must eager-load both contributing edges when the selection
+// reaches into them.
+func TestInterfaceField_EndToEnd(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+	cfg := client.RuntimeConfig()
+
+	alice, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "alice@iface.com"}).Save(ctx)
+	require.NoError(t, err)
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "Platform"}).Save(ctx)
+	require.NoError(t, err)
+	_, err = memberclient.NewMemberClient(cfg).Create().
+		SetInput(memberclient.CreateMemberInput{Role: ptr(member.RoleViewer), WorkspaceID: ws.ID, UserID: alice.ID}).Save(ctx)
+	require.NoError(t, err)
+	td, err := todoclient.NewTodoClient(cfg).Create().
+		SetInput(todoclient.CreateTodoInput{Title: "Ship interfaces", Status: ptr(todo.StatusInProgress),
+			Priority: ptr(todo.PriorityMedium), OwnerID: alice.ID, WorkspaceID: ptr(ws.ID)}).Save(ctx)
+	require.NoError(t, err)
+	_, err = commentclient.NewCommentClient(cfg).Create().
+		SetInput(commentclient.CreateCommentInput{Content: "lgtm", TodoID: td.ID, AuthorID: alice.ID}).Save(ctx)
+	require.NoError(t, err)
+
+	srv := handler.NewDefaultServer(gqlgenpkg.NewExecutableSchema(gqlgenpkg.Config{
+		Resolvers: &gqlgenpkg.Resolver{Client: client},
+	}))
+	gqlClient := gqlclient.New(srv)
+
+	// Polymorphic field with inline fragments on the interface. Both edges
+	// of a Member are populated, so the first contributing edge (workspace)
+	// wins, exactly as ent's generated resolver behaves.
+	var principal struct {
+		Members []struct {
+			Principal struct {
+				Typename string `json:"__typename"`
+				ID       string `json:"id"`
+				Name     string `json:"name"`
+				Email    string `json:"email"`
+			} `json:"principal"`
+		} `json:"members"`
+	}
+	gqlClient.MustPost(`{ members { principal { __typename id name ... on Workspace { name } ... on User { email } } } }`, &principal)
+	require.Len(t, principal.Members, 1)
+	assert.Equal(t, "Workspace", principal.Members[0].Principal.Typename)
+	assert.Equal(t, "Platform", principal.Members[0].Principal.Name)
+	assert.NotEmpty(t, principal.Members[0].Principal.ID)
+
+	// The same field reached through an eager-loading parent: users →
+	// relations (rename, to-many) → principal. The collector must schedule
+	// both contributing edges on the Member query.
+	var nested struct {
+		Users struct {
+			Edges []struct {
+				Node struct {
+					Relations []struct {
+						Principal struct {
+							Typename string `json:"__typename"`
+							Name     string `json:"name"`
+						} `json:"principal"`
+					} `json:"relations"`
+				} `json:"node"`
+			} `json:"edges"`
+		} `json:"users"`
+	}
+	gqlClient.MustPost(`{ users(first: 5) { edges { node { relations { principal { __typename name } } } } } }`, &nested)
+	require.Len(t, nested.Users.Edges, 1)
+	require.Len(t, nested.Users.Edges[0].Node.Relations, 1)
+	assert.Equal(t, "Workspace", nested.Users.Edges[0].Node.Relations[0].Principal.Typename)
+	assert.Equal(t, "Platform", nested.Users.Edges[0].Node.Relations[0].Principal.Name)
+
+	// Standalone to-one rename.
+	var subject struct {
+		Comments []struct {
+			Subject struct {
+				Title string `json:"title"`
+			} `json:"subject"`
+		} `json:"comments"`
+	}
+	gqlClient.MustPost(`{ comments { subject { title } } }`, &subject)
+	require.Len(t, subject.Comments, 1)
+	assert.Equal(t, "Ship interfaces", subject.Comments[0].Subject.Title)
+
+	// Interface fields are the intersection of the implementors' fields:
+	// selecting one that only User has through the interface is a schema
+	// error, which proves the interface was generated from the shared set.
+	var bad map[string]any
+	err = gqlClient.Post(`{ members { principal { email } } }`, &bad)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "email")
+}

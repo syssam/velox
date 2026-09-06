@@ -447,6 +447,13 @@ type Annotation struct {
 	// Use this for custom interfaces like "Auditable", "Timestamped", etc.
 	Implements []string
 
+	// InterfaceField, on an edge, exposes the edge in GraphQL under this
+	// field name. A single edge with the name is a rename; several edges on
+	// the same type sharing the name form one polymorphic field typed as the
+	// GraphQL interface their targets have in common (via Implements).
+	// See the InterfaceField constructor.
+	InterfaceField string
+
 	// Subscriptions defines subscription fields contributed by this entity.
 	// Collected into a `type Subscription` block in the generated schema.
 	Subscriptions []SubscriptionConfig
@@ -780,6 +787,37 @@ func Deprecated(reason string) Directive {
 //	type User implements Node & Auditable & Timestamped { ... }
 func Implements(interfaces ...string) Annotation {
 	return Annotation{Implements: interfaces}
+}
+
+// InterfaceField marks an edge as (part of) a GraphQL interface field.
+//
+// Group case: several edges on the same type share the name, and their
+// target types share a GraphQL interface declared with Implements. They are
+// exposed as ONE field typed as that interface. With to-one edges the field
+// holds the single populated target; with to-many edges it is an
+// <Interface>Connection whose resolver is left to the application.
+//
+//	func (Bookmark) Edges() []velox.Edge {
+//		return []velox.Edge{
+//			edge.To("todo", Todo.Type).Unique().Annotations(graphql.InterfaceField("item")),
+//			edge.To("project", Project.Type).Unique().Annotations(graphql.InterfaceField("item")),
+//		}
+//	}
+//
+// Rename case: a single edge with the name is additionally exposed under
+// that name (the edge keeps its own field too):
+//
+//	edge.From("category", Category.Type).Ref("todos").Unique().
+//		Annotations(graphql.InterfaceField("owner"))
+//
+// velox generates the SDL field, the entity resolver method, and the
+// eager-loading wiring. When every implementor of an interface shares at
+// least one renamed field, the `interface` definition itself is generated
+// from the fields all implementors have in common, and a Go interface with
+// marker methods is emitted in the entity package for gqlgen to bind.
+// Ported from entgql.InterfaceField (ent/contrib #638).
+func InterfaceField(name string) Annotation {
+	return Annotation{InterfaceField: name}
 }
 
 // --- Apollo Federation v2 Constructors ---
@@ -1402,6 +1440,10 @@ func (a Annotation) GetDirectives() []Directive { return a.Directives }
 // The "Node" interface is automatically included when RelaySpec is enabled.
 func (a Annotation) GetImplements() []string { return a.Implements }
 
+// GetInterfaceField returns the interface field name an edge contributes to,
+// or "" when the edge is not annotated.
+func (a Annotation) GetInterfaceField() string { return a.InterfaceField }
+
 // GetMutationInputs returns the mutation input configurations.
 // If not explicitly set, returns default configs based on Skip flags.
 func (a Annotation) GetMutationInputs() []MutationConfig {
@@ -1559,6 +1601,9 @@ func mergeAnnotations(a, o Annotation) Annotation {
 	}
 	if len(o.Directives) > 0 {
 		result.Directives = append(result.Directives, o.Directives...)
+	}
+	if o.InterfaceField != "" {
+		result.InterfaceField = o.InterfaceField
 	}
 	if len(o.Implements) > 0 {
 		result.Implements = append(result.Implements, o.Implements...)
