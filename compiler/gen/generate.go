@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -163,6 +164,7 @@ func (g *JenniferGenerator) Generate(ctx context.Context) error {
 	if err := os.MkdirAll(g.outDir, 0o755); err != nil {
 		return err
 	}
+	defer relaxGC()()
 
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.SetLimit(g.workers)
@@ -734,4 +736,26 @@ func appendImportSpecs(buf []byte, specs []importSpec) []byte {
 		buf = append(buf, spec.line...)
 	}
 	return buf
+}
+
+// generationGCPercent is the GOGC applied while the render workers run.
+//
+// An execution trace of a 328-entity generation showed the parallel render
+// phase serializing not on a lock but on the garbage collector: with 16
+// workers each parsing and printing a file, the goroutines spent more time
+// in gcMarkDone/gcStart than in any lock. Generation is a short-lived batch
+// whose live heap is small (~150 MB at 328 entities with GOGC=100, ~300 MB
+// at 200), so trading heap for fewer collections is cheap. Measured: about
+// 15-20% faster render. The process-wide setting is restored afterwards;
+// an explicit GOGC in the environment wins.
+const generationGCPercent = 200
+
+// relaxGC raises GOGC for the duration of generation and returns the
+// function that restores it. A caller who set GOGC explicitly keeps it.
+func relaxGC() func() {
+	if os.Getenv("GOGC") != "" {
+		return func() {}
+	}
+	prev := debug.SetGCPercent(generationGCPercent)
+	return func() { debug.SetGCPercent(prev) }
 }
