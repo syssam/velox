@@ -99,6 +99,11 @@ func NewMigrateURL(u string, opts ...MigrateOption) (*Atlas, error) {
 	return a, nil
 }
 
+// migrateMu serializes migrations across every Atlas instance in the
+// process, because they all mutate and read the same generated
+// migrate.Tables values. See Create.
+var migrateMu sync.Mutex
+
 // Create creates all schema resources in the database. It works in an "append-only"
 // mode, which means, it only creates tables, appends columns to tables or modifies column types.
 //
@@ -106,6 +111,16 @@ func NewMigrateURL(u string, opts ...MigrateOption) (*Atlas, error) {
 // resulting data altering. From example, changing varchar(255) to varchar(120) is invalid, but
 // changing varchar(120) to varchar(255) is valid. For more info, see the convert function below.
 func (a *Atlas) Create(ctx context.Context, tables ...*Table) (err error) {
+	// The tables passed in are the generated migrate.Tables — a package-level
+	// slice shared by every client in the process. setupTables mutates those
+	// shared objects (rewriting foreign-key symbols, marking primary keys)
+	// while the planning phase reads them back, so two clients migrating
+	// concurrently race on state neither of them owns. a.mu is per-Atlas and
+	// does not help: each client builds its own. Serialize on the shared
+	// state instead. Migration is a startup-time, DDL-bound operation, so
+	// the lost concurrency costs nothing in practice.
+	migrateMu.Lock()
+	defer migrateMu.Unlock()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.setupTables(tables)
