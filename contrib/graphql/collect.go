@@ -238,7 +238,7 @@ func (g *Generator) genCollectionQueries(nodes []*gen.Type) *jen.File {
 		).Block(
 			jen.Return(
 				jen.Id("q"),
-				jen.Qual(runtimePkgPath, "CollectFieldsMeta").Call(
+				jen.Qual(runtimePkgPath, "CollectFields").Call(
 					jen.Id("ctx"),
 					jen.Id("q"),
 					jen.Op("&").Qual(entityPkg, metaVar),

@@ -190,8 +190,7 @@ const OpUpdateOne github.com/syssam/velox.Op
 func BuildQueryFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func BuildSelectorFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func CloneSlice[T any]([]T) []T
-func CollectFields(context.Context, FieldCollectable, map[string]string, map[string]EdgeMeta, ...string) error
-func CollectFieldsMeta(context.Context, FieldCollectable, *CollectMeta, ...string) error
+func CollectFields(context.Context, FieldCollectable, *CollectMeta, ...string) error
 func ConfigFromContext(context.Context) Config
 func DeleteNodes(context.Context, *DeleterBase) (int, error)
 func DriverFromContext(context.Context) github.com/syssam/velox/dialect.Driver

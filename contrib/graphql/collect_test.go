@@ -20,7 +20,7 @@ func init() {
 func TestCollectFields_NonGraphQLContext(t *testing.T) {
 	ctx := context.Background()
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
-	err := runtime.CollectFields(ctx, q, nil, nil)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: nil, Edges: nil})
 	assert.NoError(t, err)
 	// No fields should have been collected since there's no GraphQL field context.
 	assert.Empty(t, q.Ctx.Fields)
@@ -35,7 +35,7 @@ func TestCollectFields_NoOperationContext(t *testing.T) {
 	edges := map[string]runtime.EdgeMeta{
 		"author": {Name: "author", Target: "users", Unique: true},
 	}
-	err := runtime.CollectFields(ctx, q, fields, edges)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	assert.NoError(t, err)
 	assert.Empty(t, q.Ctx.Fields)
 	assert.Empty(t, q.Edges)
@@ -77,7 +77,7 @@ func TestCollectFields_ScalarFieldProjection(t *testing.T) {
 	}
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name", "email", "age"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, nil)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
 
 	// Should project only id + name + email (not age).
@@ -98,7 +98,7 @@ func TestCollectFields_IDAndTypenameSkipped(t *testing.T) {
 	fields := map[string]string{"name": "name"}
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, nil)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
 
 	// Should have id (always included) + name. No duplicates from "id" field.
@@ -123,7 +123,7 @@ func TestCollectFields_EdgeLoadScheduling(t *testing.T) {
 	}
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, edges)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	require.NoError(t, err)
 
 	// Edge should be scheduled.
@@ -144,7 +144,7 @@ func TestCollectFields_UnknownFieldFallsBackToSelectAll(t *testing.T) {
 	fields := map[string]string{"name": "name"}
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name", "email", "age"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, nil)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
 
 	// Unknown field causes fallback to SELECT * — no column projection applied.
@@ -189,7 +189,7 @@ func TestCollectFields_RelayEdgePagination(t *testing.T) {
 	}
 	q := runtime.NewQueryBase(nil, "users", []string{"id"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, edges)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	require.NoError(t, err)
 
 	require.Len(t, q.Edges, 1)
@@ -223,7 +223,7 @@ func TestCollectFields_MultipleEdgesAndScalars(t *testing.T) {
 	}
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, edges)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	require.NoError(t, err)
 
 	// Both edges scheduled.
@@ -302,7 +302,7 @@ func TestCollectFields_RelayLastArg(t *testing.T) {
 	}
 	q := runtime.NewQueryBase(nil, "users", []string{"id"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, map[string]string{}, edges)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: map[string]string{}, Edges: edges})
 	require.NoError(t, err)
 
 	require.Len(t, q.Edges, 1)
@@ -321,7 +321,7 @@ func TestCollectFields_EmptySelections(t *testing.T) {
 	fields := map[string]string{"name": "name"}
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
 
-	err := runtime.CollectFields(ctx, q, fields, nil)
+	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
 
 	// With empty selections, only ID is added but since len(selectedFields) == 1
@@ -345,7 +345,7 @@ func TestCollectFields_CollectedFor(t *testing.T) {
 		CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}},
 	}
 
-	require.NoError(t, runtime.CollectFieldsMeta(ctx, q, meta))
+	require.NoError(t, runtime.CollectFields(ctx, q, meta))
 
 	assert.ElementsMatch(t, []string{"id", "first_name", "last_name"}, q.Ctx.Fields,
 		"only the id and the columns collected for fullName may be projected")
@@ -362,6 +362,6 @@ func TestCollectFields_CollectedFor_UnknownStillFallsBack(t *testing.T) {
 	q := runtime.NewQueryBase(nil, "users", []string{"id", "first_name", "last_name"}, "id", nil, "User")
 	meta := &runtime.CollectMeta{CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}}}
 
-	require.NoError(t, runtime.CollectFieldsMeta(ctx, q, meta))
+	require.NoError(t, runtime.CollectFields(ctx, q, meta))
 	assert.Empty(t, q.Ctx.Fields, "an unknown resolver field must keep the SELECT * fallback")
 }

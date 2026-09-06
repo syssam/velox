@@ -64,15 +64,14 @@ func TestGenEntityCollection_EmitsCollectedFor(t *testing.T) {
 	assert.NotContains(t, code, `"lastName":`, "a SkipType field must not appear in FieldColumns")
 }
 
-// TestGenCollectionQueries_UsesCollectFieldsMeta pins the generated call
+// TestGenCollectionQueries_PassesWholeCollectMeta pins the generated call
 // site: CollectFields on each query must pass the entity's whole CollectMeta
-// (by pointer) through runtime.CollectFieldsMeta, not the two maps through
-// the legacy runtime.CollectFields — otherwise CollectedFor never reaches
-// the collector.
-func TestGenCollectionQueries_UsesCollectFieldsMeta(t *testing.T) {
+// by pointer — passing the two maps separately is what used to drop
+// CollectedFor on the floor.
+func TestGenCollectionQueries_PassesWholeCollectMeta(t *testing.T) {
 	graph := mockGraph()
 	g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
 	code := g.genCollectionQueries(graph.Nodes).GoString()
-	require.Contains(t, code, "runtime.CollectFieldsMeta(ctx, q, &")
-	assert.NotContains(t, code, "runtime.CollectFields(")
+	require.Contains(t, code, "runtime.CollectFields(ctx, q, &")
+	assert.NotContains(t, code, ".FieldColumns,")
 }

@@ -88,19 +88,12 @@ func SetFieldCollector(fn FieldCollector) {
 // CollectFields performs GraphQL field collection if a collector is registered.
 // In ORM-only mode (no collector registered) this is a no-op and always returns nil.
 // When contrib/graphql is imported, its init() registers a collector that inspects
-// the gqlgen FieldContext and configures column projection and edge eager-loading.
-// The satisfies parameter specifies additional GraphQL interface names the entity
-// implements (for union/interface type resolution).
-//
-// It carries only field columns and edges; generated code calls
-// CollectFieldsMeta, which also passes CollectedFor mappings.
-func CollectFields(ctx context.Context, q FieldCollectable, fields map[string]string, edges map[string]EdgeMeta, satisfies ...string) error {
-	return CollectFieldsMeta(ctx, q, &CollectMeta{FieldColumns: fields, Edges: edges}, satisfies...)
-}
-
-// CollectFieldsMeta is CollectFields with the entity's full CollectMeta,
-// including CollectedFor mappings. Generated CollectFields methods call it.
-func CollectFieldsMeta(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies ...string) error {
+// the gqlgen FieldContext and configures column projection and edge eager-loading
+// from meta: scalar columns, edges, and the CollectedFor mappings of custom
+// resolver fields. The satisfies parameter specifies additional GraphQL interface
+// names the entity implements (for union/interface type resolution).
+// Generated CollectFields methods call it with the entity's CollectMeta.
+func CollectFields(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies ...string) error {
 	fn := fieldCollector.Load()
 	if fn == nil || meta == nil {
 		return nil
