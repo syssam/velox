@@ -452,7 +452,9 @@ measured on macOS:
 On an unchanged schema that turns a ~1.4s load into ~0.3s. The directory
 contains a `.gitignore` that ignores everything in it, so it never shows
 up as untracked files. It is safe to delete at any time; the next run
-recreates it. It must live next to where generation runs (inside your
+recreates it. If you build container images with `COPY . .`, add `.velox/`
+to `.dockerignore` so the host-architecture binary does not end up in the
+build context. It must live next to where generation runs (inside your
 module) because a helper outside the module tree could not import
 `internal/` schema packages.
 
