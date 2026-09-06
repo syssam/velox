@@ -93,30 +93,27 @@ echo "==> formatting"
 # testdata/ is pruned too: golden files pin generator output byte-for-byte
 # and their import paths (github.com/test/project/...) do not resolve, so
 # goimports would strip the imports it cannot find and corrupt the pins.
-FMT_TARGETS=()
-while IFS= read -r -d '' path; do
-    FMT_TARGETS+=("${path}")
+# Classify once, in a single pass: generated files carry the marker in
+# their first lines (bounded to 3 — a generator SOURCE may mention the
+# marker string further down). gofmt and goimports then run only over the
+# handwritten set; generator output is written already formatted and must
+# never be goimports'ed (see above). One awk process instead of a fork
+# pair per file — the per-file loop this replaces cost ~3 minutes.
+HANDWRITTEN=()
+while IFS= read -r path; do
+    [[ -n "${path}" ]] && HANDWRITTEN+=("${path}")
 done < <(find . \
     -type d \( -name .references -o -name .git -o -name node_modules -o -name testdata \) -prune \
-    -o -type f -name '*.go' -print0)
-if [[ ${#FMT_TARGETS[@]} -gt 0 ]]; then
-    gofmt -s -w "${FMT_TARGETS[@]}"
+    -o -type f -name '*.go' -print0 \
+    | xargs -0 awk '
+        FNR==1 { if (prev != "" && !gen) print prev; prev = FILENAME; gen = 0 }
+        FNR<=3 && /Code generated .* DO NOT EDIT/ { gen = 1 }
+        FNR>3 { nextfile }
+        END { if (prev != "" && !gen) print prev }')
+if [[ ${#HANDWRITTEN[@]} -gt 0 ]]; then
+    gofmt -s -w "${HANDWRITTEN[@]}"
     if command -v goimports >/dev/null 2>&1; then
-        # Never goimports generator output. It is written already formatted,
-        # and goimports resolves import paths against the module of the CWD:
-        # for a sub-module's generated file (tests/parity, examples/*) an
-        # import it cannot resolve whose package name differs from the path
-        # base (client/user -> userclient) is "unused" to it and gets
-        # deleted — every example module was broken this way once.
-        HANDWRITTEN=()
-        for path in "${FMT_TARGETS[@]}"; do
-            if ! head -c 512 "${path}" | grep -q 'Code generated .* DO NOT EDIT'; then
-                HANDWRITTEN+=("${path}")
-            fi
-        done
-        if [[ ${#HANDWRITTEN[@]} -gt 0 ]]; then
-            goimports -w "${HANDWRITTEN[@]}"
-        fi
+        goimports -w "${HANDWRITTEN[@]}"
     else
         echo "warning: goimports not installed; skipping import ordering" >&2
     fi
