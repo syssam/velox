@@ -20,7 +20,6 @@
   field EdgeMeta.FKColumns []string
   field EdgeMeta.Inverse string
   field EdgeMeta.Name string
-  field EdgeMeta.OwnFK bool
   field EdgeMeta.Relay bool
   field EdgeMeta.Target string
   field EdgeMeta.Unique bool
@@ -35,6 +34,7 @@
   field EntityRegistration.TypeInfo *RegisteredTypeInfo
   field EntityRegistration.ValidColumn func(string) bool
   field InterfaceFieldMeta.Edges []string
+  field InterfaceFieldMeta.FastPath bool
   field InterfaceFieldMeta.Satisfies []string
   field LoadConfig.Edges map[string][]LoadOption
   field LoadConfig.Fields []string

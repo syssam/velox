@@ -2273,7 +2273,10 @@ func (q *setOpQuerier) Query() (string, []any) {
 	}
 	// Recorded on the querier itself (not the render clone) so Err() and the
 	// caller's Builder.Join see it — same contract as Selector.ExceptAll.
-	if q.sqlite() && (q.op == string(setOpTypeExcept)+" ALL" || q.op == string(setOpTypeIntersect)+" ALL") {
+	// Recorded once: Query renders on every Builder.Join, and a querier may
+	// be rendered more than once, so an unguarded AddError would accumulate
+	// the same message.
+	if q.Err() == nil && q.sqlite() && (q.op == string(setOpTypeExcept)+" ALL" || q.op == string(setOpTypeIntersect)+" ALL") {
 		q.AddError(errors.New(q.op + " is not supported by SQLite"))
 	}
 	b := q.clone()

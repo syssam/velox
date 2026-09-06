@@ -133,4 +133,10 @@ type InterfaceFieldMeta struct {
 	// Satisfies lists the GraphQL interface and its implementor type names,
 	// the type conditions a selection on the field may use.
 	Satisfies []string
+	// FastPath is true when the generated resolver can answer a selection
+	// covered by __typename and id from the foreign keys alone. Only then
+	// may the collector skip loading the edges: a renamed edge resolves
+	// through the ordinary edge method and would otherwise be queried once
+	// per row.
+	FastPath bool
 }

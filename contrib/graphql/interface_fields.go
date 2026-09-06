@@ -75,11 +75,29 @@ func (g *Generator) interfaceFieldGroups(t *gen.Type) ([]*interfaceFieldGroup, e
 	for _, e := range g.filterEdges(t.Edges, SkipType) {
 		taken[camel(e.Name)] = true
 	}
+	// The annotation value also becomes a Go method on the entity struct
+	// (pascal case), so it must not collide with a member velox already
+	// emits there — otherwise the entity package fails to compile with an
+	// error nowhere near the schema.
+	reservedGo := map[string]bool{
+		"ID": true, "Edges": true, "Config": true, "SetConfig": true,
+		"String": true, "Unwrap": true, "Value": true, "AssignValues": true,
+	}
+	for _, f := range t.Fields {
+		reservedGo[pascal(f.Name)] = true
+	}
+	for _, e := range t.Edges {
+		reservedGo[pascal(e.Name)] = true
+	}
 	out := make([]*interfaceFieldGroup, 0, len(order))
 	for _, name := range order {
 		ifc := groups[name]
 		if taken[name] {
 			return nil, fmt.Errorf("graphql: %s: interface field %q collides with a field or edge of the same name", t.Name, name)
+		}
+		if reservedGo[pascal(name)] {
+			return nil, fmt.Errorf("graphql: %s: interface field %q would generate the method %s, which already exists on the entity; choose another name",
+				t.Name, name, pascal(name))
 		}
 		if len(ifc.Edges) == 1 {
 			ifc.IsRename = true
@@ -131,6 +149,25 @@ func (g *Generator) commonInterface(edges []*gen.Edge) (string, error) {
 	}
 	sort.Strings(sorted)
 	return sorted[0], nil
+}
+
+// hasFKFastPath reports whether the generated resolver for this interface
+// field can answer a __typename/id-only selection from the foreign keys on
+// t, without loading the target. That needs a polymorphic group (a rename
+// resolves through the ordinary edge method), every edge to-one and owning
+// its key, and a nullable key field for each — the same conditions
+// genPolymorphicUniqueMethod emits the switch under. Both call this so the
+// generated code and the collection metadata cannot disagree.
+func (g *Generator) hasFKFastPath(t *gen.Type, ifc *interfaceFieldGroup) bool {
+	if ifc.IsRename || !ifc.unique() || !ifc.allOwnFK() {
+		return false
+	}
+	for _, e := range ifc.Edges {
+		if fkPointerField(t, e) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // generatedInterface describes a GraphQL interface velox emits itself: one
@@ -386,6 +423,33 @@ func (g *Generator) validateInterfaceFields() error {
 			return err
 		}
 	}
-	_, err := g.generatedInterfaces()
-	return err
+	ifaces, err := g.generatedInterfaces()
+	if err != nil {
+		return err
+	}
+	generated := make(map[string]bool, len(ifaces))
+	for _, gi := range ifaces {
+		generated[gi.Name] = true
+	}
+	// A to-many group renders as <Interface>Connection, and velox emits that
+	// type only alongside an interface it generates itself. Over an
+	// application-declared interface the SDL would reference a type nothing
+	// defines, and gqlgen would fail with a message that does not mention
+	// the annotation.
+	for _, n := range g.graph.Nodes {
+		groups, err := g.interfaceFieldGroups(n)
+		if err != nil {
+			return err
+		}
+		for _, ifc := range groups {
+			if ifc.IsRename || ifc.unique() || generated[ifc.InterfaceName] {
+				continue
+			}
+			return fmt.Errorf(
+				"graphql: %s: interface field %q groups to-many edges under %[3]q, which velox does not define: it would emit %[3]sConnection with no %[3]s type. "+
+					"Give every implementor of %[3]q a shared graphql.InterfaceField rename so velox generates the interface, or group to-one edges instead",
+				n.Name, ifc.FieldName, ifc.InterfaceName)
+		}
+	}
+	return nil
 }

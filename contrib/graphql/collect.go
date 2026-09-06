@@ -96,15 +96,13 @@ func gqlCollectField(
 			// selection needs only __typename/id, the resolver builds the node
 			// from the key, so only the key columns are selected.
 			if ifm, ok := meta.InterfaceFields[field.Name]; ok {
-				allOwnFK := len(ifm.Edges) > 0
 				for _, key := range ifm.Edges {
-					em := edges[key]
-					selectedFields = append(selectedFields, em.FKColumns...)
-					if !em.OwnFK {
-						allOwnFK = false
-					}
+					selectedFields = append(selectedFields, edges[key].FKColumns...)
 				}
-				if allOwnFK && gqlrelay.InterfaceFieldCoveredByID(field, opCtx, ifm.Satisfies...) {
+				// Skip the edge loads only when the resolver can actually
+				// answer from the keys; otherwise this would trade one join
+				// for a query per row.
+				if ifm.FastPath && gqlrelay.InterfaceFieldCoveredByID(field, opCtx, ifm.Satisfies...) {
 					continue
 				}
 				for _, key := range ifm.Edges {
@@ -329,6 +327,7 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 					d.Lit(ifc.FieldName).Op(":").Values(jen.Dict{
 						jen.Id("Edges"):     jen.Index().String().Values(keys...),
 						jen.Id("Satisfies"): jen.Index().String().Values(sat...),
+						jen.Id("FastPath"):  jen.Lit(g.hasFKFastPath(t, ifc)),
 					})
 				}
 			})
@@ -356,7 +355,6 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 						jen.Id("Relay"):     jen.Lit(relay),
 						jen.Id("FKColumns"): jen.Index().String().Values(fkCols...),
 						jen.Id("Inverse"):   jen.Lit(e.Inverse),
-						jen.Id("OwnFK"):     jen.Lit(e.OwnFK()),
 					})
 				}
 			})

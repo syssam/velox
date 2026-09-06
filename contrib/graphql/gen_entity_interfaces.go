@@ -123,13 +123,10 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 	for _, e := range ifc.Edges {
 		satisfies = append(satisfies, jen.Lit(g.graphqlTypeName(e.Type)))
 	}
-	fastPath := ifc.allOwnFK()
+	fastPath := g.hasFKFastPath(t, ifc)
 	fkFields := map[string]string{}
 	for _, e := range ifc.Edges {
 		fkFields[e.Name] = fkPointerField(t, e)
-		if fkFields[e.Name] == "" {
-			fastPath = false
-		}
 	}
 	if fastPath {
 		f.ImportName(gqlgenGraphqlPkg, "graphql")
@@ -176,7 +173,12 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 				sw.Case(jen.Id("m").Dot(fkFields[e.Name]).Op("!=").Nil()).Block(
 					jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgePascal+"OrErr").Call(),
 					jen.If(jen.Id("err").Op("==").Nil()).Block(jen.Return(jen.Id("result"), jen.Nil())),
-					jen.If(jen.Op("!").Qual(runtimePkgPath, "IsNotLoaded").Call(jen.Id("err"))).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+					// A loaded-but-absent target is "no value here", not an
+					// error — the probe path treats it that way, and a privacy
+					// policy hiding the row must not turn into a GraphQL error.
+					jen.If(jen.Op("!").Qual(runtimePkgPath, "IsNotLoaded").Call(jen.Id("err"))).Block(
+						jen.Return(jen.Nil(), jen.Qual(runtimePkgPath, "MaskNotFound").Call(jen.Id("err"))),
+					),
 					jen.If(
 						jen.Id("fc").Op(":=").Qual(gqlgenGraphqlPkg, "GetFieldContext").Call(jen.Id("ctx")),
 						jen.Id("fc").Op("==").Nil().Op("||").Op("!").Qual(gqlrelayPkg, "InterfaceFieldCoveredByID").Call(

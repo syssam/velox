@@ -245,3 +245,40 @@ func mustRead(t *testing.T, p string) []byte {
 	}
 	return b
 }
+
+// TestHasLinkAction pins that a link step is recognized on every platform.
+// `go build -n` prints the tool as a path whose separator is
+// platform-specific, so a substring test for "/link " matches on unix and
+// silently never matches on Windows — and the loader would then treat a
+// stale binary as current and generate from an outdated schema.
+func TestHasLinkAction(t *testing.T) {
+	links := []string{
+		// The real shape: the tool is not the first field, the line is
+		// prefixed with an environment assignment.
+		"GOROOT='/opt/homebrew/Cellar/go/1.26.3/libexec' /opt/homebrew/Cellar/go/1.26.3/libexec/pkg/tool/darwin_arm64/link -o $WORK/b001/exe/a.out -importcfg $WORK/b001/importcfg.link",
+		"/usr/local/go/pkg/tool/darwin_arm64/link -o $WORK/b001/exe/a.out -importcfg ...",
+		`GOROOT='C:\go' C:\go\pkg\tool\windows_amd64\link.exe -o C:\Users\x\AppData\Local\Temp\go-build\b001\exe\a.out`,
+		"link -o out.bin",
+	}
+	for _, line := range links {
+		if !hasLinkAction(line) {
+			t.Errorf("hasLinkAction(%q) = false, want true", line)
+		}
+	}
+	notLinks := []string{
+		"touch $WORK/b001/exe/a.out",
+		"mkdir -p $WORK/b001/",
+		"/usr/local/go/pkg/tool/darwin_arm64/compile -o $WORK/b001/_pkg_.a",
+		`C:\go\pkg\tool\windows_amd64\compile.exe -o pkg.a`,
+		"",
+		"cp /tmp/linker-notes.txt $WORK/",
+		// Mentions "link" only as part of a file name.
+		"cat >$WORK/b001/importcfg.link << 'EOF' # internal",
+		"GOROOT='/opt/homebrew/Cellar/go/1.26.3/libexec' /opt/homebrew/Cellar/go/1.26.3/libexec/pkg/tool/darwin_arm64/compile -o $WORK/b001/_pkg_.a -importcfg $WORK/b001/importcfg.link",
+	}
+	for _, line := range notLinks {
+		if hasLinkAction(line) {
+			t.Errorf("hasLinkAction(%q) = true, want false", line)
+		}
+	}
+}

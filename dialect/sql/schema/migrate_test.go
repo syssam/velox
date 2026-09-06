@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 	"text/template"
-	"time"
 
 	"ariga.io/atlas/sql/migrate"
 	"ariga.io/atlas/sql/schema"
@@ -248,9 +247,11 @@ func TestMigrate_Diff(t *testing.T) {
 	m, err := NewMigrate(db, WithDir(d))
 	require.NoError(t, err)
 	require.NoError(t, m.Diff(ctx, &Table{Name: "users"}))
-	v := time.Now().UTC().Format("20060102150405")
-	requireFileEqual(t, filepath.Join(p, v+"_changes.up.sql"), "-- create \"users\" table\nCREATE TABLE `users` ();\n")
-	requireFileEqual(t, filepath.Join(p, v+"_changes.down.sql"), "-- reverse: create \"users\" table\nDROP TABLE `users`;\n")
+	// The file name carries the timestamp of the plan, so it must be looked
+	// up rather than recomputed from time.Now(): a second boundary between
+	// the diff and the assertion made this fail under load.
+	requireFileEqual(t, findMigrationFile(t, p, "_changes.up.sql"), "-- create \"users\" table\nCREATE TABLE `users` ();\n")
+	requireFileEqual(t, findMigrationFile(t, p, "_changes.down.sql"), "-- reverse: create \"users\" table\nDROP TABLE `users`;\n")
 	require.FileExists(t, filepath.Join(p, migrate.HashFileName))
 
 	// Test integrity file.
@@ -260,8 +261,8 @@ func TestMigrate_Diff(t *testing.T) {
 	m, err = NewMigrate(db, WithDir(d))
 	require.NoError(t, err)
 	require.NoError(t, m.Diff(ctx, &Table{Name: "users"}))
-	requireFileEqual(t, filepath.Join(p, v+"_changes.up.sql"), "-- create \"users\" table\nCREATE TABLE `users` ();\n")
-	requireFileEqual(t, filepath.Join(p, v+"_changes.down.sql"), "-- reverse: create \"users\" table\nDROP TABLE `users`;\n")
+	requireFileEqual(t, findMigrationFile(t, p, "_changes.up.sql"), "-- create \"users\" table\nCREATE TABLE `users` ();\n")
+	requireFileEqual(t, findMigrationFile(t, p, "_changes.down.sql"), "-- reverse: create \"users\" table\nDROP TABLE `users`;\n")
 	require.FileExists(t, filepath.Join(p, migrate.HashFileName))
 	require.NoError(t, d.WriteFile("tmp.sql", nil))
 	require.ErrorIs(t, m.Diff(ctx, &Table{Name: "users"}), migrate.ErrChecksumMismatch)
@@ -324,6 +325,22 @@ func TestMigrate_Diff(t *testing.T) {
 	require.NoError(t, err)
 	err = m.NamedDiff(ctx, "no_changes")
 	require.ErrorIs(t, err, migrate.ErrNoPlan)
+}
+
+// findMigrationFile returns the single file in dir whose name ends with
+// suffix, failing the test if there is not exactly one.
+func findMigrationFile(t *testing.T, dir, suffix string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var found []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), suffix) {
+			found = append(found, filepath.Join(dir, e.Name()))
+		}
+	}
+	require.Lenf(t, found, 1, "want exactly one %q file in %s", suffix, dir)
+	return found[0]
 }
 
 func requireFileEqual(t *testing.T, name, contents string) {

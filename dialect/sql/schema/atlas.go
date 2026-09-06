@@ -102,6 +102,11 @@ func NewMigrateURL(u string, opts ...MigrateOption) (*Atlas, error) {
 // migrateMu serializes migrations across every Atlas instance in the
 // process, because they all mutate and read the same generated
 // migrate.Tables values. See Create.
+//
+// Held by the public entry points that touch those values — Create,
+// NamedDiff and VerifyTableRange. StateReader must NOT take it: it runs
+// underneath Create (planInspect -> StateReader -> setupTables) and the
+// mutex is not reentrant.
 var migrateMu sync.Mutex
 
 // Create creates all schema resources in the database. It works in an "append-only"
@@ -140,6 +145,11 @@ func (a *Atlas) Diff(ctx context.Context, tables ...*Table) error {
 // NamedDiff compares the state read from the connected database with the state defined by Ent.
 // Changes will be written to migration files by the configured Planner.
 func (a *Atlas) NamedDiff(ctx context.Context, name string, tables ...*Table) error {
+	// Same shared state as Create: setupTables below rewrites the generated,
+	// process-global table values. StateReader takes no lock because it runs
+	// underneath these entry points.
+	migrateMu.Lock()
+	defer migrateMu.Unlock()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.dir == nil {
@@ -233,6 +243,9 @@ func (a *Atlas) cleanSchema(ctx context.Context, name string, err0 error) (err e
 // method on service start ensures the information are correct and are set again, if they aren't. For MySQL versions > 8
 // calling this method is only required once after the upgrade.
 func (a *Atlas) VerifyTableRange(ctx context.Context, tables []*Table) error {
+	// Reads the same shared table values a concurrent Create mutates.
+	migrateMu.Lock()
+	defer migrateMu.Unlock()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.driver != nil {

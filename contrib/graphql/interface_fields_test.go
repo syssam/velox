@@ -214,7 +214,7 @@ func TestInterfaceField_CollectMeta(t *testing.T) {
 	assert.Contains(t, code, `"item": {`)
 	assert.Contains(t, code, `Edges:     []string{"todo", "project"},`)
 	assert.Contains(t, code, `Satisfies: []string{"BookmarkItem", "Todo", "Project"},`)
-	assert.Contains(t, code, "OwnFK:     true")
+	assert.Contains(t, code, "FastPath:  true")
 }
 
 // TestCollectFields_InterfaceField pins the collector: a selection covered
@@ -224,11 +224,11 @@ func TestCollectFields_InterfaceField(t *testing.T) {
 	meta := &runtime.CollectMeta{
 		FieldColumns: map[string]string{"name": "name"},
 		Edges: map[string]runtime.EdgeMeta{
-			"todo":    {Name: "todo", Target: "todos", Unique: true, FKColumns: []string{"bookmark_todo"}, OwnFK: true},
-			"project": {Name: "project", Target: "projects", Unique: true, FKColumns: []string{"bookmark_project"}, OwnFK: true},
+			"todo":    {Name: "todo", Target: "todos", Unique: true, FKColumns: []string{"bookmark_todo"}},
+			"project": {Name: "project", Target: "projects", Unique: true, FKColumns: []string{"bookmark_project"}},
 		},
 		InterfaceFields: map[string]runtime.InterfaceFieldMeta{
-			"item": {Edges: []string{"todo", "project"}, Satisfies: []string{"BookmarkItem", "Todo", "Project"}},
+			"item": {Edges: []string{"todo", "project"}, Satisfies: []string{"BookmarkItem", "Todo", "Project"}, FastPath: true},
 		},
 	}
 	item := func(sel ...ast.Selection) *ast.Field {
@@ -255,4 +255,72 @@ func TestCollectFields_InterfaceField(t *testing.T) {
 	_ = context.Background
 	_ = graphql.CollectedField{}
 	_ = strings.Contains
+}
+
+// TestInterfaceField_RenameHasNoFastPath pins that a rename is reported as
+// having no foreign-key fast path. Its resolver delegates to the ordinary
+// edge method, so a collector that skipped the edge load for a
+// __typename/id selection would turn one join into a query per row.
+func TestInterfaceField_RenameHasNoFastPath(t *testing.T) {
+	g, types := interfaceGen(t)
+
+	groups, err := g.interfaceFieldGroups(types["Todo"])
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+	require.True(t, groups[0].IsRename)
+	assert.False(t, g.hasFKFastPath(types["Todo"], groups[0]),
+		"a rename resolves through the edge method and must not claim the fast path")
+
+	code := g.genEntityCollection(types["Todo"]).GoString()
+	assert.Contains(t, code, "FastPath:  false")
+
+	bookmark, err := g.interfaceFieldGroups(types["Bookmark"])
+	require.NoError(t, err)
+	assert.True(t, g.hasFKFastPath(types["Bookmark"], bookmark[0]),
+		"a polymorphic group over nullable owner-side keys has the fast path")
+}
+
+// TestInterfaceField_FastPathMasksNotFound pins that the fast path treats a
+// loaded-but-absent target as "no value" rather than an error, matching the
+// probe path. A privacy policy hiding the row must yield a null field, not
+// a GraphQL error.
+func TestInterfaceField_FastPathMasksNotFound(t *testing.T) {
+	g, types := interfaceGen(t)
+	code := g.genEntityEdge(types["Bookmark"]).GoString()
+	assert.Contains(t, code, "return nil, runtime.MaskNotFound(err)")
+	assert.NotContains(t, code, "if !runtime.IsNotLoaded(err) {\n\t\t\treturn nil, err\n\t\t}",
+		"an unmasked NotFound would surface as a GraphQL error")
+}
+
+// TestInterfaceField_RejectsToManyOverUndefinedInterface pins that grouping
+// to-many edges under an interface velox does not generate is rejected: the
+// field would render as <Interface>Connection with no such type in the SDL,
+// and gqlgen would fail without naming the annotation.
+func TestInterfaceField_RejectsToManyOverUndefinedInterface(t *testing.T) {
+	g, types := interfaceGen(t)
+	// Drop the shared rename so BookmarkItem is no longer velox-generated,
+	// and make the group's edges to-many.
+	types["Todo"].Edges[0].Annotations = nil
+	types["Project"].Edges[0].Annotations = nil
+	for _, e := range types["Bookmark"].Edges {
+		e.Unique = false
+	}
+	err := g.validateInterfaceFields()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BookmarkItemConnection")
+	assert.Contains(t, err.Error(), "graphql.InterfaceField rename")
+}
+
+// TestInterfaceField_RejectsReservedGoName pins that a name whose pascal
+// form collides with a member velox already emits on the entity is rejected
+// at generation time, instead of producing an entity package that does not
+// compile.
+func TestInterfaceField_RejectsReservedGoName(t *testing.T) {
+	for _, name := range []string{"edges", "config", "unwrap", "string"} {
+		g, types := interfaceGen(t)
+		types["Todo"].Edges[0].Annotations = map[string]any{AnnotationName: Annotation{InterfaceField: name}}
+		_, err := g.interfaceFieldGroups(types["Todo"])
+		require.Errorf(t, err, "interface field %q must be rejected", name)
+		assert.Contains(t, err.Error(), "already exists on the entity")
+	}
 }

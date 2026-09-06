@@ -108,8 +108,15 @@ done < <(find . \
     | xargs -0 awk '
         FNR==1 { if (prev != "" && !gen) print prev; prev = FILENAME; gen = 0 }
         FNR<=3 && /Code generated .* DO NOT EDIT/ { gen = 1 }
-        FNR>3 { nextfile }
+        FNR>3 { next }
         END { if (prev != "" && !gen) print prev }')
+if [[ ${#HANDWRITTEN[@]} -eq 0 ]]; then
+    # The classifier runs in a process substitution, so a failure there would
+    # otherwise leave the array empty and skip formatting while still
+    # reporting success.
+    echo "error: no handwritten Go files classified; the awk pass failed" >&2
+    exit 1
+fi
 if [[ ${#HANDWRITTEN[@]} -gt 0 ]]; then
     gofmt -s -w "${HANDWRITTEN[@]}"
     if command -v goimports >/dev/null 2>&1; then

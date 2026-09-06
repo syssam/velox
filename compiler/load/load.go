@@ -498,7 +498,30 @@ func needsLink(binPath, target string, flags []string) bool {
 		return true
 	}
 	for line := range strings.SplitSeq(string(out), "\n") {
-		if strings.Contains(line, "/link ") || strings.HasPrefix(line, "link ") {
+		if hasLinkAction(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasLinkAction reports whether a `go build -n` line invokes the linker.
+//
+// Every field is checked by base name, for two reasons. The tool is printed
+// as a path whose separator is platform-specific
+// (…/pkg/tool/darwin_arm64/link, …\pkg\tool\windows_amd64\link.exe), so a
+// "/link " substring test silently never fires on Windows and the loader
+// would reuse a stale binary forever, generating from an outdated schema.
+// And the tool is not the first field: the line is prefixed with an
+// environment assignment (GOROOT='…' …/link -o …). Comparing base names
+// also keeps the unrelated `cat >$WORK/b001/importcfg.link` line from
+// counting as a link step.
+func hasLinkAction(line string) bool {
+	for _, f := range strings.Fields(line) {
+		if i := strings.LastIndexAny(f, `/\`); i >= 0 {
+			f = f[i+1:]
+		}
+		if f == "link" || f == "link.exe" {
 			return true
 		}
 	}
