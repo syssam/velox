@@ -308,6 +308,9 @@ func (g *Graph) Gen() error {
 	for i := len(g.Hooks) - 1; i >= 0; i-- {
 		gen = g.Hooks[i](gen)
 	}
+	// The GC window wraps the hooks too, so an extension that renders after
+	// the core generator (contrib/graphql) gets the same treatment.
+	defer relaxGC()()
 	return gen.Generate(g)
 }
 
