@@ -53,7 +53,9 @@ func openPostgresOrSkip(t testing.TB) (*integration.Client, func()) {
 
 	// Verify the connection is reachable. Use a short timeout so a
 	// misconfigured DSN fails fast instead of hanging.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Schema migration on a loaded CI runner (or under -race) can take well
+	// over 5s; a short deadline turns machine load into a spurious failure.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if err := pingClient(ctx, client); err != nil {
 		_ = client.Close()
