@@ -27,6 +27,9 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in -short mode (runs full codegen pipeline)")
 	}
+	// The schema loader keeps its cache dir in the working directory (the
+	// package dir under `go test`); do not leave a 25 MB binary behind.
+	t.Cleanup(func() { _ = os.RemoveAll(".velox") })
 
 	schemaPath, err := filepath.Abs(filepath.Join("..", "testschema"))
 	require.NoError(t, err)

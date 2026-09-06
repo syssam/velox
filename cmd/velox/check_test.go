@@ -27,6 +27,7 @@ func testSchemaPath(t *testing.T) string {
 }
 
 func TestRunCheck_NoDriftAfterGenerate(t *testing.T) {
+	t.Cleanup(func() { _ = os.RemoveAll(".velox") }) // loader cache lands in the test CWD
 	if testing.Short() {
 		t.Skip("skipping in -short mode (runs full codegen pipeline twice)")
 	}
@@ -50,6 +51,7 @@ func TestRunCheck_NoDriftAfterGenerate(t *testing.T) {
 }
 
 func TestRunCheck_ReportsDrift(t *testing.T) {
+	t.Cleanup(func() { _ = os.RemoveAll(".velox") }) // loader cache lands in the test CWD
 	if testing.Short() {
 		t.Skip("skipping in -short mode (runs full codegen pipeline)")
 	}
@@ -87,6 +89,7 @@ func TestRunCheck_ReportsDrift(t *testing.T) {
 }
 
 func TestRunCheck_ReportsMissingFiles(t *testing.T) {
+	t.Cleanup(func() { _ = os.RemoveAll(".velox") }) // loader cache lands in the test CWD
 	if testing.Short() {
 		t.Skip("skipping in -short mode (runs full codegen pipeline)")
 	}
