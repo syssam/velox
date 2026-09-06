@@ -95,9 +95,22 @@ func (g *Generator) genRenameListMethod(f *jen.File, e *gen.Edge, typeName, meth
 
 // fkPointerField returns the unexported foreign-key struct field on t that
 // stores edge e's key, when it is a nullable pointer; "" otherwise.
+//
+// A foreign key is registered against the edge that DECLARES it, which for a
+// pair created by edge.From(...).Ref(...) is the assoc edge on the other
+// type: Member's key for its "workspace" edge is registered against
+// Workspace's "members" edge and named workspace_members. Matching on the
+// edge's own name alone therefore never finds it — the paired edge must be
+// considered too, the same way Edge.DeleteAction consults e.Ref. Edge.Ref is
+// set in both directions (graph_resolve.go), so one identity check covers
+// both. Auto-created keys are always nillable; a key declared with
+// .Field("x_id") on a required edge is not, and then there is no fast path.
 func fkPointerField(t *gen.Type, e *gen.Edge) string {
 	for _, fk := range t.ForeignKeys {
-		if fk.Edge == nil || fk.Edge.Name != e.Name || fk.Field == nil || !fk.Field.Nillable {
+		if fk.Edge == nil || fk.Field == nil || !fk.Field.Nillable {
+			continue
+		}
+		if fk.Edge != e && fk.Edge.Ref != e {
 			continue
 		}
 		return fk.StructField()
@@ -106,7 +119,6 @@ func fkPointerField(t *gen.Type, e *gen.Edge) string {
 }
 
 func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *interfaceFieldGroup, typeName, method string) {
-	f.ImportName(gqlgenGraphqlPkg, "graphql")
 	satisfies := []jen.Code{jen.Lit(ifc.InterfaceName)}
 	for _, e := range ifc.Edges {
 		satisfies = append(satisfies, jen.Lit(g.graphqlTypeName(e.Type)))
@@ -119,38 +131,14 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 			fastPath = false
 		}
 	}
-	f.Commentf("%s returns the %s value from the first populated edge (%s),", method, ifc.InterfaceName, edgeNames(ifc.Edges))
-	f.Comment("using the eager-loaded edge when present and falling back to a query otherwise.")
-	f.Func().Params(jen.Id("m").Op("*").Id(typeName)).Id(method).Params(
-		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.Id(ifc.InterfaceName), jen.Error()).BlockFunc(func(body *jen.Group) {
-		if fastPath {
-			// The populated foreign key names the concrete type and id.
-			body.Switch().BlockFunc(func(sw *jen.Group) {
-				for _, e := range ifc.Edges {
-					edgePascal := pascal(e.Name)
-					target := g.graphqlTypeName(e.Type)
-					sw.Case(jen.Id("m").Dot(fkFields[e.Name]).Op("!=").Nil()).Block(
-						jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgePascal+"OrErr").Call(),
-						jen.If(jen.Id("err").Op("==").Nil()).Block(jen.Return(jen.Id("result"), jen.Nil())),
-						jen.If(jen.Op("!").Qual(runtimePkgPath, "IsNotLoaded").Call(jen.Id("err"))).Block(jen.Return(jen.Nil(), jen.Id("err"))),
-						jen.If(
-							jen.Id("fc").Op(":=").Qual(gqlgenGraphqlPkg, "GetFieldContext").Call(jen.Id("ctx")),
-							jen.Id("fc").Op("==").Nil().Op("||").Op("!").Qual(gqlrelayPkg, "InterfaceFieldCoveredByID").Call(
-								append([]jen.Code{jen.Id("fc").Dot("Field"), jen.Qual(gqlgenGraphqlPkg, "GetOperationContext").Call(jen.Id("ctx"))}, satisfies...)...,
-							),
-						).Block(
-							jen.List(jen.Id("val"), jen.Id("err")).Op(":=").Id("m").Dot("Query"+edgePascal).Call().Dot("Only").Call(jen.Id("ctx")),
-							jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Qual(runtimePkgPath, "MaskNotFound").Call(jen.Id("err")))),
-							jen.Return(jen.Id("val"), jen.Nil()),
-						),
-						jen.Return(jen.Op("&").Id(target).Values(jen.Dict{jen.Id("ID"): jen.Op("*").Id("m").Dot(fkFields[e.Name])}), jen.Nil()),
-					)
-				}
-			})
-			body.Return(jen.Nil(), jen.Nil())
-			return
-		}
+	if fastPath {
+		f.ImportName(gqlgenGraphqlPkg, "graphql")
+	}
+
+	// probe emits the always-correct path: reuse the eager-loaded edge if
+	// present, otherwise query it, and move on to the next edge when this
+	// one holds nothing.
+	probe := func(body *jen.Group) {
 		for _, e := range ifc.Edges {
 			edgePascal := pascal(e.Name)
 			body.Block(
@@ -165,6 +153,47 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 			)
 		}
 		body.Return(jen.Nil(), jen.Nil())
+	}
+
+	f.Commentf("%s returns the %s value from the first populated edge (%s),", method, ifc.InterfaceName, edgeNames(ifc.Edges))
+	f.Comment("using the eager-loaded edge when present and falling back to a query otherwise.")
+	if fastPath {
+		f.Comment("When the foreign keys were selected, the populated one names the")
+		f.Comment("concrete type and id, so a selection covered by __typename/id needs")
+		f.Comment("no query at all; with no key loaded the edges are probed instead.")
+	}
+	f.Func().Params(jen.Id("m").Op("*").Id(typeName)).Id(method).Params(
+		jen.Id("ctx").Qual("context", "Context"),
+	).Params(jen.Id(ifc.InterfaceName), jen.Error()).BlockFunc(func(body *jen.Group) {
+		if !fastPath {
+			probe(body)
+			return
+		}
+		body.Switch().BlockFunc(func(sw *jen.Group) {
+			for _, e := range ifc.Edges {
+				edgePascal := pascal(e.Name)
+				target := g.graphqlTypeName(e.Type)
+				sw.Case(jen.Id("m").Dot(fkFields[e.Name]).Op("!=").Nil()).Block(
+					jen.List(jen.Id("result"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgePascal+"OrErr").Call(),
+					jen.If(jen.Id("err").Op("==").Nil()).Block(jen.Return(jen.Id("result"), jen.Nil())),
+					jen.If(jen.Op("!").Qual(runtimePkgPath, "IsNotLoaded").Call(jen.Id("err"))).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+					jen.If(
+						jen.Id("fc").Op(":=").Qual(gqlgenGraphqlPkg, "GetFieldContext").Call(jen.Id("ctx")),
+						jen.Id("fc").Op("==").Nil().Op("||").Op("!").Qual(gqlrelayPkg, "InterfaceFieldCoveredByID").Call(
+							append([]jen.Code{jen.Id("fc").Dot("Field"), jen.Qual(gqlgenGraphqlPkg, "GetOperationContext").Call(jen.Id("ctx"))}, satisfies...)...,
+						),
+					).Block(
+						jen.List(jen.Id("val"), jen.Id("err")).Op(":=").Id("m").Dot("Query"+edgePascal).Call().Dot("Only").Call(jen.Id("ctx")),
+						jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Qual(runtimePkgPath, "MaskNotFound").Call(jen.Id("err")))),
+						jen.Return(jen.Id("val"), jen.Nil()),
+					),
+					jen.Return(jen.Op("&").Id(target).Values(jen.Dict{jen.Id("ID"): jen.Op("*").Id("m").Dot(fkFields[e.Name])}), jen.Nil()),
+				)
+			}
+			// No key loaded — the query did not select the foreign keys, so
+			// nothing can be concluded from them. Probe the edges.
+			sw.Default().BlockFunc(probe)
+		})
 	})
 }
 

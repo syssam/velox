@@ -39,19 +39,31 @@ func interfaceFixture() (*entgen.Graph, map[string]*entgen.Type) {
 	todo.Annotations = ann(Annotation{Implements: []string{"BookmarkItem"}})
 	project.Annotations = ann(Annotation{Implements: []string{"BookmarkItem"}})
 
+	// m2o builds the inverse M2O edge of a pair the way velox does: the
+	// foreign key is registered against the ASSOC edge on the target type
+	// (Workspace.members owns Member's workspace_members column) and the two
+	// edges point at each other through Ref. Matching a key to an edge by
+	// name alone fails on this shape, which is the only shape a schema
+	// written with edge.From(...).Ref(...) produces.
 	m2o := func(owner *entgen.Type, name string, target *entgen.Type, ifield string) *entgen.Edge {
-		e := &entgen.Edge{
+		column := owner.Table() + "_" + name
+		inverse := &entgen.Edge{
 			Name: name, Type: target, Unique: true, Optional: true, Inverse: "ref",
-			Rel: entgen.Relation{Type: entgen.M2O, Table: owner.Table(), Columns: []string{owner.Table() + "_" + name}},
+			Rel: entgen.Relation{Type: entgen.M2O, Table: owner.Table(), Columns: []string{column}},
 		}
+		assoc := &entgen.Edge{
+			Name: owner.Table() + "_ref", Type: owner,
+			Rel: entgen.Relation{Type: entgen.O2M, Table: owner.Table(), Columns: []string{column}},
+		}
+		inverse.Ref, assoc.Ref = assoc, inverse
 		if ifield != "" {
-			e.Annotations = ann(Annotation{InterfaceField: ifield})
+			inverse.Annotations = ann(Annotation{InterfaceField: ifield})
 		}
 		owner.ForeignKeys = append(owner.ForeignKeys, &entgen.ForeignKey{
-			Edge:  e,
-			Field: &entgen.Field{Name: owner.Table() + "_" + name, Type: &field.TypeInfo{Type: field.TypeInt}, Nillable: true, Optional: true},
+			Edge:  assoc,
+			Field: &entgen.Field{Name: column, Type: &field.TypeInfo{Type: field.TypeInt}, Nillable: true, Optional: true},
 		})
-		return e
+		return inverse
 	}
 	bookmark.Edges = []*entgen.Edge{m2o(bookmark, "todo", todo, "item"), m2o(bookmark, "project", project, "item")}
 	todo.Edges = []*entgen.Edge{m2o(todo, "category", category, "owner")}
@@ -169,6 +181,13 @@ func TestInterfaceField_ResolverMethods(t *testing.T) {
 	assert.Contains(t, bookmark, `gqlrelay.InterfaceFieldCoveredByID(fc.Field, graphql.GetOperationContext(ctx), "BookmarkItem", "Todo", "Project")`)
 	assert.Contains(t, bookmark, "return &Todo{ID: *m.bookmarks_todo}, nil")
 	assert.Contains(t, bookmark, "return &Project{ID: *m.bookmarks_project}, nil")
+	// Foreign keys are NOT selected unless the query asks for them, so with
+	// every key nil the resolver must probe the edges rather than conclude
+	// that the field is empty — without this arm the field resolved to null
+	// on any query that did not go through field collection.
+	assert.Contains(t, bookmark, "default:", "fast path needs a fallback arm when no key was loaded")
+	assert.Contains(t, bookmark, "m.QueryTodo().Only(ctx)")
+	assert.Contains(t, bookmark, "m.QueryProject().Only(ctx)")
 
 	todo := g.genEntityEdge(types["Todo"]).GoString()
 	assert.Contains(t, todo, "func (m *Todo) Owner(ctx context.Context) (*Category, error) {\n\treturn m.Category(ctx)\n}")

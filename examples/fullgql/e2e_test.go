@@ -1914,6 +1914,25 @@ func TestInterfaceField_EndToEnd(t *testing.T) {
 	assert.Equal(t, "Workspace", nested.Users.Edges[0].Node.Relations[0].Principal.Typename)
 	assert.Equal(t, "Platform", nested.Users.Edges[0].Node.Relations[0].Principal.Name)
 
+	// Selection covered by __typename/id takes the foreign-key fast path:
+	// the resolver builds the node from the key already on the Member row,
+	// without querying the workspace table. If the key were not selected and
+	// scanned, both switch arms would be nil and principal would come back
+	// null — so this asserts the collector selects the key columns too.
+	var covered struct {
+		Members []struct {
+			Principal struct {
+				Typename string `json:"__typename"`
+				ID       string `json:"id"`
+			} `json:"principal"`
+		} `json:"members"`
+	}
+	gqlClient.MustPost(`{ members { principal { __typename id } } }`, &covered)
+	require.Len(t, covered.Members, 1)
+	assert.Equal(t, "Workspace", covered.Members[0].Principal.Typename)
+	assert.Equal(t, principal.Members[0].Principal.ID, covered.Members[0].Principal.ID,
+		"the fast path must return the same global id as the querying path")
+
 	// Standalone to-one rename.
 	var subject struct {
 		Comments []struct {

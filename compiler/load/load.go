@@ -588,6 +588,11 @@ func gocmd(command, target string, buildFlags []string) (string, error) {
 // out: standard library first, a blank line, then everything else, each
 // group sorted. The loader source persists in .velox/ and consumer lint
 // gates that walk dot-directories would otherwise flag it.
+//
+// compiler/gen.regroupImports applies the same stdlib rule to already
+// rendered Go source. The two are deliberately not shared: compiler/gen
+// imports this package, so a common helper would need a third package for
+// a three-line predicate.
 func groupImports(paths []string) string {
 	var std, other []string
 	for _, p := range paths {
