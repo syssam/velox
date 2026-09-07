@@ -188,7 +188,12 @@ func NewIndex(idx *index.Descriptor) *Index {
 // that can be decoded into the Schema objects declared above.
 func MarshalSchema(iface velox.Interface) (b []byte, err error) {
 	s := &Schema{
-		Config:      iface.Config(),
+		// The loader must keep reading the deprecated Config method for as
+		// long as the interface declares it: user schemas written against
+		// the pre-Annotations API still return a populated Config here, and
+		// dropping the call would silently lose their table/schema override.
+		// Remove together with velox.Interface.Config in v0.5.0.
+		Config:      iface.Config(), //nolint:staticcheck // SA1019: deliberate — see above.
 		Name:        indirect(reflect.TypeOf(iface)).Name(),
 		Annotations: make(map[string]any),
 	}
