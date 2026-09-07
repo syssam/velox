@@ -538,6 +538,13 @@ func TestMultiDialect_LockWithDistinct(t *testing.T) {
 		require.NoError(t, err, "Unique(true).ForUpdate().All() must not emit DISTINCT + FOR UPDATE on a dialect that rejects it")
 		require.Len(t, users, 1)
 
+		// FOR SHARE is MySQL 8.0.1+; 5.x spells it LOCK IN SHARE MODE and
+		// answers this clause with a syntax error. See supportsForShare.
+		if !supportsForShare(t, client) {
+			t.Log("server has no FOR SHARE clause (MySQL < 8.0.1 / MariaDB); ForUpdate leg covered above")
+			return
+		}
+
 		ids, err := tx.User.QueryPosts(u).
 			ForShare().
 			IDs(ctx)

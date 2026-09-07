@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,5 +136,106 @@ func TestMySQLHelper_Smoke(t *testing.T) {
 	}
 	if u.Name != "smoke" {
 		t.Fatalf("unexpected name: %q", u.Name)
+	}
+}
+
+// supportsForShare reports whether the server behind client accepts the
+// standard `SELECT ... FOR SHARE` clause.
+//
+// MySQL only learned that spelling in 8.0.1; 5.x expresses the same shared
+// row lock as `LOCK IN SHARE MODE` and answers `FOR SHARE` with a 1064 syntax
+// error. velox — like ent — renders the clause from the dialect name alone
+// (dialect.Capabilities is not version-aware), so a 5.x caller opts into the
+// old spelling explicitly:
+//
+//	q.ForShare(sql.WithLockClause("LOCK IN SHARE MODE"))
+//
+// ent guards its own lock coverage the same way, with skip(t, "MySQL/5") in
+// entc/integration/integration_test.go::Lock — so this is parity, not a gap.
+// Every non-MySQL dialect is reported as supporting it: Postgres has FOR
+// SHARE, and SQLite drops row locks in Selector.For, so the clause never
+// reaches the engine.
+func supportsForShare(t *testing.T, client *integration.Client) bool {
+	t.Helper()
+	if client.RuntimeConfig().Driver.Dialect() != dialect.MySQL {
+		return true
+	}
+	var version string
+	rows, err := client.QueryContext(context.Background(), "SELECT VERSION()")
+	if err != nil {
+		t.Fatalf("mysql version: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		t.Fatal("mysql version: no rows")
+	}
+	if err := rows.Scan(&version); err != nil {
+		t.Fatalf("mysql version scan: %v", err)
+	}
+	// MariaDB reports e.g. "10.11.6-MariaDB" and has no FOR SHARE at all.
+	if strings.Contains(strings.ToLower(version), "mariadb") {
+		return false
+	}
+	return compareMySQLVersion(version, "8.0.1") >= 0
+}
+
+// compareMySQLVersion compares two dotted version strings numerically,
+// ignoring any suffix after the patch component ("8.0.36-log" == "8.0.36").
+// Returns -1, 0 or 1 as a is less than, equal to, or greater than b.
+func compareMySQLVersion(a, b string) int {
+	split := func(v string) []int {
+		if i := strings.IndexAny(v, "-+ "); i >= 0 {
+			v = v[:i]
+		}
+		parts := strings.Split(v, ".")
+		out := make([]int, 3)
+		for i := 0; i < len(parts) && i < 3; i++ {
+			n, err := strconv.Atoi(parts[i])
+			if err != nil {
+				return out
+			}
+			out[i] = n
+		}
+		return out
+	}
+	av, bv := split(a), split(b)
+	for i := range av {
+		switch {
+		case av[i] < bv[i]:
+			return -1
+		case av[i] > bv[i]:
+			return 1
+		}
+	}
+	return 0
+}
+
+// TestCompareMySQLVersion pins the boundary that decides whether the FOR
+// SHARE leg of TestMultiDialect_LockWithDistinct runs: 8.0.1 is the first
+// MySQL that parses the clause. A comparison that wrongly reports "too old"
+// silently drops that coverage on a modern server, which is how the clause
+// shipped untested in the first place.
+func TestCompareMySQLVersion(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		want int
+	}{
+		{"5.7.44", "8.0.1", -1},
+		{"8.0.0", "8.0.1", -1},
+		{"8.0.1", "8.0.1", 0},
+		{"8.0.36", "8.0.1", 1},
+		{"8.4.0", "8.0.1", 1},
+		{"9.1.0", "8.0.1", 1},
+		// Suffixes are common in the wild and must not defeat the compare.
+		{"8.0.36-log", "8.0.1", 1},
+		{"5.7.44-log", "8.0.1", -1},
+		{"8.0.1-0ubuntu0.20.04.1", "8.0.1", 0},
+		// Short forms pad with zeros rather than mis-ranking.
+		{"8", "8.0.1", -1},
+		{"8.1", "8.0.1", 1},
+	} {
+		if got := compareMySQLVersion(tc.a, tc.b); got != tc.want {
+			t.Errorf("compareMySQLVersion(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
+		}
 	}
 }
