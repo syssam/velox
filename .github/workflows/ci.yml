@@ -140,10 +140,20 @@ jobs:
           (cd examples/realworld && go run generate.go)
       - uses: golangci/golangci-lint-action@v7
         with:
-          # v2.1.0 was built with Go 1.24 and refuses to lint a module
-          # targeting go 1.26 (go.mod). Track latest v2.x so the linter
-          # binary is always ≥ the module's Go version.
-          version: latest
+          # Pinned deliberately. `latest` used to be the pin, for a real
+          # reason: v2.1.0 was built with Go 1.24 and refuses to lint a
+          # module whose go.mod targets a newer Go, so the binary must stay
+          # ≥ the module's Go version. But `latest` also means a linter
+          # release can turn this job red with no commit touching velox —
+          # v2.13.2 shipped a staticcheck that reports SA1019 across
+          # packages within one module, and main was red on every nightly
+          # for weeks as a result.
+          #
+          # Bump this by hand: run the new version locally first
+          # (`golangci-lint run` must print `0 issues`), fix or annotate
+          # whatever it newly reports, and land both in one commit. Keep it
+          # ≥ the go directive in go.mod.
+          version: v2.13.2
 
   build:
     runs-on: ubuntu-latest

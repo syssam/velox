@@ -41,6 +41,22 @@ are separate Go modules whose generated output is gitignored, so a root
 `go test ./...` will not catch a break in them. The script exits non-zero
 and prints `done (with failures: ...)` if any module fails.
 
+**Bump a dependency with `go get`, never `go mod tidy`.** Every sub-module
+carries `replace github.com/syssam/velox => ../..`, so a root bump enters
+their module graph and `go build ./...` starts reporting `updates to go.mod
+needed` — each sub-module has to be updated too. The obvious repair is the
+destructive one: `generate.go` carries `//go:build ignore`, so `go mod tidy`
+cannot see the generator's imports and prunes jennifer and atlas out of
+go.sum. The module still builds; only `go run generate.go` breaks, with
+`missing go.sum entry for ... jennifer/jen`. One tidy sweep silently broke
+generation in 7 of 11 modules. After any bump:
+
+```bash
+for d in examples/* tests/external-module tests/parity; do
+  (cd "$d" && go run generate.go >/dev/null && go build ./...) || echo "FAIL $d"
+done
+```
+
 ## Rules that are load-bearing
 
 **One generator per output file.** Two generators writing the same path race
@@ -130,6 +146,16 @@ fixed, performed no isolation. Paste new snippets into a scratch package and
 run `go vet`; for security-relevant guidance, also assert the behavior in a
 test. `examples/` is the preferred home for anything longer than a few lines
 — it is compiled and tested by CI.
+
+**Reproduce a CI job with CI's version of the tool.** CI pins
+`golangci-lint: latest` and `go-version: stable`; both move without a commit,
+and three of the four failures found on 2026-09-07 were pure version drift —
+red on every nightly for weeks with `main` untouched. A local linter that
+lags CI reports zero issues on code CI rejects. Install the version CI
+resolves and run it with `GOLANGCI_LINT_CACHE=<tmpdir>` (the shared cache
+holds a global lock). Reach the `stable` leg with `GOTOOLCHAIN=go1.XX.Y`, and
+run `govulncheck` under CI's Go — it reports standard-library advisories for
+whatever toolchain built it.
 
 **Report only results you observed.** A command that silently no-ops still
 exits 0: a missing binary, an empty glob, an output filter that ate
