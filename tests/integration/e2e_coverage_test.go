@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
 	integration "github.com/syssam/velox/tests/integration"
@@ -143,6 +144,9 @@ func TestTxDriver_NestedTx_Fails(t *testing.T) {
 	txClient := tx.Client()
 	_, err = txClient.Tx(ctx)
 	assert.ErrorIs(t, err, integration.ErrTxStarted)
+	// The generated sentinel is velox.ErrTxStarted, so code that only knows
+	// the velox package can still recognize the error.
+	assert.ErrorIs(t, err, velox.ErrTxStarted)
 
 	require.NoError(t, tx.Rollback())
 }
@@ -579,6 +583,7 @@ func TestBeginTx_FromTxClient_Fails(t *testing.T) {
 	txClient := tx.Client()
 	_, err = txClient.BeginTx(ctx, nil)
 	assert.ErrorIs(t, err, integration.ErrTxStarted)
+	assert.ErrorIs(t, err, velox.ErrTxStarted)
 
 	require.NoError(t, tx.Rollback())
 }

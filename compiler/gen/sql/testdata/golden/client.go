@@ -5,10 +5,10 @@ package ent
 import (
 	"context"
 	sql1 "database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 
+	velox "github.com/syssam/velox"
 	dialect "github.com/syssam/velox/dialect"
 	sql "github.com/syssam/velox/dialect/sql"
 	runtime "github.com/syssam/velox/runtime"
@@ -20,7 +20,8 @@ import (
 )
 
 // ErrTxStarted is returned when trying to start a new transaction from a transactional client.
-var ErrTxStarted = errors.New("velox: cannot start a transaction within a transaction")
+// It is velox.ErrTxStarted, so errors.Is matches against either name.
+var ErrTxStarted = velox.ErrTxStarted
 
 // Client is the client that holds all entity clients.
 type Client struct {

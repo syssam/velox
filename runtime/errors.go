@@ -35,7 +35,6 @@ type ValidationError = velox.ValidationError
 var (
 	ErrNotFound    = velox.ErrNotFound
 	ErrNotSingular = velox.ErrNotSingular
-	ErrTxStarted   = velox.ErrTxStarted
 )
 
 // ErrNodeIDTypeMismatch is returned by a generated NodeResolver when the

@@ -20,9 +20,13 @@ func genClient(h gen.GeneratorHelper) *jen.File {
 		f.Anon(h.QueryPkg())
 	}
 
-	// ErrTxStarted sentinel
+	// ErrTxStarted aliases the velox sentinel rather than declaring its own
+	// errors.New value, so errors.Is(err, velox.ErrTxStarted) matches the
+	// error a generated client returns. A second errors.New here would be a
+	// distinct value that no velox-level check could ever match.
 	f.Comment("ErrTxStarted is returned when trying to start a new transaction from a transactional client.")
-	f.Var().Id("ErrTxStarted").Op("=").Qual("errors", "New").Call(jen.Lit("velox: cannot start a transaction within a transaction"))
+	f.Comment("It is velox.ErrTxStarted, so errors.Is matches against either name.")
+	f.Var().Id("ErrTxStarted").Op("=").Qual(veloxCorePkg, "ErrTxStarted")
 
 	// Hooks and interceptors are stored in generated typed hooks/inters structs
 	// with one field per entity. Runtime.Config bridges via callbacks for

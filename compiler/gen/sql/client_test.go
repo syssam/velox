@@ -90,3 +90,16 @@ func TestGenOptions(t *testing.T) {
 	assert.Contains(t, code, "Driver")
 	assert.Contains(t, code, "Log")
 }
+
+// TestGenClient_ErrTxStartedAliasesVelox pins that the generated ErrTxStarted
+// is the velox sentinel itself. A locally declared errors.New value would be
+// distinct, so errors.Is(err, velox.ErrTxStarted) could never match the error
+// a nested Tx/BeginTx returns.
+func TestGenClient_ErrTxStartedAliasesVelox(t *testing.T) {
+	helper := newMockHelper()
+	helper.graph.Nodes = []*gen.Type{createTestType("User")}
+
+	code := genClient(helper).GoString()
+	assert.Contains(t, code, "var ErrTxStarted = velox.ErrTxStarted")
+	assert.NotContains(t, code, `errors.New("velox: cannot start a transaction`)
+}

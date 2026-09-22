@@ -82,10 +82,8 @@ func TestIsValidationError(t *testing.T) {
 func TestSentinelErrors(t *testing.T) {
 	require.NotNil(t, ErrNotFound)
 	require.NotNil(t, ErrNotSingular)
-	require.NotNil(t, ErrTxStarted)
 	assert.Equal(t, "velox: entity not found", ErrNotFound.Error())
 	assert.Equal(t, "velox: entity not singular", ErrNotSingular.Error())
-	assert.Equal(t, "velox: cannot start a transaction within a transaction", ErrTxStarted.Error())
 }
 
 func TestNotFoundError_Is_CompatibleWithRootPackage(t *testing.T) {
