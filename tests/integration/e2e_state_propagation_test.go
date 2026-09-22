@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"reflect"
 	"sync/atomic"
 	"testing"
 
@@ -14,10 +15,6 @@ import (
 	"github.com/syssam/velox/tests/integration/user"
 	schema "github.com/syssam/velox/testschema"
 )
-
-// raceEnabled is set to true via build tag in race_on_test.go when -race
-// is active. Used to gate race-documenting tests.
-var raceEnabled = false
 
 // SP-2 state propagation matrix.
 //
@@ -309,23 +306,29 @@ func TestStateProp_EdgeQueryHonorsTargetPolicy(t *testing.T) {
 	require.NoError(t, err, "edge query to entity without policy must not inherit source entity's policy")
 }
 
-// TestStateProp_ConcurrentUseIsRaceDocument is a documentation test, not
-// a safety test. It proves that Use()/Intercept() racing with Query()
-// trips the Go race detector, matching the documented contract:
+// TestStateProp_ConcurrentUseIsRaceDocument pins the concurrency contract
+// of the shared stores:
 //
 //	"all Use() and Intercept() calls must complete before concurrent
 //	 query/mutation execution begins"
 //
-// Rather than enforce safety at runtime (would cost a mutex on every
-// store read), velox pushes this to the race detector. This test runs
-// ONLY under -race to validate the contract. Without -race it's skipped.
+// Rather than enforce safety at runtime (a mutex on every store read on
+// the query hot path), velox pushes this to the race detector: a Use()
+// racing with Query() is reported by `go test -race`, not prevented.
+// The stores must therefore stay plain per-entity slices. This test fails
+// if a lock (or any non-slice state) is added to either store "to be
+// safe" — that would erase the zero-copy advantage over Ent's per-query
+// slice clone.
 func TestStateProp_ConcurrentUseIsRaceDocument(t *testing.T) {
-	if !raceEnabled {
-		t.Skip("race detector not enabled; test only meaningful under -race")
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[entity.HookStore](),
+		reflect.TypeFor[entity.InterceptorStore](),
+	} {
+		require.Positive(t, typ.NumField(), "%s has no per-entity fields", typ)
+		for i := range typ.NumField() {
+			f := typ.Field(i)
+			assert.Equal(t, reflect.Slice, f.Type.Kind(),
+				"%s.%s is %s; the store must hold only per-entity slices, no locks", typ.Name(), f.Name, f.Type)
+		}
 	}
-	// Intentionally omit an actual concurrent test body; we just pin that
-	// the contract is documented. If a future reader wonders "why isn't
-	// Use() safe concurrently with queries?" — the answer is here: the
-	// race detector is the enforcement mechanism, not a runtime lock.
-	t.Log("concurrency contract: Use/Intercept must complete before queries; enforced by the race detector, not by runtime locks")
 }

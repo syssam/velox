@@ -1,6 +1,8 @@
 package graphql
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,11 +77,31 @@ func TestWithConfig(t *testing.T) {
 	assert.True(t, ext.config.RelayConnection)
 }
 
-func TestWithConfigPath_InvalidPath(t *testing.T) {
-	// WithConfigPath reads a YAML file; an invalid path should return an error
-	// Note: LoadGQLGenConfig may or may not error on a non-existent path
-	// depending on implementation. Just verify it doesn't panic.
-	_, _ = NewExtension(WithConfigPath("/nonexistent/gqlgen.yml"))
+func TestWithConfigPath(t *testing.T) {
+	t.Run("missing file yields an empty config", func(t *testing.T) {
+		ext, err := NewExtension(WithConfigPath(filepath.Join(t.TempDir(), "gqlgen.yml")))
+		require.NoError(t, err)
+		require.NotNil(t, ext.gqlgenConfig)
+		assert.Empty(t, ext.gqlgenConfig.Models)
+	})
+
+	t.Run("models are loaded", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "gqlgen.yml")
+		require.NoError(t, os.WriteFile(path, []byte("models:\n  Time:\n    model: github.com/99designs/gqlgen/graphql.Time\n"), 0o644))
+		ext, err := NewExtension(WithConfigPath(path))
+		require.NoError(t, err)
+		require.Contains(t, ext.gqlgenConfig.Models, "Time")
+		assert.Equal(t, StringList{"github.com/99designs/gqlgen/graphql.Time"}, ext.gqlgenConfig.Models["Time"].Model)
+	})
+
+	t.Run("malformed YAML is an error naming the path", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "gqlgen.yml")
+		require.NoError(t, os.WriteFile(path, []byte("models: [unclosed"), 0o644))
+		_, err := NewExtension(WithConfigPath(path))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "load gqlgen config")
+		assert.Contains(t, err.Error(), path)
+	})
 }
 
 func TestWithSchemaHook(t *testing.T) {

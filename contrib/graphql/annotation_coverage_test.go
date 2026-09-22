@@ -657,10 +657,9 @@ func TestMergeAnnotations_AllBranches(t *testing.T) {
 // Annotation implements schema.Annotation
 // =============================================================================
 
-func TestAnnotation_ImplementsSchemaAnnotation(t *testing.T) {
-	var _ schema.Annotation = Annotation{}
-	var _ schema.Annotation = (*Annotation)(nil)
-}
+// annotation.go asserts the pointer form; schemas also pass Annotation
+// by value, so pin that at compile time too.
+var _ schema.Annotation = Annotation{}
 
 // =============================================================================
 // ResolverMapping Tests

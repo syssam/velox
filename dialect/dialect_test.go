@@ -1,10 +1,12 @@
 package dialect
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -116,14 +118,31 @@ func TestNopTx(t *testing.T) {
 // DebugDriver Tests
 // =============================================================================
 
+// TestDebug_DefaultLogger pins that Debug without a logger writes through
+// slog's default logger and still delegates to the wrapped driver. Not
+// parallel: it swaps the process-wide default logger.
 func TestDebug_DefaultLogger(t *testing.T) {
-	t.Parallel()
-	d := &mockDriver{dialect: "sqlite"}
-	dd := Debug(d)
-	// Should not panic with default logger.
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	execErr, queryErr := errors.New("exec failed"), errors.New("query failed")
+	dd := Debug(&mockDriver{dialect: "sqlite", execErr: execErr, queryErr: queryErr})
 	ctx := context.Background()
-	_ = dd.Exec(ctx, "INSERT INTO t VALUES (?)", []any{1}, nil)
-	_ = dd.Query(ctx, "SELECT 1", nil, nil)
+	if err := dd.Exec(ctx, "INSERT INTO t VALUES (?)", []any{1}, nil); !errors.Is(err, execErr) {
+		t.Errorf("Exec() = %v, want the wrapped driver's error", err)
+	}
+	if err := dd.Query(ctx, "SELECT 1", nil, nil); !errors.Is(err, queryErr) {
+		t.Errorf("Query() = %v, want the wrapped driver's error", err)
+	}
+
+	out := buf.String()
+	for _, want := range []string{"driver.Exec: query=INSERT INTO t VALUES (?) args=[1]", "driver.Query: query=SELECT 1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("default logger output missing %q:\n%s", want, out)
+		}
+	}
 }
 
 func TestDebug_CustomLogger(t *testing.T) {

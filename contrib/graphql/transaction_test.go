@@ -7,7 +7,6 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -83,16 +82,31 @@ func TestSkipIfHasFields(t *testing.T) {
 	assert.False(t, skip(op2))
 }
 
-func TestTransactioner_SkipTx_NilOp(t *testing.T) {
-	tr := Transactioner{TxOpener: &mockTxOpener{}}
-	// skipTx is unexported, test via MutateOperationContext with nil op
-	require.NotNil(t, tr.TxOpener)
-}
-
-func TestTransactioner_SkipTx_QueryOp(t *testing.T) {
-	// Query operations should be skipped (not wrapped in tx)
-	tr := Transactioner{TxOpener: &mockTxOpener{}}
-	_ = tr
+// TestTransactioner_SkipTx pins which operations run outside a transaction:
+// anything that is not a mutation, and mutations the SkipTxFunc rejects.
+func TestTransactioner_SkipTx(t *testing.T) {
+	mutation := func(name string) *ast.OperationDefinition {
+		return &ast.OperationDefinition{Operation: ast.Mutation, Name: name}
+	}
+	tests := []struct {
+		name string
+		skip SkipTxFunc
+		op   *ast.OperationDefinition
+		want bool
+	}{
+		{"nil operation", nil, nil, true},
+		{"query", nil, &ast.OperationDefinition{Operation: ast.Query}, true},
+		{"subscription", nil, &ast.OperationDefinition{Operation: ast.Subscription}, true},
+		{"mutation", nil, mutation("createUser"), false},
+		{"mutation skipped by SkipTxFunc", SkipOperations("logout"), mutation("logout"), true},
+		{"mutation not matched by SkipTxFunc", SkipOperations("logout"), mutation("createUser"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := Transactioner{TxOpener: &mockTxOpener{}, SkipTxFunc: tt.skip}
+			assert.Equal(t, tt.want, tr.skipTx(tt.op))
+		})
+	}
 }
 
 // TestTransactioner_InterceptResponse_NoOperationContext pins that the

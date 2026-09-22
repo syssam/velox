@@ -123,14 +123,6 @@ func TestFilterFuncDeniesNonFilterableMutation(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not support filtering")
 }
 
-// TestFilterFuncImplementsQueryMutationRule confirms the compile-time assertion
-// that FilterFunc satisfies QueryMutationRule (already guaranteed by var _ in
-// privacy.go, but exercised here for coverage).
-func TestFilterFuncImplementsQueryMutationRule(t *testing.T) {
-	t.Parallel()
-	var _ privacy.QueryMutationRule = privacy.FilterFunc(nil)
-}
-
 // --- IsOwner skip-on-update edge cases ---
 
 // TestIsOwnerSkipsForWriteOperations verifies IsOwner skips for every write

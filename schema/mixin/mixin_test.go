@@ -46,11 +46,10 @@ func TestSchemaBaseMixin(t *testing.T) {
 	})
 }
 
-// TestMixinImplementsInterface tests that Schema implements velox.Mixin.
-func TestMixinImplementsInterface(t *testing.T) {
-	var _ velox.Mixin = mixin.Schema{}
-	var _ velox.Mixin = &mixin.Schema{}
-}
+// Schema implements velox.Mixin by value, so an embedded mixin.Schema
+// works whether the user's mixin is used as a value or a pointer.
+// (mixin.go asserts the pointer form.)
+var _ velox.Mixin = mixin.Schema{}
 
 // TestAnnotation is a test annotation type.
 type TestAnnotation string

@@ -72,6 +72,13 @@ func TestTraceFrom_ReturnsSnapshot(t *testing.T) {
 }
 
 func TestRecordTrace_NoopWithoutTrace(t *testing.T) {
-	// Should not panic when tracing is not enabled.
-	RecordTrace(context.Background(), "FilterFunc", "skip")
+	// Recording into an untraced context is dropped: nothing is stored on
+	// that context, and nothing leaks into a trace started afterwards.
+	ctx := context.Background()
+	RecordTrace(ctx, "FilterFunc", "skip")
+	assert.Nil(t, TraceFrom(ctx))
+
+	traced := WithTrace(ctx)
+	RecordTrace(ctx, "FilterFunc", "skip")
+	assert.Empty(t, TraceFrom(traced))
 }
