@@ -60,17 +60,6 @@ func paginationNames(node string) *PaginationNames {
 }
 
 // =============================================================================
-// Field Collection Types
-// =============================================================================
-
-// FieldCollection represents an edge with its GraphQL field mapping.
-// This matches Ent's fieldCollection struct.
-type FieldCollection struct {
-	Edge    *gen.Edge
-	Mapping []string
-}
-
-// =============================================================================
 // Filter Functions
 // =============================================================================
 
