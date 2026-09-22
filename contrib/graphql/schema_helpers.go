@@ -303,6 +303,44 @@ func (g *Generator) validateResolverMappings(t *gen.Type) error {
 	return nil
 }
 
+// validateUnimplementedEdgeAnnotations rejects edge annotations that velox
+// parses and stores but no generator reads.
+//
+// graphql.MapsTo / graphql.Mapping / graphql.Unbind were exported with doc
+// comments promising ent-contrib parity ("equivalent to Ent's entgql.MapsTo"),
+// and nothing ever consumed them: a schema annotating an edge with
+// MapsTo("subTasks") built cleanly, generated code, and still emitted the edge
+// under its original name. ent-contrib substitutes the mapping into the SDL
+// field names (entgql/schema.go) and adjusts field collection; velox does
+// neither.
+//
+// Failing the build is deliberate. It is the same call made for schema-level
+// Interceptors(), which was also assigned and never read: an annotation that
+// silently does nothing is worse than one that does not exist, because the
+// schema author believes the mapping is in effect. Implementing the feature
+// is tracked separately; until then the error names the alternative.
+func (g *Generator) validateUnimplementedEdgeAnnotations(t *gen.Type) error {
+	for _, e := range t.Edges {
+		ann := g.getEdgeAnnotation(e)
+		switch {
+		case len(ann.Mapping) > 0:
+			return fmt.Errorf(
+				"graphql: %s.%s: graphql.Mapping/graphql.MapsTo is not implemented — "+
+					"velox does not rename edge fields in the SDL. Remove the annotation and "+
+					"name the edge as it should appear in GraphQL, or use graphql.Type() on the "+
+					"target entity",
+				t.Name, e.Name)
+		case ann.Unbind:
+			return fmt.Errorf(
+				"graphql: %s.%s: graphql.Unbind is not implemented — velox always binds edge "+
+					"fields to the generated entity method. Remove the annotation; use "+
+					"graphql.Skip(graphql.SkipType) to keep the edge out of the GraphQL type",
+				t.Name, e.Name)
+		}
+	}
+	return nil
+}
+
 // =============================================================================
 // Annotation accessors
 // =============================================================================

@@ -432,6 +432,9 @@ func (g *Generator) Generate(ctx context.Context) error {
 		if err := g.validateResolverMappings(t); err != nil {
 			return err
 		}
+		if err := g.validateUnimplementedEdgeAnnotations(t); err != nil {
+			return err
+		}
 	}
 
 	// Validate enum name collisions across entities
