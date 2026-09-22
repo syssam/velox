@@ -14,23 +14,24 @@ func IsConstraintError(err error) bool {
 		IsCheckConstraintError(err)
 }
 
-// errorCoder is an interface for database errors that provide error codes.
-// Implemented by: pq.Error, pgx, mysql.MySQLError, modernc.org/sqlite, etc.
-type errorCoder interface {
-	Code() string
-}
-
-// errorNumberer is an interface for database errors that provide numeric error codes.
-// Implemented by: mysql.MySQLError (Number field via method).
-type errorNumberer interface {
-	Number() uint16
-}
-
-// sqlStateError is an interface for errors that provide SQLSTATE codes.
-// Implemented by: pq.Error, pgx, and some MySQL drivers.
+// sqlStateError is implemented by errors that expose a SQLSTATE code:
+// *pq.Error (lib/pq) and *pgconn.PgError (pgx).
 type sqlStateError interface {
 	SQLState() string
 }
+
+// sqliteError is implemented by *sqlite.Error (modernc.org/sqlite), whose
+// Code returns the extended result code (the driver enables extended codes
+// on every connection).
+type sqliteError interface {
+	Code() int
+}
+
+// go-sql-driver/mysql's *MySQLError exposes its error number only as a struct
+// field, so it matches no interface. Importing the driver to errors.As on the
+// concrete type would link and register it in every program that uses velox,
+// so MySQL errors are classified by their stable "Error <number>" message
+// prefix below.
 
 // PostgreSQL SQLSTATE codes for constraint violations (Class 23).
 const (
@@ -39,12 +40,13 @@ const (
 	pgCheckViolation      = "23514"
 )
 
-// MySQL error numbers for constraint violations.
+// SQLite extended result codes for constraint violations
+// (SQLITE_CONSTRAINT | n<<8).
 const (
-	mysqlDuplicateEntry         = 1062
-	mysqlForeignKeyParent       = 1451 // Cannot delete or update a parent row
-	mysqlForeignKeyChild        = 1452 // Cannot add or update a child row
-	mysqlCheckConstraintViolate = 3819
+	sqliteConstraintCheck      = 275  // SQLITE_CONSTRAINT_CHECK
+	sqliteConstraintForeignKey = 787  // SQLITE_CONSTRAINT_FOREIGNKEY
+	sqliteConstraintPrimaryKey = 1555 // SQLITE_CONSTRAINT_PRIMARYKEY
+	sqliteConstraintUnique     = 2067 // SQLITE_CONSTRAINT_UNIQUE
 )
 
 // IsUniqueConstraintError reports if the error resulted from a DB uniqueness constraint violation.
@@ -61,16 +63,9 @@ func IsUniqueConstraintError(err error) bool {
 		}
 	}
 
-	// Check for PostgreSQL pq.Error code
-	if e, ok := asError[errorCoder](err); ok {
-		if e.Code() == pgUniqueViolation {
-			return true
-		}
-	}
-
-	// Check for MySQL error number
-	if e, ok := asError[errorNumberer](err); ok {
-		if e.Number() == mysqlDuplicateEntry {
+	// Check for SQLite extended result code (modernc.org/sqlite)
+	if e, ok := asError[sqliteError](err); ok {
+		if c := e.Code(); c == sqliteConstraintUnique || c == sqliteConstraintPrimaryKey {
 			return true
 		}
 	}
@@ -97,17 +92,9 @@ func IsForeignKeyConstraintError(err error) bool {
 		}
 	}
 
-	// Check for PostgreSQL pq.Error code
-	if e, ok := asError[errorCoder](err); ok {
-		if e.Code() == pgForeignKeyViolation {
-			return true
-		}
-	}
-
-	// Check for MySQL error number
-	if e, ok := asError[errorNumberer](err); ok {
-		num := e.Number()
-		if num == mysqlForeignKeyParent || num == mysqlForeignKeyChild {
+	// Check for SQLite extended result code (modernc.org/sqlite)
+	if e, ok := asError[sqliteError](err); ok {
+		if e.Code() == sqliteConstraintForeignKey {
 			return true
 		}
 	}
@@ -135,16 +122,9 @@ func IsCheckConstraintError(err error) bool {
 		}
 	}
 
-	// Check for PostgreSQL pq.Error code
-	if e, ok := asError[errorCoder](err); ok {
-		if e.Code() == pgCheckViolation {
-			return true
-		}
-	}
-
-	// Check for MySQL error number
-	if e, ok := asError[errorNumberer](err); ok {
-		if e.Number() == mysqlCheckConstraintViolate {
+	// Check for SQLite extended result code (modernc.org/sqlite)
+	if e, ok := asError[sqliteError](err); ok {
+		if e.Code() == sqliteConstraintCheck {
 			return true
 		}
 	}

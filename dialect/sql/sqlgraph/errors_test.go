@@ -86,22 +86,6 @@ type mockSQLStateError struct {
 func (e *mockSQLStateError) Error() string    { return "pg error: " + e.state }
 func (e *mockSQLStateError) SQLState() string { return e.state }
 
-// mockErrorCoder simulates an error with Code() method (pq.Error style).
-type mockErrorCoder struct {
-	code string
-}
-
-func (e *mockErrorCoder) Error() string { return "coded error: " + e.code }
-func (e *mockErrorCoder) Code() string  { return e.code }
-
-// mockErrorNumberer simulates a MySQL error with Number() method.
-type mockErrorNumberer struct {
-	num uint16
-}
-
-func (e *mockErrorNumberer) Error() string  { return fmt.Sprintf("mysql error: %d", e.num) }
-func (e *mockErrorNumberer) Number() uint16 { return e.num }
-
 func TestIsUniqueConstraintError(t *testing.T) {
 	t.Parallel()
 
@@ -113,18 +97,6 @@ func TestIsUniqueConstraintError(t *testing.T) {
 	t.Run("PostgreSQL SQLSTATE", func(t *testing.T) {
 		t.Parallel()
 		err := &mockSQLStateError{state: "23505"}
-		assert.True(t, IsUniqueConstraintError(err))
-	})
-
-	t.Run("PostgreSQL code", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorCoder{code: "23505"}
-		assert.True(t, IsUniqueConstraintError(err))
-	})
-
-	t.Run("MySQL error number", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorNumberer{num: 1062}
 		assert.True(t, IsUniqueConstraintError(err))
 	})
 
@@ -163,24 +135,6 @@ func TestIsForeignKeyConstraintError(t *testing.T) {
 	t.Run("PostgreSQL SQLSTATE", func(t *testing.T) {
 		t.Parallel()
 		err := &mockSQLStateError{state: "23503"}
-		assert.True(t, IsForeignKeyConstraintError(err))
-	})
-
-	t.Run("PostgreSQL code", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorCoder{code: "23503"}
-		assert.True(t, IsForeignKeyConstraintError(err))
-	})
-
-	t.Run("MySQL error number parent", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorNumberer{num: 1451}
-		assert.True(t, IsForeignKeyConstraintError(err))
-	})
-
-	t.Run("MySQL error number child", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorNumberer{num: 1452}
 		assert.True(t, IsForeignKeyConstraintError(err))
 	})
 
@@ -225,18 +179,6 @@ func TestIsCheckConstraintError(t *testing.T) {
 	t.Run("PostgreSQL SQLSTATE", func(t *testing.T) {
 		t.Parallel()
 		err := &mockSQLStateError{state: "23514"}
-		assert.True(t, IsCheckConstraintError(err))
-	})
-
-	t.Run("PostgreSQL code", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorCoder{code: "23514"}
-		assert.True(t, IsCheckConstraintError(err))
-	})
-
-	t.Run("MySQL error number", func(t *testing.T) {
-		t.Parallel()
-		err := &mockErrorNumberer{num: 3819}
 		assert.True(t, IsCheckConstraintError(err))
 	})
 
