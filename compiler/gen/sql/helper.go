@@ -184,3 +184,82 @@ func genSchemaHooksLocal(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, rec
 		jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."),
 	)
 }
+
+// Field validation — one predicate and one emitter shared by the leaf package
+// declarations (package.go), the runtime init (runtime.go) and the create and
+// update check() methods (create.go, update.go). Keep every site on these
+// helpers: a site that disagrees either declares a validator nothing assigns
+// (nil func, panic on Save) or assigns one nothing calls (dead validation).
+//
+// Validators are generated unconditionally, as Ent does. They were once gated
+// on the opt-in FeatureValidator, which left every NotEmpty/MaxLen/Range and
+// every enum check on a default project silently unenforced.
+
+// hasGeneratedValidator reports whether the leaf package declares a
+// <Field>Validator variable for fd: the field has schema validators, or it is
+// an enum (whose validator checks the value against the declared set).
+func hasGeneratedValidator(fd *gen.Field) bool {
+	return fd.Validators > 0 || fd.IsEnum()
+}
+
+// fieldNeedsValidation reports whether a builder's check() must validate fd:
+// either through the generated <Field>Validator, or through the Validate()
+// method of a custom Go type that implements it.
+func fieldNeedsValidation(fd *gen.Field) bool {
+	return hasGeneratedValidator(fd) || (fd.HasGoType() && fd.Type != nil && fd.Type.Validator())
+}
+
+// typeHasGeneratedValidators reports whether any field of t (or its
+// user-defined ID) has a generated validator that the runtime init must
+// assign. Unlike gen.Type.HasValidators it counts enums.
+func typeHasGeneratedValidators(t *gen.Type) bool {
+	if t.HasValidators() {
+		return true
+	}
+	for _, fd := range t.Fields {
+		if fd.IsEnum() {
+			return true
+		}
+	}
+	return false
+}
+
+// validationErrorValue renders `&runtime.ValidationError{...}` for a field of t.
+func validationErrorValue(t *gen.Type, name, errVal jen.Code) jen.Code {
+	return jen.Op("&").Qual(runtimePkg, "ValidationError").Values(jen.Dict{
+		jen.Id("Name"):   name,
+		jen.Id("Err"):    errVal,
+		jen.Id("Entity"): jen.Lit(t.Name),
+		jen.Id("Field"):  name,
+	})
+}
+
+// genFieldValidatorCheck emits, inside a check() body, the validation of fd's
+// value when the mutation sets it:
+//
+//	if v, ok := <recv>.mutation.<Field>(); ok {
+//		if err := <leaf>.<Field>Validator(v); err != nil {
+//			return &runtime.ValidationError{...}
+//		}
+//	}
+//
+// Callers select the fields with fieldNeedsValidation.
+func genFieldValidatorCheck(grp *jen.Group, entityPkg string, t *gen.Type, fd *gen.Field, recv string) {
+	grp.If(
+		jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
+		jen.Id("ok"),
+	).BlockFunc(func(blk *jen.Group) {
+		var validationCall *jen.Statement
+		if hasGeneratedValidator(fd) {
+			validationCall = jen.Qual(entityPkg, fd.Validator()).Call(jen.Id("v"))
+		} else {
+			validationCall = jen.Id("v").Dot("Validate").Call()
+		}
+		blk.If(jen.Id("err").Op(":=").Add(validationCall), jen.Id("err").Op("!=").Nil()).Block(
+			jen.Return(validationErrorValue(t,
+				jen.Lit(fd.Name),
+				jen.Qual("fmt", "Errorf").Call(jen.Lit("validator failed for field \""+t.Name+"."+fd.Name+"\": %w"), jen.Id("err")),
+			)),
+		)
+	})
+}

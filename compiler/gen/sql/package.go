@@ -577,18 +577,15 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 
 	hasDefaults := false
 	hasValidators := false
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
 	for _, field := range fields {
-		if field.Default || (validatorsEnabled && (field.Validators > 0 || field.IsEnum())) {
-			hasDefaults = hasDefaults || field.Default
-			hasValidators = hasValidators || (validatorsEnabled && (field.Validators > 0 || field.IsEnum()))
-		}
+		hasDefaults = hasDefaults || field.Default
+		hasValidators = hasValidators || hasGeneratedValidator(field)
 	}
 	if idUserDefined {
 		if t.ID.Default {
 			hasDefaults = true
 		}
-		if validatorsEnabled && t.ID.Validators > 0 {
+		if t.ID.Validators > 0 {
 			hasValidators = true
 		}
 	}
@@ -617,7 +614,7 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 					defs.Commentf("%s holds the default value on update for the %q field.", field.UpdateDefaultName(), field.Name)
 					defs.Id(field.UpdateDefaultName()).Func().Params().Add(subpkgBaseType(h, field))
 				}
-				if validatorsEnabled && (field.Validators > 0 || field.IsEnum()) {
+				if hasGeneratedValidator(field) {
 					defs.Commentf("%s is a validator for the %q field. It is called by the builders before save.", field.Validator(), field.Name)
 					defs.Id(field.Validator()).Func().Params(subpkgBaseType(h, field)).Error()
 				}
@@ -632,7 +629,7 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 						defs.Id("DefaultID").Add(h.IDType(t))
 					}
 				}
-				if validatorsEnabled && t.ID.Validators > 0 {
+				if t.ID.Validators > 0 {
 					defs.Commentf("IDValidator is a validator for the \"id\" field. It is called by the builders before save.")
 					defs.Id("IDValidator").Func().Params(h.BaseType(t.ID)).Error()
 				}

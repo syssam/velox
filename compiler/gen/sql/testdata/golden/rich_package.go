@@ -145,6 +145,8 @@ var (
 	DefaultUpdatedAt time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	StatusValidator func(Status) error
 )
 
 // OrderOption defines the ordering options for the Article queries.

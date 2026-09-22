@@ -143,7 +143,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Int(), jen.Error()).BlockFunc(func(grp *jen.Group) {
 		// Validate required edges before executing SQL.
-		if updateNeedsCheck(h, t) {
+		if updateNeedsCheck(t) {
 			grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Lit(0), jen.Id("err")),
 			)
@@ -345,7 +345,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Error()).BlockFunc(func(grp *jen.Group) {
 		// Validate required edges before executing SQL.
-		if updateNeedsCheck(h, t) {
+		if updateNeedsCheck(t) {
 			grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
 			)
@@ -952,12 +952,10 @@ func hasRequiredUniqueEdge(t *gen.Type) bool {
 // predicate genCreateCheck uses, so a validator declared on a field is
 // enforced on UPDATE exactly as it is on CREATE — Ent emits the same set in
 // both check()s.
-func updateValidatedFields(h gen.GeneratorHelper, t *gen.Type) []*gen.Field {
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
+func updateValidatedFields(t *gen.Type) []*gen.Field {
 	var out []*gen.Field
 	for _, fd := range t.MutableFields() {
-		isValidator := fd.HasGoType() && fd.Type != nil && fd.Type.Validator()
-		if (validatorsEnabled && (fd.Validators > 0 || fd.IsEnum())) || isValidator {
+		if fieldNeedsValidation(fd) {
 			out = append(out, fd)
 		}
 	}
@@ -966,8 +964,8 @@ func updateValidatedFields(h gen.GeneratorHelper, t *gen.Type) []*gen.Field {
 
 // updateNeedsCheck reports whether an update builder needs a check() method at
 // all: either a required unique edge to guard or a field validator to run.
-func updateNeedsCheck(h gen.GeneratorHelper, t *gen.Type) bool {
-	return hasRequiredUniqueEdge(t) || len(updateValidatedFields(h, t)) > 0
+func updateNeedsCheck(t *gen.Type) bool {
+	return hasRequiredUniqueEdge(t) || len(updateValidatedFields(t)) > 0
 }
 
 // genUpdateCheck generates a check() method for update builders. It runs the
@@ -988,39 +986,18 @@ func genUpdateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName
 			requiredUniqueEdges = append(requiredUniqueEdges, e)
 		}
 	}
-	validated := updateValidatedFields(h, t)
+	validated := updateValidatedFields(t)
 	if len(requiredUniqueEdges) == 0 && len(validated) == 0 {
 		return // Nothing to check.
 	}
 
 	entityPkg := h.LeafPkgPath(t)
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
 
 	f.Comment("check runs the user-defined validators on the fields this mutation sets")
 	f.Comment("and guards required unique edges against being cleared.")
 	f.Func().Params(jen.Id(recv).Op("*").Id(builderName)).Id("check").Params().Error().BlockFunc(func(grp *jen.Group) {
 		for _, fd := range validated {
-			grp.If(
-				jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
-				jen.Id("ok"),
-			).BlockFunc(func(blk *jen.Group) {
-				var validationCall *jen.Statement
-				if validatorsEnabled && (fd.Validators > 0 || fd.IsEnum()) {
-					validationCall = jen.Qual(entityPkg, fd.Validator()).Call(jen.Id("v"))
-				} else {
-					validationCall = jen.Id("v").Dot("Validate").Call()
-				}
-				blk.If(jen.Id("err").Op(":=").Add(validationCall), jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.Op("&").Qual(runtimePkg, "ValidationError").Values(jen.Dict{
-						jen.Id("Name"):   jen.Lit(fd.Name),
-						jen.Id("Field"):  jen.Lit(fd.Name),
-						jen.Id("Entity"): jen.Lit(t.Name),
-						jen.Id("Err"): jen.Qual("fmt", "Errorf").Call(
-							jen.Lit("validator failed for field \""+t.Name+"."+fd.Name+"\": %w"), jen.Id("err"),
-						),
-					})),
-				)
-			})
+			genFieldValidatorCheck(grp, entityPkg, t, fd, recv)
 		}
 		for _, e := range requiredUniqueEdges {
 			grp.If(

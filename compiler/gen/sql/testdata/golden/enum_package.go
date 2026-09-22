@@ -192,6 +192,13 @@ func ValidColumn(column string) bool {
 	return ok
 }
 
+var (
+	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	StatusValidator func(Status) error
+	// PriorityValidator is a validator for the "priority" field. It is called by the builders before save.
+	PriorityValidator func(Priority) error
+)
+
 // OrderOption defines the ordering options for the Task queries.
 type OrderOption func(*sql.Selector)
 

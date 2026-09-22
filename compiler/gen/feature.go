@@ -157,28 +157,19 @@ var (
 		},
 	}
 
-	// FeatureValidator enables ORM-level validator code generation.
-	// When enabled, built-in validators (NotEmpty, MaxLen, Range, etc.) generate
-	// validation code that runs before save operations.
+	// FeatureValidator is kept only so existing configurations and the CLI's
+	// --feature flag keep accepting its name.
 	//
-	// Example:
-	//
-	//	err := entc.Generate("./schema", &gen.Config{
-	//	    Features: []gen.Feature{
-	//	        gen.FeatureValidator,
-	//	    },
-	//	})
-	//
-	// Without this feature, use GraphQL/gRPC annotations for API-layer validation:
-	//
-	//	field.String("email").Annotations(
-	//	    graphql.CreateInputValidate("required,email"),
-	//	)
+	// Deprecated: validators are always generated; this flag has no effect.
+	// Schema validators (NotEmpty, MaxLen, Range, Match, custom Validate) and
+	// enum validators run in every create and update check(), as in Ent. They
+	// used to be generated only with this flag, so a default project enforced
+	// none of them.
 	FeatureValidator = Feature{
 		Name:        "validator",
 		Stage:       Stable,
 		Default:     false,
-		Description: "Enables ORM-level validator code generation for built-in validators (NotEmpty, MaxLen, Range, etc.)",
+		Description: "Deprecated: validators are always generated; this flag has no effect",
 	}
 
 	// FeatureEntPredicates generates Ent-compatible predicate functions.

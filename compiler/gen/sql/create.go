@@ -228,16 +228,10 @@ func genCreateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName
 	}
 
 	entityPkg := h.LeafPkgPath(t)
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
 
 	// Uses runtime.ValidationError with uppercase Err field.
 	validationErr := func(name jen.Code, errVal jen.Code) jen.Code {
-		return jen.Op("&").Qual(runtimePkg, "ValidationError").Values(jen.Dict{
-			jen.Id("Name"):   name,
-			jen.Id("Err"):    errVal,
-			jen.Id("Entity"): jen.Lit(t.Name),
-			jen.Id("Field"):  name,
-		})
+		return validationErrorValue(t, name, errVal)
 	}
 
 	f.Comment("check runs all checks and user-defined validators on the builder.")
@@ -262,25 +256,8 @@ func genCreateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName
 				)
 			}
 			// Validator check
-			isValidator := fd.HasGoType() && fd.Type != nil && fd.Type.Validator()
-			if (validatorsEnabled && (fd.Validators > 0 || fd.IsEnum())) || isValidator {
-				grp.If(
-					jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
-					jen.Id("ok"),
-				).BlockFunc(func(blk *jen.Group) {
-					var validationCall *jen.Statement
-					if validatorsEnabled && (fd.Validators > 0 || fd.IsEnum()) {
-						validationCall = jen.Qual(entityPkg, fd.Validator()).Call(jen.Id("v"))
-					} else {
-						validationCall = jen.Id("v").Dot("Validate").Call()
-					}
-					blk.If(jen.Id("err").Op(":=").Add(validationCall), jen.Id("err").Op("!=").Nil()).Block(
-						jen.Return(validationErr(
-							jen.Lit(fd.Name),
-							jen.Qual("fmt", "Errorf").Call(jen.Lit("validator failed for field \""+t.Name+"."+fd.Name+"\": %w"), jen.Id("err")),
-						)),
-					)
-				})
+			if fieldNeedsValidation(fd) {
+				genFieldValidatorCheck(grp, entityPkg, t, fd, recv)
 			}
 		}
 		genCreateCheckID(h, grp, t, recv, validationErr)
@@ -1393,8 +1370,7 @@ func genCreateCheckID(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv s
 	if !t.HasOneFieldID() || t.ID == nil || !t.ID.UserDefined {
 		return
 	}
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
-	if !validatorsEnabled || t.ID.Validators == 0 {
+	if t.ID.Validators == 0 {
 		return
 	}
 	grp.If(

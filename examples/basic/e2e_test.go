@@ -2,6 +2,7 @@ package basic_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"example.com/basic/velox"
+	userclient "example.com/basic/velox/client/user"
 	"example.com/basic/velox/comment"
 	"example.com/basic/velox/entity"
 	"example.com/basic/velox/post"
@@ -157,8 +159,9 @@ func TestE2E_CreateUser_OptionalAge(t *testing.T) {
 		Save(ctx)
 	assert.Error(t, err, "Optional() without Default() should fail on NOT NULL column")
 
-	// With age explicitly set to 0, it should work.
-	u, err := client.User.Create().
+	// The zero value is not an escape hatch: age is Positive(), so an
+	// explicit 0 is rejected by the validator.
+	_, err = client.User.Create().
 		SetName("NoAge").
 		SetEmail("noage@test.com").
 		SetAge(0).
@@ -166,8 +169,20 @@ func TestE2E_CreateUser_OptionalAge(t *testing.T) {
 		SetCreatedAt(now).
 		SetUpdatedAt(now).
 		Save(ctx)
+	require.Error(t, err)
+	assert.True(t, velox.IsValidationError(err), "expected ValidationError, got: %T %v", err, err)
+
+	// With a valid age explicitly set, it works.
+	u, err := client.User.Create().
+		SetName("NoAge").
+		SetEmail("noage@test.com").
+		SetAge(1).
+		SetRole(user.RoleUser).
+		SetCreatedAt(now).
+		SetUpdatedAt(now).
+		Save(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 0, u.Age)
+	assert.Equal(t, 1, u.Age)
 }
 
 func TestE2E_CreateUser_DefaultTimestamps(t *testing.T) {
@@ -940,6 +955,58 @@ func TestE2E_ValidationError_TagMissingName(t *testing.T) {
 	_, err := client.Tag.Create().Save(ctx)
 	assert.Error(t, err)
 	assert.True(t, velox.IsValidationError(err), "expected ValidationError for missing name, got: %T %v", err, err)
+}
+
+// TestE2E_SchemaValidators_EnforcedWithoutFeatureFlag pins that schema
+// validators and the enum validator run on Create AND UpdateOne in a project
+// that enables no feature flags (this example's generate.go enables none).
+// They used to be generated only under the opt-in FeatureValidator, so this
+// module accepted SetName("").SetAge(-5).SetRole("bogus") and wrote the row.
+func TestE2E_SchemaValidators_EnforcedWithoutFeatureFlag(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	valid := func() *userclient.UserCreate {
+		return client.User.Create().
+			SetName("Valid").SetEmail("valid@test.com").SetAge(30).
+			SetRole(user.RoleUser).SetCreatedAt(now).SetUpdatedAt(now)
+	}
+
+	createCases := map[string]*userclient.UserCreate{
+		"NotEmpty name": valid().SetName(""),
+		"MaxLen name":   valid().SetName(strings.Repeat("x", 101)),
+		"Positive age":  valid().SetAge(-5),
+		"enum role":     valid().SetRole(user.Role("bogus")),
+	}
+	for name, builder := range createCases {
+		t.Run("create/"+name, func(t *testing.T) {
+			_, err := builder.Save(ctx)
+			require.Error(t, err)
+			assert.True(t, velox.IsValidationError(err), "expected ValidationError, got: %T %v", err, err)
+		})
+	}
+	n, err := client.User.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n, "an invalid create reached the database")
+
+	u := createUser(t, client, "Alice", "alice@test.com", 25)
+	updateCases := map[string]*userclient.UserUpdateOne{
+		"NotEmpty name": client.User.UpdateOneID(u.ID).SetName(""),
+		"Positive age":  client.User.UpdateOneID(u.ID).SetAge(-5),
+		"enum role":     client.User.UpdateOneID(u.ID).SetRole(user.Role("bogus")),
+	}
+	for name, builder := range updateCases {
+		t.Run("update/"+name, func(t *testing.T) {
+			_, err := builder.Save(ctx)
+			require.Error(t, err)
+			assert.True(t, velox.IsValidationError(err), "expected ValidationError, got: %T %v", err, err)
+		})
+	}
+	got, err := client.User.Get(ctx, u.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Alice", got.Name)
+	assert.Equal(t, 25, got.Age)
+	assert.Equal(t, user.RoleUser, got.Role)
 }
 
 // =============================================================================

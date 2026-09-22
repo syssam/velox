@@ -178,6 +178,16 @@ func (c *ArticleCreate) check() error {
 			Name:   "status",
 		}
 	}
+	if v, ok := c.mutation.Status(); ok {
+		if err := article.StatusValidator(v); err != nil {
+			return &runtime.ValidationError{
+				Entity: "Article",
+				Err:    fmt.Errorf("validator failed for field \"Article.status\": %w", err),
+				Field:  "status",
+				Name:   "status",
+			}
+		}
+	}
 	if len(c.mutation.AuthorIDs()) == 0 {
 		return &runtime.ValidationError{
 			Entity: "Article",

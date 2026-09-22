@@ -177,6 +177,16 @@ func (_u *ArticleUpdate) Modify(modifiers ...func(*sql.UpdateBuilder)) *ArticleU
 // check runs the user-defined validators on the fields this mutation sets
 // and guards required unique edges against being cleared.
 func (_u *ArticleUpdate) check() error {
+	if v, ok := _u.mutation.Status(); ok {
+		if err := article.StatusValidator(v); err != nil {
+			return &runtime.ValidationError{
+				Entity: "Article",
+				Err:    fmt.Errorf("validator failed for field \"Article.status\": %w", err),
+				Field:  "status",
+				Name:   "status",
+			}
+		}
+	}
 	if _u.mutation.AuthorCleared() {
 		return errors.New("clearing a required unique edge \"Article.author\"")
 	}
@@ -489,6 +499,16 @@ func (_u *ArticleUpdateOne) Modify(modifiers ...func(*sql.UpdateBuilder)) *Artic
 // check runs the user-defined validators on the fields this mutation sets
 // and guards required unique edges against being cleared.
 func (_u *ArticleUpdateOne) check() error {
+	if v, ok := _u.mutation.Status(); ok {
+		if err := article.StatusValidator(v); err != nil {
+			return &runtime.ValidationError{
+				Entity: "Article",
+				Err:    fmt.Errorf("validator failed for field \"Article.status\": %w", err),
+				Field:  "status",
+				Name:   "status",
+			}
+		}
+	}
 	if _u.mutation.AuthorCleared() {
 		return errors.New("clearing a required unique edge \"Article.author\"")
 	}

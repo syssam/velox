@@ -15,9 +15,9 @@ func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, sc
 	entityPkg := h.LeafPkgPath(t)
 	pkg := t.Package() // lowercase package name (e.g., "abtestevent")
 
-	// Check if entity has defaults, update defaults, validators, or value scanners
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
-	hasRuntimeFields := t.HasDefault() || t.HasUpdateDefault() || (validatorsEnabled && t.HasValidators())
+	// Check if entity has defaults, update defaults or validators (enums included:
+	// their validator is assigned here, and a nil one panics on Save).
+	hasRuntimeFields := t.HasDefault() || t.HasUpdateDefault() || typeHasGeneratedValidators(t)
 
 	// Skip if no runtime code needed (no mixins and no runtime fields)
 	if !hasRuntimeFields && !t.RuntimeMixin() {
@@ -98,9 +98,6 @@ func genRuntimeFields(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schema
 		grp.Id("_").Op("=").Id(pkg + "Fields")
 	}
 
-	// Check if validators feature is enabled
-	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
-
 	// Process each field (including edge fields - they can have validators too)
 	for _, field := range fields {
 		// Enum defaults are wired here (same as non-enum defaults) when FeatureAutoDefault
@@ -108,7 +105,7 @@ func genRuntimeFields(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schema
 		// longer applicable with Jennifer codegen.
 		hasDefault := field.Default
 		hasUpdateDefault := field.UpdateDefault
-		hasValidators := validatorsEnabled && (field.Validators > 0 || field.IsEnum())
+		hasValidators := hasGeneratedValidator(field)
 		hasValueScanner := field.HasValueScanner()
 
 		// Skip if no runtime code needed for this field
@@ -220,8 +217,8 @@ func genRuntimeValidator(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, fie
 	validatorType := getValidatorType(h, field)
 
 	if field.IsEnum() && field.Validators == 0 {
-		// Enum fields get an auto-generated IsValid() validator when FeatureValidator
-		// is enabled, even without explicit schema validators.
+		// Enum fields always get an auto-generated IsValid() validator, even
+		// without explicit schema validators.
 		grp.Commentf("// %s.%s is a validator for the %q field. It is called by the builders before save.",
 			pkg, validatorVar, field.Name)
 		grp.Qual(entityPkg, validatorVar).Op("=").Func().Params(
