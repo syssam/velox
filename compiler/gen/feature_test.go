@@ -50,9 +50,11 @@ func TestFeatureByName(t *testing.T) {
 // feature that lost its reader.
 //
 //   - FeatureValidator: validators are always generated (Ent parity).
+//   - FeatureLock: ForUpdate/ForShare are always generated.
 func TestInertFeaturesAreDeprecatedAndAccepted(t *testing.T) {
 	inert := map[string]Feature{
 		"FeatureValidator": FeatureValidator,
+		"FeatureLock":      FeatureLock,
 	}
 
 	fset := token.NewFileSet()

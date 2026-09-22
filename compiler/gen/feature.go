@@ -106,12 +106,17 @@ var (
 		Stage: Beta,
 	}
 
-	// FeatureLock provides a feature-flag for sql locking extension.
+	// FeatureLock is kept only so existing configurations and the CLI's
+	// --feature flag keep accepting its name.
+	//
+	// Deprecated: locking is always generated; this flag has no effect.
+	// Every query builder carries ForUpdate/ForShare regardless of it.
+	// Gating them now would break code that already calls them.
 	FeatureLock = Feature{
 		Name:        "sql/lock",
 		Stage:       Alpha,
 		Default:     false,
-		Description: "Allows users to use row-level locking in SQL using the 'FOR {UPDATE|SHARE}' clauses",
+		Description: "Deprecated: locking (ForUpdate/ForShare) is always generated; this flag has no effect",
 	}
 
 	// FeatureModifier provides a feature-flag for adding query modifiers.

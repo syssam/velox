@@ -75,7 +75,7 @@
 //   - FeatureBidiEdgeRefs: Bidirectional edge references
 //   - FeatureSnapshot: Schema snapshot for migrations
 //   - FeatureSchemaConfig: Multi-schema support
-//   - FeatureLock: SQL row-level locking (FOR UPDATE/FOR SHARE)
+//   - FeatureLock: deprecated no-op; ForUpdate/ForShare are always generated
 //   - FeatureModifier: Query modifiers
 //   - FeatureExecQuery: Raw SQL execution
 //   - FeatureUpsert: ON CONFLICT support

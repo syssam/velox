@@ -129,7 +129,7 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, _ []*gen.Type, entityPkgPat
 	qg.genCountExist()
 	qg.genSQLExplain()
 	qg.genIDTerminals()
-	qg.genLocking()
+	qg.genLocking() // unconditional; FeatureLock is a deprecated no-op
 	qg.genQueryReader()
 	qg.genSelectEntry()
 	qg.genSelectType()
