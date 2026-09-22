@@ -250,10 +250,11 @@ func TestQueryGroupBy_ModifiersRunLastAndUniqueApplies(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
-	base.SetUnique(true)
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	unique := true
+	base.Ctx.Unique = &unique
 	var seen []string
-	base.AddModifier(func(s *sql.Selector) {
+	base.Modifiers = append(base.Modifiers, func(s *sql.Selector) {
 		seen = append(seen, s.SelectedColumns()...)
 		s.AppendSelect("MAX(`users`.`age`)")
 	})
