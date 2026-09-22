@@ -446,8 +446,6 @@ func TestGenRuntimeEntityInit_WithDefaults(t *testing.T) {
 func TestGenRuntimeEntityInit_WithValidators(t *testing.T) {
 	t.Parallel()
 	helper := newMockHelper()
-	// Enable validator feature in config
-	helper.graph.Features = append(helper.graph.Features, gen.FeatureValidator)
 
 	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{

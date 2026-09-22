@@ -31,7 +31,6 @@ func main() {
 			gen.FeatureNamedEdges,
 			gen.FeatureBidiEdgeRefs,
 			gen.FeatureModifier,
-			gen.FeatureLock,
 			gen.FeatureUpsert,
 			gen.FeatureExecQuery,
 			gen.FeatureWhereInputAll,

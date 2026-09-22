@@ -42,8 +42,8 @@ func validatorFixture(t *testing.T) (*mockHelper, *gen.Type) {
 // (entc/gen/template/builder/create.tmpl).
 func TestValidatorsGeneratedWithoutFeatureFlag(t *testing.T) {
 	helper, typ := validatorFixture(t)
-	if on, _ := helper.graph.FeatureEnabled(gen.FeatureValidator.Name); on {
-		t.Fatal("fixture must not enable FeatureValidator")
+	if len(helper.graph.Features) != 0 {
+		t.Fatal("fixture must not enable any feature")
 	}
 
 	// The leaf package declares the validator variables.

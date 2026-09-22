@@ -1625,8 +1625,7 @@ func TestUpdateCheckRunsFieldValidators(t *testing.T) {
 	helper := newMockHelper()
 	helper.graph = &gen.Graph{
 		Config: &gen.Config{
-			Package:  "github.com/test/project/ent",
-			Features: []gen.Feature{gen.FeatureValidator},
+			Package: "github.com/test/project/ent",
 		},
 		Nodes: []*gen.Type{typ},
 	}
@@ -1683,7 +1682,7 @@ func TestUpdateCheckRunsFieldValidators(t *testing.T) {
 // (entc/integration/gremlin/ent/item_create.go).
 //
 // NOTE: there is no e2e counterpart because no schema in this repo pairs
-// FeatureValidator with a validated user-defined ID — testschema's only
+// a validated user-defined ID with a runtime schema — testschema's only
 // custom ID is a uuid.UUID, and the uuid field builder exposes no Validate.
 // If one is ever added, assert the behavior there too.
 func TestCreateCheckCallsIDValidator(t *testing.T) {
@@ -1699,8 +1698,7 @@ func TestCreateCheckCallsIDValidator(t *testing.T) {
 	helper := newMockHelper()
 	helper.graph = &gen.Graph{
 		Config: &gen.Config{
-			Package:  "github.com/test/project/ent",
-			Features: []gen.Feature{gen.FeatureValidator},
+			Package: "github.com/test/project/ent",
 		},
 		Nodes: []*gen.Type{typ},
 	}

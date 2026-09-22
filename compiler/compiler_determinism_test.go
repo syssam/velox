@@ -49,12 +49,10 @@ func TestGenerateIsDeterministic(t *testing.T) {
 				gen.FeatureBidiEdgeRefs,
 				gen.FeatureSnapshot,
 				gen.FeatureSchemaConfig,
-				gen.FeatureLock,
 				gen.FeatureExecQuery,
 				gen.FeatureUpsert,
 				gen.FeatureVersionedMigration,
 				gen.FeatureGlobalID,
-				gen.FeatureValidator,
 				gen.FeatureAutoDefault,
 			),
 		)

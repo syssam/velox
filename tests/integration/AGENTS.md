@@ -94,11 +94,9 @@ expect may simply be absent rather than renamed.
 - `sql/autodefault`
 - `sql/execquery`
 - `sql/globalid`
-- `sql/lock`
 - `sql/schemaconfig`
 - `sql/upsert`
 - `sql/versioned-migration`
-- `validator`
 
 ## Entities (5)
 

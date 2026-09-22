@@ -214,13 +214,6 @@ func createTypeWithSchemaFields(t testing.TB, name string, fields []*load.Field)
 	})
 }
 
-// newMockHelperWithValidators creates a mockHelper with the FeatureValidator enabled in Config.
-func newMockHelperWithValidators() *mockHelper {
-	h := newMockHelper()
-	h.graph.Features = append(h.graph.Features, gen.FeatureValidator)
-	return h
-}
-
 // createFieldWithValidators creates a field with validator count > 0.
 func createFieldWithValidators(name string, typ field.Type, count int) *gen.Field {
 	return &gen.Field{

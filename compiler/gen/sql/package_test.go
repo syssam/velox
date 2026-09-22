@@ -291,7 +291,7 @@ func TestGenPackage_WithUpdateDefaultField(t *testing.T) {
 
 func TestGenPackage_WithValidatorsEnabled(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelperWithValidators()
+	helper := newMockHelper()
 	userType := createTestType("User")
 	userType.Fields = append(userType.Fields, createFieldWithValidators("name", field.TypeString, 2))
 	helper.graph.Nodes = []*gen.Type{userType}
