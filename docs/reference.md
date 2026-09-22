@@ -109,8 +109,8 @@ Use `Required()` only on one side. Velox rejects `Required()` on both ends of th
 ## Entity-Level GraphQL Annotations
 
 ```go
-func (User) Annotations() []velox.Annotation {
-    return []velox.Annotation{
+func (User) Annotations() []schema.Annotation { // import "github.com/syssam/velox/schema"
+    return []schema.Annotation{
         graphql.RelayConnection(),
         graphql.QueryField(),
         graphql.Type("Member"),                 // Custom GraphQL type name
@@ -273,9 +273,9 @@ gen.WithFeatures(gen.FeatureAutoDefault)
 Works for: String(`''`), Int/Uint/Float(`0`), Bool(`false`).
 Does NOT auto-default: Enum, JSON, Time, UUID, Bytes, Nillable fields.
 
-## ORM Validators (opt-in)
+## ORM Validators
 
-Requires `gen.FeatureValidator`. Methods: `NotEmpty()`, `MinLen(n)`, `MaxLen(n)`, `Match(re)`, `Positive()`, `NonNegative()`, `Min(n)`, `Max(n)`, `Range(min, max)`.
+Always generated and run on both create and update (after hooks, before the SQL statement); a failure returns a `*ValidationError`. `gen.FeatureValidator` is a deprecated no-op. Methods: `NotEmpty()`, `MinLen(n)`, `MaxLen(n)`, `Match(re)`, `Positive()`, `NonNegative()`, `Min(n)`, `Max(n)`, `Range(min, max)`.
 
 ## Schema Split Modes
 

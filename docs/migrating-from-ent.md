@@ -198,6 +198,31 @@ u = u.Unwrap() // detaches from txDriver — safe to pass to callers
 
 ---
 
+## Query API differences
+
+The query builder is closely modeled on Ent, but it is not source-compatible. The differences you will hit first:
+
+| | Ent | Velox |
+|---|---|---|
+| Field predicates | `user.NameEQ("a")`, `user.AgeGT(18)` | `user.NameField.EQ("a")`, `user.AgeField.GT(18)` (generic). Enable `gen.FeatureEntPredicates` (`sql/entpredicates`) to also get Ent-style `user.NameEQ(...)` functions |
+| Edge predicates | `user.HasPostsWith(...)` | Same |
+| Eager-load options | `WithPosts(func(q *ent.PostQuery) {...})` | `WithPosts(func(q entity.PostQuerier) {...})` — an interface from the generated `entity` package, because per-entity packages cannot import each other |
+| Entity mutations | `u.Update()`, `u.Delete()` | Not generated — see below |
+
+```go
+// Ent
+client.User.Query().
+    WithPosts(func(q *ent.PostQuery) { q.Where(post.PublishedEQ(true)) }).
+    All(ctx)
+
+// Velox
+client.User.Query().
+    WithPosts(func(q entity.PostQuerier) { q.Where(post.PublishedField.EQ(true)) }).
+    All(ctx)
+```
+
+---
+
 ## No `u.Update()` / `u.Delete()`
 
 Ent generates `Update()` and `Delete()` convenience methods on entity structs. Velox does not.
@@ -252,6 +277,9 @@ graphql.WhereInputFields("email", "status")
 | `gen.FeatureNamedEdges` | `gen.FeatureNamedEdges` (short: `"namedges"`) |
 | `gen.FeatureGlobalID` | `gen.FeatureGlobalID` |
 | `gen.FeatureVersionedMigration` | `gen.FeatureVersionedMigration` |
+| `gen.FeatureBidiEdgeRefs` | `gen.FeatureBidiEdgeRefs` (`"bidiedges"`) — off by default in both; without it eager-loaded children carry no back-reference |
+| `gen.FeatureLock` | Not needed — `ForUpdate`/`ForShare` are always generated; `gen.FeatureLock` is a deprecated no-op |
+| — (Ent always generates validators) | Same; `gen.FeatureValidator` exists only as a deprecated no-op |
 
 ---
 
@@ -280,7 +308,8 @@ The driver name changes from `"sqlite3"` to `"sqlite"` and the DSN foreign-key p
 5. Replace `Nullable()` calls — they are now `Optional().Nillable()` or the shorthand `Nullable()` (already compatible)
 6. Replace `sqlite3` driver name and DSN pragma if using SQLite
 7. Add `graphql.WhereInput()` annotations to fields you want filterable (Velox whitelist model)
-8. Replace `u.Update()` / `u.Delete()` with `client.User.UpdateOne(u)` / `client.User.DeleteOne(u)`
-9. Add `u.Unwrap()` before returning tx-created entities across a commit boundary
-10. Run `go generate ./...` and fix any codegen errors
-11. Run `go test -race ./...`
+8. Rewrite predicates (`user.NameEQ` → `user.NameField.EQ`, or enable `gen.FeatureEntPredicates`) and eager-load options (`*ent.PostQuery` → `entity.PostQuerier`)
+9. Replace `u.Update()` / `u.Delete()` with `client.User.UpdateOne(u)` / `client.User.DeleteOne(u)`
+10. Add `u.Unwrap()` before returning tx-created entities across a commit boundary
+11. Run `go generate ./...` and fix any codegen errors
+12. Run `go test -race ./...`

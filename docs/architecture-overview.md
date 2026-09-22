@@ -351,7 +351,7 @@ When the parent query eager-loads the edge AND the edge call has no `where`
 ```go
 // Single DB round trip for the entire user.posts response:
 users, _ := client.User.Query().
-    WithPosts(func(q *query.PostQuery) { q.Order(post.ByCreatedAt()) }).
+    WithPosts(func(q entity.PostQuerier) { q.Order(post.ByCreatedAt()) }).
     All(ctx)
 
 // gqlgen autobind invokes (*User).Posts(...) per user; with no where/after/before,

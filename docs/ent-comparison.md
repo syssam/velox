@@ -764,7 +764,7 @@ Both Ent and Velox require hand-written resolvers for delete mutations. Delete o
 | `FeatureBidiEdgeRefs` | Two-way edge references |
 | `FeatureSnapshot` | Schema snapshots |
 | `FeatureSchemaConfig` | Multi-schema names |
-| `FeatureLock` | Row-level SQL locking (FOR UPDATE) |
+| `FeatureLock` | Deprecated no-op in velox — `ForUpdate`/`ForShare` are always generated |
 | `FeatureModifier` | Custom query modifiers |
 | `FeatureExecQuery` | Raw SQL execution |
 | `FeatureUpsert` | ON CONFLICT support |
@@ -775,12 +775,11 @@ Both Ent and Velox require hand-written resolvers for delete mutations. Delete o
 
 | Feature | Description |
 |---------|-------------|
-| `FeatureValidator` | ORM-level field validation code generation |
 | `FeatureEntPredicates` | Generate Ent-compatible predicate functions |
 | `FeatureAutoDefault` | Auto-add DB DEFAULT for all NOT NULL fields |
 | `FeatureWhereInputAll` | All fields filterable (Ent-compat mode) |
 
-**Verdict: Velox has all Ent features plus 4 additional.**
+**Verdict: Velox has all Ent features plus 3 additional.** (Validators are always generated, as in Ent; `FeatureValidator` is a deprecated no-op.)
 
 ---
 
@@ -1026,7 +1025,6 @@ Features present in Velox but NOT in Ent:
 | **`Omittable()` annotation** | PATCH semantics with `graphql.Omittable[T]` |
 | **`SkipDefaults()`/`SkipDefault()`** | Skip UpdateDefault fields on update |
 | **`FeatureAutoDefault`** | Auto-add DB DEFAULT for all NOT NULL fields |
-| **`FeatureValidator`** | ORM-level field validation code generation |
 | **`FeatureWhereInputAll`** | Ent-compat mode (all fields filterable) |
 | **`FeatureEntPredicates`** | Generate Ent-compatible predicate style |
 | **`sqlschema.Check(expr)`** | CHECK constraint annotation |

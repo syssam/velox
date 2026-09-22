@@ -320,8 +320,8 @@ field.String("internal_field").
 
 **Solution**:
 ```go
-func (User) Annotations() []velox.Annotation {
-    return []velox.Annotation{
+func (User) Annotations() []schema.Annotation { // import "github.com/syssam/velox/schema"
+    return []schema.Annotation{
         graphql.RelayConnection(), // Enable connections
         graphql.QueryField(),      // Enable query field
     }

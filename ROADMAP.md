@@ -1,8 +1,9 @@
 # Roadmap
 
-Velox is pre-1.0 (`v0.1.0`). This document is the answer to two questions the
-README's [Feature Stability](README.md#feature-stability) table raises but
-does not answer: **what must be true before v1.0.0**, and **what does it take
+Velox is pre-1.0 (latest tag `v0.2.1`; see [CHANGELOG.md](CHANGELOG.md)).
+This document is the answer to two questions the README's
+[Feature Stability](README.md#feature-stability) table raises but does not
+answer: **what must be true before v1.0.0**, and **what does it take
 for an individual feature to move up a stage**.
 
 Dates are deliberately absent — velox is a personal project and stages are
@@ -25,9 +26,10 @@ Alpha until the fix lands with a pinning test.
 
 Ordered roughly by how much they de-risk the release, not by effort.
 
-- [ ] **Promote `privacy` and `intercept` to Beta.** They are enabled
-  together in the integration prototype and covered by e2e tests; what's
-  missing is a second real downstream consumer and a freeze on the
+- [ ] **Promote `privacy` and `intercept` to Beta.** The two flags are
+  independent (privacy does not require `intercept`); both are enabled in
+  the integration prototype and covered by e2e tests. What's missing is a
+  second real downstream consumer and a freeze on the
   `FilterFunc`/`Filterable` surface.
 - [ ] **Promote `sql/upsert` to Beta.** The dialect-divergent paths
   (`ON CONFLICT` vs `ON DUPLICATE KEY`) are pinned by

@@ -4,7 +4,7 @@ This guide walks you through creating a simple application with Velox ORM.
 
 ## Prerequisites
 
-- Go 1.26+ (see `go.mod` for exact version)
+- Go 1.25+ (see `go.mod` for exact version)
 - A database: PostgreSQL, MySQL, or SQLite (no setup needed)
 
 ## Project Setup
@@ -265,8 +265,8 @@ func main() {
 Add GraphQL annotations to your schema:
 
 ```go
-func (User) Annotations() []velox.Annotation {
-    return []velox.Annotation{
+func (User) Annotations() []schema.Annotation { // import "github.com/syssam/velox/schema"
+    return []schema.Annotation{
         graphql.RelayConnection(),
         graphql.QueryField(),
         graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()),

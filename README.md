@@ -37,7 +37,7 @@ A type-safe Go ORM framework with integrated code generation for GraphQL service
 
 ## Why Velox?
 
-Velox is **API-compatible with Ent** — same schema definition patterns, same generated query builder API, same hooks/interceptors/privacy model. The key difference is the code generation engine:
+Velox uses an **Ent-compatible schema DSL** (`velox.Schema`, `field`/`edge`/`index`/`mixin` builders) and the same hooks/interceptors/privacy model. The generated query API is closely modeled on Ent but is not a drop-in replacement: predicates are `user.NameField.EQ(...)` unless you enable `sql/entpredicates`, eager-load options take `func(entity.PostQuerier)` instead of `*ent.PostQuery`, and there is no `(*Entity).Update()` — see [docs/migrating-from-ent.md](docs/migrating-from-ent.md) for the full list of differences. The main difference is the code generation engine:
 
 | | Ent | Velox |
 |---|---|---|
@@ -90,23 +90,26 @@ Opt-in features live behind flags in `gen.Config.Features`. Stages follow Ent's 
 | `sql/schemaconfig` | Stable | Alternate schema names per entity (multi-database tables) |
 | `sql/entpredicates` | Stable | Ent-compatible standalone predicate functions |
 | `graphql/whereinputall` | Stable | Expose all fields in WhereInput by default (Ent-compatible) |
-| `validator` | Stable | ORM-level validators (NotEmpty, MaxLen, Range, …) run pre-save |
 | `sql/multischema` | Beta | Auto-enabled by storage driver for multi-schema annotations |
-| `privacy` | Alpha | Policy-based authorization (requires `intercept`) |
-| `intercept` | Alpha | Query interceptor helper package |
+| `privacy` | Alpha | Policy-based authorization (independent of `intercept`) |
+| `intercept` | Alpha | Generated `intercept/` helper package (`TraverseFunc`, typed per-entity helpers); interceptors themselves always work |
 | `namedges` | Alpha | Eager-load edges with dynamic names |
-| `sql/lock` | Alpha | Row-level locking (`FOR UPDATE`/`FOR SHARE`) |
 | `sql/upsert` | Alpha | `ON CONFLICT` / `ON DUPLICATE KEY` for INSERT |
 | `sql/modifier` | Alpha | Custom query modifiers |
 | `sql/autodefault` | Alpha | Auto-emit DB `DEFAULT` for all NOT NULL fields |
 | `entql` | Experimental | Dynamic predicate builder — translates `querylanguage.P` expressions to SQL at runtime; use for API filter params or rules engines without rerunning codegen |
-| `bidiedges` | Experimental | Two-way references on O2M/O2O eager-load |
+| `bidiedges` | Experimental | Set back-references on eager-loaded edges (e.g. `post.Edges.Author` after `WithPosts`). Off by default, as in Ent; the back-references form cycles, so detach them before `json.Marshal` |
 | `schema/snapshot` | Experimental | Schema snapshot for merge-conflict resolution |
 | `sql/execquery` | Experimental | Expose driver `ExecContext`/`QueryContext` |
 | `sql/versioned-migration` | Experimental | Atlas versioned migration files |
 | `sql/globalid` | Experimental | Unique global IDs across all node types |
 
-All non-Stable flags are off by default. Enable per-project via `gen.Config{Features: []gen.Feature{gen.FeaturePrivacy, ...}}`. Missing `Requires:` dependencies are auto-enabled with a warning at codegen time.
+All non-Stable flags are off by default. Enable per-project via `gen.WithFeatures(gen.FeaturePrivacy, ...)`. No feature currently depends on another — in particular `privacy` and `intercept` are orthogonal and can be enabled separately.
+
+Always generated, no flag needed:
+
+- **Validators** — schema validators (`NotEmpty`, `MaxLen`, `Range`, …) and enum validation run on create and update. `FeatureValidator` (`validator`) is a deprecated no-op kept so existing configs still compile.
+- **Row-level locking** — `ForUpdate` / `ForShare` on every query builder. `FeatureLock` (`sql/lock`) is a deprecated no-op.
 
 ## Installation
 
@@ -306,7 +309,7 @@ field.Float64("price")                      // DOUBLE PRECISION
 field.Bool("active")                        // BOOLEAN
 field.Time("created_at")                    // TIMESTAMP
 field.Enum("status").Values("a", "b")       // VARCHAR with validation
-field.JSON("metadata")                      // JSONB/JSON
+field.JSON("metadata", map[string]any{})    // JSONB/JSON
 field.UUID("external_id", uuid.UUID{})      // UUID
 field.Bytes("data")                         // BYTEA/BLOB
 ```
@@ -371,9 +374,10 @@ client.User.Query().
     WithProfile().
     All(ctx)
 
-// Load with filtering
+// Load with filtering. The option receives the entity.PostQuerier
+// interface (import "yourproject/velox/entity"), not a concrete query type.
 client.User.Query().
-    WithPosts(func(q *velox.PostQuery) {
+    WithPosts(func(q entity.PostQuerier) {
         q.Where(post.PublishedField.EQ(true)).
           Limit(5)
     }).
@@ -434,11 +438,17 @@ err := velox.WithTx(ctx, client, func(tx *velox.Tx) error {
         Save(ctx)
     return err // Commit on nil, rollback on error
 })
+if err != nil {
+    return err
+}
 
 // Manual transaction control
 tx, err := client.Tx(ctx)
+if err != nil {
+    return err
+}
 // ... use tx.User, tx.Post, etc.
-tx.Commit()  // or tx.Rollback()
+return tx.Commit() // or tx.Rollback()
 ```
 
 ## Error Handling
@@ -553,8 +563,8 @@ func (User) Edges() []velox.Edge {
 }
 
 // Or use entity-level bulk opt-in:
-func (User) Annotations() []velox.Annotation {
-    return []velox.Annotation{
+func (User) Annotations() []schema.Annotation { // import "github.com/syssam/velox/schema"
+    return []schema.Annotation{
         graphql.WhereInputFields("email", "role", "created_at"),
         graphql.WhereInputEdges("posts"),
     }
@@ -574,12 +584,15 @@ cfg, err := gen.NewConfig(
 For edges opted into `WhereInput` filtering, the generated entity method on the parent carries a typed `where *filter.XxxWhereInput` parameter. This makes filtered edge access usable both from gqlgen (which autobinds it directly — no resolver code needed) and from non-GraphQL callers (REST handlers, batch jobs, gRPC services):
 
 ```go
-// Find a user's overdue todos without a GraphQL request.
+// Find a user's overdue in-progress todos without a GraphQL request.
+// u is an *entity.User; filter and todo are generated packages.
+now := time.Now()
+status := todo.StatusInProgress
 where := &filter.TodoWhereInput{
-    Status:    &filter.TodoStatus{EQ: ptr(todo.StatusActive)},
-    DueBefore: ptr(time.Now()),
+    Status:    &status,
+    DueDateLT: &now,
 }
-overdue, err := user.Todos(ctx, nil, nil, nil, nil, nil, where)
+overdue, err := u.Todos(ctx, nil, nil, nil, nil, nil, where)
 ```
 
 The cursor/limit args (`after, first, before, last`) and `orderBy` accept `nil` when you only want filtering. When `where == nil` AND no cursor is passed, the method returns the eager-loaded slice (via `.WithTodos()` on the parent query) without a DB round trip.
@@ -589,8 +602,8 @@ The cursor/limit args (`after, first, before, last`) and `orderBy` accept `nil` 
 Use `Resolvers()` to add custom resolver fields to an entity type. gqlgen generates resolver stubs that you implement. For forcing existing fields to use resolvers, configure `forceResolver` in gqlgen.yml instead.
 
 ```go
-func (Invoice) Annotations() []velox.Annotation {
-    return []velox.Annotation{
+func (Invoice) Annotations() []schema.Annotation {
+    return []schema.Annotation{
         graphql.Resolvers(
             graphql.Map("glAccount", "PublicGlAccount!"),
             graphql.Map("approver", "PublicUser"),
