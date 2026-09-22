@@ -144,13 +144,21 @@ For non-standard types (enum, bytes), `compiler/gen/graph_validate.go`
 enforces this at codegen time: `Optional()` without `Default()` or
 `Nillable()` is a build error.
 
-### 4.2. `Nullable()` was removed; use `Nillable()`
+### 4.2. `Nullable()` is velox's shorthand for `Optional().Nillable()`
 
-The field-builder method is `Nillable()` (equivalent to
-`Optional().Nillable()`): DB `NULL`, Go `*T`.
+`Nillable()` and `Optional()` are independent, exactly as in Ent:
+
+- `Optional()` — not required on create. Column is `NOT NULL` unless
+  something else makes it nullable; Go keeps the plain type.
+- `Nillable()` — the generated struct field is `*T`.
+- `Nullable()` — both at once: DB `NULL` and Go `*T`.
+
+`Nullable()` has no Ent counterpart; it exists so that "this field can be
+absent" needs one call instead of two.
 
 ```go
-field.String("middle_name").Nillable()    // VARCHAR NULL, Go *string
+field.String("middle_name").Nullable()             // VARCHAR NULL, Go *string
+field.String("middle_name").Optional().Nillable()  // identical
 ```
 
 ### 4.3. Mutations are opt-in via `graphql.Mutations()`

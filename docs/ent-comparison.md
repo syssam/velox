@@ -107,7 +107,7 @@ func (User) Annotations() []schema.Annotation { ... }
 | `.Unique()` | Yes | Yes | |
 | `.Optional()` | Yes | Yes | ORM-only zero value, NOT a DB DEFAULT |
 | `.Nillable()` | Yes | Yes | NULL in DB, `*T` in Go |
-| `.Nullable()` | Yes | **Removed** | Velox uses `Nillable()` only |
+| `.Nullable()` | **No** | Yes | Velox-only shorthand for `Optional().Nillable()` |
 | `.Default(value)` | Yes | Yes | Literal default |
 | `.DefaultFunc(fn)` | Yes | Yes | Function default (Go-only, no SQL effect) |
 | `.UpdateDefault(fn)` | Yes | Yes | Called on update |
@@ -140,7 +140,7 @@ func (User) Annotations() []schema.Annotation { ... }
 
 Both define identical field type constants: `TypeBool`, `TypeTime`, `TypeJSON`, `TypeUUID`, `TypeBytes`, `TypeEnum`, `TypeString`, `TypeOther`, plus all integer and float variants.
 
-**Verdict: 99% identical.** Only difference: Velox removed `Nullable()` in favor of `Nillable()`.
+**Verdict: 99% identical.** Only difference: Velox adds `Nullable()`, a shorthand for `Optional().Nillable()`; Ent has no such method.
 
 ---
 
@@ -1068,7 +1068,7 @@ Features present in Ent but NOT in Velox:
 | Category | Ent | Velox | Notes |
 |----------|-----|-------|-------|
 | **Schema API** | Full | **Full + extras** | Identical core, Velox adds mixins |
-| **Field API** | Full | **Full** | Velox removed `Nullable()` |
+| **Field API** | Full | **Full + extras** | Velox adds `Nullable()` |
 | **Edge API** | Full | **Full** | Identical |
 | **Index API** | Full | **Full** | Identical |
 | **Client API** | Full | **Full** | Different internals, same surface |
