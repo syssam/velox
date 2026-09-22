@@ -147,32 +147,6 @@ func ExampleIsValidationError() {
 	// velox: validator failed for field "email": must be a valid email address
 }
 
-// ExampleNewAggregateError demonstrates collecting multiple errors
-// into a single aggregate error. Nil errors are filtered out, and
-// if only one non-nil error remains, it is returned directly.
-func ExampleNewAggregateError() {
-	// Multiple errors produce an aggregate.
-	agg := velox.NewAggregateError(
-		velox.NewValidationError("name", errors.New("required")),
-		nil, // nil errors are filtered out
-		velox.NewValidationError("email", errors.New("invalid format")),
-	)
-	fmt.Println(agg)
-
-	// A single non-nil error is returned as-is (not wrapped).
-	single := velox.NewAggregateError(nil, errors.New("only error"), nil)
-	fmt.Println(single)
-
-	// All nil returns nil.
-	fmt.Println(velox.NewAggregateError(nil, nil) == nil)
-	// Output:
-	// velox: multiple errors:
-	//   [1] velox: validator failed for field "name": required
-	//   [2] velox: validator failed for field "email": invalid format
-	// only error
-	// true
-}
-
 // ExampleOp_Is demonstrates using Op.Is to check whether a mutation
 // operation matches a given type. Op values are bitmasks, so Is
 // performs a bitwise AND check.

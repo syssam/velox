@@ -372,7 +372,7 @@ EntityPackageDialect (GenEntityClient, GenEntityRuntime, GenEntityPkg,
 ## Error Types
 
 Sentinel: `ErrNotFound`, `ErrNotSingular`, `ErrTxStarted`.
-Structured: `NotFoundError`, `NotSingularError`, `NotLoadedError`, `QueryError`, `MutationError`, `ValidationError`, `ConstraintError`, `PrivacyError`.
+Structured: `NotFoundError`, `NotSingularError`, `NotLoadedError`, `ValidationError`, `ConstraintError`.
 Checkers: `IsNotFound()`, `IsNotSingular()`, `IsConstraintError()`, `IsValidationError()`, etc.
 
 ## Supported Databases

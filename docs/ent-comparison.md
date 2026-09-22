@@ -882,11 +882,6 @@ velox/
 | `ConstraintError` | Yes | Yes | |
 | `ValidationError` | Yes | Yes | |
 | `NotLoadedError` | Yes | Yes | |
-| `QueryError` | No | **Yes** | Velox addition |
-| `MutationError` | No | **Yes** | Velox addition |
-| `PrivacyError` | No | **Yes** | Velox addition |
-| `RollbackError` | No | **Yes** | Velox addition |
-| `AggregateError` | No | **Yes** | Velox addition |
 
 ### Error Checkers
 
@@ -1035,7 +1030,6 @@ Features present in Velox but NOT in Ent:
 | **Built-in mixins** | ID, SoftDelete, TimeSoftDelete, TenantID, Audit |
 | **Privacy Viewer system** | `Viewer` interface, `SimpleViewer`, context helpers |
 | **Privacy built-in rules** | `DenyIfNoViewer`, `HasRole`, `IsOwner`, `TenantRule`, etc. |
-| **Structured errors** | `QueryError`, `MutationError`, `PrivacyError`, `RollbackError`, `AggregateError` |
 | **Driver stats** | Connection pool statistics |
 | **Pure Go SQLite** | `modernc.org/sqlite` (no CGO) |
 | **Jennifer AST codegen** | Type-safe code generation |
