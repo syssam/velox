@@ -53,3 +53,33 @@ func TestGenerate_PlainEdges_StillGenerate(t *testing.T) {
 	})
 	require.NoError(t, gen.Generate(context.Background()))
 }
+
+// graphql.QueryField("allUsers").Description(...).Directives(...) collected its
+// configuration into Annotation.QueryFieldConfig and nothing read it: the Query
+// field was always named camel(pluralize(typeName)) with no description and no
+// directives, despite the doc comment promising parity with entgql.QueryField
+// (which honors all three — ent-contrib entgql/schema.go).
+func TestGenQueryType_HonorsQueryFieldConfig(t *testing.T) {
+	t.Run("custom name, description and directives", func(t *testing.T) {
+		g := mockGraph()
+		giveOwnAnnotations(g)
+		ann := QueryField("allUsers").
+			Description("Every user in the system").
+			Directives(Directive{Name: "deprecated", Args: map[string]any{"reason": "use people"}})
+		g.Nodes[0].Annotations[AnnotationName] = ann.Annotation
+
+		sdl := NewGenerator(g, Config{OutDir: t.TempDir(), Package: "graphql", ORMPackage: "example/ent"}).genQueryType()
+
+		assert.Contains(t, sdl, "allUsers", "custom query field name must be used")
+		assert.NotContains(t, sdl, "\n  users", "the derived plural name must be replaced")
+		assert.Contains(t, sdl, "Every user in the system", "description must reach the SDL")
+		assert.Contains(t, sdl, "@deprecated", "directives must reach the SDL")
+	})
+
+	t.Run("no config keeps the derived plural name", func(t *testing.T) {
+		g := mockGraph()
+		giveOwnAnnotations(g)
+		sdl := NewGenerator(g, Config{OutDir: t.TempDir(), Package: "graphql", ORMPackage: "example/ent"}).genQueryType()
+		assert.Contains(t, sdl, "users", "default naming must be unchanged")
+	})
+}

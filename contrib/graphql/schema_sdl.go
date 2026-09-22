@@ -276,16 +276,32 @@ func (g *Generator) genQueryType() string {
 	nodes := g.filterNodes(g.graph.Nodes, SkipType)
 	for _, t := range nodes {
 		typeName := g.graphqlTypeName(t)
-		pluralName := camel(pluralize(typeName))
+		// graphql.QueryField("allUsers").Description(...).Directives(...) overrides
+		// the derived name and decorates the field, as entgql.QueryField does
+		// (ent-contrib entgql/schema.go). Without this the config was collected
+		// into the annotation and dropped on the floor.
+		ann := g.getTypeAnnotation(t)
+		fieldName := camel(pluralize(typeName))
+		var description, directives string
+		if cfg := ann.QueryFieldConfig; cfg != nil {
+			if cfg.Name != "" {
+				fieldName = cfg.Name
+			}
+			description = cfg.Description
+			directives = renderDirectives(cfg.Directives)
+		}
+		if description != "" {
+			fmt.Fprintf(&buf, "  \"\"\"\n  %s\n  \"\"\"\n", description)
+		}
 
 		// List/connection query
 		if g.config.RelayConnection && g.hasRelayConnection(t) {
 			orderByArg := g.orderByArg(t)
 			args := g.genQueryConnectionArgs(t, typeName, orderByArg)
-			fmt.Fprintf(&buf, "  %s%s: %sConnection!\n", pluralName, args, typeName)
+			fmt.Fprintf(&buf, "  %s%s: %sConnection!%s\n", fieldName, args, typeName, directives)
 		} else {
 			// Simple list query for QueryField-only entities (no args like Ent)
-			fmt.Fprintf(&buf, "  %s: [%s!]!\n", pluralName, typeName)
+			fmt.Fprintf(&buf, "  %s: [%s!]!%s\n", fieldName, typeName, directives)
 		}
 	}
 
