@@ -566,7 +566,7 @@ func WithInterceptors[V Value](ctx context.Context, q Query, qr Querier, inters 
 	}
 	vt, ok := rv.(V)
 	if !ok {
-		return v, fmt.Errorf("unexpected type %T returned from %T. expected type: %T", vt, q, v)
+		return v, fmt.Errorf("unexpected type %T returned from %T. expected type: %T", rv, q, v)
 	}
 	return vt, nil
 }

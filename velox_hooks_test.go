@@ -163,3 +163,17 @@ func TestHookContextPropagation(t *testing.T) {
 
 	assert.Equal(t, "injected-value", receivedValue)
 }
+
+// TestWithInterceptors_TypeMismatchNamesActualType pins that the mismatch
+// error names the type the querier actually returned, not the zero value of
+// the expected type.
+func TestWithInterceptors_TypeMismatchNamesActualType(t *testing.T) {
+	type query struct{}
+	qr := velox.QuerierFunc(func(context.Context, velox.Query) (velox.Value, error) {
+		return "not an int", nil
+	})
+	_, err := velox.WithInterceptors[int](context.Background(), &query{}, qr, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected type string returned from")
+	assert.Contains(t, err.Error(), "expected type: int")
+}
