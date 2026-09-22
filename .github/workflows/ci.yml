@@ -23,7 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.26', 'stable']
+        # '1.25' is the root go.mod minimum (`go 1.25.0`); keep the two in
+        # step so the documented minimum is actually tested.
+        go-version: ['1.25', '1.26', 'stable']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
