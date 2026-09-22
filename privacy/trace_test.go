@@ -3,6 +3,7 @@ package privacy
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,6 +39,36 @@ func TestDecisionString_WrappedSentinels(t *testing.T) {
 	assert.Equal(t, "skip", decisionString(Skipf("reason")))
 	assert.Equal(t, "allow", decisionString(Allowf("reason")))
 	assert.Equal(t, "deny", decisionString(Denyf("reason")))
+}
+
+// TestRecordTrace_Concurrent pins that one traced context can be shared by
+// concurrently evaluated rules — gqlgen resolves fields in parallel, all
+// under the request's context. Run with -race.
+func TestRecordTrace_Concurrent(t *testing.T) {
+	ctx := WithTrace(context.Background())
+	const workers, perWorker = 8, 100
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for range perWorker {
+				RecordTrace(ctx, "FilterFunc", "skip")
+				_ = TraceFrom(ctx)
+			}
+		})
+	}
+	wg.Wait()
+	assert.Len(t, TraceFrom(ctx), workers*perWorker)
+}
+
+// TestTraceFrom_ReturnsSnapshot pins that the returned slice is a copy: a
+// caller holding it must not observe (or race with) later entries.
+func TestTraceFrom_ReturnsSnapshot(t *testing.T) {
+	ctx := WithTrace(context.Background())
+	RecordTrace(ctx, "FilterFunc", "skip")
+	snap := TraceFrom(ctx)
+	RecordTrace(ctx, "FilterFunc", "allow")
+	require.Len(t, snap, 1)
+	assert.Len(t, TraceFrom(ctx), 2)
 }
 
 func TestRecordTrace_NoopWithoutTrace(t *testing.T) {
