@@ -256,27 +256,19 @@ func TestDialectGeneratorInterface(t *testing.T) {
 	})
 }
 
-// TestInterfaceHierarchy verifies the interface hierarchy is correct.
-func TestInterfaceHierarchy(t *testing.T) {
-	t.Run("MinimalDialect embeds EntityGenerator and GraphGenerator", func(t *testing.T) {
-		var m MinimalDialect = &mockMinimalDialect{}
-
-		// Can be assigned to both sub-interfaces
-		var _ EntityGenerator = m
-		var _ GraphGenerator = m
-	})
-
-	t.Run("DialectGenerator embeds MinimalDialect, FeatureGenerator, OptionalFeatureGenerator", func(t *testing.T) {
-		var d DialectGenerator = &mockDialectGenerator{}
-
-		// Can be assigned to all sub-interfaces
-		var _ MinimalDialect = d
-		var _ EntityGenerator = d
-		var _ GraphGenerator = d
-		var _ FeatureGenerator = d
-		var _ OptionalFeatureGenerator = d
-	})
-}
+// The interface hierarchy is checked at compile time: MinimalDialect embeds
+// EntityGenerator and GraphGenerator; DialectGenerator embeds MinimalDialect,
+// FeatureGenerator and OptionalFeatureGenerator. Assigning an interface value
+// to each embedded interface fails to compile if an embedding is dropped.
+var (
+	_ EntityGenerator          = MinimalDialect(nil)
+	_ GraphGenerator           = MinimalDialect(nil)
+	_ MinimalDialect           = DialectGenerator(nil)
+	_ FeatureGenerator         = DialectGenerator(nil)
+	_ OptionalFeatureGenerator = DialectGenerator(nil)
+	_ MinimalDialect           = (*mockMinimalDialect)(nil)
+	_ DialectGenerator         = (*mockDialectGenerator)(nil)
+)
 
 // TestCapabilityDetection verifies type assertion for optional capabilities.
 func TestCapabilityDetection(t *testing.T) {

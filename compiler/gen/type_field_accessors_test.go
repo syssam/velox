@@ -310,31 +310,6 @@ func TestField_GoType_NoGoType(t *testing.T) {
 	assert.Equal(t, "v", f.goType("v"))
 }
 
-func TestField_FieldAnnotate_Valid(t *testing.T) {
-	ann := fieldAnnotate(map[string]any{
-		"FieldAnnotation": map[string]any{
-			"OrderField": "EMAIL",
-		},
-	})
-	// fieldAnnotate returns nil for unknown keys; returns the object otherwise.
-	// The FieldAnnotation key is field.Annotation.Name().
-	_ = ann // just ensure no panic
-}
-
-func TestField_FieldAnnotate_Nil(t *testing.T) {
-	assert.Nil(t, fieldAnnotate(nil))
-	assert.Nil(t, fieldAnnotate(map[string]any{}))
-}
-
-func TestSqlIndexAnnotate_WithData(t *testing.T) {
-	// Has sqlschema.IndexAnnotation key.
-	result := sqlIndexAnnotate(map[string]any{
-		"IndexAnnotation": map[string]any{"Type": "GIN"},
-	})
-	// Key doesn't match the annotation name → still nil.
-	_ = result
-}
-
 // =============================================================================
 // type_field.go — ScanTypeField (basic path)
 // =============================================================================

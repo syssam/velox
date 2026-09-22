@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -42,24 +44,41 @@ func TestValidateSQLAnnotation(t *testing.T) {
 	assert.NoError(t, err3)
 }
 
-func TestSqlIndexAnnotate(t *testing.T) {
-	// Nil → nil.
-	assert.Nil(t, sqlIndexAnnotate(nil))
+// TestAnnotationDecoders pins the three loaded-annotation decoders: each
+// returns nil unless its own annotation name is present, and otherwise
+// decodes the JSON-shaped map the loader produces into the typed struct.
+func TestAnnotationDecoders(t *testing.T) {
+	fieldName := field.Annotation{}.Name()
+	indexName := sqlschema.IndexAnnotation{}.Name()
 
-	// Missing key → nil.
-	assert.Nil(t, sqlIndexAnnotate(map[string]any{"other": "val"}))
-}
+	t.Run("fieldAnnotate", func(t *testing.T) {
+		assert.Nil(t, fieldAnnotate(nil))
+		assert.Nil(t, fieldAnnotate(map[string]any{}))
+		// A key that is not field.Annotation.Name() is ignored.
+		assert.Nil(t, fieldAnnotate(map[string]any{"FieldAnnotation": map[string]any{"ID": []string{"a", "b"}}}))
 
-// =============================================================================
-// fieldAnnotate — with valid annotation key
-// =============================================================================
-
-func TestFieldAnnotate_WithAnnotationKey(t *testing.T) {
-	annotationName := (&field.Annotation{}).Name()
-	ann := fieldAnnotate(map[string]any{
-		annotationName: map[string]any{
-			"OrderField": "EMAIL",
-		},
+		got := fieldAnnotate(map[string]any{
+			fieldName: map[string]any{
+				"StructTag": map[string]any{"name": `json:"n"`},
+				"ID":        []any{"user_id", "tweet_id"},
+			},
+		})
+		require.NotNil(t, got)
+		assert.Equal(t, map[string]string{"name": `json:"n"`}, got.StructTag)
+		assert.Equal(t, []string{"user_id", "tweet_id"}, got.ID)
 	})
-	_ = ann
+
+	t.Run("sqlIndexAnnotate", func(t *testing.T) {
+		assert.Nil(t, sqlIndexAnnotate(nil))
+		assert.Nil(t, sqlIndexAnnotate(map[string]any{"other": "val"}))
+		// The struct name is not the annotation name.
+		assert.Nil(t, sqlIndexAnnotate(map[string]any{"IndexAnnotation": map[string]any{"Type": "GIN"}}))
+
+		got := sqlIndexAnnotate(map[string]any{
+			indexName: map[string]any{"Type": "GIN", "Types": map[string]any{"postgres": "GIST"}},
+		})
+		require.NotNil(t, got)
+		assert.Equal(t, "GIN", got.Type)
+		assert.Equal(t, map[string]string{"postgres": "GIST"}, got.Types)
+	})
 }

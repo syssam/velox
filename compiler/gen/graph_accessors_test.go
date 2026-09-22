@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox/compiler/load"
 	"github.com/syssam/velox/dialect/sql/schema"
+	"github.com/syssam/velox/schema/edge"
 )
 
 // =============================================================================
@@ -42,35 +44,29 @@ func TestGraph_SchemaSnapshot(t *testing.T) {
 }
 
 // =============================================================================
-// config.go — ModuleInfo (smoke test — returns empty outside module)
+// graph_tables.go — fkSymbols
 // =============================================================================
 
-func TestConfig_ModuleInfo_Smoke(t *testing.T) {
-	c := &Config{}
-	// Should not panic; result may be empty outside velox module context.
-	_ = c.ModuleInfo()
-}
+func TestFkSymbols(t *testing.T) {
+	c1, c2 := &schema.Column{Name: "user_id"}, &schema.Column{Name: "group_id"}
+	rel := Relation{Type: M2M, Table: "user_groups"}
 
-// =============================================================================
-// fkSymbols — via graph with M2M edge (exercises internal fkSymbols)
-// =============================================================================
+	// No storage key: "<join table>_<column>" for both sides.
+	s1, s2 := fkSymbols(&Edge{Name: "groups", Rel: rel}, c1, c2)
+	assert.Equal(t, "user_groups_user_id", s1)
+	assert.Equal(t, "user_groups_group_id", s2)
 
-func TestFkSymbols_ViaEdgeSchemas(t *testing.T) {
-	// fkSymbols is called by edgeSchemas for M2M edges.
-	graph, err := NewGraph(&Config{Package: "entc/gen", Storage: drivers["sql"]}, T1, T2)
-	require.NoError(t, err)
-	tables := graph.edgeSchemas()
-	// edgeSchemas returns the M2M join tables.
-	_ = tables
-}
+	// One storage-key symbol overrides only the first constraint.
+	one := &Edge{Name: "groups", Rel: rel, def: &load.Edge{StorageKey: &edge.StorageKey{Symbols: []string{"fk_user"}}}}
+	s1, s2 = fkSymbols(one, c1, c2)
+	assert.Equal(t, "fk_user", s1)
+	assert.Equal(t, "user_groups_group_id", s2)
 
-// =============================================================================
-// schema.Column usage to keep the import used
-// =============================================================================
-
-func TestSchemaColumn_Import(t *testing.T) {
-	c := &schema.Column{Name: "id"}
-	assert.Equal(t, "id", c.Name)
+	// Two symbols override both.
+	two := &Edge{Name: "groups", Rel: rel, def: &load.Edge{StorageKey: &edge.StorageKey{Symbols: []string{"fk_user", "fk_group"}}}}
+	s1, s2 = fkSymbols(two, c1, c2)
+	assert.Equal(t, "fk_user", s1)
+	assert.Equal(t, "fk_group", s2)
 }
 
 // =============================================================================

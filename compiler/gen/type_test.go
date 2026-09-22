@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"slices"
 	"sync"
 	"testing"
 
@@ -611,11 +612,33 @@ func TestType_ConcurrentFieldMethods(t *testing.T) {
 	const goroutines = 100
 	wg.Add(goroutines * 4)
 
+	// Every concurrent caller must see the same answer: the ID and "name"
+	// carry validators and defaults, and both come from mixins 0 and 1.
 	for range goroutines {
-		go func() { defer wg.Done(); typ.HasValidators() }()
-		go func() { defer wg.Done(); typ.HasDefault() }()
-		go func() { defer wg.Done(); typ.NeedsDefaults() }()
-		go func() { defer wg.Done(); typ.MixedInFields() }()
+		go func() {
+			defer wg.Done()
+			if !typ.HasValidators() {
+				t.Error("HasValidators() = false, want true")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if !typ.HasDefault() {
+				t.Error("HasDefault() = false, want true")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if !typ.NeedsDefaults() {
+				t.Error("NeedsDefaults() = false, want true")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if got := typ.MixedInFields(); !slices.Equal(got, []int{0, 1}) {
+				t.Errorf("MixedInFields() = %v, want [0 1]", got)
+			}
+		}()
 	}
 	wg.Wait()
 }

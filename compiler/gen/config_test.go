@@ -138,14 +138,11 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestModuleInfo(t *testing.T) {
-	t.Run("returns module info without panic", func(t *testing.T) {
-		c := &Config{}
-		m := c.ModuleInfo()
-		// ModuleInfo may return empty module when not running as velox CLI,
-		// but it should not panic.
-		_ = m.Path
-		_ = m.Version
-	})
+	// A test binary's main module is the one that owns the package under
+	// test, so ModuleInfo takes its "running as the velox CLI" branch and
+	// reports velox itself.
+	m := (&Config{}).ModuleInfo()
+	assert.Equal(t, "github.com/syssam/velox", m.Path)
 }
 
 func TestConfigFeatureEnabled_WhereInputAll(t *testing.T) {
