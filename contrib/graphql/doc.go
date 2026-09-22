@@ -58,8 +58,8 @@
 //
 // Control GraphQL generation using annotations on your schemas:
 //
-//	func (User) Annotations() []velox.Annotation {
-//	    return []velox.Annotation{
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
 //	        graphql.RelayConnection(),              // Enable Relay connections
 //	        graphql.QueryField(),                   // Include in Query type
 //	        graphql.Type("Member"),                 // Custom GraphQL type name

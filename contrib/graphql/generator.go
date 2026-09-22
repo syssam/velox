@@ -21,8 +21,8 @@
 // Features like RelayConnection, Mutations, Ordering are enabled by default
 // and can be controlled per-entity using schema annotations:
 //
-//	func (User) Annotations() []velox.Annotation {
-//	    return []velox.Annotation{
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
 //	        graphql.RelayConnection(),              // Enable Relay connections
 //	        graphql.Mutations(                      // Control mutations
 //	            graphql.MutationCreate(),

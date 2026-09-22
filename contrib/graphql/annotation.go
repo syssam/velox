@@ -568,7 +568,7 @@ type Annotation struct {
 	Unions []string `json:"unions,omitempty"`
 }
 
-// Name implements velox.Annotation.
+// Name implements schema.Annotation.
 func (a Annotation) Name() string {
 	return AnnotationName
 }
@@ -827,8 +827,8 @@ func InterfaceField(name string) Annotation {
 //
 // Example:
 //
-//	func (User) Annotations() []velox.Annotation {
-//	    return []velox.Annotation{
+//	func (User) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
 //	        graphql.FederationKey("id"),
 //	    }
 //	}
@@ -848,8 +848,8 @@ func FederationKey(fields string) Annotation {
 //
 // Example:
 //
-//	func (Product) Annotations() []velox.Annotation {
-//	    return []velox.Annotation{
+//	func (Product) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
 //	        graphql.FederationKeyResolvable("id", false),
 //	    }
 //	}
@@ -1196,8 +1196,8 @@ func WhereInput() Annotation {
 //
 // Example:
 //
-//	func (Invoice) Annotations() []velox.Annotation {
-//	    return []velox.Annotation{
+//	func (Invoice) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
 //	        graphql.WhereInputFields("status", "customer_id", "created_at"),
 //	    }
 //	}
@@ -1210,8 +1210,8 @@ func WhereInputFields(fields ...string) Annotation {
 //
 // Example:
 //
-//	func (Invoice) Annotations() []velox.Annotation {
-//	    return []velox.Annotation{
+//	func (Invoice) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
 //	        graphql.WhereInputEdges("items", "payments"),
 //	    }
 //	}
