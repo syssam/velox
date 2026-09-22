@@ -170,6 +170,6 @@ prior `SetLabels(nil)` left as the JSON scalar `null`, both injected a spurious
 - `suite_test.go` — the curated three-way suite, parametrized over all backends.
 - `coverage_test.go` — the coverage-matrix assertions.
 
-Specs:
-- `docs/superpowers/plans/2026-05-30-parity-harness-A3a-executors-driver.md`
-- `docs/superpowers/plans/2026-05-30-parity-harness-A3b-dialects-ci.md`
+The design specs (`2026-05-30-parity-harness-A3a-executors-driver.md`,
+`2026-05-30-parity-harness-A3b-dialects-ci.md`) are a local-only record under
+the gitignored `docs/superpowers/plans/`; they are not in the repository.

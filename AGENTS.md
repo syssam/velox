@@ -147,13 +147,14 @@ run `go vet`; for security-relevant guidance, also assert the behavior in a
 test. `examples/` is the preferred home for anything longer than a few lines
 — it is compiled and tested by CI.
 
-**Reproduce a CI job with CI's version of the tool.** CI pins
-`golangci-lint: latest` and `go-version: stable`; both move without a commit,
-and three of the four failures found on 2026-09-07 were pure version drift —
-red on every nightly for weeks with `main` untouched. A local linter that
-lags CI reports zero issues on code CI rejects. Install the version CI
-resolves and run it with `GOLANGCI_LINT_CACHE=<tmpdir>` (the shared cache
-holds a global lock). Reach the `stable` leg with `GOTOOLCHAIN=go1.XX.Y`, and
+**Reproduce a CI job with CI's version of the tool.** CI pins golangci-lint
+to an exact version (`v2.13.2` in `.github/workflows/ci.yml`, bumped by hand)
+but still runs `go-version: stable`, which moves without a commit. Three of
+the four failures found on 2026-09-07 were pure version drift — red on every
+nightly for weeks with `main` untouched — which is why the linter is now
+pinned. A local linter that differs from CI's reports zero issues on code CI
+rejects. Install the exact version CI pins and run it with
+`GOLANGCI_LINT_CACHE=<tmpdir>` (the shared cache holds a global lock). Reach the `stable` leg with `GOTOOLCHAIN=go1.XX.Y`, and
 run `govulncheck` under CI's Go — it reports standard-library advisories for
 whatever toolchain built it.
 
