@@ -107,28 +107,12 @@ func TestGenEntityRuntime_WithRootPkg(t *testing.T) {
 	assert.Contains(t, code, "func init()")
 	// Should contain RegisterEntity with all fields in entity-package mode
 	assert.Contains(t, code, "RegisterEntity")
-	assert.Contains(t, code, "RegisteredTypeInfo")
 	assert.Contains(t, code, "Table")
-	assert.Contains(t, code, "Columns")
-	assert.Contains(t, code, "FieldID")
 	assert.Contains(t, code, "ValidColumn")
-	assert.Contains(t, code, "ScanValues")
-	assert.Contains(t, code, "AssignValues")
-}
-
-func TestGenEntityRuntime_WithRootPkg_EntityTypeRef(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	helper.rootPkg = "github.com/test/project/ent"
-	userType := createTestType("User")
-
-	file := genEntityRuntime(helper, userType)
-	require.NotNil(t, file)
-
-	code := file.GoString()
-	// Should reference entity.User from the entity/ package
-	assert.Contains(t, code, "entity")
-	assert.Contains(t, code, "User")
+	assert.Contains(t, code, "Mutator")
+	// The type-info and entity-client registries had no reader and were removed.
+	assert.NotContains(t, code, "RegisteredTypeInfo")
+	assert.NotContains(t, code, "Client:")
 }
 
 func TestGenEntityRuntime_WithRootPkg_NoForeignKeys(t *testing.T) {
@@ -240,7 +224,7 @@ func TestGenEntityRuntimeRegistration_ContainsAllFields(t *testing.T) {
 	assert.Contains(t, code, "UserMutation")
 	assert.Contains(t, code, "mutate")
 	assert.Contains(t, code, "ValidColumn")
-	assert.Contains(t, code, "RegisteredTypeInfo")
+	assert.NotContains(t, code, "RegisteredTypeInfo")
 }
 
 func TestGenEntityRuntime_WithRootPkg_RegistersMutator(t *testing.T) {

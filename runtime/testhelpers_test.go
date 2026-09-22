@@ -63,8 +63,8 @@ func (e *testEntity) AssignValues(columns []string, values []any) error {
 	return nil
 }
 
-// testMeta holds test metadata for testEntity. Provides the glue required
-// by QueryBase/edge loaders (RegisteredTypeInfo + ScanConfig).
+// testMeta holds test metadata for testEntity: the table shape and scan
+// hooks the runtime query and scan tests need.
 type testMeta struct {
 	Table       string
 	Columns     []string
@@ -77,42 +77,6 @@ type testMeta struct {
 	GetID       func(entity *testEntity) any
 	SetDriver   func(entity *testEntity, driver dialect.Driver)
 	LoadEdges   func(ctx context.Context, nodes []*testEntity, edges []EdgeLoad, driver dialect.Driver) error
-}
-
-// RegisteredInfo returns a RegisteredTypeInfo for query/edge operations.
-func (m *testMeta) RegisteredInfo() *RegisteredTypeInfo {
-	info := &RegisteredTypeInfo{
-		Table:      m.Table,
-		Columns:    m.Columns,
-		IDColumn:   m.IDColumn,
-		ScanValues: m.ScanValues,
-		New:        func() any { return m.New() },
-		Assign:     func(e any, cols []string, vals []any) error { return m.Assign(e.(*testEntity), cols, vals) },
-	}
-	if m.GetID != nil {
-		info.GetID = func(e any) any { return m.GetID(e.(*testEntity)) }
-	}
-	return info
-}
-
-// ScanConfig returns a ScanConfig for test query operations.
-func (m *testMeta) ScanConfig() *ScanConfig {
-	sc := &ScanConfig{
-		Table:       m.Table,
-		Columns:     m.Columns,
-		IDColumn:    m.IDColumn,
-		IDFieldType: m.IDFieldType,
-		ScanValues:  m.ScanValues,
-		New:         func() any { return m.New() },
-		Assign:      func(e any, cols []string, vals []any) error { return m.Assign(e.(*testEntity), cols, vals) },
-	}
-	if m.GetID != nil {
-		sc.GetID = func(e any) any { return m.GetID(e.(*testEntity)) }
-	}
-	if m.SetDriver != nil {
-		sc.SetDriver = func(e any, drv dialect.Driver) { m.SetDriver(e.(*testEntity), drv) }
-	}
-	return sc
 }
 
 // testTypeInfo returns a testMeta for testEntity.
@@ -179,30 +143,6 @@ func testTypeInfo() *testMeta {
 			return nil
 		},
 	}
-}
-
-// failDriver wraps a real driver but fails Query/Exec after a configurable number of calls.
-type failDriver struct {
-	dialect.Driver
-	failAfter int // fail on the Nth call (0 = fail immediately)
-	calls     int
-	err       error
-}
-
-func (d *failDriver) Query(ctx context.Context, query string, args, v any) error {
-	d.calls++
-	if d.calls > d.failAfter {
-		return d.err
-	}
-	return d.Driver.Query(ctx, query, args, v)
-}
-
-func (d *failDriver) Exec(ctx context.Context, query string, args, v any) error {
-	d.calls++
-	if d.calls > d.failAfter {
-		return d.err
-	}
-	return d.Driver.Exec(ctx, query, args, v)
 }
 
 // seedUsers inserts multiple users directly via SQL INSERT.

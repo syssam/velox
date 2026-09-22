@@ -76,29 +76,6 @@ func (q *ArticleQuery) WithEdgeLoad(name string, _ ...runtime.LoadOption) {
 	}
 }
 
-// NewArticleQueryFromEdge creates a ArticleQuery from an existing EdgeQuery.
-// The EdgeQuery fields are copied into the self-contained query struct via exported getters.
-// SP-2: the inters field is a *entity.InterceptorStore pointer recovered
-// from cfg.InterStore (type-asserted with nil-safe fallback). Callers that
-// need a populated store must pass a Config built via the standard client
-// constructor; the EdgeQuery's own inters slice is no longer carried.
-func NewArticleQueryFromEdge(cfg runtime.Config, eq *runtime.EdgeQuery) *ArticleQuery {
-	inters, _ := cfg.InterStore.(*entity.InterceptorStore)
-	if inters == nil {
-		inters = &entity.InterceptorStore{}
-	}
-	return &ArticleQuery{
-		config:     cfg,
-		ctx:        eq.GetCtx(),
-		inters:     inters,
-		modifiers:  eq.GetModifiers(),
-		order:      eq.GetOrder(),
-		path:       eq.GetPath(),
-		predicates: eq.GetPredicates(),
-		withFKs:    eq.GetWithFKs(),
-	}
-}
-
 // querySpec builds a *sqlgraph.QuerySpec from the query's direct fields.
 func (q *ArticleQuery) querySpec() *sqlgraph.QuerySpec {
 	return runtime.MakeQuerySpec(q, field.TypeInt64)

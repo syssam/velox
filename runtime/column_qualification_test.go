@@ -66,7 +66,7 @@ func TestBuildSelectorFrom_Neighbors_M2O(t *testing.T) {
 	)
 
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
+	base := newTestQuery(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.Neighbors(dialect.SQLite, step), nil
 	}
@@ -93,7 +93,7 @@ func TestBuildSelectorFrom_Neighbors_O2OInverse(t *testing.T) {
 	)
 
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "parent", []string{"parent_id", "label"}, "parent_id", nil, "Parent")
+	base := newTestQuery(drv, "parent", []string{"parent_id", "label"}, "parent_id", nil, "Parent")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.Neighbors(dialect.SQLite, step), nil
 	}
@@ -124,7 +124,7 @@ func TestBuildSelectorFrom_SetNeighbors_M2O(t *testing.T) {
 	step.From.V = parentSel
 
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
+	base := newTestQuery(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.SetNeighbors(dialect.SQLite, step), nil
 	}
@@ -155,7 +155,7 @@ func TestBuildSelectorFrom_SetNeighbors_O2M(t *testing.T) {
 	step.From.V = parentSel
 
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "posts", []string{"id", "title", "user_id"}, "id", nil, "Post")
+	base := newTestQuery(drv, "posts", []string{"id", "title", "user_id"}, "id", nil, "Post")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.SetNeighbors(dialect.SQLite, step), nil
 	}
@@ -196,7 +196,7 @@ func TestLiveDB_M2O_FKNameEqualsTargetPK(t *testing.T) {
 		sqlgraph.Edge(sqlgraph.M2O, true, "sales_order", "terms_id"),
 	)
 
-	base := NewQueryBase(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
+	base := newTestQuery(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.Neighbors(drv.Dialect(), step), nil
 	}
@@ -249,7 +249,7 @@ func TestLiveDB_O2OInverse_FKNameEqualsTargetPK(t *testing.T) {
 		sqlgraph.Edge(sqlgraph.O2O, true, "product", "category_id"),
 	)
 
-	base := NewQueryBase(drv, "category", []string{"category_id", "label"}, "category_id", nil, "Category")
+	base := newTestQuery(drv, "category", []string{"category_id", "label"}, "category_id", nil, "Category")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.Neighbors(drv.Dialect(), step), nil
 	}
@@ -305,7 +305,7 @@ func TestLiveDB_SetNeighbors_M2O_FKNameEqualsTargetPK(t *testing.T) {
 	)
 	step.From.V = parentSel
 
-	base := NewQueryBase(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
+	base := newTestQuery(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sqlgraph.SetNeighbors(drv.Dialect(), step), nil
 	}

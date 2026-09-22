@@ -4,11 +4,11 @@ Generic runtime library for Velox-generated code.
 
 This package provides base types and helper functions used by generated entity code:
 
-- **QueryBase** -- Shared query state (driver, table, predicates, edges)
+- **QueryReader** -- Read-only view of a generated query's state, consumed by `BuildQueryFrom` / `BuildSelectorFrom` / `MakeQuerySpec`
 - **QueryScan / QuerySelect / QueryGroupBy** -- Query execution paths; `QuerySelect` handles both plain `Select(fields...).Scan()` and `Aggregate(fns...).Int/Scan/...` by honoring the Selector's registered aggregate functions
 - **LoadConfig** -- Eager loading configuration with nested edge support
 - **Config** -- Runtime configuration; `HookStore` and `InterStore` carry shared `*entity.HookStore` / `*entity.InterceptorStore` pointers so mutation hooks and query interceptors registered on any client reach all code paths
-- **Scanning** -- Row scanning, value extraction, and type conversion (`ScanAll`, `ScanFirst`, `ScanOnly`)
+- **Scanning** -- Row scanning, value extraction, and type conversion (`ScanAll`, `ScanFirst`)
 - **Registry** -- `RegisterEntity`, `RegisterQueryFactory`, `FindMutator`, `NewEntityQuery` — the decoupling layer that lets runtime dispatch mutations/queries without importing entity sub-packages
 - **Node** -- Relay Node interface support and resolver registry
 

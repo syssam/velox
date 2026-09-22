@@ -16,7 +16,7 @@ func TestCollectFields(t *testing.T) {
 		fieldCollector.Store(nil)
 		defer fieldCollector.Store(nil)
 
-		err := CollectFields(ctx, &QueryBase{Ctx: &QueryContext{}}, &CollectMeta{})
+		err := CollectFields(ctx, &testQuery{Ctx: &QueryContext{}}, &CollectMeta{})
 		assert.NoError(t, err)
 	})
 
@@ -30,7 +30,7 @@ func TestCollectFields(t *testing.T) {
 		}
 		SetFieldCollector(fn)
 
-		err := CollectFields(ctx, &QueryBase{Ctx: &QueryContext{}}, &CollectMeta{})
+		err := CollectFields(ctx, &testQuery{Ctx: &QueryContext{}}, &CollectMeta{})
 		require.NoError(t, err)
 		assert.True(t, called)
 	})
@@ -43,7 +43,7 @@ func TestCollectFields(t *testing.T) {
 		}
 		SetFieldCollector(fn)
 
-		err := CollectFields(ctx, &QueryBase{Ctx: &QueryContext{}}, &CollectMeta{})
+		err := CollectFields(ctx, &testQuery{Ctx: &QueryContext{}}, &CollectMeta{})
 		assert.EqualError(t, err, "collection failed")
 	})
 
@@ -57,7 +57,7 @@ func TestCollectFields(t *testing.T) {
 		}
 		SetFieldCollector(fn)
 
-		err := CollectFields(ctx, &QueryBase{Ctx: &QueryContext{}}, &CollectMeta{}, "Node", "User")
+		err := CollectFields(ctx, &testQuery{Ctx: &QueryContext{}}, &CollectMeta{}, "Node", "User")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"Node", "User"}, got)
 	})
@@ -77,10 +77,10 @@ func TestCollectFields_PassesMetaThrough(t *testing.T) {
 	})
 
 	meta := &CollectMeta{CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}}}
-	require.NoError(t, CollectFields(ctx, &QueryBase{Ctx: &QueryContext{}}, meta))
+	require.NoError(t, CollectFields(ctx, &testQuery{Ctx: &QueryContext{}}, meta))
 	assert.Same(t, meta, got, "collector must receive the caller's CollectMeta")
 
 	got = nil
-	require.NoError(t, CollectFields(ctx, &QueryBase{Ctx: &QueryContext{}}, nil))
+	require.NoError(t, CollectFields(ctx, &testQuery{Ctx: &QueryContext{}}, nil))
 	assert.Nil(t, got, "nil meta must not reach the collector")
 }

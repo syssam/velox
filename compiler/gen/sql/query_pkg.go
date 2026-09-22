@@ -13,8 +13,8 @@ import (
 // directly (same package, no import cycle). Each query implements the
 // entity.XxxQuerier interface from the entity/ package.
 //
-// The generated query struct holds ALL query state directly — no embedded
-// *runtime.QueryBase (no embedding). This makes query builders self-contained like Ent ORM.
+// The generated query struct holds ALL query state directly — nothing is
+// embedded. This makes query builders self-contained like Ent ORM.
 //
 // Output: query/{entity_name}.go
 
@@ -116,7 +116,6 @@ func genQueryPkg(h gen.GeneratorHelper, t *gen.Type, _ []*gen.Type, entityPkgPat
 	qg.genStruct()
 	qg.genConstructorAndWiring()
 	qg.genFieldCollectable()
-	qg.genFromEdge()
 	qg.genSpecBuilders()
 	qg.genChainers()
 	qg.genWithEdges()
@@ -364,45 +363,6 @@ func (qg *queryGen) genFieldCollectable() {
 				sw.Case(jen.Lit(edge.Name)).Block(caseStmts...)
 			}
 		})
-	})
-}
-
-// genFromEdge emits NewXxxQueryFromEdge, which adapts a *runtime.EdgeQuery
-// into a self-contained query (used by contrib/graphql pagination).
-func (qg *queryGen) genFromEdge() {
-	// =========================================================================
-	// NewXxxQueryFromEdge — adapts a *runtime.EdgeQuery into a self-contained query.
-	// Used by GraphQL contrib (pagination) which receives an EdgeQuery from edge resolvers.
-	// =========================================================================
-
-	qg.f.Commentf("New%sFromEdge creates a %s from an existing EdgeQuery.", qg.queryName, qg.queryName)
-	qg.f.Commentf("The EdgeQuery fields are copied into the self-contained query struct via exported getters.")
-	qg.f.Comment("SP-2: the inters field is a *entity.InterceptorStore pointer recovered")
-	qg.f.Comment("from cfg.InterStore (type-asserted with nil-safe fallback). Callers that")
-	qg.f.Comment("need a populated store must pass a Config built via the standard client")
-	qg.f.Comment("constructor; the EdgeQuery's own inters slice is no longer carried.")
-	qg.f.Func().Id("New"+qg.queryName+"FromEdge").Params(
-		jen.Id("cfg").Qual(runtimePkg, "Config"),
-		jen.Id("eq").Op("*").Qual(runtimePkg, "EdgeQuery"),
-	).Op("*").Id(qg.queryName).BlockFunc(func(g *jen.Group) {
-		// inters, _ := cfg.InterStore.(*entity.InterceptorStore)
-		// if inters == nil { inters = &entity.InterceptorStore{} }
-		g.List(jen.Id("inters"), jen.Id("_")).Op(":=").Id("cfg").Dot("InterStore").Assert(
-			jen.Op("*").Qual(qg.entityPkgImportPath, "InterceptorStore"),
-		)
-		g.If(jen.Id("inters").Op("==").Nil()).Block(
-			jen.Id("inters").Op("=").Op("&").Qual(qg.entityPkgImportPath, "InterceptorStore").Values(),
-		)
-		g.Return(jen.Op("&").Id(qg.queryName).Values(jen.Dict{
-			jen.Id("config"):     jen.Id("cfg"),
-			jen.Id("ctx"):        jen.Id("eq").Dot("GetCtx").Call(),
-			jen.Id("predicates"): jen.Id("eq").Dot("GetPredicates").Call(),
-			jen.Id("order"):      jen.Id("eq").Dot("GetOrder").Call(),
-			jen.Id("modifiers"):  jen.Id("eq").Dot("GetModifiers").Call(),
-			jen.Id("inters"):     jen.Id("inters"),
-			jen.Id("withFKs"):    jen.Id("eq").Dot("GetWithFKs").Call(),
-			jen.Id("path"):       jen.Id("eq").Dot("GetPath").Call(),
-		}))
 	})
 }
 

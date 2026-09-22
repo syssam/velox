@@ -62,48 +62,10 @@ func (c *QueryContext) AppendFieldOnce(f string) {
 	c.Fields = append(c.Fields, f)
 }
 
-// QueryBase holds non-generic query state. Compiled once, shared by all entity queries.
-type QueryBase struct {
-	Driver      dialect.Driver
-	Table       string
-	Columns     []string
-	IDColumn    string
-	FKColumns   []string
-	IDFieldType field.Type // ID field type for Count/Exist queries.
-	Ctx         *QueryContext
-	Path        func(context.Context) (*sql.Selector, error) // Graph traversal path (set by QueryXxx methods).
-	Predicates  []func(*sql.Selector)
-	Order       []func(*sql.Selector)
-	Modifiers   []func(*sql.Selector)
-	Edges       []EdgeLoad
-	WithFKs     bool
-	Inters      []Interceptor
-}
-
-// NewQueryBase creates a new QueryBase.
-func NewQueryBase(drv dialect.Driver, table string, columns []string, idColumn string, fkColumns []string, typeName string) *QueryBase {
-	return &QueryBase{
-		Driver:    drv,
-		Table:     table,
-		Columns:   columns,
-		IDColumn:  idColumn,
-		FKColumns: fkColumns,
-		Ctx:       &QueryContext{Type: typeName},
-	}
-}
-
-// GetIDColumn returns the primary key column name.
-// Implements FieldCollectable.
-func (q *QueryBase) GetIDColumn() string { return q.IDColumn }
-
-// GetCtx returns the query context for field projection.
-// Implements FieldCollectable.
-func (q *QueryBase) GetCtx() *QueryContext { return q.Ctx }
-
 // QueryReader provides read-only access to query state. Generated query
-// types and QueryBase both satisfy this interface. Top-level functions
-// (BuildQueryFrom, BuildSelectorFrom, MakeQuerySpec) accept QueryReader
-// so generated queries can skip the queryBase() allocation bridge.
+// types satisfy this interface. Top-level functions (BuildQueryFrom,
+// BuildSelectorFrom, MakeQuerySpec) accept QueryReader so generated
+// queries can share one implementation without an allocation bridge.
 type QueryReader interface {
 	GetDriver() dialect.Driver
 	GetTable() string
@@ -117,41 +79,6 @@ type QueryReader interface {
 	GetOrder() []func(*sql.Selector)
 	GetModifiers() []func(*sql.Selector)
 	GetWithFKs() bool
-}
-
-// GetDriver returns the dialect driver. Implements QueryReader.
-func (q *QueryBase) GetDriver() dialect.Driver { return q.Driver }
-
-// GetTable returns the primary table name. Implements QueryReader.
-func (q *QueryBase) GetTable() string { return q.Table }
-
-// GetColumns returns the default column list. Implements QueryReader.
-func (q *QueryBase) GetColumns() []string { return q.Columns }
-
-// GetFKColumns returns the foreign-key columns needed for edge loading. Implements QueryReader.
-func (q *QueryBase) GetFKColumns() []string { return q.FKColumns }
-
-// GetIDFieldType returns the schema type of the ID field. Implements QueryReader.
-func (q *QueryBase) GetIDFieldType() field.Type { return q.IDFieldType }
-
-// GetPath returns the graph-traversal path function. Implements QueryReader.
-func (q *QueryBase) GetPath() func(context.Context) (*sql.Selector, error) { return q.Path }
-
-// GetPredicates returns the registered WHERE predicates. Implements QueryReader.
-func (q *QueryBase) GetPredicates() []func(*sql.Selector) { return q.Predicates }
-
-// GetOrder returns the registered ORDER BY functions. Implements QueryReader.
-func (q *QueryBase) GetOrder() []func(*sql.Selector) { return q.Order }
-
-// GetModifiers returns the registered query modifiers. Implements QueryReader.
-func (q *QueryBase) GetModifiers() []func(*sql.Selector) { return q.Modifiers }
-
-// GetWithFKs reports whether FK columns should be included in selection. Implements QueryReader.
-func (q *QueryBase) GetWithFKs() bool { return q.WithFKs }
-
-// Where appends predicate functions to the query.
-func (q *QueryBase) Where(ps ...func(*sql.Selector)) {
-	q.Predicates = append(q.Predicates, ps...)
 }
 
 // PredicateAdder is the minimal interface implemented by generated
@@ -172,64 +99,8 @@ type PredicateAdder interface {
 	AddPredicate(func(*sql.Selector))
 }
 
-// SetLimit sets the query limit.
-func (q *QueryBase) SetLimit(n int) { q.Ctx.Limit = &n }
-
-// SetOffset sets the query offset.
-func (q *QueryBase) SetOffset(n int) { q.Ctx.Offset = &n }
-
-// AddOrder appends order functions to the query.
-func (q *QueryBase) AddOrder(o ...func(*sql.Selector)) {
-	q.Order = append(q.Order, o...)
-}
-
-// AddModifier appends modifier functions to the query.
-func (q *QueryBase) AddModifier(m ...func(*sql.Selector)) {
-	q.Modifiers = append(q.Modifiers, m...)
-}
-
-// SetUnique sets whether the query should return distinct results.
-func (q *QueryBase) SetUnique(v bool) { q.Ctx.Unique = &v }
-
-// WithEdgeLoad adds an edge to be eagerly loaded.
-// Also enables FK column selection, which M2O edges need to resolve parent→child.
-func (q *QueryBase) WithEdgeLoad(name string, opts ...LoadOption) {
-	q.Edges = append(q.Edges, EdgeLoad{Name: name, Opts: opts})
-	q.WithFKs = true
-}
-
-// WithNamedEdgeLoad adds a named edge load for distinguishing multiple loads of the same edge.
-func (q *QueryBase) WithNamedEdgeLoad(label, name string, opts ...LoadOption) {
-	q.Edges = append(q.Edges, EdgeLoad{Name: name, Label: label, Opts: opts})
-	q.WithFKs = true
-}
-
-// ForUpdate locks the selected rows against concurrent updates.
-func (q *QueryBase) ForUpdate(opts ...sql.LockOption) {
-	q.SetUnique(false)
-	q.AddModifier(func(s *sql.Selector) { s.ForUpdate(opts...) })
-}
-
-// ForShare locks the selected rows in shared mode.
-func (q *QueryBase) ForShare(opts ...sql.LockOption) {
-	q.SetUnique(false)
-	q.AddModifier(func(s *sql.Selector) { s.ForShare(opts...) })
-}
-
-// ForNoKeyUpdate is like ForUpdate but weaker. PostgreSQL only.
-func (q *QueryBase) ForNoKeyUpdate(opts ...sql.LockOption) {
-	q.SetUnique(false)
-	q.AddModifier(func(s *sql.Selector) { s.For(sql.LockNoKeyUpdate, opts...) })
-}
-
-// ForKeyShare is the weakest row-level lock. PostgreSQL only.
-func (q *QueryBase) ForKeyShare(opts ...sql.LockOption) {
-	q.SetUnique(false)
-	q.AddModifier(func(s *sql.Selector) { s.For(sql.LockKeyShare, opts...) })
-}
-
 // CloneSlice returns nil if s is empty, otherwise an independent copy of s.
-// Used by QueryBase.Clone and by per-entity generated Query.clone() to keep
+// Used by per-entity generated Query.clone() to keep
 // the clone idiom in one place. Exported because generated query packages
 // call it across the package boundary.
 //
@@ -239,7 +110,7 @@ func (q *QueryBase) ForKeyShare(opts ...sql.LockOption) {
 // under reflect.DeepEqual and direct nil-checks, so this is not a drop-in
 // replacement for `append([]T{}, s...)` if a caller relies on those. For
 // populated slices, deep-copy semantics match. Pinned by
-// TestQueryBase_Clone_EmptyAllocInvariant and TestQueryBase_Clone_PopulatedDeepCopy
+// TestCloneSlice_EmptyReturnsNil and TestCloneSlice_PopulatedDeepCopy
 // in runtime/query_test.go.
 func CloneSlice[T any](s []T) []T {
 	if len(s) == 0 {
@@ -248,38 +119,6 @@ func CloneSlice[T any](s []T) []T {
 	out := make([]T, len(s))
 	copy(out, s)
 	return out
-}
-
-// Clone returns a deep copy of the QueryBase. Slice fields that are empty
-// in the source stay nil in the clone (see CloneSlice). Deep-copy semantics
-// for populated slices are pinned by TestQueryBase_Clone_PopulatedDeepCopy.
-func (q *QueryBase) Clone() *QueryBase {
-	if q == nil {
-		return nil
-	}
-	clone := *q
-	clone.Ctx = q.Ctx.Clone()
-	clone.Predicates = CloneSlice(q.Predicates)
-	clone.Order = CloneSlice(q.Order)
-	clone.Modifiers = CloneSlice(q.Modifiers)
-	clone.Edges = CloneSlice(q.Edges)
-	clone.Inters = CloneSlice(q.Inters)
-	return &clone
-}
-
-// BuildQuery delegates to BuildQueryFrom for backward compatibility.
-func (q *QueryBase) BuildQuery(ctx context.Context) (*sql.Selector, error) {
-	return BuildQueryFrom(ctx, q)
-}
-
-// BuildSelector delegates to BuildSelectorFrom for backward compatibility.
-func (q *QueryBase) BuildSelector(ctx context.Context) (*sql.Selector, error) {
-	return BuildSelectorFrom(ctx, q)
-}
-
-// QuerySpec delegates to MakeQuerySpec for backward compatibility.
-func (q *QueryBase) QuerySpec(idFieldType field.Type) *sqlgraph.QuerySpec {
-	return MakeQuerySpec(q, idFieldType)
 }
 
 // resolvePathFrom resolves the graph traversal path from a QueryReader and returns
@@ -435,95 +274,6 @@ func MakeQuerySpec(q QueryReader, idFieldType field.Type) *sqlgraph.QuerySpec {
 	return spec
 }
 
-// QueryAllSC executes a SELECT query and returns all matching entities as []any.
-// Used by EdgeQuery and other non-generic query paths.
-func QueryAllSC(ctx context.Context, q QueryReader, sc *ScanConfig) ([]any, error) {
-	from, err := resolvePathFrom(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	spec := MakeQuerySpec(q, sc.IDFieldType)
-	spec.From = from
-	drv := q.GetDriver()
-	var nodes []any
-
-	spec.ScanValues = sc.ScanValues
-	spec.Assign = func(columns []string, values []any) error {
-		node := sc.New()
-		if sc.SetDriver != nil {
-			sc.SetDriver(node, drv)
-		}
-		nodes = append(nodes, node)
-		return sc.Assign(node, columns, values)
-	}
-
-	if err := sqlgraph.QueryNodes(ctx, drv, spec); err != nil {
-		return nil, err
-	}
-	return nodes, nil
-}
-
-// QueryCount executes a COUNT query.
-func QueryCount(ctx context.Context, q QueryReader, idFieldType field.Type) (int, error) {
-	from, err := resolvePathFrom(ctx, q)
-	if err != nil {
-		return 0, err
-	}
-	// Build spec then nil columns so the generated SQL is COUNT(*)
-	// instead of COUNT(col1, col2, ...) which fails on SQLite.
-	// QueryReader is read-only, so we clear columns on the spec directly
-	// rather than cloning.
-	spec := MakeQuerySpec(q, idFieldType)
-	spec.Node.Columns = nil
-	spec.From = from
-	return sqlgraph.CountNodes(ctx, q.GetDriver(), spec)
-}
-
-// QueryExist returns true if any matching entity exists.
-func QueryExist(ctx context.Context, q QueryReader, idFieldType field.Type) (bool, error) {
-	n, err := QueryCount(ctx, q, idFieldType)
-	return n > 0, err
-}
-
-// QueryIDsOnly scans only the ID column from the query.
-// The base is cloned internally so callers do not need to pre-clone.
-func QueryIDsOnly(ctx context.Context, base *QueryBase) ([]any, error) {
-	return queryIDsOnlyNoClone(ctx, base.Clone())
-}
-
-// queryIDsOnlyNoClone is the internal implementation of QueryIDsOnly that does
-// not clone. Used by QueryFirstIDOnly and QueryOnlyIDOnly which pre-clone.
-func queryIDsOnlyNoClone(ctx context.Context, base *QueryBase) ([]any, error) {
-	from, err := resolvePathFrom(ctx, base)
-	if err != nil {
-		return nil, err
-	}
-	base.Columns = []string{base.IDColumn}
-	spec := base.QuerySpec(base.IDFieldType)
-	spec.From = from
-
-	idFieldType := base.IDFieldType
-	var ids []any
-	spec.ScanValues = func(_ []string) ([]any, error) {
-		return IDScanValues(idFieldType), nil
-	}
-	spec.Assign = func(_ []string, values []any) error {
-		if len(values) == 0 {
-			return fmt.Errorf("velox: QueryIDs: no values returned")
-		}
-		id, err := ExtractID(values[0], idFieldType)
-		if err != nil {
-			return err
-		}
-		ids = append(ids, id)
-		return nil
-	}
-	if err := sqlgraph.QueryNodes(ctx, base.Driver, spec); err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
 // IDScanValues returns scanner values for the ID column based on field type.
 func IDScanValues(ft field.Type) []any {
 	switch ft {
@@ -584,38 +334,6 @@ func ExtractID(v any, ft field.Type) (any, error) {
 		default: // TypeInt (default velox ID type) and any future integer-like type
 			return int(ni.Int64), nil
 		}
-	}
-}
-
-// QueryFirstIDOnly returns the first matching entity ID. Uses lightweight ID-only scanning.
-func QueryFirstIDOnly(ctx context.Context, base *QueryBase) (any, error) {
-	clone := base.Clone()
-	clone.SetLimit(1)
-	ids, err := queryIDsOnlyNoClone(ctx, clone)
-	if err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		return nil, NewNotFoundError(base.Ctx.Type)
-	}
-	return ids[0], nil
-}
-
-// QueryOnlyIDOnly returns the only matching entity ID. Uses lightweight ID-only scanning.
-func QueryOnlyIDOnly(ctx context.Context, base *QueryBase) (any, error) {
-	clone := base.Clone()
-	clone.SetLimit(2)
-	ids, err := queryIDsOnlyNoClone(ctx, clone)
-	if err != nil {
-		return nil, err
-	}
-	switch len(ids) {
-	case 0:
-		return nil, NewNotFoundError(base.Ctx.Type)
-	case 1:
-		return ids[0], nil
-	default:
-		return nil, NewNotSingularError(base.Ctx.Type)
 	}
 }
 
@@ -722,24 +440,7 @@ func QuerySelect(ctx context.Context, q QueryReader, fns []AggregateFunc, v any)
 }
 
 // =============================================================================
-// ScanConfig
-// =============================================================================
-
-// ScanConfig holds scanning functions needed for edge loading and CRUD operations.
-type ScanConfig struct {
-	Table       string
-	Columns     []string
-	IDColumn    string
-	IDFieldType field.Type
-	ScanValues  func(columns []string) ([]any, error)
-	New         func() any
-	Assign      func(entity any, columns []string, values []any) error
-	GetID       func(entity any) any
-	SetDriver   func(entity any, drv dialect.Driver)
-}
-
-// =============================================================================
-// Typed Scanning (ScanAll / ScanFirst / ScanOnly / ScanMapRows)
+// Typed Scanning (ScanAll / ScanFirst)
 // =============================================================================
 
 // Scannable is the interface that generated entity types implement for DB row scanning.
@@ -816,76 +517,6 @@ func ScanFirst[T any, PT ScannableOf[T]](ctx context.Context, drv dialect.Driver
 		return nil, NewNotFoundError(typeName)
 	}
 	return nodes[0], nil
-}
-
-// ScanMapRows executes the query and scans all rows into []map[string]any.
-// Values are scanned as their natural SQL types (int64, float64, string, []byte, etc.).
-func ScanMapRows(ctx context.Context, drv dialect.Driver, build func(context.Context) (*sql.Selector, error)) ([]map[string]any, error) {
-	selector, err := build(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows := &sql.Rows{}
-	query, args := selector.Query()
-	if qErr := drv.Query(ctx, query, args, rows); qErr != nil {
-		return nil, qErr
-	}
-	defer rows.Close()
-
-	columns, err := rows.ColumnTypes()
-	if err != nil {
-		return nil, err
-	}
-	colNames := make([]string, len(columns))
-	for i, c := range columns {
-		colNames[i] = c.Name()
-	}
-
-	var result []map[string]any
-	for rows.Next() {
-		values := make([]any, len(colNames))
-		for i := range values {
-			values[i] = new(any)
-		}
-		if err := rows.Scan(values...); err != nil {
-			return nil, err
-		}
-		row := make(map[string]any, len(colNames))
-		for i, col := range colNames {
-			row[col] = *(values[i].(*any)) //nolint:errcheck // values[i] is always *any from our allocation above
-		}
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// ScanOnly executes the query and returns exactly one result.
-// LIMIT 2 is injected internally to detect non-singular results
-// without scanning the full table.
-// typeName is used for NotFoundError/NotSingularError messages.
-func ScanOnly[T any, PT ScannableOf[T]](ctx context.Context, drv dialect.Driver, build func(context.Context) (*sql.Selector, error), typeName string) (*T, error) {
-	nodes, err := ScanAll[T, PT](ctx, drv, func(ctx context.Context) (*sql.Selector, error) {
-		s, err := build(ctx)
-		if err != nil {
-			return nil, err
-		}
-		s.Limit(2)
-		return s, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	switch len(nodes) {
-	case 0:
-		return nil, NewNotFoundError(typeName)
-	case 1:
-		return nodes[0], nil
-	default:
-		return nil, NewNotSingularError(typeName)
-	}
 }
 
 // =============================================================================

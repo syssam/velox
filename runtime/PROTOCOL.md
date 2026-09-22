@@ -16,7 +16,7 @@ Every clause below is pinned by an AST-level test in `compiler/gen/sql/wiring_te
 
 1.4. Hooks use a matching `*entity.HookStore` pointer with the same construction-time wiring.
 
-1.5. `EntityClient.Query()` calls `NewXxxQuery(c.config)` then `q.SetInterStore(c.interStore)`. `EdgeQuery` holds its interceptors in a plain `inters []Interceptor` field populated from the query builder — there is no dynamic lookup. `runtime.EntityInterceptors`, `InterceptorAccessor` and `PackageInterceptors` were removed along with the package-level `Interceptors` array they served; schema-level `Interceptors()` is now rejected by `Graph.Validate`.
+1.5. `EntityClient.Query()` calls `NewXxxQuery(c.config)` then `q.SetInterStore(c.interStore)`. There is no dynamic interceptor lookup. `runtime.EntityInterceptors`, `InterceptorAccessor` and `PackageInterceptors` were removed along with the package-level `Interceptors` array they served; schema-level `Interceptors()` is now rejected by `Graph.Validate`.
 
 **Pinned by:** `TestNoSetIntersInterfaceAssertion`, `TestQueryHasInterceptorStorePointer`
 

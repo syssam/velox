@@ -73,48 +73,17 @@ func genEntityRuntime(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 }
 
 // genEntityRuntimeRegistration generates a single RegisterEntity call that
-// consolidates RegisterTypeInfo, RegisterColumns, RegisterMutator, and
-// RegisterEntityClient into one call per entity.
+// consolidates RegisterMutator and RegisterColumns into one call per entity.
 func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type) {
-	entityPkg := h.SharedEntityPkg()
 	leafPkg := h.LeafPkgPath(t)
-	entityType := func() *jen.Statement { return jen.Qual(entityPkg, t.Name) }
 
 	clientName := t.ClientName()
 	mutName := t.MutationName()
 
 	grp.Qual(runtimePkg, "RegisterEntity").Call(
 		jen.Qual(runtimePkg, "EntityRegistration").Values(jen.Dict{
-			jen.Id("Name"):  jen.Lit(t.Name),
-			jen.Id("Table"): jen.Qual(leafPkg, "Table"),
-			jen.Id("TypeInfo"): jen.Op("&").Qual(runtimePkg, "RegisteredTypeInfo").Values(jen.Dict{
-				jen.Id("Table"):       jen.Qual(leafPkg, "Table"),
-				jen.Id("Columns"):     jen.Qual(leafPkg, "Columns"),
-				jen.Id("IDColumn"):    jen.Qual(leafPkg, "FieldID"),
-				jen.Id("IDFieldType"): jen.Qual(schemaPkg(), t.ID.Type.ConstName()),
-				jen.Id("ScanValues"): jen.Func().Params(
-					jen.Id("columns").Index().String(),
-				).Params(
-					jen.Index().Any(), jen.Error(),
-				).Block(
-					jen.Return(jen.Parens(jen.Op("&").Add(entityType()).Values()).Dot("ScanValues").Call(jen.Id("columns"))),
-				),
-				jen.Id("New"): jen.Func().Params().Any().Block(
-					jen.Return(jen.Op("&").Add(entityType()).Values()),
-				),
-				jen.Id("Assign"): jen.Func().Params(
-					jen.Id("_e").Any(),
-					jen.Id("columns").Index().String(),
-					jen.Id("values").Index().Any(),
-				).Error().Block(
-					jen.Return(jen.Id("_e").Assert(jen.Op("*").Add(entityType())).Dot("AssignValues").Call(jen.Id("columns"), jen.Id("values"))),
-				),
-				jen.Id("GetID"): jen.Func().Params(
-					jen.Id("_e").Any(),
-				).Any().Block(
-					jen.Return(jen.Id("_e").Assert(jen.Op("*").Add(entityType())).Dot("ID")),
-				),
-			}),
+			jen.Id("Name"):        jen.Lit(t.Name),
+			jen.Id("Table"):       jen.Qual(leafPkg, "Table"),
 			jen.Id("ValidColumn"): jen.Qual(leafPkg, "ValidColumn"),
 			jen.Id("Mutator"): jen.Func().Params(
 				jen.Id("ctx").Qual("context", "Context"),
@@ -127,11 +96,6 @@ func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.
 						jen.Id("m").Assert(jen.Op("*").Id(mutName)),
 					),
 				),
-			),
-			jen.Id("Client"): jen.Func().Params(
-				jen.Id("cfg").Qual(runtimePkg, "Config"),
-			).Any().Block(
-				jen.Return(jen.Id("New" + clientName).Call(jen.Id("cfg"))),
 			),
 		}),
 	)

@@ -17,9 +17,31 @@ func init() {
 	RegisterFieldCollector()
 }
 
+// collectQuery is a minimal runtime.FieldCollectable recording what the
+// collector asks for: projected columns on Ctx.Fields, eager loads on Edges.
+type collectQuery struct {
+	IDColumn string
+	Ctx      *runtime.QueryContext
+	Edges    []runtime.EdgeLoad
+	WithFKs  bool
+}
+
+func newCollectQuery(idColumn, typeName string) *collectQuery {
+	return &collectQuery{IDColumn: idColumn, Ctx: &runtime.QueryContext{Type: typeName}}
+}
+
+func (q *collectQuery) GetIDColumn() string { return q.IDColumn }
+
+func (q *collectQuery) GetCtx() *runtime.QueryContext { return q.Ctx }
+
+func (q *collectQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) {
+	q.Edges = append(q.Edges, runtime.EdgeLoad{Name: name, Opts: opts})
+	q.WithFKs = true
+}
+
 func TestCollectFields_NonGraphQLContext(t *testing.T) {
 	ctx := context.Background()
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: nil, Edges: nil})
 	assert.NoError(t, err)
 	// No fields should have been collected since there's no GraphQL field context.
@@ -30,7 +52,7 @@ func TestCollectFields_NoOperationContext(t *testing.T) {
 	// A plain context.Background() has no GraphQL field context,
 	// so CollectFields should return nil immediately.
 	ctx := context.Background()
-	q := runtime.NewQueryBase(nil, "posts", []string{"id", "title"}, "id", nil, "Post")
+	q := newCollectQuery("id", "Post")
 	fields := map[string]string{"title": "title"}
 	edges := map[string]runtime.EdgeMeta{
 		"author": {Name: "author", Target: "users", Unique: true},
@@ -75,7 +97,7 @@ func TestCollectFields_ScalarFieldProjection(t *testing.T) {
 		"name":  "name",
 		"email": "email",
 	}
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name", "email", "age"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
@@ -96,7 +118,7 @@ func TestCollectFields_IDAndTypenameSkipped(t *testing.T) {
 	ctx := newGQLContext(t, selections)
 
 	fields := map[string]string{"name": "name"}
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
@@ -121,7 +143,7 @@ func TestCollectFields_EdgeLoadScheduling(t *testing.T) {
 			FKColumns: []string{"user_posts"},
 		},
 	}
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	require.NoError(t, err)
@@ -142,7 +164,7 @@ func TestCollectFields_UnknownFieldFallsBackToSelectAll(t *testing.T) {
 	ctx := newGQLContext(t, selections)
 
 	fields := map[string]string{"name": "name"}
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name", "email", "age"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
@@ -187,7 +209,7 @@ func TestCollectFields_RelayEdgePagination(t *testing.T) {
 			FKColumns: []string{"user_posts"},
 		},
 	}
-	q := runtime.NewQueryBase(nil, "users", []string{"id"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	require.NoError(t, err)
@@ -221,7 +243,7 @@ func TestCollectFields_MultipleEdgesAndScalars(t *testing.T) {
 		"posts":  {Name: "posts", Target: "posts", FKColumns: []string{"user_posts"}},
 		"groups": {Name: "groups", Target: "groups", FKColumns: []string{"user_groups"}},
 	}
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
 	require.NoError(t, err)
@@ -300,7 +322,7 @@ func TestCollectFields_RelayLastArg(t *testing.T) {
 	edges := map[string]runtime.EdgeMeta{
 		"posts": {Name: "posts", Target: "posts", Relay: true, FKColumns: []string{"user_posts"}},
 	}
-	q := runtime.NewQueryBase(nil, "users", []string{"id"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: map[string]string{}, Edges: edges})
 	require.NoError(t, err)
@@ -319,7 +341,7 @@ func TestCollectFields_EmptySelections(t *testing.T) {
 	ctx := newGQLContext(t, selections)
 
 	fields := map[string]string{"name": "name"}
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 
 	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
 	require.NoError(t, err)
@@ -339,7 +361,7 @@ func TestCollectFields_CollectedFor(t *testing.T) {
 		&ast.Field{Name: "fullName", Alias: "fullName"},
 	}
 	ctx := newGQLContext(t, selections)
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "first_name", "last_name", "age"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 	meta := &runtime.CollectMeta{
 		FieldColumns: map[string]string{"age": "age"},
 		CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}},
@@ -359,7 +381,7 @@ func TestCollectFields_CollectedFor_UnknownStillFallsBack(t *testing.T) {
 		&ast.Field{Name: "initials", Alias: "initials"},
 	}
 	ctx := newGQLContext(t, selections)
-	q := runtime.NewQueryBase(nil, "users", []string{"id", "first_name", "last_name"}, "id", nil, "User")
+	q := newCollectQuery("id", "User")
 	meta := &runtime.CollectMeta{CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}}}
 
 	require.NoError(t, runtime.CollectFields(ctx, q, meta))

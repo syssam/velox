@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	runtime "github.com/syssam/velox/runtime"
-	field "github.com/syssam/velox/schema/field"
-	entity "github.com/test/project/ent/entity"
 	user "github.com/test/project/ent/user"
 )
 
@@ -18,32 +16,11 @@ import (
 // to the package variables.
 func init() {
 	runtime.RegisterEntity(runtime.EntityRegistration{
-		Client: func(cfg runtime.Config) any {
-			return NewUserClient(cfg)
-		},
 		Mutator: func(ctx context.Context, cfg runtime.Config, m any) (any, error) {
 			return NewUserClient(cfg).mutate(ctx, m.(*UserMutation))
 		},
-		Name:  "User",
-		Table: user.Table,
-		TypeInfo: &runtime.RegisteredTypeInfo{
-			Assign: func(_e any, columns []string, values []any) error {
-				return _e.(*entity.User).AssignValues(columns, values)
-			},
-			Columns: user.Columns,
-			GetID: func(_e any) any {
-				return _e.(*entity.User).ID
-			},
-			IDColumn:    user.FieldID,
-			IDFieldType: field.TypeInt64,
-			New: func() any {
-				return &entity.User{}
-			},
-			ScanValues: func(columns []string) ([]any, error) {
-				return (&entity.User{}).ScanValues(columns)
-			},
-			Table: user.Table,
-		},
+		Name:        "User",
+		Table:       user.Table,
 		ValidColumn: user.ValidColumn,
 	})
 	runtime.RegisterNodeResolver(user.Table, runtime.NodeResolver{

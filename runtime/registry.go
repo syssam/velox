@@ -12,7 +12,7 @@ import (
 )
 
 // =============================================================================
-// Mutator / Query Factory / Entity Client Registry
+// Mutator / Query Factory Registry
 // =============================================================================
 
 // MutatorFunc is a function that executes a mutation for a specific entity type.
@@ -80,34 +80,6 @@ func NewEntityQuery(name string, cfg Config) any {
 	return fn(cfg)
 }
 
-// EntityClientFunc creates a typed entity client from runtime config.
-type EntityClientFunc func(cfg Config) any
-
-var (
-	clientMu      sync.RWMutex
-	entityClients = map[string]EntityClientFunc{}
-)
-
-// RegisterEntityClient registers an entity client factory.
-func RegisterEntityClient(name string, fn EntityClientFunc) {
-	clientMu.Lock()
-	defer clientMu.Unlock()
-	entityClients[name] = fn
-	slog.Debug("velox: registered entity client", "entity", name)
-}
-
-// NewEntityClient creates a typed entity client by name.
-// Panics with a descriptive message if the entity is not registered.
-func NewEntityClient(name string, cfg Config) any {
-	clientMu.RLock()
-	defer clientMu.RUnlock()
-	fn, ok := entityClients[name]
-	if !ok {
-		panic(fmt.Sprintf("velox: entity client not registered for %q — ensure the entity package is imported (e.g., import _ \"your/pkg/%s\")", name, strings.ToLower(name)))
-	}
-	return fn(cfg)
-}
-
 // EntityRegistration holds all per-entity registration data.
 // Used by RegisterEntity() to register all entity metadata in one call.
 type EntityRegistration struct {
@@ -115,28 +87,22 @@ type EntityRegistration struct {
 	Name string
 	// Table is the SQL table name (e.g. "users").
 	Table string
-	// TypeInfo provides scan/assign capabilities.
-	TypeInfo *RegisteredTypeInfo
 	// ValidColumn checks if a column exists on this table.
 	ValidColumn func(string) bool
 	// Mutator executes mutations for this entity type.
 	Mutator MutatorFunc
-	// Client constructs a typed entity client from Config.
-	Client EntityClientFunc
 }
 
 // RegisterEntity registers all metadata for an entity in one call.
 // Called from generated entity sub-package init() functions.
 func RegisterEntity(r EntityRegistration) {
 	RegisterMutator(r.Name, r.Mutator)
-	RegisterEntityClient(r.Name, r.Client)
-	RegisterTypeInfo(r.Table, r.TypeInfo)
 	RegisterColumns(r.Table, r.ValidColumn)
 	slog.Debug("velox: registered entity", "entity", r.Name, "table", r.Table)
 }
 
 // ValidateRegistries checks that all registered entity types have consistent
-// registrations across mutator, query, and client registries. Call this at
+// registrations across the mutator and query registries. Call this at
 // application startup to catch missing imports or code generation issues early.
 // Returns nil if all registries are consistent.
 func ValidateRegistries() error {
@@ -144,26 +110,16 @@ func ValidateRegistries() error {
 	defer mutatorMu.RUnlock()
 	queryMu.RLock()
 	defer queryMu.RUnlock()
-	clientMu.RLock()
-	defer clientMu.RUnlock()
 
 	var errs []string
 	for _, name := range registeredNames {
 		if _, ok := queryFactories[name]; !ok {
 			errs = append(errs, fmt.Sprintf("entity %q: mutator registered but query factory missing", name))
 		}
-		if _, ok := entityClients[name]; !ok {
-			errs = append(errs, fmt.Sprintf("entity %q: mutator registered but entity client missing", name))
-		}
 	}
 	for name := range queryFactories {
 		if _, ok := mutators[name]; !ok {
 			errs = append(errs, fmt.Sprintf("entity %q: query factory registered but mutator missing", name))
-		}
-	}
-	for name := range entityClients {
-		if _, ok := mutators[name]; !ok {
-			errs = append(errs, fmt.Sprintf("entity %q: entity client registered but mutator missing", name))
 		}
 	}
 	if len(errs) > 0 {

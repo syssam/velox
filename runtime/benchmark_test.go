@@ -100,44 +100,12 @@ func BenchmarkQueryContext_AppendFieldOnce_Duplicate(b *testing.B) {
 }
 
 // =============================================================================
-// QueryBase Benchmarks
-// =============================================================================
-
-func BenchmarkQueryBase_Clone_Minimal(b *testing.B) {
-	qb := NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
-	for b.Loop() {
-		_ = qb.Clone()
-	}
-}
-
-func BenchmarkQueryBase_Clone_Full(b *testing.B) {
-	qb := NewQueryBase(nil, "users",
-		[]string{"id", "name", "email", "age", "created_at"},
-		"id",
-		[]string{"group_id", "org_id"},
-		"User",
-	)
-	qb.Where(func(*sql.Selector) {})
-	qb.Where(func(*sql.Selector) {})
-	qb.AddOrder(func(*sql.Selector) {})
-	qb.AddModifier(func(*sql.Selector) {})
-	qb.Ctx.Fields = []string{"id", "name", "email"}
-	unique := true
-	qb.Ctx.Unique = &unique
-	limit := 25
-	qb.Ctx.Limit = &limit
-	for b.Loop() {
-		_ = qb.Clone()
-	}
-}
-
-// =============================================================================
 // BuildSelectorFrom Benchmarks
 // =============================================================================
 
 func BenchmarkBuildSelectorFrom_Simple(b *testing.B) {
 	drv := newTestDB(b)
-	qb := NewQueryBase(drv, "users", []string{"id", "name", "email"}, "id", nil, "User")
+	qb := newTestQuery(drv, "users", []string{"id", "name", "email"}, "id", nil, "User")
 	ctx := context.Background()
 	for b.Loop() {
 		_, _ = BuildSelectorFrom(ctx, qb)
@@ -146,7 +114,7 @@ func BenchmarkBuildSelectorFrom_Simple(b *testing.B) {
 
 func BenchmarkBuildSelectorFrom_WithPredicates(b *testing.B) {
 	drv := newTestDB(b)
-	qb := NewQueryBase(drv, "users", []string{"id", "name", "email"}, "id", nil, "User")
+	qb := newTestQuery(drv, "users", []string{"id", "name", "email"}, "id", nil, "User")
 	qb.Where(func(s *sql.Selector) { s.Where(sql.EQ(s.C("name"), "alice")) })
 	qb.Where(func(s *sql.Selector) { s.Where(sql.GT(s.C("age"), 18)) })
 	ctx := context.Background()
@@ -157,7 +125,7 @@ func BenchmarkBuildSelectorFrom_WithPredicates(b *testing.B) {
 
 func BenchmarkBuildSelectorFrom_WithFieldProjection(b *testing.B) {
 	drv := newTestDB(b)
-	qb := NewQueryBase(drv, "users",
+	qb := newTestQuery(drv, "users",
 		[]string{"id", "name", "email", "age", "created_at", "updated_at"},
 		"id", nil, "User")
 	qb.Ctx.Fields = []string{"name", "email"}
@@ -169,7 +137,7 @@ func BenchmarkBuildSelectorFrom_WithFieldProjection(b *testing.B) {
 
 func BenchmarkBuildSelectorFrom_Full(b *testing.B) {
 	drv := newTestDB(b)
-	qb := NewQueryBase(drv, "users",
+	qb := newTestQuery(drv, "users",
 		[]string{"id", "name", "email", "age", "created_at"},
 		"id",
 		[]string{"group_id"},
@@ -196,14 +164,14 @@ func BenchmarkBuildSelectorFrom_Full(b *testing.B) {
 // =============================================================================
 
 func BenchmarkMakeQuerySpec_Simple(b *testing.B) {
-	qb := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", nil, "User")
+	qb := newTestQuery(nil, "users", []string{"id", "name", "email"}, "id", nil, "User")
 	for b.Loop() {
 		_ = MakeQuerySpec(qb, field.TypeInt)
 	}
 }
 
 func BenchmarkMakeQuerySpec_Full(b *testing.B) {
-	qb := NewQueryBase(nil, "users",
+	qb := newTestQuery(nil, "users",
 		[]string{"id", "name", "email", "age", "created_at"},
 		"id",
 		[]string{"group_id"},
@@ -235,17 +203,6 @@ func BenchmarkRegistryLookup_Mutator(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		_ = FindMutator("BenchEntity")
-	}
-}
-
-func BenchmarkRegistryLookup_TypeInfo(b *testing.B) {
-	RegisterTypeInfo("bench_entities", &RegisteredTypeInfo{
-		Table:   "bench_entities",
-		Columns: []string{"id", "name"},
-	})
-	b.ResetTimer()
-	for b.Loop() {
-		_ = FindRegisteredType("bench_entities")
 	}
 }
 
@@ -301,13 +258,12 @@ func benchmarkScanAll(b *testing.B, n int) {
 	}
 
 	meta := testTypeInfo()
-	qb := NewQueryBase(drv, "users", meta.Columns, meta.IDColumn, nil, "User")
-	sc := meta.ScanConfig()
+	qb := newTestQuery(drv, "users", meta.Columns, meta.IDColumn, nil, "User")
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for b.Loop() {
-		_, err := QueryAllSC(ctx, qb, sc)
+		_, err := ScanAll[testEntity, *testEntity](ctx, drv, qb.BuildSelector)
 		if err != nil {
 			b.Fatal(err)
 		}

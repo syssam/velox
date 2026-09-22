@@ -58,7 +58,7 @@ type (
 // =============================================================================
 
 // FieldCollectable is implemented by query builders that support GraphQL field collection.
-// Both the self-contained query types (in query/ package) and QueryBase implement this.
+// The generated self-contained query types (in the query/ package) implement it.
 type FieldCollectable interface {
 	// GetIDColumn returns the primary key column name.
 	GetIDColumn() string

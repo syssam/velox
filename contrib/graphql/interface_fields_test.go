@@ -236,7 +236,7 @@ func TestCollectFields_InterfaceField(t *testing.T) {
 	}
 
 	ctx := newGQLContext(t, ast.SelectionSet{item(&ast.Field{Name: "__typename"}, &ast.Field{Name: "id"})})
-	q := runtime.NewQueryBase(nil, "bookmarks", []string{"id", "name"}, "id", nil, "Bookmark")
+	q := newCollectQuery("id", "Bookmark")
 	require.NoError(t, runtime.CollectFields(ctx, q, meta))
 	assert.ElementsMatch(t, []string{"id", "bookmark_todo", "bookmark_project"}, q.Ctx.Fields)
 	assert.Empty(t, q.Edges, "covered by id: no edge load")
@@ -245,7 +245,7 @@ func TestCollectFields_InterfaceField(t *testing.T) {
 		TypeCondition: "Todo",
 		SelectionSet:  ast.SelectionSet{&ast.Field{Name: "text"}},
 	})})
-	q = runtime.NewQueryBase(nil, "bookmarks", []string{"id", "name"}, "id", nil, "Bookmark")
+	q = newCollectQuery("id", "Bookmark")
 	require.NoError(t, runtime.CollectFields(ctx, q, meta))
 	names := make([]string, 0, 2)
 	for _, e := range q.Edges {

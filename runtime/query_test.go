@@ -33,10 +33,6 @@ func (m *mockDriver) Tx(_ context.Context) (dialect.Tx, error)         { return 
 func (m *mockDriver) Close() error                                     { return nil }
 func (m *mockDriver) Dialect() string                                  { return m.dialectName }
 
-func TestQueryBaseImplementsQueryReader(t *testing.T) {
-	var _ QueryReader = (*QueryBase)(nil)
-}
-
 func TestQueryContext_Clone(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
 		var c *QueryContext
@@ -72,240 +68,6 @@ func TestQueryContext_AppendFieldOnce(t *testing.T) {
 	assert.Equal(t, []string{"name", "email"}, c.Fields)
 }
 
-func TestNewQueryBase(t *testing.T) {
-	q := NewQueryBase(nil, "users", []string{"id", "name"}, "id", []string{"org_id"}, "User")
-	assert.Equal(t, "users", q.Table)
-	assert.Equal(t, []string{"id", "name"}, q.Columns)
-	assert.Equal(t, "id", q.IDColumn)
-	assert.Equal(t, []string{"org_id"}, q.FKColumns)
-	assert.Equal(t, "User", q.Ctx.Type)
-}
-
-func TestQueryBase_Where(t *testing.T) {
-	q := NewQueryBase(nil, "users", nil, "id", nil, "User")
-	assert.Empty(t, q.Predicates)
-	q.Where(func(s *sql.Selector) {})
-	assert.Len(t, q.Predicates, 1)
-}
-
-func TestQueryBase_LimitOffset(t *testing.T) {
-	q := NewQueryBase(nil, "users", nil, "id", nil, "User")
-	assert.Nil(t, q.Ctx.Limit)
-	assert.Nil(t, q.Ctx.Offset)
-
-	q.SetLimit(10)
-	q.SetOffset(20)
-	require.NotNil(t, q.Ctx.Limit)
-	require.NotNil(t, q.Ctx.Offset)
-	assert.Equal(t, 10, *q.Ctx.Limit)
-	assert.Equal(t, 20, *q.Ctx.Offset)
-}
-
-func TestQueryBase_Order(t *testing.T) {
-	q := NewQueryBase(nil, "users", nil, "id", nil, "User")
-	q.AddOrder(func(s *sql.Selector) {})
-	assert.Len(t, q.Order, 1)
-}
-
-func TestQueryBase_Modifier(t *testing.T) {
-	q := NewQueryBase(nil, "users", nil, "id", nil, "User")
-	q.AddModifier(func(s *sql.Selector) {})
-	assert.Len(t, q.Modifiers, 1)
-}
-
-func TestQueryBase_Unique(t *testing.T) {
-	q := NewQueryBase(nil, "users", nil, "id", nil, "User")
-	assert.Nil(t, q.Ctx.Unique)
-	q.SetUnique(true)
-	require.NotNil(t, q.Ctx.Unique)
-	assert.True(t, *q.Ctx.Unique)
-}
-
-func TestQueryBase_WithEdgeLoad(t *testing.T) {
-	q := NewQueryBase(nil, "users", nil, "id", nil, "User")
-	q.WithEdgeLoad("posts", Limit(5))
-	require.Len(t, q.Edges, 1)
-	assert.Equal(t, "posts", q.Edges[0].Name)
-	assert.Len(t, q.Edges[0].Opts, 1)
-}
-
-func TestQueryBase_Clone(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		var q *QueryBase
-		assert.Nil(t, q.Clone())
-	})
-
-	t.Run("full", func(t *testing.T) {
-		q := NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
-		q.Where(func(s *sql.Selector) {})
-		q.AddOrder(func(s *sql.Selector) {})
-		q.AddModifier(func(s *sql.Selector) {})
-		q.WithEdgeLoad("posts")
-		q.SetLimit(10)
-
-		clone := q.Clone()
-		require.NotNil(t, clone)
-		assert.Equal(t, q.Table, clone.Table)
-		assert.Equal(t, q.Columns, clone.Columns)
-		assert.Len(t, clone.Predicates, 1)
-		assert.Len(t, clone.Order, 1)
-		assert.Len(t, clone.Modifiers, 1)
-		assert.Len(t, clone.Edges, 1)
-		require.NotNil(t, clone.Ctx.Limit)
-		assert.Equal(t, 10, *clone.Ctx.Limit)
-
-		// Mutating clone should not affect original.
-		clone.Predicates = append(clone.Predicates, func(s *sql.Selector) {})
-		assert.Len(t, q.Predicates, 1)
-		assert.Len(t, clone.Predicates, 2)
-	})
-}
-
-// TestQueryBase_Clone_PopulatedDeepCopy guards the deep-copy semantics of
-// QueryBase.Clone. Mutating the clone's slices must not affect the original.
-// Added in SP-9 before the zero-alloc refactor to prevent silent regression.
-func TestQueryBase_Clone_PopulatedDeepCopy(t *testing.T) {
-	pred := func(*sql.Selector) {}
-	ord := func(*sql.Selector) {}
-	mod := func(*sql.Selector) {}
-	original := &QueryBase{
-		Table:      "users",
-		Columns:    []string{"id", "name"},
-		IDColumn:   "id",
-		Ctx:        &QueryContext{Type: "User"},
-		Predicates: []func(*sql.Selector){pred},
-		Order:      []func(*sql.Selector){ord},
-		Modifiers:  []func(*sql.Selector){mod},
-		Edges:      []EdgeLoad{{Name: "posts"}},
-		Inters:     []Interceptor{InterceptFunc(func(Querier) Querier { return nil })},
-	}
-
-	clone := original.Clone()
-
-	// Sanity: the clone is a different *QueryBase but logically equal.
-	if clone == original {
-		t.Fatal("Clone returned same pointer")
-	}
-	if len(clone.Predicates) != 1 || len(clone.Order) != 1 || len(clone.Modifiers) != 1 || len(clone.Edges) != 1 || len(clone.Inters) != 1 {
-		t.Fatalf("clone lengths wrong: preds=%d order=%d mods=%d edges=%d inters=%d",
-			len(clone.Predicates), len(clone.Order), len(clone.Modifiers), len(clone.Edges), len(clone.Inters))
-	}
-
-	// Mutating clone slices must not affect original.
-	clone.Predicates = append(clone.Predicates, pred)
-	clone.Order = append(clone.Order, ord)
-	clone.Modifiers = append(clone.Modifiers, mod)
-	clone.Edges = append(clone.Edges, EdgeLoad{Name: "comments"})
-	clone.Inters = append(clone.Inters, InterceptFunc(func(Querier) Querier { return nil }))
-
-	if len(original.Predicates) != 1 {
-		t.Errorf("original.Predicates was mutated: len=%d", len(original.Predicates))
-	}
-	if len(original.Order) != 1 {
-		t.Errorf("original.Order was mutated: len=%d", len(original.Order))
-	}
-	if len(original.Modifiers) != 1 {
-		t.Errorf("original.Modifiers was mutated: len=%d", len(original.Modifiers))
-	}
-	if len(original.Edges) != 1 {
-		t.Errorf("original.Edges was mutated: len=%d", len(original.Edges))
-	}
-	if len(original.Inters) != 1 {
-		t.Errorf("original.Inters was mutated: len=%d", len(original.Inters))
-	}
-}
-
-// TestQueryBase_Clone_EmptyAllocInvariant locks in the allocation contract
-// for cloning an empty QueryBase. Exactly 2 allocations are expected:
-// the *QueryBase itself and the *QueryContext copy. Nothing else.
-//
-// This is a regression guard, not a failing TDD test. Go 1.22+ optimizes
-// `append([]X{}, nil...)` to zero allocations when stored into a field,
-// so cloning a QueryBase with no predicates/order/modifiers/edges/inters
-// already allocates only the 2 expected objects. If that optimization is
-// ever defeated — by a Go compiler regression, or by a velox refactor
-// that introduces non-nil empty slices or extra indirection — this test
-// fails loud.
-//
-// Uses `==` not `<=` so both directions are caught: any drift from the
-// contract (even favorable) is a signal worth investigating.
-func TestQueryBase_Clone_EmptyAllocInvariant(t *testing.T) {
-	base := &QueryBase{
-		Table:    "users",
-		IDColumn: "id",
-		Ctx:      &QueryContext{Type: "User"},
-	}
-	allocs := testing.AllocsPerRun(100, func() {
-		_ = base.Clone()
-	})
-	const want = 2.0 // *QueryBase + *QueryContext
-	switch {
-	case allocs > want:
-		t.Errorf("QueryBase.Clone empty-alloc regression: got %v allocs, want %v", allocs, want)
-	case allocs < want:
-		t.Errorf("QueryBase.Clone empty-alloc favorable drift: got %v allocs, want %v — update the want constant and docstring if this is intentional", allocs, want)
-	}
-}
-
-func TestQueryBase_QuerySpec(t *testing.T) {
-	q := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
-	q.SetLimit(10)
-	q.SetOffset(5)
-	q.SetUnique(true)
-	q.Where(func(s *sql.Selector) {})
-	q.AddOrder(func(s *sql.Selector) {})
-	q.AddModifier(func(s *sql.Selector) {})
-
-	spec := q.QuerySpec(field.TypeInt)
-	assert.Equal(t, "users", spec.Node.Table)
-	assert.Equal(t, "id", spec.Node.ID.Column)
-	assert.Equal(t, field.TypeInt, spec.Node.ID.Type)
-	assert.Equal(t, 10, spec.Limit)
-	assert.Equal(t, 5, spec.Offset)
-	assert.True(t, spec.Unique)
-	assert.NotNil(t, spec.Predicate)
-	assert.NotNil(t, spec.Order)
-	assert.Len(t, spec.Modifiers, 1)
-}
-
-func TestQueryBase_QuerySpec_WithFields(t *testing.T) {
-	q := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
-	q.Ctx.Fields = []string{"name", "email"}
-	q.WithFKs = true
-
-	spec := q.QuerySpec(field.TypeInt)
-	// Should include id + name + email + org_id (FK).
-	assert.Contains(t, spec.Node.Columns, "id")
-	assert.Contains(t, spec.Node.Columns, "name")
-	assert.Contains(t, spec.Node.Columns, "email")
-	assert.Contains(t, spec.Node.Columns, "org_id")
-}
-
-func TestQueryBase_QuerySpec_IDInFields(t *testing.T) {
-	q := NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
-	q.Ctx.Fields = []string{"id", "name"}
-
-	spec := q.QuerySpec(field.TypeInt)
-	// ID should appear only once.
-	idCount := 0
-	for _, c := range spec.Node.Columns {
-		if c == "id" {
-			idCount++
-		}
-	}
-	assert.Equal(t, 1, idCount)
-}
-
-func TestQueryBase_QuerySpec_NoPredicates(t *testing.T) {
-	q := NewQueryBase(nil, "users", []string{"id"}, "id", nil, "User")
-	spec := q.QuerySpec(field.TypeInt)
-	assert.Nil(t, spec.Predicate)
-	assert.Nil(t, spec.Order)
-	assert.Nil(t, spec.Modifiers)
-	assert.Equal(t, 0, spec.Limit)
-	assert.Equal(t, 0, spec.Offset)
-}
-
 func TestQueryGroupBy_SetsDialect(t *testing.T) {
 	sentinel := fmt.Errorf("query captured")
 	var capturedQuery string
@@ -317,7 +79,7 @@ func TestQueryGroupBy_SetsDialect(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	var result []map[string]any
 	err := QueryGroupBy(context.Background(), base, []string{"name"}, nil, &result)
 	require.ErrorIs(t, err, sentinel)
@@ -338,7 +100,7 @@ func TestQueryScan_SingleColumn(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	base.Ctx.Fields = []string{"name"}
 	var result []string
 	err := QueryScan(context.Background(), base, &result)
@@ -362,7 +124,7 @@ func TestQueryScan_AllColumns(t *testing.T) {
 	}
 
 	// No Fields set → all Columns should be selected.
-	base := NewQueryBase(drv, "users", []string{"id", "name", "age"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name", "age"}, "id", nil, "User")
 	var result []map[string]any
 	err := QueryScan(context.Background(), base, &result)
 	require.ErrorIs(t, err, sentinel)
@@ -383,7 +145,7 @@ func TestQueryScan_AppliesPredicatesOrderLimitOffset(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	base.Where(func(s *sql.Selector) {
 		s.Where(sql.EQ("active", true))
 	})
@@ -406,104 +168,6 @@ func TestQueryScan_AppliesPredicatesOrderLimitOffset(t *testing.T) {
 // QueryScalarSlice, QueryScalar, GroupByScalarSlice, GroupByScalar removed.
 // Scalar access is now handled by the Selector type (see selector_test.go).
 
-func TestQueryBase_WithNamedEdgeLoad(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-
-	base.WithNamedEdgeLoad("my_posts", "posts", Limit(5))
-	require.Len(t, base.Edges, 1)
-	assert.Equal(t, "posts", base.Edges[0].Name)
-	assert.Equal(t, "my_posts", base.Edges[0].Label)
-}
-
-func TestQueryBase_ForUpdate(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.Postgres}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-
-	base.ForUpdate()
-	require.NotNil(t, base.Ctx.Unique)
-	assert.False(t, *base.Ctx.Unique)
-	assert.Len(t, base.Modifiers, 1)
-}
-
-func TestQueryBase_ForShare(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.Postgres}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-
-	base.ForShare()
-	require.NotNil(t, base.Ctx.Unique)
-	assert.False(t, *base.Ctx.Unique)
-	assert.Len(t, base.Modifiers, 1)
-}
-
-func TestQueryBase_ForNoKeyUpdate(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.Postgres}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-
-	base.ForNoKeyUpdate()
-	require.NotNil(t, base.Ctx.Unique)
-	assert.False(t, *base.Ctx.Unique)
-	assert.Len(t, base.Modifiers, 1)
-}
-
-func TestQueryBase_ForKeyShare(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.Postgres}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-
-	base.ForKeyShare()
-	require.NotNil(t, base.Ctx.Unique)
-	assert.False(t, *base.Ctx.Unique)
-	assert.Len(t, base.Modifiers, 1)
-}
-
-func TestQueryBase_BuildQuery(t *testing.T) {
-	t.Run("simple", func(t *testing.T) {
-		drv := &mockDriver{dialectName: dialect.SQLite}
-		base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
-		base.Where(func(s *sql.Selector) {
-			s.Where(sql.EQ(s.C("name"), "Alice"))
-		})
-		limit := 10
-		offset := 5
-		base.Ctx.Limit = &limit
-		base.Ctx.Offset = &offset
-		base.AddOrder(func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C("name"))) })
-
-		selector, err := base.BuildQuery(context.Background())
-		require.NoError(t, err)
-		require.NotNil(t, selector)
-
-		query, _ := selector.Query()
-		assert.Contains(t, query, "users")
-		assert.Contains(t, query, "LIMIT")
-		assert.Contains(t, query, "OFFSET")
-	})
-
-	t.Run("with_path", func(t *testing.T) {
-		drv := &mockDriver{dialectName: dialect.SQLite}
-		base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-		base.Path = func(ctx context.Context) (*sql.Selector, error) {
-			return sql.Select("id").From(sql.Table("parent_query")), nil
-		}
-
-		selector, err := base.BuildQuery(context.Background())
-		require.NoError(t, err)
-		query, _ := selector.Query()
-		assert.Contains(t, query, "parent_query")
-	})
-
-	t.Run("path_error", func(t *testing.T) {
-		drv := &mockDriver{dialectName: dialect.SQLite}
-		base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
-		base.Path = func(ctx context.Context) (*sql.Selector, error) {
-			return nil, fmt.Errorf("path error")
-		}
-
-		_, err := base.BuildQuery(context.Background())
-		assert.EqualError(t, err, "path error")
-	})
-}
-
 func TestQueryScan_Distinct(t *testing.T) {
 	sentinel := fmt.Errorf("stop after capture")
 	var capturedQuery string
@@ -515,7 +179,7 @@ func TestQueryScan_Distinct(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	base.SetUnique(true)
 	base.Ctx.Fields = []string{"name"}
 
@@ -536,7 +200,7 @@ func TestQueryGroupBy_WithLimitOffset(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	limit := 10
 	offset := 5
 	base.Ctx.Limit = &limit
@@ -560,7 +224,7 @@ func TestQueryScan_WithPath(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	base.Ctx.Fields = []string{"name"}
 	base.Path = func(ctx context.Context) (*sql.Selector, error) {
 		return sql.Select().From(sql.Table("sub_query")), nil
@@ -613,7 +277,7 @@ func TestQueryGroupBy_WithPath(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id"}, "id", nil, "User")
 	base.Path = func(ctx context.Context) (*sql.Selector, error) {
 		return sql.Select().From(sql.Table("sub_query")), nil
 	}
@@ -625,39 +289,12 @@ func TestQueryGroupBy_WithPath(t *testing.T) {
 }
 
 // =============================================================================
-// Parity tests: top-level functions vs QueryBase methods
+// Parity tests: top-level functions vs testQuery methods
 // =============================================================================
-
-func TestBuildQueryFrom_ParityWithMethod(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
-	base.Where(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C("name"), "Alice"))
-	})
-	base.SetLimit(10)
-	base.SetOffset(5)
-	base.AddOrder(func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C("name"))) })
-	base.AddModifier(func(s *sql.Selector) {
-		// no-op modifier for parity check
-	})
-
-	ctx := context.Background()
-
-	methodSel, err := base.BuildQuery(ctx)
-	require.NoError(t, err)
-	methodSQL, methodArgs := methodSel.Query()
-
-	funcSel, err := BuildQueryFrom(ctx, base)
-	require.NoError(t, err)
-	funcSQL, funcArgs := funcSel.Query()
-
-	assert.Equal(t, methodSQL, funcSQL, "SQL mismatch between method and function")
-	assert.Equal(t, methodArgs, funcArgs, "args mismatch between method and function")
-}
 
 func TestBuildQueryFrom_WithPath(t *testing.T) {
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id"}, "id", nil, "User")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return sql.Select("id").From(sql.Table("parent_query")), nil
 	}
@@ -670,7 +307,7 @@ func TestBuildQueryFrom_WithPath(t *testing.T) {
 
 func TestBuildQueryFrom_PathError(t *testing.T) {
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "users", []string{"id"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id"}, "id", nil, "User")
 	base.Path = func(_ context.Context) (*sql.Selector, error) {
 		return nil, fmt.Errorf("path error")
 	}
@@ -679,33 +316,9 @@ func TestBuildQueryFrom_PathError(t *testing.T) {
 	assert.EqualError(t, err, "path error")
 }
 
-func TestBuildSelectorFrom_ParityWithMethod(t *testing.T) {
-	drv := &mockDriver{dialectName: dialect.Postgres}
-	base := NewQueryBase(drv, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
-	base.Where(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C("name"), "Bob"))
-	})
-	base.SetLimit(20)
-	base.SetUnique(true)
-	base.WithFKs = true
-
-	ctx := context.Background()
-
-	methodSel, err := base.BuildSelector(ctx)
-	require.NoError(t, err)
-	methodSQL, methodArgs := methodSel.Query()
-
-	funcSel, err := BuildSelectorFrom(ctx, base)
-	require.NoError(t, err)
-	funcSQL, funcArgs := funcSel.Query()
-
-	assert.Equal(t, methodSQL, funcSQL, "SQL mismatch between method and function")
-	assert.Equal(t, methodArgs, funcArgs, "args mismatch between method and function")
-}
-
 func TestBuildSelectorFrom_WithFields(t *testing.T) {
 	drv := &mockDriver{dialectName: dialect.SQLite}
-	base := NewQueryBase(drv, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
 	base.Ctx.Fields = []string{"name", "email"}
 	base.WithFKs = true
 
@@ -728,7 +341,7 @@ func TestBuildSelectorFrom_WithFields(t *testing.T) {
 func TestBuildSelectorFrom_M2OEdge_AmbiguousColumn(t *testing.T) {
 	// Simulate: sales_order.terms_id → terms.terms_id (FK name = target PK name).
 	drv := &mockDriver{dialectName: dialect.Postgres}
-	base := NewQueryBase(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
+	base := newTestQuery(drv, "terms", []string{"terms_id", "name"}, "terms_id", nil, "Terms")
 	// The path is what SetPath injects for a M2O (FromEdgeOwner) edge:
 	// Neighbors produces SELECT * FROM terms JOIN (SELECT terms_id FROM sales_order WHERE id = ?) AS t1
 	//                        ON terms.terms_id = t1.terms_id
@@ -765,7 +378,7 @@ func TestBuildSelectorFrom_M2OEdge_AmbiguousColumn(t *testing.T) {
 func TestBuildSelectorFrom_ModifierOrdering(t *testing.T) {
 	t.Run("Select replaces defaults", func(t *testing.T) {
 		drv := &mockDriver{dialectName: dialect.Postgres}
-		base := NewQueryBase(drv, "users", []string{"id", "name", "age"}, "id", nil, "User")
+		base := newTestQuery(drv, "users", []string{"id", "name", "age"}, "id", nil, "User")
 		base.AddModifier(func(s *sql.Selector) {
 			s.Select("SUM(age)")
 			s.GroupBy("id")
@@ -783,7 +396,7 @@ func TestBuildSelectorFrom_ModifierOrdering(t *testing.T) {
 
 	t.Run("AppendSelect adds to defaults", func(t *testing.T) {
 		drv := &mockDriver{dialectName: dialect.Postgres}
-		base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+		base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 		base.AddModifier(func(s *sql.Selector) {
 			s.AppendSelect("LOWER(name) AS lname")
 		})
@@ -799,7 +412,7 @@ func TestBuildSelectorFrom_ModifierOrdering(t *testing.T) {
 
 	t.Run("Where in modifier still runs", func(t *testing.T) {
 		drv := &mockDriver{dialectName: dialect.Postgres}
-		base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+		base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 		base.AddModifier(func(s *sql.Selector) {
 			s.Where(sql.Like(s.C("name"), "A%"))
 		})
@@ -813,33 +426,8 @@ func TestBuildSelectorFrom_ModifierOrdering(t *testing.T) {
 	})
 }
 
-func TestMakeQuerySpec_ParityWithMethod(t *testing.T) {
-	base := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
-	base.SetLimit(10)
-	base.SetOffset(5)
-	base.SetUnique(true)
-	base.Where(func(s *sql.Selector) {})
-	base.AddOrder(func(s *sql.Selector) {})
-	base.AddModifier(func(s *sql.Selector) {})
-	base.WithFKs = true
-
-	methodSpec := base.QuerySpec(field.TypeInt)
-	funcSpec := MakeQuerySpec(base, field.TypeInt)
-
-	assert.Equal(t, methodSpec.Node.Table, funcSpec.Node.Table)
-	assert.Equal(t, methodSpec.Node.ID.Column, funcSpec.Node.ID.Column)
-	assert.Equal(t, methodSpec.Node.ID.Type, funcSpec.Node.ID.Type)
-	assert.Equal(t, methodSpec.Node.Columns, funcSpec.Node.Columns)
-	assert.Equal(t, methodSpec.Limit, funcSpec.Limit)
-	assert.Equal(t, methodSpec.Offset, funcSpec.Offset)
-	assert.Equal(t, methodSpec.Unique, funcSpec.Unique)
-	assert.Equal(t, methodSpec.Predicate != nil, funcSpec.Predicate != nil)
-	assert.Equal(t, methodSpec.Order != nil, funcSpec.Order != nil)
-	assert.Equal(t, len(methodSpec.Modifiers), len(funcSpec.Modifiers))
-}
-
 func TestMakeQuerySpec_NoPredicates(t *testing.T) {
-	base := NewQueryBase(nil, "users", []string{"id"}, "id", nil, "User")
+	base := newTestQuery(nil, "users", []string{"id"}, "id", nil, "User")
 	spec := MakeQuerySpec(base, field.TypeInt)
 	assert.Nil(t, spec.Predicate)
 	assert.Nil(t, spec.Order)
@@ -849,7 +437,7 @@ func TestMakeQuerySpec_NoPredicates(t *testing.T) {
 }
 
 func TestMakeQuerySpec_WithFields(t *testing.T) {
-	base := NewQueryBase(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
+	base := newTestQuery(nil, "users", []string{"id", "name", "email"}, "id", []string{"org_id"}, "User")
 	base.Ctx.Fields = []string{"name", "email"}
 	base.WithFKs = true
 
@@ -861,7 +449,7 @@ func TestMakeQuerySpec_WithFields(t *testing.T) {
 }
 
 func TestMakeQuerySpec_IDInFields(t *testing.T) {
-	base := NewQueryBase(nil, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(nil, "users", []string{"id", "name"}, "id", nil, "User")
 	base.Ctx.Fields = []string{"id", "name"}
 
 	spec := MakeQuerySpec(base, field.TypeInt)
@@ -885,7 +473,7 @@ func TestQueryGroupBy_AcceptsQueryReader(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	var result []map[string]any
 	// Call with QueryReader interface explicitly.
 	var qr QueryReader = base
@@ -905,7 +493,7 @@ func TestQuerySelect_AcceptsQueryReader(t *testing.T) {
 		},
 	}
 
-	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base := newTestQuery(drv, "users", []string{"id", "name"}, "id", nil, "User")
 	base.Ctx.Fields = []string{"name"}
 	var result []string
 	var qr QueryReader = base
@@ -916,14 +504,14 @@ func TestQuerySelect_AcceptsQueryReader(t *testing.T) {
 
 func TestResolvePathFrom(t *testing.T) {
 	t.Run("nil_path", func(t *testing.T) {
-		base := NewQueryBase(nil, "users", nil, "id", nil, "User")
+		base := newTestQuery(nil, "users", nil, "id", nil, "User")
 		sel, err := resolvePathFrom(context.Background(), base)
 		assert.NoError(t, err)
 		assert.Nil(t, sel)
 	})
 
 	t.Run("with_path", func(t *testing.T) {
-		base := NewQueryBase(nil, "users", nil, "id", nil, "User")
+		base := newTestQuery(nil, "users", nil, "id", nil, "User")
 		base.Path = func(_ context.Context) (*sql.Selector, error) {
 			return sql.Select("id").From(sql.Table("sub")), nil
 		}
@@ -935,7 +523,7 @@ func TestResolvePathFrom(t *testing.T) {
 	})
 
 	t.Run("path_error", func(t *testing.T) {
-		base := NewQueryBase(nil, "users", nil, "id", nil, "User")
+		base := newTestQuery(nil, "users", nil, "id", nil, "User")
 		base.Path = func(_ context.Context) (*sql.Selector, error) {
 			return nil, fmt.Errorf("boom")
 		}
@@ -1181,4 +769,20 @@ func TestRunTraversers_MixedInterceptors(t *testing.T) {
 	err := RunTraversers(context.Background(), nil, []Interceptor{plain, trv})
 	require.NoError(t, err)
 	assert.True(t, trv.traverseCalled)
+}
+
+func TestCloneSlice_EmptyReturnsNil(t *testing.T) {
+	assert.Nil(t, CloneSlice([]int(nil)))
+	assert.Nil(t, CloneSlice([]int{}))
+}
+
+func TestCloneSlice_PopulatedDeepCopy(t *testing.T) {
+	src := []int{1, 2, 3}
+	got := CloneSlice(src)
+	require.Equal(t, src, got)
+	got[0] = 99
+	assert.Equal(t, 1, src[0], "mutating the clone must not affect the source")
+	got = append(got, 4)
+	assert.Len(t, src, 3, "appending to the clone must not affect the source")
+	_ = got
 }
