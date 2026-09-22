@@ -9,7 +9,7 @@
 
 ## Why this report exists
 
-`docs/scale-performance-2026-04-25.md` covers SQLite codegen / build-time
+`docs/reports/scale-performance-2026-04-25.md` covers SQLite codegen / build-time
 metrics only. Run-time DB performance is dialect-dependent — Postgres
 adds round-trip overhead (loopback ~150 µs even at zero load) and uses
 `RETURNING` for inserts/updates. This report captures the run-time

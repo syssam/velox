@@ -62,8 +62,8 @@ Ordered roughly by how much they de-risk the release, not by effort.
 
 ## Non-goals (deliberate)
 
-These are decided, not pending — see `docs/architecture-overview.md` §4 and
-`CLAUDE.md` for the rationale:
+These are decided, not pending — see `docs/architecture-overview.md` §4 for
+the rationale:
 
 - `(*Entity).Update()` / `(*Entity).Delete()` methods (ActiveRecord pattern;
   spreads the tx-driver footgun).

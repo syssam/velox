@@ -1,5 +1,7 @@
 # Architecture
 
+> **Which doc to read:** this page covers velox's *internals* — the codegen pipeline, graph construction and generator interfaces — for people changing velox. If you are *using* velox, read [architecture-overview.md](architecture-overview.md) instead: the generated package layout, why it looks that way, and the gotchas.
+
 ## Overview
 
 Velox follows a pipeline architecture: schema definitions are loaded, validated, and transformed into a typed graph, which is then used to generate database access code.
@@ -52,7 +54,7 @@ Validation runs during construction. Errors are collected and returned as struct
 The `JenniferGenerator` orchestrates parallel code generation:
 
 - Uses `errgroup` with `SetLimit(min(GOMAXPROCS, 16))`
-- Writes files atomically via `os.CreateTemp` + `os.Rename`
+- Writes every artifact through `gen.WriteFileIfChanged` (byte-compare, then atomic temp file + rename), so a no-op regeneration rewrites nothing
 - Checks `ctx.Err()` before each write for cancellation support
 - External templates run sequentially (not goroutine-safe)
 
@@ -71,33 +73,12 @@ Optional capabilities are detected via type assertion at runtime, following the 
 
 ## Generated Code Structure
 
-```
-{target}/
-+-- entity/              # Shared entity structs (cross-entity imports OK)
-|   +-- entity_model.go  # User, Post structs with typed edge fields
-+-- query/               # Query builders (all in one package)
-|   +-- user_query.go    # UserQuery with edge loading
-|   +-- post_query.go
-+-- user/                # Per-entity sub-package (zero cross-entity imports)
-|   +-- client.go        # Create, Update, Delete, Query, Get
-|   +-- create.go        # CreateUserInput builder
-|   +-- update.go        # UpdateUser/UpdateUserOne builders
-|   +-- delete.go        # DeleteUser/DeleteUserOne builders
-|   +-- mutation.go      # UserMutation type
-|   +-- where.go         # Type-safe predicates
-|   +-- runtime.go       # init() registration
-+-- predicate/           # Predicate type aliases
-+-- runtime/             # Schema descriptors, validators
-+-- client.go            # Root Client with schema + hooks
-+-- velox.go             # Base types, errors, Op enum
-+-- tx.go                # Transaction support
-```
+The generated package layout (root, `entity/`, `client/{entity}/`, `{entity}/`, `query/`, `predicate/`, `filter/`, …) and the reasons for it are documented in [architecture-overview.md §2–3](architecture-overview.md#2-package-topology). `tests/integration/` is the canonical generated example.
 
 Key design decisions:
 - **Per-entity sub-packages** self-register via `init()` (protobuf-go model)
-- **Entity structs are pure data** -- no query methods on structs
-- **Edge queries** go through entity client or query builder, not entity struct
-- **Root Client** has no per-entity fields -- only config + Schema
+- **Per-entity packages have zero cross-entity imports** -- cross-entity references go through the `runtime` registry and the interfaces in `entity/`
+- **Root Client** has no per-entity CRUD code -- only config, schema and per-entity client fields
 
 ## Interface Hierarchy
 
@@ -126,7 +107,7 @@ Core types live in `privacy/` (no codegen dependency). Policy evaluation:
 
 1. Check `DecisionFromContext` (cached decision from parent)
 2. Evaluate rules in order: `Allow` stops with permit, `Skip` continues, `Deny` stops with reject
-3. If no rule decides, deny by default
+3. If every rule skips, the policy **allows** (returns nil) -- end a policy with `privacy.AlwaysDenyRule()` to fail closed
 
 `FilterFunc` enables query-level filtering without codegen dependency by using interface assertion on the query's `Filter()` method.
 

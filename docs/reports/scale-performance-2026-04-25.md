@@ -18,7 +18,7 @@ have to verify it didn't regress velox's headline claim:
 
 The relevant numbers:
 - **Incremental rebuild (touch 1 entity)**: pre-Plan-2 baseline 0.32s @ 100 ent
-  (`docs/build-performance-report.md`); pre-Plan-2 vs-Ent baseline 0.35s
+  (`docs/reports/build-performance-report.md`); pre-Plan-2 vs-Ent baseline 0.35s
   (`project_model_elimination.md`).
 - **Cold build wall**: pre-Plan-2 baseline 8.1s @ 100 ent.
 - **Cold build peak RSS**: pre-Plan-2 baseline 1.1 GB @ 100 ent.

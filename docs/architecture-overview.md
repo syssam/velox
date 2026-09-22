@@ -5,8 +5,10 @@ evaluating velox or starting your first project. The audience here is the
 human integrator: where the generated code lives, why the layout looks like
 that, and what bites first-time users.
 
-> Maintainer / AI-assistant reference is `CLAUDE.md` at the repo root.
-> This doc is intentionally narrower.
+> **Which doc to read:** this page is for people *using* velox. For the
+> internals — codegen pipeline, graph construction, generator interfaces —
+> see [architecture.md](architecture.md); the rules for changing velox are in
+> [`AGENTS.md`](../AGENTS.md).
 
 ---
 
@@ -22,7 +24,7 @@ the measured headline numbers are a **10–25× faster incremental rebuild
 (~0.7s vs ~8–18s at 50 entities) and ~75% lower peak codegen RSS than
 Ent**, and the curve stays linear out to 328 entities. See
 [`docs/benchmarks.md`](benchmarks.md) for the current methodology and
-numbers, and [`docs/scale-performance-2026-04-25.md`](scale-performance-2026-04-25.md)
+numbers, and [`docs/reports/scale-performance-2026-04-25.md`](reports/scale-performance-2026-04-25.md)
 for the scale study.
 
 If your schema has fewer than ~50 entities and you are not building a
@@ -94,7 +96,7 @@ That is what unlocks the incremental-rebuild numbers.
 
 A sub-package layout is the only way velox holds linear build/RSS scaling
 at 100+ entities. A flat Ent-style layout was measured and rejected; see
-[`docs/scale-performance-2026-04-25.md`](scale-performance-2026-04-25.md)
+[`docs/reports/scale-performance-2026-04-25.md`](reports/scale-performance-2026-04-25.md)
 for cold-build, peak-RSS, and incremental-rebuild numbers across
 stress-100, stress-200, and stress-328 fixtures.
 
@@ -119,9 +121,8 @@ doc takes the current layout as given.
 
 ## 4. Gotchas (Curated)
 
-CLAUDE.md catalogs every gotcha. The seven below are the ones that bite
-first-time users — schema-authoring traps and runtime contracts that look
-fine until they don't.
+The gotchas below are the ones that bite first-time users — schema-authoring
+traps and runtime contracts that look fine until they don't.
 
 ### 4.1. `Optional()` does not add a DB DEFAULT
 
@@ -432,9 +433,9 @@ not a runtime concern.
 | Get started step-by-step                     | [`docs/getting-started.md`](getting-started.md)                             |
 | Migrate from Ent                             | [`docs/migrating-from-ent.md`](migrating-from-ent.md)                       |
 | Read past breaking-change records            | [`docs/migrations/`](migrations/)                                           |
-| Read benchmarks                              | [`docs/benchmarks.md`](benchmarks.md), [`docs/scale-performance-2026-04-25.md`](scale-performance-2026-04-25.md) |
+| Read benchmarks                              | [`docs/benchmarks.md`](benchmarks.md), [`docs/reports/scale-performance-2026-04-25.md`](reports/scale-performance-2026-04-25.md) |
 | See full feature list and project README     | [`README.md`](../README.md)                                                 |
 
-`CLAUDE.md` at the repo root is the AI-assistant / maintainer reference.
-Skim it if you are contributing to velox itself; otherwise the docs above
-are the user-facing surface.
+[`AGENTS.md`](../AGENTS.md) at the repo root is the reference for changing
+velox itself, and [architecture.md](architecture.md) covers the codegen
+internals; otherwise the docs above are the user-facing surface.
