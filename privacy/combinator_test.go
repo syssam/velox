@@ -235,12 +235,55 @@ func TestNot(t *testing.T) {
 		assert.True(t, errors.Is(err, privacy.Deny))
 	})
 
-	t.Run("wrapped_deny_inverted", func(t *testing.T) {
+	// A deny that carries a reason is how every fail-closed path reports
+	// itself (Denyf in FilterFunc, TenantFilterRule, DenyIfNoViewer, ...).
+	// Not must never turn one of those into a grant, so only the bare Deny
+	// sentinel is inverted.
+	t.Run("wrapped_deny_stays_deny", func(t *testing.T) {
 		rule := privacy.Not(privacy.ContextQueryMutationRule(func(_ context.Context) error {
 			return privacy.Denyf("user is banned")
 		}))
 		err := rule.EvalQuery(ctx, q)
-		assert.True(t, errors.Is(err, privacy.Allow))
+		assert.True(t, errors.Is(err, privacy.Deny))
+		assert.False(t, errors.Is(err, privacy.Allow))
+	})
+
+	t.Run("filterfunc_on_non_filterable_stays_deny", func(t *testing.T) {
+		rule := privacy.Not(privacy.FilterFunc(func(context.Context, privacy.Filter) error {
+			return privacy.Skip
+		}))
+		err := rule.EvalQuery(ctx, q)
+		assert.True(t, errors.Is(err, privacy.Deny), "got %v", err)
+		assert.False(t, errors.Is(err, privacy.Allow))
+
+		err = rule.EvalMutation(ctx, &mockMutation{op: velox.OpUpdate})
+		assert.True(t, errors.Is(err, privacy.Deny), "got %v", err)
+		assert.False(t, errors.Is(err, privacy.Allow))
+	})
+
+	t.Run("tenant_filter_without_viewer_stays_deny", func(t *testing.T) {
+		rule := privacy.Not(privacy.TenantFilterRule("tenant_id"))
+		err := rule.EvalQuery(ctx, &filterableQuery{filter: &testFilter{}})
+		assert.True(t, errors.Is(err, privacy.Deny), "got %v", err)
+		assert.False(t, errors.Is(err, privacy.Allow))
+	})
+
+	t.Run("non_decision_error_passes_through", func(t *testing.T) {
+		boom := errors.New("db down")
+		rule := privacy.Not(privacy.ContextQueryMutationRule(func(_ context.Context) error {
+			return boom
+		}))
+		err := rule.EvalQuery(ctx, q)
+		assert.ErrorIs(t, err, boom)
+		assert.False(t, errors.Is(err, privacy.Allow))
+	})
+
+	t.Run("wrapped_skip_passes_through", func(t *testing.T) {
+		rule := privacy.Not(privacy.ContextQueryMutationRule(func(_ context.Context) error {
+			return privacy.Skipf("not my concern")
+		}))
+		err := rule.EvalQuery(ctx, q)
+		assert.True(t, errors.Is(err, privacy.Skip))
 	})
 }
 

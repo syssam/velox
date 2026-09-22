@@ -80,8 +80,18 @@ func (rules orRule) EvalMutation(ctx context.Context, m velox.Mutation) error {
 	return lastErr
 }
 
-// Not returns a rule that inverts Allow to Deny and Deny to Allow.
-// Skip passes through unchanged.
+// Not returns a rule that inverts the decision of rule, failing closed:
+//
+//   - Allow, bare or wrapped (Allowf), becomes Deny.
+//   - The bare Deny sentinel becomes Allow.
+//   - A deny that carries a reason (Denyf, or any error wrapping Deny) stays
+//     Deny. That is how fail-closed paths report themselves — FilterFunc on
+//     a type that does not support filtering, TenantFilterRule or
+//     DenyIfNoViewer without a viewer — and inverting them would turn a
+//     refusal to evaluate into a grant. A rule meant to be negated must
+//     return the bare Deny for its "no" answer.
+//   - Skip (bare or wrapped) and any non-decision error pass through
+//     unchanged; the policy treats the latter as a denial.
 func Not(rule QueryMutationRule) QueryMutationRule {
 	return notRule{rule}
 }
@@ -98,11 +108,13 @@ func (n notRule) EvalMutation(ctx context.Context, m velox.Mutation) error {
 	return invertDecision(n.rule.EvalMutation(ctx, m))
 }
 
+// invertDecision implements Not's semantics. Only the identity comparison
+// err == Deny may produce Allow; everything wrapping Deny is kept as is.
 func invertDecision(err error) error {
 	switch {
 	case errors.Is(err, Allow):
 		return Deny
-	case errors.Is(err, Deny):
+	case err == Deny: //nolint:errorlint // identity on purpose: a wrapped Deny must stay a denial.
 		return Allow
 	default:
 		return err
