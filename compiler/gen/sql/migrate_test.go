@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"regexp"
 	"testing"
 
 	"github.com/dave/jennifer/jen"
@@ -46,6 +47,7 @@ func TestGenMigrateSchema_OnDeleteAnnotationCompilesAndRendersConstName(t *testi
 	helper.graph.Nodes = []*gen.Type{userType, postType}
 
 	code := genMigrateSchema(helper).GoString()
+	t.Log("\n" + code)
 	assert.Contains(t, code, "schema.Cascade",
 		"FK OnDelete must render the Go constant schema.Cascade")
 	assert.NotContains(t, code, "schema.CASCADE",
@@ -91,6 +93,7 @@ func TestGenMigrateSchema_OnDeleteOnAssocEdgeRendersOnM2OSide(t *testing.T) {
 	helper.graph.Nodes = []*gen.Type{userType, postType}
 
 	code := genMigrateSchema(helper).GoString()
+	t.Log("\n" + code)
 	assert.Contains(t, code, "schema.Cascade",
 		"assoc-side (e.Ref) OnDelete annotation must render schema.Cascade on the M2O FK")
 	_, err := parser.ParseFile(token.NewFileSet(), "schema.go", code, parser.AllErrors)
@@ -1112,4 +1115,101 @@ func BenchmarkFieldTypeCode(b *testing.B) {
 			_ = fieldTypeCode(typ, fieldPkg)
 		}
 	}
+}
+
+// TestMigrateSchemaMatchesReferenceBuilder is the differential guard between
+// the two foreign-key builders velox maintains in parallel:
+//
+//   - compiler/gen/graph_tables.go (Graph.Tables) — the REFERENCE builder,
+//     used by tests and tooling, with its own fkSymbol/fkSymbols/deleteAction.
+//     It SKIPS inverse edges and builds each FK from the assoc side.
+//   - compiler/gen/sql/migrate.go (genMigrateSchema) — the PRODUCTION path,
+//     rendering the static Tables slice that actually ships, with its own
+//     fkSymbolForEdge/m2mFKSymbols. It iterates the M2O (FK-owning) side.
+//
+// They read the same relationship from OPPOSITE ends, and they have drifted
+// twice: once on the referential action (an assoc-side sqlschema.OnDelete
+// silently degraded to NoAction — a CASCADE-class data-integrity divergence)
+// and once on the constraint symbol (the M2O edge name was used instead of the
+// assoc edge name). Both were caught downstream or by the parity harness, then
+// pinned with hand-written per-property assertions that a reviewer must
+// remember to extend for the next property.
+//
+// This asserts wholesale agreement: same set of FK symbols, same referential
+// action for each.
+//
+// The graph is built through gen.NewGraph from load.Schema rather than by
+// assembling gen.Edge values directly. A hand-assembled fixture silently
+// registered only the inverse halves of each relationship, so the reference
+// builder skipped them all and "agreed" with production on an empty set.
+func TestMigrateSchemaMatchesReferenceBuilder(t *testing.T) {
+	t.Parallel()
+
+	ann := func(a sqlschema.CascadeAction) map[string]any {
+		return map[string]any{sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: a}}
+	}
+	// Every FK shape in one graph: an assoc edge carrying OnDelete (Ent's
+	// placement), an inverse M2O carrying its own (velox's convention), a pair
+	// with no annotation at all (must land on the default), and an M2M.
+	user := &load.Schema{
+		Name: "User",
+		Edges: []*load.Edge{
+			{Name: "posts", Type: "Post", Annotations: ann(sqlschema.Cascade)},
+			{Name: "comments", Type: "Comment"},
+		},
+	}
+	post := &load.Schema{
+		Name: "Post",
+		Edges: []*load.Edge{
+			{Name: "author", Type: "User", RefName: "posts", Inverse: true, Unique: true},
+			{Name: "comments", Type: "Comment"},
+			{Name: "tags", Type: "Tag"},
+		},
+	}
+	comment := &load.Schema{
+		Name: "Comment",
+		Edges: []*load.Edge{
+			{Name: "post", Type: "Post", RefName: "comments", Inverse: true, Unique: true,
+				Annotations: ann(sqlschema.SetNull)},
+			{Name: "author", Type: "User", RefName: "comments", Inverse: true, Unique: true},
+		},
+	}
+	tag := &load.Schema{
+		Name:  "Tag",
+		Edges: []*load.Edge{{Name: "posts", Type: "Post", RefName: "tags", Inverse: true}},
+	}
+
+	graph, err := gen.NewGraph(&gen.Config{Package: "example.com/app/ent"}, user, post, comment, tag)
+	require.NoError(t, err, "fixture graph must build")
+
+	refTables, err := graph.Tables()
+	require.NoError(t, err, "reference builder must succeed")
+	want := make(map[string]string) // FK symbol -> OnDelete constant name
+	for _, tbl := range refTables {
+		for _, k := range tbl.ForeignKeys {
+			want[k.Symbol] = k.OnDelete.ConstName()
+		}
+	}
+	// Guard the fixture: it must reach the bidirectional path, where the
+	// symbol comes from the ASSOC edge name. A fixture that degraded to the
+	// standalone fallback would compare two builders that agree only because
+	// both took the easy branch — that is how the symbol drift stayed hidden.
+	require.Contains(t, want, "posts_users_posts", "fixture must exercise the assoc-edge naming path")
+	require.Contains(t, want, "comments_posts_comments", "fixture must exercise the assoc-edge naming path")
+
+	helper := newMockHelper()
+	helper.graph = graph
+	code := genMigrateSchema(helper).GoString()
+
+	// jen.Dict renders keys alphabetically, so OnDelete precedes Symbol
+	// within each ForeignKey literal.
+	re := regexp.MustCompile(`OnDelete:\s*schema\.(\w+),[\s\S]*?Symbol:\s*"([^"]+)"`)
+	got := make(map[string]string)
+	for _, m := range re.FindAllStringSubmatch(code, -1) {
+		got[m[2]] = m[1]
+	}
+	require.NotEmpty(t, got, "extracted no foreign keys from the rendered schema:\n%s", code)
+
+	assert.Equal(t, want, got,
+		"the reference builder and the shipped migrate schema disagree on FK symbols or referential actions")
 }
