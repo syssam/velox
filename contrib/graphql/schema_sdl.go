@@ -291,7 +291,7 @@ func (g *Generator) genQueryType() string {
 			directives = renderDirectives(cfg.Directives)
 		}
 		if description != "" {
-			fmt.Fprintf(&buf, "  \"\"\"\n  %s\n  \"\"\"\n", description)
+			buf.WriteString("  " + sdlDescription(description, "  "))
 		}
 
 		// List/connection query

@@ -92,7 +92,7 @@ func (g *Generator) genEdgeField(_ *gen.Type, e *gen.Edge) string {
 	}
 
 	if comment != "" {
-		return fmt.Sprintf("\"\"\"\n  %s\n  \"\"\"\n  %s", comment, fieldDef)
+		return sdlDescription(comment, "  ") + "  " + fieldDef
 	}
 	return fieldDef
 }
@@ -477,7 +477,7 @@ func (g *Generator) genJSONSliceFiltersSDL(f *gen.Field) string {
 	ann := g.getFieldAnnotation(f)
 	ops := ann.GetWhereOps()
 
-	fmt.Fprintf(&buf, "  \"\"\"\n  %s field predicates\n  \"\"\"\n", name)
+	buf.WriteString("  " + sdlDescription(name+" field predicates", "  "))
 	if ops.HasHas() {
 		fmt.Fprintf(&buf, "  %sHas: %s\n", name, elemGQLType)
 	}

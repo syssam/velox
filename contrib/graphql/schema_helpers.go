@@ -753,7 +753,7 @@ func (g *Generator) genSubscriptionType() string {
 	buf.WriteString("type Subscription {\n")
 	for _, sub := range subs {
 		if sub.Description != "" {
-			fmt.Fprintf(&buf, "  \"\"\"\n  %s\n  \"\"\"\n", sub.Description)
+			buf.WriteString("  " + sdlDescription(sub.Description, "  "))
 		}
 		if sub.Args != "" {
 			fmt.Fprintf(&buf, "  %s(%s): %s\n", sub.Name, sub.Args, sub.ReturnType)

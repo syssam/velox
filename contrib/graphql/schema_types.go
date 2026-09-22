@@ -530,7 +530,7 @@ func (g *Generator) genEntityType(t *gen.Type) string {
 	entityAnn := g.getTypeAnnotation(t)
 	for _, rm := range entityAnn.ResolverMappings {
 		if rm.Comment != "" {
-			fmt.Fprintf(&buf, "  \"\"\"\n  %s\n  \"\"\"\n", rm.Comment)
+			buf.WriteString("  " + sdlDescription(rm.Comment, "  "))
 		}
 		fmt.Fprintf(&buf, "  %s: %s @goField(forceResolver: true)\n",
 			rm.FieldName, rm.ReturnType)
@@ -595,7 +595,7 @@ func (g *Generator) genField(t *gen.Type, f *gen.Field) string {
 
 	comment := f.Comment()
 	if comment != "" {
-		return fmt.Sprintf("\"\"\"\n  %s\n  \"\"\"\n  %s", comment, fieldDef)
+		return sdlDescription(comment, "  ") + "  " + fieldDef
 	}
 	return fieldDef
 }

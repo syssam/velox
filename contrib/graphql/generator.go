@@ -688,6 +688,12 @@ func (g *Generator) writeSchema(ctx context.Context, content, subdir, filename s
 		return err
 	}
 
+	// Every generated SDL file is parsed before anything else sees it, so a
+	// malformed one fails generation here instead of in gqlgen later.
+	if err := checkSDLSyntax(filepath.Join(subdir, filename), content); err != nil {
+		return err
+	}
+
 	// Apply schema hooks via typed AST.
 	// Hooks apply to ALL schema files (root + per-entity) so users can add
 	// directives to entity-specific types in SchemaSplitPerEntity mode.

@@ -397,7 +397,7 @@ func (g *Generator) genInterfaceDefsSchema() (string, error) {
 	}
 	var buf bytes.Buffer
 	for _, gi := range ifaces {
-		fmt.Fprintf(&buf, "\"\"\"\n%s is implemented by %s.\n\"\"\"\n", gi.Name, strings.Join(gi.Implementors, ", "))
+		buf.WriteString(sdlDescription(gi.Name+" is implemented by "+strings.Join(gi.Implementors, ", ")+".", ""))
 		if g.config.ORMPackage != "" {
 			fmt.Fprintf(&buf, "interface %s @goModel(model: \"%s/entity.%s\") {\n", gi.Name, g.config.ORMPackage, gi.Name)
 		} else {
