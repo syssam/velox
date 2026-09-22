@@ -27,11 +27,19 @@ go test ./compiler/gen/sql/ -update-golden
 echo "==> regenerating tests/integration fixtures"
 go run tests/integration/generate.go
 
-# Sub-modules that participate in drift-check. Each has its own go.mod
-# and regenerates into a local ./velox/ output that's gitignored — so
-# `git diff` alone can't detect when the generator emits broken code.
-# `go build ./...` inside each sub-module exercises the full generated
-# surface and surfaces type/import drift that the diff-only path misses.
+# Directories that participate in drift-check. Each regenerates into a local
+# ./velox/ output that's gitignored — so `git diff` alone can't detect when the
+# generator emits broken code. `go build ./...` inside each one exercises the
+# full generated surface and surfaces type/import drift that the diff-only path
+# misses.
+#
+# Most of these are their own Go module. examples/realworld is NOT — it has no
+# go.mod, so its gitignored velox/ output belongs to the ROOT module. That makes
+# omitting it especially bad: its stale generated code is compiled by every root
+# `go build ./...`, `go test ./...`, `golangci-lint run` and coverage run, while
+# nothing regenerates it. It sat several generator fixes behind before being
+# added here. CI generates it explicitly (.github/workflows/ci.yml) — this list
+# is what makes a local regen match CI.
 DRIFT_CHECK_MODULES=(
     examples/basic
     examples/edge-schema
@@ -40,6 +48,7 @@ DRIFT_CHECK_MODULES=(
     examples/globalid
     examples/json-field
     examples/multitenant
+    examples/realworld
     examples/tree
     examples/versioned-migration
     tests/external-module
