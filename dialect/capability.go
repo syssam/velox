@@ -4,33 +4,14 @@ package dialect
 // database dialect. Use [Capabilities] to query what a specific dialect supports.
 type Capability uint32
 
+// Only flags that generated code or the runtime actually consults are
+// declared. Add a flag together with its first reader: a flag nothing reads
+// is a promise the dialect layer does not keep.
 const (
-	// CapReturning indicates support for INSERT ... RETURNING (Postgres, SQLite 3.35+).
-	CapReturning Capability = 1 << iota
-	// CapUpsert indicates support for INSERT ... ON CONFLICT / ON DUPLICATE KEY.
-	CapUpsert
-	// CapJSONOperators indicates support for native JSON column operators.
-	CapJSONOperators
 	// CapForUpdate indicates support for SELECT ... FOR UPDATE row-level locking.
-	CapForUpdate
+	CapForUpdate Capability = 1 << iota
 	// CapForShare indicates support for SELECT ... FOR SHARE.
 	CapForShare
-	// CapForNoKeyUpdate indicates support for FOR NO KEY UPDATE (Postgres only).
-	CapForNoKeyUpdate
-	// CapForKeyShare indicates support for FOR KEY SHARE (Postgres only).
-	CapForKeyShare
-	// CapSchemas indicates support for named schemas (e.g., SET search_path, USE schema).
-	CapSchemas
-	// CapEnumType indicates support for native ENUM column types.
-	CapEnumType
-	// CapArrayType indicates support for native array column types (Postgres).
-	CapArrayType
-	// CapCTE indicates support for Common Table Expressions (WITH ... AS).
-	CapCTE
-	// CapWindowFunctions indicates support for window functions (OVER, PARTITION BY).
-	CapWindowFunctions
-	// CapLastInsertID indicates support for LastInsertId() on sql.Result (MySQL, SQLite).
-	CapLastInsertID
 	// CapLockWithDistinct indicates that a row-locking clause (FOR UPDATE /
 	// FOR SHARE) may be combined with SELECT DISTINCT. Postgres rejects the
 	// combination ("FOR UPDATE is not allowed with DISTINCT clause"), so the
@@ -67,24 +48,9 @@ func (c Capabilities) HasAny(caps ...Capability) bool {
 
 // dialectCaps maps dialect names to their capability sets.
 var dialectCaps = map[string]Capabilities{
-	Postgres: {
-		CapReturning | CapUpsert | CapJSONOperators |
-			CapForUpdate | CapForShare | CapForNoKeyUpdate | CapForKeyShare |
-			CapSchemas | CapEnumType | CapArrayType |
-			CapCTE | CapWindowFunctions,
-	},
-	MySQL: {
-		CapUpsert | CapJSONOperators |
-			CapForUpdate | CapForShare | CapLockWithDistinct |
-			CapSchemas | CapEnumType |
-			CapCTE | CapWindowFunctions |
-			CapLastInsertID,
-	},
-	SQLite: {
-		CapReturning | CapUpsert | CapJSONOperators |
-			CapCTE | CapWindowFunctions |
-			CapLastInsertID,
-	},
+	Postgres: {CapForUpdate | CapForShare},
+	MySQL:    {CapForUpdate | CapForShare | CapLockWithDistinct},
+	SQLite:   {},
 }
 
 // GetCapabilities returns the capability set for the named dialect.

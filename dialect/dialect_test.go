@@ -17,26 +17,26 @@ func TestCapabilities_Has(t *testing.T) {
 	t.Parallel()
 	pg := GetCapabilities(Postgres)
 
-	if !pg.Has(CapReturning) {
-		t.Error("Postgres should support RETURNING")
+	if !pg.Has(CapForUpdate) {
+		t.Error("Postgres should support FOR UPDATE")
 	}
-	if !pg.Has(CapReturning, CapUpsert) {
-		t.Error("Postgres should support both RETURNING and Upsert")
+	if !pg.Has(CapForUpdate, CapForShare) {
+		t.Error("Postgres should support both FOR UPDATE and FOR SHARE")
 	}
-	if pg.Has(CapLastInsertID) {
-		t.Error("Postgres should NOT support LastInsertID")
+	if pg.Has(CapForUpdate, CapLockWithDistinct) {
+		t.Error("Has must require every flag; Postgres lacks CapLockWithDistinct")
 	}
 }
 
 func TestCapabilities_HasAny(t *testing.T) {
 	t.Parallel()
-	my := GetCapabilities(MySQL)
+	pg := GetCapabilities(Postgres)
 
-	if !my.HasAny(CapReturning, CapUpsert) {
-		t.Error("MySQL should support at least Upsert")
+	if !pg.HasAny(CapLockWithDistinct, CapForShare) {
+		t.Error("Postgres should support at least FOR SHARE")
 	}
-	if my.HasAny(CapReturning, CapArrayType) {
-		t.Error("MySQL should NOT support RETURNING or ArrayType")
+	if pg.HasAny(CapLockWithDistinct) {
+		t.Error("Postgres should NOT support locking with DISTINCT")
 	}
 }
 
@@ -63,76 +63,8 @@ func TestCapabilities_LockWithDistinct(t *testing.T) {
 func TestGetCapabilities_Unknown(t *testing.T) {
 	t.Parallel()
 	caps := GetCapabilities("cockroach")
-	if caps.Has(CapReturning) {
+	if caps.HasAny(CapForUpdate, CapForShare, CapLockWithDistinct) {
 		t.Error("unknown dialect should have no capabilities")
-	}
-	if caps.HasAny(CapUpsert, CapForUpdate) {
-		t.Error("unknown dialect should have no capabilities")
-	}
-}
-
-func TestGetCapabilities_Postgres(t *testing.T) {
-	t.Parallel()
-	pg := GetCapabilities(Postgres)
-	mustHave := []Capability{
-		CapReturning, CapUpsert, CapJSONOperators,
-		CapForUpdate, CapForShare, CapForNoKeyUpdate, CapForKeyShare,
-		CapSchemas, CapEnumType, CapArrayType,
-		CapCTE, CapWindowFunctions,
-	}
-	for _, c := range mustHave {
-		if !pg.Has(c) {
-			t.Errorf("Postgres missing capability %d", c)
-		}
-	}
-	mustNotHave := []Capability{CapLastInsertID}
-	for _, c := range mustNotHave {
-		if pg.Has(c) {
-			t.Errorf("Postgres should not have capability %d", c)
-		}
-	}
-}
-
-func TestGetCapabilities_MySQL(t *testing.T) {
-	t.Parallel()
-	my := GetCapabilities(MySQL)
-	mustHave := []Capability{
-		CapUpsert, CapJSONOperators, CapForUpdate, CapForShare,
-		CapSchemas, CapEnumType, CapCTE, CapWindowFunctions, CapLastInsertID,
-	}
-	for _, c := range mustHave {
-		if !my.Has(c) {
-			t.Errorf("MySQL missing capability %d", c)
-		}
-	}
-	mustNotHave := []Capability{CapReturning, CapArrayType, CapForNoKeyUpdate, CapForKeyShare}
-	for _, c := range mustNotHave {
-		if my.Has(c) {
-			t.Errorf("MySQL should not have capability %d", c)
-		}
-	}
-}
-
-func TestGetCapabilities_SQLite(t *testing.T) {
-	t.Parallel()
-	sl := GetCapabilities(SQLite)
-	mustHave := []Capability{
-		CapReturning, CapUpsert, CapJSONOperators,
-		CapCTE, CapWindowFunctions, CapLastInsertID,
-	}
-	for _, c := range mustHave {
-		if !sl.Has(c) {
-			t.Errorf("SQLite missing capability %d", c)
-		}
-	}
-	mustNotHave := []Capability{
-		CapForUpdate, CapForShare, CapForNoKeyUpdate, CapForKeyShare,
-		CapSchemas, CapEnumType, CapArrayType,
-	}
-	for _, c := range mustNotHave {
-		if sl.Has(c) {
-			t.Errorf("SQLite should not have capability %d", c)
-		}
 	}
 }
 
