@@ -1596,3 +1596,66 @@ func TestSchemaHooksAppendIsCapClamped(t *testing.T) {
 		}
 	}
 }
+
+// TestUpdateCheckRunsFieldValidators pins that the generated update builders
+// run user-defined field validators, and that sqlSave actually calls check().
+//
+// Before this, update check() guarded required unique edges and nothing else,
+// so every validator on the schema (NotEmpty, MaxLen, Range, NonNegative, the
+// enum validator) was enforced on CREATE and silently skipped on UPDATE.
+// check() is invoked from sqlSave, i.e. after the hook chain, so a hook that
+// rewrites a field is validated too. Ent emits the same validator block in
+// both its create and update check().
+func TestUpdateCheckRunsFieldValidators(t *testing.T) {
+	typ := createTestTypeWithSchema(t, "User", &load.Schema{
+		Fields: []*load.Field{
+			{Name: "name", Info: &field.TypeInfo{Type: field.TypeString}, Validators: 1},
+			{Name: "bio", Info: &field.TypeInfo{Type: field.TypeString}, Optional: true},
+		},
+	})
+	helper := newMockHelper()
+	helper.graph = &gen.Graph{
+		Config: &gen.Config{
+			Package:  "github.com/test/project/ent",
+			Features: []gen.Feature{gen.FeatureValidator},
+		},
+		Nodes: []*gen.Type{typ},
+	}
+
+	file, err := genUpdate(helper, typ)
+	if err != nil {
+		t.Fatalf("genUpdate: %v", err)
+	}
+	src := file.GoString()
+
+	// Both builders must declare check() and validate the field that has one.
+	for _, builder := range []string{"UserUpdate", "UserUpdateOne"} {
+		decl := "func (_u *" + builder + ") check() error {"
+		if !strings.Contains(src, decl) {
+			t.Errorf("%s has no check() method — validators cannot run on update", builder)
+			continue
+		}
+		body := src[strings.Index(src, decl):]
+		body = body[:strings.Index(body, "\n}\n")]
+		if !strings.Contains(body, "user.NameValidator(v)") {
+			t.Errorf("%s.check() does not call user.NameValidator; a validated field is unenforced on UPDATE\n%s", builder, body)
+		}
+		if strings.Contains(body, "BioValidator") {
+			t.Errorf("%s.check() validates a field that declares no validator", builder)
+		}
+	}
+
+	// A check() nothing calls is worse than none — it reads as coverage.
+	for _, builder := range []string{"UserUpdate", "UserUpdateOne"} {
+		decl := "func (_u *" + builder + ") sqlSave(ctx context.Context)"
+		i := strings.Index(src, decl)
+		if i < 0 {
+			t.Fatalf("%s has no sqlSave", builder)
+		}
+		body := src[i:]
+		body = body[:strings.Index(body, "\n}\n")]
+		if !strings.Contains(body, "_u.check()") {
+			t.Errorf("%s.sqlSave does not call check(); validators would never run", builder)
+		}
+	}
+}

@@ -135,7 +135,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 	genUpdateModify(h, f, updateName, recv, ifaceReturn)
 
 	// --- check() for required-edge validation ---
-	genUpdateCheck(f, t, updateName, recv)
+	genUpdateCheck(h, f, t, updateName, recv)
 
 	// --- sqlSave (named method — Ent pattern) ---
 	f.Commentf("sqlSave executes the SQL update for %s after hooks have run.", t.Name)
@@ -143,7 +143,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Int(), jen.Error()).BlockFunc(func(grp *jen.Group) {
 		// Validate required edges before executing SQL.
-		if hasRequiredUniqueEdge(t) {
+		if updateNeedsCheck(h, t) {
 			grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Lit(0), jen.Id("err")),
 			)
@@ -335,7 +335,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 	genUpdateModify(h, f, updateOneName, recv, ifaceReturn)
 
 	// --- check() for required-edge validation ---
-	genUpdateCheck(f, t, updateOneName, recv)
+	genUpdateCheck(h, f, t, updateOneName, recv)
 
 	// --- sqlSave (named method — Ent pattern) ---
 	f.Commentf("sqlSave executes the SQL update for a single %s after hooks have run.", t.Name)
@@ -343,7 +343,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Error()).BlockFunc(func(grp *jen.Group) {
 		// Validate required edges before executing SQL.
-		if hasRequiredUniqueEdge(t) {
+		if updateNeedsCheck(h, t) {
 			grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Id("err")),
 			)
@@ -940,9 +940,40 @@ func hasRequiredUniqueEdge(t *gen.Type) bool {
 	return false
 }
 
-// genUpdateCheck generates a check() method for update builders that validates
-// required unique edges are not cleared without being replaced. Matches Ent's behavior.
-func genUpdateCheck(f *jen.File, t *gen.Type, builderName, recv string) {
+// updateValidatedFields returns the mutable fields whose value must be run
+// through a validator inside the update builder's check(). Mirrors the
+// predicate genCreateCheck uses, so a validator declared on a field is
+// enforced on UPDATE exactly as it is on CREATE — Ent emits the same set in
+// both check()s.
+func updateValidatedFields(h gen.GeneratorHelper, t *gen.Type) []*gen.Field {
+	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
+	var out []*gen.Field
+	for _, fd := range t.MutableFields() {
+		isValidator := fd.HasGoType() && fd.Type != nil && fd.Type.Validator()
+		if (validatorsEnabled && (fd.Validators > 0 || fd.IsEnum())) || isValidator {
+			out = append(out, fd)
+		}
+	}
+	return out
+}
+
+// updateNeedsCheck reports whether an update builder needs a check() method at
+// all: either a required unique edge to guard or a field validator to run.
+func updateNeedsCheck(h gen.GeneratorHelper, t *gen.Type) bool {
+	return hasRequiredUniqueEdge(t) || len(updateValidatedFields(h, t)) > 0
+}
+
+// genUpdateCheck generates a check() method for update builders. It runs the
+// user-defined field validators over every field the mutation actually set and
+// then guards required unique edges against being cleared. Matches Ent, which
+// emits the same validator block in its update check().
+//
+// The validators are NOT optional garnish: without them a field declared
+// `field.String("title").NotEmpty()` is enforced on CREATE and silently
+// ignored on UPDATE, so `UpdateOneID(id).SetTitle("")` writes an empty title.
+// check() is called from sqlSave, i.e. AFTER the hook chain, so a hook that
+// rewrites a field is validated too.
+func genUpdateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName, recv string) {
 	// Collect required unique edges (O2O/M2O where !Optional).
 	var requiredUniqueEdges []*gen.Edge
 	for _, e := range t.EdgesWithID() {
@@ -950,12 +981,40 @@ func genUpdateCheck(f *jen.File, t *gen.Type, builderName, recv string) {
 			requiredUniqueEdges = append(requiredUniqueEdges, e)
 		}
 	}
-	if len(requiredUniqueEdges) == 0 {
-		return // No required unique edges — no check needed.
+	validated := updateValidatedFields(h, t)
+	if len(requiredUniqueEdges) == 0 && len(validated) == 0 {
+		return // Nothing to check.
 	}
 
-	f.Comment("check validates required unique edges are not cleared without replacement.")
+	entityPkg := h.LeafPkgPath(t)
+	validatorsEnabled, _ := h.Graph().FeatureEnabled(gen.FeatureValidator.Name)
+
+	f.Comment("check runs the user-defined validators on the fields this mutation sets")
+	f.Comment("and guards required unique edges against being cleared.")
 	f.Func().Params(jen.Id(recv).Op("*").Id(builderName)).Id("check").Params().Error().BlockFunc(func(grp *jen.Group) {
+		for _, fd := range validated {
+			grp.If(
+				jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
+				jen.Id("ok"),
+			).BlockFunc(func(blk *jen.Group) {
+				var validationCall *jen.Statement
+				if validatorsEnabled && (fd.Validators > 0 || fd.IsEnum()) {
+					validationCall = jen.Qual(entityPkg, fd.Validator()).Call(jen.Id("v"))
+				} else {
+					validationCall = jen.Id("v").Dot("Validate").Call()
+				}
+				blk.If(jen.Id("err").Op(":=").Add(validationCall), jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Op("&").Qual(runtimePkg, "ValidationError").Values(jen.Dict{
+						jen.Id("Name"):   jen.Lit(fd.Name),
+						jen.Id("Field"):  jen.Lit(fd.Name),
+						jen.Id("Entity"): jen.Lit(t.Name),
+						jen.Id("Err"): jen.Qual("fmt", "Errorf").Call(
+							jen.Lit("validator failed for field \""+t.Name+"."+fd.Name+"\": %w"), jen.Id("err"),
+						),
+					})),
+				)
+			})
+		}
 		for _, e := range requiredUniqueEdges {
 			grp.If(
 				jen.Id(recv).Dot("mutation").Dot(e.MutationCleared()).Call(),

@@ -109,7 +109,8 @@ func (_u *PostUpdate) Modify(modifiers ...func(*sql.UpdateBuilder)) *PostUpdate 
 	return _u
 }
 
-// check validates required unique edges are not cleared without replacement.
+// check runs the user-defined validators on the fields this mutation sets
+// and guards required unique edges against being cleared.
 func (_u *PostUpdate) check() error {
 	if _u.mutation.AuthorCleared() {
 		return errors.New("clearing a required unique edge \"Post.author\"")
@@ -304,7 +305,8 @@ func (_u *PostUpdateOne) Modify(modifiers ...func(*sql.UpdateBuilder)) *PostUpda
 	return _u
 }
 
-// check validates required unique edges are not cleared without replacement.
+// check runs the user-defined validators on the fields this mutation sets
+// and guards required unique edges against being cleared.
 func (_u *PostUpdateOne) check() error {
 	if _u.mutation.AuthorCleared() {
 		return errors.New("clearing a required unique edge \"Post.author\"")
