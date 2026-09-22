@@ -58,6 +58,10 @@ type queryGen struct {
 	hasPolicy           bool
 	schemaConfigEnabled bool
 	namedEdgesEnabled   bool
+	// bidiEdgeRefs gates the eager-load back-reference (child.Edges.<Ref> =
+	// parent). Off by default: the back-reference makes every eager-loaded
+	// O2M/O2O result a pointer cycle that encoding/json cannot marshal.
+	bidiEdgeRefs bool
 
 	idType jen.Code
 }
@@ -80,6 +84,7 @@ func newQueryGen(h gen.GeneratorHelper, t *gen.Type, entityPkgPath string) *quer
 		hasPolicy:           h.FeatureEnabled(gen.FeaturePrivacy.Name) && t.NumPolicy() > 0,
 		schemaConfigEnabled: h.FeatureEnabled(gen.FeatureSchemaConfig.Name),
 		namedEdgesEnabled:   h.FeatureEnabled(gen.FeatureNamedEdges.Name),
+		bidiEdgeRefs:        h.FeatureEnabled(gen.FeatureBidiEdgeRefs.Name),
 		idType:              h.IDType(t),
 	}
 }

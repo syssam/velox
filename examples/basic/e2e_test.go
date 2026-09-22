@@ -2,6 +2,7 @@ package basic_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -1158,6 +1159,30 @@ func TestE2E_WithPosts_EagerLoad(t *testing.T) {
 	posts, err := u.Edges.PostsOrErr()
 	require.NoError(t, err)
 	assert.Empty(t, posts)
+}
+
+// TestE2E_EagerLoad_JSONMarshalHasNoCycle pins that an eager-loaded result
+// marshals to JSON in a project without FeatureBidiEdgeRefs. The loader used
+// to set post.Edges.Author = user unconditionally while loading user.posts,
+// so the result was a user→post→user pointer cycle and json.Marshal failed
+// with "encountered a cycle". Ent sets that back-reference only under the
+// "bidiedges" feature; velox now does the same.
+func TestE2E_EagerLoad_JSONMarshalHasNoCycle(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+
+	u := createUser(t, client, "Alice", "alice@test.com", 25)
+	createPost(t, client, "Hello", "World", u.ID)
+
+	users, err := client.User.Query().WithPosts().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+	require.Len(t, users[0].Edges.Posts, 1)
+	assert.Nil(t, users[0].Edges.Posts[0].Edges.Author, "back-reference set without FeatureBidiEdgeRefs")
+
+	out, err := json.Marshal(users)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `"title":"Hello"`)
 }
 
 func TestE2E_TagEdgeNotLoaded(t *testing.T) {

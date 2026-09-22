@@ -2,6 +2,8 @@ package sql
 
 import (
 	"github.com/dave/jennifer/jen"
+
+	"github.com/syssam/velox/compiler/gen"
 )
 
 // Terminal-method sections of genQueryPkg. See queryGen in query_pkg.go.
@@ -68,14 +70,7 @@ func (qg *queryGen) genSQLAll() {
 						jen.Id("e").Op("*").Add(targetEntityType()),
 					).BlockFunc(func(fnBody *jen.Group) {
 						fnBody.Id("n").Dot("Edges").Dot(edgeField).Op("=").Id("e")
-						// Back-reference: if the child has an inverse unique edge, set it.
-						if edge.Ref != nil && edge.Ref.Unique {
-							refField := edge.Ref.StructField()
-							fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
-								jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
-								jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
-							)
-						}
+						qg.genBackRef(fnBody, edge)
 					})
 				} else {
 					assignFn = jen.Func().Params(
@@ -85,14 +80,7 @@ func (qg *queryGen) genSQLAll() {
 						fnBody.Id("n").Dot("Edges").Dot(edgeField).Op("=").Append(
 							jen.Id("n").Dot("Edges").Dot(edgeField), jen.Id("e"),
 						)
-						// Back-reference for O2M.
-						if edge.Ref != nil && edge.Ref.Unique {
-							refField := edge.Ref.StructField()
-							fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
-								jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
-								jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
-							)
-						}
+						qg.genBackRef(fnBody, edge)
 					})
 				}
 
@@ -130,13 +118,7 @@ func (qg *queryGen) genSQLAll() {
 						jen.Id("e").Op("*").Add(targetEntityType()),
 					).BlockFunc(func(fnBody *jen.Group) {
 						fnBody.Id("n").Dot("AppendNamed"+edgeField).Call(jen.Id("name"), jen.Id("e"))
-						if edge.Ref != nil && edge.Ref.Unique {
-							refField := edge.Ref.StructField()
-							fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
-								jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
-								jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
-							)
-						}
+						qg.genBackRef(fnBody, edge)
 					})
 					forBody.If(
 						jen.Err().Op(":=").Id(qg.recv).Dot(loaderName).Call(
@@ -165,6 +147,29 @@ func (qg *queryGen) genSQLAll() {
 
 		allBody.Return(jen.Id("nodes"), jen.Nil())
 	})
+}
+
+// genBackRef emits, inside an eager-load assign callback, the back-reference
+// from the loaded child e to its parent n:
+//
+//	if !e.Edges.<Ref>Loaded() {
+//		e.Edges.<Ref> = n
+//		e.Edges.Mark<Ref>Loaded()
+//	}
+//
+// Only under FeatureBidiEdgeRefs and only when the paired edge is unique,
+// as in Ent (dialect/sql/query.tmpl, "bidiedges"). Emitted unconditionally,
+// it made json.Marshal of any WithXxx() result fail with "encountered a
+// cycle".
+func (qg *queryGen) genBackRef(fnBody *jen.Group, edge *gen.Edge) {
+	if !qg.bidiEdgeRefs || edge.Ref == nil || !edge.Ref.Unique {
+		return
+	}
+	refField := edge.Ref.StructField()
+	fnBody.If(jen.Op("!").Id("e").Dot("Edges").Dot(refField+"Loaded").Call()).Block(
+		jen.Id("e").Dot("Edges").Dot(refField).Op("=").Id("n"),
+		jen.Id("e").Dot("Edges").Dot("Mark"+refField+"Loaded").Call(),
+	)
 }
 
 // genPrepareQuery emits prepareQuery: explicit policy evaluation followed
