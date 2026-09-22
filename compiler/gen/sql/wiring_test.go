@@ -1668,3 +1668,59 @@ func TestUpdateCheckRunsFieldValidators(t *testing.T) {
 		}
 	}
 }
+
+// TestCreateCheckCallsIDValidator pins that a validator declared on a
+// user-defined ID is actually invoked.
+//
+// genCreateCheck appends t.ID to its field list and then skips it by name
+// (the ID has no "missing required field" check — the database or DefaultID
+// may supply it). That skip used to drop the ID's validator as well, so
+// `IDValidator` was declared in the leaf package, assigned by the runtime
+// init, and never called by anything: a schema writing
+// `field.String("id").NotEmpty().MaxLen(20)` generated, compiled, and
+// validated nothing. Same shape as the dead schema-level Interceptors() and
+// the dead CollectedFor annotation. Ent calls it from create check()
+// (entc/integration/gremlin/ent/item_create.go).
+//
+// NOTE: there is no e2e counterpart because no schema in this repo pairs
+// FeatureValidator with a validated user-defined ID — testschema's only
+// custom ID is a uuid.UUID, and the uuid field builder exposes no Validate.
+// If one is ever added, assert the behavior there too.
+func TestCreateCheckCallsIDValidator(t *testing.T) {
+	typ := createTestTypeWithSchema(t, "Token", &load.Schema{
+		Fields: []*load.Field{
+			{Name: "id", Info: &field.TypeInfo{Type: field.TypeString}, Validators: 1},
+			{Name: "name", Info: &field.TypeInfo{Type: field.TypeString}, Validators: 1},
+		},
+	})
+	if !typ.HasOneFieldID() || typ.ID == nil || !typ.ID.UserDefined || typ.ID.Validators == 0 {
+		t.Fatalf("fixture is not a validated user-defined ID: %+v", typ.ID)
+	}
+	helper := newMockHelper()
+	helper.graph = &gen.Graph{
+		Config: &gen.Config{
+			Package:  "github.com/test/project/ent",
+			Features: []gen.Feature{gen.FeatureValidator},
+		},
+		Nodes: []*gen.Type{typ},
+	}
+
+	// The leaf package declares it, so something must call it.
+	if pkgSrc := genPackage(helper, typ, &entityPkgEnumRegistry{}).GoString(); !strings.Contains(pkgSrc, "IDValidator") {
+		t.Fatal("fixture does not declare IDValidator; the test proves nothing")
+	}
+
+	file, err := genCreate(helper, typ)
+	if err != nil {
+		t.Fatalf("genCreate: %v", err)
+	}
+	body := funcBody(t, file.GoString(), "func (c *TokenCreate) check() error {")
+	if !strings.Contains(body, "token.IDValidator(") {
+		t.Errorf("create check() never calls IDValidator; a validator on a custom ID is dead\n%s", body)
+	}
+	// And the ordinary field validator still runs, i.e. the ID path did not
+	// displace the main loop.
+	if !strings.Contains(body, "token.NameValidator(") {
+		t.Errorf("create check() no longer calls NameValidator\n%s", body)
+	}
+}
