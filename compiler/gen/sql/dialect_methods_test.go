@@ -115,10 +115,6 @@ func TestDialect_Name(t *testing.T) {
 // Dialect Interface Compliance
 // =============================================================================
 
-func TestDialect_ImplementsDialectGenerator(t *testing.T) {
-	helper := newMockHelper()
-	d := NewDialect(helper)
-
-	// Verify all interface methods exist via type assertion
-	var _ gen.DialectGenerator = d
-}
+// Dialect must implement the full DialectGenerator surface; checked at
+// compile time.
+var _ gen.DialectGenerator = (*Dialect)(nil)

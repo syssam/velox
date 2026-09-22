@@ -385,246 +385,164 @@ func TestGenMutation_FieldBackedEdge_TypedFieldStorage(t *testing.T) {
 // genFieldAssignment Tests
 // =============================================================================
 
-func TestGenFieldAssignment_StringField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("name", field.TypeString)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Name")
-	// Should not panic
+// renderGroup renders the statements fn appends to a jen.Group as a block,
+// so generator helpers that write into a caller's group can be asserted on.
+func renderGroup(fn func(*jen.Group)) string {
+	return jen.BlockFunc(fn).GoString()
 }
 
-func TestGenFieldAssignment_NillableField(t *testing.T) {
+// TestGenFieldAssignment pins the assignValues arm genFieldAssignment emits
+// for each scan shape: the type the scanned value is asserted to, and how it
+// is stored on the receiver (nullable wrapper field, new(T) for nillable
+// fields, a deref for non-pointer values, a conversion for narrowed ints and
+// floats, json.Unmarshal for JSON).
+func TestGenFieldAssignment(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-	fld := createNillableField("bio", field.TypeString)
 
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Bio")
-	// Should not panic
-}
-
-func TestGenFieldAssignment_BoolField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("active", field.TypeBool)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Active")
-}
-
-func TestGenFieldAssignment_IntField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("age", field.TypeInt)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Age")
-}
-
-func TestGenFieldAssignment_JSONField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := &gen.Field{
-		Name: "metadata",
-		Type: &field.TypeInfo{Type: field.TypeJSON},
-	}
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Metadata")
-	// JSON field takes a different code path (json.Unmarshal)
-}
-
-func TestGenFieldAssignment_TimeField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("created_at", field.TypeTime)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "CreatedAt")
-}
-
-func TestGenFieldAssignment_NillableIntField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createNillableField("score", field.TypeInt)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Score")
-}
-
-func TestGenFieldAssignment_UUIDField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("uuid", field.TypeUUID)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "UUID")
-}
-
-func TestGenFieldAssignment_EnumField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createEnumField("status", []string{"active", "inactive"})
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Status")
-}
-
-func TestGenFieldAssignment_Float64Field(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("price", field.TypeFloat64)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Price")
-}
-
-// =============================================================================
-// genFieldAssignment Additional Branch Coverage
-// =============================================================================
-
-func TestGenFieldAssignment_NillableBoolField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createNillableField("active", field.TypeBool)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Active")
-}
-
-func TestGenFieldAssignment_NillableTimeField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createNillableField("deleted_at", field.TypeTime)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "DeletedAt")
-}
-
-func TestGenFieldAssignment_Float32Field(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("rating", field.TypeFloat32)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Rating")
-}
-
-func TestGenFieldAssignment_BytesField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("data", field.TypeBytes)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Data")
-}
-
-func TestGenFieldAssignment_NillableFloat64(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createNillableField("score", field.TypeFloat64)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Score")
-}
-
-func TestGenFieldAssignment_OtherField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := &gen.Field{
-		Name: "custom",
-		Type: &field.TypeInfo{Type: field.TypeOther, Ident: "MyType"},
-	}
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Custom")
-}
-
-// =============================================================================
-// genScanTypeFieldExpr Tests
-// =============================================================================
-
-func TestGenScanTypeFieldExpr_RegularField(t *testing.T) {
-	t.Parallel()
-	fld := createTestField("name", field.TypeString)
-	result := genScanTypeFieldExpr(fld, false)
-	assert.NotNil(t, result)
-}
-
-func TestGenScanTypeFieldExpr_EnumField(t *testing.T) {
-	t.Parallel()
-	fld := createEnumField("status", []string{"active", "inactive"})
-	result := genScanTypeFieldExpr(fld, false)
-	assert.NotNil(t, result)
-}
-
-// =============================================================================
-// genFieldAssignment Additional Coverage (nillable pointer type)
-// =============================================================================
-
-func TestGenFieldAssignment_NillableWithPointerRType(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := &gen.Field{
-		Name:     "custom",
-		Type:     &field.TypeInfo{Type: field.TypeOther, Ident: "MyType", RType: &field.RType{Ident: "MyType"}},
-		Nillable: true,
-	}
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Custom")
-}
-
-func TestGenFieldAssignment_Uint8Field(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("flags", field.TypeUint8)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Flags")
-}
-
-func TestGenFieldAssignment_Int8Field(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createTestField("priority", field.TypeInt8)
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Priority")
-}
-
-func TestGenFieldAssignment_FieldWithPointerRType(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	// Field with RType.IsPtr() true, Nillable false — tests the else branch
-	// where value is assigned without dereference
-	fld := &gen.Field{
-		Name: "custom",
-		Type: &field.TypeInfo{
-			Type:  field.TypeOther,
-			Ident: "*MyType",
-			RType: &field.RType{
-				Ident: "*MyType",
-				Kind:  reflect.Pointer,
-			},
+	tests := []struct {
+		name    string
+		field   *gen.Field
+		want    []string
+		notWant []string
+	}{
+		{
+			name:    "string",
+			field:   createTestField("name", field.TypeString),
+			want:    []string{"values[0].(*sql.NullString)", "if value.Valid {", "u.F = value.String\n"},
+			notWant: []string{"new("},
 		},
-		Nillable: false,
+		{
+			name:  "nillable string",
+			field: createNillableField("bio", field.TypeString),
+			want:  []string{"values[0].(*sql.NullString)", "u.F = new(string)\n", "*u.F = value.String\n"},
+		},
+		{
+			name:    "bool",
+			field:   createTestField("active", field.TypeBool),
+			want:    []string{"values[0].(*sql.NullBool)", "u.F = value.Bool\n"},
+			notWant: []string{"new("},
+		},
+		{
+			name:  "nillable bool",
+			field: createNillableField("active", field.TypeBool),
+			want:  []string{"values[0].(*sql.NullBool)", "u.F = new(bool)\n", "*u.F = value.Bool\n"},
+		},
+		{
+			name:    "int",
+			field:   createTestField("age", field.TypeInt),
+			want:    []string{"values[0].(*sql.NullInt64)", "u.F = int(value.Int64)\n"},
+			notWant: []string{"new("},
+		},
+		{
+			name:  "nillable int",
+			field: createNillableField("score", field.TypeInt),
+			want:  []string{"values[0].(*sql.NullInt64)", "u.F = new(int)\n", "*u.F = int(value.Int64)\n"},
+		},
+		{
+			name:  "int8",
+			field: createTestField("priority", field.TypeInt8),
+			want:  []string{"values[0].(*sql.NullInt64)", "u.F = int8(value.Int64)\n"},
+		},
+		{
+			name:  "uint8",
+			field: createTestField("flags", field.TypeUint8),
+			want:  []string{"values[0].(*sql.NullInt64)", "u.F = uint8(value.Int64)\n"},
+		},
+		{
+			name:    "float64",
+			field:   createTestField("price", field.TypeFloat64),
+			want:    []string{"values[0].(*sql.NullFloat64)", "u.F = value.Float64\n"},
+			notWant: []string{"new("},
+		},
+		{
+			name:  "nillable float64",
+			field: createNillableField("score", field.TypeFloat64),
+			want:  []string{"values[0].(*sql.NullFloat64)", "u.F = new(float64)\n", "*u.F = value.Float64\n"},
+		},
+		{
+			name:  "float32",
+			field: createTestField("rating", field.TypeFloat32),
+			want:  []string{"values[0].(*sql.NullFloat64)", "u.F = float32(value.Float64)\n"},
+		},
+		{
+			name:    "time",
+			field:   createTestField("created_at", field.TypeTime),
+			want:    []string{"values[0].(*sql.NullTime)", "u.F = value.Time\n"},
+			notWant: []string{"new("},
+		},
+		{
+			name:  "nillable time",
+			field: createNillableField("deleted_at", field.TypeTime),
+			want:  []string{"values[0].(*sql.NullTime)", "u.F = new(time.Time)\n", "*u.F = value.Time\n"},
+		},
+		{
+			name:  "enum converts the scanned string",
+			field: createEnumField("status", []string{"active", "inactive"}),
+			want:  []string{"values[0].(*sql.NullString)", "u.F = Status(value.String)\n"},
+		},
+		{
+			name:  "uuid is dereferenced",
+			field: createTestField("uuid", field.TypeUUID),
+			want:  []string{"values[0].(*[16]byte)", "if value != nil {", "u.F = *value\n"},
+		},
+		{
+			name:  "bytes are dereferenced",
+			field: createTestField("data", field.TypeBytes),
+			want:  []string{"values[0].(*[]byte)", "if value != nil {", "u.F = *value\n"},
+		},
+		{
+			name:    "json is unmarshaled",
+			field:   &gen.Field{Name: "metadata", Type: &field.TypeInfo{Type: field.TypeJSON}},
+			want:    []string{"values[0].(*[]byte)", "value != nil && len(*value) > 0", "json.Unmarshal(*value, &u.F)", `"unmarshal field metadata: %w"`},
+			notWant: []string{"u.F = "},
+		},
+		{
+			name:  "other type is dereferenced",
+			field: &gen.Field{Name: "custom", Type: &field.TypeInfo{Type: field.TypeOther, Ident: "MyType"}},
+			want:  []string{"values[0].(*MyType)", "u.F = *value\n"},
+		},
+		{
+			name: "nillable other type keeps the pointer",
+			field: &gen.Field{
+				Name:     "custom",
+				Type:     &field.TypeInfo{Type: field.TypeOther, Ident: "MyType", RType: &field.RType{Ident: "MyType"}},
+				Nillable: true,
+			},
+			want:    []string{"values[0].(*MyType)", "u.F = value\n"},
+			notWant: []string{"*value\n"},
+		},
+		{
+			// RType.IsPtr, not nillable: the value is assigned without a deref
+			// (same as Ent's decode template).
+			name: "pointer go type keeps the pointer",
+			field: &gen.Field{
+				Name: "custom",
+				Type: &field.TypeInfo{
+					Type:  field.TypeOther,
+					Ident: "*MyType",
+					RType: &field.RType{Ident: "*MyType", Kind: reflect.Pointer},
+				},
+			},
+			want:    []string{"values[0].(**MyType)", "u.F = value\n"},
+			notWant: []string{"*value\n"},
+		},
 	}
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Custom")
-}
-
-func TestGenFieldAssignment_NillableEnumField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	fld := createEnumField("status", []string{"active", "inactive"})
-	fld.Nillable = true
-
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, createTestType("User"), fld, "0", "u", "Status")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			code := renderGroup(func(g *jen.Group) {
+				genFieldAssignment(newMockHelper(), g, createTestType("User"), tt.field, "0", "u", "F")
+			})
+			// Every arm rejects a slot of the wrong type with a named error.
+			assert.Contains(t, code, `fmt.Errorf("unexpected type %T for field `+tt.field.Name+`", values[0])`)
+			for _, w := range tt.want {
+				assert.Contains(t, code, w)
+			}
+			for _, nw := range tt.notWant {
+				assert.NotContains(t, code, nw)
+			}
+		})
+	}
 }
 
 func TestGenFieldAssignment_ValueScannerField(t *testing.T) {
@@ -648,12 +566,33 @@ func TestGenFieldAssignment_ValueScannerField(t *testing.T) {
 			ValueScanner: true,
 		},
 	})
-	helper := newMockHelper()
-
-	// Verify the field has ValueScanner set
-	require.Greater(t, len(userType.Fields), 0, "expected at least one field")
+	require.NotEmpty(t, userType.Fields)
 	require.True(t, userType.Fields[0].HasValueScanner(), "expected ValueScanner to be true")
 
-	grp := &jen.Group{}
-	genFieldAssignment(helper, grp, userType, userType.Fields[0], "0", "u", "CustomType")
+	code := renderGroup(func(g *jen.Group) {
+		genFieldAssignment(newMockHelper(), g, userType, userType.Fields[0], "0", "u", "CustomType")
+	})
+	// An external ValueScanner decodes through its FromValue func and
+	// propagates its error instead of type-asserting the slot.
+	assert.Contains(t, code, "if value, err := user.ValueScanner.CustomType.FromValue(values[0]); err != nil {")
+	assert.Contains(t, code, "return err\n")
+	assert.Contains(t, code, "u.CustomType = value\n")
+	assert.NotContains(t, code, "unexpected type")
+}
+
+// =============================================================================
+// genScanTypeFieldExpr Tests
+// =============================================================================
+
+func TestGenScanTypeFieldExpr(t *testing.T) {
+	t.Parallel()
+	render := func(c jen.Code) string { return jen.Add(c).GoString() }
+
+	assert.Equal(t, "value.String", render(genScanTypeFieldExpr(createTestField("name", field.TypeString), false)))
+	assert.Equal(t, "value.Int64", render(genScanTypeFieldExpr(createTestField("id", field.TypeInt64), false)))
+	assert.Equal(t, "int8(value.Int64)", render(genScanTypeFieldExpr(createTestField("n", field.TypeInt8), false)))
+
+	enum := createEnumField("status", []string{"active", "inactive"})
+	// Same package (entity model): the enum type is referenced unqualified.
+	assert.Equal(t, "Status(value.String)", render(genScanTypeFieldExpr(enum, true)))
 }

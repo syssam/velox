@@ -183,29 +183,6 @@ func TestGenEntityRuntime_WithRootPkg_WithDefaults(t *testing.T) {
 // genEntityRuntimeRegistration Tests
 // =============================================================================
 
-func TestGenEntityRuntimeRegistration_BasicUser(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	helper.rootPkg = "github.com/test/project/ent"
-	userType := createTestType("User")
-
-	grp := &jen.Group{}
-	genEntityRuntimeRegistration(helper, grp, userType)
-	// Should not panic
-}
-
-func TestGenEntityRuntimeRegistration_EmptyGraphPackage(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-	helper.rootPkg = "github.com/test/project/ent"
-	helper.graph.Package = ""
-	userType := createTestType("User")
-
-	grp := &jen.Group{}
-	genEntityRuntimeRegistration(helper, grp, userType)
-	// Should fall back to h.Pkg() + "/entity" without panic
-}
-
 func TestGenEntityRuntimeRegistration_ContainsAllFields(t *testing.T) {
 	t.Parallel()
 	helper := newMockHelper()

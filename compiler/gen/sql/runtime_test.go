@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dave/jennifer/jen"
@@ -123,390 +124,297 @@ func TestGetValidatorType_JSONField(t *testing.T) {
 }
 
 // =============================================================================
-// genRuntimeDefault Tests
+// genRuntimeDefault / genRuntimeUpdateDefault / genRuntimeValidator Tests
 // =============================================================================
+
+const (
+	testSchemaPkg = "github.com/test/project/schema"
+	testUserPkg   = "github.com/test/project/ent/user"
+)
+
+// emptyBlock is what renderGroup returns when a generator appends nothing.
+const emptyBlock = "{\n}"
 
 func TestGenRuntimeDefault_StandardType(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
 	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{Name: "name", Info: &field.TypeInfo{Type: field.TypeString}, Default: true, DefaultValue: "unknown"},
 	})
-	// Get the properly initialized field from the type
-	require.True(t, len(userType.Fields) > 0)
-	nameField := userType.Fields[0]
+	require.NotEmpty(t, userType.Fields)
 
-	grp := &jen.Group{}
-	genRuntimeDefault(helper, grp, userType, nameField, "userDescName", "github.com/test/project/ent/user", "user")
-	// Should generate code without panicking
+	code := renderGroup(func(g *jen.Group) {
+		genRuntimeDefault(newMockHelper(), g, userType, userType.Fields[0], "userDescName", testUserPkg, "user")
+	})
+	assert.Contains(t, code, "// user.DefaultName holds the default value on creation for the name field.")
+	assert.Contains(t, code, "user.DefaultName = userDescName.Default.(string)\n")
 }
-
-// =============================================================================
-// genRuntimeValidator Tests
-// =============================================================================
-
-func TestGenRuntimeValidator_SingleValidator(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
-	nameField := createTestField("name", field.TypeString)
-	nameField.Validators = 1
-
-	grp := &jen.Group{}
-	genRuntimeValidator(helper, grp, userType, nameField, "userDescName", "github.com/test/project/ent/user", "user")
-	// Should not panic and generate code for single validator
-}
-
-func TestGenRuntimeValidator_MultipleValidators(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
-	nameField := createTestField("name", field.TypeString)
-	nameField.Validators = 3
-
-	grp := &jen.Group{}
-	genRuntimeValidator(helper, grp, userType, nameField, "userDescName", "github.com/test/project/ent/user", "user")
-	// Should not panic and generate combined validator
-}
-
-func TestGenRuntimeValidator_ZeroValidators(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
-	nameField := createTestField("name", field.TypeString)
-	nameField.Validators = 0
-
-	grp := &jen.Group{}
-	genRuntimeValidator(helper, grp, userType, nameField, "userDescName", "github.com/test/project/ent/user", "user")
-	// Should not panic - zero validators should be a no-op
-}
-
-// =============================================================================
-// genRuntimeUpdateDefault Tests
-// =============================================================================
 
 func TestGenRuntimeUpdateDefault(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
 	updatedField := createTestField("updated_at", field.TypeTime)
 	updatedField.UpdateDefault = true
 
-	grp := &jen.Group{}
-	genRuntimeUpdateDefault(helper, grp, userType, updatedField, "userDescUpdatedAt", "github.com/test/project/ent/user", "user")
-	// Should not panic
+	code := renderGroup(func(g *jen.Group) {
+		genRuntimeUpdateDefault(newMockHelper(), g, createTestType("User"), updatedField, "userDescUpdatedAt", testUserPkg, "user")
+	})
+	// An update default is always a func, asserted to func() T.
+	assert.Contains(t, code, "user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)\n")
+}
+
+func TestGenRuntimeValidator(t *testing.T) {
+	t.Parallel()
+	render := func(n int) string {
+		nameField := createTestField("name", field.TypeString)
+		nameField.Validators = n
+		return renderGroup(func(g *jen.Group) {
+			genRuntimeValidator(newMockHelper(), g, createTestType("User"), nameField, "userDescName", testUserPkg, "user")
+		})
+	}
+
+	t.Run("zero validators emit nothing", func(t *testing.T) {
+		assert.Equal(t, emptyBlock, render(0))
+	})
+
+	t.Run("one validator is assigned directly", func(t *testing.T) {
+		code := render(1)
+		assert.Contains(t, code, "user.NameValidator = userDescName.Validators[0].(func(string) error)\n")
+		assert.NotContains(t, code, "fns :=")
+	})
+
+	t.Run("several validators are chained in order", func(t *testing.T) {
+		code := render(3)
+		assert.Contains(t, code, "user.NameValidator = func() func(string) error {")
+		assert.Contains(t, code, "validators := userDescName.Validators")
+		assert.Contains(t, code, "fns := [...]func(string) error{")
+		for _, i := range []string{"0", "1", "2"} {
+			assert.Contains(t, code, "validators["+i+"].(func(string) error),")
+		}
+		assert.NotContains(t, code, "validators[3]")
+		// The combined validator stops at the first failing one.
+		assert.Contains(t, code, "for _, fn := range fns {")
+		assert.Contains(t, code, "if err := fn(name); err != nil {")
+		assert.Contains(t, code, "}()")
+	})
 }
 
 // =============================================================================
-// genRuntimeHooks Tests
+// genRuntimeHooks / genRuntimePolicies Tests
 // =============================================================================
 
-func TestGenRuntimeHooks_NoHooks(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
-	grp := &jen.Group{}
-	genRuntimeHooks(helper, grp, userType, "schema", "entity", "pkg")
-	// No hooks, should be a no-op
+// renderRuntime renders gen for a User type built from s.
+func renderRuntime(t *testing.T, s *load.Schema, fn func(h *mockHelper, g *jen.Group, typ *gen.Type)) string {
+	t.Helper()
+	h := newMockHelper()
+	typ := createTestTypeWithSchema(t, "User", s)
+	h.graph.Nodes = []*gen.Type{typ}
+	return renderGroup(func(g *jen.Group) { fn(h, g, typ) })
 }
 
-func TestGenRuntimeHooks_WithSchemaHooks(t *testing.T) {
+func TestGenRuntimeHooks(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
+	hooks := func(h *mockHelper, g *jen.Group, typ *gen.Type) {
+		genRuntimeHooks(h, g, typ, testSchemaPkg, h.LeafPkgPath(typ), "user")
+	}
 
-	userType := createTypeWithHooks(t, "User", []*load.Position{
-		{Index: 0, MixedIn: false},
+	t.Run("no hooks emit nothing", func(t *testing.T) {
+		assert.Equal(t, emptyBlock, renderRuntime(t, &load.Schema{}, hooks))
 	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
 
-	grp := &jen.Group{}
-	genRuntimeHooks(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-	// Should generate code assigning hooks
-}
-
-func TestGenRuntimeHooks_WithMixinHooks(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithHooks(t, "User", []*load.Position{
-		{Index: 0, MixedIn: true, MixinIndex: 0},
+	t.Run("schema hook", func(t *testing.T) {
+		code := renderRuntime(t, &load.Schema{Hooks: []*load.Position{{Index: 0}}}, hooks)
+		assert.Contains(t, code, "userHooks := schema.User{}.Hooks()\n")
+		assert.Contains(t, code, "user.Hooks[0] = userHooks[0]\n")
+		assert.NotContains(t, code, "Mixin")
 	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
 
-	grp := &jen.Group{}
-	genRuntimeHooks(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-func TestGenRuntimeHooks_WithPolicyOffset(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	// Create a type with both policies and hooks
-	userType := createTestTypeWithSchema(t, "User", &load.Schema{
-		Hooks:  []*load.Position{{Index: 0, MixedIn: false}},
-		Policy: []*load.Position{{Index: 0, MixedIn: false}},
+	t.Run("mixin hook", func(t *testing.T) {
+		code := renderRuntime(t, &load.Schema{Hooks: []*load.Position{{Index: 0, MixedIn: true, MixinIndex: 0}}}, hooks)
+		assert.Contains(t, code, "userMixinHooks0 := userMixin[0].Hooks()\n")
+		assert.Contains(t, code, "user.Hooks[0] = userMixinHooks0[0]\n")
+		assert.NotContains(t, code, "schema.User{}.Hooks()")
 	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
 
-	grp := &jen.Group{}
-	genRuntimeHooks(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-	// Hook should be at index 1 (offset 1 because policy is at index 0)
-}
-
-// =============================================================================
-// genRuntimePolicies Tests
-// =============================================================================
-
-func TestGenRuntimePolicies_NoPolicies(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestType("User")
-	grp := &jen.Group{}
-	genRuntimePolicies(helper, grp, userType, "schema", "entity", "pkg")
-	// No policies, should be a no-op
-}
-
-func TestGenRuntimePolicies_WithSchemaPolicy(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithPolicies(t, "User", []*load.Position{
-		{Index: 0, MixedIn: false},
+	t.Run("mixin hooks come before schema hooks", func(t *testing.T) {
+		code := renderRuntime(t, &load.Schema{Hooks: []*load.Position{
+			{Index: 0, MixedIn: true, MixinIndex: 0},
+			{Index: 0},
+		}}, hooks)
+		assert.Contains(t, code, "user.Hooks[0] = userMixinHooks0[0]\n")
+		assert.Contains(t, code, "user.Hooks[1] = userHooks[0]\n")
 	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
 
-	grp := &jen.Group{}
-	genRuntimePolicies(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
+	// Privacy is an explicit policy field, not a Hooks[0] slot: a policy
+	// must not shift the schema's hooks.
+	t.Run("policy does not reserve a hook slot", func(t *testing.T) {
+		code := renderRuntime(t, &load.Schema{
+			Hooks:  []*load.Position{{Index: 0}},
+			Policy: []*load.Position{{Index: 0}},
+		}, hooks)
+		assert.Contains(t, code, "user.Hooks[0] = userHooks[0]\n")
+		assert.NotContains(t, code, "Hooks[1]")
+		assert.NotContains(t, code, "Policy")
+	})
 }
 
-func TestGenRuntimePolicies_WithMixinPolicy(t *testing.T) {
+func TestGenRuntimePolicies(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
+	policies := func(h *mockHelper, g *jen.Group, typ *gen.Type) {
+		genRuntimePolicies(h, g, typ, testSchemaPkg, h.LeafPkgPath(typ), "user")
+	}
 
-	userType := createTypeWithPolicies(t, "User", []*load.Position{
-		{Index: 0, MixedIn: true, MixinIndex: 0},
+	t.Run("no policy emits nothing", func(t *testing.T) {
+		assert.Equal(t, emptyBlock, renderRuntime(t, &load.Schema{}, policies))
 	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
 
-	grp := &jen.Group{}
-	genRuntimePolicies(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
+	t.Run("schema policy", func(t *testing.T) {
+		code := renderRuntime(t, &load.Schema{Policy: []*load.Position{{Index: 0}}}, policies)
+		assert.Contains(t, code, "user.Policy = privacy.NewPolicies(schema.User{})\n")
+		// The client reads RuntimePolicy; edge queries look it up by name.
+		assert.Contains(t, code, "user.RuntimePolicy = user.Policy\n")
+		assert.Contains(t, code, `runtime.RegisterEntityPolicy("User", user.RuntimePolicy)`)
+		assert.NotContains(t, code, "Hooks")
+	})
+
+	t.Run("mixin policies are composed before the schema policy", func(t *testing.T) {
+		code := renderRuntime(t, &load.Schema{Policy: []*load.Position{{Index: 0, MixedIn: true, MixinIndex: 0}}}, policies)
+		assert.Contains(t, code, "user.Policy = privacy.NewPolicies(userMixin[0], schema.User{})\n")
+		assert.Contains(t, code, "user.RuntimePolicy = user.Policy\n")
+	})
 }
 
 // =============================================================================
-// genRuntimeFields Tests
+// genRuntimeFields / genRuntimeEntityInit Tests
 // =============================================================================
 
-func TestGenRuntimeFields_WithDefaults(t *testing.T) {
+func TestGenRuntimeEntityInit(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
+	stringField := func(f load.Field) *load.Field {
+		f.Info = &field.TypeInfo{Type: field.TypeString}
+		return &f
+	}
+	timeField := func(f load.Field) *load.Field {
+		f.Info = &field.TypeInfo{Type: field.TypeTime}
+		return &f
+	}
 
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
+	tests := []struct {
+		name    string
+		schema  *load.Schema
+		want    []string
+		notWant []string
+	}{
 		{
-			Name:    "name",
-			Info:    &field.TypeInfo{Type: field.TypeString},
-			Default: true,
+			name:   "nothing to wire",
+			schema: &load.Schema{Fields: []*load.Field{stringField(load.Field{Name: "name"})}},
 		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeFields(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-func TestGenRuntimeFields_WithValidators(t *testing.T) {
-	t.Parallel()
-	fh := newFeatureMockHelper()
-	fh.withFeatures("validator")
-
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{
-			Name:       "name",
-			Info:       &field.TypeInfo{Type: field.TypeString},
-			Validators: 1,
+			name:   "default",
+			schema: &load.Schema{Fields: []*load.Field{stringField(load.Field{Name: "name", Default: true})}},
+			want: []string{
+				"userFields := schema.User{}.Fields()\n",
+				"_ = userFields\n",
+				"userDescName := userFields[0].Descriptor()\n",
+				"user.DefaultName = userDescName.Default.(string)\n",
+			},
+			notWant: []string{"Mixin", "Validator"},
 		},
-	})
-	fh.graph.Nodes = []*gen.Type{userType}
-	entityPkg := fh.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeFields(fh, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-func TestGenRuntimeFields_WithUpdateDefault(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{
-			Name:          "updated_at",
-			Info:          &field.TypeInfo{Type: field.TypeTime},
-			UpdateDefault: true,
+			// Validators are generated unconditionally; FeatureValidator is a no-op.
+			name:   "validator",
+			schema: &load.Schema{Fields: []*load.Field{stringField(load.Field{Name: "name", Validators: 1})}},
+			want: []string{
+				"userDescName := userFields[0].Descriptor()\n",
+				"user.NameValidator = userDescName.Validators[0].(func(string) error)\n",
+			},
+			notWant: []string{"Default"},
 		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeFields(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-func TestGenRuntimeFields_MixinField(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{
-			Name:     "created_at",
-			Info:     &field.TypeInfo{Type: field.TypeTime},
-			Default:  true,
-			Position: &load.Position{MixedIn: true, MixinIndex: 0, Index: 0},
+			name:   "update default",
+			schema: &load.Schema{Fields: []*load.Field{timeField(load.Field{Name: "updated_at", UpdateDefault: true})}},
+			want: []string{
+				"userDescUpdatedAt := userFields[0].Descriptor()\n",
+				"user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)\n",
+			},
 		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-	entityPkg := helper.LeafPkgPath(userType)
-
-	grp := &jen.Group{}
-	genRuntimeFields(helper, grp, userType, "github.com/test/project/schema", entityPkg, "user")
-}
-
-// =============================================================================
-// genRuntimeEntityInit Tests
-// =============================================================================
-
-func TestGenRuntimeEntityInit_WithHooks(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestTypeWithSchema(t, "User", &load.Schema{
-		Hooks: []*load.Position{{Index: 0, MixedIn: false}},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
-}
-
-func TestGenRuntimeEntityInit_WithPoliciesAndHooks(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestTypeWithSchema(t, "User", &load.Schema{
-		Hooks:  []*load.Position{{Index: 0, MixedIn: false}},
-		Policy: []*load.Position{{Index: 0, MixedIn: false}},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
-}
-
-func TestGenRuntimeEntityInit_NoRuntimeNeeded(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	// Type with no defaults, no validators, no hooks, no mixins
-	userType := createTestType("User")
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
-	// Should return early - no runtime code needed
-}
-
-func TestGenRuntimeEntityInit_WithDefaults(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	// Type with default fields triggers hasRuntimeFields=true
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{
-			Name:    "name",
-			Info:    &field.TypeInfo{Type: field.TypeString},
-			Default: true,
+			name: "descriptor index follows the schema position",
+			schema: &load.Schema{Fields: []*load.Field{
+				stringField(load.Field{Name: "a"}),
+				stringField(load.Field{Name: "b", Default: true, Position: &load.Position{Index: 1}}),
+			}},
+			want:    []string{"userDescB := userFields[1].Descriptor()\n"},
+			notWant: []string{"userDescA"},
 		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
-}
-
-func TestGenRuntimeEntityInit_WithValidators(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{
-			Name:       "name",
-			Info:       &field.TypeInfo{Type: field.TypeString},
-			Validators: 1,
+			name: "mixin field reads the mixin's descriptor",
+			schema: &load.Schema{Fields: []*load.Field{
+				timeField(load.Field{Name: "created_at", Default: true, Position: &load.Position{MixedIn: true, MixinIndex: 0, Index: 0}}),
+			}},
+			want: []string{
+				"userMixin := schema.User{}.Mixin()\n",
+				"userMixinFields0 := userMixin[0].Fields()\n",
+				"userDescCreatedAt := userMixinFields0[0].Descriptor()\n",
+				"user.DefaultCreatedAt = userDescCreatedAt.Default.(time.Time)\n",
+			},
+			notWant: []string{"userFields[0].Descriptor()"},
 		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
-}
-
-func TestGenRuntimeEntityInit_WithUpdateDefault(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
 		{
-			Name:          "updated_at",
-			Info:          &field.TypeInfo{Type: field.TypeTime},
-			UpdateDefault: true,
+			name: "policy, hooks and fields are all wired",
+			schema: &load.Schema{
+				Fields: []*load.Field{stringField(load.Field{Name: "name", Default: true})},
+				Hooks:  []*load.Position{{Index: 0}},
+				Policy: []*load.Position{{Index: 0}},
+			},
+			want: []string{
+				"user.RuntimePolicy = user.Policy\n",
+				"user.Hooks[0] = userHooks[0]\n",
+				"user.DefaultName = userDescName.Default.(string)\n",
+			},
 		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newMockHelper()
+			typ := createTestTypeWithSchema(t, "User", tt.schema)
+			h.graph.Nodes = []*gen.Type{typ}
+			code := renderGroup(func(g *jen.Group) { genRuntimeEntityInit(h, g, typ, testSchemaPkg) })
+			if len(tt.want) == 0 {
+				assert.Equal(t, emptyBlock, code)
+				return
+			}
+			for _, w := range tt.want {
+				assert.Contains(t, code, w)
+			}
+			for _, nw := range tt.notWant {
+				assert.NotContains(t, code, nw)
+			}
+		})
+	}
 }
 
-func TestGenRuntimeEntityInit_WithInterceptors(t *testing.T) {
+// TestGenRuntimeEntityInit_Order pins Ent's init order: mixin, policies,
+// hooks, then fields. The policy must be installed before anything that
+// could run a mutation.
+func TestGenRuntimeEntityInit_Order(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-
-	userType := createTestTypeWithSchema(t, "User", &load.Schema{
-		Interceptors: []*load.Position{{Index: 0, MixedIn: false}},
+	h := newMockHelper()
+	typ := createTestTypeWithSchema(t, "User", &load.Schema{
+		Fields: []*load.Field{{Name: "created_at", Info: &field.TypeInfo{Type: field.TypeTime}, Default: true, Position: &load.Position{MixedIn: true, MixinIndex: 0}}},
+		Hooks:  []*load.Position{{Index: 0}},
+		Policy: []*load.Position{{Index: 0}},
 	})
-	helper.graph.Nodes = []*gen.Type{userType}
+	h.graph.Nodes = []*gen.Type{typ}
+	code := renderGroup(func(g *jen.Group) { genRuntimeEntityInit(h, g, typ, testSchemaPkg) })
 
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
-}
-
-func TestGenRuntimeEntityInit_WithMixinFields(t *testing.T) {
-	t.Parallel()
-	helper := newMockHelper()
-
-	// Type with mixin fields that have defaults triggers RuntimeMixin
-	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
-		{
-			Name:     "created_at",
-			Info:     &field.TypeInfo{Type: field.TypeTime},
-			Default:  true,
-			Position: &load.Position{MixedIn: true, MixinIndex: 0, Index: 0},
-		},
-	})
-	helper.graph.Nodes = []*gen.Type{userType}
-
-	grp := &jen.Group{}
-	genRuntimeEntityInit(helper, grp, userType, "github.com/test/project/schema")
+	order := []string{"userMixin := ", "user.Policy = ", "userHooks := ", "userMixinFields0 := ", "user.DefaultCreatedAt = "}
+	last := -1
+	for _, s := range order {
+		i := strings.Index(code, s)
+		require.GreaterOrEqual(t, i, 0, "missing %q in:\n%s", s, code)
+		assert.Greater(t, i, last, "%q out of order in:\n%s", s, code)
+		last = i
+	}
 }
 
 // =============================================================================

@@ -163,6 +163,13 @@ func TestGenPredicateVars_WithEdges(t *testing.T) {
 
 	f := helper.NewFile("user")
 	genPredicateVars(helper, f, userType)
+
+	code := f.GoString()
+	assert.Contains(t, code, "var IDField = sql.Int64Field[predicate.User](FieldID)")
+	// Edge predicates (HasPosts/HasPostsWith) belong to genEdgePredicates,
+	// not the field-predicate vars.
+	assert.NotContains(t, code, "HasPosts")
+	assert.NotContains(t, code, "PostsField")
 }
 
 func TestGenPredicateVars_WithMultipleFieldTypes(t *testing.T) {
@@ -173,11 +180,28 @@ func TestGenPredicateVars_WithMultipleFieldTypes(t *testing.T) {
 		createTestField("active", field.TypeBool),
 		createTestField("score", field.TypeFloat64),
 		createNillableField("bio", field.TypeString),
+		createTestField("created_at", field.TypeTime),
+		{Name: "meta", Type: &field.TypeInfo{Type: field.TypeJSON}},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
 
 	f := helper.NewFile("user")
 	genPredicateVars(helper, f, userType)
+
+	code := f.GoString()
+	for _, want := range []string{
+		"var NameField = sql.StringField[predicate.User](FieldName)",
+		"var AgeField = sql.IntField[predicate.User](FieldAge)",
+		"var ActiveField = sql.BoolField[predicate.User](FieldActive)",
+		"var ScoreField = sql.Float64Field[predicate.User](FieldScore)",
+		// Nillable does not change the predicate type.
+		"var BioField = sql.StringField[predicate.User](FieldBio)",
+		"var CreatedAtField = sql.TimeField[predicate.User, time.Time](FieldCreatedAt)",
+	} {
+		assert.Contains(t, code, want)
+	}
+	// JSON fields get no generic field predicate.
+	assert.NotContains(t, code, "MetaField")
 }
 
 func TestGenEdgePredicates_WithHasPredicate(t *testing.T) {
