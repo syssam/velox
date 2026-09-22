@@ -18,7 +18,7 @@ func TestWithVars(t *testing.T) {
 	require.NoError(t, err)
 	db.SetMaxOpenConns(1)
 	drv := OpenDB(dialect.Postgres, db)
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("bar").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "bar").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
 	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	rows := &Rows{}
@@ -32,8 +32,8 @@ func TestWithVars(t *testing.T) {
 	require.NoError(t, rows.Close(), "rows should be closed to release the connection")
 	require.NoError(t, mock.ExpectationsWereMet())
 
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("bar").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("baz").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "bar").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "baz").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
 	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	err = drv.Query(
@@ -47,7 +47,7 @@ func TestWithVars(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	mock.ExpectBegin()
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("bar").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, true\)`).WithArgs("foo", "bar").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
 	mock.ExpectCommit()
 	tx, err := drv.Tx(context.Background())
@@ -64,7 +64,7 @@ func TestWithVars(t *testing.T) {
 	// Rows should not be closed to release the session,
 	// as a transaction is always scoped to a single connection.
 
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("qux").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "qux").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO users DEFAULT VALUES").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	err = drv.Exec(
@@ -77,7 +77,7 @@ func TestWithVars(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 	// No rows are returned, so no need to close them.
 
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("foo").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO users DEFAULT VALUES").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	err = drv.Exec(
@@ -563,7 +563,7 @@ func TestWithVarsEscapedValue(t *testing.T) {
 	drv := OpenDB(dialect.Postgres, db)
 
 	// Parameterized queries handle special characters safely
-	mock.ExpectExec(`SET foo TO \$1`).WithArgs("it's escaped").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "it's escaped").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
 	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -610,8 +610,8 @@ func TestWithVars_SpecialCharacters(t *testing.T) {
 	drv := OpenDB(dialect.Postgres, db)
 
 	// SQL injection attempt in value should be safe via parameterization
-	mock.ExpectExec(`SET app\.data TO \$1`).
-		WithArgs("O'Brien; DROP TABLE users--").
+	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).
+		WithArgs("app.data", "O'Brien; DROP TABLE users--").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").
 		WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
@@ -626,4 +626,53 @@ func TestWithVars_SpecialCharacters(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, rows.Close())
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestWithVars_MySQLTxResetsUserVariables pins that a MySQL user variable set
+// inside a transaction is reset once the statement finishes. MySQL user
+// variables are session-scoped, not transaction-scoped: without the reset the
+// value survives COMMIT and is visible to the next borrower of the pooled
+// connection (a cross-tenant leak for a tenant variable).
+func TestWithVars_MySQLTxResetsUserVariables(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
+	drv := OpenDB(dialect.MySQL, db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`SET @tenant_id = \?`).WithArgs("t-1").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	mock.ExpectExec(`SET @tenant_id = NULL`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SET @tenant_id = \?`).WithArgs("t-1").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("INSERT INTO users DEFAULT VALUES").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(`SET @tenant_id = NULL`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tx, err := drv.Tx(context.Background())
+	require.NoError(t, err)
+	ctx := WithVar(context.Background(), "tenant_id", "t-1")
+	rows := &Rows{}
+	require.NoError(t, tx.Query(ctx, "SELECT 1", []any{}, rows))
+	require.NoError(t, rows.Close())
+	require.NoError(t, tx.Exec(ctx, "INSERT INTO users DEFAULT VALUES", []any{}, nil))
+	require.NoError(t, tx.Commit())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestWithVars_TxInvalidIdentifier pins that variable-name validation also
+// applies inside a transaction.
+func TestWithVars_TxInvalidIdentifier(t *testing.T) {
+	for _, d := range []string{dialect.Postgres, dialect.MySQL} {
+		t.Run(d, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			drv := OpenDB(d, db)
+			mock.ExpectBegin()
+			tx, err := drv.Tx(context.Background())
+			require.NoError(t, err)
+			err = tx.Exec(WithVar(context.Background(), "x; DROP TABLE users", "v"), "SELECT 1", []any{}, nil)
+			require.ErrorContains(t, err, "invalid session variable name")
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }

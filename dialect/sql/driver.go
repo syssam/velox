@@ -220,6 +220,21 @@ func (c Conn) Query(ctx context.Context, query string, args, v any) error {
 }
 
 // maySetVars sets the session variables before executing a query.
+//
+// Outside a transaction the variables are set on a dedicated connection and
+// reset before it goes back to the pool. Inside a transaction they must not
+// outlive the transaction either, because its connection returns to the pool
+// at COMMIT/ROLLBACK:
+//
+//   - Postgres uses set_config(name, value, true), which is transaction-local:
+//     the value vanishes at COMMIT or ROLLBACK and there is nothing to reset.
+//     A plain SET would persist on the pooled connection after COMMIT and leak
+//     into its next borrower.
+//   - MySQL user variables are always session-scoped, so they are reset by the
+//     returned cleanup function, exactly as outside a transaction.
+//
+// Postgres rejects bind parameters in a SET statement, so set_config is also
+// what lets the value travel as a parameter rather than as SQL text.
 func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error) {
 	sv, _ := ctx.Value(ctxVarsKey{}).(sessionVars)
 	if len(sv.vars) == 0 {
@@ -228,12 +243,13 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 	var (
 		ex    ExecQuerier  // Underlying ExecQuerier.
 		cf    func() error // Close function.
+		inTx  bool         // Variables are set on a transaction's connection.
 		reset []string     // Reset variables.
 		seen  = make(map[string]struct{}, len(sv.vars))
 	)
 	switch e := c.ExecQuerier.(type) {
 	case *sql.Tx:
-		ex = e
+		ex, inTx = e, true
 	case *sql.DB:
 		conn, err := e.Conn(ctx)
 		if err != nil {
@@ -243,8 +259,9 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 	default:
 		return nil, nil, fmt.Errorf("unsupported ExecQuerier type: %T", c.ExecQuerier)
 	}
-	// resetVars resets any already-set session variables and closes the connection.
-	// Used both on error mid-loop and as the cleanup function on success.
+	// resetAndClose resets any already-set session variables and closes the
+	// connection (cls is nil inside a transaction). Used both on error mid-loop
+	// and as the cleanup function on success.
 	resetAndClose := func(reset []string, cls func() error) error {
 		if len(reset) == 0 {
 			if cls != nil {
@@ -269,15 +286,15 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 		// Validate the variable name to prevent SQL injection
 		if !isValidIdentifier(s.k) {
 			err := fmt.Errorf("invalid session variable name: %q", s.k)
-			if cf != nil {
-				err = errors.Join(err, resetAndClose(reset, cf))
-			}
-			return nil, nil, err
+			return nil, nil, errors.Join(err, resetAndClose(reset, cf))
 		}
 		if _, ok := seen[s.k]; !ok {
 			switch c.dialect {
 			case dialect.Postgres:
-				reset = append(reset, fmt.Sprintf("RESET %s", s.k))
+				// A transaction-local set_config has nothing to reset.
+				if !inTx {
+					reset = append(reset, fmt.Sprintf("RESET %s", s.k))
+				}
 			case dialect.MySQL:
 				reset = append(reset, fmt.Sprintf("SET @%s = NULL", s.k))
 			}
@@ -285,37 +302,28 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 		}
 		// Use parameterized queries to prevent SQL injection on values.
 		// The identifier (s.k) is validated by isValidIdentifier() above.
+		var err error
 		switch c.dialect {
 		case dialect.Postgres:
-			// PostgreSQL: SET <ident> TO $1
-			if _, err := ex.ExecContext(ctx, fmt.Sprintf("SET %s TO $1", s.k), s.v); err != nil {
-				if cf != nil {
-					err = errors.Join(err, resetAndClose(reset, cf))
-				}
-				return nil, nil, err
-			}
+			// PostgreSQL: set_config(<ident>, <value>, <is_local>).
+			_, err = ex.ExecContext(ctx, fmt.Sprintf("SELECT set_config($1, $2, %t)", inTx), s.k, s.v)
 		case dialect.MySQL:
 			// MySQL: SET @<ident> = ? (user variables support parameterization)
-			if _, err := ex.ExecContext(ctx, fmt.Sprintf("SET @%s = ?", s.k), s.v); err != nil {
-				if cf != nil {
-					err = errors.Join(err, resetAndClose(reset, cf))
-				}
-				return nil, nil, err
-			}
+			_, err = ex.ExecContext(ctx, fmt.Sprintf("SET @%s = ?", s.k), s.v)
 		default:
 			// Unknown dialect: use escaped string value as fallback.
 			escapedValue := escapeStringValue(s.v, c.dialect)
-			if _, err := ex.ExecContext(ctx, fmt.Sprintf("SET %s = '%s'", s.k, escapedValue)); err != nil {
-				if cf != nil {
-					err = errors.Join(err, resetAndClose(reset, cf))
-				}
-				return nil, nil, err
-			}
+			_, err = ex.ExecContext(ctx, fmt.Sprintf("SET %s = '%s'", s.k, escapedValue))
+		}
+		if err != nil {
+			return nil, nil, errors.Join(err, resetAndClose(reset, cf))
 		}
 	}
-	// If there are variables to reset, and we need to return the
-	// connection to the pool, we need to clean up the variables.
-	if cls := cf; cf != nil && len(reset) > 0 {
+	// If there are variables to reset, run the reset once the statement is
+	// done: before the connection returns to the pool or, inside a
+	// transaction, before the transaction ends.
+	if len(reset) > 0 {
+		cls := cf
 		cf = func() error {
 			return resetAndClose(reset, cls)
 		}
