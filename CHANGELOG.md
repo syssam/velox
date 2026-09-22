@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sql.WithVar` inside a transaction no longer leaks session variables to the pooled connection
 - `privacy.Not` no longer converts a fail-closed denial into `Allow`
 - Privacy trace recording is safe for concurrent use
+- `errors.Is(err, velox.ErrTxStarted)` now matches the error a generated client returns from a nested `Tx`/`BeginTx`; the generated `ErrTxStarted` aliases `velox.ErrTxStarted`
 - `field.Sensitive()` now hides the value from JSON, `String()` and the GraphQL output type (it stays settable through mutation inputs)
 - `Noder`/`Noders` no longer fail at random in schemas that mix ID types
 - `graphql.QueryField` honors its name, description and directives
@@ -53,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - `contrib/graphql.FieldCollection`, an exported type nothing referenced
+- **BREAKING (dead API):** `runtime.EdgeQuery`, `runtime.NewEdgeQuery` and the generated `query.NewXxxQueryFromEdge` constructors — nothing constructed an `EdgeQuery`
+- **BREAKING (dead API):** `runtime.QueryBase`, `NewQueryBase`, `QueryAllSC`, `QueryCount`, `QueryExist`, `QueryIDsOnly`, `QueryFirstIDOnly`, `QueryOnlyIDOnly`, `ScanOnly`, `ScanMapRows`, `ScanConfig`
+- **BREAKING (dead API):** `runtime.RegisterTypeInfo`, `FindRegisteredType`, `RegisteredTypeInfo`, `RegisterEntityClient`, `NewEntityClient`, `EntityClientFunc`, and the `TypeInfo`/`Client` fields of `runtime.EntityRegistration` — written at init, never read
+- **BREAKING (dead API):** `velox.Cache`, `velox.CacheKey`
+- **BREAKING (dead API):** `velox.QueryError`, `MutationError`, `PrivacyError`, `RollbackError`, `AggregateError` and their helpers, `NewNotFoundErrorWithID`, `NewNotSingularErrorWithCount`, `(*NotFoundError).ID`, `(*NotSingularError).Count` — never constructed
+- **BREAKING (dead API):** `runtime.ErrTxStarted` — use `velox.ErrTxStarted`
+- **BREAKING (dead API):** 11 unread `dialect.Cap*` flags; `CapForUpdate`, `CapForShare`, `CapLockWithDistinct` remain
 
 ## [0.2.1] - 2026-06-25
 
