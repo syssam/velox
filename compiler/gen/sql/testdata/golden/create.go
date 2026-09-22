@@ -355,8 +355,9 @@ func (_cb *UserCreateBulk) saveChunk(ctx context.Context, builders []*UserCreate
 				}
 				return nodes[i], nil
 			})
-			for j := len(builder.hooks) - 1; j >= 0; j-- {
-				mut = builder.hooks[j](mut)
+			allHooks := builder.hooks
+			for j := len(allHooks) - 1; j >= 0; j-- {
+				mut = allHooks[j](mut)
 			}
 			mutators[i] = mut
 		}(i, ctx)

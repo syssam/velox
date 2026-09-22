@@ -162,3 +162,25 @@ func assertSetPath(queryVar string, sqlPkg string, pathClosure jen.Code) *jen.St
 		),
 	).Dot("SetPath").Call(pathClosure)
 }
+
+// genSchemaHooksLocal emits a local hook slice that merges the builder's
+// runtime hooks with the schema-level Hooks array declared in the entity's
+// leaf package.
+//
+// The runtime slice is re-sliced with a full slice expression (cap == len)
+// before appending. `<recv>.hooks` aliases the client's shared
+// *entity.HookStore slice, so a plain `append(<recv>.hooks, Hooks[:]...)`
+// writes the schema hook into that store's spare capacity — silently
+// overwriting a hook registered by a later Use(). The hook then stops
+// running and whatever field it stamped goes missing from the statement.
+// Ent applies the same clamp in Client.Hooks().
+func genSchemaHooksLocal(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv, local string) {
+	grp.Id(local).Op(":=").Id(recv).Dot("hooks")
+	if t.NumHooks() == 0 {
+		return
+	}
+	grp.Id(local).Op("=").Append(
+		jen.Id(local).Index(jen.Empty(), jen.Len(jen.Id(local)), jen.Len(jen.Id(local))),
+		jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."),
+	)
+}

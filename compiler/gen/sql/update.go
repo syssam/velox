@@ -193,11 +193,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 			)
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
-		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
-		} else {
-			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
-		}
+		genSchemaHooksLocal(h, grp, t, recv, "hooks")
 		mutationType := jen.Id(mutName)
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Int(),
@@ -497,11 +493,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 			)
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
-		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
-		} else {
-			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
-		}
+		genSchemaHooksLocal(h, grp, t, recv, "hooks")
 		mutationType := jen.Id(mutName)
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Op("*").Qual(entityReturnPkg, t.Name),

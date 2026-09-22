@@ -545,11 +545,7 @@ func genCreateSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName,
 			)
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
-		if t.NumHooks() > 0 {
-			grp.Id("hooks").Op(":=").Id("append").Call(jen.Id(recv).Dot("hooks"), jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."))
-		} else {
-			grp.Id("hooks").Op(":=").Id(recv).Dot("hooks")
-		}
+		genSchemaHooksLocal(h, grp, t, recv, "hooks")
 		mutationType := jen.Id(t.MutationName())
 		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
 			jen.Op("*").Qual(entityReturnPkg, t.Name),
@@ -875,36 +871,20 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 					}),
 				)
 				// Combine the builder's runtime hooks (from c.Use) with
-				// the package-level Hooks slice. Single-row Save does
-				// the same `append(c.hooks, Hooks[:]...)`. Gated on
-				// NumHooks because the Hooks package-level var only
-				// exists when it is non-zero; otherwise there is no
-				// Hooks identifier to reference. Privacy is evaluated
-				// separately in saveChunk before the mutator chain.
-				if t.NumHooks() > 0 {
-					// Hooks is a package-level var declared in the {entity}/ leaf
-					// package (by genPackageRuntimeVars). After cycle-break, this
-					// bulk builder lives in client/{entity}/, so qualify the ref.
-					iife.Id("allHooks").Op(":=").Append(
-						jen.Id("builder").Dot("hooks"),
-						jen.Qual(h.LeafPkgPath(t), "Hooks").Index(jen.Op(":")).Op("..."),
-					)
-					iife.For(
-						jen.Id("j").Op(":=").Len(jen.Id("allHooks")).Op("-").Lit(1),
-						jen.Id("j").Op(">=").Lit(0),
-						jen.Id("j").Op("--"),
-					).Block(
-						jen.Id("mut").Op("=").Id("allHooks").Index(jen.Id("j")).Call(jen.Id("mut")),
-					)
-				} else {
-					iife.For(
-						jen.Id("j").Op(":=").Len(jen.Id("builder").Dot("hooks")).Op("-").Lit(1),
-						jen.Id("j").Op(">=").Lit(0),
-						jen.Id("j").Op("--"),
-					).Block(
-						jen.Id("mut").Op("=").Id("builder").Dot("hooks").Index(jen.Id("j")).Call(jen.Id("mut")),
-					)
-				}
+				// the package-level Hooks slice — same cap-clamped merge
+				// single-row Save uses. Hooks is a package-level var declared
+				// in the {entity}/ leaf package (by genPackageRuntimeVars);
+				// after cycle-break this bulk builder lives in
+				// client/{entity}/, so the ref is qualified. Privacy is
+				// evaluated separately in saveChunk before the mutator chain.
+				genSchemaHooksLocal(h, iife, t, "builder", "allHooks")
+				iife.For(
+					jen.Id("j").Op(":=").Len(jen.Id("allHooks")).Op("-").Lit(1),
+					jen.Id("j").Op(">=").Lit(0),
+					jen.Id("j").Op("--"),
+				).Block(
+					jen.Id("mut").Op("=").Id("allHooks").Index(jen.Id("j")).Call(jen.Id("mut")),
+				)
 				iife.Id("mutators").Index(jen.Id("i")).Op("=").Id("mut")
 			}).Call(jen.Id("i"), jen.Id("ctx"))
 		})

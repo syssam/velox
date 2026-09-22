@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dave/jennifer/jen"
+
 	"github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/compiler/load"
 	"github.com/syssam/velox/schema/field"
@@ -1518,6 +1520,79 @@ func TestSelectForwardsInsteadOfEmbedding(t *testing.T) {
 		want := "func (s *UserSelect) " + m + "(ctx context.Context)"
 		if !strings.Contains(src, want) {
 			t.Errorf("missing forwarder %q — the Selector interface would no longer be satisfied", want)
+		}
+	}
+}
+
+// TestSchemaHooksAppendIsCapClamped pins that every builder which merges the
+// schema-level Hooks array into the client's runtime hooks re-slices the
+// runtime slice with a full slice expression (cap == len) first.
+//
+// The builder's hook slice IS the shared *entity.HookStore slice, not a copy.
+// A plain `append(_u.hooks, user.Hooks[:]...)` writes the schema hook into
+// that slice's spare capacity, so an older builder saving after a later Use()
+// overwrites the hook that Use() registered — it stops running for every
+// later mutation, and whatever field it stamped goes missing from the
+// statement with no error. Ent applies the same clamp in Client.Hooks().
+//
+// The assertion walks every merge site rather than matching one spelling:
+// the bulk-create path names its local allHooks, so a check hardcoded to
+// "hooks" would pass on the single-row sites alone and leave bulk unguarded.
+func TestSchemaHooksAppendIsCapClamped(t *testing.T) {
+	hooked := createTypeWithHooks(t, "User", []*load.Position{{Index: 0, MixinIndex: -1}})
+	helper := newMockHelper()
+
+	// Matches `<local> = append(<local>[:len(<local>):len(<local>)], user.Hooks[:]...)`
+	// with the same identifier in all four positions.
+	clamped := regexp.MustCompile(`(\w+) = append\((\w+)\[:len\((\w+)\):len\((\w+)\)\], \w+\.Hooks\[:\]\.\.\.\)`)
+
+	for _, tc := range []struct {
+		name string
+		gen  func(gen.GeneratorHelper, *gen.Type) (*jen.File, error)
+	}{
+		{"create", genCreate},
+		{"update", genUpdate},
+		{"delete", genDelete},
+	} {
+		file, err := tc.gen(helper, hooked)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		var merges int
+		for _, line := range strings.Split(file.GoString(), "\n") {
+			if !strings.Contains(line, ".Hooks[:]...") {
+				continue
+			}
+			merges++
+			m := clamped.FindStringSubmatch(strings.TrimSpace(line))
+			if m == nil {
+				t.Errorf("%s: unclamped schema-hook merge %q — append can write into the shared hook store's spare capacity", tc.name, strings.TrimSpace(line))
+				continue
+			}
+			if m[1] != m[2] || m[2] != m[3] || m[3] != m[4] {
+				t.Errorf("%s: clamp re-slices the wrong identifier in %q", tc.name, strings.TrimSpace(line))
+			}
+		}
+		if merges == 0 {
+			t.Fatalf("%s: fixture does not merge schema hooks at all", tc.name)
+		}
+	}
+
+	// genCreate emits both the single-row Save and the bulk mutator chain, so
+	// it must carry two distinct merge locals. A regression that drops the
+	// bulk clamp would otherwise still satisfy the loop above via the
+	// single-row site.
+	create, err := genCreate(helper, hooked)
+	if err != nil {
+		t.Fatalf("genCreate: %v", err)
+	}
+	src := create.GoString()
+	for _, want := range []string{
+		"hooks = append(hooks[:len(hooks):len(hooks)], user.Hooks[:]...)",
+		"allHooks = append(allHooks[:len(allHooks):len(allHooks)], user.Hooks[:]...)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("create: missing merge site %q", want)
 		}
 	}
 }

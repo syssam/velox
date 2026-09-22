@@ -1953,3 +1953,52 @@ func TestInterfaceField_EndToEnd(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "email")
 }
+
+// TestSchemaHook_MergeDoesNotClobberHookStore pins that merging the
+// schema-level Hooks array into a builder's runtime hooks cannot overwrite the
+// client's shared hook store.
+//
+// `_u.hooks` aliases *entity.HookStore's slice. Before the cap-clamp fix the
+// generated Save did a plain `append(_u.hooks, user.Hooks[:]...)`, which wrote
+// the schema hook into that slice's spare capacity — silently replacing a hook
+// a later Use() had registered there. The replaced hook then never ran again,
+// so any field it stamped went missing from every subsequent mutation.
+//
+// The sequence below is the minimal reproduction: three separate Use() calls
+// leave the store at len=3 cap=4, a builder snapshots it, a fourth Use() lands
+// at index 3, and saving the older builder overwrites index 3.
+func TestSchemaHook_MergeDoesNotClobberHookStore(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+	cfg := client.RuntimeConfig()
+	uc := userclient.NewUserClient(cfg)
+
+	u, err := uc.Create().SetName("zeta").SetEmail("clobber@example.com").Save(ctx)
+	require.NoError(t, err)
+
+	noop := func(next velox.Mutator) velox.Mutator { return next }
+	uc.Use(noop)
+	uc.Use(noop)
+	uc.Use(noop)
+	require.Less(t, len(uc.Hooks()), cap(uc.Hooks()),
+		"fixture precondition: the hook store must have spare capacity")
+
+	stale := uc.UpdateOneID(u.ID).SetName("alpha")
+
+	var stamped int
+	uc.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			stamped++
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	got, err := stale.Save(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "Alpha", got.Name, "the schema hook must still run for the stale builder")
+
+	_, err = uc.UpdateOneID(u.ID).SetName("beta").Save(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, stamped,
+		"the last-registered hook was overwritten by the schema hook in the shared store")
+}
