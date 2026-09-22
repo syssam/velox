@@ -674,8 +674,10 @@ func Generate(g *gen.Graph, cfg Config) error {
 	return gqlGen.Generate(context.Background())
 }
 
-// Schema generation methods are in schema_sdl.go, schema_types.go,
-// schema_input.go, schema_connection.go, and schema_query.go.
+// Schema generation methods are in schema_sdl.go (full/root/per-entity
+// assembly, Query and Mutation types), schema_types.go and schema_input.go
+// (inputs and connections). SDL parsing and the description helper are in
+// schema_ast.go.
 
 // Type definitions (typedJSONScalar, enums, entity types, scalars, fields) are in schema_types.go.
 
@@ -789,6 +791,6 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 
 // Helper methods, annotation extraction, string utilities, and ORM type helpers
 // are in schema_helpers.go.
-// Input SDL generation is in schema_input.go.
-// Connection SDL generation is in schema_connection.go.
-// Query/Mutation SDL generation is in schema_query.go.
+// Input and connection SDL generation is in schema_input.go.
+// Query/Mutation SDL generation is in schema_sdl.go; Subscription in
+// schema_helpers.go.
