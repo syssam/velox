@@ -326,14 +326,18 @@ func (g *Generator) validateUnimplementedEdgeAnnotations(t *gen.Type) error {
 		case len(ann.Mapping) > 0:
 			return fmt.Errorf(
 				"graphql: %s.%s: graphql.Mapping/graphql.MapsTo is not implemented — "+
-					"velox does not rename edge fields in the SDL. Remove the annotation and "+
-					"name the edge as it should appear in GraphQL, or use graphql.Type() on the "+
-					"target entity",
-				t.Name, e.Name)
+					"velox has no edge-level rename. The SDL field name and the generated "+
+					"entity method are both derived from the edge name (camel vs pascal), and "+
+					"that identity is what lets gqlgen autobind the edge without a resolver. "+
+					"Name the edge as it should appear in GraphQL instead: "+
+					"edge.To(%q, ...). Note graphql.FieldName renames FIELDS only, and "+
+					"graphql.Type renames the target TYPE, not this field",
+				t.Name, e.Name, camel(e.Name))
 		case ann.Unbind:
 			return fmt.Errorf(
 				"graphql: %s.%s: graphql.Unbind is not implemented — velox always binds edge "+
-					"fields to the generated entity method. Remove the annotation; use "+
+					"fields to the generated entity method, which is what removes the need for "+
+					"a hand-written resolver. Remove the annotation; use "+
 					"graphql.Skip(graphql.SkipType) to keep the edge out of the GraphQL type",
 				t.Name, e.Name)
 		}
