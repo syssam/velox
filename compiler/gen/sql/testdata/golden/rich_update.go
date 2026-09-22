@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	velox "github.com/syssam/velox"
@@ -354,7 +353,9 @@ func (_u *ArticleUpdateOne) Where(ps ...predicate.Article) *ArticleUpdateOne {
 	return _u
 }
 
-// Select allows selecting one or more fields/columns for the given update query.
+// Select allows selecting one or more fields (columns) of the returned entity.
+// The default is selecting all fields defined in the entity schema. It narrows
+// only what is read back — every field set on this builder is still written.
 func (_u *ArticleUpdateOne) Select(field string, fields ...string) *ArticleUpdateOne {
 	_u.selectFields = append([]string{field}, fields...)
 	return _u
@@ -507,40 +508,26 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 		Column: article.FieldID,
 		Type:   articleIDFieldType,
 	})
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "title") {
-		if _u.mutation._title != nil {
-			spec.SetField("title", field.TypeString, *_u.mutation._title)
-		}
+	if _u.mutation._title != nil {
+		spec.SetField("title", field.TypeString, *_u.mutation._title)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "content") {
-		if _u.mutation._content != nil {
-			spec.SetField("content", field.TypeString, *_u.mutation._content)
-		}
+	if _u.mutation._content != nil {
+		spec.SetField("content", field.TypeString, *_u.mutation._content)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "created_at") {
-		if _u.mutation._created_at != nil {
-			spec.SetField("created_at", field.TypeTime, *_u.mutation._created_at)
-		}
+	if _u.mutation._created_at != nil {
+		spec.SetField("created_at", field.TypeTime, *_u.mutation._created_at)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "updated_at") {
-		if _u.mutation._updated_at != nil {
-			spec.SetField("updated_at", field.TypeTime, *_u.mutation._updated_at)
-		}
+	if _u.mutation._updated_at != nil {
+		spec.SetField("updated_at", field.TypeTime, *_u.mutation._updated_at)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "tags") {
-		if _u.mutation._tags != nil {
-			spec.SetField("tags", field.TypeJSON, *_u.mutation._tags)
-		}
+	if _u.mutation._tags != nil {
+		spec.SetField("tags", field.TypeJSON, *_u.mutation._tags)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "status") {
-		if _u.mutation._status != nil {
-			spec.SetField("status", field.TypeEnum, *_u.mutation._status)
-		}
+	if _u.mutation._status != nil {
+		spec.SetField("status", field.TypeEnum, *_u.mutation._status)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "content") {
-		if _, ok := _u.mutation.clearedFields["content"]; ok {
-			spec.ClearField("content", field.TypeString)
-		}
+	if _, ok := _u.mutation.clearedFields["content"]; ok {
+		spec.ClearField("content", field.TypeString)
 	}
 	spec.Node.ID.Value = id
 	ps := _u.mutation.PredicatesFuncs()
@@ -626,7 +613,21 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 	}
 	columns := article.Columns
 	if len(_u.selectFields) > 0 {
-		columns = append([]string{article.FieldID}, _u.selectFields...)
+		columns = make([]string, 0, len(_u.selectFields)+1)
+		columns = append(columns, article.FieldID)
+		for _, f := range _u.selectFields {
+			if !article.ValidColumn(f) {
+				return nil, &runtime.ValidationError{
+					Entity: "Article",
+					Err:    errors.New("invalid field for query"),
+					Field:  f,
+					Name:   f,
+				}
+			}
+			if f != article.FieldID {
+				columns = append(columns, f)
+			}
+		}
 	}
 	build := func(_ context.Context) (*sql.Selector, error) {
 		s := sql.Select(columns...).From(sql.Table(article.Table))

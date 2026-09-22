@@ -468,10 +468,15 @@ func TestWhereUsesNamedPredicateType(t *testing.T) {
 	}
 }
 
-// TestUpdateOneSelectFieldsRestriction guards that UpdateOne.sqlSave
-// respects selectFields for both the UPDATE SET clause and the
-// post-update re-query. Without this, UpdateOne.Select("name") would
-// still update ALL mutated fields (the B3 bug).
+// TestUpdateOneSelectFieldsRestriction guards what UpdateOne.Select() may and
+// may not touch: it narrows the columns READ BACK after the UPDATE, and never
+// the SET clause.
+//
+// It used to guard every spec.SetField with a slices.Contains(selectFields)
+// check, so `UpdateOneID(id).SetName(x).Select("age")` silently discarded the
+// name write. Ent's Select() only builds _spec.Node.Columns
+// (entc/integration/ent/user_update.go), which is what this now pins, along
+// with the ValidColumn rejection Ent performs on each requested column.
 func TestUpdateOneSelectFieldsRestriction(t *testing.T) {
 	graph, userType, _ := buildWiringTestGraph(t)
 	helper := newMockHelper()
@@ -483,40 +488,44 @@ func TestUpdateOneSelectFieldsRestriction(t *testing.T) {
 	}
 	src := file.GoString()
 
-	// The UpdateOne.sqlSave must reference selectFields to guard field operations.
-	if !strings.Contains(src, "len(_u.selectFields)") {
-		t.Error("UpdateOne.sqlSave does not check len(_u.selectFields); " +
-			"Select() restriction on SET clause is not implemented")
+	// selectFields must never gate a field write.
+	if strings.Contains(src, "slices.Contains(_u.selectFields") {
+		t.Error("UpdateOne.sqlSave gates field operations by selectFields; " +
+			"Select() must not drop SET values")
 	}
 
-	// The UpdateOne.sqlSave must use slices.Contains to filter by selectFields.
-	if !strings.Contains(src, "slices.Contains(_u.selectFields") {
-		t.Error("UpdateOne.sqlSave does not use slices.Contains on selectFields; " +
-			"individual field filtering is not implemented")
+	// It must still narrow the read-back, and validate each column.
+	one := funcBody(t, src, "func (_u *UserUpdateOne) sqlSave(")
+	for _, want := range []string{
+		"_u.selectFields",
+		"user.ValidColumn(f)",
+		"columns = append(columns, f)",
+	} {
+		if !strings.Contains(one, want) {
+			t.Errorf("UpdateOne.sqlSave re-query is missing %q\n%s", want, one)
+		}
 	}
 
-	// The post-update re-query must use selectFields for column selection.
-	if !strings.Contains(src, `columns = append([]string{user.FieldID}, _u.selectFields...)`) {
-		t.Error("UpdateOne.sqlSave re-query does not narrow columns by selectFields")
-	}
-
-	// The bulk UserUpdate.sqlSave must NOT reference selectFields (it has no Select method).
-	// Find the bulk sqlSave body — it ends at the next top-level func declaration.
-	bulkIdx := strings.Index(src, "func (_u *UserUpdate) sqlSave(")
-	if bulkIdx < 0 {
-		t.Fatal("could not find UserUpdate.sqlSave in generated code")
-	}
-	// Find the end of the bulk sqlSave: next "func " at the start of a line.
-	bulkRest := src[bulkIdx+1:]
-	nextFunc := strings.Index(bulkRest, "\nfunc ")
-	if nextFunc < 0 {
-		t.Fatal("could not find end of UserUpdate.sqlSave")
-	}
-	bulkBody := bulkRest[:nextFunc]
-	if strings.Contains(bulkBody, "selectFields") {
+	// The bulk UserUpdate.sqlSave must NOT reference selectFields (no Select method).
+	if bulk := funcBody(t, src, "func (_u *UserUpdate) sqlSave("); strings.Contains(bulk, "selectFields") {
 		t.Error("UserUpdate (bulk) sqlSave references selectFields; " +
 			"selectFields is only for UpdateOne")
 	}
+}
+
+// funcBody returns the source of the function whose declaration starts with
+// decl, up to the next top-level func.
+func funcBody(t *testing.T, src, decl string) string {
+	t.Helper()
+	i := strings.Index(src, decl)
+	if i < 0 {
+		t.Fatalf("could not find %q in generated code", decl)
+	}
+	rest := src[i+1:]
+	if j := strings.Index(rest, "\nfunc "); j >= 0 {
+		return rest[:j]
+	}
+	return rest
 }
 
 // TestUpdateOneUsesSingleNodeUpdate guards that UpdateOne.sqlSave uses

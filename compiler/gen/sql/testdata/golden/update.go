@@ -5,7 +5,6 @@ package ent
 import (
 	"context"
 	"errors"
-	"slices"
 
 	velox "github.com/syssam/velox"
 	sql "github.com/syssam/velox/dialect/sql"
@@ -320,7 +319,9 @@ func (_u *UserUpdateOne) Where(ps ...predicate.User) *UserUpdateOne {
 	return _u
 }
 
-// Select allows selecting one or more fields/columns for the given update query.
+// Select allows selecting one or more fields (columns) of the returned entity.
+// The default is selecting all fields defined in the entity schema. It narrows
+// only what is read back — every field set on this builder is still written.
 func (_u *UserUpdateOne) Select(field string, fields ...string) *UserUpdateOne {
 	_u.selectFields = append([]string{field}, fields...)
 	return _u
@@ -467,40 +468,26 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (*entity.User, error) {
 		Column: user.FieldID,
 		Type:   userIDFieldType,
 	})
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "name") {
-		if _u.mutation._name != nil {
-			spec.SetField("name", field.TypeString, *_u.mutation._name)
-		}
+	if _u.mutation._name != nil {
+		spec.SetField("name", field.TypeString, *_u.mutation._name)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "email") {
-		if _u.mutation._email != nil {
-			spec.SetField("email", field.TypeString, *_u.mutation._email)
-		}
+	if _u.mutation._email != nil {
+		spec.SetField("email", field.TypeString, *_u.mutation._email)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "age") {
-		if _u.mutation._age != nil {
-			spec.SetField("age", field.TypeInt, *_u.mutation._age)
-		}
+	if _u.mutation._age != nil {
+		spec.SetField("age", field.TypeInt, *_u.mutation._age)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "bio") {
-		if _u.mutation._bio != nil {
-			spec.SetField("bio", field.TypeString, *_u.mutation._bio)
-		}
+	if _u.mutation._bio != nil {
+		spec.SetField("bio", field.TypeString, *_u.mutation._bio)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "nickname") {
-		if _u.mutation._nickname != nil {
-			spec.SetField("nickname", field.TypeString, *_u.mutation._nickname)
-		}
+	if _u.mutation._nickname != nil {
+		spec.SetField("nickname", field.TypeString, *_u.mutation._nickname)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "age") {
-		if _u.mutation._addage != nil {
-			spec.AddField("age", field.TypeInt, *_u.mutation._addage)
-		}
+	if _u.mutation._addage != nil {
+		spec.AddField("age", field.TypeInt, *_u.mutation._addage)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "nickname") {
-		if _, ok := _u.mutation.clearedFields["nickname"]; ok {
-			spec.ClearField("nickname", field.TypeString)
-		}
+	if _, ok := _u.mutation.clearedFields["nickname"]; ok {
+		spec.ClearField("nickname", field.TypeString)
 	}
 	spec.Node.ID.Value = id
 	ps := _u.mutation.PredicatesFuncs()
@@ -569,7 +556,21 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (*entity.User, error) {
 	}
 	columns := user.Columns
 	if len(_u.selectFields) > 0 {
-		columns = append([]string{user.FieldID}, _u.selectFields...)
+		columns = make([]string, 0, len(_u.selectFields)+1)
+		columns = append(columns, user.FieldID)
+		for _, f := range _u.selectFields {
+			if !user.ValidColumn(f) {
+				return nil, &runtime.ValidationError{
+					Entity: "User",
+					Err:    errors.New("invalid field for query"),
+					Field:  f,
+					Name:   f,
+				}
+			}
+			if f != user.FieldID {
+				columns = append(columns, f)
+			}
+		}
 	}
 	build := func(_ context.Context) (*sql.Selector, error) {
 		s := sql.Select(columns...).From(sql.Table(user.Table))

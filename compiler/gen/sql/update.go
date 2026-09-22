@@ -149,7 +149,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 			)
 		}
 		// Build UpdateSpec from typed mutation fields.
-		genUpdateSpecBuild(h, grp, t, recv, false)
+		genUpdateSpecBuild(h, grp, t, recv)
 		// Add predicates from the mutation.
 		grp.Id("ps").Op(":=").Id(recv).Dot("mutation").Dot("PredicatesFuncs").Call()
 		grp.If(jen.Len(jen.Id("ps")).Op(">").Lit(0)).Block(
@@ -292,7 +292,9 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 	)
 
 	// --- Select ---
-	f.Commentf("Select allows selecting one or more fields/columns for the given update query.")
+	f.Commentf("Select allows selecting one or more fields (columns) of the returned entity.")
+	f.Commentf("The default is selecting all fields defined in the entity schema. It narrows")
+	f.Commentf("only what is read back — every field set on this builder is still written.")
 	f.Func().Params(jen.Id(recv).Op("*").Id(updateOneName)).Id("Select").Params(
 		jen.Id("field").String(),
 		jen.Id("fields").Op("...").String(),
@@ -354,7 +356,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 			jen.Return(jen.Nil(), jen.Qual("errors", "New").Call(jen.Lit("velox: missing ID for UpdateOne"))),
 		)
 		// Build UpdateSpec from typed mutation fields — selectFields-aware for UpdateOne.
-		genUpdateSpecBuild(h, grp, t, recv, true)
+		genUpdateSpecBuild(h, grp, t, recv)
 		// sqlgraph.UpdateNode (used below) builds its WHERE from spec.Node.ID.Value
 		// and runs ensureExists on zero affected rows; set the id so the single-node
 		// path and its existence re-check target the right row.
@@ -398,13 +400,28 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 			),
 			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "MayWrapConstraintError").Call(jen.Id("err"))),
 		)
-		// Re-query the entity to return the updated version.
-		// When selectFields is set, only query those columns (plus ID which is always needed).
+		// Re-query the entity to return the updated version. Select() narrows
+		// the columns read back (and nothing else); an unknown column is
+		// rejected up front rather than surfacing as a driver-level
+		// "no such column" from the read-back. Matches Ent.
 		grp.Id("columns").Op(":=").Qual(entityPkg, "Columns")
 		grp.If(jen.Len(jen.Id(recv).Dot("selectFields")).Op(">").Lit(0)).Block(
-			jen.Id("columns").Op("=").Append(
-				jen.Index().String().Values(jen.Qual(entityPkg, "FieldID")),
-				jen.Id(recv).Dot("selectFields").Op("..."),
+			jen.Id("columns").Op("=").Make(
+				jen.Index().String(), jen.Lit(0), jen.Len(jen.Id(recv).Dot("selectFields")).Op("+").Lit(1),
+			),
+			jen.Id("columns").Op("=").Append(jen.Id("columns"), jen.Qual(entityPkg, "FieldID")),
+			jen.For(jen.List(jen.Id("_"), jen.Id("f")).Op(":=").Range().Id(recv).Dot("selectFields")).Block(
+				jen.If(jen.Op("!").Qual(entityPkg, "ValidColumn").Call(jen.Id("f"))).Block(
+					jen.Return(jen.Nil(), jen.Op("&").Qual(runtimePkg, "ValidationError").Values(jen.Dict{
+						jen.Id("Name"):   jen.Id("f"),
+						jen.Id("Field"):  jen.Id("f"),
+						jen.Id("Entity"): jen.Lit(t.Name),
+						jen.Id("Err"):    jen.Qual("errors", "New").Call(jen.Lit("invalid field for query")),
+					})),
+				),
+				jen.If(jen.Id("f").Op("!=").Qual(entityPkg, "FieldID")).Block(
+					jen.Id("columns").Op("=").Append(jen.Id("columns"), jen.Id("f")),
+				),
 			),
 		)
 		grp.Id("build").Op(":=").Func().Params(
@@ -537,10 +554,12 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 // genUpdateSpecBuild emits code that builds a sqlgraph.UpdateSpec directly
 // from typed mutation fields (_name, _age, _addage, clearedFields). The emitted
 // code declares a local variable `spec` used by the caller.
-// When hasSelect is true, each field operation is guarded by a check that
-// selectFields is empty or contains the field name — so UpdateOne.Select()
-// restricts which fields are actually written in the UPDATE SET clause.
-func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv string, hasSelect bool) {
+//
+// Select() deliberately has NO influence here. It narrows the columns read
+// back after the UPDATE, never the SET clause — same as Ent, whose Select()
+// only touches _spec.Node.Columns. Guarding the SetField calls with it made
+// `UpdateOneID(id).SetName(x).Select("age")` drop the name write silently.
+func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv string) {
 	entityPkg := h.LeafPkgPath(t)
 	fieldPkg := h.FieldPkg()
 	sqlGraphPkg := h.SQLGraphPkg()
@@ -553,18 +572,6 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 			jen.Id("Type"):   jen.Id(idFieldTypeVar(t)),
 		}),
 	)
-
-	// selectGuard wraps an inner statement with a selectFields check when
-	// hasSelect is true. When selectFields is non-empty, only fields present
-	// in selectFields are included in the UPDATE SET clause.
-	selectGuard := func(fieldName string, inner *jen.Statement) *jen.Statement {
-		if !hasSelect {
-			return inner
-		}
-		return jen.If(jen.Len(jen.Id(recv).Dot("selectFields")).Op("==").Lit(0).Op("||").Qual("slices", "Contains").Call(
-			jen.Id(recv).Dot("selectFields"), jen.Lit(fieldName),
-		)).Block(inner)
-	}
 
 	// Set fields from typed mutation pointers (only mutable fields are
 	// settable on update builders; immutable fields have no setter).
@@ -580,7 +587,7 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 				jen.Op("*").Id(recv).Dot("mutation").Dot(typedField),
 			),
 		)
-		grp.Add(selectGuard(fd.Name, setStmt))
+		grp.Add(setStmt)
 	}
 
 	// Add fields from typed _addX pointers (numeric increments).
@@ -599,7 +606,7 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 				jen.Op("*").Id(recv).Dot("mutation").Dot(addField),
 			),
 		)
-		grp.Add(selectGuard(fd.Name, addStmt))
+		grp.Add(addStmt)
 	}
 
 	// Clear fields from the typed clearedFields map. Only nillable fields can be
@@ -622,7 +629,7 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 				jen.Qual(fieldPkg, h.FieldTypeConstant(fd)),
 			),
 		)
-		grp.Add(selectGuard(fd.Name, clearStmt))
+		grp.Add(clearStmt)
 	}
 }
 

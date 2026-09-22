@@ -5,7 +5,6 @@ package ent
 import (
 	"context"
 	"errors"
-	"slices"
 
 	velox "github.com/syssam/velox"
 	sql "github.com/syssam/velox/dialect/sql"
@@ -234,7 +233,9 @@ func (_u *PostUpdateOne) Where(ps ...predicate.Post) *PostUpdateOne {
 	return _u
 }
 
-// Select allows selecting one or more fields/columns for the given update query.
+// Select allows selecting one or more fields (columns) of the returned entity.
+// The default is selecting all fields defined in the entity schema. It narrows
+// only what is read back — every field set on this builder is still written.
 func (_u *PostUpdateOne) Select(field string, fields ...string) *PostUpdateOne {
 	_u.selectFields = append([]string{field}, fields...)
 	return _u
@@ -327,15 +328,11 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (*entity.Post, error) {
 		Column: post.FieldID,
 		Type:   postIDFieldType,
 	})
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "title") {
-		if _u.mutation._title != nil {
-			spec.SetField("title", field.TypeString, *_u.mutation._title)
-		}
+	if _u.mutation._title != nil {
+		spec.SetField("title", field.TypeString, *_u.mutation._title)
 	}
-	if len(_u.selectFields) == 0 || slices.Contains(_u.selectFields, "content") {
-		if _u.mutation._content != nil {
-			spec.SetField("content", field.TypeString, *_u.mutation._content)
-		}
+	if _u.mutation._content != nil {
+		spec.SetField("content", field.TypeString, *_u.mutation._content)
 	}
 	spec.Node.ID.Value = id
 	ps := _u.mutation.PredicatesFuncs()
@@ -387,7 +384,21 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (*entity.Post, error) {
 	}
 	columns := post.Columns
 	if len(_u.selectFields) > 0 {
-		columns = append([]string{post.FieldID}, _u.selectFields...)
+		columns = make([]string, 0, len(_u.selectFields)+1)
+		columns = append(columns, post.FieldID)
+		for _, f := range _u.selectFields {
+			if !post.ValidColumn(f) {
+				return nil, &runtime.ValidationError{
+					Entity: "Post",
+					Err:    errors.New("invalid field for query"),
+					Field:  f,
+					Name:   f,
+				}
+			}
+			if f != post.FieldID {
+				columns = append(columns, f)
+			}
+		}
 	}
 	build := func(_ context.Context) (*sql.Selector, error) {
 		s := sql.Select(columns...).From(sql.Table(post.Table))
