@@ -572,6 +572,36 @@ func TestQueryScan_WithPath(t *testing.T) {
 	assert.Contains(t, capturedQuery, "sub_query")
 }
 
+// TestQueryGroupBy_ModifiersRunLastAndUniqueApplies pins QueryGroupBy to the
+// same ordering as QuerySelect: modifiers see (and may override) the finished
+// SELECT list, and Unique renders DISTINCT.
+func TestQueryGroupBy_ModifiersRunLastAndUniqueApplies(t *testing.T) {
+	sentinel := fmt.Errorf("stop after capture")
+	var capturedQuery string
+	drv := &mockDriver{
+		dialectName: dialect.SQLite,
+		queryFn: func(_ context.Context, query string, _ any, _ any) error {
+			capturedQuery = query
+			return sentinel
+		},
+	}
+
+	base := NewQueryBase(drv, "users", []string{"id", "name"}, "id", nil, "User")
+	base.SetUnique(true)
+	var seen []string
+	base.AddModifier(func(s *sql.Selector) {
+		seen = append(seen, s.SelectedColumns()...)
+		s.AppendSelect("MAX(`users`.`age`)")
+	})
+	count := func(s *sql.Selector) string { return sql.Count("*") }
+
+	var results []struct{ Name string }
+	err := QueryGroupBy(context.Background(), base, []string{"name"}, []AggregateFunc{count}, &results)
+	require.ErrorIs(t, err, sentinel)
+	assert.Equal(t, []string{"name", "COUNT(*)"}, seen, "modifier must run after group columns and aggregates are selected")
+	assert.Equal(t, "SELECT DISTINCT `name`, COUNT(*), MAX(`users`.`age`) FROM `users` GROUP BY `name`", capturedQuery)
+}
+
 func TestQueryGroupBy_WithPath(t *testing.T) {
 	sentinel := fmt.Errorf("stop after capture")
 	var capturedQuery string

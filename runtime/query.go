@@ -623,49 +623,20 @@ func QueryOnlyIDOnly(ctx context.Context, base *QueryBase) (any, error) {
 type AggregateFunc = func(*sql.Selector) string
 
 // QueryGroupBy executes a GROUP BY query with aggregation.
+//
+// The selector is built like QuerySelect's: predicates, order and
+// limit/offset first, then the group columns and aggregate expressions,
+// DISTINCT when Unique is set, and modifiers LAST so they see (and may
+// override) the finished SELECT list.
 func QueryGroupBy(ctx context.Context, q QueryReader, groupFields []string, fns []AggregateFunc, v any) error {
-	var selector *sql.Selector
-	if from, err := resolvePathFrom(ctx, q); err != nil {
+	selector, err := BuildQueryFrom(ctx, q)
+	if err != nil {
 		return err
-	} else if from != nil {
-		selector = from
-	} else {
-		selector = sql.Select().From(sql.Table(q.GetTable()))
 	}
-	selector.SetDialect(q.GetDriver().Dialect())
-
-	// Apply predicates from the query.
-	for _, p := range q.GetPredicates() {
-		p(selector)
-	}
-
-	// Apply modifiers (e.g., multi-schema table name rewriting).
-	for _, m := range q.GetModifiers() {
-		m(selector)
-	}
-
-	// Apply ordering.
-	for _, o := range q.GetOrder() {
-		o(selector)
-	}
-
-	// Apply limit/offset.
-	qctx := q.GetCtx()
-	if limit := qctx.Limit; limit != nil {
-		selector.Limit(*limit)
-	}
-	if offset := qctx.Offset; offset != nil {
-		selector.Offset(*offset)
-		if qctx.Limit == nil {
-			selector.Limit(math.MaxInt32)
-		}
-	}
-
 	// Add group-by columns.
 	for _, f := range groupFields {
 		selector.AppendSelect(f)
 	}
-
 	// Apply aggregate functions.
 	for _, fn := range fns {
 		agg := fn(selector)
@@ -673,10 +644,13 @@ func QueryGroupBy(ctx context.Context, q QueryReader, groupFields []string, fns 
 			selector.AppendSelect(agg)
 		}
 	}
-
-	// Add GROUP BY.
 	selector.GroupBy(groupFields...)
-
+	if qctx := q.GetCtx(); qctx.Unique != nil && *qctx.Unique {
+		selector.Distinct()
+	}
+	for _, m := range q.GetModifiers() {
+		m(selector)
+	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
 	drv := q.GetDriver()
