@@ -294,6 +294,34 @@ func TestGenEntityPkgQuerierInterface(t *testing.T) {
 	assertValidGo(t, f, "UserQuerier")
 }
 
+// TestGenEntityPkgQuerierInterface_CollectFields pins that the Querier
+// interface carries CollectFields exactly when the GraphQL extension marked
+// the type (it generates the concrete method for those types only), so a
+// list resolver calls it on Query() without asserting *query.XxxQuery.
+func TestGenEntityPkgQuerierInterface_CollectFields(t *testing.T) {
+	t.Parallel()
+	const method = "CollectFields(ctx context.Context, satisfies ...string) (UserQuerier, error)"
+	for _, tt := range []struct {
+		name string
+		ann  map[string]any
+		want bool
+	}{
+		{"marked", map[string]any{"graphql": map[string]any{"CollectFields": true}}, true},
+		{"graphql annotation without the mark", map[string]any{"graphql": map[string]any{"RelayConnection": true}}, false},
+		{"no graphql annotation", nil, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			helper := newMockHelper()
+			helper.rootPkg = "github.com/test/project"
+			userType := createTestType("User")
+			userType.Annotations = tt.ann
+			helper.graph.Nodes = []*gen.Type{userType}
+			code := genEntityPkgFileWithRegistry(helper, userType, helper.graph.Nodes, nil).GoString()
+			assert.Equal(t, tt.want, strings.Contains(code, method), code)
+		})
+	}
+}
+
 // TestGenEntityPkgEdgeQueryMethods_SetInterStore verifies that the PRODUCTION
 // generator (genEntityPkgEdgeQueryMethods) correctly wires SetInterStore on
 // queries created via runtime.NewEntityQuery. Without this, terminal methods

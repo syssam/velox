@@ -559,7 +559,7 @@ func (g *Generator) Generate(ctx context.Context) error {
 	// Generate field collection utilities (like entgql's gql_collection.go)
 	if g.config.ORMPackage != "" {
 		// Per-entity collection metadata → entity sub-packages
-		for _, t := range g.filterNodes(g.graph.Nodes, SkipType) {
+		for _, t := range collectionNodes(g.graph.Nodes) {
 			errg.Go(func() error {
 				if f := g.genEntityCollection(t); f != nil {
 					return g.writeFileSubdir(ctx, f, g.entityPkgName(t), "gql_collection.go")
@@ -569,8 +569,8 @@ func (g *Generator) Generate(ctx context.Context) error {
 		}
 		// All CollectFields methods → single query/gql_collection.go
 		errg.Go(func() error {
-			collectionNodes := g.filterNodes(g.graph.Nodes, SkipType)
-			if f := g.genCollectionQueries(collectionNodes); f != nil {
+			nodes := collectionNodes(g.graph.Nodes)
+			if f := g.genCollectionQueries(nodes); f != nil {
 				return g.writeFileSubdir(ctx, f, "query", "gql_collection.go")
 			}
 			return nil

@@ -21,7 +21,6 @@ import (
 	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/filter"
-	"example.com/fullgql/velox/query"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 )
 
@@ -132,7 +131,11 @@ func (r *queryResolver) Nodes(ctx context.Context, ids []int) ([]velox.Noder, er
 
 // AuditLogs is the resolver for the auditLogs field.
 func (r *queryResolver) AuditLogs(ctx context.Context) ([]*entity.AuditLog, error) {
-	return r.Client.AuditLog.Query().All(ctx)
+	q, err := r.Client.AuditLog.Query().CollectFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return q.All(ctx)
 }
 
 // Categories is the resolver for the categories field.
@@ -142,7 +145,11 @@ func (r *queryResolver) Categories(ctx context.Context, after *gqlrelay.Cursor, 
 
 // Comments is the resolver for the comments field.
 func (r *queryResolver) Comments(ctx context.Context) ([]*entity.Comment, error) {
-	return r.Client.Comment.Query().All(ctx)
+	q, err := r.Client.Comment.Query().CollectFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return q.All(ctx)
 }
 
 // Labels is the resolver for the labels field.
@@ -154,7 +161,7 @@ func (r *queryResolver) Labels(ctx context.Context, after *gqlrelay.Cursor, firs
 func (r *queryResolver) Members(ctx context.Context) ([]*entity.Member, error) {
 	// A list resolver collects explicitly (Paginate does it on its own):
 	// project the selected columns and eager-load the selected edges.
-	q, err := r.Client.Member.Query().(*query.MemberQuery).CollectFields(ctx)
+	q, err := r.Client.Member.Query().CollectFields(ctx)
 	if err != nil {
 		return nil, err
 	}

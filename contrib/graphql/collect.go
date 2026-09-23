@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 
@@ -33,6 +34,40 @@ func (g *Generator) genEntityCollection(t *gen.Type) *jen.File {
 	return f
 }
 
+// collectionNodes returns the types that get GraphQL field collection: a
+// CollectMeta in their entity package and a CollectFields method on their
+// query. It is the one definition both the generator and markCollectFields
+// use.
+func collectionNodes(nodes []*gen.Type) []*gen.Type {
+	return (&Generator{}).filterNodes(nodes, SkipType)
+}
+
+// markCollectFields marks every collection type's graphql annotation with
+// CollectFields, before the core generator runs, so it adds
+// CollectFields(ctx, satisfies...) (XxxQuerier, error) to entity.XxxQuerier
+// — a list resolver then calls it on Query() without asserting the concrete
+// query type. The core reads annotations as map[string]any (it cannot import
+// this package), the same channel RelayConnection uses for Paginate.
+func markCollectFields(nodes []*gen.Type) {
+	for _, t := range collectionNodes(nodes) {
+		m, ok := t.Annotations[AnnotationName].(map[string]any)
+		if !ok {
+			data, err := json.Marshal(extractGraphQLAnnotation(t.Annotations))
+			if err != nil {
+				continue
+			}
+			if err := json.Unmarshal(data, &m); err != nil {
+				continue
+			}
+		}
+		m["CollectFields"] = true
+		if t.Annotations == nil {
+			t.Annotations = make(map[string]any)
+		}
+		t.Annotations[AnnotationName] = m
+	}
+}
+
 // genCollectionQueries generates a single gql_collection.go in the query/ package
 // containing CollectFields methods for all entity query types.
 func (g *Generator) genCollectionQueries(nodes []*gen.Type) *jen.File {
@@ -58,14 +93,15 @@ func (g *Generator) genCollectionQueries(nodes []*gen.Type) *jen.File {
 		f.Comment("CollectFields tells the query-builder to project the columns and")
 		f.Comment("eager-load the edges the GraphQL selection of the resolver in ctx")
 		f.Comment("reads. Call it in resolvers that return entities; Paginate collects")
-		f.Comment("on its own.")
+		f.Comment("on its own. It is part of the entity's Querier interface, so it is")
+		f.Comment("reachable from Query() without a type assertion.")
 		f.Func().Params(
 			jen.Id("q").Op("*").Id(queryType),
 		).Id("CollectFields").Params(
 			jen.Id("ctx").Qual("context", "Context"),
 			jen.Id("satisfies").Op("...").String(),
 		).Params(
-			jen.Op("*").Id(queryType),
+			jen.Qual(g.config.ORMPackage+"/entity", t.Name+"Querier"),
 			jen.Error(),
 		).Block(
 			jen.Return(

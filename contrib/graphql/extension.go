@@ -186,6 +186,10 @@ func (e *Extension) generateHook() gen.Hook {
 				}
 			}
 
+			// Pre-generation: mark the types that get (*XxxQuery).CollectFields
+			// so the core adds it to their Querier interface.
+			markCollectFields(g.Nodes)
+
 			// First run the normal generation
 			if err := next.Generate(g); err != nil {
 				return err

@@ -835,6 +835,17 @@ func genEntityPkgQuerierInterface(h gen.GeneratorHelper, f *jen.File, t *gen.Typ
 		// --- Paginate (when GraphQL RelayConnection is annotated) ---
 		// Check for graphql annotation with RelayConnection enabled.
 		if ann, ok := t.Annotations["graphql"].(map[string]any); ok {
+			// --- CollectFields (GraphQL field collection) ---
+			// The GraphQL extension marks every type it generates
+			// (*XxxQuery).CollectFields for (query/gql_collection.go), so a
+			// list resolver can call it on Query() without asserting the
+			// concrete type.
+			if cf, _ := ann["CollectFields"].(bool); cf {
+				grp.Id("CollectFields").Params(
+					jen.Id("ctx").Qual("context", "Context"),
+					jen.Id("satisfies").Op("...").String(),
+				).Params(jen.Id(ifaceName), jen.Error())
+			}
 			if rc, _ := ann["RelayConnection"].(bool); rc {
 				connName := t.Name + "Connection"
 				optName := t.Name + "PaginateOption"

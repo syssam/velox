@@ -76,3 +76,44 @@ func TestGenCollectionQueries_PassesWholeCollectMeta(t *testing.T) {
 	assert.Contains(t, code, ") CollectMeta() *runtime.CollectMeta {")
 	assert.NotContains(t, code, ".FieldColumns,")
 }
+
+// TestGenCollectionQueries_ReturnsQuerier pins the concrete CollectFields
+// signature to the method markCollectFields adds to entity.XxxQuerier: the
+// two must match exactly or the generated query no longer implements its
+// interface.
+func TestGenCollectionQueries_ReturnsQuerier(t *testing.T) {
+	graph := mockGraph()
+	g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
+	code := g.genCollectionQueries(graph.Nodes).GoString()
+	for _, n := range graph.Nodes {
+		assert.Contains(t, code, ") CollectFields(ctx context.Context, satisfies ...string) (entity."+n.Name+"Querier, error) {")
+	}
+}
+
+// TestMarkCollectFields pins that the extension marks exactly the types it
+// generates CollectFields for — the core adds the method to the Querier
+// interface from that mark, so marking a type without the method is a
+// compile error and missing one forces resolvers back to a type assertion.
+func TestMarkCollectFields(t *testing.T) {
+	graph := mockGraph()
+	skipped := &gen.Type{Name: "Hidden", ID: graph.Nodes[0].ID, Annotations: map[string]any{AnnotationName: Annotation{Skip: SkipType}}}
+	plain := &gen.Type{Name: "Plain", ID: graph.Nodes[0].ID}
+	graph.Nodes = append(graph.Nodes, skipped, plain)
+
+	markCollectFields(graph.Nodes)
+
+	collected := map[string]bool{}
+	for _, n := range collectionNodes(graph.Nodes) {
+		collected[n.Name] = true
+	}
+	require.True(t, collected["Plain"])
+	require.False(t, collected["Hidden"])
+	for _, n := range graph.Nodes {
+		m, _ := n.Annotations[AnnotationName].(map[string]any)
+		marked, _ := m["CollectFields"].(bool)
+		assert.Equal(t, collected[n.Name], marked, n.Name)
+	}
+	// The mark must not disturb the annotation it rides on.
+	ann := extractGraphQLAnnotation(skipped.Annotations)
+	assert.True(t, ann.IsSkipType())
+}

@@ -10,6 +10,8 @@ import (
 
 	gqlgenpkg "example.com/fullgql/gqlgen"
 	"example.com/fullgql/velox"
+	auditlogclient "example.com/fullgql/velox/client/auditlog"
+	commentclient "example.com/fullgql/velox/client/comment"
 	memberclient "example.com/fullgql/velox/client/member"
 	tagclient "example.com/fullgql/velox/client/tag"
 	todoclient "example.com/fullgql/velox/client/todo"
@@ -340,6 +342,64 @@ func TestCollect_ListResolverCollectFields(t *testing.T) {
 	sel := log.selects("members")
 	require.Len(t, sel, 1)
 	assert.ElementsMatch(t, []string{"id", "role", "workspace_members", "user_memberships"}, selectedColumns(t, sel[0]))
+}
+
+// TestCollect_ListResolversCollectThroughTheQuerier pins that every list
+// resolver (auditLogs, comments, members) collects: CollectFields is part
+// of entity.XxxQuerier, so the resolvers call it on Query() directly. A
+// resolver that forgets it reads every column and loads a to-one edge once
+// per row.
+func TestCollect_ListResolversCollectThroughTheQuerier(t *testing.T) {
+	client, gql, log := openCountingClient(t)
+	ctx := context.Background()
+	cfg := client.RuntimeConfig()
+	users := seedTodos(t, client, 3, 1, 0)
+	todos, err := todoclient.NewTodoClient(cfg).Query().All(ctx)
+	require.NoError(t, err)
+	for i, td := range todos {
+		_, err := commentclient.NewCommentClient(cfg).Create().
+			SetInput(commentclient.CreateCommentInput{Content: fmt.Sprintf("c%d", i), TodoID: td.ID, AuthorID: users[i].ID}).Save(ctx)
+		require.NoError(t, err)
+	}
+	_, err = auditlogclient.NewAuditLogClient(cfg).Create().
+		SetAction("create").SetEntityType("todo").SetEntityID(todos[0].ID).Save(ctx)
+	require.NoError(t, err)
+
+	t.Run("comments", func(t *testing.T) {
+		log.reset()
+		var resp struct {
+			Comments []struct {
+				Content string `json:"content"`
+				Todo    struct {
+					Title string `json:"title"`
+				} `json:"todo"`
+			} `json:"comments"`
+		}
+		gql.MustPost(`{ comments { content todo { title } } }`, &resp)
+		require.Len(t, resp.Comments, len(todos))
+		for i, c := range resp.Comments {
+			assert.Equal(t, fmt.Sprintf("c%d", i), c.Content)
+			assert.Equal(t, todos[i].Title, c.Todo.Title)
+		}
+		assert.Len(t, log.snapshot(), 2, "comments, todos — not one todo query per comment: %v", log.snapshot())
+		sel := log.selects("comments")
+		require.Len(t, sel, 1)
+		assert.NotContains(t, selectedColumns(t, sel[0]), "created_at", "only the selected columns and keys are read")
+	})
+	t.Run("auditLogs", func(t *testing.T) {
+		log.reset()
+		var resp struct {
+			AuditLogs []struct {
+				Action string `json:"action"`
+			} `json:"auditLogs"`
+		}
+		gql.MustPost(`{ auditLogs { action } }`, &resp)
+		require.Len(t, resp.AuditLogs, 1)
+		assert.Equal(t, "create", resp.AuditLogs[0].Action)
+		sel := log.selects("audit_logs")
+		require.Len(t, sel, 1, "%v", log.snapshot())
+		assert.Equal(t, []string{"id", "action"}, selectedColumns(t, sel[0]))
+	})
 }
 
 // TestCollect_CollectedFor pins graphql.CollectedFor end to end: User.summary

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **BREAKING:** With the GraphQL extension, `CollectFields(ctx, satisfies ...string) (XxxQuerier, error)` is part of the generated `entity.XxxQuerier` interface, so list resolvers call `client.Xxx.Query().CollectFields(ctx)` without asserting `*query.XxxQuery`. The concrete method now returns `entity.XxxQuerier` (like the other chainers) instead of `*query.XxxQuery`
 - Generated `Paginate` skips its `COUNT` query unless the GraphQL selection reads `totalCount` (Ent parity; `pageInfo` comes from the limit+1 row). Outside a GraphQL operation it keeps counting. New `gqlrelay.TotalCountSelected(ctx)`. Regenerate after upgrading
 - **BREAKING:** `runtime.RegisterEntityPolicy` takes the address of the entity's policy variable (`*velox.Policy`) and `runtime.EntityPolicy` reads it at lookup. Regenerate after upgrading
 - **BREAKING:** Schema validators (`NotEmpty`, `MaxLen`, `Range`, …) and enum validation are always generated; `FeatureValidator` is a deprecated no-op. Invalid values that were previously accepted now return a `ValidationError`

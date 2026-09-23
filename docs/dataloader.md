@@ -55,12 +55,12 @@ connection in its own field resolver rather than building it inside the
 resolver of a parent type.
 
 A resolver that returns entities directly (a list or a single node) calls
-the generated `CollectFields` itself. `Query()` returns the querier
-interface, so assert the concrete query type:
+the generated `CollectFields` itself. It is part of the `entity.XxxQuerier`
+interface `Query()` returns, so no type assertion is needed:
 
 ```go
 func (r *queryResolver) Members(ctx context.Context) ([]*entity.Member, error) {
-	q, err := r.Client.Member.Query().(*query.MemberQuery).CollectFields(ctx)
+	q, err := r.Client.Member.Query().CollectFields(ctx)
 	if err != nil {
 		return nil, err
 	}
