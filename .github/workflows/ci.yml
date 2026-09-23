@@ -140,7 +140,7 @@ jobs:
         run: |
           go run tests/integration/generate.go
           (cd examples/realworld && go run generate.go)
-      - uses: golangci/golangci-lint-action@v7
+      - uses: golangci/golangci-lint-action@v9
         with:
           # Pinned deliberately. `latest` used to be the pin, for a real
           # reason: v2.1.0 was built with Go 1.24 and refuses to lint a
@@ -496,14 +496,14 @@ jobs:
         run: go test -bench=. -benchmem -count=5 -timeout=20m ./dialect/sql/ ./compiler/gen/ ./privacy/ 2>&1 | tee bench-current.txt
       - name: Save baseline (main only)
         if: github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: bench-current.txt
           key: benchmark-baseline-${{ github.sha }}
       - name: Restore baseline (PR only)
         if: github.event_name == 'pull_request'
         id: restore-baseline
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: bench-baseline.txt
           key: benchmark-baseline-
