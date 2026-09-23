@@ -305,13 +305,11 @@ func BenchmarkExtractID_UUID(b *testing.B) {
 // =============================================================================
 
 func BenchmarkLoadConfig_Apply(b *testing.B) {
-	n := 10
 	opts := []LoadOption{
 		func(c *LoadConfig) {
 			c.Predicates = append(c.Predicates, func(s *sql.Selector) { s.Where(sql.EQ(s.C("active"), true)) })
 		},
 		Limit(10),
-		func(c *LoadConfig) { c.Offset = &n },
 		OrderBy(func(s *sql.Selector) { s.OrderBy(s.C("name")) }),
 		Select("id", "name"),
 		WithEdge("posts", Limit(5)),

@@ -72,6 +72,7 @@ func TestGenCollectionQueries_PassesWholeCollectMeta(t *testing.T) {
 	graph := mockGraph()
 	g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
 	code := g.genCollectionQueries(graph.Nodes).GoString()
-	require.Contains(t, code, "runtime.CollectFields(ctx, q, &")
+	require.Contains(t, code, "gqlrelay.CollectFields(ctx, q, &")
+	assert.Contains(t, code, ") CollectMeta() *runtime.CollectMeta {")
 	assert.NotContains(t, code, ".FieldColumns,")
 }

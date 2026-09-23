@@ -56,9 +56,10 @@ func (q *testQuery) GetOrder() []func(*sql.Selector)                       { ret
 func (q *testQuery) GetModifiers() []func(*sql.Selector)                   { return q.Modifiers }
 func (q *testQuery) GetWithFKs() bool                                      { return q.WithFKs }
 
-func (q *testQuery) WithEdgeLoad(name string, opts ...LoadOption) {
+func (q *testQuery) WithEdgeLoad(name string, opts ...LoadOption) FieldCollectable {
 	q.Edges = append(q.Edges, EdgeLoad{Name: name, Opts: opts})
 	q.WithFKs = true
+	return nil
 }
 
 func (q *testQuery) Where(ps ...func(*sql.Selector)) { q.Predicates = append(q.Predicates, ps...) }

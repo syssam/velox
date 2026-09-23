@@ -89,6 +89,16 @@ func (q *UserQuery) Paginate(ctx context.Context, after *gqlrelay.Cursor, first 
 	} else if last != nil {
 		q.Limit(*last + 1)
 	}
+	if err := gqlrelay.CollectConnectionFields(ctx, q, &user.UserCollectMeta); err != nil {
+		return nil, err
+	}
+	if len(q.ctx.Fields) > 0 {
+		for _, o := range cfg.Order {
+			if o != nil && o.Field != nil {
+				q.ctx.AppendFieldOnce(o.Field.Column)
+			}
+		}
+	}
 	nodes, err := q.All(ctx)
 	if err != nil {
 		return nil, err

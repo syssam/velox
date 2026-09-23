@@ -1,9 +1,6 @@
 package runtime
 
 import (
-	"context"
-	"sync/atomic"
-
 	"github.com/syssam/velox"
 )
 
@@ -53,56 +50,26 @@ type (
 // GraphQL Field Collection
 // =============================================================================
 
-// FieldCollectable is implemented by query builders that support GraphQL field collection.
-// The generated self-contained query types (in the query/ package) implement it.
+// FieldCollectable is implemented by every generated query builder (in the
+// query/ package). The GraphQL field collector (gqlrelay.CollectFields, which
+// the generated Paginate and CollectFields methods call) drives it to project
+// columns and eager-load the edges a GraphQL selection asks for.
 type FieldCollectable interface {
 	// GetIDColumn returns the primary key column name.
 	GetIDColumn() string
 	// GetCtx returns the query context for field projection.
 	GetCtx() *QueryContext
-	// WithEdgeLoad adds an edge to be eagerly loaded by name.
-	WithEdgeLoad(name string, opts ...LoadOption)
-}
-
-// FieldCollector is the GraphQL field collection function contrib/graphql
-// registers at init time: it inspects the gqlgen field context and
-// configures column projection and edge eager-loading on q from meta.
-type FieldCollector func(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies []string) error
-
-// fieldCollector holds the registered GraphQL field collection function.
-// Set by contrib/graphql at init time when GraphQL support is active.
-// Uses atomic.Pointer for safe concurrent access (even though init() runs
-// before goroutines, tests may register collectors concurrently).
-var fieldCollector atomic.Pointer[FieldCollector]
-
-// SetFieldCollector registers the GraphQL field collection function.
-// Called by contrib/graphql's init() when GraphQL support is active.
-func SetFieldCollector(fn FieldCollector) {
-	fieldCollector.Store(&fn)
-}
-
-// CollectFields performs GraphQL field collection if a collector is registered.
-// In ORM-only mode (no collector registered) this is a no-op and always returns nil.
-// When contrib/graphql is imported, its init() registers a collector that inspects
-// the gqlgen FieldContext and configures column projection and edge eager-loading
-// from meta: scalar columns, edges, and the CollectedFor mappings of custom
-// resolver fields. The satisfies parameter specifies additional GraphQL interface
-// names the entity implements (for union/interface type resolution).
-// Generated CollectFields methods call it with the entity's CollectMeta.
-func CollectFields(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies ...string) error {
-	fn := fieldCollector.Load()
-	if fn == nil || meta == nil {
-		return nil
-	}
-	return (*fn)(ctx, q, meta, satisfies)
+	// WithEdgeLoad enables eager loading of the named edge, applies opts to
+	// the edge query and returns that query, or nil when the query has no
+	// edge of that name. Limit in opts applies per parent, not in total.
+	WithEdgeLoad(name string, opts ...LoadOption) FieldCollectable
 }
 
 // CollectMeta holds GraphQL field collection metadata for an entity.
-// Used by contrib/graphql to map GraphQL field/edge names to database columns
-// and edge configurations for efficient query projection and eager loading.
-//
-// Registered per-entity at init() time by generated gql_collection.go files.
-// This replaces the FieldColumns/Edges fields that were previously on TypeInfo.
+// Used by the GraphQL field collector to map GraphQL field/edge names to
+// database columns and edge configurations for query projection and eager
+// loading. Populated per entity at init() time by the generated
+// gql_collection.go files.
 type CollectMeta struct {
 	// FieldColumns maps GraphQL field names to database column names.
 	FieldColumns map[string]string

@@ -75,11 +75,6 @@ type ExtensionOption func(*Extension) error
 //   - WithConfigPath() - path to gqlgen.yml for auto model binding
 //   - WithSchemaPath() - output path for generated schema
 func NewExtension(opts ...ExtensionOption) (*Extension, error) {
-	// Register gqlgen field collector with the Velox runtime.
-	// This is done here (not init()) to avoid side effects when importing
-	// the package only for annotation types.
-	RegisterFieldCollector()
-
 	ex := &Extension{
 		config: Config{
 			// Defaults - these enable features globally,

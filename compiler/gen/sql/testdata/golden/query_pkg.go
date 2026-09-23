@@ -63,15 +63,38 @@ func (q *UserQuery) GetCtx() *runtime.QueryContext {
 	return q.ctx
 }
 
-// WithEdgeLoad adds an edge to be eagerly loaded by name.
-// Used by GraphQL field collector for generic edge loading.
-func (q *UserQuery) WithEdgeLoad(name string, _ ...runtime.LoadOption) {
+// WithEdgeLoad enables eager loading of the named edge, applies opts to
+// the edge query and returns it (nil for an unknown edge). runtime.Limit
+// caps the rows of each parent, not the total. Used by the GraphQL field
+// collector for generic edge loading.
+func (q *UserQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) runtime.FieldCollectable {
 	switch name {
 	case "posts":
 		if q.withPosts == nil {
 			q.withPosts = NewPostQuery(q.config)
 			q.withPosts.inters = q.inters
 		}
+		q.withPosts.applyLoad(runtime.NewLoadConfig(opts...), true)
+		return q.withPosts
+	}
+	return nil
+}
+
+// applyLoad applies an edge's load configuration to this query when a
+// parent eager-loads it through WithEdgeLoad. A limit is kept only on a
+// to-many edge, where the parent's loader applies it per parent.
+func (q *UserQuery) applyLoad(cfg *runtime.LoadConfig, toMany bool) {
+	for _, f := range cfg.Fields {
+		q.ctx.AppendFieldOnce(f)
+	}
+	q.predicates = append(q.predicates, cfg.Predicates...)
+	q.order = append(q.order, cfg.Orders...)
+	if toMany && cfg.Limit != nil {
+		n := *cfg.Limit
+		q.ctx.PartitionLimit = &n
+	}
+	for name, opts := range cfg.Edges {
+		q.WithEdgeLoad(name, opts...)
 	}
 }
 
@@ -760,6 +783,12 @@ func (q *UserQuery) loadPosts(ctx context.Context, query *PostQuery, nodes []*en
 	query.Where(func(s *sql.Selector) {
 		s.Where(sql.In(s.C(user.PostsColumn), fks...))
 	})
+	if n := query.ctx.PartitionLimit; n != nil {
+		query.modifiers = append(query.modifiers, func(s *sql.Selector) {
+			s.OrderBy(s.C(post.FieldID))
+			s.LimitPerPartition(s.C(user.PostsColumn), *n)
+		})
+	}
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err

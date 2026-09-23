@@ -334,12 +334,18 @@ func (qg *queryGen) genFieldCollectable() {
 		jen.Return(jen.Id(qg.recv).Dot("ctx")),
 	)
 
-	qg.f.Comment("WithEdgeLoad adds an edge to be eagerly loaded by name.")
-	qg.f.Comment("Used by GraphQL field collector for generic edge loading.")
+	qg.f.Comment("WithEdgeLoad enables eager loading of the named edge, applies opts to")
+	qg.f.Comment("the edge query and returns it (nil for an unknown edge). runtime.Limit")
+	qg.f.Comment("caps the rows of each parent, not the total. Used by the GraphQL field")
+	qg.f.Comment("collector for generic edge loading.")
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("WithEdgeLoad").Params(
 		jen.Id("name").String(),
-		jen.Id("_").Op("...").Qual(runtimePkg, "LoadOption"),
-	).BlockFunc(func(body *jen.Group) {
+		jen.Id("opts").Op("...").Qual(runtimePkg, "LoadOption"),
+	).Qual(runtimePkg, "FieldCollectable").BlockFunc(func(body *jen.Group) {
+		if len(qg.t.Edges) == 0 {
+			body.Return(jen.Nil())
+			return
+		}
 		// Switch on edge name to set the correct withXxx field.
 		body.Switch(jen.Id("name")).BlockFunc(func(sw *jen.Group) {
 			for _, edge := range qg.t.Edges {
@@ -348,21 +354,54 @@ func (qg *queryGen) genFieldCollectable() {
 				// Build case body: initialize query if nil, and enable FK columns
 				// only for edges where the FK resides on this entity's table (M2O, O2O inverse).
 				var caseStmts []jen.Code
+				initStmts := []jen.Code{
+					jen.Id(qg.recv).Dot(callbackField).Op("=").Id("New" + targetQueryName).Call(jen.Id(qg.recv).Dot("config")),
+					// Thread the parent's interceptors into the child
+					// query so client.Intercept() fires on eager-loads
+					// as well as direct queries.
+					jen.Id(qg.recv).Dot(callbackField).Dot("inters").Op("=").Id(qg.recv).Dot("inters"),
+				}
+				if p := qg.wireEdgePolicy(jen.Id(qg.recv).Dot(callbackField), edge); p != nil {
+					initStmts = append(initStmts, p)
+				}
 				caseStmts = append(caseStmts,
-					jen.If(jen.Id(qg.recv).Dot(callbackField).Op("==").Nil()).Block(
-						jen.Id(qg.recv).Dot(callbackField).Op("=").Id("New"+targetQueryName).Call(jen.Id(qg.recv).Dot("config")),
-						// Thread the parent's interceptors into the child
-						// query so client.Intercept() fires on eager-loads
-						// as well as direct queries.
-						jen.Id(qg.recv).Dot(callbackField).Dot("inters").Op("=").Id(qg.recv).Dot("inters"),
-					),
+					jen.If(jen.Id(qg.recv).Dot(callbackField).Op("==").Nil()).Block(initStmts...),
 				)
 				if edge.OwnFK() {
 					caseStmts = append(caseStmts, jen.Id(qg.recv).Dot("withFKs").Op("=").True())
 				}
+				caseStmts = append(caseStmts,
+					jen.Id(qg.recv).Dot(callbackField).Dot("applyLoad").Call(
+						jen.Qual(runtimePkg, "NewLoadConfig").Call(jen.Id("opts").Op("...")),
+						jen.Lit(!edge.Unique),
+					),
+					jen.Return(jen.Id(qg.recv).Dot(callbackField)),
+				)
 				sw.Case(jen.Lit(edge.Name)).Block(caseStmts...)
 			}
 		})
+		body.Return(jen.Nil())
+	})
+
+	qg.f.Comment("applyLoad applies an edge's load configuration to this query when a")
+	qg.f.Comment("parent eager-loads it through WithEdgeLoad. A limit is kept only on a")
+	qg.f.Comment("to-many edge, where the parent's loader applies it per parent.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("applyLoad").Params(
+		jen.Id("cfg").Op("*").Qual(runtimePkg, "LoadConfig"),
+		jen.Id("toMany").Bool(),
+	).BlockFunc(func(body *jen.Group) {
+		body.For(jen.List(jen.Id("_"), jen.Id("f")).Op(":=").Range().Id("cfg").Dot("Fields")).Block(
+			jen.Id(qg.recv).Dot("ctx").Dot("AppendFieldOnce").Call(jen.Id("f")),
+		)
+		body.Id(qg.recv).Dot("predicates").Op("=").Append(jen.Id(qg.recv).Dot("predicates"), jen.Id("cfg").Dot("Predicates").Op("..."))
+		body.Id(qg.recv).Dot("order").Op("=").Append(jen.Id(qg.recv).Dot("order"), jen.Id("cfg").Dot("Orders").Op("..."))
+		body.If(jen.Id("toMany").Op("&&").Id("cfg").Dot("Limit").Op("!=").Nil()).Block(
+			jen.Id("n").Op(":=").Op("*").Id("cfg").Dot("Limit"),
+			jen.Id(qg.recv).Dot("ctx").Dot("PartitionLimit").Op("=").Op("&").Id("n"),
+		)
+		body.For(jen.List(jen.Id("name"), jen.Id("opts")).Op(":=").Range().Id("cfg").Dot("Edges")).Block(
+			jen.Id(qg.recv).Dot("WithEdgeLoad").Call(jen.Id("name"), jen.Id("opts").Op("...")),
+		)
 	})
 }
 
@@ -491,6 +530,9 @@ func (qg *queryGen) genWithEdges() {
 			// Thread the parent's interceptors into the child query so
 			// client.Intercept() fires on eager-loads too.
 			body.Id("tq").Dot("inters").Op("=").Id(qg.recv).Dot("inters")
+			if p := qg.wireEdgePolicy(jen.Id("tq"), edge); p != nil {
+				body.Add(p)
+			}
 			body.For(jen.List(jen.Id("_"), jen.Id("opt")).Op(":=").Range().Id("opts")).Block(
 				jen.Id("opt").Call(jen.Id("tq")),
 			)
@@ -532,6 +574,9 @@ func (qg *queryGen) genWithNamedEdges() {
 				// Thread the parent's interceptors into the child query
 				// so client.Intercept() fires on named eager-loads too.
 				body.Id("query").Dot("inters").Op("=").Id(qg.recv).Dot("inters")
+				if p := qg.wireEdgePolicy(jen.Id("query"), edge); p != nil {
+					body.Add(p)
+				}
 				body.For(jen.List(jen.Id("_"), jen.Id("opt")).Op(":=").Range().Id("opts")).Block(
 					jen.Id("opt").Call(jen.Id("query")),
 				)
@@ -570,6 +615,9 @@ func (qg *queryGen) genQueryEdges() {
 			// Thread the parent's interceptors into the child query so
 			// client.Intercept() fires on chained edge traversals too.
 			grp.Id("tq").Dot("inters").Op("=").Id(qg.recv).Dot("inters")
+			if p := qg.wireEdgePolicy(jen.Id("tq"), edge); p != nil {
+				grp.Add(p)
+			}
 
 			// Set up the path closure for sub-select traversal
 			grp.Id("tq").Dot("path").Op("=").Func().Params(
@@ -640,6 +688,20 @@ func (qg *queryGen) genClonePublic() {
 
 // edgeCallbackField returns the unexported field name for edge loading callbacks.
 // For example, edge "Posts" -> "withPosts".
+// wireEdgePolicy returns `<v>.policy = runtime.EntityPolicy("<Target>")`
+// when the edge's target declares a privacy policy, else nil (jen skips
+// it). Every query constructed for an edge — eager loads (WithXxx,
+// WithNamedXxx, WithEdgeLoad) and query-level traversals (QueryXxx) —
+// must carry the target's policy, exactly like the entity- and
+// client-level edge queries, or reading through an edge bypasses the
+// target's Policy() (Ent enforces it on every one of these paths).
+func (qg *queryGen) wireEdgePolicy(v jen.Code, edge *gen.Edge) jen.Code {
+	if !qg.h.FeatureEnabled(gen.FeaturePrivacy.Name) || edge.Type.NumPolicy() == 0 {
+		return nil
+	}
+	return jen.Add(v).Dot("policy").Op("=").Qual(runtimePkg, "EntityPolicy").Call(jen.Lit(edge.Type.Name))
+}
+
 func edgeCallbackField(e *gen.Edge) string {
 	return "with" + e.StructField()
 }
@@ -718,6 +780,30 @@ func genTypedO2MLoader(
 			),
 		),
 	)
+
+	// A projected edge query (GraphQL field collection, runtime.Select) must
+	// still read the foreign key that maps each row to its parent. An
+	// auto-created key rides on withFKs; a user-declared one is an ordinary
+	// column and has to be added to the projection.
+	if edge.Ref != nil {
+		if refFK, fkErr := edge.Ref.ForeignKey(); fkErr == nil && refFK.UserDefined && refFK.Field != nil {
+			body.If(jen.Len(jen.Id("query").Dot("ctx").Dot("Fields")).Op(">").Lit(0)).Block(
+				jen.Id("query").Dot("ctx").Dot("AppendFieldOnce").Call(jen.Qual(h.LeafPkgPath(edge.Type), refFK.Field.Constant())),
+			)
+		}
+	}
+	// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks each
+	// parent's rows and keeps the first n of every one of them, in one query.
+	if !edge.Unique {
+		body.If(jen.Id("n").Op(":=").Id("query").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
+			jen.Id("query").Dot("modifiers").Op("=").Append(jen.Id("query").Dot("modifiers"),
+				jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
+					jen.Id("s").Dot("OrderBy").Call(jen.Id("s").Dot("C").Call(jen.Qual(h.LeafPkgPath(edge.Type), "FieldID"))),
+					jen.Id("s").Dot("LimitPerPartition").Call(jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)), jen.Op("*").Id("n")),
+				),
+			),
+		)
+	}
 
 	// Execute sub-query: query.All(ctx) — interceptors apply!
 	body.List(jen.Id("neighbors"), jen.Id("err")).Op(":=").Id("query").Dot("All").Call(jen.Id("ctx"))
@@ -974,6 +1060,14 @@ func genM2MLoaderFallback(
 			fnBody.Id("selector").Dot("Select").Call(jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)))
 			fnBody.Id("selector").Dot("AppendSelect").Call(jen.Id("cols").Op("..."))
 			fnBody.Id("selector").Dot("SetDistinct").Call(jen.False())
+
+			// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks
+			// the rows of every parent by its join-table key and keeps the
+			// first n of each, in this one query.
+			fnBody.If(jen.Id("n").Op(":=").Id("tq").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
+				jen.Id("selector").Dot("OrderBy").Call(jen.Id("selector").Dot("C").Call(jen.Qual(targetSubPkg, "FieldID"))),
+				jen.Id("selector").Dot("LimitPerPartition").Call(jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)), jen.Op("*").Id("n")),
+			)
 
 			// rows := &sql.Rows{}
 			// queryStr, args := selector.Query()

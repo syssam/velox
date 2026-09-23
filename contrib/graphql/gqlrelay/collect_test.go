@@ -1,10 +1,11 @@
-package graphql
+package gqlrelay
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	gqlgenGraphql "github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -12,18 +13,18 @@ import (
 	"github.com/syssam/velox/runtime"
 )
 
-func init() {
-	// Register field collector for tests (normally done by NewExtension).
-	RegisterFieldCollector()
-}
-
 // collectQuery is a minimal runtime.FieldCollectable recording what the
-// collector asks for: projected columns on Ctx.Fields, eager loads on Edges.
+// collector asks for: projected columns on Ctx.Fields, eager loads on
+// Edges. Children are created per edge name and carry their own metadata,
+// like the generated query types, so recursion can be observed.
 type collectQuery struct {
 	IDColumn string
 	Ctx      *runtime.QueryContext
+	Meta     *runtime.CollectMeta
 	Edges    []collectedEdge
-	WithFKs  bool
+	Children map[string]*collectQuery
+	// ChildMeta is the metadata a child created for the edge gets.
+	ChildMeta map[string]*runtime.CollectMeta
 }
 
 // collectedEdge records one WithEdgeLoad call.
@@ -32,242 +33,298 @@ type collectedEdge struct {
 	Opts []runtime.LoadOption
 }
 
-func newCollectQuery(idColumn, typeName string) *collectQuery {
-	return &collectQuery{IDColumn: idColumn, Ctx: &runtime.QueryContext{Type: typeName}}
+func newCollectQuery(meta *runtime.CollectMeta) *collectQuery {
+	return &collectQuery{IDColumn: "id", Ctx: &runtime.QueryContext{}, Meta: meta, Children: map[string]*collectQuery{}}
 }
 
-func (q *collectQuery) GetIDColumn() string { return q.IDColumn }
+func (q *collectQuery) GetIDColumn() string               { return q.IDColumn }
+func (q *collectQuery) GetCtx() *runtime.QueryContext     { return q.Ctx }
+func (q *collectQuery) CollectMeta() *runtime.CollectMeta { return q.Meta }
 
-func (q *collectQuery) GetCtx() *runtime.QueryContext { return q.Ctx }
-
-func (q *collectQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) {
+func (q *collectQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) runtime.FieldCollectable {
 	q.Edges = append(q.Edges, collectedEdge{Name: name, Opts: opts})
-	q.WithFKs = true
-}
-
-func TestCollectFields_NonGraphQLContext(t *testing.T) {
-	ctx := context.Background()
-	q := newCollectQuery("id", "User")
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: nil, Edges: nil})
-	assert.NoError(t, err)
-	// No fields should have been collected since there's no GraphQL field context.
-	assert.Empty(t, q.Ctx.Fields)
-}
-
-func TestCollectFields_NoOperationContext(t *testing.T) {
-	// A plain context.Background() has no GraphQL field context,
-	// so CollectFields should return nil immediately.
-	ctx := context.Background()
-	q := newCollectQuery("id", "Post")
-	fields := map[string]string{"title": "title"}
-	edges := map[string]runtime.EdgeMeta{
-		"author": {Name: "author", Target: "users", Unique: true},
+	child := q.Children[name]
+	if child == nil {
+		child = newCollectQuery(q.ChildMeta[name])
+		q.Children[name] = child
 	}
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
-	assert.NoError(t, err)
-	assert.Empty(t, q.Ctx.Fields)
-	assert.Empty(t, q.Edges)
+	return child
+}
+
+// loadConfig returns the options of the only WithEdgeLoad call for name.
+func (q *collectQuery) loadConfig(t *testing.T, name string) *runtime.LoadConfig {
+	t.Helper()
+	var calls []collectedEdge
+	for _, e := range q.Edges {
+		if e.Name == name {
+			calls = append(calls, e)
+		}
+	}
+	require.Len(t, calls, 1, "edge %q must be loaded exactly once", name)
+	return runtime.NewLoadConfig(calls[0].Opts...)
 }
 
 // newGQLContext creates a context with gqlgen field and operation contexts
 // for the given selection set.
 func newGQLContext(t *testing.T, selections ast.SelectionSet) context.Context {
 	t.Helper()
-	collected := gqlgenGraphql.CollectedField{
-		Field: &ast.Field{
-			Name:         "user",
-			Alias:        "user",
-			SelectionSet: selections,
-		},
+	collected := graphql.CollectedField{
+		Field:      &ast.Field{Name: "user", Alias: "user", SelectionSet: selections},
 		Selections: selections,
 	}
-	fc := &gqlgenGraphql.FieldContext{
-		Field: collected,
-	}
-	opCtx := &gqlgenGraphql.OperationContext{
-		Variables: map[string]any{},
-	}
-	ctx := gqlgenGraphql.WithFieldContext(context.Background(), fc)
-	ctx = gqlgenGraphql.WithOperationContext(ctx, opCtx)
-	return ctx
+	ctx := graphql.WithFieldContext(context.Background(), &graphql.FieldContext{Field: collected})
+	return graphql.WithOperationContext(ctx, &graphql.OperationContext{Variables: map[string]any{}})
 }
 
-func TestCollectFields_ScalarFieldProjection(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "name", Alias: "name"},
-		&ast.Field{Name: "email", Alias: "email"},
-	}
-	ctx := newGQLContext(t, selections)
-
-	fields := map[string]string{
-		"name":  "name",
-		"email": "email",
-	}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
-	require.NoError(t, err)
-
-	// Should project only id + name + email (not age).
-	assert.Contains(t, q.Ctx.Fields, "id")
-	assert.Contains(t, q.Ctx.Fields, "name")
-	assert.Contains(t, q.Ctx.Fields, "email")
-	assert.NotContains(t, q.Ctx.Fields, "age")
+// field builds a selected field with its selection set.
+func field(name string, sel ...ast.Selection) *ast.Field {
+	return &ast.Field{Name: name, Alias: name, SelectionSet: sel}
 }
 
-func TestCollectFields_IDAndTypenameSkipped(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "id", Alias: "id"},
-		&ast.Field{Name: "__typename", Alias: "__typename"},
-		&ast.Field{Name: "name", Alias: "name"},
+// connField builds a connection field with the given literal arguments
+// (name → raw Int literal, or "null" for an explicit null).
+func connField(name string, args map[string]string, sel ...ast.Selection) *ast.Field {
+	f := field(name, sel...)
+	def := &ast.FieldDefinition{Name: name}
+	for _, argName := range []string{"after", "first", "before", "last", "orderBy", "where"} {
+		def.Arguments = append(def.Arguments, &ast.ArgumentDefinition{Name: argName, Type: ast.NamedType("Int", nil)})
 	}
-	ctx := newGQLContext(t, selections)
-
-	fields := map[string]string{"name": "name"}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
-	require.NoError(t, err)
-
-	// Should have id (always included) + name. No duplicates from "id" field.
-	assert.Contains(t, q.Ctx.Fields, "id")
-	assert.Contains(t, q.Ctx.Fields, "name")
+	for argName, raw := range args {
+		v := &ast.Value{Kind: ast.IntValue, Raw: raw}
+		switch raw {
+		case "null":
+			v = &ast.Value{Kind: ast.NullValue, Raw: raw}
+		case "{}":
+			v = &ast.Value{Kind: ast.ObjectValue}
+		}
+		f.Arguments = append(f.Arguments, &ast.Argument{Name: argName, Value: v})
+	}
+	f.Definition = def
+	return f
 }
 
-func TestCollectFields_EdgeLoadScheduling(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "name", Alias: "name"},
-		&ast.Field{Name: "posts", Alias: "posts"},
-	}
-	ctx := newGQLContext(t, selections)
+// nodeSel is edges { node { <sel> } }.
+func nodeSel(sel ...ast.Selection) ast.Selection {
+	return field("edges", field("node", sel...))
+}
 
-	fields := map[string]string{"name": "name"}
-	edges := map[string]runtime.EdgeMeta{
-		"posts": {
-			Name:      "posts",
-			Target:    "posts",
-			FKColumns: []string{"user_posts"},
+var postsMeta = &runtime.CollectMeta{
+	FieldColumns: map[string]string{"title": "title", "body": "body"},
+}
+
+func userMeta() *runtime.CollectMeta {
+	return &runtime.CollectMeta{
+		FieldColumns: map[string]string{"name": "name", "email": "email", "age": "age"},
+		Edges: map[string]runtime.EdgeMeta{
+			"posts":    {Name: "posts", Relay: true, PagesLoaded: true},
+			"comments": {Name: "comments"},
+			"company":  {Name: "company", Unique: true, FKColumns: []string{"company_users"}},
+			"groups":   {Name: "groups", Relay: true},
 		},
 	}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
-	require.NoError(t, err)
-
-	// Edge should be scheduled.
-	require.Len(t, q.Edges, 1)
-	assert.Equal(t, "posts", q.Edges[0].Name)
-
-	// FK columns should be added to field projection.
-	assert.Contains(t, q.Ctx.Fields, "user_posts")
 }
 
-func TestCollectFields_UnknownFieldFallsBackToSelectAll(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "name", Alias: "name"},
-		&ast.Field{Name: "customResolver", Alias: "customResolver"},
+func newUserQuery() *collectQuery {
+	q := newCollectQuery(userMeta())
+	q.ChildMeta = map[string]*runtime.CollectMeta{"posts": postsMeta, "comments": postsMeta, "company": {FieldColumns: map[string]string{"name": "name"}}}
+	return q
+}
+
+func TestCollectFields_NoGraphQLContext(t *testing.T) {
+	q := newUserQuery()
+	require.NoError(t, CollectFields(context.Background(), q, q.Meta))
+	assert.Empty(t, q.Ctx.Fields)
+	assert.Empty(t, q.Edges)
+}
+
+func TestCollectFields_FieldContextWithoutOperationContext(t *testing.T) {
+	ctx := graphql.WithFieldContext(context.Background(), &graphql.FieldContext{})
+	q := newUserQuery()
+	require.NoError(t, CollectFields(ctx, q, q.Meta))
+	assert.Empty(t, q.Ctx.Fields)
+}
+
+func TestCollectFields_ScalarProjection(t *testing.T) {
+	ctx := newGQLContext(t, ast.SelectionSet{field("id"), field("__typename"), field("name"), field("email")})
+	q := newUserQuery()
+	require.NoError(t, CollectFields(ctx, q, q.Meta))
+	assert.Equal(t, []string{"id", "name", "email"}, q.Ctx.Fields)
+}
+
+func TestCollectFields_UnknownFieldKeepsSelectAll(t *testing.T) {
+	ctx := newGQLContext(t, ast.SelectionSet{field("name"), field("customResolver")})
+	q := newUserQuery()
+	require.NoError(t, CollectFields(ctx, q, q.Meta))
+	assert.Empty(t, q.Ctx.Fields, "unknown fields must prevent column projection")
+}
+
+func TestCollectFields_CollectedFor(t *testing.T) {
+	ctx := newGQLContext(t, ast.SelectionSet{field("fullName")})
+	meta := &runtime.CollectMeta{
+		FieldColumns: map[string]string{"age": "age"},
+		CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}},
 	}
-	ctx := newGQLContext(t, selections)
-
-	fields := map[string]string{"name": "name"}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
-	require.NoError(t, err)
-
-	// Unknown field causes fallback to SELECT * — no column projection applied.
-	assert.Empty(t, q.Ctx.Fields, "unknown fields should prevent column projection")
+	q := newCollectQuery(meta)
+	require.NoError(t, CollectFields(ctx, q, meta))
+	assert.Equal(t, []string{"id", "first_name", "last_name"}, q.Ctx.Fields)
 }
 
-func TestCollectFields_RelayEdgePagination(t *testing.T) {
-	// Simulate a Relay connection edge with "first" argument.
-	postField := &ast.Field{
-		Name:  "posts",
-		Alias: "posts",
-		Arguments: ast.ArgumentList{
-			{
-				Name: "first",
-				Value: &ast.Value{
-					Kind: ast.IntValue,
-					Raw:  "10",
-				},
+func TestCollectFields_CollectedFor_UnknownStillFallsBack(t *testing.T) {
+	ctx := newGQLContext(t, ast.SelectionSet{field("fullName"), field("initials")})
+	meta := &runtime.CollectMeta{CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}}}
+	q := newCollectQuery(meta)
+	require.NoError(t, CollectFields(ctx, q, meta))
+	assert.Empty(t, q.Ctx.Fields)
+}
+
+// TestCollectFields_UniqueEdgeRecursesAndSelectsOwnKey pins that a to-one
+// edge whose key lives on this table adds the key to the projection, and
+// that the edge query is projected from the nested selection.
+func TestCollectFields_UniqueEdgeRecursesAndSelectsOwnKey(t *testing.T) {
+	ctx := newGQLContext(t, ast.SelectionSet{field("name"), field("company", field("name"))})
+	q := newUserQuery()
+	require.NoError(t, CollectFields(ctx, q, q.Meta))
+	assert.Equal(t, []string{"id", "name", "company_users"}, q.Ctx.Fields)
+	assert.Nil(t, q.loadConfig(t, "company").Limit)
+	assert.Equal(t, []string{"id", "name"}, q.Children["company"].Ctx.Fields)
+}
+
+// TestCollectFields_ListEdgeLoadsWholeEdge pins that a plain list edge is
+// loaded unlimited and projected.
+func TestCollectFields_ListEdgeLoadsWholeEdge(t *testing.T) {
+	ctx := newGQLContext(t, ast.SelectionSet{field("comments", field("body"))})
+	q := newUserQuery()
+	require.NoError(t, CollectFields(ctx, q, q.Meta))
+	assert.Nil(t, q.loadConfig(t, "comments").Limit)
+	assert.Equal(t, []string{"id", "body"}, q.Children["comments"].Ctx.Fields)
+	assert.Equal(t, []string{"id"}, q.Ctx.Fields, "a key on the other table must not be selected here")
+}
+
+func TestCollectFields_Connection(t *testing.T) {
+	tests := []struct {
+		name      string
+		sel       ast.SelectionSet
+		wantLoad  bool
+		wantLimit *int
+	}{
+		{
+			name:      "first limits per parent to first+1",
+			sel:       ast.SelectionSet{connField("posts", map[string]string{"first": "2"}, nodeSel(field("title")))},
+			wantLoad:  true,
+			wantLimit: intp(3),
+		},
+		{
+			name:     "no first loads the whole edge",
+			sel:      ast.SelectionSet{connField("posts", nil, nodeSel(field("title")))},
+			wantLoad: true,
+		},
+		{
+			name:     "last loads the whole edge",
+			sel:      ast.SelectionSet{connField("posts", map[string]string{"last": "2"}, nodeSel(field("title")))},
+			wantLoad: true,
+		},
+		{
+			name:     "totalCount needs every row",
+			sel:      ast.SelectionSet{connField("posts", map[string]string{"first": "2"}, nodeSel(field("title")), field("totalCount"))},
+			wantLoad: true,
+		},
+		{
+			name: "cursor resolves through Paginate",
+			sel:  ast.SelectionSet{connField("posts", map[string]string{"first": "2", "after": "1"}, nodeSel(field("title")))},
+		},
+		{
+			name: "where resolves through Paginate",
+			sel:  ast.SelectionSet{connField("posts", map[string]string{"where": "{}"}, nodeSel(field("title")))},
+		},
+		{
+			name: "orderBy resolves through Paginate",
+			sel:  ast.SelectionSet{connField("posts", map[string]string{"orderBy": "1"}, nodeSel(field("title")))},
+		},
+		{
+			name:      "explicit null where still loads",
+			sel:       ast.SelectionSet{connField("posts", map[string]string{"where": "null", "first": "1"}, nodeSel(field("title")))},
+			wantLoad:  true,
+			wantLimit: intp(2),
+		},
+		{
+			name: "nothing read loads nothing",
+			sel:  ast.SelectionSet{connField("posts", map[string]string{"first": "1"}, field("__typename"))},
+		},
+		{
+			name: "connection without an in-memory pager is left to Paginate",
+			sel:  ast.SelectionSet{connField("groups", map[string]string{"first": "1"}, nodeSel(field("name")))},
+		},
+		{
+			name: "aliases merge: the largest first wins",
+			sel: ast.SelectionSet{
+				connField("posts", map[string]string{"first": "2"}, nodeSel(field("title"))),
+				&ast.Field{Name: "posts", Alias: "more", SelectionSet: ast.SelectionSet{nodeSel(field("body"))},
+					Arguments:  ast.ArgumentList{{Name: "first", Value: &ast.Value{Kind: ast.IntValue, Raw: "5"}}},
+					Definition: connField("posts", nil).Definition},
 			},
+			wantLoad:  true,
+			wantLimit: intp(6),
 		},
-		Definition: &ast.FieldDefinition{
-			Name: "posts",
-			Arguments: ast.ArgumentDefinitionList{
-				{
-					Name: "first",
-					Type: ast.NamedType("Int", nil),
-				},
+		{
+			name: "aliases merge: one unlimited occurrence loads everything",
+			sel: ast.SelectionSet{
+				connField("posts", map[string]string{"first": "2"}, nodeSel(field("title"))),
+				&ast.Field{Name: "posts", Alias: "all", SelectionSet: ast.SelectionSet{nodeSel(field("body"))},
+					Definition: connField("posts", nil).Definition},
 			},
+			wantLoad: true,
 		},
 	}
-	selections := ast.SelectionSet{postField}
-	ctx := newGQLContext(t, selections)
-
-	fields := map[string]string{}
-	edges := map[string]runtime.EdgeMeta{
-		"posts": {
-			Name:      "posts",
-			Target:    "posts",
-			Relay:     true,
-			FKColumns: []string{"user_posts"},
-		},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := newGQLContext(t, tt.sel)
+			q := newUserQuery()
+			require.NoError(t, CollectFields(ctx, q, q.Meta))
+			if !tt.wantLoad {
+				assert.Empty(t, q.Edges)
+				return
+			}
+			name := "posts"
+			assert.Equal(t, tt.wantLimit, q.loadConfig(t, name).Limit)
+		})
 	}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
-	require.NoError(t, err)
-
-	require.Len(t, q.Edges, 1)
-	assert.Equal(t, "posts", q.Edges[0].Name)
-
-	// The Relay edge should have a Limit load option (first + 1 for hasNextPage).
-	cfg := &runtime.LoadConfig{}
-	for _, opt := range q.Edges[0].Opts {
-		opt(cfg)
-	}
-	require.NotNil(t, cfg.Limit, "Relay edge should have Limit from 'first' arg")
-	assert.Equal(t, 11, *cfg.Limit, "should be first+1 for hasNextPage probe")
 }
 
-func TestCollectFields_MultipleEdgesAndScalars(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "name", Alias: "name"},
-		&ast.Field{Name: "email", Alias: "email"},
-		&ast.Field{Name: "posts", Alias: "posts"},
-		&ast.Field{Name: "groups", Alias: "groups"},
+func TestCollectFields_ConnectionNodeProjection(t *testing.T) {
+	sel := ast.SelectionSet{
+		connField("posts", map[string]string{"first": "2"}, nodeSel(field("title"))),
+		&ast.Field{Name: "posts", Alias: "more", SelectionSet: ast.SelectionSet{nodeSel(field("body"))},
+			Definition: connField("posts", nil).Definition},
 	}
-	ctx := newGQLContext(t, selections)
+	q := newUserQuery()
+	require.NoError(t, CollectFields(newGQLContext(t, sel), q, q.Meta))
+	assert.Equal(t, []string{"id", "title", "body"}, q.Children["posts"].Ctx.Fields,
+		"the edge query must read what every alias selects")
 
-	fields := map[string]string{
-		"name":  "name",
-		"email": "email",
+	// Only pageInfo: rows are needed, columns are not.
+	q = newUserQuery()
+	require.NoError(t, CollectFields(newGQLContext(t, ast.SelectionSet{connField("posts", map[string]string{"first": "1"}, field("pageInfo", field("hasNextPage")))}), q, q.Meta))
+	assert.Equal(t, []string{"id"}, q.Children["posts"].Ctx.Fields)
+}
+
+func TestCollectConnectionFields(t *testing.T) {
+	sel := ast.SelectionSet{field("totalCount"), nodeSel(field("title"), connField("posts", map[string]string{"first": "3"}, nodeSel(field("body"))))}
+	meta := &runtime.CollectMeta{
+		FieldColumns: map[string]string{"title": "title"},
+		Edges:        map[string]runtime.EdgeMeta{"posts": {Name: "posts", Relay: true, PagesLoaded: true}},
 	}
-	edges := map[string]runtime.EdgeMeta{
-		"posts":  {Name: "posts", Target: "posts", FKColumns: []string{"user_posts"}},
-		"groups": {Name: "groups", Target: "groups", FKColumns: []string{"user_groups"}},
-	}
-	q := newCollectQuery("id", "User")
+	q := newCollectQuery(meta)
+	q.ChildMeta = map[string]*runtime.CollectMeta{"posts": postsMeta}
+	require.NoError(t, CollectConnectionFields(newGQLContext(t, sel), q, meta))
+	assert.Equal(t, []string{"id", "title"}, q.Ctx.Fields)
+	assert.Equal(t, intp(4), q.loadConfig(t, "posts").Limit)
+	assert.Equal(t, []string{"id", "body"}, q.Children["posts"].Ctx.Fields)
 
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: edges})
-	require.NoError(t, err)
-
-	// Both edges scheduled.
-	require.Len(t, q.Edges, 2)
-	edgeNames := make(map[string]bool)
-	for _, e := range q.Edges {
-		edgeNames[e.Name] = true
-	}
-	assert.True(t, edgeNames["posts"])
-	assert.True(t, edgeNames["groups"])
-
-	// Scalars + FK columns projected.
-	assert.Contains(t, q.Ctx.Fields, "name")
-	assert.Contains(t, q.Ctx.Fields, "email")
-	assert.Contains(t, q.Ctx.Fields, "user_posts")
-	assert.Contains(t, q.Ctx.Fields, "user_groups")
+	// No edges selected: only the key is read.
+	q = newCollectQuery(meta)
+	require.NoError(t, CollectConnectionFields(newGQLContext(t, ast.SelectionSet{field("totalCount")}), q, meta))
+	assert.Equal(t, []string{"id"}, q.Ctx.Fields)
+	assert.Empty(t, q.Edges)
 }
 
 func TestGqlToInt(t *testing.T) {
@@ -280,14 +337,13 @@ func TestGqlToInt(t *testing.T) {
 		{"int", 10, 10, true},
 		{"int64", int64(42), 42, true},
 		{"int32", int32(7), 7, true},
+		{"json.Number", json.Number("9"), 9, true},
+		{"json.Number fraction", json.Number("9.5"), 0, false},
 		{"float64 whole number", float64(10), 10, true},
 		{"float64 with fraction returns false", 3.14, 0, false},
 		{"string returns false", "10", 0, false},
 		{"nil returns false", nil, 0, false},
 		{"negative int", -5, -5, true},
-		{"float64 negative whole", float64(-3), -3, true},
-		{"float64 zero", float64(0), 0, true},
-		// int64 overflow check (only relevant on 32-bit platforms, but logic is exercised)
 		{"int64 max int", int64(maxInt), maxInt, true},
 	}
 	for _, tt := range tests {
@@ -299,97 +355,41 @@ func TestGqlToInt(t *testing.T) {
 	}
 }
 
-func TestCollectFields_RelayLastArg(t *testing.T) {
-	lastField := &ast.Field{
-		Name:  "posts",
-		Alias: "posts",
-		Arguments: ast.ArgumentList{
-			{
-				Name: "last",
-				Value: &ast.Value{
-					Kind: ast.IntValue,
-					Raw:  "5",
-				},
-			},
-		},
-		Definition: &ast.FieldDefinition{
-			Name: "posts",
-			Arguments: ast.ArgumentDefinitionList{
-				{
-					Name: "last",
-					Type: ast.NamedType("Int", nil),
-				},
-			},
-		},
-	}
-	selections := ast.SelectionSet{lastField}
-	ctx := newGQLContext(t, selections)
+func intp(n int) *int { return &n }
 
-	edges := map[string]runtime.EdgeMeta{
-		"posts": {Name: "posts", Target: "posts", Relay: true, FKColumns: []string{"user_posts"}},
-	}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: map[string]string{}, Edges: edges})
-	require.NoError(t, err)
-
-	require.Len(t, q.Edges, 1)
-	cfg := &runtime.LoadConfig{}
-	for _, opt := range q.Edges[0].Opts {
-		opt(cfg)
-	}
-	require.NotNil(t, cfg.Limit, "Relay edge should have Limit from 'last' arg")
-	assert.Equal(t, 6, *cfg.Limit, "should be last+1 for hasPreviousPage probe")
-}
-
-func TestCollectFields_EmptySelections(t *testing.T) {
-	selections := ast.SelectionSet{}
-	ctx := newGQLContext(t, selections)
-
-	fields := map[string]string{"name": "name"}
-	q := newCollectQuery("id", "User")
-
-	err := runtime.CollectFields(ctx, q, &runtime.CollectMeta{FieldColumns: fields, Edges: nil})
-	require.NoError(t, err)
-
-	// With empty selections, only ID is added but since len(selectedFields) == 1
-	// and no unknownSeen, the single ID field should be projected.
-	// However, the ID is always included but selectedFields only adds it.
-	assert.Empty(t, q.Edges)
-}
-
-// TestCollectFields_CollectedFor pins that a GraphQL field with no column of
-// its own — a custom resolver declared via graphql.CollectedFor — selects
-// exactly the columns it was declared for instead of falling back to
-// SELECT *. Before this the annotation was parsed and never consulted.
-func TestCollectFields_CollectedFor(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "fullName", Alias: "fullName"},
-	}
-	ctx := newGQLContext(t, selections)
-	q := newCollectQuery("id", "User")
+// TestCollectFields_InterfaceField pins the collector: a selection covered
+// by __typename/id on an all-own-FK field selects only the key columns and
+// schedules no edge load; any other selection eager-loads every edge.
+func TestCollectFields_InterfaceField(t *testing.T) {
 	meta := &runtime.CollectMeta{
-		FieldColumns: map[string]string{"age": "age"},
-		CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}},
+		FieldColumns: map[string]string{"name": "name"},
+		Edges: map[string]runtime.EdgeMeta{
+			"todo":    {Name: "todo", Target: "todos", Unique: true, FKColumns: []string{"bookmark_todo"}},
+			"project": {Name: "project", Target: "projects", Unique: true, FKColumns: []string{"bookmark_project"}},
+		},
+		InterfaceFields: map[string]runtime.InterfaceFieldMeta{
+			"item": {Edges: []string{"todo", "project"}, Satisfies: []string{"BookmarkItem", "Todo", "Project"}, FastPath: true},
+		},
+	}
+	item := func(sel ...ast.Selection) *ast.Field {
+		return &ast.Field{Name: "item", Alias: "item", SelectionSet: sel}
 	}
 
-	require.NoError(t, runtime.CollectFields(ctx, q, meta))
+	ctx := newGQLContext(t, ast.SelectionSet{item(&ast.Field{Name: "__typename"}, &ast.Field{Name: "id"})})
+	q := newCollectQuery(meta)
+	require.NoError(t, CollectFields(ctx, q, meta))
+	assert.ElementsMatch(t, []string{"id", "bookmark_todo", "bookmark_project"}, q.Ctx.Fields)
+	assert.Empty(t, q.Edges, "covered by id: no edge load")
 
-	assert.ElementsMatch(t, []string{"id", "first_name", "last_name"}, q.Ctx.Fields,
-		"only the id and the columns collected for fullName may be projected")
-}
-
-// TestCollectFields_CollectedFor_UnknownStillFallsBack pins the boundary:
-// a resolver field without a CollectedFor entry still disables projection.
-func TestCollectFields_CollectedFor_UnknownStillFallsBack(t *testing.T) {
-	selections := ast.SelectionSet{
-		&ast.Field{Name: "fullName", Alias: "fullName"},
-		&ast.Field{Name: "initials", Alias: "initials"},
+	ctx = newGQLContext(t, ast.SelectionSet{item(&ast.Field{Name: "id"}, &ast.InlineFragment{
+		TypeCondition: "Todo",
+		SelectionSet:  ast.SelectionSet{&ast.Field{Name: "text"}},
+	})})
+	q = newCollectQuery(meta)
+	require.NoError(t, CollectFields(ctx, q, meta))
+	names := make([]string, 0, 2)
+	for _, e := range q.Edges {
+		names = append(names, e.Name)
 	}
-	ctx := newGQLContext(t, selections)
-	q := newCollectQuery("id", "User")
-	meta := &runtime.CollectMeta{CollectedFor: map[string][]string{"fullName": {"first_name", "last_name"}}}
-
-	require.NoError(t, runtime.CollectFields(ctx, q, meta))
-	assert.Empty(t, q.Ctx.Fields, "an unknown resolver field must keep the SELECT * fallback")
+	assert.ElementsMatch(t, []string{"todo", "project"}, names, "a real selection loads every contributing edge")
 }

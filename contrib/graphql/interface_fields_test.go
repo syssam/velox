@@ -1,17 +1,12 @@
 package graphql
 
 import (
-	"context"
-	"strings"
 	"testing"
 
-	"github.com/99designs/gqlgen/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vektah/gqlparser/v2/ast"
 
 	entgen "github.com/syssam/velox/compiler/gen"
-	"github.com/syssam/velox/runtime"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -215,46 +210,6 @@ func TestInterfaceField_CollectMeta(t *testing.T) {
 	assert.Contains(t, code, `Edges:     []string{"todo", "project"},`)
 	assert.Contains(t, code, `Satisfies: []string{"BookmarkItem", "Todo", "Project"},`)
 	assert.Contains(t, code, "FastPath:  true")
-}
-
-// TestCollectFields_InterfaceField pins the collector: a selection covered
-// by __typename/id on an all-own-FK field selects only the key columns and
-// schedules no edge load; any other selection eager-loads every edge.
-func TestCollectFields_InterfaceField(t *testing.T) {
-	meta := &runtime.CollectMeta{
-		FieldColumns: map[string]string{"name": "name"},
-		Edges: map[string]runtime.EdgeMeta{
-			"todo":    {Name: "todo", Target: "todos", Unique: true, FKColumns: []string{"bookmark_todo"}},
-			"project": {Name: "project", Target: "projects", Unique: true, FKColumns: []string{"bookmark_project"}},
-		},
-		InterfaceFields: map[string]runtime.InterfaceFieldMeta{
-			"item": {Edges: []string{"todo", "project"}, Satisfies: []string{"BookmarkItem", "Todo", "Project"}, FastPath: true},
-		},
-	}
-	item := func(sel ...ast.Selection) *ast.Field {
-		return &ast.Field{Name: "item", Alias: "item", SelectionSet: sel}
-	}
-
-	ctx := newGQLContext(t, ast.SelectionSet{item(&ast.Field{Name: "__typename"}, &ast.Field{Name: "id"})})
-	q := newCollectQuery("id", "Bookmark")
-	require.NoError(t, runtime.CollectFields(ctx, q, meta))
-	assert.ElementsMatch(t, []string{"id", "bookmark_todo", "bookmark_project"}, q.Ctx.Fields)
-	assert.Empty(t, q.Edges, "covered by id: no edge load")
-
-	ctx = newGQLContext(t, ast.SelectionSet{item(&ast.Field{Name: "id"}, &ast.InlineFragment{
-		TypeCondition: "Todo",
-		SelectionSet:  ast.SelectionSet{&ast.Field{Name: "text"}},
-	})})
-	q = newCollectQuery("id", "Bookmark")
-	require.NoError(t, runtime.CollectFields(ctx, q, meta))
-	names := make([]string, 0, 2)
-	for _, e := range q.Edges {
-		names = append(names, e.Name)
-	}
-	assert.ElementsMatch(t, []string{"todo", "project"}, names, "a real selection loads every contributing edge")
-	_ = context.Background
-	_ = graphql.CollectedField{}
-	_ = strings.Contains
 }
 
 // TestInterfaceField_RenameHasNoFastPath pins that a rename is reported as

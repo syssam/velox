@@ -255,6 +255,34 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			jen.Id("q").Dot("Limit").Call(jen.Op("*").Id("last").Op("+").Lit(1)),
 		)
 
+		// GraphQL field collection (Ent parity: entgql's Paginate calls
+		// collectField on edges.node): project the columns the selection
+		// reads and eager-load the edges it traverses. A no-op outside a
+		// gqlgen resolver. Runs after the count, which must not be projected.
+		grp.If(
+			jen.Err().Op(":=").Qual(gqlrelayPkg, "CollectConnectionFields").Call(
+				jen.Id("ctx"), jen.Id("q"), jen.Op("&").Qual(subEntityPkg, t.Name+"CollectMeta"),
+			),
+			jen.Err().Op("!=").Nil(),
+		).Block(
+			jen.Return(jen.Nil(), jen.Err()),
+		)
+		// Cursors are built from the order columns, so a projected page
+		// must still read them.
+		grp.If(jen.Len(jen.Id("q").Dot("ctx").Dot("Fields")).Op(">").Lit(0)).BlockFunc(func(proj *jen.Group) {
+			if multiOrder {
+				proj.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("cfg").Dot("Order")).Block(
+					jen.If(jen.Id("o").Op("!=").Nil().Op("&&").Id("o").Dot("Field").Op("!=").Nil()).Block(
+						jen.Id("q").Dot("ctx").Dot("AppendFieldOnce").Call(jen.Id("o").Dot("Field").Dot("Column")),
+					),
+				)
+			} else {
+				proj.If(jen.Id("cfg").Dot("Order").Op("!=").Nil().Op("&&").Id("cfg").Dot("Order").Dot("Field").Op("!=").Nil()).Block(
+					jen.Id("q").Dot("ctx").Dot("AppendFieldOnce").Call(jen.Id("cfg").Dot("Order").Dot("Field").Dot("Column")),
+				)
+			}
+		})
+
 		// Fetch
 		grp.List(jen.Id("nodes"), jen.Id("err")).Op(":=").Id("q").Dot("All").Call(jen.Id("ctx"))
 		grp.If(jen.Err().Op("!=").Nil()).Block(

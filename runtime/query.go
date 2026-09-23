@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -22,6 +23,11 @@ type QueryContext struct {
 	Unique     *bool
 	Limit      *int
 	Offset     *int
+	// PartitionLimit caps the rows an eager-loaded to-many edge query keeps
+	// per parent. Set by WithEdgeLoad from runtime.Limit; the parent's
+	// loader applies it with sql.Selector.LimitPerPartition, partitioned by
+	// the key that links each row to its parent.
+	PartitionLimit *int
 }
 
 // Clone returns a deep copy of the QueryContext.
@@ -43,6 +49,10 @@ func (c *QueryContext) Clone() *QueryContext {
 	if c.Offset != nil {
 		v := *c.Offset
 		clone.Offset = &v
+	}
+	if c.PartitionLimit != nil {
+		v := *c.PartitionLimit
+		clone.PartitionLimit = &v
 	}
 	return &clone
 }
@@ -190,8 +200,12 @@ func BuildSelectorFrom(ctx context.Context, q QueryReader) (*sql.Selector, error
 		}
 	}
 	if q.GetWithFKs() {
-		if fkCols := q.GetFKColumns(); len(fkCols) > 0 {
-			columns = append(columns, fkCols...)
+		// A projection may already name a key (the GraphQL collector adds
+		// the keys the selected edges need); select each column once.
+		for _, fk := range q.GetFKColumns() {
+			if !slices.Contains(columns, fk) {
+				columns = append(columns, fk)
+			}
 		}
 	}
 	selector.Select(selector.Columns(columns...)...)
@@ -238,7 +252,11 @@ func MakeQuerySpec(q QueryReader, idFieldType field.Type) *sqlgraph.QuerySpec {
 			spec.Node.Columns = make([]string, 0, len(cols)+len(fkCols))
 			spec.Node.Columns = append(spec.Node.Columns, cols...)
 		}
-		spec.Node.Columns = append(spec.Node.Columns, fkCols...)
+		for _, fk := range fkCols {
+			if !slices.Contains(spec.Node.Columns, fk) {
+				spec.Node.Columns = append(spec.Node.Columns, fk)
+			}
+		}
 	}
 
 	preds := q.GetPredicates()

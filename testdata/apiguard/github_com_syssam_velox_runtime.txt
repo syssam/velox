@@ -17,6 +17,7 @@
   field EdgeMeta.FKColumns []string
   field EdgeMeta.Inverse string
   field EdgeMeta.Name string
+  field EdgeMeta.PagesLoaded bool
   field EdgeMeta.Relay bool
   field EdgeMeta.Target string
   field EdgeMeta.Unique bool
@@ -33,7 +34,6 @@
   field LoadConfig.Edges map[string][]LoadOption
   field LoadConfig.Fields []string
   field LoadConfig.Limit *int
-  field LoadConfig.Offset *int
   field LoadConfig.Orders []func(*github.com/syssam/velox/dialect/sql.Selector)
   field LoadConfig.Predicates []func(*github.com/syssam/velox/dialect/sql.Selector)
   field NodeResolver.Resolve func(ctx context.Context, id any) (any, error)
@@ -41,6 +41,7 @@
   field QueryContext.Fields []string
   field QueryContext.Limit *int
   field QueryContext.Offset *int
+  field QueryContext.PartitionLimit *int
   field QueryContext.Type string
   field QueryContext.Unique *bool
   field QueryPlan.Args []any
@@ -49,7 +50,7 @@
   field QueryPlan.SQL string
   method FieldCollectable.GetCtx() *QueryContext
   method FieldCollectable.GetIDColumn() string
-  method FieldCollectable.WithEdgeLoad(string, ...LoadOption)
+  method FieldCollectable.WithEdgeLoad(string, ...LoadOption) FieldCollectable
   method PredicateAdder.AddPredicate(func(*github.com/syssam/velox/dialect/sql.Selector))
   method QueryContext.AppendFieldOnce(string)
   method QueryContext.Clone() *QueryContext
@@ -97,7 +98,6 @@ const OpUpdateOne github.com/syssam/velox.Op
 func BuildQueryFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func BuildSelectorFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func CloneSlice[T any]([]T) []T
-func CollectFields(context.Context, FieldCollectable, *CollectMeta, ...string) error
 func ConfigFromContext(context.Context) Config
 func DeleteNodes(context.Context, *DeleterBase) (int, error)
 func EntityPolicy(string) github.com/syssam/velox.Policy
@@ -115,6 +115,7 @@ func MakeQuerySpec(QueryReader, github.com/syssam/velox/schema/field.Type) *gith
 func MaskNotFound(error) error
 func MayWrapConstraintError(error) error
 func NewEntityQuery(string, Config) any
+func NewLoadConfig(...LoadOption) *LoadConfig
 func NewSelector(string, *[]string, func(context.Context, any) error) Selector
 func NodeResolvers() map[string]NodeResolver
 func OrderBy(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
@@ -132,7 +133,6 @@ func ScanAll[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/
 func ScanFirst[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error), string) (*T, error)
 func ScanWithInterceptors(context.Context, Query, []Interceptor, func(context.Context, any) error, any) error
 func Select(...string) LoadOption
-func SetFieldCollector(FieldCollector)
 func ValidColumn(string, string) error
 func ValidateRegistries() error
 func WithConfigContext(context.Context, Config) context.Context
@@ -146,7 +146,6 @@ type EdgeMeta struct
 type EdgePlan struct
 type EntityRegistration struct
 type FieldCollectable interface
-type FieldCollector func(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies []string) error
 type Hook = Hook
 type Interceptor = Interceptor
 type InterfaceFieldMeta struct

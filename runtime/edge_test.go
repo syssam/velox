@@ -82,7 +82,6 @@ func TestLoadConfig_ZeroValue(t *testing.T) {
 	// All fields should be nil/zero — accessing them must not panic.
 	assert.Nil(t, cfg.Predicates)
 	assert.Nil(t, cfg.Limit)
-	assert.Nil(t, cfg.Offset)
 	assert.Nil(t, cfg.Orders)
 	assert.Nil(t, cfg.Fields)
 	assert.Nil(t, cfg.Edges)

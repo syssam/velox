@@ -10,20 +10,41 @@ import (
 // Edge Load Options
 // =============================================================================
 
-// LoadOption configures edge loading.
+// LoadOption configures an edge loaded through a generated query's
+// WithEdgeLoad method.
 type LoadOption func(*LoadConfig)
 
 // LoadConfig holds configuration for eager loading an edge.
 type LoadConfig struct {
+	// Predicates filter the loaded rows of every parent alike.
 	Predicates []func(*sql.Selector)
-	Limit      *int
-	Offset     *int
-	Orders     []func(*sql.Selector)
-	Fields     []string
-	Edges      map[string][]LoadOption
+	// Limit caps the rows loaded for EACH parent of a to-many edge — never
+	// the total across parents. It is ignored on a to-one edge.
+	Limit *int
+	// Orders sort the loaded rows; on a limited to-many edge they also rank
+	// the rows each parent keeps, with the primary key as the final tiebreak.
+	Orders []func(*sql.Selector)
+	// Fields project the edge query onto these columns. The primary key and
+	// the foreign keys the loader needs are always selected.
+	Fields []string
+	// Edges are nested edges to load on the edge query, by edge name.
+	Edges map[string][]LoadOption
 }
 
-// Limit sets the maximum number of edges to load.
+// NewLoadConfig returns the LoadConfig the given options describe.
+func NewLoadConfig(opts ...LoadOption) *LoadConfig {
+	c := &LoadConfig{}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// Limit keeps at most n rows per parent of a to-many edge. The limit is
+// applied inside the database with ROW_NUMBER() OVER (PARTITION BY <parent
+// key>), so loading an edge for many parents stays one query and every
+// parent gets its own n rows — a plain LIMIT would cap the total instead.
+// Ranking follows the edge query's order, then the primary key.
 func Limit(n int) LoadOption {
 	return func(c *LoadConfig) {
 		c.Limit = &n
@@ -71,10 +92,16 @@ type EdgeMeta struct {
 	Target string
 	// Unique indicates a single-entity relationship (O2O or M2O).
 	Unique bool
-	// Relay indicates this edge uses Relay cursor pagination.
+	// Relay indicates a to-many edge exposed as a Relay connection.
 	Relay bool
-	// FKColumns lists the foreign key columns needed for this edge.
-	// These are added to the parent query's SELECT to enable eager loading.
+	// PagesLoaded reports that the connection's generated entity method
+	// answers a page without cursors, filter or order from the eager-loaded
+	// edge (gqlrelay.PageLoaded). The collector eager-loads a connection
+	// only then; otherwise every row would query it again anyway.
+	PagesLoaded bool
+	// FKColumns lists the foreign-key columns of THIS entity's table the
+	// edge needs (the key of an edge that owns it); empty when the key lives
+	// on the other table or a join table. Added to the parent's projection.
 	FKColumns []string
 	// Inverse is the back-reference edge name on the target entity (e.g., "user").
 	Inverse string

@@ -1375,6 +1375,39 @@ func TestEveryEdgeQueryToPolicyEntitySetsPolicy(t *testing.T) {
 	}
 }
 
+// TestQueryLevelEdgeQueriesCarryTargetPolicy pins that every edge query the
+// query package constructs — WithXxx, WithNamedXxx and WithEdgeLoad eager
+// loads, and QueryXxx traversals — carries the target's policy. They were
+// built with only the parent's interceptors, so an eager load read rows the
+// target's Policy() hid from the same caller's direct and entity-level
+// queries; activating GraphQL field collection turned every nested edge
+// into such an eager load.
+func TestQueryLevelEdgeQueriesCarryTargetPolicy(t *testing.T) {
+	postType := createTypeWithPolicies(t, "Post", []*load.Position{{MixedIn: false}})
+	userType := createTestType("User") // no policy of its own
+	userType.Edges = []*gen.Edge{createO2MEdge("posts", postType, "posts", "user_id")}
+	graph := &gen.Graph{
+		Config: &gen.Config{Package: "github.com/test/project/ent"},
+		Nodes:  []*gen.Type{userType, postType},
+	}
+	helper := newFeatureMockHelper().withFeatures("privacy", "namedges")
+	helper.graph = graph
+
+	src := genQueryPkg(helper, userType, graph.Nodes, helper.LeafPkgPath(userType)).GoString()
+	for _, fn := range []string{"WithPosts", "WithNamedPosts", "WithEdgeLoad", "QueryPosts"} {
+		body := funcBody(t, src, "func (q *UserQuery) "+fn+"(")
+		if !strings.Contains(body, `policy = runtime.EntityPolicy("Post")`) {
+			t.Errorf("(*UserQuery).%s must wire the Post policy onto the edge query:\n%s", fn, body)
+		}
+	}
+
+	// A target without a policy has no policy field to set.
+	postSrc := genQueryPkg(helper, postType, graph.Nodes, helper.LeafPkgPath(postType)).GoString()
+	if strings.Contains(postSrc, `runtime.EntityPolicy("User")`) {
+		t.Error("an edge to a policy-less target must not reference its policy")
+	}
+}
+
 // TestPrivacyHasNoInterceptorTraces extends TestPolicyExplicitEvaluation
 // with negative-invariant breadth: ensures no generated query file in
 // the integration prototype carries ANY trace of the pre-2026-04-10
