@@ -4,12 +4,16 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/privacy"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 )
 
-type denyTagQueryCtxKey struct{}
+type (
+	denyTagQueryCtxKey         struct{}
+	filterTagQueryPrefixCtxKey struct{}
+)
 
 // DenyTagQueryContext makes the Tag query policy deny. Tag is the target of
 // a many-to-many edge (Post.tags) with named-edge variants, so this is how
@@ -17,6 +21,14 @@ type denyTagQueryCtxKey struct{}
 // eager load. Without the marker the policy skips.
 func DenyTagQueryContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, denyTagQueryCtxKey{}, true)
+}
+
+// FilterTagQueryToPrefixContext makes the Tag query policy narrow every
+// Tag read to names starting with prefix: a row filter on the target of a
+// many-to-many edge, which the M2M eager loader must apply exactly as the
+// entity-level edge query does.
+func FilterTagQueryToPrefixContext(ctx context.Context, prefix string) context.Context {
+	return context.WithValue(ctx, filterTagQueryPrefixCtxKey{}, prefix)
 }
 
 // Tag holds the schema definition for the Tag entity.
@@ -42,7 +54,8 @@ func (Tag) Edges() []velox.Edge {
 	}
 }
 
-// Policy denies Tag reads under DenyTagQueryContext and skips otherwise.
+// Policy denies Tag reads under DenyTagQueryContext, narrows them under
+// FilterTagQueryToPrefixContext, and skips otherwise.
 func (Tag) Policy() velox.Policy {
 	return privacy.Policy{
 		Query: privacy.QueryPolicy{
@@ -50,6 +63,16 @@ func (Tag) Policy() velox.Policy {
 				if v, _ := ctx.Value(denyTagQueryCtxKey{}).(bool); v {
 					return privacy.Deny
 				}
+				return privacy.Skip
+			}),
+			privacy.FilterFunc(func(ctx context.Context, f privacy.Filter) error {
+				prefix, ok := ctx.Value(filterTagQueryPrefixCtxKey{}).(string)
+				if !ok {
+					return privacy.Skip
+				}
+				f.WhereP(func(s *sql.Selector) {
+					s.Where(sql.HasPrefix(s.C("name"), prefix))
+				})
 				return privacy.Skip
 			}),
 		},

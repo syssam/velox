@@ -156,13 +156,15 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) Load(ctx context.Context, query Q, nodes []
 			init(node)
 		}
 	}
-	parents := make(map[TK][]*P, len(nodes))
+	// edges lists every (target, parent) pair in the order the rows were
+	// read, which for each parent is its own ranking order.
+	var edges []m2mPair[TK, K]
 	qr := velox.QuerierFunc(func(ctx context.Context, q velox.Query) (velox.Value, error) {
 		tq, ok := q.(Q)
 		if !ok {
 			return nil, fmt.Errorf("velox: unexpected query type %T loading the %s edge", q, l.Edge)
 		}
-		return l.scan(ctx, tq, edgeIDs, byID, parents)
+		return l.scan(ctx, tq, edgeIDs, &edges)
 	})
 	// Traversers and the policy run before the interceptor chain, as they
 	// do for every other read of the target.
@@ -173,18 +175,27 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) Load(ctx context.Context, query Q, nodes []
 	if err != nil {
 		return err
 	}
+	targets := make(map[TK]*T, len(neighbors))
 	for _, n := range neighbors {
 		l.SetConfig(n, l.Config)
-		for _, parent := range parents[l.TargetKey(n)] {
-			assign(parent, n)
+		targets[l.TargetKey(n)] = n
+	}
+	// Assign in row order, not in the order of neighbors: a target shared
+	// by several parents is scanned once, at its first row, and under a
+	// per-parent limit the window returns rows by rank across all parents,
+	// so the first row of a shared target can precede a row that ranks
+	// before it for another parent.
+	for _, e := range edges {
+		if n, ok := targets[e.target]; ok {
+			assign(byID[e.parent], n)
 		}
 	}
 	return nil
 }
 
-// scan runs the join and returns each target once, recording in parents
-// every parent it belongs to.
-func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []any, byID map[K]*P, parents map[TK][]*P) ([]*T, error) {
+// scan runs the join and returns each target once, appending to edges
+// every (target, parent) pair in the order the rows were read.
+func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []any, edges *[]m2mPair[TK, K]) ([]*T, error) {
 	selector, err := l.Selector(tq, ctx)
 	if err != nil {
 		return nil, err
@@ -213,9 +224,12 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 	if err != nil {
 		return nil, err
 	}
+	// An interceptor that runs the query again gets the edges of that run.
+	*edges = (*edges)[:0]
 	var (
-		result []*T
-		seen   = make(map[m2mPair[TK, K]]struct{})
+		result  []*T
+		seen    = make(map[m2mPair[TK, K]]struct{})
+		scanned = make(map[TK]struct{})
 	)
 	for rows.Next() {
 		node := new(T)
@@ -240,10 +254,11 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 			continue
 		}
 		seen[pair] = struct{}{}
-		if _, loaded := parents[tk]; !loaded {
+		*edges = append(*edges, pair)
+		if _, ok := scanned[tk]; !ok {
+			scanned[tk] = struct{}{}
 			result = append(result, node)
 		}
-		parents[tk] = append(parents[tk], byID[key])
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
