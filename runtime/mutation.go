@@ -41,16 +41,12 @@ type (
 	Querier = velox.Querier
 	// QuerierFunc is an adapter to allow ordinary functions as Querier.
 	QuerierFunc = velox.QuerierFunc
-	// InterceptFunc is an adapter to allow ordinary functions as Interceptor.
-	InterceptFunc = velox.InterceptFunc
 	// Value represents a dynamic value returned by mutations or queries.
 	Value = velox.Value
 	// Query represents a query builder.
 	Query = velox.Query
 	// Traverser is the interface for traversing query nodes.
 	Traverser = velox.Traverser
-	// TraverseFunc is an adapter for ordinary functions as Traverser.
-	TraverseFunc = velox.TraverseFunc
 )
 
 // =============================================================================

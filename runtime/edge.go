@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 
-	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sql"
 )
 
@@ -24,24 +23,10 @@ type LoadConfig struct {
 	Edges      map[string][]LoadOption
 }
 
-// Where adds predicates to the edge load query.
-func Where(ps ...func(*sql.Selector)) LoadOption {
-	return func(c *LoadConfig) {
-		c.Predicates = append(c.Predicates, ps...)
-	}
-}
-
 // Limit sets the maximum number of edges to load.
 func Limit(n int) LoadOption {
 	return func(c *LoadConfig) {
 		c.Limit = &n
-	}
-}
-
-// Offset sets the number of edges to skip before loading.
-func Offset(n int) LoadOption {
-	return func(c *LoadConfig) {
-		c.Offset = &n
 	}
 }
 
@@ -67,13 +52,6 @@ func WithEdge(name string, opts ...LoadOption) LoadOption {
 		}
 		c.Edges[name] = opts
 	}
-}
-
-// EdgeLoad holds the name and options for an edge to be loaded.
-type EdgeLoad struct {
-	Name  string
-	Label string // Optional label for named edge loading
-	Opts  []LoadOption
 }
 
 // =============================================================================
@@ -103,25 +81,8 @@ type EdgeMeta struct {
 }
 
 // =============================================================================
-// Driver / Config Context Propagation
+// Config Context Propagation
 // =============================================================================
-
-// driverKey is the context key for the database driver.
-type driverKey struct{}
-
-// WithDriverContext returns a new context with the given driver attached.
-// Used by generated code and transaction wrappers to propagate the driver
-// through context so downstream edge resolvers can construct queries without
-// explicitly threading the driver through every call.
-func WithDriverContext(ctx context.Context, drv dialect.Driver) context.Context {
-	return context.WithValue(ctx, driverKey{}, drv)
-}
-
-// DriverFromContext returns the driver from the context, or nil if not set.
-func DriverFromContext(ctx context.Context) dialect.Driver {
-	d, _ := ctx.Value(driverKey{}).(dialect.Driver)
-	return d
-}
 
 // configKey is the context key for the runtime Config.
 type configKey struct{}

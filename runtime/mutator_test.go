@@ -53,6 +53,5 @@ func TestRegisterEntity(t *testing.T) {
 	assert.Error(t, err, "invalid column should fail")
 
 	// Verify registered names.
-	names := RegisteredTypeNames()
-	assert.Contains(t, names, "User")
+	assert.Contains(t, registeredNames, "User")
 }

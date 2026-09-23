@@ -69,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING (dead API):** `velox.Cache`, `velox.CacheKey`
 - **BREAKING (dead API):** `velox.QueryError`, `MutationError`, `PrivacyError`, `RollbackError`, `AggregateError` and their helpers, `NewNotFoundErrorWithID`, `NewNotSingularErrorWithCount`, `(*NotFoundError).ID`, `(*NotSingularError).Count` — never constructed
 - **BREAKING (dead API):** `runtime.ErrTxStarted` — use `velox.ErrTxStarted`
+- **BREAKING (dead API):** `runtime.ErrNotFound`, `ErrNotSingular`, `NewValidationError`, `InterceptFunc`, `TraverseFunc` — aliases nothing used; use the `velox` root package's
+- **BREAKING (dead API):** `runtime.WithDriverContext`/`DriverFromContext` (nothing read the driver back out of the context), `RegisteredTypeNames`, `EdgeLoad`, and the `Where`/`Offset` load options
 - **BREAKING (dead API):** 11 unread `dialect.Cap*` flags; `CapForUpdate`, `CapForShare`, `CapLockWithDistinct` remain
 
 ## [0.2.1] - 2026-06-25

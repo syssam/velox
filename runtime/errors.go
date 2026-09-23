@@ -22,7 +22,6 @@ var (
 	NewNotSingularError = velox.NewNotSingularError
 	NewNotLoadedError   = velox.NewNotLoadedError
 	NewConstraintError  = velox.NewConstraintError
-	NewValidationError  = velox.NewValidationError
 )
 
 // ConstraintError is an alias for velox.ConstraintError.
@@ -30,12 +29,6 @@ type ConstraintError = velox.ConstraintError
 
 // ValidationError is an alias for velox.ValidationError.
 type ValidationError = velox.ValidationError
-
-// Sentinel errors — aliases for the root velox package sentinels.
-var (
-	ErrNotFound    = velox.ErrNotFound
-	ErrNotSingular = velox.ErrNotSingular
-)
 
 // ErrNodeIDTypeMismatch is returned by a generated NodeResolver when the
 // id it was handed is not of that entity's ID type.

@@ -8,37 +8,11 @@ import (
 	"github.com/syssam/velox/dialect/sql"
 )
 
-func TestEdgeLoad_Struct(t *testing.T) {
-	el := EdgeLoad{
-		Name: "posts",
-		Opts: []LoadOption{Limit(10)},
-	}
-	assert.Equal(t, "posts", el.Name)
-	assert.Len(t, el.Opts, 1)
-}
-
-func TestLoadOption_Where(t *testing.T) {
-	cfg := &LoadConfig{}
-	opt := Where(func(s *sql.Selector) {})
-	opt(cfg)
-	assert.Len(t, cfg.Predicates, 1)
-	// Apply another
-	opt(cfg)
-	assert.Len(t, cfg.Predicates, 2)
-}
-
 func TestLoadOption_Limit(t *testing.T) {
 	cfg := &LoadConfig{}
 	Limit(10)(cfg)
 	assert.NotNil(t, cfg.Limit)
 	assert.Equal(t, 10, *cfg.Limit)
-}
-
-func TestLoadOption_Offset(t *testing.T) {
-	cfg := &LoadConfig{}
-	Offset(5)(cfg)
-	assert.NotNil(t, cfg.Offset)
-	assert.Equal(t, 5, *cfg.Offset)
 }
 
 func TestLoadOption_Select(t *testing.T) {
@@ -115,19 +89,15 @@ func TestLoadConfig_ZeroValue(t *testing.T) {
 
 	// Applying options to a zero-value struct must not panic.
 	assert.NotPanics(t, func() {
-		Where(func(s *sql.Selector) {})(&cfg)
 		Select("id")(&cfg)
 		Limit(5)(&cfg)
-		Offset(0)(&cfg)
 		OrderBy(func(s *sql.Selector) {})(&cfg)
 		WithEdge("posts")(&cfg)
 	})
 
 	// After applying, values should be populated.
-	assert.Len(t, cfg.Predicates, 1)
 	assert.Equal(t, []string{"id"}, cfg.Fields)
 	assert.NotNil(t, cfg.Limit)
-	assert.NotNil(t, cfg.Offset)
 	assert.Len(t, cfg.Orders, 1)
 	assert.Contains(t, cfg.Edges, "posts")
 }
@@ -139,25 +109,4 @@ func TestLoadConfig_MultipleSelectCalls(t *testing.T) {
 	Select("name")(cfg)
 	Select("email")(cfg)
 	assert.Equal(t, []string{"name", "email"}, cfg.Fields)
-}
-
-// TestLoadConfig_MultipleWherePredicates verifies that calling Where multiple times
-// accumulates all predicates rather than overwriting.
-func TestLoadConfig_MultipleWherePredicates(t *testing.T) {
-	cfg := &LoadConfig{}
-	pred1Called := false
-	pred2Called := false
-	pred1 := func(s *sql.Selector) { pred1Called = true }
-	pred2 := func(s *sql.Selector) { pred2Called = true }
-
-	Where(pred1)(cfg)
-	Where(pred2)(cfg)
-	assert.Len(t, cfg.Predicates, 2)
-
-	// Execute all predicates to confirm both are present.
-	for _, p := range cfg.Predicates {
-		p(nil)
-	}
-	assert.True(t, pred1Called, "first predicate should have been called")
-	assert.True(t, pred2Called, "second predicate should have been called")
 }

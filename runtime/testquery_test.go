@@ -78,3 +78,10 @@ func (q *testQuery) AddModifier(m ...func(*sql.Selector)) {
 func (q *testQuery) BuildSelector(ctx context.Context) (*sql.Selector, error) {
 	return BuildSelectorFrom(ctx, q)
 }
+
+// EdgeLoad records one WithEdgeLoad call on a testQuery.
+type EdgeLoad struct {
+	Name  string
+	Label string
+	Opts  []LoadOption
+}

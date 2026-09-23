@@ -14,9 +14,6 @@
   field DeleterBase.Predicates []func(*github.com/syssam/velox/dialect/sql.Selector)
   field DeleterBase.Schema string
   field DeleterBase.Table string
-  field EdgeLoad.Label string
-  field EdgeLoad.Name string
-  field EdgeLoad.Opts []LoadOption
   field EdgeMeta.FKColumns []string
   field EdgeMeta.Inverse string
   field EdgeMeta.Name string
@@ -103,7 +100,6 @@ func CloneSlice[T any]([]T) []T
 func CollectFields(context.Context, FieldCollectable, *CollectMeta, ...string) error
 func ConfigFromContext(context.Context) Config
 func DeleteNodes(context.Context, *DeleterBase) (int, error)
-func DriverFromContext(context.Context) github.com/syssam/velox/dialect.Driver
 func EntityPolicy(string) github.com/syssam/velox.Policy
 func ExtractID(any, github.com/syssam/velox/schema/field.Type) (any, error)
 func FindMutator(string) MutatorFunc
@@ -121,7 +117,6 @@ func MayWrapConstraintError(error) error
 func NewEntityQuery(string, Config) any
 func NewSelector(string, *[]string, func(context.Context, any) error) Selector
 func NodeResolvers() map[string]NodeResolver
-func Offset(int) LoadOption
 func OrderBy(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
 func QueryGroupBy(context.Context, QueryReader, []string, []AggregateFunc, any) error
 func QueryScan(context.Context, QueryReader, any) error
@@ -132,7 +127,6 @@ func RegisterEntityPolicy(string, github.com/syssam/velox.Policy)
 func RegisterMutator(string, MutatorFunc)
 func RegisterNodeResolver(string, NodeResolver)
 func RegisterQueryFactory(string, QueryFunc)
-func RegisteredTypeNames() []string
 func RunTraversers(context.Context, Query, []Interceptor) error
 func ScanAll[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)) ([]*T, error)
 func ScanFirst[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error), string) (*T, error)
@@ -141,23 +135,19 @@ func Select(...string) LoadOption
 func SetFieldCollector(FieldCollector)
 func ValidColumn(string, string) error
 func ValidateRegistries() error
-func Where(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
 func WithConfigContext(context.Context, Config) context.Context
-func WithDriverContext(context.Context, github.com/syssam/velox/dialect.Driver) context.Context
 func WithEdge(string, ...LoadOption) LoadOption
 type AggregateFunc = AggregateFunc
 type CollectMeta struct
 type Config struct
 type ConstraintError = ConstraintError
 type DeleterBase struct
-type EdgeLoad struct
 type EdgeMeta struct
 type EdgePlan struct
 type EntityRegistration struct
 type FieldCollectable interface
 type FieldCollector func(ctx context.Context, q FieldCollectable, meta *CollectMeta, satisfies []string) error
 type Hook = Hook
-type InterceptFunc = InterceptFunc
 type Interceptor = Interceptor
 type InterfaceFieldMeta struct
 type LoadConfig struct
@@ -182,16 +172,12 @@ type QueryReader interface
 type Scannable interface
 type ScannableOf[T any] interface
 type Selector struct
-type TraverseFunc = TraverseFunc
 type Traverser = Traverser
 type TxDriverUnwrapper interface
 type ValidationError = ValidationError
 type Value = Value
 var ErrNodeIDTypeMismatch error
-var ErrNotFound error
-var ErrNotSingular error
 var NewConstraintError func(msg string, wrap error) *github.com/syssam/velox.ConstraintError
 var NewNotFoundError func(label string) *github.com/syssam/velox.NotFoundError
 var NewNotLoadedError func(edge string) *github.com/syssam/velox.NotLoadedError
 var NewNotSingularError func(label string) *github.com/syssam/velox.NotSingularError
-var NewValidationError func(name string, err error) *github.com/syssam/velox.ValidationError

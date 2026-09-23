@@ -45,13 +45,6 @@ func FindMutator(name string) MutatorFunc {
 	return mutators[name]
 }
 
-// RegisteredTypeNames returns all registered entity type names.
-func RegisteredTypeNames() []string {
-	mutatorMu.RLock()
-	defer mutatorMu.RUnlock()
-	return registeredNames
-}
-
 // QueryFunc creates a Querier for a given entity type.
 type QueryFunc func(cfg Config) any
 

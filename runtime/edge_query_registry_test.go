@@ -13,19 +13,6 @@ import (
 // WithDriverContext / DriverFromContext
 // =============================================================================
 
-func TestWithDriverContext_and_DriverFromContext(t *testing.T) {
-	drv := newTestDB(t)
-	ctx := WithDriverContext(context.Background(), drv)
-
-	got := DriverFromContext(ctx)
-	assert.Equal(t, drv, got)
-}
-
-func TestDriverFromContext_NilWhenMissing(t *testing.T) {
-	got := DriverFromContext(context.Background())
-	assert.Nil(t, got)
-}
-
 func TestWithConfigContext_and_ConfigFromContext(t *testing.T) {
 	drv := newTestDB(t)
 	cfg := Config{Driver: drv}
@@ -80,17 +67,6 @@ func TestRegisterMutator_and_FindMutator(t *testing.T) {
 	assert.True(t, called)
 
 	assert.Nil(t, FindMutator("NonExistentEntity"))
-}
-
-func TestRegisteredTypeNames(t *testing.T) {
-	defer cleanupRegistries(t, "TestTypeNamesEntity")
-
-	RegisterMutator("TestTypeNamesEntity", func(_ context.Context, _ Config, _ any) (any, error) {
-		return nil, nil
-	})
-
-	names := RegisteredTypeNames()
-	assert.Contains(t, names, "TestTypeNamesEntity")
 }
 
 // =============================================================================

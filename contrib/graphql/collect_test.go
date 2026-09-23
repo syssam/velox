@@ -22,8 +22,14 @@ func init() {
 type collectQuery struct {
 	IDColumn string
 	Ctx      *runtime.QueryContext
-	Edges    []runtime.EdgeLoad
+	Edges    []collectedEdge
 	WithFKs  bool
+}
+
+// collectedEdge records one WithEdgeLoad call.
+type collectedEdge struct {
+	Name string
+	Opts []runtime.LoadOption
 }
 
 func newCollectQuery(idColumn, typeName string) *collectQuery {
@@ -35,7 +41,7 @@ func (q *collectQuery) GetIDColumn() string { return q.IDColumn }
 func (q *collectQuery) GetCtx() *runtime.QueryContext { return q.Ctx }
 
 func (q *collectQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) {
-	q.Edges = append(q.Edges, runtime.EdgeLoad{Name: name, Opts: opts})
+	q.Edges = append(q.Edges, collectedEdge{Name: name, Opts: opts})
 	q.WithFKs = true
 }
 

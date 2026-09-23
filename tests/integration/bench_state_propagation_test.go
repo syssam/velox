@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	velox "github.com/syssam/velox"
 	"github.com/syssam/velox/runtime"
 	integration "github.com/syssam/velox/tests/integration"
 	"github.com/syssam/velox/tests/integration/entity"
@@ -46,7 +47,7 @@ func BenchmarkInterceptorChain(b *testing.B) {
 	defer client.Close()
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		client.User.Intercept(runtime.InterceptFunc(func(next runtime.Querier) runtime.Querier {
+		client.User.Intercept(velox.InterceptFunc(func(next runtime.Querier) runtime.Querier {
 			return runtime.QuerierFunc(func(ctx context.Context, q runtime.Query) (runtime.Value, error) {
 				return next.Query(ctx, q)
 			})
@@ -69,7 +70,7 @@ func BenchmarkInterceptorChain(b *testing.B) {
 func BenchmarkClientIntercept(b *testing.B) {
 	client := openBenchClient(b)
 	defer client.Close()
-	inter := runtime.InterceptFunc(func(next runtime.Querier) runtime.Querier {
+	inter := velox.InterceptFunc(func(next runtime.Querier) runtime.Querier {
 		return next
 	})
 	b.ResetTimer()

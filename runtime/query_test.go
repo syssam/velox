@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/schema/field"
@@ -703,7 +704,7 @@ func TestScanWithInterceptors_ErrorFromInterceptorChain(t *testing.T) {
 	}
 
 	inters := []Interceptor{
-		InterceptFunc(func(next Querier) Querier {
+		velox.InterceptFunc(func(next Querier) Querier {
 			return QuerierFunc(func(_ context.Context, _ Query) (Value, error) {
 				return nil, want
 			})
@@ -744,7 +745,7 @@ func TestRunTraversers_NilInterceptor(t *testing.T) {
 
 func TestRunTraversers_NonTraverser(t *testing.T) {
 	// A plain interceptor that does NOT implement Traverser — skipped silently.
-	inter := InterceptFunc(func(next Querier) Querier { return next })
+	inter := velox.InterceptFunc(func(next Querier) Querier { return next })
 	err := RunTraversers(context.Background(), nil, []Interceptor{inter})
 	assert.NoError(t, err)
 }
@@ -766,7 +767,7 @@ func TestRunTraversers_TraverserError(t *testing.T) {
 func TestRunTraversers_MixedInterceptors(t *testing.T) {
 	// Mix of traverser and non-traverser — only traversers get called.
 	trv := &mockTraverser{}
-	plain := InterceptFunc(func(next Querier) Querier { return next })
+	plain := velox.InterceptFunc(func(next Querier) Querier { return next })
 	err := RunTraversers(context.Background(), nil, []Interceptor{plain, trv})
 	require.NoError(t, err)
 	assert.True(t, trv.traverseCalled)

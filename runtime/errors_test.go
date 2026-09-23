@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syssam/velox"
 )
 
 func TestNotFoundError(t *testing.T) {
@@ -80,26 +81,26 @@ func TestIsValidationError(t *testing.T) {
 }
 
 func TestSentinelErrors(t *testing.T) {
-	require.NotNil(t, ErrNotFound)
-	require.NotNil(t, ErrNotSingular)
-	assert.Equal(t, "velox: entity not found", ErrNotFound.Error())
-	assert.Equal(t, "velox: entity not singular", ErrNotSingular.Error())
+	require.NotNil(t, velox.ErrNotFound)
+	require.NotNil(t, velox.ErrNotSingular)
+	assert.Equal(t, "velox: entity not found", velox.ErrNotFound.Error())
+	assert.Equal(t, "velox: entity not singular", velox.ErrNotSingular.Error())
 }
 
 func TestNotFoundError_Is_CompatibleWithRootPackage(t *testing.T) {
 	// runtime.NotFoundError should be matchable via errors.Is with velox.ErrNotFound
 	err := NewNotFoundError("User")
-	assert.True(t, errors.Is(err, ErrNotFound), "errors.Is should match runtime.NotFoundError against ErrNotFound")
+	assert.True(t, errors.Is(err, velox.ErrNotFound), "errors.Is should match runtime.NotFoundError against velox.ErrNotFound")
 
 	// Also works when wrapped
 	wrapped := fmt.Errorf("wrap: %w", err)
-	assert.True(t, errors.Is(wrapped, ErrNotFound))
+	assert.True(t, errors.Is(wrapped, velox.ErrNotFound))
 }
 
 func TestNotSingularError_Is_CompatibleWithRootPackage(t *testing.T) {
 	err := NewNotSingularError("User")
-	assert.True(t, errors.Is(err, ErrNotSingular), "errors.Is should match runtime.NotSingularError against ErrNotSingular")
+	assert.True(t, errors.Is(err, velox.ErrNotSingular), "errors.Is should match runtime.NotSingularError against velox.ErrNotSingular")
 
 	wrapped := fmt.Errorf("wrap: %w", err)
-	assert.True(t, errors.Is(wrapped, ErrNotSingular))
+	assert.True(t, errors.Is(wrapped, velox.ErrNotSingular))
 }
