@@ -60,6 +60,30 @@ var CommentSchema = EntitySchema{
 	}},
 }
 
+// PetSchema is the schema configuration for Pet.
+var PetSchema = EntitySchema{
+	Edges: []EdgeConfig{{
+		Columns: []string{"owner_id"},
+		Inverse: true,
+		Name:    "owner",
+		Table:   "users",
+		Type:    "User",
+	}},
+	Fields: []FieldConfig{{
+		Column: "id",
+		Name:   "id",
+		Type:   "TypeInt",
+	}, {
+		Column: "name",
+		Name:   "name",
+		Type:   "TypeString",
+	}, {
+		Column: "owner_id",
+		Name:   "owner_id",
+		Type:   "TypeInt",
+	}},
+}
+
 // PostSchema is the schema configuration for Post.
 var PostSchema = EntitySchema{
 	Edges: []EdgeConfig{{
@@ -179,6 +203,12 @@ var UserSchema = EntitySchema{
 		Table:   "posts",
 		Type:    "Post",
 	}, {
+		Columns: []string{"owner_id"},
+		Inverse: false,
+		Name:    "pets",
+		Table:   "pets",
+		Type:    "Pet",
+	}, {
 		Columns: []string{"user_comments"},
 		Inverse: false,
 		Name:    "comments",
@@ -221,7 +251,7 @@ var UserSchema = EntitySchema{
 }
 
 // TypeSchemas maps entity type names to their schema configurations.
-var TypeSchemas = map[string]*EntitySchema{"Comment": &CommentSchema, "Post": &PostSchema, "Tag": &TagSchema, "Token": &TokenSchema, "User": &UserSchema}
+var TypeSchemas = map[string]*EntitySchema{"Comment": &CommentSchema, "Pet": &PetSchema, "Post": &PostSchema, "Tag": &TagSchema, "Token": &TokenSchema, "User": &UserSchema}
 
 // GetSchema returns the schema configuration for a given type name.
 func GetSchema(typeName string) (*EntitySchema, bool) {

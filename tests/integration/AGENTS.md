@@ -98,13 +98,14 @@ expect may simply be absent rather than renamed.
 - `sql/upsert`
 - `sql/versioned-migration`
 
-## Entities (5)
+## Entities (6)
 
 | Entity | Table | Package dir | Edges |
 |---|---|---|---|
 | `Comment` | `comments` | `comment/` | post→Post, author→User |
+| `Pet` | `pets` | `pet/` | owner→User |
 | `Post` | `posts` | `post/` | author→User, comments→Comment, tags→Tag |
 | `Tag` | `tags` | `tag/` | posts→Post |
 | `Token` | `tokens` | `token/` | — |
-| `User` | `users` | `user/` | posts→Post, comments→Comment |
+| `User` | `users` | `user/` | posts→Post, pets→Pet, comments→Comment |
 

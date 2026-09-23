@@ -72,6 +72,12 @@ type Comment implements Node @goModel(model: "github.com/syssam/velox/tests/inte
   author: User!
 }
 
+type Pet implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Pet") {
+  id: ID!
+  name: String!
+  owner: User
+}
+
 type Post implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Post") {
   id: ID!
   """
@@ -240,6 +246,36 @@ type User implements Node @goModel(model: "github.com/syssam/velox/tests/integra
     where: PostWhereInput
   ): PostConnection!
   """
+  Pets owned by this user (a .Field()-bound foreign key)
+  """
+  pets(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Pets returned from the connection.
+    """
+    orderBy: PetOrder
+
+  ): PetConnection!
+  """
   Comments written by this user
   """
   comments(
@@ -368,6 +404,27 @@ Properties by which Comment connections can be ordered.
 enum CommentOrderField @goModel(model: "github.com/syssam/velox/tests/integration/entity.CommentOrderField") {
   CREATED_AT
   UPDATED_AT
+}
+
+"""
+Ordering options for Pet connections
+"""
+input PetOrder @goModel(model: "github.com/syssam/velox/tests/integration/entity.PetOrder") {
+  """
+  The ordering direction.
+  """
+  direction: OrderDirection! = ASC
+  """
+  The field by which to order Pets.
+  """
+  field: PetOrderField!
+}
+"""
+Properties by which Pet connections can be ordered.
+"""
+enum PetOrderField @goModel(model: "github.com/syssam/velox/tests/integration/entity.PetOrderField") {
+  NAME
+  OWNER_ID
 }
 
 """
@@ -516,6 +573,37 @@ type CommentEdge @goModel(model: "github.com/syssam/velox/tests/integration/enti
   The item at the end of the edge.
   """
   node: Comment
+  """
+  A cursor for use in pagination.
+  """
+  cursor: Cursor!
+}
+
+"""
+A connection to a list of items.
+"""
+type PetConnection @goModel(model: "github.com/syssam/velox/tests/integration/entity.PetConnection") {
+  """
+  A list of edges.
+  """
+  edges: [PetEdge!]
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+  """
+  Identifies the total count of items in the connection.
+  """
+  totalCount: Int!
+}
+"""
+An edge in a connection.
+"""
+type PetEdge @goModel(model: "github.com/syssam/velox/tests/integration/entity.PetEdge") {
+  """
+  The item at the end of the edge.
+  """
+  node: Pet
   """
   A cursor for use in pagination.
   """
@@ -693,6 +781,33 @@ type Query {
     orderBy: [CommentOrder!]
 
   ): CommentConnection!
+  pets(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Pets returned from the connection.
+    """
+    orderBy: PetOrder
+
+  ): PetConnection!
   posts(
     """
     Returns the elements in the list that come after the specified cursor.

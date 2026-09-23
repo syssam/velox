@@ -713,6 +713,38 @@ func partitionTiebreak(h gen.GeneratorHelper, edge *gen.Edge, sel string) jen.Co
 	return jen.Id(sel).Dot("OrderBy").Call(jen.Id(sel).Dot("C").Call(jen.Qual(h.LeafPkgPath(edge.Type), edge.Type.ID.Constant())))
 }
 
+// genEdgeFieldKeys emits, for every to-one edge of t whose foreign key is a
+// user-declared field bound with .Field(), a statement adding that key to a
+// projected query when the edge is eager-loaded:
+//
+//	if len(q.ctx.Fields) > 0 && q.withOwner != nil {
+//		q.ctx.AppendFieldOnce(pet.FieldOwnerID)
+//	}
+//
+// An auto-created key rides on withFKs; a declared one is an ordinary column
+// that Select() leaves out, so the loader had nothing to join on and the
+// edge came back nil with no error. Ent adds the same column in querySpec.
+// Emitted where rows of t are scanned into entities (sqlAll, and the M2M
+// loader that scans t itself) — not in buildSelector, which Select().Scan
+// also uses to scan into the caller's own struct.
+func genEdgeFieldKeys(g *jen.Group, h gen.GeneratorHelper, t *gen.Type, recv string) {
+	for _, edge := range t.Edges {
+		if !edge.OwnFK() {
+			continue
+		}
+		fk, err := edge.ForeignKey()
+		if err != nil || !fk.UserDefined || fk.Field == nil {
+			continue
+		}
+		g.If(
+			jen.Len(jen.Id(recv).Dot("ctx").Dot("Fields")).Op(">").Lit(0).
+				Op("&&").Id(recv).Dot(edgeCallbackField(edge)).Op("!=").Nil(),
+		).Block(
+			jen.Id(recv).Dot("ctx").Dot("AppendFieldOnce").Call(jen.Qual(h.LeafPkgPath(t), fk.Field.Constant())),
+		)
+	}
+}
+
 func edgeCallbackField(e *gen.Edge) string {
 	return "with" + e.StructField()
 }
@@ -1047,6 +1079,7 @@ func genM2MLoaderFallback(
 
 			// tq := q.(*TagQuery)
 			fnBody.Id("tq").Op(":=").Id("q").Assert(jen.Op("*").Id(targetQueryName))
+			genEdgeFieldKeys(fnBody, h, edge.Type, "tq")
 
 			// selector, err := tq.buildSelector(ctx)
 			fnBody.List(jen.Id("selector"), jen.Err()).Op(":=").Id("tq").Dot("buildSelector").Call(jen.Id("ctx"))

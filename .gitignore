@@ -66,6 +66,7 @@ tests/integration/hook/
 tests/integration/intercept/
 tests/integration/internal/
 tests/integration/migrate/
+tests/integration/pet/
 tests/integration/post/
 tests/integration/predicate/
 tests/integration/privacy/

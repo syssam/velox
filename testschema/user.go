@@ -112,6 +112,8 @@ func (User) Edges() []velox.Edge {
 		edge.To("posts", Post.Type).
 			Comment("Posts written by this user").
 			Annotations(graphql.WhereInput()),
+		edge.To("pets", Pet.Type).
+			Comment("Pets owned by this user (a .Field()-bound foreign key)"),
 		edge.To("comments", Comment.Type).
 			Comment("Comments written by this user"),
 	}

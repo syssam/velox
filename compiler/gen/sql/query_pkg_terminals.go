@@ -27,6 +27,7 @@ func (qg *queryGen) genSQLAll() {
 				jen.Id(qg.recv).Dot("schemaConfig"),
 			)
 		}
+		genEdgeFieldKeys(allBody, qg.h, qg.t, qg.recv)
 		allBody.List(jen.Id("nodes"), jen.Err()).Op(":=").Qual(runtimePkg, "ScanAll").Types(
 			qg.entityType(), jen.Op("*").Add(qg.entityType()),
 		).Call(
