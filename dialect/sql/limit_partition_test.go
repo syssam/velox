@@ -62,7 +62,7 @@ func TestSelector_LimitPerPartition(t *testing.T) {
 			}
 		}
 		for name, order := range map[string]func(*Selector){
-			"OrderExprFunc":     func(s *Selector) { s.OrderExprFunc(byCase(s)) },
+			"OrderExprFunc":      func(s *Selector) { s.OrderExprFunc(byCase(s)) },
 			"OrderExpr+ExprFunc": func(s *Selector) { s.OrderExpr(ExprFunc(byCase(s))) },
 		} {
 			t.Run(name, func(t *testing.T) {
