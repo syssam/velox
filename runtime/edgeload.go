@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
@@ -158,13 +159,18 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) Load(ctx context.Context, query Q, nodes []
 	}
 	// edges lists every (target, parent) pair in the order the rows were
 	// read, which for each parent is its own ranking order.
-	var edges []m2mPair[TK, K]
+	var (
+		edges   []m2mPair[TK, K]
+		scanned []*T // what the last scan returned, before any interceptor
+	)
 	qr := velox.QuerierFunc(func(ctx context.Context, q velox.Query) (velox.Value, error) {
 		tq, ok := q.(Q)
 		if !ok {
 			return nil, fmt.Errorf("velox: unexpected query type %T loading the %s edge", q, l.Edge)
 		}
-		return l.scan(ctx, tq, edgeIDs, &edges)
+		var err error
+		scanned, err = l.scan(ctx, tq, edgeIDs, &edges)
+		return scanned, err
 	})
 	// Traversers and the policy run before the interceptor chain, as they
 	// do for every other read of the target.
@@ -180,14 +186,29 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) Load(ctx context.Context, query Q, nodes []
 		l.SetConfig(n, l.Config)
 		targets[l.TargetKey(n)] = n
 	}
-	// Assign in row order, not in the order of neighbors: a target shared
-	// by several parents is scanned once, at its first row, and under a
-	// per-parent limit the window returns rows by rank across all parents,
-	// so the first row of a shared target can precede a row that ranks
-	// before it for another parent.
+	if slices.Equal(neighbors, scanned) {
+		// No interceptor reordered the targets: assign in row order. A
+		// target shared by several parents is scanned once, at its first
+		// row, and under a per-parent limit the window returns rows by rank
+		// across all parents, so the first row of a shared target can
+		// precede a row that ranks before it for another parent.
+		for _, e := range edges {
+			if n, ok := targets[e.target]; ok {
+				assign(byID[e.parent], n)
+			}
+		}
+		return nil
+	}
+	// An interceptor changed the result: follow its order, as the direct
+	// edge query and Ent's loader do, assigning each target to its parents
+	// in row order.
+	parents := make(map[TK][]K, len(targets))
 	for _, e := range edges {
-		if n, ok := targets[e.target]; ok {
-			assign(byID[e.parent], n)
+		parents[e.target] = append(parents[e.target], e.parent)
+	}
+	for _, n := range neighbors {
+		for _, k := range parents[l.TargetKey(n)] {
+			assign(byID[k], n)
 		}
 	}
 	return nil
@@ -227,9 +248,10 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 	// An interceptor that runs the query again gets the edges of that run.
 	*edges = (*edges)[:0]
 	var (
-		result  []*T
-		seen    = make(map[m2mPair[TK, K]]struct{})
-		scanned = make(map[TK]struct{})
+		result []*T
+		// seen holds, per target, the parents it was already paired with;
+		// a target's first appearance is when its entry is created.
+		seen = make(map[TK]map[K]struct{})
 	)
 	for rows.Next() {
 		node := new(T)
@@ -249,16 +271,17 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 			continue
 		}
 		tk := l.TargetKey(node)
-		pair := m2mPair[TK, K]{target: tk, parent: key}
-		if _, dup := seen[pair]; dup {
-			continue
-		}
-		seen[pair] = struct{}{}
-		*edges = append(*edges, pair)
-		if _, ok := scanned[tk]; !ok {
-			scanned[tk] = struct{}{}
+		ps, ok := seen[tk]
+		if !ok {
+			ps = make(map[K]struct{}, 1)
+			seen[tk] = ps
 			result = append(result, node)
 		}
+		if _, dup := ps[key]; dup {
+			continue
+		}
+		ps[key] = struct{}{}
+		*edges = append(*edges, m2mPair[TK, K]{target: tk, parent: key})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
