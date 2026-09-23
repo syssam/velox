@@ -8,7 +8,7 @@ import (
 
 // Terminal-method sections of genQueryPkg. See queryGen in query_pkg.go.
 
-// genSQLAll emits sqlAll: scan, then three eager-load phases (standard
+// genSQLAll emits sqlAll (scan, then eagerLoad) and eagerLoad: three phases (standard
 // edges, named edges, loadTotal hooks), then config injection.
 func (qg *queryGen) genSQLAll() {
 	// =========================================================================
@@ -38,7 +38,22 @@ func (qg *queryGen) genSQLAll() {
 		allBody.If(jen.Len(jen.Id("nodes")).Op("==").Lit(0)).Block(
 			jen.Return(jen.Id("nodes"), jen.Nil()),
 		)
+		allBody.If(jen.Err().Op(":=").Id(qg.recv).Dot("eagerLoad").Call(jen.Id("ctx"), jen.Id("nodes")), jen.Err().Op("!=").Nil()).Block(
+			jen.Return(jen.Nil(), jen.Err()),
+		)
+		allBody.Return(jen.Id("nodes"), jen.Nil())
+	})
 
+	// eagerLoad — the edge-loading half of sqlAll. The M2M loader scans its
+	// join rows itself and calls it on the targets, so edges loaded under a
+	// many-to-many edge are loaded too (Ent runs sqlAll there).
+	qg.f.Comment("eagerLoad loads the edges this query was asked to eager-load into nodes")
+	qg.f.Comment("and injects the runtime config. sqlAll calls it after scanning; the")
+	qg.f.Comment("many-to-many loaders of other queries call it on the rows they scan.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("eagerLoad").Params(
+		jen.Id("ctx").Qual("context", "Context"),
+		jen.Id("nodes").Index().Op("*").Add(qg.entityType()),
+	).Error().BlockFunc(func(allBody *jen.Group) {
 		// Phase 1 — Standard eager loading.
 		for _, edge := range qg.t.Edges {
 			edgeField := edge.StructField()
@@ -91,7 +106,7 @@ func (qg *queryGen) genSQLAll() {
 					),
 					jen.Err().Op("!=").Nil(),
 				).Block(
-					jen.Return(jen.Nil(), jen.Err()),
+					jen.Return(jen.Err()),
 				)
 			})
 		}
@@ -127,7 +142,7 @@ func (qg *queryGen) genSQLAll() {
 						),
 						jen.Err().Op("!=").Nil(),
 					).Block(
-						jen.Return(jen.Nil(), jen.Err()),
+						jen.Return(jen.Err()),
 					)
 				})
 			}
@@ -136,7 +151,7 @@ func (qg *queryGen) genSQLAll() {
 		// Phase 3 — loadTotal registry loop.
 		allBody.For(jen.Id("i").Op(":=").Range().Id(qg.recv).Dot("loadTotal")).Block(
 			jen.If(jen.Err().Op(":=").Id(qg.recv).Dot("loadTotal").Index(jen.Id("i")).Call(jen.Id("ctx"), jen.Id("nodes")), jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Err()),
+				jen.Return(jen.Err()),
 			),
 		)
 
@@ -145,7 +160,7 @@ func (qg *queryGen) genSQLAll() {
 			jen.Id("node").Dot(qg.t.SetConfigMethodName()).Call(jen.Id(qg.recv).Dot("config")),
 		)
 
-		allBody.Return(jen.Id("nodes"), jen.Nil())
+		allBody.Return(jen.Nil())
 	})
 }
 

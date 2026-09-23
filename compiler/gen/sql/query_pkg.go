@@ -1173,6 +1173,19 @@ func genM2MLoaderFallback(
 			fnBody.If(jen.Err().Op(":=").Id("rows").Dot("Err").Call(), jen.Err().Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Err()),
 			)
+			// Close before loading nested edges: a driver holding one
+			// connection cannot run their queries while these rows are open.
+			fnBody.Id("rows").Dot("Close").Call()
+
+			// Edges loaded under this one (WithEdgeLoad("tags",
+			// runtime.WithEdge("posts")), WithTags(func(q){ q.WithPosts() })).
+			// Ent runs the target's sqlAll here; the scan above is its first
+			// half, eagerLoad the second.
+			fnBody.If(jen.Len(jen.Id("result")).Op(">").Lit(0)).Block(
+				jen.If(jen.Err().Op(":=").Id("tq").Dot("eagerLoad").Call(jen.Id("ctx"), jen.Id("result")), jen.Err().Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Err()),
+				),
+			)
 
 			fnBody.Return(jen.Id("result"), jen.Nil())
 		}),

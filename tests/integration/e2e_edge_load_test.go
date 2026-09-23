@@ -170,6 +170,63 @@ func TestMultiDialect_EdgeLoadLimitOrderWithArgs(t *testing.T) {
 	})
 }
 
+// TestMultiDialect_EdgeLoadNestedUnderM2M pins that edges requested under a
+// many-to-many edge are loaded. The M2M loader scanned its join rows itself
+// and never ran the target query's loaders, so every nested load was
+// silently dropped: PostsOrErr on a loaded tag reported "not loaded".
+func TestMultiDialect_EdgeLoadNestedUnderM2M(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		u := createUser(t, client, "tagger", "tagger@nested")
+		p0 := createPost(t, client, u, "p0", "c")
+		p1 := createPost(t, client, u, "p1", "c")
+		t0 := createTag(t, client, "t0")
+		t1 := createTag(t, client, "t1")
+		require.NoError(t, client.Post.UpdateOneID(p0.ID).AddTagIDs(t0.ID, t1.ID).Exec(ctx))
+		require.NoError(t, client.Post.UpdateOneID(p1.ID).AddTagIDs(t0.ID).Exec(ctx))
+
+		check := func(t *testing.T, got []*entity.Post) {
+			t.Helper()
+			require.Len(t, got, 2)
+			for _, p := range got {
+				require.NotEmpty(t, p.Edges.Tags, p.Title)
+				for _, tg := range p.Edges.Tags {
+					posts, err := tg.Edges.PostsOrErr()
+					require.NoError(t, err, "nested edge under the M2M edge must be loaded")
+					want := 1
+					if tg.ID == t0.ID {
+						want = 2
+					}
+					assert.Len(t, posts, want, "tag %s", tg.Name)
+					for _, tp := range posts {
+						_, err := tp.Edges.AuthorOrErr()
+						assert.NoError(t, err, "two levels under the M2M edge")
+					}
+				}
+			}
+		}
+		t.Run("WithEdgeLoad", func(t *testing.T) {
+			q := client.Post.Query()
+			edgeLoader(t, q).WithEdgeLoad(post.EdgeTags, runtime.WithEdge("posts", runtime.WithEdge(post.EdgeAuthor)))
+			got, err := q.All(ctx)
+			require.NoError(t, err)
+			check(t, got)
+		})
+		t.Run("WithEdgeLoad with a per-parent limit", func(t *testing.T) {
+			q := client.Post.Query()
+			edgeLoader(t, q).WithEdgeLoad(post.EdgeTags, runtime.Limit(1), runtime.WithEdge("posts", runtime.WithEdge(post.EdgeAuthor)))
+			got, err := q.All(ctx)
+			require.NoError(t, err)
+			require.Len(t, got, 2)
+			for _, p := range got {
+				require.Len(t, p.Edges.Tags, 1, p.Title)
+				_, err := p.Edges.Tags[0].Edges.PostsOrErr()
+				require.NoError(t, err)
+			}
+		})
+	})
+}
+
 // TestMultiDialect_EdgeLoadRerun pins that executing the same query twice
 // (and a clone of it) loads the same edges. The loaders used to mutate the
 // stored child query: each run appended another LimitPerPartition modifier

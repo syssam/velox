@@ -188,6 +188,16 @@ func (q *UserQuery) sqlAll(ctx context.Context) ([]*entity.User, error) {
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if err := q.eagerLoad(ctx, nodes); err != nil {
+		return nil, err
+	}
+	return nodes, nil
+}
+
+// eagerLoad loads the edges this query was asked to eager-load into nodes
+// and injects the runtime config. sqlAll calls it after scanning; the
+// many-to-many loaders of other queries call it on the rows they scan.
+func (q *UserQuery) eagerLoad(ctx context.Context, nodes []*entity.User) error {
 	if query := q.withPosts; query != nil {
 		if err := q.loadPosts(ctx, query, nodes, func(n *entity.User) {
 			n.Edges.Posts = []*entity.Post{}
@@ -195,18 +205,18 @@ func (q *UserQuery) sqlAll(ctx context.Context) ([]*entity.User, error) {
 		}, func(n *entity.User, e *entity.Post) {
 			n.Edges.Posts = append(n.Edges.Posts, e)
 		}); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for i := range q.loadTotal {
 		if err := q.loadTotal[i](ctx, nodes); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for _, node := range nodes {
 		node.SetConfig(q.config)
 	}
-	return nodes, nil
+	return nil
 }
 
 // prepareQuery evaluates the privacy policy (if any) and runs

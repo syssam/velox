@@ -1783,4 +1783,13 @@ func TestEdgeLoadersNarrowACopy(t *testing.T) {
 			t.Errorf("%s must narrow a copy of the stored query; first statement is %q", loader, first)
 		}
 	}
+	// The M2M loader scans its join rows itself; it must hand them to the
+	// target query's eagerLoad or every edge nested under it is dropped
+	// (behaviorally pinned by TestMultiDialect_EdgeLoadNestedUnderM2M).
+	if body := funcBody(t, src, ") loadTags("); !strings.Contains(body, "tq.eagerLoad(ctx, result)") {
+		t.Errorf("loadTags does not run the target's eager loads\n%s", body)
+	}
+	if body := funcBody(t, src, ") sqlAll("); !strings.Contains(body, ".eagerLoad(ctx, nodes)") {
+		t.Errorf("sqlAll does not run eagerLoad\n%s", body)
+	}
 }
