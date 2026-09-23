@@ -27,9 +27,7 @@ type ArticleQuery struct {
 	order      []func(*sql.Selector)
 	modifiers  []func(*sql.Selector)
 	inters     *entity.InterceptorStore
-	withFKs    bool
 	withAuthor *AuthorQuery
-	loadTotal  []func(context.Context, []*entity.Article) error
 	path       func(context.Context) (*sql.Selector, error)
 }
 
@@ -74,7 +72,6 @@ func (q *ArticleQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) run
 			q.withAuthor = NewAuthorQuery(q.config)
 			q.withAuthor.inters = q.inters
 		}
-		q.withFKs = true
 		q.withAuthor.applyLoad(runtime.NewLoadConfig(opts...), false)
 		return q.withAuthor
 	}
@@ -156,7 +153,6 @@ func (q *ArticleQuery) WithAuthor(opts ...func(entity.AuthorQuerier)) entity.Art
 		opt(tq)
 	}
 	q.withAuthor = tq
-	q.withFKs = true
 	return q
 }
 
@@ -206,11 +202,6 @@ func (q *ArticleQuery) eagerLoad(ctx context.Context, nodes []*entity.Article) e
 		}, func(n *entity.Article, e *entity.Author) {
 			n.Edges.Author = e
 		}); err != nil {
-			return err
-		}
-	}
-	for i := range q.loadTotal {
-		if err := q.loadTotal[i](ctx, nodes); err != nil {
 			return err
 		}
 	}
@@ -587,7 +578,7 @@ func (q *ArticleQuery) GetModifiers() []func(*sql.Selector) {
 
 // GetWithFKs returns whether FK columns should be included. Implements runtime.QueryReader.
 func (q *ArticleQuery) GetWithFKs() bool {
-	return q.withFKs
+	return false
 }
 
 // Select allows the selection of one or more fields/columns for the given query,
@@ -768,13 +759,11 @@ func (q *ArticleQuery) clone() *ArticleQuery {
 		config:     q.config,
 		ctx:        q.ctx.Clone(),
 		inters:     q.inters,
-		loadTotal:  runtime.CloneSlice(q.loadTotal),
 		modifiers:  runtime.CloneSlice(q.modifiers),
 		order:      runtime.CloneSlice(q.order),
 		path:       q.path,
 		predicates: runtime.CloneSlice(q.predicates),
 		withAuthor: q.withAuthor.clone(),
-		withFKs:    q.withFKs,
 	}
 	return c
 }

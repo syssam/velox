@@ -64,7 +64,7 @@ Golden files live in `compiler/gen/sql/testdata/golden/`. Review diffs carefully
 
 `deadapi_test.go` (root package) fails when something is declared but nothing
 in production reads it — velox's most repeated bug, where a feature compiles,
-is stored at init, and silently does nothing. It checks four rules:
+is stored at init, and silently does nothing. It checks five rules:
 
 | Rule | Fails when |
 |---|---|
@@ -72,6 +72,7 @@ is stored at init, and silently does nothing. It checks four rules:
 | (b) | a `contrib/graphql.Annotation` field is read by nothing outside `annotation.go` (an accessor counts only if the accessor has a caller; `Merge` never counts) |
 | (c) | a package-level registry a `runtime` function writes is read by no function that has a caller |
 | (d) | an exported `runtime` identifier is unreachable from generated code and from every other package |
+| (e) | a field of a struct in generated code (`tests/integration`, `examples/realworld`) is written only inside `clone()` — copied between queries, never given a value |
 
 Generated code counts as a reader, so the guard needs the gitignored fixtures;
 it skips locally (and fails under `CI`) without them:

@@ -62,6 +62,10 @@ type queryGen struct {
 	// parent). Off by default: the back-reference makes every eager-loaded
 	// O2M/O2O result a pointer cycle that encoding/json cannot marshal.
 	bidiEdgeRefs bool
+	// hasFKs is true when the entity's table holds foreign-key columns.
+	// Only then does the query carry withFKs: for any other entity the
+	// flag could never be set and would be copied around as a constant.
+	hasFKs bool
 
 	idType jen.Code
 }
@@ -82,6 +86,7 @@ func newQueryGen(h gen.GeneratorHelper, t *gen.Type, entityPkgPath string) *quer
 		entityPkgImportPath: h.SharedEntityPkg(),
 		entitySubPkg:        h.LeafPkgPath(t),
 		hasPolicy:           h.FeatureEnabled(gen.FeaturePrivacy.Name) && t.NumPolicy() > 0,
+		hasFKs:              len(t.ForeignKeys) > 0,
 		schemaConfigEnabled: h.FeatureEnabled(gen.FeatureSchemaConfig.Name),
 		namedEdgesEnabled:   h.FeatureEnabled(gen.FeatureNamedEdges.Name),
 		bidiEdgeRefs:        h.FeatureEnabled(gen.FeatureBidiEdgeRefs.Name),
@@ -180,17 +185,14 @@ func (qg *queryGen) genStruct() {
 		if qg.hasPolicy {
 			group.Id("policy").Qual(qg.h.VeloxPkg(), "Policy")
 		}
-		group.Id("withFKs").Bool()
+		if qg.hasFKs {
+			group.Id("withFKs").Bool()
+		}
 		// Edge eager-loading: concrete *XxxQuery pointers (same package)
 		for _, edge := range qg.t.Edges {
 			targetQueryName := edge.Type.Name + "Query"
 			group.Id(edgeCallbackField(edge)).Op("*").Id(targetQueryName)
 		}
-		// loadTotal — registry of post-load hooks (Ent-style).
-		group.Id("loadTotal").Index().Func().Params(
-			jen.Qual("context", "Context"),
-			jen.Index().Op("*").Add(qg.entityType()),
-		).Error()
 		// Named edge variants (FeatureNamedEdges).
 		if qg.namedEdgesEnabled {
 			for _, edge := range qg.t.Edges {
@@ -367,7 +369,7 @@ func (qg *queryGen) genFieldCollectable() {
 				caseStmts = append(caseStmts,
 					jen.If(jen.Id(qg.recv).Dot(callbackField).Op("==").Nil()).Block(initStmts...),
 				)
-				if edge.OwnFK() {
+				if edge.OwnFK() && qg.hasFKs {
 					caseStmts = append(caseStmts, jen.Id(qg.recv).Dot("withFKs").Op("=").True())
 				}
 				caseStmts = append(caseStmts,
@@ -539,7 +541,7 @@ func (qg *queryGen) genWithEdges() {
 			body.Id(qg.recv).Dot(callbackField).Op("=").Id("tq")
 			// Enable FK column selection for M2O and O2O-inverse edges
 			// where the FK resides on this entity's table.
-			if ownFK {
+			if ownFK && qg.hasFKs {
 				body.Id(qg.recv).Dot("withFKs").Op("=").True()
 			}
 			body.Return(jen.Id(qg.recv))
@@ -818,7 +820,9 @@ func genTypedO2MLoader(
 	})
 
 	// Use query parameter directly — no clone, no reading from _q.withXxx.
-	body.Id("query").Dot("withFKs").Op("=").True()
+	if len(edge.Type.ForeignKeys) > 0 {
+		body.Id("query").Dot("withFKs").Op("=").True()
+	}
 	body.Id("query").Dot("Where").Call(
 		jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
 			jen.Id("s").Dot("Where").Call(

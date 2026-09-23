@@ -47,6 +47,9 @@ import (
 //	(d) every exported top-level func, type, var and const in runtime (which
 //	    exists to serve generated code) must be reachable: used from another
 //	    package, or from the declaration of a live runtime identifier.
+//	(e) no field of a struct in generated code (tests/integration,
+//	    examples/realworld) may be written only inside clone(): such a field
+//	    is copied between queries but never populated.
 //
 // Exceptions live in testdata/deadapi/allowlist.txt, one "<rule> <pkg>.<Name>"
 // per line with a reason. Keep it short; an allowlist that grows is a guard
@@ -97,6 +100,7 @@ func TestDeadAPIGuard(t *testing.T) {
 	// registry it reads alive.
 	idx.checkRegistries(t, report, func(name string) bool { _, ok := allow["d runtime."+name]; return ok })
 	idx.checkRuntimeExports(t, report)
+	idx.checkClonedOnlyFields(report)
 
 	for key, unused := range allow {
 		if unused {
@@ -670,6 +674,78 @@ func recvTypeName(p *packages.Package, fd *ast.FuncDecl) types.Object {
 		return p.TypesInfo.Uses[id]
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// (e) generated struct fields populated only by clone()
+// ---------------------------------------------------------------------------
+
+// generatedPkgPrefixes are the generator-output packages the root module
+// compiles (see generatedFixtures).
+var generatedPkgPrefixes = []string{
+	modulePath + "/tests/integration",
+	modulePath + "/examples/realworld/velox",
+}
+
+// checkClonedOnlyFields reports a field of a generated struct whose every
+// write is inside a clone()/Clone() method: it is copied from query to query
+// but never given a value, so whatever reads it always sees the zero value.
+// That was loadTotal on every generated query — declared, cloned, ranged
+// over in sqlAll, and never appended to. A field with no write at all is
+// not reported (zero values, embedded locks and the like are legitimate).
+func (idx *deadAPIIndex) checkClonedOnlyFields(report func(rule, id string, pos token.Position, why string)) {
+	for path, p := range idx.pkgs {
+		if !isGeneratedPkg(path) {
+			continue
+		}
+		for _, f := range p.Syntax {
+			if strings.HasSuffix(p.Fset.File(f.Pos()).Name(), "_test.go") {
+				continue
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				ts, ok := n.(*ast.TypeSpec)
+				if !ok {
+					return true
+				}
+				st, ok := ts.Type.(*ast.StructType)
+				if !ok {
+					return true
+				}
+				for _, fld := range st.Fields.List {
+					for _, name := range fld.Names {
+						obj := p.TypesInfo.Defs[name]
+						if obj == nil {
+							continue
+						}
+						writes, cloneWrites := 0, 0
+						for _, u := range idx.uses[obj] {
+							if !u.write {
+								continue
+							}
+							writes++
+							if u.fn != nil && strings.EqualFold(u.fn.Name.Name, "clone") {
+								cloneWrites++
+							}
+						}
+						if writes > 0 && writes == cloneWrites {
+							report("e", p.Name+"."+ts.Name.Name+"."+name.Name, idx.position(name.Pos()),
+								"generated struct field is written only by clone(); nothing ever gives it a value")
+						}
+					}
+				}
+				return false
+			})
+		}
+	}
+}
+
+func isGeneratedPkg(path string) bool {
+	for _, prefix := range generatedPkgPrefixes {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------

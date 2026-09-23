@@ -8,8 +8,8 @@ import (
 
 // Terminal-method sections of genQueryPkg. See queryGen in query_pkg.go.
 
-// genSQLAll emits sqlAll (scan, then eagerLoad) and eagerLoad: three phases (standard
-// edges, named edges, loadTotal hooks), then config injection.
+// genSQLAll emits sqlAll (scan, then eagerLoad) and eagerLoad: two phases
+// (standard edges, named edges), then config injection.
 func (qg *queryGen) genSQLAll() {
 	// =========================================================================
 	// Terminal methods
@@ -148,13 +148,6 @@ func (qg *queryGen) genSQLAll() {
 				})
 			}
 		}
-
-		// Phase 3 — loadTotal registry loop.
-		allBody.For(jen.Id("i").Op(":=").Range().Id(qg.recv).Dot("loadTotal")).Block(
-			jen.If(jen.Err().Op(":=").Id(qg.recv).Dot("loadTotal").Index(jen.Id("i")).Call(jen.Id("ctx"), jen.Id("nodes")), jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Err()),
-			),
-		)
 
 		// Inject runtime config so entity-level methods can access the driver.
 		allBody.For(jen.List(jen.Id("_"), jen.Id("node")).Op(":=").Range().Id("nodes")).Block(

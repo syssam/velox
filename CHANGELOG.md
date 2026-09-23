@@ -69,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - `contrib/graphql.FieldCollection`, an exported type nothing referenced
+- The generated `loadTotal` field on every query (declared, cloned and ranged over, never populated) and the `withFKs` field on queries of entities without foreign-key columns (could never be set). The dead-API guard's new rule (e) fails on a generated struct field written only by `clone()`
 - **BREAKING (dead API):** `runtime.EdgeQuery`, `runtime.NewEdgeQuery` and the generated `query.NewXxxQueryFromEdge` constructors — nothing constructed an `EdgeQuery`
 - **BREAKING (dead API):** `runtime.QueryBase`, `NewQueryBase`, `QueryAllSC`, `QueryCount`, `QueryExist`, `QueryIDsOnly`, `QueryFirstIDOnly`, `QueryOnlyIDOnly`, `ScanOnly`, `ScanMapRows`, `ScanConfig`
 - **BREAKING (dead API):** `runtime.RegisterTypeInfo`, `FindRegisteredType`, `RegisteredTypeInfo`, `RegisterEntityClient`, `NewEntityClient`, `EntityClientFunc`, and the `TypeInfo`/`Client` fields of `runtime.EntityRegistration` — written at init, never read

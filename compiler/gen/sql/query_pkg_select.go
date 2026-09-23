@@ -69,8 +69,12 @@ func (qg *queryGen) genQueryReader() {
 	)
 
 	qg.f.Comment("GetWithFKs returns whether FK columns should be included. Implements runtime.QueryReader.")
+	withFKs := jen.False()
+	if qg.hasFKs {
+		withFKs = jen.Id(qg.recv).Dot("withFKs")
+	}
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("GetWithFKs").Params().Bool().Block(
-		jen.Return(jen.Id(qg.recv).Dot("withFKs")),
+		jen.Return(withFKs),
 	)
 }
 
@@ -364,7 +368,6 @@ func (qg *queryGen) genClonePrivate() {
 			jen.Id("predicates"): jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(qg.recv).Dot("predicates")),
 			jen.Id("order"):      jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(qg.recv).Dot("order")),
 			jen.Id("modifiers"):  jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(qg.recv).Dot("modifiers")),
-			jen.Id("withFKs"):    jen.Id(qg.recv).Dot("withFKs"),
 			jen.Id("path"):       jen.Id(qg.recv).Dot("path"),
 			// SP-2: pointer copy of the shared *entity.InterceptorStore.
 			// Without this, clone()s lose all client-level interceptors
@@ -373,6 +376,9 @@ func (qg *queryGen) genClonePrivate() {
 		}
 		if qg.schemaConfigEnabled {
 			cloneDict[jen.Id("schemaConfig")] = jen.Id(qg.recv).Dot("schemaConfig")
+		}
+		if qg.hasFKs {
+			cloneDict[jen.Id("withFKs")] = jen.Id(qg.recv).Dot("withFKs")
 		}
 		// Policy must survive clone — First/Only/FirstID/OnlyID/Exist all
 		// call q.clone().IDs(ctx) which re-enters prepareQuery; without
@@ -386,8 +392,6 @@ func (qg *queryGen) genClonePrivate() {
 			field := edgeCallbackField(edge)
 			cloneDict[jen.Id(field)] = jen.Id(qg.recv).Dot(field).Dot("clone").Call()
 		}
-		// Copy loadTotal slice.
-		cloneDict[jen.Id("loadTotal")] = jen.Qual(runtimePkg, "CloneSlice").Call(jen.Id(qg.recv).Dot("loadTotal"))
 		body.Id("c").Op(":=").Op("&").Id(qg.queryName).Values(cloneDict)
 		// Copy named edge maps (deep clone each query).
 		if qg.h.FeatureEnabled(gen.FeatureNamedEdges.Name) {

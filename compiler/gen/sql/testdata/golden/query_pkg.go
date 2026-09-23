@@ -27,9 +27,7 @@ type UserQuery struct {
 	order      []func(*sql.Selector)
 	modifiers  []func(*sql.Selector)
 	inters     *entity.InterceptorStore
-	withFKs    bool
 	withPosts  *PostQuery
-	loadTotal  []func(context.Context, []*entity.User) error
 	path       func(context.Context) (*sql.Selector, error)
 }
 
@@ -205,11 +203,6 @@ func (q *UserQuery) eagerLoad(ctx context.Context, nodes []*entity.User) error {
 		}, func(n *entity.User, e *entity.Post) {
 			n.Edges.Posts = append(n.Edges.Posts, e)
 		}); err != nil {
-			return err
-		}
-	}
-	for i := range q.loadTotal {
-		if err := q.loadTotal[i](ctx, nodes); err != nil {
 			return err
 		}
 	}
@@ -586,7 +579,7 @@ func (q *UserQuery) GetModifiers() []func(*sql.Selector) {
 
 // GetWithFKs returns whether FK columns should be included. Implements runtime.QueryReader.
 func (q *UserQuery) GetWithFKs() bool {
-	return q.withFKs
+	return false
 }
 
 // Select allows the selection of one or more fields/columns for the given query,
@@ -767,12 +760,10 @@ func (q *UserQuery) clone() *UserQuery {
 		config:     q.config,
 		ctx:        q.ctx.Clone(),
 		inters:     q.inters,
-		loadTotal:  runtime.CloneSlice(q.loadTotal),
 		modifiers:  runtime.CloneSlice(q.modifiers),
 		order:      runtime.CloneSlice(q.order),
 		path:       q.path,
 		predicates: runtime.CloneSlice(q.predicates),
-		withFKs:    q.withFKs,
 		withPosts:  q.withPosts.clone(),
 	}
 	return c
@@ -790,7 +781,6 @@ func (q *UserQuery) loadPosts(ctx context.Context, query *PostQuery, nodes []*en
 			init(nodes[i])
 		}
 	}
-	query.withFKs = true
 	query.Where(func(s *sql.Selector) {
 		s.Where(sql.In(s.C(user.PostsColumn), fks...))
 	})
