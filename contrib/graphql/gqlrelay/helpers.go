@@ -82,13 +82,19 @@ type LoadedPage[T any] struct {
 // PageLoaded cuts the page a Paginate call without cursors, filter or custom
 // order would return, from nodes that hold the whole edge (an eager load).
 // Paginate orders by ID ascending, so nodes are sorted — on a copy, the
-// loaded edge is left alone — with cmpID before first/last are applied; the
+// loaded edge is left alone, and the sort is skipped when an eager load
+// already came back in ID order — with cmpID before first/last are applied; the
 // page is always in ascending order, as Paginate returns it for last too.
 func PageLoaded[T any](nodes []T, cmpID func(a, b T) int, first, last *int) (LoadedPage[T], error) {
 	if err := ValidateFirstLast(first, last); err != nil {
 		return LoadedPage[T]{}, err
 	}
-	sorted := slices.SortedStableFunc(slices.Values(nodes), cmpID)
+	// One exact-size copy. slices.SortedStableFunc(slices.Values(...)) grew
+	// its result by append, reallocating ~log2(n) times per edge.
+	sorted := slices.Clone(nodes)
+	if !slices.IsSortedFunc(sorted, cmpID) {
+		slices.SortStableFunc(sorted, cmpID)
+	}
 	page := LoadedPage[T]{Nodes: sorted, TotalCount: len(sorted)}
 	switch {
 	case first != nil && len(sorted) > *first:

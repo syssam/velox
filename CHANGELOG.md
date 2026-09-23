@@ -91,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 - `Count()` (and the `totalCount` of `Paginate`) renders `COUNT(*)` instead of `COUNT(<id>)` when the selector has no JOIN, no DISTINCT and no selected columns — the id is a NOT NULL primary key there, so the result is identical. On SQLite a 10k-row unfiltered count drops from ~900µs to ~16µs (`BenchmarkCountNodes_SQLite`); Postgres runs `count(*)` ~25% faster server-side. Counts over a JOIN (M2M/M2O traversals, order-by-neighbor terms, a predicate or modifier that joins) keep `COUNT(<id>)`. Ent emits `COUNT(<id>)` everywhere; this is a deliberate deviation
+- `gqlrelay.PageLoaded` (the eager-loaded edge-connection fast path) copies the edge once at its exact size and skips the sort when it is already in ID order: 1 allocation per call instead of 8–11 (`BenchmarkPageLoaded`)
 
 ## [0.2.1] - 2026-06-25
 
