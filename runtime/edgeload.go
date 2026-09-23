@@ -216,7 +216,7 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
-	if err := tq.GetDriver().Query(ctx, query, args, rows); err != nil {
+	if err = tq.GetDriver().Query(ctx, query, args, rows); err != nil {
 		return nil, err
 	}
 	defer rows.Close()
@@ -265,7 +265,9 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 	}
 	// Close before loading nested edges: a driver holding one connection
 	// cannot run their queries while these rows are open.
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if len(result) > 0 {
 		if err := l.EagerLoad(tq, ctx, result); err != nil {
 			return nil, err
