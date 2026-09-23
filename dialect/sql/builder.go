@@ -942,7 +942,7 @@ func LT(col string, value any) *Predicate {
 func (p *Predicate) LT(col string, arg any) *Predicate {
 	return p.Append(func(b *Builder) {
 		b.Ident(col)
-		p.WriteOp(OpLT)
+		b.WriteOp(OpLT)
 		p.arg(b, arg)
 	})
 }
@@ -966,7 +966,7 @@ func LTE(col string, value any) *Predicate {
 func (p *Predicate) LTE(col string, arg any) *Predicate {
 	return p.Append(func(b *Builder) {
 		b.Ident(col)
-		p.WriteOp(OpLTE)
+		b.WriteOp(OpLTE)
 		p.arg(b, arg)
 	})
 }
@@ -990,7 +990,7 @@ func GT(col string, value any) *Predicate {
 func (p *Predicate) GT(col string, arg any) *Predicate {
 	return p.Append(func(b *Builder) {
 		b.Ident(col)
-		p.WriteOp(OpGT)
+		b.WriteOp(OpGT)
 		p.arg(b, arg)
 	})
 }
@@ -1014,7 +1014,7 @@ func GTE(col string, value any) *Predicate {
 func (p *Predicate) GTE(col string, arg any) *Predicate {
 	return p.Append(func(b *Builder) {
 		b.Ident(col)
-		p.WriteOp(OpGTE)
+		b.WriteOp(OpGTE)
 		p.arg(b, arg)
 	})
 }
@@ -1202,8 +1202,8 @@ func (p *Predicate) escapedLike(col, left, right, word string) *Predicate {
 		w, escaped := escape(word)
 		b.Ident(col).WriteOp(OpLike)
 		b.Arg(left + w + right)
-		if p.dialect == dialect.SQLite && escaped {
-			p.WriteString(" ESCAPE ").Arg("\\")
+		if b.dialect == dialect.SQLite && escaped {
+			b.WriteString(" ESCAPE ").Arg("\\")
 		}
 	})
 }
@@ -1228,7 +1228,7 @@ func (p *Predicate) escapedLikeFold(col, left, substr, right string) *Predicate 
 			b.WriteString(f.String()).WriteString(" LIKE ")
 			b.Arg(left + strings.ToLower(w) + right)
 			if escaped {
-				p.WriteString(" ESCAPE ").Arg("\\")
+				b.WriteString(" ESCAPE ").Arg("\\")
 			}
 		}
 	})
@@ -1262,7 +1262,7 @@ func ColumnsHasPrefix(col, prefixC string) *Predicate {
 // ColumnsHasPrefix appends a new predicate that checks if the given column begins with the other column (prefix).
 func (p *Predicate) ColumnsHasPrefix(col, prefixC string) *Predicate {
 	return p.Append(func(b *Builder) {
-		switch p.dialect {
+		switch b.dialect {
 		case dialect.MySQL:
 			b.Ident(col)
 			b.WriteOp(OpLike)
@@ -1271,11 +1271,11 @@ func (p *Predicate) ColumnsHasPrefix(col, prefixC string) *Predicate {
 			b.Ident(col)
 			b.WriteOp(OpLike)
 			b.S("(REPLACE(REPLACE(").Ident(prefixC).S(", '_', '\\_'), '%', '\\%') || '%')")
-			if p.dialect == dialect.SQLite {
-				p.WriteString(" ESCAPE ").Arg("\\")
+			if b.dialect == dialect.SQLite {
+				b.WriteString(" ESCAPE ").Arg("\\")
 			}
 		default:
-			b.AddError(fmt.Errorf("ColumnsHasPrefix: unsupported dialect: %q", p.dialect))
+			b.AddError(fmt.Errorf("ColumnsHasPrefix: unsupported dialect: %q", b.dialect))
 		}
 	})
 }
