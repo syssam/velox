@@ -188,6 +188,36 @@ The tenant viewer must implement `privacy.TenantIDer`:
 func (u *AuthUser) TenantID() string { return u.Tenant }
 ```
 
+#### Database-enforced isolation with `sql.WithVar`
+
+To back the ORM policy with Postgres row-level security (or to hand a value
+to MySQL triggers and views), put the tenant in a session variable with
+`sql.WithVar` from `github.com/syssam/velox/dialect/sql`. velox sets it
+before every statement run with that context:
+
+```go
+ctx = sql.WithVar(ctx, "app.tenant_id", tenantID)
+todos, err := client.Todo.Query().All(ctx)
+```
+
+Outside a transaction the variable is set on the connection reserved for
+the statement and reset before the connection returns to the pool. Inside a
+transaction the two databases differ:
+
+| | Postgres | MySQL |
+|---|---|---|
+| Mechanism | `set_config(name, value, true)` (transaction-local) | `SET @name = ?`, reset after the statement |
+| Later statements in the same transaction | still see the value, even without `WithVar` on their context | do not see it |
+| After `COMMIT`/`ROLLBACK` | gone | gone |
+
+Neither leaks to another pooled connection. Because the in-transaction
+behavior differs, pass the `WithVar` context to **every** statement that
+depends on the variable — do not rely on an earlier statement in the
+transaction having set it. On Postgres, write the RLS policy so that an
+unset variable matches nothing: `current_setting('app.tenant_id', true)`
+returns NULL, or an empty string once the variable has been reset on that
+connection, and neither should equal a real tenant id.
+
 ### Row-Level Filtering with FilterFunc
 
 For dynamic WHERE clauses that filter results based on the viewer:

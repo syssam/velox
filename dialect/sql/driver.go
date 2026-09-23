@@ -122,6 +122,23 @@ type sessionVars struct {
 }
 
 // WithVar returns a new context that holds the session variable to be executed before every query.
+//
+// The variable is set before each statement run with the returned context,
+// and is scoped as follows:
+//
+//   - Outside a transaction, it is set on a connection reserved for the
+//     statement and reset before that connection returns to the pool.
+//   - Inside a transaction on Postgres, it is set with set_config(name, value,
+//     true) — transaction-local — so it stays in effect for the REST of the
+//     transaction, including later statements whose context does not carry it.
+//   - Inside a transaction on MySQL, the user variable is reset after each
+//     statement, so a later statement in the same transaction does not see it
+//     unless its own context carries it.
+//
+// On either database the value never survives COMMIT or ROLLBACK and never
+// reaches another pooled connection. Because the in-transaction behavior
+// differs, pass the WithVar context to every statement that depends on the
+// variable rather than relying on an earlier statement having set it.
 func WithVar(ctx context.Context, name, value string) context.Context {
 	sv, _ := ctx.Value(ctxVarsKey{}).(sessionVars)
 	sv.vars = append(sv.vars, struct {
