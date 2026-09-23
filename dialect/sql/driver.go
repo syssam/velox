@@ -50,11 +50,14 @@ type Driver struct {
 
 // serverCaps caches the capabilities of the server behind a Driver. It is
 // a pointer so copies of the Driver (and wrappers embedding it) share one
-// probe.
+// probe. The mutex guards the fields only; it is never held across a query.
 type serverCaps struct {
 	mu   sync.Mutex
 	done bool
 	caps dialect.Capabilities
+	// flight is closed when the in-flight probe through the driver's own
+	// pool finishes; nil when none is running.
+	flight chan struct{}
 }
 
 // NewDriver creates a new Driver with the given Conn and dialect.
@@ -82,20 +85,61 @@ func (d *Driver) ServerCapabilitiesVia(ctx context.Context, q dialect.ExecQuerie
 	if name != dialect.MySQL {
 		return dialect.GetCapabilities(name), nil
 	}
-	if d.server == nil {
+	s := d.server
+	if s == nil {
 		return probeCapabilities(ctx, q, name)
 	}
-	d.server.mu.Lock()
-	defer d.server.mu.Unlock()
-	if d.server.done {
-		return d.server.caps, nil
+	for {
+		s.mu.Lock()
+		if s.done {
+			caps := s.caps
+			s.mu.Unlock()
+			return caps, nil
+		}
+		if q != dialect.ExecQuerier(d) {
+			// The caller holds its own connection (an open transaction).
+			// Probe on it rather than wait: the in-flight pool probe may be
+			// waiting for this very connection.
+			s.mu.Unlock()
+			caps, err := probeCapabilities(ctx, q, name)
+			if err != nil {
+				return caps, err
+			}
+			return s.publish(caps), nil
+		}
+		if ch := s.flight; ch != nil {
+			s.mu.Unlock()
+			select {
+			case <-ch:
+				continue // done, or failed and up for another attempt
+			case <-ctx.Done():
+				return dialect.Capabilities{}, ctx.Err()
+			}
+		}
+		ch := make(chan struct{})
+		s.flight = ch
+		s.mu.Unlock()
+		caps, err := probeCapabilities(ctx, q, name)
+		s.mu.Lock()
+		s.flight = nil
+		close(ch)
+		s.mu.Unlock()
+		if err != nil {
+			return caps, err
+		}
+		return s.publish(caps), nil
 	}
-	caps, err := probeCapabilities(ctx, q, name)
-	if err != nil {
-		return caps, err
+}
+
+// publish caches caps unless another probe got there first, and returns the
+// cached answer.
+func (s *serverCaps) publish(caps dialect.Capabilities) dialect.Capabilities {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.done {
+		s.caps, s.done = caps, true
 	}
-	d.server.caps, d.server.done = caps, true
-	return caps, nil
+	return s.caps
 }
 
 // probeCapabilities asks the server behind q for its version.
