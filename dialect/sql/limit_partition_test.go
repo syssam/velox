@@ -49,4 +49,56 @@ func TestSelector_LimitPerPartition(t *testing.T) {
 		query, _ := s.Query()
 		require.NotContains(t, query, "DISTINCT")
 	})
+
+	// An ORDER BY that binds an argument moves into the window, which is
+	// rendered before the WHERE: its placeholder must come first and the
+	// argument must be kept. OrderExprFunc used to render its callback to a
+	// bare string and drop every argument it bound.
+	t.Run("order arguments are threaded through the window", func(t *testing.T) {
+		const want = `SELECT "id" FROM (SELECT "posts"."id", (ROW_NUMBER() OVER (PARTITION BY "posts"."user_posts" ORDER BY CASE WHEN "posts"."title" = $1 THEN 0 ELSE 1 END)) AS "velox_partition_row" FROM "posts" WHERE "posts"."x" <> $2) AS "posts" WHERE "velox_partition_row" <= $3 ORDER BY "velox_partition_row"`
+		byCase := func(s *Selector) func(*Builder) {
+			return func(b *Builder) {
+				b.WriteString("CASE WHEN ").Ident(s.C("title")).WriteOp(OpEQ).Arg("keep").WriteString(" THEN 0 ELSE 1 END")
+			}
+		}
+		for name, order := range map[string]func(*Selector){
+			"OrderExprFunc":     func(s *Selector) { s.OrderExprFunc(byCase(s)) },
+			"OrderExpr+ExprFunc": func(s *Selector) { s.OrderExpr(ExprFunc(byCase(s))) },
+		} {
+			t.Run(name, func(t *testing.T) {
+				d := Dialect(dialect.Postgres)
+				posts := d.Table("posts")
+				s := d.Select(posts.C("id")).From(posts).Where(NEQ(posts.C("x"), 5))
+				order(s)
+				s.LimitPerPartition(s.C("user_posts"), 2)
+				query, args := s.Query()
+				require.Equal(t, want, query)
+				require.Equal(t, []any{"keep", 5, 2}, args)
+				// Rendering is repeatable: the window used to append to its
+				// own builder on every call. (A top-level selector keeps its
+				// argument count between renders, so reset it first.)
+				s.SetTotal(0)
+				query, args = s.Query()
+				require.Equal(t, want, query)
+				require.Equal(t, []any{"keep", 5, 2}, args)
+			})
+		}
+	})
+}
+
+func TestWindowBuilder_QueryIsRepeatable(t *testing.T) {
+	w := RowNumber().PartitionBy("a").OrderExpr(ExprFunc(func(b *Builder) { b.Ident("b").WriteOp(OpGT).Arg(1) }))
+	q1, a1 := w.Query()
+	q2, a2 := w.Query()
+	require.Equal(t, "ROW_NUMBER() OVER (PARTITION BY `a` ORDER BY `b` > ?)", q1)
+	require.Equal(t, q1, q2)
+	require.Equal(t, []any{1}, a1)
+	require.Equal(t, a1, a2)
+}
+
+func TestDialectBuilderExpr_KeepsArguments(t *testing.T) {
+	x := Dialect(dialect.Postgres).Expr(func(b *Builder) { b.Ident("a").WriteOp(OpEQ).Arg(7) })
+	query, args := Dialect(dialect.Postgres).Select("a").From(Table("t")).Where(NEQ("b", 1)).OrderExpr(x).Query()
+	require.Equal(t, `SELECT "a" FROM "t" WHERE "b" <> $1 ORDER BY "a" = $2`, query)
+	require.Equal(t, []any{1, 7}, args)
 }

@@ -2985,17 +2985,21 @@ func (w *WindowBuilder) OrderExpr(exprs ...Querier) *WindowBuilder {
 }
 
 // Query returns query representation of the window function.
+//
+// Each call renders from scratch, so the same window can be rendered more
+// than once (a selector is rendered again on every execution).
 func (w *WindowBuilder) Query() (string, []any) {
-	w.fn(&w.Builder)
-	w.WriteString(" OVER ")
-	w.Wrap(func(b *Builder) {
+	b := Builder{dialect: w.dialect, total: w.total, sb: &strings.Builder{}}
+	w.fn(&b)
+	b.WriteString(" OVER ")
+	b.Wrap(func(b *Builder) {
 		if w.partition != nil {
 			b.WriteString("PARTITION BY ")
 			w.partition(b)
 		}
 		joinOrder(w.order, b)
 	})
-	return w.String(), w.args
+	return b.String(), b.args
 }
 
 // partitionRowNumber is the column LimitPerPartition ranks rows under. It
@@ -3606,8 +3610,15 @@ func (d *DialectBuilder) String(f func(*Builder)) string {
 }
 
 // Expr builds a dialect-aware expression from the given callback.
+//
+// Arguments the callback binds with [Builder.Arg] are kept and numbered
+// where the expression is rendered. (It used to render the callback to a
+// bare string up front, which dropped every argument and froze the
+// placeholder numbering at $1 on PostgreSQL. Ent has the same bug.)
 func (d *DialectBuilder) Expr(f func(*Builder)) Querier {
-	return Expr(d.String(f))
+	x := &exprFunc{fn: f}
+	x.SetDialect(d.dialect)
+	return x
 }
 
 // CreateView creates a ViewBuilder for the configured dialect.

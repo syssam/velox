@@ -135,6 +135,41 @@ func TestMultiDialect_EdgeLoadLimitPerParent_M2M(t *testing.T) {
 	})
 }
 
+// TestMultiDialect_EdgeLoadLimitOrderWithArgs ranks each parent's rows by an
+// ORDER BY expression that binds an argument, alongside a WHERE argument on
+// the child query. The window's ORDER BY is rendered before the WHERE, so
+// the placeholders must be numbered in rendering order — on Postgres a
+// misnumbered $N binds the wrong value or fails outright.
+func TestMultiDialect_EdgeLoadLimitOrderWithArgs(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		u0 := createUser(t, client, "u0", "u0@orderargs")
+		u1 := createUser(t, client, "u1", "u1@orderargs")
+		for _, u := range []*entity.User{u0, u1} {
+			createPost(t, client, u, "other", "c")
+			createPost(t, client, u, "keep", "c")
+			createPost(t, client, u, "other", "skip")
+		}
+		q := client.User.Query()
+		posts := edgeLoader(t, q).WithEdgeLoad(user.EdgePosts,
+			runtime.Limit(1),
+			runtime.OrderBy(func(s *sql.Selector) {
+				s.OrderExprFunc(func(b *sql.Builder) {
+					b.WriteString("CASE WHEN ").Ident(s.C(post.FieldTitle)).WriteOp(sql.OpEQ).Arg("keep").WriteString(" THEN 0 ELSE 1 END")
+				})
+			}),
+		)
+		posts.(entity.PostQuerier).Where(post.ContentField.NEQ("skip"))
+		got, err := q.All(ctx)
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		for _, u := range got {
+			require.Len(t, u.Edges.Posts, 1, u.Name)
+			assert.Equal(t, "keep", u.Edges.Posts[0].Title, u.Name)
+		}
+	})
+}
+
 // TestMultiDialect_EdgeLoadRerun pins that executing the same query twice
 // (and a clone of it) loads the same edges. The loaders used to mutate the
 // stored child query: each run appended another LimitPerPartition modifier
