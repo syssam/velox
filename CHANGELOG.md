@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The SQL driver no longer logs failing statements and their arguments to the default logger
 - The loader's staleness check recognizes a link step on Windows
 - The `velox` CLI (`cmd/velox`) is now in the repository; a `.gitignore` pattern had excluded it since the first commit
+- `benchmarks/run.sh scale` runs again: the `stress-{100,200,328}` fixture modules lagged the root module's `golang.org/x/*` versions, so `go run generate.go` stopped with `updates to go.mod needed`
 
 ### Removed
 - `contrib/graphql.FieldCollection`, an exported type nothing referenced
