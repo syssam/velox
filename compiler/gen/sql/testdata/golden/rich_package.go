@@ -145,9 +145,17 @@ var (
 	DefaultUpdatedAt time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
-	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
-	StatusValidator func(Status) error
 )
+
+// StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
+func StatusValidator(v Status) error {
+	switch v {
+	case StatusDraft, StatusReview, StatusPublished:
+		return nil
+	default:
+		return fmt.Errorf("article: invalid enum value for status field: %q", v)
+	}
+}
 
 // OrderOption defines the ordering options for the Article queries.
 type OrderOption func(*sql.Selector)

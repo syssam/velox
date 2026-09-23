@@ -32,6 +32,20 @@ enum PostStatus @goModel(model: "github.com/syssam/velox/tests/integration/post.
   ARCHIVED
 }
 
+"""TokenTier is enum for the field tier
+"""
+enum TokenTier @goModel(model: "github.com/syssam/velox/testschema/types.Tier") {
+  FREE
+  PRO
+}
+
+"""TokenGrade is enum for the field grade
+"""
+enum TokenGrade @goModel(model: "github.com/syssam/velox/testschema/types.Tier") {
+  FREE
+  PRO
+}
+
 """UserRole is enum for the field role
 """
 enum UserRole @goModel(model: "github.com/syssam/velox/tests/integration/user.Role") {
@@ -169,6 +183,11 @@ type Tag implements Node @goModel(model: "github.com/syssam/velox/tests/integrat
 type Token implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Token") {
   id: ID!
   name: String!
+  tier: TokenTier!
+  grade: TokenGrade
+  label: String!
+  alias: String
+  weight: Int!
 }
 
 type User implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.User") {
@@ -413,6 +432,11 @@ Properties by which Token connections can be ordered.
 """
 enum TokenOrderField @goModel(model: "github.com/syssam/velox/tests/integration/entity.TokenOrderField") {
   NAME
+  TIER
+  GRADE
+  LABEL
+  ALIAS
+  WEIGHT
 }
 
 """

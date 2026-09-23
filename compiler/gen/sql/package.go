@@ -579,7 +579,7 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 	hasValidators := false
 	for _, field := range fields {
 		hasDefaults = hasDefaults || field.Default
-		hasValidators = hasValidators || hasGeneratedValidator(field)
+		hasValidators = hasValidators || hasRuntimeValidator(field)
 	}
 	if idUserDefined {
 		if t.ID.Default {
@@ -614,9 +614,14 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 					defs.Commentf("%s holds the default value on update for the %q field.", field.UpdateDefaultName(), field.Name)
 					defs.Id(field.UpdateDefaultName()).Func().Params().Add(subpkgBaseType(h, field))
 				}
-				if hasGeneratedValidator(field) {
+				if hasRuntimeValidator(field) {
+					// Declared at the BASIC type (func(string) error), not the
+					// field's GoType: the runtime init asserts the schema
+					// descriptor's validators, which are always written against
+					// the basic type, and check() converts with BasicType("v").
+					// Matches Ent's meta.tmpl ($f.Type.Type).
 					defs.Commentf("%s is a validator for the %q field. It is called by the builders before save.", field.Validator(), field.Name)
-					defs.Id(field.Validator()).Func().Params(subpkgBaseType(h, field)).Error()
+					defs.Id(field.Validator()).Func().Params(getValidatorType(h, field)).Error()
 				}
 			}
 
@@ -636,4 +641,60 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 			}
 		})
 	}
+
+	for _, field := range fields {
+		if field.IsEnum() {
+			genEnumValidatorFunc(h, f, t, field)
+		}
+	}
+}
+
+// genEnumValidatorFunc emits the enum validator as a plain function in the
+// leaf package, mirroring Ent's meta.tmpl:
+//
+//	func StatusValidator(v Status) error {
+//		switch v {
+//		case StatusActive, StatusInactive:
+//			return nil
+//		default:
+//			return fmt.Errorf("user: invalid enum value for status field: %q", v)
+//		}
+//	}
+//
+// For an enum with a custom GoType (field.Enum(...).GoType(types.Status(""))),
+// the parameter is the user's type and the cases are the declared values as
+// string literals: the user type lives in the user's package and has neither
+// the generated constants nor IsValid(). A Stringer is switched on through
+// String(). Enums cannot carry schema validators, so nothing is assigned at
+// runtime and the function can never be nil.
+func genEnumValidatorFunc(h gen.GeneratorHelper, f *jen.File, t *gen.Type, field *gen.Field) {
+	name := field.Validator()
+	recv := "v"
+	subject := jen.Id(recv)
+	cases := make([]jen.Code, 0, len(field.Enums))
+	var param jen.Code
+	if field.HasGoType() {
+		param = h.BaseType(field)
+		if field.Type.Stringer() {
+			subject = jen.Id(recv).Dot("String").Call()
+		}
+		for _, e := range field.Enums {
+			cases = append(cases, jen.Lit(e.Value))
+		}
+	} else {
+		param = jen.Id(field.SubpackageEnumTypeName())
+		for _, e := range field.Enums {
+			cases = append(cases, jen.Id(field.EnumName(e.Value)))
+		}
+	}
+	f.Commentf("%s is a validator for the %q field enum values. It is called by the builders before save.", name, field.Name)
+	f.Func().Id(name).Params(jen.Id(recv).Add(param)).Error().Block(
+		jen.Switch(subject).Block(
+			jen.Case(cases...).Block(jen.Return(jen.Nil())),
+			jen.Default().Block(jen.Return(jen.Qual("fmt", "Errorf").Call(
+				jen.Lit(t.PackageDir()+": invalid enum value for "+field.Name+" field: %q"),
+				jen.Id(recv),
+			))),
+		),
+	)
 }

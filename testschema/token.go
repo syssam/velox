@@ -5,6 +5,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/testschema/types"
 )
 
 // Token is a minimal entity with a UUID primary key, used by the
@@ -27,5 +28,34 @@ func (Token) Fields() []velox.Field {
 			Unique().
 			NotEmpty().
 			MaxLen(100),
+
+		// Custom GoType fields. Each one reaches a generator path that a
+		// plain field does not: a validator on a GoType is declared at the
+		// basic type and called as Validator(string(v)); a GoType enum has
+		// no generated constants, so its validator switches on the declared
+		// values; String() must convert a string-kind GoType. Every one of
+		// these once generated code that did not compile, and nothing in
+		// the repo noticed because no schema used them.
+		field.Enum("tier").
+			GoType(types.Tier("")).
+			Default(string(types.TierFree)),
+		field.Enum("grade").
+			GoType(types.Tier("")).
+			Optional().
+			Nillable(),
+		field.String("label").
+			GoType(types.Label("")).
+			NotEmpty().
+			MaxLen(20).
+			Default("token"),
+		field.String("alias").
+			GoType(types.Label("")).
+			Optional().
+			Nillable().
+			NotEmpty(),
+		field.Int("weight").
+			GoType(types.Weight(0)).
+			Positive().
+			Default(1),
 	}
 }

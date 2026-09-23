@@ -147,6 +147,26 @@ var TokenSchema = EntitySchema{
 		Column: "name",
 		Name:   "name",
 		Type:   "TypeString",
+	}, {
+		Column: "tier",
+		Name:   "tier",
+		Type:   "TypeEnum",
+	}, {
+		Column: "grade",
+		Name:   "grade",
+		Type:   "TypeEnum",
+	}, {
+		Column: "label",
+		Name:   "label",
+		Type:   "TypeString",
+	}, {
+		Column: "alias",
+		Name:   "alias",
+		Type:   "TypeString",
+	}, {
+		Column: "weight",
+		Name:   "weight",
+		Type:   "TypeInt",
 	}},
 }
 

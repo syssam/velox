@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `UpdateOne.Select(...)` no longer discards `SetXxx` values for columns outside the selection (c11f35c)
 - Merging schema-level `Hooks()` into a builder's hooks could overwrite a hook in the shared hook store, silently dropping it for every later mutation (4f42d8e)
 - `IDValidator` on a custom ID field is now called; it was generated and never run
+- Fields with a custom `GoType` compile again now that validators are always generated: a GoType enum's validator no longer references a leaf enum type and an `IsValid()` that do not exist, a GoType scalar's validator is declared at the basic type and called as `Validator(string(v))` (Ent parity), and `String()` converts a string-kind GoType. Enum validators are generated functions (Ent parity) instead of init-assigned variables, so they can never be nil
+- A `field.Bytes` validator was asserted as `func(any) error` at init; it is now `func([]byte) error`
 - `sql.WithVar` inside a transaction no longer leaks session variables to the pooled connection
 - `sql.WithVar` on Postgres no longer leaks a setting whose dotted name contains an SQL keyword (`app.user`) to the pooled connection: the reset is now `set_config(name, NULL, false)` with the name bound as a parameter, where `RESET app.user` failed to parse
 - `privacy.Not` no longer converts a fail-closed denial into `Allow`

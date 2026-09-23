@@ -17,7 +17,7 @@ func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, sc
 
 	// Check if entity has defaults, update defaults or validators (enums included:
 	// their validator is assigned here, and a nil one panics on Save).
-	hasRuntimeFields := t.HasDefault() || t.HasUpdateDefault() || typeHasGeneratedValidators(t)
+	hasRuntimeFields := t.HasDefault() || t.HasUpdateDefault() || t.HasValidators()
 
 	// Skip if no runtime code needed (no mixins and no runtime fields)
 	if !hasRuntimeFields && !t.RuntimeMixin() {
@@ -105,7 +105,7 @@ func genRuntimeFields(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schema
 		// longer applicable with Jennifer codegen.
 		hasDefault := field.Default
 		hasUpdateDefault := field.UpdateDefault
-		hasValidators := hasGeneratedValidator(field)
+		hasValidators := hasRuntimeValidator(field)
 		hasValueScanner := field.HasValueScanner()
 
 		// Skip if no runtime code needed for this field
@@ -115,26 +115,19 @@ func genRuntimeFields(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, schema
 
 		fieldVar := pkg + "Desc" + field.StructField()
 
-		// The descriptor is needed for defaults, updateDefaults, valueScanner, or
-		// non-enum validators. Enum-only validators are generated inline without
-		// referencing the descriptor.
-		needsDescriptor := hasDefault || hasUpdateDefault || hasValueScanner || (hasValidators && field.Validators > 0)
-
-		if needsDescriptor {
-			// Generate descriptor assignment based on field position
-			grp.Commentf("// %s is the schema descriptor for %s field.", fieldVar, field.Name)
-			if field.Position != nil && field.Position.MixedIn {
-				// Field comes from mixin
-				grp.Id(fieldVar).Op(":=").Id(pkg + "MixinFields" + itoa(field.Position.MixinIndex)).
-					Index(jen.Lit(field.Position.Index)).Dot("Descriptor").Call()
-			} else {
-				// Field comes from entity
-				idx := 0
-				if field.Position != nil {
-					idx = field.Position.Index
-				}
-				grp.Id(fieldVar).Op(":=").Id(pkg + "Fields").Index(jen.Lit(idx)).Dot("Descriptor").Call()
+		// Descriptor assignment based on field position.
+		grp.Commentf("// %s is the schema descriptor for %s field.", fieldVar, field.Name)
+		if field.Position != nil && field.Position.MixedIn {
+			// Field comes from mixin
+			grp.Id(fieldVar).Op(":=").Id(pkg + "MixinFields" + itoa(field.Position.MixinIndex)).
+				Index(jen.Lit(field.Position.Index)).Dot("Descriptor").Call()
+		} else {
+			// Field comes from entity
+			idx := 0
+			if field.Position != nil {
+				idx = field.Position.Index
 			}
+			grp.Id(fieldVar).Op(":=").Id(pkg + "Fields").Index(jen.Lit(idx)).Dot("Descriptor").Call()
 		}
 
 		// Generate default value initialization
@@ -216,23 +209,9 @@ func genRuntimeValidator(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, fie
 	// Get the Go type for the validator function
 	validatorType := getValidatorType(h, field)
 
-	if field.IsEnum() && field.Validators == 0 {
-		// Enum fields always get an auto-generated IsValid() validator, even
-		// without explicit schema validators.
-		grp.Commentf("// %s.%s is a validator for the %q field. It is called by the builders before save.",
-			pkg, validatorVar, field.Name)
-		grp.Qual(entityPkg, validatorVar).Op("=").Func().Params(
-			jen.Id("v").Qual(entityPkg, field.SubpackageEnumTypeName()),
-		).Error().Block(
-			jen.If(jen.Op("!").Id("v").Dot("IsValid").Call()).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("invalid enum value for "+field.Name+": %v"),
-					jen.Id("v"),
-				)),
-			),
-			jen.Return(jen.Nil()),
-		)
-	} else if field.Validators == 1 {
+	// Enum validators are generated functions in the leaf package
+	// (genEnumValidatorFunc); only schema validators are assigned here.
+	if field.Validators == 1 {
 		// Single validator - direct assignment
 		grp.Commentf("// %s.%s is a validator for the %q field. It is called by the builders before save.",
 			pkg, validatorVar, field.Name)
@@ -367,6 +346,12 @@ func baseTypeCode(field *gen.Field) jen.Code {
 		return jen.Float64()
 	case "bool":
 		return jen.Bool()
+	case "[]byte":
+		// Bytes validators are func([]byte) error. Without this case a bytes
+		// field with MaxLen/NotEmpty asserted .(func(any) error) at init.
+		return jen.Index().Byte()
+	case "time.Time":
+		return jen.Qual("time", "Time")
 	default:
 		return jen.Any()
 	}

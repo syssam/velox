@@ -196,10 +196,18 @@ func genSchemaHooksLocal(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, rec
 // every enum check on a default project silently unenforced.
 
 // hasGeneratedValidator reports whether the leaf package declares a
-// <Field>Validator variable for fd: the field has schema validators, or it is
-// an enum (whose validator checks the value against the declared set).
+// <Field>Validator for fd: the field has schema validators (a variable the
+// runtime init assigns), or it is an enum (a function checking the value
+// against the declared set; see genEnumValidatorFunc).
 func hasGeneratedValidator(fd *gen.Field) bool {
-	return fd.Validators > 0 || fd.IsEnum()
+	return hasRuntimeValidator(fd) || fd.IsEnum()
+}
+
+// hasRuntimeValidator reports whether fd's <Field>Validator is a package
+// variable assigned by the runtime init from the schema descriptor. Enum
+// validators are generated functions and need no assignment.
+func hasRuntimeValidator(fd *gen.Field) bool {
+	return fd.Validators > 0
 }
 
 // fieldNeedsValidation reports whether a builder's check() must validate fd:
@@ -207,21 +215,6 @@ func hasGeneratedValidator(fd *gen.Field) bool {
 // method of a custom Go type that implements it.
 func fieldNeedsValidation(fd *gen.Field) bool {
 	return hasGeneratedValidator(fd) || (fd.HasGoType() && fd.Type != nil && fd.Type.Validator())
-}
-
-// typeHasGeneratedValidators reports whether any field of t (or its
-// user-defined ID) has a generated validator that the runtime init must
-// assign. Unlike gen.Type.HasValidators it counts enums.
-func typeHasGeneratedValidators(t *gen.Type) bool {
-	if t.HasValidators() {
-		return true
-	}
-	for _, fd := range t.Fields {
-		if fd.IsEnum() {
-			return true
-		}
-	}
-	return false
 }
 
 // validationErrorValue renders `&runtime.ValidationError{...}` for a field of t.
@@ -251,7 +244,10 @@ func genFieldValidatorCheck(grp *jen.Group, entityPkg string, t *gen.Type, fd *g
 	).BlockFunc(func(blk *jen.Group) {
 		var validationCall *jen.Statement
 		if hasGeneratedValidator(fd) {
-			validationCall = jen.Qual(entityPkg, fd.Validator()).Call(jen.Id("v"))
+			// The validator takes the basic type; convert a custom GoType
+			// the way Ent does ($f.BasicType "v"): string(v), int64(v),
+			// v.String(), []byte(v), ... Enums and JSON pass v unchanged.
+			validationCall = jen.Qual(entityPkg, fd.Validator()).Call(jen.Id(fd.BasicType("v")))
 		} else {
 			validationCall = jen.Id("v").Dot("Validate").Call()
 		}

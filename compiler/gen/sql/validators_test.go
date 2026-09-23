@@ -46,9 +46,10 @@ func TestValidatorsGeneratedWithoutFeatureFlag(t *testing.T) {
 		t.Fatal("fixture must not enable any feature")
 	}
 
-	// The leaf package declares the validator variables.
+	// The leaf package declares the schema validator variable and the enum
+	// validator function.
 	pkgSrc := genPackage(helper, typ, buildEntityPkgEnumRegistry(helper.graph.Nodes)).GoString()
-	for _, want := range []string{"NameValidator func(", "RoleValidator func("} {
+	for _, want := range []string{"NameValidator func(string) error", "func RoleValidator(v Role) error"} {
 		if !strings.Contains(pkgSrc, want) {
 			t.Errorf("package does not declare %q", want)
 		}
@@ -57,13 +58,15 @@ func TestValidatorsGeneratedWithoutFeatureFlag(t *testing.T) {
 		t.Error("package declares a validator for a field that has none")
 	}
 
-	// The runtime init assigns them — a declared, unassigned validator is a
-	// nil func that panics on the first Save.
+	// The runtime init assigns the schema validator — a declared, unassigned
+	// validator is a nil func that panics on the first Save. The enum
+	// validator is a function and is not assigned.
 	rtSrc := genEntityRuntime(helper, typ).GoString()
-	for _, want := range []string{"user.NameValidator =", "user.RoleValidator ="} {
-		if !strings.Contains(rtSrc, want) {
-			t.Errorf("runtime init does not assign %q\n%s", want, rtSrc)
-		}
+	if !strings.Contains(rtSrc, "user.NameValidator =") {
+		t.Errorf("runtime init does not assign user.NameValidator\n%s", rtSrc)
+	}
+	if strings.Contains(rtSrc, "RoleValidator") {
+		t.Errorf("runtime init assigns the enum validator function\n%s", rtSrc)
 	}
 
 	// Create check() calls both.
@@ -97,11 +100,13 @@ func TestValidatorsGeneratedWithoutFeatureFlag(t *testing.T) {
 	}
 }
 
-// TestEnumOnlyValidatorIsAssignedAtInit covers a type whose only runtime
-// field code is an enum validator: no default, no schema validator. The
-// runtime init used to be skipped for such a type (Type.HasValidators ignores
-// enums), leaving <Enum>Validator nil while create check() called it.
-func TestEnumOnlyValidatorIsAssignedAtInit(t *testing.T) {
+// TestEnumOnlyValidatorIsNeverNil covers a type whose only validation is an
+// enum: no default, no schema validator. The runtime init used to be skipped
+// for such a type (Type.HasValidators ignores enums), leaving a var
+// <Enum>Validator nil while create check() called it. Enum validators are now
+// generated functions, as in Ent, so there is nothing to assign and nothing
+// that can be nil.
+func TestEnumOnlyValidatorIsNeverNil(t *testing.T) {
 	typ := createTestTypeWithSchema(t, "Ticket", &load.Schema{
 		Fields: []*load.Field{{
 			Name:  "status",
@@ -114,8 +119,18 @@ func TestEnumOnlyValidatorIsAssignedAtInit(t *testing.T) {
 		Config: &gen.Config{Package: "github.com/test/project/ent"},
 		Nodes:  []*gen.Type{typ},
 	}
-	rtSrc := genEntityRuntime(helper, typ).GoString()
-	if !strings.Contains(rtSrc, "ticket.StatusValidator =") {
-		t.Errorf("enum-only type never assigns StatusValidator; create check() would call a nil func\n%s", rtSrc)
+	pkgSrc := genPackage(helper, typ, buildEntityPkgEnumRegistry(helper.graph.Nodes)).GoString()
+	if !strings.Contains(pkgSrc, "func StatusValidator(v Status) error {") {
+		t.Errorf("enum validator is not a generated function\n%s", pkgSrc)
+	}
+	if strings.Contains(pkgSrc, "StatusValidator func(") {
+		t.Errorf("enum validator is declared as a variable that could be nil\n%s", pkgSrc)
+	}
+	createFile, err := genCreate(helper, typ)
+	if err != nil {
+		t.Fatalf("genCreate: %v", err)
+	}
+	if !strings.Contains(createFile.GoString(), "ticket.StatusValidator(v)") {
+		t.Error("create check() does not call the enum validator")
 	}
 }

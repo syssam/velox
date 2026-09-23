@@ -192,12 +192,25 @@ func ValidColumn(column string) bool {
 	return ok
 }
 
-var (
-	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
-	StatusValidator func(Status) error
-	// PriorityValidator is a validator for the "priority" field. It is called by the builders before save.
-	PriorityValidator func(Priority) error
-)
+// StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
+func StatusValidator(v Status) error {
+	switch v {
+	case StatusPending, StatusActive, StatusDone:
+		return nil
+	default:
+		return fmt.Errorf("task: invalid enum value for status field: %q", v)
+	}
+}
+
+// PriorityValidator is a validator for the "priority" field enum values. It is called by the builders before save.
+func PriorityValidator(v Priority) error {
+	switch v {
+	case PriorityLow, PriorityMedium, PriorityHigh, PriorityCritical:
+		return nil
+	default:
+		return fmt.Errorf("task: invalid enum value for priority field: %q", v)
+	}
+}
 
 // OrderOption defines the ordering options for the Task queries.
 type OrderOption func(*sql.Selector)

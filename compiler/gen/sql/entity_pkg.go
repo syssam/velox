@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 
 	"github.com/dave/jennifer/jen"
@@ -552,9 +553,15 @@ func genEntityPkgStringMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 			grp.Id("b").Dot("WriteString").Call(jen.Lit(fld.Name + "=<sensitive>"))
 			return
 		}
-		if fld.IsString() && !fld.IsEnum() {
-			// Fast path: string fields — avoid fmt.Fprintf overhead.
+		if fld.IsString() && !fld.IsEnum() && (!fld.HasGoType() || fld.Type.RType == nil || fld.Type.RType.Kind == reflect.String) {
+			// Fast path: string fields — avoid fmt.Fprintf overhead. A
+			// custom GoType of kind string (type Name string) is not
+			// assignable to string, so it is converted; any other GoType
+			// (a Stringer struct, sql.NullString) goes through Fprintf.
 			grp.Id("b").Dot("WriteString").Call(jen.Lit(fld.Name + "="))
+			if fld.HasGoType() {
+				accessor = jen.String().Call(accessor)
+			}
 			grp.Id("b").Dot("WriteString").Call(accessor)
 		} else {
 			grp.Qual("fmt", "Fprintf").Call(jen.Op("&").Id("b"), jen.Lit(fld.Name+"=%v"), accessor)
