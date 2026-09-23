@@ -2,6 +2,7 @@ package sql
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"strings"
 	"testing"
@@ -672,6 +673,51 @@ func TestWithVars_TxInvalidIdentifier(t *testing.T) {
 			require.NoError(t, err)
 			err = tx.Exec(WithVar(context.Background(), "x; DROP TABLE users", "v"), "SELECT 1", []any{}, nil)
 			require.ErrorContains(t, err, "invalid session variable name")
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+// TestWithVars_FailedSetIsNotReset pins the partial-failure cleanup of
+// maySetVars: when setting a variable fails, only the variables set before it
+// are reset. The reset used to be queued before the set, so the failed
+// variable's reset ran too, usually failed the same way, and the caller got
+// the same error twice.
+func TestWithVars_FailedSetIsNotReset(t *testing.T) {
+	setErr := errors.New("permission denied to set parameter")
+	for _, tc := range []struct {
+		name  string
+		d     string
+		set   string
+		reset string
+	}{
+		{"postgres", dialect.Postgres, `SELECT set_config\(\$1, \$2, false\)`, `SELECT set_config\(\$1, NULL, false\)`},
+		{"mysql", dialect.MySQL, `SET @%s = \?`, `SET @%s = NULL`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			db.SetMaxOpenConns(1)
+			drv := OpenDB(tc.d, db)
+			pat := func(p, name string) string { return strings.ReplaceAll(p, "%s", name) }
+			args := func(name string, v ...driver.Value) []driver.Value {
+				if tc.d == dialect.Postgres {
+					return append([]driver.Value{name}, v...)
+				}
+				return v
+			}
+			// "ok" is set, "bad" fails; only "ok" is reset, once.
+			mock.ExpectExec(pat(tc.set, "ok")).WithArgs(args("ok", "1")...).WillReturnResult(sqlmock.NewResult(0, 0))
+			mock.ExpectExec(pat(tc.set, "bad")).WithArgs(args("bad", "2")...).WillReturnError(setErr)
+			mock.ExpectExec(pat(tc.reset, "ok")).WithArgs(args("ok")...).WillReturnResult(sqlmock.NewResult(0, 0))
+
+			ctx := WithVar(WithVar(context.Background(), "ok", "1"), "bad", "2")
+			err = drv.Exec(ctx, "SELECT 1", []any{}, nil)
+			require.ErrorIs(t, err, setErr)
+			// The reset of "ok" succeeds, so cleanup adds nothing to the
+			// error. A reset of "bad" would be an unexpected sqlmock call
+			// and join a second error.
+			assert.NotContains(t, err.Error(), "\n", "cleanup must not add an error: %v", err)
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}

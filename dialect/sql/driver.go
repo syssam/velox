@@ -294,23 +294,6 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 			err := fmt.Errorf("invalid session variable name: %q", s.k)
 			return nil, nil, errors.Join(err, resetAndClose(reset, cf))
 		}
-		if _, ok := seen[s.k]; !ok {
-			switch c.dialect {
-			case dialect.Postgres:
-				// A transaction-local set_config has nothing to reset. A NULL
-				// value makes set_config reset the setting, like RESET, but
-				// the name travels as a parameter: RESET <name> is SQL text,
-				// and a name with a keyword component (app.user) that
-				// set_config accepted would fail to parse, leaving the value
-				// on the pooled connection.
-				if !inTx {
-					reset = append(reset, resetStmt{"SELECT set_config($1, NULL, false)", []any{s.k}})
-				}
-			case dialect.MySQL:
-				reset = append(reset, resetStmt{fmt.Sprintf("SET @%s = NULL", s.k), nil})
-			}
-			seen[s.k] = struct{}{}
-		}
 		// Use parameterized queries to prevent SQL injection on values.
 		// The identifier (s.k) is validated by isValidIdentifier() above.
 		var err error
@@ -327,7 +310,28 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 			_, err = ex.ExecContext(ctx, fmt.Sprintf("SET %s = '%s'", s.k, escapedValue))
 		}
 		if err != nil {
+			// Only variables whose set succeeded are queued for reset:
+			// re-running the reset of the one that just failed would
+			// usually fail the same way and report the error twice.
 			return nil, nil, errors.Join(err, resetAndClose(reset, cf))
+		}
+		// Queue the reset once per variable, after its first successful set.
+		if _, ok := seen[s.k]; !ok {
+			switch c.dialect {
+			case dialect.Postgres:
+				// A transaction-local set_config has nothing to reset. A NULL
+				// value makes set_config reset the setting, like RESET, but
+				// the name travels as a parameter: RESET <name> is SQL text,
+				// and a name with a keyword component (app.user) that
+				// set_config accepted would fail to parse, leaving the value
+				// on the pooled connection.
+				if !inTx {
+					reset = append(reset, resetStmt{"SELECT set_config($1, NULL, false)", []any{s.k}})
+				}
+			case dialect.MySQL:
+				reset = append(reset, resetStmt{fmt.Sprintf("SET @%s = NULL", s.k), nil})
+			}
+			seen[s.k] = struct{}{}
 		}
 	}
 	// If there are variables to reset, run the reset once the statement is

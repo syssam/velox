@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `field.Bytes` validator was asserted as `func(any) error` at init; it is now `func([]byte) error`
 - `sqlgraph.IsUniqueConstraintError` and friends no longer miss a SQLite constraint error wrapped by an application error that has its own `Code() int` (an HTTP status, say); the SQLite match now requires the `modernc.org/sqlite` error type
 - `sql.WithVar` inside a transaction no longer leaks session variables to the pooled connection
+- `sql.WithVar` no longer reports a failed `set_config`/`SET @var` twice: the variable's reset was queued before the set and re-ran during cleanup
 - `sql.WithVar` on Postgres no longer leaks a setting whose dotted name contains an SQL keyword (`app.user`) to the pooled connection: the reset is now `set_config(name, NULL, false)` with the name bound as a parameter, where `RESET app.user` failed to parse
 - `privacy.Not` no longer converts a fail-closed denial into `Allow`
 - Privacy trace recording is safe for concurrent use
