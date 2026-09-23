@@ -127,6 +127,14 @@ type CapabilityProber interface {
 	ServerCapabilities(ctx context.Context) (Capabilities, error)
 }
 
+// CapabilityProberVia is a CapabilityProber that can run its probe on a
+// caller-supplied ExecQuerier — the driver or open transaction the caller
+// is using — when it has no cached answer yet. DriverCapabilities prefers
+// it over CapabilityProber.
+type CapabilityProberVia interface {
+	ServerCapabilitiesVia(ctx context.Context, q ExecQuerier) (Capabilities, error)
+}
+
 // DriverCapabilities returns the capabilities of the server behind d. It
 // looks through DebugDriver and transactional drivers (anything with a
 // BaseDriver() Driver method, like the generated txDriver) for a
@@ -134,8 +142,15 @@ type CapabilityProber interface {
 // there is none — so an unknown wrapper around a MySQL 8 driver loses
 // CapWindowFunctions and takes the slower path, never a syntax error.
 func DriverCapabilities(ctx context.Context, d Driver) (Capabilities, error) {
+	// A probe runs on the driver the caller holds: inside a transaction that
+	// is the transaction, whose connection is already checked out. Probing
+	// through the base driver instead needs a second pooled connection and
+	// blocks forever on a pool of one.
+	var via ExecQuerier = d
 	for d != nil {
 		switch v := d.(type) {
+		case CapabilityProberVia:
+			return v.ServerCapabilitiesVia(ctx, via)
 		case CapabilityProber:
 			return v.ServerCapabilities(ctx)
 		case *DebugDriver:

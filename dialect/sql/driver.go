@@ -69,19 +69,28 @@ func NewDriver(d string, c Conn) *Driver {
 // retried on the next call. Other dialects return their static set without
 // a round trip.
 func (d *Driver) ServerCapabilities(ctx context.Context) (dialect.Capabilities, error) {
+	return d.ServerCapabilitiesVia(ctx, d)
+}
+
+// ServerCapabilitiesVia implements dialect.CapabilityProberVia: like
+// ServerCapabilities, but a cold cache is filled by running the probe on q.
+// Inside a transaction q is the transaction, so the probe does not need a
+// second pooled connection — on a pool of one, held by the transaction,
+// that second connection never comes.
+func (d *Driver) ServerCapabilitiesVia(ctx context.Context, q dialect.ExecQuerier) (dialect.Capabilities, error) {
 	name := d.Dialect()
 	if name != dialect.MySQL {
 		return dialect.GetCapabilities(name), nil
 	}
 	if d.server == nil {
-		return d.probeCapabilities(ctx, name)
+		return probeCapabilities(ctx, q, name)
 	}
 	d.server.mu.Lock()
 	defer d.server.mu.Unlock()
 	if d.server.done {
 		return d.server.caps, nil
 	}
-	caps, err := d.probeCapabilities(ctx, name)
+	caps, err := probeCapabilities(ctx, q, name)
 	if err != nil {
 		return caps, err
 	}
@@ -89,10 +98,10 @@ func (d *Driver) ServerCapabilities(ctx context.Context) (dialect.Capabilities, 
 	return caps, nil
 }
 
-// probeCapabilities asks the server for its version.
-func (d *Driver) probeCapabilities(ctx context.Context, name string) (dialect.Capabilities, error) {
+// probeCapabilities asks the server behind q for its version.
+func probeCapabilities(ctx context.Context, q dialect.ExecQuerier, name string) (dialect.Capabilities, error) {
 	rows := &Rows{}
-	if err := d.Query(ctx, "SELECT VERSION()", []any{}, rows); err != nil {
+	if err := q.Query(ctx, "SELECT VERSION()", []any{}, rows); err != nil {
 		return dialect.Capabilities{}, fmt.Errorf("dialect/sql: query server version: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
