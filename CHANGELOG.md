@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public-API guard (`apiguard_test.go`) that fails the build on any change to the exported surface of the 8 consumer-facing packages
 
 ### Fixed
+- `graphql.Mutations(graphql.MutationCreate().Description(...))` puts the description on the generated `Create…Input` (likewise for update); it was stored in `Annotation.MutationInputs` and read by nothing
 - A connection edge method served from an eager-loaded edge (`WithXxx()`) now returns what the database path returns. The fast path ignored `orderBy`, returned `last` pages in reverse, and reported the page length as `totalCount`. It now runs only without `orderBy`, sorts the loaded rows by ID and counts the whole edge; edges whose target has a string ID always query, since their order depends on the column collation
 - Field validators now run on UPDATE, not only on CREATE — `UpdateOneID(id).SetTitle("")` used to write past `NotEmpty()` (a622611)
 - `UpdateOne.Select(...)` no longer discards `SetXxx` values for columns outside the selection (c11f35c)

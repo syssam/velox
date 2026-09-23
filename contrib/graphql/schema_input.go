@@ -164,6 +164,9 @@ func (g *Generator) genCreateInput(t *gen.Type) string {
 	var buf bytes.Buffer
 	typeName := g.graphqlTypeName(t)
 	inputName := "Create" + typeName + "Input"
+	if desc := g.mutationInputDescription(t, true); desc != "" {
+		buf.WriteString(sdlDescription(desc, ""))
+	}
 
 	// Add @goModel directive for autobind — CreateInput lives in client/{entity}/
 	// after cycle-break (same package as the CreateXxx builder type).
@@ -227,6 +230,9 @@ func (g *Generator) genUpdateInput(t *gen.Type) string {
 	var buf bytes.Buffer
 	typeName := g.graphqlTypeName(t)
 	inputName := "Update" + typeName + "Input"
+	if desc := g.mutationInputDescription(t, false); desc != "" {
+		buf.WriteString(sdlDescription(desc, ""))
+	}
 
 	// Add @goModel directive for autobind — UpdateInput lives in client/{entity}/
 	// after cycle-break (same package as the UpdateXxx builder type).
@@ -682,4 +688,16 @@ Properties by which %s connections can be ordered.
 
 	buf.WriteString("}\n")
 	return buf.String()
+}
+
+// mutationInputDescription returns the description set through
+// graphql.Mutations(graphql.MutationCreate().Description(...)) for the create
+// (or update) input of t, or "" when none was given.
+func (g *Generator) mutationInputDescription(t *gen.Type, create bool) string {
+	for _, mc := range g.getTypeAnnotation(t).GetMutationInputs() {
+		if mc.IsCreate == create && mc.Description != "" {
+			return mc.Description
+		}
+	}
+	return ""
 }

@@ -1072,3 +1072,29 @@ func TestMutationInputEdges_SkipAnnotation(t *testing.T) {
 		assert.NotContains(t, updateMutate, "CommentIDs", "update Mutate should not reference CommentIDs")
 	})
 }
+
+// A description set on a mutation option must reach the SDL of the input it
+// describes, and only that input. It used to be stored in
+// Annotation.MutationInputs and read by nothing.
+func TestGenMutationInputs_Description(t *testing.T) {
+	typ := &entgen.Type{
+		Name:   "Invoice",
+		ID:     &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{{Name: "memo", Type: &field.TypeInfo{Type: field.TypeString}}},
+		Annotations: map[string]any{
+			"graphql": Mutations(
+				MutationCreate().Description("Creates an invoice."),
+				MutationUpdate(),
+			),
+		},
+	}
+	g := newTestGenerator(typ)
+
+	create := g.genCreateInput(typ)
+	assert.True(t, strings.HasPrefix(create, "\"\"\"\nCreates an invoice.\n\"\"\"\ninput CreateInvoiceInput"),
+		"create input must carry its description, got:\n%s", create)
+
+	update := g.genUpdateInput(typ)
+	assert.True(t, strings.HasPrefix(update, "input UpdateInvoiceInput"),
+		"update input has no description of its own, got:\n%s", update)
+}
