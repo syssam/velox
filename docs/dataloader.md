@@ -72,6 +72,11 @@ What the collector does, per selected field:
 | to-one edge, list edge | eager-loaded with one query for all parents, projected from the nested selection |
 | connection edge without `after`, `before`, `where` or `orderBy` | eager-loaded; with `first: n` and no `totalCount`, limited to n+1 rows **per parent** with a window function (SQLite 3.25+, PostgreSQL, MySQL 8); otherwise the whole edge |
 | connection edge with `after`, `before`, `where` or `orderBy` | not eager-loaded — the entity method runs its own `Paginate` per parent row, which is always correct |
+| interface field (`graphql.InterfaceField`) | every backing edge is eager-loaded whole (no per-parent limit) — unless the selection is covered by `__typename`/`id` and every edge owns its key, then only the keys are selected |
+
+Every path to the same edge — aliases, fragments, an interface field next to a
+direct selection — lands in one eager-loaded query whose projection is the
+union of what each path reads.
 
 Connection edges are paged from the loaded slice by the generated entity
 method only when their target's ID orders in memory the way the database
@@ -79,7 +84,8 @@ orders it (numeric and UUID IDs); edges to entities with string IDs are
 always paged by the database and are never eager-loaded.
 
 Eager-loaded edge queries carry the target entity's privacy policy and the
-client's interceptors, exactly as `entity.QueryXxx()` does.
+client's interceptors, exactly as `entity.QueryXxx()` does. A `Deny` from
+that policy fails the parent query (see [privacy.md](privacy.md#policies-on-edges-and-eager-loads)).
 
 The same per-parent limit is available outside GraphQL through the by-name
 loader every generated query implements (`runtime.FieldCollectable`):
