@@ -135,6 +135,49 @@ func TestMultiDialect_EdgeLoadLimitPerParent_M2M(t *testing.T) {
 	})
 }
 
+// TestMultiDialect_EdgeLoadRerun pins that executing the same query twice
+// (and a clone of it) loads the same edges. The loaders used to mutate the
+// stored child query: each run appended another LimitPerPartition modifier
+// (the second run wrapped the ranked query twice) and another IN over the
+// parent keys (a parent that appeared between runs lost its rows).
+func TestMultiDialect_EdgeLoadRerun(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		u0 := createUser(t, client, "u0", "u0@rerun")
+		for range 3 {
+			createPost(t, client, u0, "p", "c")
+		}
+		q := client.User.Query()
+		edgeLoader(t, q).WithEdgeLoad(user.EdgePosts, runtime.Limit(2))
+		first, err := q.All(ctx)
+		require.NoError(t, err)
+		require.Len(t, first, 1)
+		assert.Len(t, first[0].Edges.Posts, 2)
+
+		u1 := createUser(t, client, "u1", "u1@rerun")
+		for range 3 {
+			createPost(t, client, u1, "p", "c")
+		}
+		check := func(t *testing.T, got []*entity.User) {
+			t.Helper()
+			require.Len(t, got, 2)
+			for _, u := range got {
+				assert.Len(t, u.Edges.Posts, 2, "user %s", u.Name)
+			}
+		}
+		t.Run("second run", func(t *testing.T) {
+			got, err := q.All(ctx)
+			require.NoError(t, err)
+			check(t, got)
+		})
+		t.Run("clone", func(t *testing.T) {
+			got, err := q.Clone().All(ctx)
+			require.NoError(t, err)
+			check(t, got)
+		})
+	})
+}
+
 // TestEdgeLoad_UnlimitedAndToOne pins the other WithEdgeLoad options: no
 // limit loads every row, a to-one edge ignores Limit, and the returned
 // edge query accepts nested loads.

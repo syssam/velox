@@ -1755,3 +1755,32 @@ func TestCreateCheckCallsIDValidator(t *testing.T) {
 		t.Errorf("create check() no longer calls NameValidator\n%s", body)
 	}
 }
+
+// TestEdgeLoadersNarrowACopy pins that every eager-load loader clones the
+// stored child query before narrowing it to the current parents. Narrowing
+// in place stacked a second IN and a second per-parent limit on every re-run
+// of the parent query (behaviorally pinned by
+// tests/integration::TestMultiDialect_EdgeLoadRerun).
+func TestEdgeLoadersNarrowACopy(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	tagType := createTestType("Tag")
+	userType.Edges = []*gen.Edge{
+		createO2MEdge("posts", postType, "posts", "user_id"),
+		createM2MEdge("tags", tagType, "user_tags", []string{"user_id", "tag_id"}),
+	}
+	h.graph.Nodes = []*gen.Type{userType, postType, tagType}
+	src := genQueryPkg(h, userType, h.graph.Nodes, h.LeafPkgPath(userType)).GoString()
+	for _, loader := range []string{"loadPosts", "loadTags"} {
+		body := funcBody(t, src, ") "+loader+"(")
+		open := strings.Index(body, "{\n")
+		if open < 0 {
+			t.Fatalf("%s: no body\n%s", loader, body)
+		}
+		first := strings.TrimSpace(strings.SplitN(body[open+2:], "\n", 2)[0])
+		if first != "query = query.clone()" {
+			t.Errorf("%s must narrow a copy of the stored query; first statement is %q", loader, first)
+		}
+	}
+}

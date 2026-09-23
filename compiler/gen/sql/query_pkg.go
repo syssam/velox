@@ -742,6 +742,12 @@ func genTypedEdgeLoader(
 		jen.Id("init").Func().Params(jen.Op("*").Add(entityType())),
 		jen.Id("assign").Func().Params(jen.Op("*").Add(entityType()), jen.Op("*").Add(targetEntityType())),
 	).Error().BlockFunc(func(body *jen.Group) {
+		// The loader narrows the child query to this run's parents (IN over
+		// their keys, a per-parent limit). It works on a copy: the stored
+		// query is reused when the parent query runs again or is cloned, and
+		// narrowing it in place stacked a second IN (dropping every parent
+		// that appeared between runs) and a second partition wrapper.
+		body.Id("query").Op("=").Id("query").Dot("clone").Call()
 		if edge.OwnFK() {
 			genTypedM2OLoader(body, h, t, edge, recv, entityPkgPath, entityType, targetEntityType, sqlPkg, idType)
 		} else if edge.M2M() {

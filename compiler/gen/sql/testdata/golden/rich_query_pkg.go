@@ -771,6 +771,7 @@ func (q *ArticleQuery) clone() *ArticleQuery {
 
 // loadAuthor eagerly loads the "author" edge for the given nodes.
 func (q *ArticleQuery) loadAuthor(ctx context.Context, query *AuthorQuery, nodes []*entity.Article, init func(*entity.Article), assign func(*entity.Article, *entity.Author)) error {
+	query = query.clone()
 	return nil
 }
 

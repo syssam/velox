@@ -770,6 +770,7 @@ func (q *UserQuery) clone() *UserQuery {
 
 // loadPosts eagerly loads the "posts" edge for the given nodes.
 func (q *UserQuery) loadPosts(ctx context.Context, query *PostQuery, nodes []*entity.User, init func(*entity.User), assign func(*entity.User, *entity.Post)) error {
+	query = query.clone()
 	fks := make([]any, 0, len(nodes))
 	nodeids := make(map[int64]*entity.User, len(nodes))
 	for i := range nodes {
