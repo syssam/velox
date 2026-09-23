@@ -1,0 +1,9 @@
+# Dead-API guard allowlist (deadapi_test.go).
+#
+# One entry per line: "<rule> <pkg>.<Name>  # reason". The reason is required.
+# An entry is for API that is deliberately meant for application code and so
+# has no reader inside this repository. Anything that generated code or a
+# generator should read does NOT belong here — delete it or wire it up.
+# The guard fails on an entry that is no longer needed.
+
+d runtime.ValidateRegistries  # application startup check; generated code never calls it
