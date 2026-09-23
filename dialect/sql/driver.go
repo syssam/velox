@@ -120,14 +120,20 @@ func (d *Driver) ServerCapabilitiesVia(ctx context.Context, q dialect.ExecQuerie
 		s.flight = ch
 		s.mu.Unlock()
 		caps, err := probeCapabilities(ctx, q, name)
+		// Publish before waking the waiters, in one critical section: a
+		// waiter that woke to an empty cache and no probe in flight would
+		// start a second probe.
 		s.mu.Lock()
+		if err == nil {
+			if !s.done {
+				s.caps, s.done = caps, true
+			}
+			caps = s.caps
+		}
 		s.flight = nil
 		close(ch)
 		s.mu.Unlock()
-		if err != nil {
-			return caps, err
-		}
-		return s.publish(caps), nil
+		return caps, err
 	}
 }
 
