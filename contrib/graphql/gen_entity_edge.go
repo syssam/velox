@@ -12,6 +12,7 @@ import (
 	"github.com/dave/jennifer/jen"
 
 	"github.com/syssam/velox/compiler/gen"
+	"github.com/syssam/velox/schema/field"
 )
 
 // genEntityEdge generates edge resolver methods for an entity in the entity/ package.
@@ -215,29 +216,42 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 		jen.Op("*").Id(connName),
 		jen.Error(),
 	).BlockFunc(func(body *jen.Group) {
-		fastCondition := jen.Id("err").Op("==").Nil()
-		if wantsWhere {
-			fastCondition = fastCondition.Op("&&").Id("where").Op("==").Nil()
-		}
-		fastCondition = fastCondition.Op("&&").Id("after").Op("==").Nil().
-			Op("&&").Id("before").Op("==").Nil()
-		body.If(
-			jen.List(jen.Id("nodes"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgeOrErr).Call(),
-			fastCondition,
-		).Block(
-			jen.Return(
-				jen.Id(buildConnFunc).Call(
-					jen.Id("nodes"),
-					jen.Lit(0),
-					jen.Id("orderBy"),
-					jen.Id("after"),
-					jen.Id("first"),
-					jen.Id("before"),
-					jen.Id("last"),
+		// Fast path: answer from an eager-loaded edge without a query. It must
+		// return exactly what Paginate would, so it is taken only when Paginate
+		// would order by ID alone (no orderBy, no cursors, no filter) and the ID
+		// can be ordered in memory the way the database orders it. The loaded
+		// slice is the whole edge, so totalCount is its length.
+		if cmpID := idCompareFunc(e.Type, g.goEntityName(e.Type)); cmpID != nil {
+			fastCondition := jen.Id("err").Op("==").Nil()
+			if wantsWhere {
+				fastCondition = fastCondition.Op("&&").Id("where").Op("==").Nil()
+			}
+			fastCondition = fastCondition.Op("&&").Id("after").Op("==").Nil().
+				Op("&&").Id("before").Op("==").Nil()
+			if multiOrder {
+				fastCondition = fastCondition.Op("&&").Len(jen.Id("orderBy")).Op("==").Lit(0)
+			} else {
+				fastCondition = fastCondition.Op("&&").Id("orderBy").Op("==").Nil()
+			}
+			body.If(
+				jen.List(jen.Id("nodes"), jen.Id("err")).Op(":=").Id("m").Dot("Edges").Dot(edgeOrErr).Call(),
+				fastCondition,
+			).Block(
+				jen.List(jen.Id("page"), jen.Id("err")).Op(":=").Qual(gqlrelayPkg, "PageLoaded").Call(
+					jen.Id("nodes"), cmpID, jen.Id("first"), jen.Id("last"),
 				),
-				jen.Nil(),
-			),
-		)
+				jen.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Id("err"))),
+				jen.Id("conn").Op(":=").Id(buildConnFunc).Call(
+					jen.Id("page").Dot("Nodes"),
+					jen.Id("page").Dot("TotalCount"),
+					jen.Nil(),
+					jen.Nil(), jen.Nil(), jen.Nil(), jen.Nil(),
+				),
+				jen.Id("conn").Dot("PageInfo").Dot("HasNextPage").Op("=").Id("page").Dot("HasNextPage"),
+				jen.Id("conn").Dot("PageInfo").Dot("HasPreviousPage").Op("=").Id("page").Dot("HasPreviousPage"),
+				jen.Return(jen.Id("conn"), jen.Nil()),
+			)
+		}
 
 		if multiOrder {
 			// Multi-order WithXxxOrder returns (opt, error); propagate the error.
@@ -270,4 +284,29 @@ func (g *Generator) genConnectionEdgeMethod(f *jen.File, _ *gen.Type, e *gen.Edg
 			),
 		)
 	})
+}
+
+// idCompareFunc returns a comparator literal ordering *<entity> values by ID
+// the way the database orders the ID column, or nil when that cannot be
+// guaranteed in memory. Integer and float IDs compare numerically. UUIDs
+// compare by their canonical lowercase string, which orders like the 16 raw
+// bytes (Postgres compares uuid bytewise; MySQL/SQLite store the string).
+// String IDs are left to the database: its collation may not be bytewise.
+func idCompareFunc(t *gen.Type, goName string) jen.Code {
+	if t.ID == nil || t.ID.Type == nil {
+		return nil
+	}
+	a, b := jen.Id("a").Dot("ID"), jen.Id("b").Dot("ID")
+	var body jen.Code
+	switch ft := t.ID.Type.Type; {
+	case ft.Numeric():
+		body = jen.Qual("cmp", "Compare").Call(a, b)
+	case ft == field.TypeUUID:
+		body = jen.Qual("strings", "Compare").Call(a.Clone().Dot("String").Call(), b.Clone().Dot("String").Call())
+	default:
+		return nil
+	}
+	return jen.Func().Params(
+		jen.List(jen.Id("a"), jen.Id("b")).Op("*").Id(goName),
+	).Int().Block(jen.Return(body))
 }
