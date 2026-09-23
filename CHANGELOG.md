@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generated `client/<entity>` imports carry an explicit alias, so goimports cannot delete them
 - Faster code generation: textual import regrouping instead of re-parsing every file, a persistent `.velox/` loader cache that skips the relink on an unchanged schema, and GOGC=200 during generation
 - Go 1.25 is the documented and CI-tested minimum, matching `go.mod`
+- Generated many-to-many eager loaders are one `runtime.M2MLoad` call instead of a per-edge copy of the scan loop (join, pivot scan, dedup, per-parent limit, policy, interceptors, nested eager loads, config injection); the per-parent limit of every to-many loader is planned by `runtime.PlanPerParentLimit`. `examples/fullgql`'s query package shrinks from 11,936 to 11,251 lines with no change in compile time. Regenerate after upgrading
 
 ### Added
 - Version-aware dialect capabilities: `dialect.CapWindowFunctions` (static on PostgreSQL and SQLite, granted on MySQL 8.0+ / MariaDB 10.2+ only), `dialect.VersionCapabilities(dialect, version)`, the `dialect.CapabilityProber` interface and `dialect.DriverCapabilities(ctx, drv)`, which looks through `DebugDriver` and transactional drivers. `sql.Driver.ServerCapabilities` runs `SELECT VERSION()` once per MySQL driver and caches the answer; other dialects never query
@@ -40,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public-API guard (`apiguard_test.go`) that fails the build on any change to the exported surface of the 8 consumer-facing packages
 
 ### Fixed
+- A many-to-many eager load with a per-parent limit and an order (`WithEdgeLoad("tags", runtime.OrderBy(...), runtime.Limit(n))`) keeps each parent's rows in that order. A target shared by several parents was assigned in the order it was first read, and the window returns rows ranked across all parents, so a parent's targets could come back out of order
 - The MySQL server-version probe never holds its lock across the query, and a caller inside a transaction probes on its own connection instead of waiting for an in-flight pool probe — on a pool fully held by transactions, that wait was a deadlock
 - **BREAKING:** a per-parent eager-load limit (`runtime.Limit` through `WithEdgeLoad`) combined with `Limit`/`Offset` on the same edge query now returns an error. The window path applied that Limit after ranking and the MySQL 5.7 fallback before it, so the two returned different rows
 - The MySQL server-version probe behind per-parent eager-load limits runs on the caller's open transaction when there is one; probing through a second pooled connection hung forever on a pool of one held by the transaction (`dialect.CapabilityProberVia`, `(*sql.Driver).ServerCapabilitiesVia`)
