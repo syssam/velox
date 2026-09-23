@@ -979,6 +979,14 @@ func genPartitionLimit(g *jen.Group, h gen.GeneratorHelper, edge *gen.Edge, pl p
 	g.Var().Id("perParent").Op("*").Int()
 	g.Var().Id("kept").Map(pl.keyType).Int()
 	g.If(jen.Id("n").Op(":=").Id(pl.query).Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
+		// A Limit/Offset on the edge query itself has no single meaning next
+		// to a per-parent limit: the window path applied it after ranking,
+		// the in-memory fallback before, so MySQL 5.7 and 8.x returned
+		// different rows. Reject the combination on every server.
+		jen.If(jen.Id(pl.query).Dot("ctx").Dot("Limit").Op("!=").Nil().Op("||").Id(pl.query).Dot("ctx").Dot("Offset").Op("!=").Nil()).Block(
+			jen.Err().Op(":=").Qual("errors", "New").Call(jen.Lit("velox: a per-parent limit cannot be combined with Limit or Offset on the "+edge.Name+" edge query")),
+			pl.onErr,
+		),
 		jen.List(jen.Id("caps"), jen.Err()).Op(":=").Qual(dialectPkg(), "DriverCapabilities").Call(jen.Id("ctx"), jen.Id(pl.query).Dot("config").Dot("Driver")),
 		jen.If(jen.Err().Op("!=").Nil()).Block(pl.onErr),
 		jen.If(jen.Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), "CapWindowFunctions"))).Block(

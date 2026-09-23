@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	velox "github.com/syssam/velox"
@@ -787,6 +788,10 @@ func (q *UserQuery) loadPosts(ctx context.Context, query *PostQuery, nodes []*en
 	var perParent *int
 	var kept map[int64]int
 	if n := query.ctx.PartitionLimit; n != nil {
+		if query.ctx.Limit != nil || query.ctx.Offset != nil {
+			err := errors.New("velox: a per-parent limit cannot be combined with Limit or Offset on the posts edge query")
+			return err
+		}
 		caps, err := dialect.DriverCapabilities(ctx, query.config.Driver)
 		if err != nil {
 			return err

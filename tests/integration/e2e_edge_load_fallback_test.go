@@ -145,3 +145,35 @@ func TestMultiDialect_EdgeLoadWindowOrFallback(t *testing.T) {
 		})
 	})
 }
+
+// TestMultiDialect_EdgeLoadPartitionLimitRejectsQueryLimit pins that a
+// per-parent limit combined with a Limit or Offset on the edge query itself
+// is rejected on every server. The window path applied that Limit after
+// ranking and the in-memory fallback before it, so the same load returned
+// different rows on MySQL 5.7 than on 8.x; an error is the only answer both
+// paths can agree on.
+func TestMultiDialect_EdgeLoadPartitionLimitRejectsQueryLimit(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		u := createUser(t, client, "lim", "lim@fallback")
+		createPost(t, client, u, "p", "c")
+		base := client.RuntimeConfig().Driver
+		for name, c := range map[string]*integration.Client{
+			"server capabilities": client,
+			"forced fallback":     integration.NewClient(integration.Driver(noWindowDriver{base})),
+		} {
+			t.Run(name, func(t *testing.T) {
+				for _, limitEdge := range []func(entity.PostQuerier){
+					func(pq entity.PostQuerier) { pq.Limit(3) },
+					func(pq entity.PostQuerier) { pq.Offset(1) },
+				} {
+					q := c.User.Query().Where(user.IDField.EQ(u.ID)).WithPosts(limitEdge)
+					edgeLoader(t, q).WithEdgeLoad(user.EdgePosts, runtime.Limit(2))
+					_, err := q.All(ctx)
+					require.Error(t, err)
+					assert.Contains(t, err.Error(), "per-parent limit")
+				}
+			})
+		}
+	})
+}
