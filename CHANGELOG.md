@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **BREAKING:** `runtime.RegisterEntityPolicy` takes the address of the entity's policy variable (`*velox.Policy`) and `runtime.EntityPolicy` reads it at lookup. Regenerate after upgrading
 - **BREAKING:** Schema validators (`NotEmpty`, `MaxLen`, `Range`, …) and enum validation are always generated; `FeatureValidator` is a deprecated no-op. Invalid values that were previously accepted now return a `ValidationError`
 - Back-references on eager-loaded edges are only set with `FeatureBidiEdgeRefs` (Ent parity); fixes `json.Marshal` cycles on eager-loaded results
 - `FeatureLock` is a deprecated no-op; `ForUpdate`/`ForShare` are always generated
@@ -36,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public-API guard (`apiguard_test.go`) that fails the build on any change to the exported surface of the 8 consumer-facing packages
 
 ### Fixed
+- GraphQL field collection: an interface field (`graphql.InterfaceField`) and a direct selection of the same edge share one eager-loaded query, and its projection now covers both. It was narrowed to the direct selection, so the interface resolver returned the other fields as zero values (`principal { ... on Workspace { description } }` next to `workspace { name }` gave `null`); such an edge is also no longer limited per parent
+- Re-running a query (or a clone of it) with eager-loaded edges loads the same edges: loaders narrowed the stored child query in place, stacking a second `IN` over parent keys (dropping parents that appeared between runs) and a second per-parent limit
+- Edges eager-loaded under a many-to-many edge (`WithTags(func(q){ q.WithPosts() })`, `WithEdgeLoad("tags", runtime.WithEdge("posts"))`) are loaded; the M2M loader never ran the target query's loaders
+- A projected query that eager-loads a to-one edge bound to a declared foreign-key field (`.Field("owner_id")`) keeps that column, so the edge is no longer silently nil (Ent parity)
+- `LT`/`LTE`/`GT`/`GTE` predicates and SQLite's `ESCAPE` clause wrote into the predicate instead of the builder, so a `Clone()`d selector rendered `WHERE "a"$1` (same bug in Ent)
+- `Selector.OrderExprFunc` / `DialectBuilder.Expr` keep the arguments their callback binds; they rendered it to a bare string, dropping every argument (same bug in Ent). `WindowBuilder.Query` no longer appends to itself on every call
+- `LimitPerPartition` moves an existing `LIMIT`/`OFFSET` to the outer query, where it caps rows across partitions; on the ranked inner query it cut rows before ranking
+- Eager loads and edge queries read the target entity's `RuntimePolicy` variable when they run, as its client does; they read a copy taken at init, so replacing the variable did not reach them
 - `graphql.Mutations(graphql.MutationCreate().Description(...))` puts the description on the generated `Create…Input` (likewise for update); it was stored in `Annotation.MutationInputs` and read by nothing
 - A connection edge method served from an eager-loaded edge (`WithXxx()`) now returns what the database path returns. The fast path ignored `orderBy`, returned `last` pages in reverse, and reported the page length as `totalCount`. It now runs only without `orderBy`, sorts the loaded rows by ID and counts the whole edge; edges whose target has a string ID always query, since their order depends on the column collation
 - Field validators now run on UPDATE, not only on CREATE — `UpdateOneID(id).SetTitle("")` used to write past `NotEmpty()` (a622611)
