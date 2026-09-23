@@ -86,6 +86,21 @@ func TestSelector_LimitPerPartition(t *testing.T) {
 	})
 }
 
+// A LIMIT/OFFSET set before the rewrite caps the result across partitions.
+// On the inner query it cut rows before ranking, so partitions whose rows
+// sorted late lost them.
+func TestSelector_LimitPerPartition_MovesLimitOffsetOutward(t *testing.T) {
+	d := Dialect(dialect.Postgres)
+	posts := d.Table("posts")
+	s := d.Select(posts.C("id")).From(posts).OrderBy(posts.C("id")).Limit(10).Offset(3)
+	s.LimitPerPartition(s.C("user_posts"), 2)
+	query, args := s.Query()
+	require.Equal(t,
+		`SELECT "id" FROM (SELECT "posts"."id", (ROW_NUMBER() OVER (PARTITION BY "posts"."user_posts" ORDER BY "posts"."id")) AS "velox_partition_row" FROM "posts") AS "posts" WHERE "velox_partition_row" <= $1 ORDER BY "velox_partition_row" LIMIT 10 OFFSET 3`,
+		query)
+	require.Equal(t, []any{2}, args)
+}
+
 func TestWindowBuilder_QueryIsRepeatable(t *testing.T) {
 	w := RowNumber().PartitionBy("a").OrderExpr(ExprFunc(func(b *Builder) { b.Ident("b").WriteOp(OpGT).Arg(1) }))
 	q1, a1 := w.Query()

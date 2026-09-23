@@ -3019,13 +3019,18 @@ const partitionRowNumber = "velox_partition_row"
 //	) AS <table> WHERE velox_partition_row <= n ORDER BY velox_partition_row
 //
 // so each partition keeps its ranking order in the result. Only plain
-// selected columns survive the rewrite. It is how an eager-loaded to-many
-// edge is limited per parent instead of across all of them, and needs window
+// selected columns survive the rewrite. A LIMIT or OFFSET already set on the
+// selector moves to the outer query, where it caps the rows kept across all
+// partitions; left on the inner query it would cut rows before they are
+// ranked, starving later partitions. It is how an eager-loaded to-many edge
+// is limited per parent instead of across all of them, and needs window
 // functions (SQLite 3.25+, PostgreSQL, MySQL 8).
 func (s *Selector) LimitPerPartition(partition string, n int) *Selector {
 	inner := s.Clone()
 	order := inner.order
 	inner.order = nil
+	limit, offset := inner.limit, inner.offset
+	inner.limit, inner.offset = nil, nil
 	inner.SetDistinct(false)
 	w := RowNumber().PartitionBy(partition)
 	w.order = order
@@ -3039,6 +3044,7 @@ func (s *Selector) LimitPerPartition(partition string, n int) *Selector {
 		From(inner.As(alias)).
 		Where(LTE(partitionRowNumber, n)).
 		OrderBy(partitionRowNumber)
+	outer.limit, outer.offset = limit, offset
 	outer.ctx = s.ctx
 	outer.as = s.as
 	*s = *outer
