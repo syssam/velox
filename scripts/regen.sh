@@ -99,6 +99,9 @@ echo "==> formatting"
 # Format only velox-owned code. .references/ent and .references/ent-contrib
 # are upstream read-only reference checkouts; recursive gofmt on "." would
 # silently rewrite their files and cause ghost "modified content" drift.
+# .claude/ holds git worktrees of OTHER checkouts (agent sessions): formatting
+# them rewrites someone else's in-progress work, and a worktree removed
+# mid-run failed the whole script.
 # testdata/ is pruned too: golden files pin generator output byte-for-byte
 # and their import paths (github.com/test/project/...) do not resolve, so
 # goimports would strip the imports it cannot find and corrupt the pins.
@@ -112,7 +115,7 @@ HANDWRITTEN=()
 while IFS= read -r path; do
     [[ -n "${path}" ]] && HANDWRITTEN+=("${path}")
 done < <(find . \
-    -type d \( -name .references -o -name .git -o -name node_modules -o -name testdata \) -prune \
+    -type d \( -name .references -o -name .git -o -name .claude -o -name node_modules -o -name testdata \) -prune \
     -o -type f -name '*.go' -print0 \
     | xargs -0 awk '
         FNR==1 { if (prev != "" && !gen) print prev; prev = FILENAME; gen = 0 }
