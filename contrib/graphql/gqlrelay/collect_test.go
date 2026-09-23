@@ -393,3 +393,85 @@ func TestCollectFields_InterfaceField(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"todo", "project"}, names, "a real selection loads every contributing edge")
 }
+
+// An interface field and a direct selection of the same edge share one
+// eager-loaded child query. The child's projection must cover BOTH: the
+// interface resolver answers from the loaded row, so a projection narrowed
+// to the direct selection alone returned the interface's other fields as
+// zero values (description null, role "").
+func TestCollectFields_InterfaceFieldSharesEdgeWithDirectSelection(t *testing.T) {
+	workspaceMeta := &runtime.CollectMeta{FieldColumns: map[string]string{"name": "name", "description": "description"}}
+	memberMeta := &runtime.CollectMeta{FieldColumns: map[string]string{"role": "role", "accepted": "accepted"}}
+	meta := &runtime.CollectMeta{
+		Edges: map[string]runtime.EdgeMeta{
+			"workspace":   {Name: "workspace", Unique: true, FKColumns: []string{"workspace_members"}},
+			"user":        {Name: "user", Unique: true, FKColumns: []string{"user_memberships"}},
+			"memberships": {Name: "memberships", Relay: true, PagesLoaded: true},
+		},
+		InterfaceFields: map[string]runtime.InterfaceFieldMeta{
+			"principal": {Edges: []string{"workspace", "user"}, Satisfies: []string{"Principal", "Workspace", "User"}, FastPath: true},
+			"relations": {Edges: []string{"memberships"}, Satisfies: []string{"Member"}},
+		},
+	}
+	newQ := func() *collectQuery {
+		q := newCollectQuery(meta)
+		q.ChildMeta = map[string]*runtime.CollectMeta{"workspace": workspaceMeta, "user": {FieldColumns: map[string]string{"name": "name"}}, "memberships": memberMeta}
+		return q
+	}
+
+	t.Run("to-one", func(t *testing.T) {
+		ctx := newGQLContext(t, ast.SelectionSet{
+			field("workspace", field("name")),
+			field("principal", &ast.InlineFragment{
+				TypeCondition: "Workspace",
+				SelectionSet:  ast.SelectionSet{field("name"), field("description")},
+			}),
+		})
+		q := newQ()
+		require.NoError(t, CollectFields(ctx, q, meta))
+		q.loadConfig(t, "workspace")
+		child := q.Children["workspace"]
+		if len(child.Ctx.Fields) > 0 {
+			assert.Subset(t, child.Ctx.Fields, []string{"id", "name", "description"})
+		}
+	})
+
+	t.Run("to-many connection with first", func(t *testing.T) {
+		ctx := newGQLContext(t, ast.SelectionSet{
+			connField("memberships", map[string]string{"first": "1"}, nodeSel(field("accepted"))),
+			field("relations", field("role")),
+		})
+		q := newQ()
+		require.NoError(t, CollectFields(ctx, q, meta))
+		cfg := q.loadConfig(t, "memberships")
+		assert.Nil(t, cfg.Limit, "the interface resolver reads every loaded row: no per-parent limit")
+		child := q.Children["memberships"]
+		if len(child.Ctx.Fields) > 0 {
+			assert.Subset(t, child.Ctx.Fields, []string{"id", "accepted", "role"})
+		}
+	})
+
+	t.Run("nested edge under the interface selection", func(t *testing.T) {
+		// principal { ... on Workspace { owner { name } } } next to a direct
+		// workspace { name }: the nested edge is loaded too.
+		wsMeta := &runtime.CollectMeta{
+			FieldColumns: map[string]string{"name": "name"},
+			Edges:        map[string]runtime.EdgeMeta{"owner": {Name: "owner", Unique: true, FKColumns: []string{"owner_id"}}},
+		}
+		q := newCollectQuery(meta)
+		q.ChildMeta = map[string]*runtime.CollectMeta{"workspace": wsMeta, "user": {}}
+		ctx := newGQLContext(t, ast.SelectionSet{
+			field("workspace", field("name")),
+			field("principal", &ast.InlineFragment{
+				TypeCondition: "Workspace",
+				SelectionSet:  ast.SelectionSet{field("owner", field("name"))},
+			}),
+		})
+		require.NoError(t, CollectFields(ctx, q, meta))
+		child := q.Children["workspace"]
+		child.loadConfig(t, "owner")
+		if len(child.Ctx.Fields) > 0 {
+			assert.Contains(t, child.Ctx.Fields, "owner_id")
+		}
+	})
+}

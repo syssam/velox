@@ -16,6 +16,7 @@ import (
 	userclient "example.com/fullgql/velox/client/user"
 	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/entity"
+	"example.com/fullgql/velox/member"
 	"example.com/fullgql/velox/todo"
 
 	gqlclient "github.com/99designs/gqlgen/client"
@@ -371,4 +372,68 @@ func TestCollect_CollectedFor(t *testing.T) {
 	sel := log.selects("users")
 	require.Len(t, sel, 1)
 	assert.Equal(t, []string{"id", "email", "name", "bio"}, selectedColumns(t, sel[0]))
+}
+
+// TestCollect_InterfaceFieldSharesEdgeWithDirectSelection pins that an
+// interface field (graphql.InterfaceField) and a direct selection of the same
+// edge read correct data. Both paths load the edge into one child query; the
+// direct selection used to narrow that query's projection to its own fields,
+// and the interface resolver then answered from rows missing the rest —
+// description came back null and role came back "".
+func TestCollect_InterfaceFieldSharesEdgeWithDirectSelection(t *testing.T) {
+	client, gql, log := openCountingClient(t)
+	ctx := context.Background()
+	cfg := client.RuntimeConfig()
+	alice, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "alice@iface.com"}).Save(ctx)
+	require.NoError(t, err)
+	desc := "the platform team"
+	ws, err := workspaceclient.NewWorkspaceClient(cfg).Create().
+		SetInput(workspaceclient.CreateWorkspaceInput{Name: "Platform", Description: &desc}).Save(ctx)
+	require.NoError(t, err)
+	_, err = memberclient.NewMemberClient(cfg).Create().
+		SetInput(memberclient.CreateMemberInput{Role: ptr(member.RoleAdmin), WorkspaceID: ws.ID, UserID: alice.ID}).Save(ctx)
+	require.NoError(t, err)
+
+	t.Run("to-one", func(t *testing.T) {
+		var out struct {
+			Members []struct {
+				Workspace struct{ Name string }
+				Principal struct {
+					Typename    string `json:"__typename"`
+					Name        string
+					Description *string
+				}
+			}
+		}
+		log.reset()
+		gql.MustPost(`{ members { workspace { name } principal { __typename ... on Workspace { name description } } } }`, &out)
+		require.Len(t, out.Members, 1)
+		m := out.Members[0]
+		assert.Equal(t, "Platform", m.Workspace.Name)
+		assert.Equal(t, "Workspace", m.Principal.Typename)
+		assert.Equal(t, "Platform", m.Principal.Name)
+		require.NotNil(t, m.Principal.Description, "the interface resolver read a row projected for the direct selection")
+		assert.Equal(t, desc, *m.Principal.Description)
+		assert.Len(t, log.selects("workspaces"), 1, "one load serves both paths")
+	})
+
+	t.Run("to-many", func(t *testing.T) {
+		var out struct {
+			Users struct {
+				Edges []struct {
+					Node struct {
+						Memberships []struct{ Accepted bool }
+						Relations   []struct{ Role string }
+					}
+				}
+			}
+		}
+		gql.MustPost(`{ users { edges { node { memberships { accepted } relations { role } } } } }`, &out)
+		require.Len(t, out.Users.Edges, 1)
+		n := out.Users.Edges[0].Node
+		require.Len(t, n.Memberships, 1)
+		require.Len(t, n.Relations, 1)
+		assert.Equal(t, "ADMIN", n.Relations[0].Role)
+	})
 }

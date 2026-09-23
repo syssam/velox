@@ -37,7 +37,7 @@ func CollectFields(ctx context.Context, q runtime.FieldCollectable, meta *runtim
 	if fc == nil || meta == nil || !graphql.HasOperationContext(ctx) {
 		return nil
 	}
-	collect(graphql.GetOperationContext(ctx), q, meta, []graphql.CollectedField{fc.Field}, satisfies)
+	collect(graphql.GetOperationContext(ctx), q, meta, []occurrence{{field: fc.Field, satisfies: satisfies}})
 	return nil
 }
 
@@ -57,16 +57,38 @@ func CollectConnectionFields(ctx context.Context, q runtime.FieldCollectable, me
 		q.GetCtx().AppendFieldOnce(q.GetIDColumn())
 		return nil
 	}
-	collect(opCtx, q, meta, nodes, nil)
+	collect(opCtx, q, meta, occurrences(nodes, nil))
 	return nil
 }
 
-// edgeSelection gathers every occurrence of one edge in a selection set —
-// aliases select the same edge more than once, and a query can load an edge
-// only once, so the occurrences are merged.
+// occurrence is one selection of an entity: a field (or a connection's
+// node) and the type conditions its fragments are collected under.
+type occurrence struct {
+	field     graphql.CollectedField
+	satisfies []string
+}
+
+func occurrences(fields []graphql.CollectedField, satisfies []string) []occurrence {
+	out := make([]occurrence, len(fields))
+	for i, f := range fields {
+		out[i] = occurrence{field: f, satisfies: satisfies}
+	}
+	return out
+}
+
+// edgeSelection gathers every path to one edge in a selection set — aliases
+// and fragments select the same edge more than once, and an interface field
+// (graphql.InterfaceField) reaches the edge under another name. A query
+// loads an edge once, into one child query, so every path's needs are
+// merged into it: the child's projection is the union of all of them.
 type edgeSelection struct {
-	meta   runtime.EdgeMeta
+	meta runtime.EdgeMeta
+	// fields are the direct selections of the edge.
 	fields []graphql.CollectedField
+	// viaInterface are the selections of interface fields the edge backs.
+	// Their resolver answers from the loaded edge, so it is loaded whole
+	// (no per-parent limit) and projected for these selections too.
+	viaInterface []occurrence
 }
 
 // collect projects q onto what the given fields select and schedules the
@@ -76,8 +98,7 @@ func collect(
 	opCtx *graphql.OperationContext,
 	q runtime.FieldCollectable,
 	meta *runtime.CollectMeta,
-	parents []graphql.CollectedField,
-	satisfies []string,
+	parents []occurrence,
 ) {
 	var (
 		unknownSeen bool
@@ -85,8 +106,19 @@ func collect(
 		edges       []*edgeSelection
 		edgeIndex   = map[string]*edgeSelection{}
 	)
+	// edgeFor returns the merged selection of an edge, keyed by the schema
+	// edge name so every path to it lands in the same child query.
+	edgeFor := func(edge runtime.EdgeMeta) *edgeSelection {
+		es := edgeIndex[edge.Name]
+		if es == nil {
+			es = &edgeSelection{meta: edge}
+			edgeIndex[edge.Name] = es
+			edges = append(edges, es)
+		}
+		return es
+	}
 	for _, parent := range parents {
-		for _, field := range graphql.CollectFields(opCtx, parent.Selections, satisfies) {
+		for _, field := range graphql.CollectFields(opCtx, parent.field.Selections, parent.satisfies) {
 			switch field.Name {
 			case "id", "__typename":
 				continue
@@ -99,12 +131,7 @@ func collect(
 				// Columns of this table the edge needs (a foreign key it
 				// owns); empty when the key lives on the other side.
 				selected = append(selected, edge.FKColumns...)
-				es := edgeIndex[field.Name]
-				if es == nil {
-					es = &edgeSelection{meta: edge}
-					edgeIndex[field.Name] = es
-					edges = append(edges, es)
-				}
+				es := edgeFor(edge)
 				es.fields = append(es.fields, field)
 				continue
 			}
@@ -122,8 +149,12 @@ func collect(
 				if ifm.FastPath && InterfaceFieldCoveredByID(field, opCtx, ifm.Satisfies...) {
 					continue
 				}
+				// The selection is collected under every implementor's type
+				// condition: fields of another implementor are unknown to
+				// this edge's entity and keep it unprojected, which is safe.
 				for _, key := range ifm.Edges {
-					q.WithEdgeLoad(meta.Edges[key].Name)
+					es := edgeFor(meta.Edges[key])
+					es.viaInterface = append(es.viaInterface, occurrence{field: field, satisfies: ifm.Satisfies})
 				}
 				continue
 			}
@@ -158,22 +189,32 @@ func collect(
 // total) to first+1 when every loaded occurrence asks for first and none
 // asks for totalCount; otherwise the whole edge is loaded, since the entity
 // method pages the loaded slice in memory and counts it for totalCount.
+//
+// An edge an interface field reaches is always loaded whole — its resolver
+// reads every loaded row — and projected for the union of the direct and
+// the interface selections.
 func collectEdge(opCtx *graphql.OperationContext, q runtime.FieldCollectable, es *edgeSelection) {
 	if es.meta.Unique || !es.meta.Relay {
 		child := q.WithEdgeLoad(es.meta.Name)
-		collectChild(opCtx, child, es.fields)
-		return
-	}
-	if !es.meta.PagesLoaded {
-		// The entity method would query the edge per row regardless.
+		collectChild(opCtx, child, append(occurrences(es.fields, nil), es.viaInterface...))
 		return
 	}
 	var (
 		nodes     []graphql.CollectedField
-		load      bool
-		unlimited bool
+		load      = len(es.viaInterface) > 0
+		unlimited = load
 		limit     int
 	)
+	if !es.meta.PagesLoaded {
+		// The entity method would query the edge per row regardless; only
+		// an interface field reads the loaded edge.
+		if !load {
+			return
+		}
+		child := q.WithEdgeLoad(es.meta.Name)
+		collectChild(opCtx, child, es.viaInterface)
+		return
+	}
 	for _, field := range es.fields {
 		args := field.ArgumentMap(opCtx.Variables)
 		if args["after"] != nil || args["before"] != nil || args["where"] != nil || args["orderBy"] != nil {
@@ -203,22 +244,22 @@ func collectEdge(opCtx *graphql.OperationContext, q runtime.FieldCollectable, es
 	if child == nil {
 		return
 	}
-	if len(nodes) == 0 {
+	if len(nodes) == 0 && len(es.viaInterface) == 0 {
 		child.GetCtx().AppendFieldOnce(child.GetIDColumn())
 		return
 	}
-	collectChild(opCtx, child, nodes)
+	collectChild(opCtx, child, append(occurrences(nodes, nil), es.viaInterface...))
 }
 
 // collectChild recurses into an eager-loaded edge query when it carries its
 // own metadata; otherwise the edge is loaded unprojected.
-func collectChild(opCtx *graphql.OperationContext, child runtime.FieldCollectable, fields []graphql.CollectedField) {
+func collectChild(opCtx *graphql.OperationContext, child runtime.FieldCollectable, fields []occurrence) {
 	mc, ok := child.(MetaCollectable)
 	if !ok {
 		return
 	}
 	if meta := mc.CollectMeta(); meta != nil {
-		collect(opCtx, mc, meta, fields, nil)
+		collect(opCtx, mc, meta, fields)
 	}
 }
 
