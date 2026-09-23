@@ -252,21 +252,49 @@ func (Todo) Policy() velox.Policy {
 
 ### Combining Rules
 
+`And`, `Or` and `Not` take and return `QueryMutationRule`s, so they combine
+rules such as `HasRole`, `HasAnyRole`, `DenyIfNoViewer` and
+`TenantFilterRule`; mutation-only rules (`TenantRule`, `IsOwner`) go in a
+`MutationPolicy` list directly. The combinators work on the three decisions
+described under [Decision Model](#decision-model), not on booleans:
+
+- `And(a, b)` returns `Allow` only if every rule returns `Allow`; otherwise
+  it returns the first decision that is not `Allow` — often `Skip`.
+- `Or(a, b)` returns `Allow` if any rule returns `Allow`; otherwise the last
+  rule's decision.
+- `Not(r)` turns `Allow` into `Deny` and the bare `Deny` into `Allow`. `Skip`
+  stays `Skip`, and a denial that carries a reason (`Denyf`, a missing
+  viewer) stays a denial.
+
 ```go
-// Must be admin AND in the same tenant
+// Must hold both roles.
 privacy.And(
     privacy.HasRole("admin"),
-    privacy.TenantRule("tenant_id"),
+    privacy.HasRole("billing"),
 )
 
-// Admin OR owner can mutate
+// Either role is enough.
 privacy.Or(
     privacy.HasRole("admin"),
-    privacy.IsOwner("created_by"),
+    privacy.HasRole("editor"),
 )
 
-// Anyone except guests
+// Denies guests. It does NOT allow anyone: HasRole returns Skip for a
+// viewer without the role, Not keeps that Skip, and evaluation moves on.
 privacy.Not(privacy.HasRole("guest"))
+```
+
+Because a non-guest gets `Skip` from `Not(HasRole("guest"))`, what happens to
+them is decided by the rules after it — or, if every rule skips, by the
+permissive default. To express "anyone signed in except guests", end the
+list explicitly:
+
+```go
+Query: privacy.QueryPolicy{
+    privacy.DenyIfNoViewer(),              // no viewer: Deny
+    privacy.Not(privacy.HasRole("guest")), // guest: Deny; anyone else: Skip
+    privacy.AlwaysAllowRule(),             // everyone left: Allow
+},
 ```
 
 ## Decision Model

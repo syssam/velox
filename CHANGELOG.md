@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sql.WithVar` no longer reports a failed `set_config`/`SET @var` twice: the variable's reset was queued before the set and re-ran during cleanup
 - `sql.WithVar` on Postgres no longer leaks a setting whose dotted name contains an SQL keyword (`app.user`) to the pooled connection: the reset is now `set_config(name, NULL, false)` with the name bound as a parameter, where `RESET app.user` failed to parse
 - `privacy.Not` no longer converts a fail-closed denial into `Allow`
+- `docs/privacy.md` § Combining Rules: `Not(HasRole("guest"))` was described as "anyone except guests", but it returns `Skip`, not `Allow`, for non-guests; the section now explains the three-valued combinators and replaces an `And(HasRole, TenantRule)` example that did not compile
 - Privacy trace recording is safe for concurrent use
 - `errors.Is(err, velox.ErrTxStarted)` now matches the error a generated client returns from a nested `Tx`/`BeginTx`; the generated `ErrTxStarted` aliases `velox.ErrTxStarted`
 - `field.Sensitive()` now hides the value from JSON, `String()` and the GraphQL output type (it stays settable through mutation inputs)
