@@ -702,6 +702,17 @@ func (qg *queryGen) wireEdgePolicy(v jen.Code, edge *gen.Edge) jen.Code {
 	return jen.Add(v).Dot("policy").Op("=").Qual(runtimePkg, "EntityPolicy").Call(jen.Lit(edge.Type.Name))
 }
 
+// partitionTiebreak returns `<sel>.OrderBy(<sel>.C(<target>.<ID constant>))`,
+// the final ranking term of a per-parent limit that makes the rows kept for
+// each parent deterministic, or nil for a target without a single ID field
+// (a composite-ID edge schema), which is then ranked by its order alone.
+func partitionTiebreak(h gen.GeneratorHelper, edge *gen.Edge, sel string) jen.Code {
+	if edge.Type.ID == nil {
+		return nil
+	}
+	return jen.Id(sel).Dot("OrderBy").Call(jen.Id(sel).Dot("C").Call(jen.Qual(h.LeafPkgPath(edge.Type), edge.Type.ID.Constant())))
+}
+
 func edgeCallbackField(e *gen.Edge) string {
 	return "with" + e.StructField()
 }
@@ -795,12 +806,14 @@ func genTypedO2MLoader(
 	// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks each
 	// parent's rows and keeps the first n of every one of them, in one query.
 	if !edge.Unique {
+		var rank []jen.Code
+		if tb := partitionTiebreak(h, edge, "s"); tb != nil {
+			rank = append(rank, tb)
+		}
+		rank = append(rank, jen.Id("s").Dot("LimitPerPartition").Call(jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)), jen.Op("*").Id("n")))
 		body.If(jen.Id("n").Op(":=").Id("query").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
 			jen.Id("query").Dot("modifiers").Op("=").Append(jen.Id("query").Dot("modifiers"),
-				jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
-					jen.Id("s").Dot("OrderBy").Call(jen.Id("s").Dot("C").Call(jen.Qual(h.LeafPkgPath(edge.Type), "FieldID"))),
-					jen.Id("s").Dot("LimitPerPartition").Call(jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)), jen.Op("*").Id("n")),
-				),
+				jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(rank...),
 			),
 		)
 	}
@@ -1064,10 +1077,12 @@ func genM2MLoaderFallback(
 			// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks
 			// the rows of every parent by its join-table key and keeps the
 			// first n of each, in this one query.
-			fnBody.If(jen.Id("n").Op(":=").Id("tq").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
-				jen.Id("selector").Dot("OrderBy").Call(jen.Id("selector").Dot("C").Call(jen.Qual(targetSubPkg, "FieldID"))),
-				jen.Id("selector").Dot("LimitPerPartition").Call(jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)), jen.Op("*").Id("n")),
-			)
+			var rank []jen.Code
+			if tb := partitionTiebreak(h, edge, "selector"); tb != nil {
+				rank = append(rank, tb)
+			}
+			rank = append(rank, jen.Id("selector").Dot("LimitPerPartition").Call(jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)), jen.Op("*").Id("n")))
+			fnBody.If(jen.Id("n").Op(":=").Id("tq").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(rank...)
 
 			// rows := &sql.Rows{}
 			// queryStr, args := selector.Query()
