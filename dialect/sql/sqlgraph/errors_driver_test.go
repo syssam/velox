@@ -3,6 +3,7 @@ package sqlgraph
 import (
 	"context"
 	stdsql "database/sql"
+	"errors"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
@@ -87,4 +88,37 @@ func TestConstraintErrors_RealDriverTypes(t *testing.T) {
 			assert.Equal(t, tt.want != want{}, IsConstraintError(tt.err), "constraint")
 		})
 	}
+}
+
+// httpError is an application error that carries an HTTP status as Code() int
+// — the same method set as modernc.org/sqlite's *Error — and hides the
+// wrapped message.
+type httpError struct {
+	status int
+	err    error
+}
+
+func (e *httpError) Error() string { return "request failed" }
+func (e *httpError) Code() int     { return e.status }
+func (e *httpError) Unwrap() error { return e.err }
+
+// TestConstraintErrors_SQLiteBehindCodeWrapper pins that an application error
+// with its own Code() int does not mask the SQLite error it wraps. Matching
+// on the method set alone made errors.As stop at the wrapper, read 500 as the
+// SQLite result code, and report "not a constraint error".
+func TestConstraintErrors_SQLiteBehindCodeWrapper(t *testing.T) {
+	unique, _, foreignKey, check, other := sqliteConstraintErrors(t)
+
+	assert.True(t, IsUniqueConstraintError(&httpError{500, unique}), "unique")
+	assert.True(t, IsForeignKeyConstraintError(&httpError{409, foreignKey}), "foreign key")
+	assert.True(t, IsCheckConstraintError(&httpError{400, check}), "check")
+	assert.False(t, IsConstraintError(&httpError{500, other}), "non-constraint")
+
+	// Joined errors are walked like errors.As does.
+	joined := errors.Join(&httpError{500, errors.New("unrelated")}, &httpError{500, unique})
+	assert.True(t, IsUniqueConstraintError(joined), "unique in a joined tree")
+
+	// An application error whose Code() happens to equal a SQLite constraint
+	// code is not a SQLite error.
+	assert.False(t, IsUniqueConstraintError(&httpError{2067, nil}), "foreign Code() must not match")
 }
