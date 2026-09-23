@@ -228,8 +228,9 @@ func TestCollect_NestedEdgesAreNotNPlusOne(t *testing.T) {
 			}
 		}
 		counts[n] = len(log.snapshot())
-		// users COUNT, users page, todos (all parents), owners (all todos).
-		assert.Equal(t, 4, counts[n], "queries at N=%d: %v", n, log.snapshot())
+		// users page, todos (all parents), owners (all todos); no COUNT, as
+		// totalCount is not selected.
+		assert.Equal(t, 3, counts[n], "queries at N=%d: %v", n, log.snapshot())
 		todoSel := log.selects("todos")
 		require.Len(t, todoSel, 1)
 		assert.Equal(t, []string{"id", "title", "user_todos", "category_todos", "workspace_todos"}, selectedColumns(t, todoSel[0]),
@@ -255,7 +256,7 @@ func TestCollect_NestedConnectionFirstIsPerParent(t *testing.T) {
 	todoSel := log.selects("todos")
 	require.Len(t, todoSel, 1, "one todos query for every parent: %v", collectedQueries)
 	assert.Contains(t, todoSel[0], "ROW_NUMBER() OVER (PARTITION BY", "the limit is applied per parent")
-	assert.Len(t, collectedQueries, 4, "users COUNT, users, todos, tags: %v", collectedQueries)
+	assert.Len(t, collectedQueries, 3, "users, todos, tags (no totalCount, no COUNT): %v", collectedQueries)
 
 	require.Len(t, collected.Users.Edges, 4)
 	for i, e := range collected.Users.Edges {
@@ -296,7 +297,7 @@ func TestCollect_NestedConnectionTotalCount(t *testing.T) {
 		assert.Equal(t, 4, e.Node.Todos.TotalCount)
 		assert.Len(t, e.Node.Todos.Edges, 1)
 	}
-	assert.Len(t, log.snapshot(), 3, "users COUNT, users, todos: %v", log.snapshot())
+	assert.Len(t, log.snapshot(), 2, "users, todos — the nested totalCount is the loaded edge's length and the top level selects none: %v", log.snapshot())
 }
 
 // TestCollect_ListResolverCollectFields pins the list-resolver path: the

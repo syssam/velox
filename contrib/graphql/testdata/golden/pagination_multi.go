@@ -29,9 +29,13 @@ func (q *UserQuery) Paginate(ctx context.Context, after *gqlrelay.Cursor, first 
 			q.Where(p)
 		}
 	}
-	totalCount, err := q.Clone().Count(ctx)
-	if err != nil {
-		return nil, err
+	var totalCount int
+	if gqlrelay.TotalCountSelected(ctx) {
+		n, err := q.Clone().Count(ctx)
+		if err != nil {
+			return nil, err
+		}
+		totalCount = n
 	}
 	var sqlDir gqlrelay.OrderDirection = gqlrelay.OrderDirectionAsc
 	if len(cfg.Order) > 0 && cfg.Order[0].Field != nil {

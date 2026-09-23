@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Generated `Paginate` skips its `COUNT` query unless the GraphQL selection reads `totalCount` (Ent parity; `pageInfo` comes from the limit+1 row). Outside a GraphQL operation it keeps counting. New `gqlrelay.TotalCountSelected(ctx)`. Regenerate after upgrading
 - **BREAKING:** `runtime.RegisterEntityPolicy` takes the address of the entity's policy variable (`*velox.Policy`) and `runtime.EntityPolicy` reads it at lookup. Regenerate after upgrading
 - **BREAKING:** Schema validators (`NotEmpty`, `MaxLen`, `Range`, …) and enum validation are always generated; `FeatureValidator` is a deprecated no-op. Invalid values that were previously accepted now return a `ValidationError`
 - Back-references on eager-loaded edges are only set with `FeatureBidiEdgeRefs` (Ent parity); fixes `json.Marshal` cycles on eager-loaded results

@@ -327,6 +327,19 @@ func TestCollectConnectionFields(t *testing.T) {
 	assert.Empty(t, q.Edges)
 }
 
+func TestTotalCountSelected(t *testing.T) {
+	assert.True(t, TotalCountSelected(context.Background()), "outside a resolver there is no selection to consult: count")
+	assert.True(t, TotalCountSelected(graphql.WithFieldContext(context.Background(), &graphql.FieldContext{})),
+		"a field context without an operation context: count")
+	assert.True(t, TotalCountSelected(newGQLContext(t, ast.SelectionSet{field("totalCount"), nodeSel(field("title"))})))
+	assert.True(t, TotalCountSelected(newGQLContext(t, ast.SelectionSet{
+		&ast.InlineFragment{SelectionSet: ast.SelectionSet{field("totalCount")}},
+	})), "a totalCount inside a fragment counts")
+	assert.False(t, TotalCountSelected(newGQLContext(t, ast.SelectionSet{field("pageInfo", field("hasNextPage")), nodeSel(field("title"))})),
+		"pageInfo is computed from the extra row, not the count")
+	assert.False(t, TotalCountSelected(newGQLContext(t, ast.SelectionSet{nodeSel(field("title"))})))
+}
+
 func TestGqlToInt(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -61,6 +61,26 @@ func CollectConnectionFields(ctx context.Context, q runtime.FieldCollectable, me
 	return nil
 }
 
+// TotalCountSelected reports whether the Relay connection being resolved in
+// ctx needs its total count. Generated Paginate methods skip their COUNT
+// query when it returns false, as Ent's do (hasCollectedField(totalCount)).
+// pageInfo never needs the count: hasNextPage and hasPreviousPage come from
+// fetching one row past the page.
+//
+// Outside a gqlgen resolver it returns true — a direct Paginate call has no
+// selection to consult. Inside one it reads the selection of the field
+// being resolved, so a resolver that calls Paginate for a connection nested
+// in its own result type (not the field it resolves) gets no count; resolve
+// such a connection in its own field resolver.
+func TotalCountSelected(ctx context.Context) bool {
+	fc := graphql.GetFieldContext(ctx)
+	if fc == nil || !graphql.HasOperationContext(ctx) {
+		return true
+	}
+	_, use := connectionSelection(graphql.GetOperationContext(ctx), fc.Field)
+	return use.totalCount
+}
+
 // occurrence is one selection of an entity: a field (or a connection's
 // node) and the type conditions its fragments are collected under.
 type occurrence struct {

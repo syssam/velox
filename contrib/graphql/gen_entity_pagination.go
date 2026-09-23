@@ -124,9 +124,17 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		// post-cursor window. Filter has already been applied above; cursor
 		// predicates would shrink the count to only "rows past the cursor",
 		// which would make TotalCount change between pages.
-		grp.List(jen.Id("totalCount"), jen.Id("err")).Op(":=").Id("q").Dot("Clone").Call().Dot("Count").Call(jen.Id("ctx"))
-		grp.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
+		//
+		// Only when the request reads totalCount (always outside a GraphQL
+		// operation): pageInfo comes from the limit+1 row, not the count,
+		// so a page without totalCount costs one query (Ent parity).
+		grp.Var().Id("totalCount").Int()
+		grp.If(jen.Qual(gqlrelayPkg, "TotalCountSelected").Call(jen.Id("ctx"))).Block(
+			jen.List(jen.Id("n"), jen.Err()).Op(":=").Id("q").Dot("Clone").Call().Dot("Count").Call(jen.Id("ctx")),
+			jen.If(jen.Err().Op("!=").Nil()).Block(
+				jen.Return(jen.Nil(), jen.Err()),
+			),
+			jen.Id("totalCount").Op("=").Id("n"),
 		)
 
 		// Determine the SQL ORDER BY direction. For backward pagination

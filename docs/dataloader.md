@@ -42,11 +42,17 @@ directly.
 ```
 Query: { users(first: 10) { edges { node { name todos(first: 2) { edges { node { title owner { name } } } } } } } }
 
-→ SELECT COUNT(id) FROM users
 → SELECT id, name FROM users ORDER BY id LIMIT 11
 → SELECT id, title, user_todos, ... FROM (… ROW_NUMBER() OVER (PARTITION BY user_todos ORDER BY id) …) WHERE row <= 3
-→ SELECT id, name FROM users WHERE id IN (…)            (4 queries for any number of users)
+→ SELECT id, name FROM users WHERE id IN (…)            (3 queries for any number of users)
 ```
+
+`Paginate` runs its `SELECT COUNT(...)` only when the selection reads
+`totalCount` — `pageInfo` is computed from the extra row fetched past the
+page — and always when called outside a GraphQL operation (Ent parity).
+It reads the selection of the field being resolved, so resolve a
+connection in its own field resolver rather than building it inside the
+resolver of a parent type.
 
 A resolver that returns entities directly (a list or a single node) calls
 the generated `CollectFields` itself. `Query()` returns the querier
