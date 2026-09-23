@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go 1.25 is the documented and CI-tested minimum, matching `go.mod`
 
 ### Added
+- Dead-API guard (`deadapi_test.go`): fails when a `gen.Feature` is consulted by no generator, a `graphql.Annotation` field is read by nothing (an accessor counts only if it has a caller), a runtime registry is written but never read, or an exported `runtime` identifier is unreachable from generated code and every other package; see CONTRIBUTING.md § Dead-API Guard
 - `graphql.InterfaceField(name)`: GraphQL interface fields over edges, with the interface, Go markers and resolvers generated (ported from ent/contrib #638, without the view-backed global connection)
 - Package-level `sql.Union`, `UnionAll`, `Except`, `ExceptAll`, `Intersect`, `IntersectAll` with parenthesized branches; SQLite renders branches as derived tables so every dialect returns the same rows
 - `privacy.TenantFilterRule(column)`: appends `WHERE <column> = <viewer tenant>` to reads, bulk UPDATE and bulk DELETE

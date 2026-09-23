@@ -27,6 +27,13 @@ jobs:
         with:
           go-version: '1.26'
           cache: true
+      - name: Generate fixtures (root module)
+        # tests/integration and examples/realworld keep their generated
+        # output gitignored; the module does not compile, and the dead-API
+        # guard (deadapi_test.go) fails under CI, without it.
+        run: |
+          go run tests/integration/generate.go
+          (cd examples/realworld && go run generate.go)
       - name: Run tests before release
         run: go test -race ./...
       - uses: goreleaser/goreleaser-action@v6

@@ -60,6 +60,41 @@ go test ./compiler/gen/sql/ -run TestGolden
 
 Golden files live in `compiler/gen/sql/testdata/golden/`. Review diffs carefully before committing — they represent the public-facing generated API.
 
+### Dead-API Guard
+
+`deadapi_test.go` (root package) fails when something is declared but nothing
+in production reads it — velox's most repeated bug, where a feature compiles,
+is stored at init, and silently does nothing. It checks four rules:
+
+| Rule | Fails when |
+|---|---|
+| (a) | a `gen.Feature` var is never consulted by a generator and has no `Deprecated:` doc line |
+| (b) | a `contrib/graphql.Annotation` field is read by nothing outside `annotation.go` (an accessor counts only if the accessor has a caller; `Merge` never counts) |
+| (c) | a package-level registry a `runtime` function writes is read by no function that has a caller |
+| (d) | an exported `runtime` identifier is unreachable from generated code and from every other package |
+
+Generated code counts as a reader, so the guard needs the gitignored fixtures;
+it skips locally (and fails under `CI`) without them:
+
+```bash
+go run tests/integration/generate.go && (cd examples/realworld && go run generate.go)
+go test . -run TestDeadAPIGuard
+```
+
+When it fails, in order of preference:
+
+1. **Delete the identifier** if nothing should read it. Add a CHANGELOG
+   `[Unreleased] → Removed` entry, and run
+   `go test . -run TestPublicAPIGuard -update-api` if it was public API.
+2. **Wire it up** if it stands for a feature that should work, with a test that
+   asserts on generated output or behavior — not that the value was stored.
+3. For a `gen.Feature` kept only so existing `generate.go` files still
+   compile, add a `Deprecated:` line saying the flag has no effect.
+4. **Allowlist it** only if it is deliberately application-facing API with no
+   reader in this repository: add `<rule> <pkg>.<Name>  # reason` to
+   `testdata/deadapi/allowlist.txt`. The guard also fails on an entry that is
+   no longer needed, so the list cannot rot.
+
 ### Regenerating Examples
 
 After changing generators, regenerate the example fixtures:

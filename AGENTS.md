@@ -108,6 +108,11 @@ the consumer-facing packages. Refactoring the generator to make illegal
 states unrepresentable is risk for no measurable gain — the bug class
 already cannot ship.
 
+**A declared identifier with no production reader is a bug** — velox's most
+repeated one. `deadapi_test.go` fails on unread feature flags, `graphql.Annotation`
+fields, runtime registries and unreachable `runtime` exports; see
+CONTRIBUTING.md § Dead-API Guard. Never allowlist something generated code should read.
+
 **Dialect differences go through `dialect.Capability` flags**, never string
 comparisons on the dialect name.
 
