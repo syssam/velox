@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING:** Schema validators (`NotEmpty`, `MaxLen`, `Range`, …) and enum validation are always generated; `FeatureValidator` is a deprecated no-op. Invalid values that were previously accepted now return a `ValidationError`
 - Back-references on eager-loaded edges are only set with `FeatureBidiEdgeRefs` (Ent parity); fixes `json.Marshal` cycles on eager-loaded results
 - `FeatureLock` is a deprecated no-op; `ForUpdate`/`ForShare` are always generated
+- `FeatureModifier` is a deprecated no-op; `Modify` is always generated
 - **BREAKING:** Schema- and mixin-level `Interceptors()` is a codegen error — it was assigned at init and never read. Register interceptors on the client instead
 - **BREAKING:** `graphql.MapsTo`, `graphql.Mapping` and `graphql.Unbind` are rejected at codegen time instead of being silently ignored
 - **BREAKING:** `runtime.CollectFields` takes the entity's `*CollectMeta`; regenerate after upgrading

@@ -119,12 +119,16 @@ var (
 		Description: "Deprecated: locking (ForUpdate/ForShare) is always generated; this flag has no effect",
 	}
 
-	// FeatureModifier provides a feature-flag for adding query modifiers.
+	// FeatureModifier is kept only so existing configurations and the CLI's
+	// --feature flag keep accepting its name.
+	//
+	// Deprecated: query modifiers are always generated; this flag has no
+	// effect. Every query builder carries Modify regardless of it.
 	FeatureModifier = Feature{
 		Name:        "sql/modifier",
 		Stage:       Alpha,
 		Default:     false,
-		Description: "Allows users to attach custom modifiers to queries",
+		Description: "Deprecated: query modifiers (Modify) are always generated; this flag has no effect",
 	}
 
 	// FeatureExecQuery provides a feature-flag for exposing the ExecContext/QueryContext methods of the underlying SQL drivers.

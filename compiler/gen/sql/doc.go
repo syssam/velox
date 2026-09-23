@@ -76,7 +76,7 @@
 //   - FeatureSnapshot: Schema snapshot for migrations
 //   - FeatureSchemaConfig: Multi-schema support
 //   - FeatureLock: deprecated no-op; ForUpdate/ForShare are always generated
-//   - FeatureModifier: Query modifiers
+//   - FeatureModifier: deprecated no-op; Modify is always generated
 //   - FeatureExecQuery: Raw SQL execution
 //   - FeatureUpsert: ON CONFLICT support
 //   - FeatureVersionedMigration: Versioned migrations

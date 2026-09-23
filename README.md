@@ -95,7 +95,6 @@ Opt-in features live behind flags in `gen.Config.Features`. Stages follow Ent's 
 | `intercept` | Alpha | Generated `intercept/` helper package (`TraverseFunc`, typed per-entity helpers); interceptors themselves always work |
 | `namedges` | Alpha | Eager-load edges with dynamic names |
 | `sql/upsert` | Alpha | `ON CONFLICT` / `ON DUPLICATE KEY` for INSERT |
-| `sql/modifier` | Alpha | Custom query modifiers |
 | `sql/autodefault` | Alpha | Auto-emit DB `DEFAULT` for all NOT NULL fields |
 | `entql` | Experimental | Dynamic predicate builder — translates `querylanguage.P` expressions to SQL at runtime; use for API filter params or rules engines without rerunning codegen |
 | `bidiedges` | Experimental | Set back-references on eager-loaded edges (e.g. `post.Edges.Author` after `WithPosts`). Off by default, as in Ent; the back-references form cycles, so detach them before `json.Marshal` |
@@ -110,6 +109,7 @@ Always generated, no flag needed:
 
 - **Validators** — schema validators (`NotEmpty`, `MaxLen`, `Range`, …) and enum validation run on create and update. `FeatureValidator` (`validator`) is a deprecated no-op kept so existing configs still compile.
 - **Row-level locking** — `ForUpdate` / `ForShare` on every query builder. `FeatureLock` (`sql/lock`) is a deprecated no-op.
+- **Query modifiers** — `Modify` on every query builder. `FeatureModifier` (`sql/modifier`) is a deprecated no-op.
 
 ## Installation
 

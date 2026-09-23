@@ -765,7 +765,7 @@ Both Ent and Velox require hand-written resolvers for delete mutations. Delete o
 | `FeatureSnapshot` | Schema snapshots |
 | `FeatureSchemaConfig` | Multi-schema names |
 | `FeatureLock` | Deprecated no-op in velox — `ForUpdate`/`ForShare` are always generated |
-| `FeatureModifier` | Custom query modifiers |
+| `FeatureModifier` | Deprecated no-op in velox — `Modify` is always generated |
 | `FeatureExecQuery` | Raw SQL execution |
 | `FeatureUpsert` | ON CONFLICT support |
 | `FeatureVersionedMigration` | Versioned migration files |

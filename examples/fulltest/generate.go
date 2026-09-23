@@ -30,7 +30,6 @@ func main() {
 			gen.FeatureIntercept,
 			gen.FeatureNamedEdges,
 			gen.FeatureBidiEdgeRefs,
-			gen.FeatureModifier,
 			gen.FeatureUpsert,
 			gen.FeatureExecQuery,
 			gen.FeatureWhereInputAll,
