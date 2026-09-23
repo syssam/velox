@@ -503,6 +503,13 @@ users, _ := client.User.Query().
     All(ctx)
 ```
 
+In GraphQL, generated `Paginate` eager-loads the selected edges on its
+own, and list resolvers get the same by calling the generated
+`CollectFields`. If a nested edge still queries once per row, check the
+table in [DataLoader § Field Collection](dataloader.md#field-collection-automatic):
+connection arguments such as `where` or `orderBy` deliberately fall back
+to per-row pagination.
+
 ### Memory issues with large result sets
 
 **Solutions**:

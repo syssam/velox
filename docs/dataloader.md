@@ -25,6 +25,74 @@ A DataLoader batches these into a single query:
 → SELECT * FROM posts WHERE user_id IN (1, 2, 3, ...)  (1 query total)
 ```
 
+For edges velox generates, you usually do not need a DataLoader: GraphQL
+field collection (below) eager-loads them. Reach for a DataLoader for
+custom resolvers that fetch data velox does not model as an edge.
+
+---
+
+## Field Collection (automatic)
+
+Generated `Paginate` methods inspect the GraphQL selection before running
+the page query, like Ent's: they select only the columns the query reads
+and eager-load the edges it traverses, recursively. Nothing has to be
+registered — the generated code calls the collector (`gqlrelay.CollectFields`)
+directly.
+
+```
+Query: { users(first: 10) { edges { node { name todos(first: 2) { edges { node { title owner { name } } } } } } } }
+
+→ SELECT COUNT(id) FROM users
+→ SELECT id, name FROM users ORDER BY id LIMIT 11
+→ SELECT id, title, user_todos, ... FROM (… ROW_NUMBER() OVER (PARTITION BY user_todos ORDER BY id) …) WHERE row <= 3
+→ SELECT id, name FROM users WHERE id IN (…)            (4 queries for any number of users)
+```
+
+A resolver that returns entities directly (a list or a single node) calls
+the generated `CollectFields` itself. `Query()` returns the querier
+interface, so assert the concrete query type:
+
+```go
+func (r *queryResolver) Members(ctx context.Context) ([]*entity.Member, error) {
+	q, err := r.Client.Member.Query().(*query.MemberQuery).CollectFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return q.All(ctx)
+}
+```
+
+What the collector does, per selected field:
+
+| Selection | Effect |
+|---|---|
+| scalar field | its column is selected (the ID always is) |
+| custom resolver field annotated with `graphql.CollectedFor("name")` on the fields it reads | those columns are selected |
+| any other custom resolver field | no projection for that entity: `SELECT *`, since the resolver may read any column |
+| to-one edge, list edge | eager-loaded with one query for all parents, projected from the nested selection |
+| connection edge without `after`, `before`, `where` or `orderBy` | eager-loaded; with `first: n` and no `totalCount`, limited to n+1 rows **per parent** with a window function (SQLite 3.25+, PostgreSQL, MySQL 8); otherwise the whole edge |
+| connection edge with `after`, `before`, `where` or `orderBy` | not eager-loaded — the entity method runs its own `Paginate` per parent row, which is always correct |
+
+Connection edges are paged from the loaded slice by the generated entity
+method only when their target's ID orders in memory the way the database
+orders it (numeric and UUID IDs); edges to entities with string IDs are
+always paged by the database and are never eager-loaded.
+
+Eager-loaded edge queries carry the target entity's privacy policy and the
+client's interceptors, exactly as `entity.QueryXxx()` does.
+
+The same per-parent limit is available outside GraphQL through the by-name
+loader every generated query implements (`runtime.FieldCollectable`):
+
+```go
+q := client.User.Query()
+q.(runtime.FieldCollectable).WithEdgeLoad(user.EdgePosts,
+	runtime.Limit(2),                  // two posts per user, not two in total
+	runtime.Select(post.FieldTitle),   // projection; keys are always read
+)
+users, err := q.All(ctx)
+```
+
 ---
 
 ## Setup

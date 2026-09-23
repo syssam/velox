@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FeatureModifier` is a deprecated no-op; `Modify` is always generated
 - **BREAKING:** Schema- and mixin-level `Interceptors()` is a codegen error — it was assigned at init and never read. Register interceptors on the client instead
 - **BREAKING:** `graphql.MapsTo`, `graphql.Mapping` and `graphql.Unbind` are rejected at codegen time instead of being silently ignored
-- **BREAKING:** `runtime.CollectFields` takes the entity's `*CollectMeta`; regenerate after upgrading
+- **BREAKING:** GraphQL field collection runs in applications. Generated `Paginate` collects from the connection's `edges.node` selection (Ent parity) and generated `CollectFields` calls `gqlrelay.CollectFields` directly; the runtime registry (`runtime.SetFieldCollector`, `runtime.FieldCollector`, `runtime.CollectFields`) and `graphql.RegisterFieldCollector` are removed. Regenerate after upgrading. Custom resolver fields without `graphql.CollectedFor` keep `SELECT *`
+- **BREAKING:** `runtime.FieldCollectable.WithEdgeLoad` returns the edge query, and generated `WithEdgeLoad` honors its `LoadOption`s (they were discarded). `runtime.Limit` on a to-many edge limits rows **per parent** with a window function; `LoadConfig.Offset` is removed
 - Generated `XxxSelect` holds its query as a named field instead of embedding `*XxxQuery` (−39% functions in the query package at 328 entities); code calling a promoted query method on a concrete `*XxxSelect` must go through `s.XxxQuery`
 - `privacy.TenantQueryRule` is deprecated — it only checks presence and never filtered; use `TenantFilterRule`
 - Generated `ForUpdate`/`ForShare` decide whether to drop `DISTINCT` via `dialect.CapLockWithDistinct` instead of a dialect-name comparison
@@ -23,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go 1.25 is the documented and CI-tested minimum, matching `go.mod`
 
 ### Added
+- `sql.Selector.LimitPerPartition(partition, n)`: keeps n rows per partition with `ROW_NUMBER() OVER (PARTITION BY …)`, ranked by the selector's order; `runtime.NewLoadConfig`
+- `docs/dataloader.md` § Field Collection: what the collector projects and eager-loads, and when a connection falls back to per-row pagination
 - Dead-API guard (`deadapi_test.go`): fails when a `gen.Feature` is consulted by no generator, a `graphql.Annotation` field is read by nothing (an accessor counts only if it has a caller), a runtime registry is written but never read, or an exported `runtime` identifier is unreachable from generated code and every other package; see CONTRIBUTING.md § Dead-API Guard
 - `graphql.InterfaceField(name)`: GraphQL interface fields over edges, with the interface, Go markers and resolvers generated (ported from ent/contrib #638, without the view-backed global connection)
 - Package-level `sql.Union`, `UnionAll`, `Except`, `ExceptAll`, `Intersect`, `IntersectAll` with parenthesized branches; SQLite renders branches as derived tables so every dialect returns the same rows
@@ -52,7 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `field.Sensitive()` now hides the value from JSON, `String()` and the GraphQL output type (it stays settable through mutation inputs)
 - `Noder`/`Noders` no longer fail at random in schemas that mix ID types
 - `graphql.QueryField` honors its name, description and directives
-- `graphql.CollectedFor` now reaches the field collector instead of falling back to `SELECT *`
+- GraphQL field collection was inactive in applications: the collector was registered only in the codegen process and no generated resolver called it, so projection, `graphql.CollectedFor` and eager loading of nested edges never happened and nested edges resolved per row (N+1). A `users → todos → owner` query now costs 4 queries for any number of users (32 before at 6 users); nested `first: n` connections are limited per parent in one query
+- Eager-loaded edge queries (`WithXxx`, `WithNamedXxx`, `WithEdgeLoad`) and query-level `QueryXxx` traversals now carry the target entity's privacy policy; they ran without it, so an eager load returned rows the target's `Policy()` hid from `entity.QueryXxx()`
+- The generated GraphQL collection metadata listed an O2M edge's foreign key and an M2M edge's join-table columns as columns of the parent table
 - `graphql.Type()` renaming an entity no longer generates uncompilable Go
 - GraphQL SDL is always validated at codegen time; descriptions containing `"""` are escaped
 - Typed-JSON GraphQL scalars are generated only for named Go types; unnamed struct/array JSON fields fall back to the generic scalar instead of breaking generation
