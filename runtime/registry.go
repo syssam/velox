@@ -126,20 +126,22 @@ func ValidateRegistries() error {
 // Entity Policy Registry
 // =============================================================================
 
-// policyRegistry stores per-entity privacy policies keyed by entity type name.
-// Each entity sub-package's runtime.go init() registers its RuntimePolicy here
-// so cross-package edge queries (e.g. entity.User.QueryPosts()) can look up
-// the TARGET entity's policy without importing its sub-package.
+// policyRegistry stores, per entity type name, the address of the entity's
+// RuntimePolicy variable. Each entity's generated runtime init() registers
+// it so cross-package edge queries (e.g. entity.User.QueryPosts()) and
+// eager loads can look up the TARGET entity's policy without importing its
+// sub-package. The variable is read at lookup time, not copied at init: an
+// edge query sees the same policy the target's own client reads, including
+// after the variable is replaced.
 var (
 	policyMu       sync.RWMutex
-	policyRegistry = map[string]velox.Policy{}
+	policyRegistry = map[string]*velox.Policy{}
 )
 
-// RegisterEntityPolicy registers a privacy policy for an entity type.
-// Called from generated entity sub-package runtime.go init() functions.
-// Passing a nil policy is a no-op (entities without privacy policies
-// simply never call this).
-func RegisterEntityPolicy(name string, p velox.Policy) {
+// RegisterEntityPolicy registers the policy variable of an entity type.
+// Called from generated runtime init() functions with the address of the
+// entity's RuntimePolicy. A nil pointer is a no-op.
+func RegisterEntityPolicy(name string, p *velox.Policy) {
 	if p == nil {
 		return
 	}
@@ -149,14 +151,17 @@ func RegisterEntityPolicy(name string, p velox.Policy) {
 	slog.Debug("velox: registered entity policy", "entity", name)
 }
 
-// EntityPolicy returns the registered privacy policy for the named entity,
-// or nil if the entity has no policy (or its sub-package is not imported).
-// Used by cross-package edge query constructors to wire the target entity's
-// policy onto freshly-built queries.
+// EntityPolicy returns the current value of the named entity's registered
+// policy variable, or nil if the entity has no policy (or its sub-package
+// is not imported). Used by edge query constructors and eager loads to wire
+// the target entity's policy onto freshly-built queries.
 func EntityPolicy(name string) velox.Policy {
 	policyMu.RLock()
 	defer policyMu.RUnlock()
-	return policyRegistry[name]
+	if p := policyRegistry[name]; p != nil {
+		return *p
+	}
+	return nil
 }
 
 // =============================================================================

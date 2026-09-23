@@ -124,7 +124,7 @@ func QueryScan(context.Context, QueryReader, any) error
 func QuerySelect(context.Context, QueryReader, []AggregateFunc, any) error
 func RegisterColumns(string, func(string) bool)
 func RegisterEntity(EntityRegistration)
-func RegisterEntityPolicy(string, github.com/syssam/velox.Policy)
+func RegisterEntityPolicy(string, *github.com/syssam/velox.Policy)
 func RegisterMutator(string, MutatorFunc)
 func RegisterNodeResolver(string, NodeResolver)
 func RegisterQueryFactory(string, QueryFunc)

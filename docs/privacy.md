@@ -309,6 +309,27 @@ Rules return one of three decisions:
 
 If all rules return `Skip`, the operation is **allowed** (permissive default).
 
+## Policies on Edges and Eager Loads
+
+Reading through an edge evaluates the **target** entity's query policy, on
+every path: `post.QueryAuthor()`, `client.Post.Query().QueryAuthor()`,
+`WithAuthor()`, `WithNamedTags(...)`, a many-to-many `WithTags()`, edges
+nested under any of those, and the eager loads GraphQL field collection
+schedules. A `FilterFunc` rule on the target narrows the loaded rows.
+
+A `Deny` from the target's policy on an eager load fails the **whole parent
+query**: `client.Post.Query().WithAuthor().All(ctx)` returns the policy
+error, not posts with a nil author. This matches Ent. If a caller may read
+the parent but not the edge, do not eager-load the edge for that caller, or
+make the target's rule filter (`FilterFunc`) instead of deny.
+
+Every one of these paths reads the target's policy from the same variable
+its own client does — `<entity>.RuntimePolicy` in the generated entity
+package, set once at init — and reads it when the query runs. Replacing that
+variable (as some tests do to install a stricter policy) therefore reaches
+eager loads and edge queries too; it is a package global, so tests that
+replace it must not run in parallel with anything that reads it.
+
 ## HTTP Middleware Example
 
 ```go

@@ -271,7 +271,7 @@ func TestGenRuntimePolicies(t *testing.T) {
 		assert.Contains(t, code, "user.Policy = privacy.NewPolicies(schema.User{})\n")
 		// The client reads RuntimePolicy; edge queries look it up by name.
 		assert.Contains(t, code, "user.RuntimePolicy = user.Policy\n")
-		assert.Contains(t, code, `runtime.RegisterEntityPolicy("User", user.RuntimePolicy)`)
+		assert.Contains(t, code, `runtime.RegisterEntityPolicy("User", &user.RuntimePolicy)`)
 		assert.NotContains(t, code, "Hooks")
 	})
 
