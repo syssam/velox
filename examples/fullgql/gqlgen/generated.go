@@ -57,6 +57,7 @@ type ResolverRoot interface {
 	Mutation() MutationResolver
 	Product() ProductResolver
 	Query() QueryResolver
+	User() UserResolver
 	CreateProductInput() CreateProductInputResolver
 	UpdateProductInput() UpdateProductInputResolver
 }
@@ -265,6 +266,7 @@ type ComplexityRoot struct {
 		Name        func(childComplexity int) int
 		Relations   func(childComplexity int) int
 		Role        func(childComplexity int) int
+		Summary     func(childComplexity int) int
 		Todos       func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) int
 		UpdatedAt   func(childComplexity int) int
 	}
@@ -341,6 +343,9 @@ type QueryResolver interface {
 	Todos(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error)
 	Users(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.UserOrder, where *filter.UserWhereInput) (*entity.UserConnection, error)
 	Workspaces(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.WorkspaceOrder, where *filter.WorkspaceWhereInput) (*entity.WorkspaceConnection, error)
+}
+type UserResolver interface {
+	Summary(ctx context.Context, obj *entity.User) (string, error)
 }
 
 type CreateProductInputResolver interface {
@@ -1381,6 +1386,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.User.Role(childComplexity), true
+	case "User.summary":
+		if e.complexity.User.Summary == nil {
+			break
+		}
+
+		return e.complexity.User.Summary(childComplexity), true
 	case "User.todos":
 		if e.complexity.User.Todos == nil {
 			break
@@ -3481,6 +3492,17 @@ type Mutation {
   updateWorkspace(id: ID!, input: UpdateWorkspaceInput!): Workspace!
 }
 `, BuiltIn: false},
+	{Name: "../extensions.graphql", Input: `# Hand-written schema extensions, resolved by gqlgen/extensions.resolvers.go.
+
+extend type User {
+  """
+  A one-line profile summary built from name and bio. Its resolver reads
+  columns that are not selected by the field itself, so schema/user.go
+  declares them with graphql.CollectedFor("summary").
+  """
+  summary: String!
+}
+`, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -4712,6 +4734,8 @@ func (ec *executionContext) fieldContext_AuditLog_user(_ context.Context, field 
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -5419,6 +5443,8 @@ func (ec *executionContext) fieldContext_Comment_author(_ context.Context, field
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -6044,6 +6070,8 @@ func (ec *executionContext) fieldContext_Member_user(_ context.Context, field gr
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -6959,6 +6987,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -7030,6 +7060,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -9095,6 +9127,8 @@ func (ec *executionContext) fieldContext_Todo_owner(_ context.Context, field gra
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -10036,6 +10070,35 @@ func (ec *executionContext) fieldContext_User_relations(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _User_summary(ctx context.Context, field graphql.CollectedField, obj *entity.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_summary,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.User().Summary(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_summary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UserConnection_edges(ctx context.Context, field graphql.CollectedField, obj *entity.UserConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10191,6 +10254,8 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_auditLogs(ctx, field)
 			case "relations":
 				return ec.fieldContext_User_relations(ctx, field)
+			case "summary":
+				return ec.fieldContext_User_summary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -17634,6 +17699,42 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 					}
 				}()
 				res = ec._User_relations(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "summary":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_summary(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

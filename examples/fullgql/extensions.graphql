@@ -1,0 +1,10 @@
+# Hand-written schema extensions, resolved by gqlgen/extensions.resolvers.go.
+
+extend type User {
+  """
+  A one-line profile summary built from name and bio. Its resolver reads
+  columns that are not selected by the field itself, so schema/user.go
+  declares them with graphql.CollectedFor("summary").
+  """
+  summary: String!
+}

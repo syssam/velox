@@ -21,6 +21,7 @@ import (
 	workspaceclient "example.com/fullgql/velox/client/workspace"
 	"example.com/fullgql/velox/entity"
 	"example.com/fullgql/velox/filter"
+	"example.com/fullgql/velox/query"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 )
 
@@ -151,7 +152,13 @@ func (r *queryResolver) Labels(ctx context.Context, after *gqlrelay.Cursor, firs
 
 // Members is the resolver for the members field.
 func (r *queryResolver) Members(ctx context.Context) ([]*entity.Member, error) {
-	return r.Client.Member.Query().All(ctx)
+	// A list resolver collects explicitly (Paginate does it on its own):
+	// project the selected columns and eager-load the selected edges.
+	q, err := r.Client.Member.Query().(*query.MemberQuery).CollectFields(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return q.All(ctx)
 }
 
 // Products is the resolver for the products field.
@@ -198,6 +205,9 @@ func (r *Resolver) Product() ProductResolver { return &productResolver{r} }
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
+// User returns UserResolver implementation.
+func (r *Resolver) User() UserResolver { return &userResolver{r} }
+
 // CreateProductInput returns CreateProductInputResolver implementation.
 func (r *Resolver) CreateProductInput() CreateProductInputResolver {
 	return &createProductInputResolver{r}
@@ -211,5 +221,6 @@ func (r *Resolver) UpdateProductInput() UpdateProductInputResolver {
 type mutationResolver struct{ *Resolver }
 type productResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }
 type createProductInputResolver struct{ *Resolver }
 type updateProductInputResolver struct{ *Resolver }

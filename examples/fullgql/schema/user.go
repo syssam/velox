@@ -39,6 +39,10 @@ func (User) Fields() []velox.Field {
 				graphql.OrderField("NAME"),
 				graphql.CreateInputValidate("required,min=2,max=100"),
 				graphql.UpdateInputValidate("omitempty,min=2,max=100"),
+				// summary (extensions.graphql) is a custom resolver that
+				// reads name and bio: selecting it collects both columns
+				// instead of falling back to SELECT *.
+				graphql.CollectedFor("summary"),
 			),
 		field.String("email").
 			Unique().
@@ -63,6 +67,7 @@ func (User) Fields() []velox.Field {
 			MaxLen(500).
 			Annotations(
 				graphql.Skip(graphql.SkipWhereInput),
+				graphql.CollectedFor("summary"),
 			),
 		field.Enum("role").
 			Values("admin", "moderator", "user", "guest").

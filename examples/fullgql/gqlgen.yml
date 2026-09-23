@@ -3,6 +3,7 @@
 
 schema:
   - "./velox/schema.graphql"
+  - "./extensions.graphql"
 
 exec:
   filename: ./gqlgen/generated.go
