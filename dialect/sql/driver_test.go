@@ -20,7 +20,7 @@ func TestWithVars(t *testing.T) {
 	drv := OpenDB(dialect.Postgres, db)
 	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "bar").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
-	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, NULL, false\)`).WithArgs("foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	rows := &Rows{}
 	err = drv.Query(
 		WithVar(context.Background(), "foo", "bar"),
@@ -35,7 +35,7 @@ func TestWithVars(t *testing.T) {
 	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "bar").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "baz").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
-	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, NULL, false\)`).WithArgs("foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	err = drv.Query(
 		WithVar(WithVar(context.Background(), "foo", "bar"), "foo", "baz"),
 		"SELECT 1",
@@ -66,7 +66,7 @@ func TestWithVars(t *testing.T) {
 
 	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "qux").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO users DEFAULT VALUES").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, NULL, false\)`).WithArgs("foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	err = drv.Exec(
 		WithVar(context.Background(), "foo", "qux"),
 		"INSERT INTO users DEFAULT VALUES",
@@ -79,7 +79,7 @@ func TestWithVars(t *testing.T) {
 
 	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO users DEFAULT VALUES").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, NULL, false\)`).WithArgs("foo").WillReturnResult(sqlmock.NewResult(0, 0))
 	err = drv.Exec(
 		WithVar(context.Background(), "foo", "foo"),
 		"INSERT INTO users DEFAULT VALUES",
@@ -565,7 +565,7 @@ func TestWithVarsEscapedValue(t *testing.T) {
 	// Parameterized queries handle special characters safely
 	mock.ExpectExec(`SELECT set_config\(\$1, \$2, false\)`).WithArgs("foo", "it's escaped").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
-	mock.ExpectExec("RESET foo").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`SELECT set_config\(\$1, NULL, false\)`).WithArgs("foo").WillReturnResult(sqlmock.NewResult(0, 0))
 
 	rows := &Rows{}
 	err = drv.Query(
@@ -615,7 +615,7 @@ func TestWithVars_SpecialCharacters(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT 1").
 		WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
-	mock.ExpectExec(`RESET app\.data`).
+	mock.ExpectExec(`SELECT set_config\(\$1, NULL, false\)`).WithArgs("app.data").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	rows := &Rows{}

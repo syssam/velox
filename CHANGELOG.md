@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Merging schema-level `Hooks()` into a builder's hooks could overwrite a hook in the shared hook store, silently dropping it for every later mutation (4f42d8e)
 - `IDValidator` on a custom ID field is now called; it was generated and never run
 - `sql.WithVar` inside a transaction no longer leaks session variables to the pooled connection
+- `sql.WithVar` on Postgres no longer leaks a setting whose dotted name contains an SQL keyword (`app.user`) to the pooled connection: the reset is now `set_config(name, NULL, false)` with the name bound as a parameter, where `RESET app.user` failed to parse
 - `privacy.Not` no longer converts a fail-closed denial into `Allow`
 - Privacy trace recording is safe for concurrent use
 - `errors.Is(err, velox.ErrTxStarted)` now matches the error a generated client returns from a nested `Tx`/`BeginTx`; the generated `ErrTxStarted` aliases `velox.ErrTxStarted`

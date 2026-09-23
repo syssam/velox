@@ -219,6 +219,12 @@ func (c Conn) Query(ctx context.Context, query string, args, v any) error {
 	return nil
 }
 
+// resetStmt is a statement that resets one session variable.
+type resetStmt struct {
+	query string
+	args  []any
+}
+
 // maySetVars sets the session variables before executing a query.
 //
 // Outside a transaction the variables are set on a dedicated connection and
@@ -244,7 +250,7 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 		ex    ExecQuerier  // Underlying ExecQuerier.
 		cf    func() error // Close function.
 		inTx  bool         // Variables are set on a transaction's connection.
-		reset []string     // Reset variables.
+		reset []resetStmt  // Reset variables.
 		seen  = make(map[string]struct{}, len(sv.vars))
 	)
 	switch e := c.ExecQuerier.(type) {
@@ -262,7 +268,7 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 	// resetAndClose resets any already-set session variables and closes the
 	// connection (cls is nil inside a transaction). Used both on error mid-loop
 	// and as the cleanup function on success.
-	resetAndClose := func(reset []string, cls func() error) error {
+	resetAndClose := func(reset []resetStmt, cls func() error) error {
 		if len(reset) == 0 {
 			if cls != nil {
 				return cls()
@@ -272,8 +278,8 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var resetErr error
-		for _, q := range reset {
-			if _, err := ex.ExecContext(cleanupCtx, q); err != nil {
+		for _, r := range reset {
+			if _, err := ex.ExecContext(cleanupCtx, r.query, r.args...); err != nil {
 				resetErr = errors.Join(resetErr, err)
 			}
 		}
@@ -291,12 +297,17 @@ func (c Conn) maySetVars(ctx context.Context) (ExecQuerier, func() error, error)
 		if _, ok := seen[s.k]; !ok {
 			switch c.dialect {
 			case dialect.Postgres:
-				// A transaction-local set_config has nothing to reset.
+				// A transaction-local set_config has nothing to reset. A NULL
+				// value makes set_config reset the setting, like RESET, but
+				// the name travels as a parameter: RESET <name> is SQL text,
+				// and a name with a keyword component (app.user) that
+				// set_config accepted would fail to parse, leaving the value
+				// on the pooled connection.
 				if !inTx {
-					reset = append(reset, fmt.Sprintf("RESET %s", s.k))
+					reset = append(reset, resetStmt{"SELECT set_config($1, NULL, false)", []any{s.k}})
 				}
 			case dialect.MySQL:
-				reset = append(reset, fmt.Sprintf("SET @%s = NULL", s.k))
+				reset = append(reset, resetStmt{fmt.Sprintf("SET @%s = NULL", s.k), nil})
 			}
 			seen[s.k] = struct{}{}
 		}

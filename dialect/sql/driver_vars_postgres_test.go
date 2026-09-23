@@ -29,15 +29,19 @@ func TestWithVars_RealPostgres(t *testing.T) {
 	drv := OpenDB(dialect.Postgres, db)
 	ctx := context.Background()
 
-	current := func(t *testing.T, ctx context.Context, q dialect.ExecQuerier) string {
+	currentOf := func(t *testing.T, ctx context.Context, q dialect.ExecQuerier, name string) string {
 		t.Helper()
 		rows := &Rows{}
-		require.NoError(t, q.Query(ctx, "SELECT COALESCE(current_setting('velox.tenant', true), '')", []any{}, rows))
+		require.NoError(t, q.Query(ctx, "SELECT COALESCE(current_setting($1, true), '')", []any{name}, rows))
 		require.True(t, rows.Next())
 		var v string
 		require.NoError(t, rows.Scan(&v))
 		require.NoError(t, rows.Close())
 		return v
+	}
+	current := func(t *testing.T, ctx context.Context, q dialect.ExecQuerier) string {
+		t.Helper()
+		return currentOf(t, ctx, q, "velox.tenant")
 	}
 
 	t.Run("Session", func(t *testing.T) {
@@ -52,5 +56,33 @@ func TestWithVars_RealPostgres(t *testing.T) {
 		require.NoError(t, tx.Exec(WithVar(ctx, "velox.tenant", "t-2"), "SELECT 1", []any{}, nil))
 		require.NoError(t, tx.Commit())
 		require.Empty(t, current(t, ctx, drv), "a variable set inside a transaction must not survive COMMIT")
+	})
+
+	t.Run("TxRollback", func(t *testing.T) {
+		tx, err := drv.Tx(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "t-3", current(t, WithVar(ctx, "velox.tenant", "t-3"), tx))
+		require.Equal(t, "t-3", current(t, ctx, tx), "set_config(..., true) lasts until the end of the transaction")
+		require.NoError(t, tx.Rollback())
+		require.Empty(t, current(t, ctx, drv), "a variable set inside a transaction must not survive ROLLBACK")
+	})
+
+	// Custom settings must be dotted (e.g. app.tenant_id), and set_config
+	// accepts any component, including SQL keywords. A reset spelled as SQL
+	// text (RESET app.user) is a syntax error for those, which would leave
+	// the value on the pooled connection for its next borrower.
+	t.Run("KeywordComponent", func(t *testing.T) {
+		for _, name := range []string{"app.user", "user.tenant_id", "select.from", "app.tenant.id"} {
+			require.Equal(t, "v-1", currentOf(t, WithVar(ctx, name, "v-1"), drv, name), "name=%q", name)
+			require.Empty(t, currentOf(t, ctx, drv, name), "name=%q must be reset before the connection returns to the pool", name)
+		}
+	})
+
+	t.Run("InvalidIdentifier", func(t *testing.T) {
+		rows := &Rows{}
+		err := drv.Query(WithVar(ctx, "velox.tenant'; DROP TABLE x; --", "v"), "SELECT 1", []any{}, rows)
+		require.ErrorContains(t, err, "invalid session variable name")
+		require.Equal(t, "t-5", current(t, WithVar(ctx, "velox.tenant", "t-5"), drv))
+		require.Empty(t, current(t, ctx, drv))
 	})
 }
