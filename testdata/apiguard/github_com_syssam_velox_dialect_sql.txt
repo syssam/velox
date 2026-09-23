@@ -160,6 +160,7 @@
   method Driver.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
   method Driver.Query(context.Context, string, any, any) error
   method Driver.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method Driver.ServerCapabilities(context.Context) (github.com/syssam/velox/dialect.Capabilities, error)
   method Driver.Tx(context.Context) (github.com/syssam/velox/dialect.Tx, error)
   method EnumField.EQ(T) P
   method EnumField.In(...T) P
@@ -284,6 +285,7 @@
   method LogDriver.ExecContext(context.Context, string, ...any) (database/sql.Result, error)
   method LogDriver.Query(context.Context, string, any, any) error
   method LogDriver.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
+  method LogDriver.ServerCapabilities(context.Context) (github.com/syssam/velox/dialect.Capabilities, error)
   method LogDriver.Tx(context.Context) (github.com/syssam/velox/dialect.Tx, error)
   method LogTx.Commit() error
   method LogTx.Exec(context.Context, string, any, any) error
@@ -507,6 +509,7 @@
   method StatsDriver.Query(context.Context, string, any, any) error
   method StatsDriver.QueryContext(context.Context, string, ...any) (*database/sql.Rows, error)
   method StatsDriver.QueryStats() *QueryStats
+  method StatsDriver.ServerCapabilities(context.Context) (github.com/syssam/velox/dialect.Capabilities, error)
   method StatsDriver.SetSlowThreshold(time.Duration)
   method StatsDriver.SlowThreshold() time.Duration
   method StatsDriver.Tx(context.Context) (github.com/syssam/velox/dialect.Tx, error)

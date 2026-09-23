@@ -70,7 +70,7 @@ What the collector does, per selected field:
 | custom resolver field annotated with `graphql.CollectedFor("name")` on the fields it reads | those columns are selected |
 | any other custom resolver field | no projection for that entity: `SELECT *`, since the resolver may read any column |
 | to-one edge, list edge | eager-loaded with one query for all parents, projected from the nested selection |
-| connection edge without `after`, `before`, `where` or `orderBy` | eager-loaded; with `first: n` and no `totalCount`, limited to n+1 rows **per parent** with a window function (SQLite 3.25+, PostgreSQL, MySQL 8); otherwise the whole edge |
+| connection edge without `after`, `before`, `where` or `orderBy` | eager-loaded; with `first: n` and no `totalCount`, limited to n+1 rows **per parent** — with a window function where the server has them (SQLite 3.25+, PostgreSQL, MySQL 8.0+, MariaDB 10.2+), otherwise by reading the edge and keeping each parent's first n+1 rows in memory; without `first`, or with `totalCount`, the whole edge |
 | connection edge with `after`, `before`, `where` or `orderBy` | not eager-loaded — the entity method runs its own `Paginate` per parent row, which is always correct |
 | interface field (`graphql.InterfaceField`) | every backing edge is eager-loaded whole (no per-parent limit) — unless the selection is covered by `__typename`/`id` and every edge owns its key, then only the keys are selected |
 

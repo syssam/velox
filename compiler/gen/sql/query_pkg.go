@@ -846,18 +846,21 @@ func genTypedO2MLoader(
 		}
 	}
 	// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks each
-	// parent's rows and keeps the first n of every one of them, in one query.
+	// parent's rows and keeps the first n of every one of them, in one query
+	// — or, on a server without window functions, in the assignment loop.
 	if !edge.Unique {
-		var rank []jen.Code
-		if tb := partitionTiebreak(h, edge, "s"); tb != nil {
-			rank = append(rank, tb)
-		}
-		rank = append(rank, jen.Id("s").Dot("LimitPerPartition").Call(jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)), jen.Op("*").Id("n")))
-		body.If(jen.Id("n").Op(":=").Id("query").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
-			jen.Id("query").Dot("modifiers").Op("=").Append(jen.Id("query").Dot("modifiers"),
-				jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(rank...),
-			),
-		)
+		genPartitionLimit(body, h, edge, partitionLimit{
+			query:     "query",
+			keyType:   idType,
+			onErr:     jen.Return(jen.Err()),
+			sel:       "s",
+			partition: jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)),
+			wrap: func(stmts []jen.Code) []jen.Code {
+				return []jen.Code{jen.Id("query").Dot("modifiers").Op("=").Append(jen.Id("query").Dot("modifiers"),
+					jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(stmts...),
+				)}
+			},
+		})
 	}
 
 	// Execute sub-query: query.All(ctx) — interceptors apply!
@@ -912,10 +915,85 @@ func genTypedO2MLoader(
 				jen.Lit("velox: unexpected foreign-key %q returned %v for node %v"), jen.Lit(edge.Rel.Column()), jen.Id("parentID"), jen.Id("n").Dot("ID"),
 			)),
 		)
+		if !edge.Unique {
+			genPartitionTrim(forBody, "parentID")
+		}
 		forBody.Id("assign").Call(jen.Id("node"), jen.Id("n"))
 	})
 
 	body.Return(jen.Nil())
+}
+
+// partitionLimit describes where a to-many loader applies its per-parent
+// limit: the target query variable, the parent key type, the statement run
+// when probing the server fails, the selector variable name inside the
+// statements wrap produces, and the partition column.
+type partitionLimit struct {
+	query     string
+	keyType   jen.Code
+	onErr     jen.Code
+	sel       string
+	partition jen.Code
+	wrap      func(stmts []jen.Code) []jen.Code
+}
+
+// genPartitionLimit emits the per-parent limit of a to-many loader:
+//
+//	var perParent *int
+//	var kept map[K]int
+//	if n := query.ctx.PartitionLimit; n != nil {
+//		caps, err := dialect.DriverCapabilities(ctx, query.config.Driver)
+//		...
+//		if caps.Has(dialect.CapWindowFunctions) {
+//			<order by id; LimitPerPartition(partition, *n)>
+//		} else {
+//			<order by id>
+//			perParent = n
+//			kept = make(map[K]int)
+//		}
+//	}
+//
+// Without window functions (MySQL < 8.0, MariaDB < 10.2) the query reads
+// every row in the edge's order plus the ID tiebreak — the same order the
+// window ranks by — and genPartitionTrim keeps each parent's first n, so the
+// loaded edges match the window path's row for row.
+func genPartitionLimit(g *jen.Group, h gen.GeneratorHelper, edge *gen.Edge, pl partitionLimit) {
+	var order []jen.Code
+	if tb := partitionTiebreak(h, edge, pl.sel); tb != nil {
+		order = append(order, tb)
+	}
+	window := append(append([]jen.Code{}, order...),
+		jen.Id(pl.sel).Dot("LimitPerPartition").Call(pl.partition, jen.Op("*").Id("n")))
+	fallback := []jen.Code{
+		jen.Comment("No window functions on this server: read every row in the"),
+		jen.Comment("ranking order and keep each parent's first n while assigning."),
+	}
+	if len(order) > 0 {
+		fallback = append(fallback, pl.wrap(order)...)
+	}
+	fallback = append(fallback,
+		jen.Id("perParent").Op("=").Id("n"),
+		jen.Id("kept").Op("=").Make(jen.Map(pl.keyType).Int()),
+	)
+	g.Var().Id("perParent").Op("*").Int()
+	g.Var().Id("kept").Map(pl.keyType).Int()
+	g.If(jen.Id("n").Op(":=").Id(pl.query).Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
+		jen.List(jen.Id("caps"), jen.Err()).Op(":=").Qual(dialectPkg(), "DriverCapabilities").Call(jen.Id("ctx"), jen.Id(pl.query).Dot("config").Dot("Driver")),
+		jen.If(jen.Err().Op("!=").Nil()).Block(pl.onErr),
+		jen.If(jen.Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), "CapWindowFunctions"))).Block(
+			pl.wrap(window)...,
+		).Else().Block(fallback...),
+	)
+}
+
+// genPartitionTrim emits the in-memory half of genPartitionLimit's
+// fallback, inside the loop that assigns rows to parents: a row beyond its
+// parent's first perParent is skipped.
+func genPartitionTrim(g *jen.Group, key string) {
+	g.If(jen.Id("perParent").Op("!=").Nil()).Block(
+		jen.If(jen.Id("kept").Index(jen.Id(key)).Op(">=").Op("*").Id("perParent")).Block(jen.Continue()),
+		jen.Id("kept").Index(jen.Id(key)).Op("++"),
+	)
 }
 
 // genTypedM2OLoader generates typed M2O edge loading with init/assign callbacks (Ent-style).
@@ -1119,13 +1197,16 @@ func genM2MLoaderFallback(
 
 			// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks
 			// the rows of every parent by its join-table key and keeps the
-			// first n of each, in this one query.
-			var rank []jen.Code
-			if tb := partitionTiebreak(h, edge, "selector"); tb != nil {
-				rank = append(rank, tb)
-			}
-			rank = append(rank, jen.Id("selector").Dot("LimitPerPartition").Call(jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)), jen.Op("*").Id("n")))
-			fnBody.If(jen.Id("n").Op(":=").Id("tq").Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(rank...)
+			// first n of each, in this one query — or, on a server without
+			// window functions, in the scan loop below.
+			genPartitionLimit(fnBody, h, edge, partitionLimit{
+				query:     "tq",
+				keyType:   idType,
+				onErr:     jen.Return(jen.Nil(), jen.Err()),
+				sel:       "selector",
+				partition: jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)),
+				wrap:      func(stmts []jen.Code) []jen.Code { return stmts },
+			})
 
 			// rows := &sql.Rows{}
 			// queryStr, args := selector.Query()
@@ -1194,6 +1275,7 @@ func genM2MLoaderFallback(
 				// outValue := int(pivotScan.Int64)
 				pivotExtract := t.ID.ScanTypeField("pivotScan")
 				scanBody.Id("outValue").Op(":=").Id(pivotExtract)
+				genPartitionTrim(scanBody, "outValue")
 
 				// Deduplicate: group by target node ID, map parents.
 				scanBody.If(jen.Id("nids").Index(jen.Id("node").Dot("ID")).Op("==").Nil()).BlockFunc(func(ifBody *jen.Group) {

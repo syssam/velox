@@ -145,7 +145,7 @@ func TestMySQLHelper_Smoke(t *testing.T) {
 // MySQL only learned that spelling in 8.0.1; 5.x expresses the same shared
 // row lock as `LOCK IN SHARE MODE` and answers `FOR SHARE` with a 1064 syntax
 // error. velox — like ent — renders the clause from the dialect name alone
-// (dialect.Capabilities is not version-aware), so a 5.x caller opts into the
+// (the static dialect.GetCapabilities set, not the probed server version), so a 5.x caller opts into the
 // old spelling explicitly:
 //
 //	q.ForShare(sql.WithLockClause("LOCK IN SHARE MODE"))
@@ -160,6 +160,35 @@ func supportsForShare(t *testing.T, client *integration.Client) bool {
 	if client.RuntimeConfig().Driver.Dialect() != dialect.MySQL {
 		return true
 	}
+	version := mysqlServerVersion(t, client)
+	// MariaDB reports e.g. "10.11.6-MariaDB" and has no FOR SHARE at all.
+	if strings.Contains(strings.ToLower(version), "mariadb") {
+		return false
+	}
+	return compareMySQLVersion(version, "8.0.1") >= 0
+}
+
+// supportsWindowFunctions reports whether the server behind client has
+// window functions (ROW_NUMBER() OVER), which per-parent eager-load limits
+// render when they can: MySQL 8.0+, MariaDB 10.2+, every Postgres and the
+// bundled SQLite. It is derived from the version here, independently of
+// dialect.VersionCapabilities, so a wrong rule there shows up as a test
+// failure instead of agreeing with itself.
+func supportsWindowFunctions(t *testing.T, client *integration.Client) bool {
+	t.Helper()
+	if client.RuntimeConfig().Driver.Dialect() != dialect.MySQL {
+		return true
+	}
+	version := mysqlServerVersion(t, client)
+	if strings.Contains(strings.ToLower(version), "mariadb") {
+		return compareMySQLVersion(strings.TrimPrefix(version, "5.5.5-"), "10.2.0") >= 0
+	}
+	return compareMySQLVersion(version, "8.0.0") >= 0
+}
+
+// mysqlServerVersion returns SELECT VERSION() of the server behind client.
+func mysqlServerVersion(t *testing.T, client *integration.Client) string {
+	t.Helper()
 	var version string
 	rows, err := client.QueryContext(context.Background(), "SELECT VERSION()")
 	if err != nil {
@@ -172,11 +201,7 @@ func supportsForShare(t *testing.T, client *integration.Client) bool {
 	if err := rows.Scan(&version); err != nil {
 		t.Fatalf("mysql version scan: %v", err)
 	}
-	// MariaDB reports e.g. "10.11.6-MariaDB" and has no FOR SHARE at all.
-	if strings.Contains(strings.ToLower(version), "mariadb") {
-		return false
-	}
-	return compareMySQLVersion(version, "8.0.1") >= 0
+	return version
 }
 
 // compareMySQLVersion compares two dotted version strings numerically,

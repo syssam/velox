@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/syssam/velox/dialect"
@@ -44,11 +45,68 @@ func escapeStringValue(s, dialectName string) string {
 type Driver struct {
 	Conn
 	dialect string
+	server  *serverCaps
+}
+
+// serverCaps caches the capabilities of the server behind a Driver. It is
+// a pointer so copies of the Driver (and wrappers embedding it) share one
+// probe.
+type serverCaps struct {
+	mu   sync.Mutex
+	done bool
+	caps dialect.Capabilities
 }
 
 // NewDriver creates a new Driver with the given Conn and dialect.
 func NewDriver(d string, c Conn) *Driver {
-	return &Driver{dialect: d, Conn: c}
+	return &Driver{dialect: d, Conn: c, server: &serverCaps{}}
+}
+
+// ServerCapabilities implements dialect.CapabilityProber. For MySQL, whose
+// capabilities depend on the server version (window functions arrived in
+// 8.0, MariaDB 10.2), the first call runs SELECT VERSION() and the answer
+// is cached for the life of the Driver; a failed probe is returned and
+// retried on the next call. Other dialects return their static set without
+// a round trip.
+func (d *Driver) ServerCapabilities(ctx context.Context) (dialect.Capabilities, error) {
+	name := d.Dialect()
+	if name != dialect.MySQL {
+		return dialect.GetCapabilities(name), nil
+	}
+	if d.server == nil {
+		return d.probeCapabilities(ctx, name)
+	}
+	d.server.mu.Lock()
+	defer d.server.mu.Unlock()
+	if d.server.done {
+		return d.server.caps, nil
+	}
+	caps, err := d.probeCapabilities(ctx, name)
+	if err != nil {
+		return caps, err
+	}
+	d.server.caps, d.server.done = caps, true
+	return caps, nil
+}
+
+// probeCapabilities asks the server for its version.
+func (d *Driver) probeCapabilities(ctx context.Context, name string) (dialect.Capabilities, error) {
+	rows := &Rows{}
+	if err := d.Query(ctx, "SELECT VERSION()", []any{}, rows); err != nil {
+		return dialect.Capabilities{}, fmt.Errorf("dialect/sql: query server version: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var version string
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return dialect.Capabilities{}, fmt.Errorf("dialect/sql: query server version: %w", err)
+		}
+		return dialect.Capabilities{}, errors.New("dialect/sql: query server version: no rows")
+	}
+	if err := rows.Scan(&version); err != nil {
+		return dialect.Capabilities{}, fmt.Errorf("dialect/sql: scan server version: %w", err)
+	}
+	return dialect.VersionCapabilities(name, version), nil
 }
 
 // Open wraps the database/sql.Open method and returns a dialect.Driver that implements the an ent/dialect.Driver interface.

@@ -1793,3 +1793,38 @@ func TestEdgeLoadersNarrowACopy(t *testing.T) {
 		t.Errorf("sqlAll does not run eagerLoad\n%s", body)
 	}
 }
+
+// TestPartitionLimitChecksWindowFunctions pins that a to-many loader asks
+// the server whether it has window functions before rendering
+// LimitPerPartition, and otherwise trims every parent's rows to the limit
+// in memory. MySQL 5.7 answers ROW_NUMBER() OVER with a syntax error, so a
+// loader that renders it unconditionally fails every per-parent-limited
+// eager load there (behaviorally pinned by TestMultiDialect_EdgeLoad* on a
+// 5.7 server and TestMultiDialect_EdgeLoadWindowOrFallback).
+func TestPartitionLimitChecksWindowFunctions(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	tagType := createTestType("Tag")
+	userType.Edges = []*gen.Edge{
+		createO2MEdge("posts", postType, "posts", "user_id"),
+		createM2MEdge("tags", tagType, "user_tags", []string{"user_id", "tag_id"}),
+	}
+	h.graph.Nodes = []*gen.Type{userType, postType, tagType}
+	src := genQueryPkg(h, userType, h.graph.Nodes, h.LeafPkgPath(userType)).GoString()
+	for _, loader := range []string{"loadPosts", "loadTags"} {
+		body := funcBody(t, src, ") "+loader+"(")
+		probe := strings.Index(body, "dialect.DriverCapabilities(ctx, ")
+		window := strings.Index(body, "caps.Has(dialect.CapWindowFunctions)")
+		partition := strings.Index(body, ".LimitPerPartition(")
+		if probe < 0 || window < 0 || partition < 0 || probe > window || window > partition {
+			t.Errorf("%s must check CapWindowFunctions on the driver before LimitPerPartition\n%s", loader, body)
+		}
+		if !strings.Contains(body, "perParent = n") {
+			t.Errorf("%s must keep the limit for the in-memory trim when the server has no window functions\n%s", loader, body)
+		}
+		if !strings.Contains(body, "kept[") || !strings.Contains(body, ">= *perParent") {
+			t.Errorf("%s must trim each parent's rows to the limit in memory\n%s", loader, body)
+		}
+	}
+}

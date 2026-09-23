@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go 1.25 is the documented and CI-tested minimum, matching `go.mod`
 
 ### Added
+- Version-aware dialect capabilities: `dialect.CapWindowFunctions` (static on PostgreSQL and SQLite, granted on MySQL 8.0+ / MariaDB 10.2+ only), `dialect.VersionCapabilities(dialect, version)`, the `dialect.CapabilityProber` interface and `dialect.DriverCapabilities(ctx, drv)`, which looks through `DebugDriver` and transactional drivers. `sql.Driver.ServerCapabilities` runs `SELECT VERSION()` once per MySQL driver and caches the answer; other dialects never query
 - `sql.Selector.LimitPerPartition(partition, n)`: keeps n rows per partition with `ROW_NUMBER() OVER (PARTITION BY …)`, ranked by the selector's order; `runtime.NewLoadConfig`
 - `docs/dataloader.md` § Field Collection: what the collector projects and eager-loads, and when a connection falls back to per-row pagination
 - Dead-API guard (`deadapi_test.go`): fails when a `gen.Feature` is consulted by no generator, a `graphql.Annotation` field is read by nothing (an accessor counts only if it has a caller), a runtime registry is written but never read, or an exported `runtime` identifier is unreachable from generated code and every other package; see CONTRIBUTING.md § Dead-API Guard
@@ -37,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Public-API guard (`apiguard_test.go`) that fails the build on any change to the exported surface of the 8 consumer-facing packages
 
 ### Fixed
+- Per-parent eager-load limits (`runtime.Limit` through `WithEdgeLoad`, and the GraphQL collector's limit for nested `first:` connections) work on MySQL 5.7 and MariaDB < 10.2. They rendered `ROW_NUMBER() OVER`, which those servers reject with `Error 1064`; the loader now asks the driver (`dialect.DriverCapabilities`) and, without window functions, reads the edge in its ranking order and keeps each parent's first n rows in memory — the same rows as the window path
 - GraphQL field collection: an interface field (`graphql.InterfaceField`) and a direct selection of the same edge share one eager-loaded query, and its projection now covers both. It was narrowed to the direct selection, so the interface resolver returned the other fields as zero values (`principal { ... on Workspace { description } }` next to `workspace { name }` gave `null`); such an edge is also no longer limited per parent
 - Re-running a query (or a clone of it) with eager-loaded edges loads the same edges: loaders narrowed the stored child query in place, stacking a second `IN` over parent keys (dropping parents that appeared between runs) and a second per-parent limit
 - Edges eager-loaded under a many-to-many edge (`WithTags(func(q){ q.WithPosts() })`, `WithEdgeLoad("tags", runtime.WithEdge("posts"))`) are loaded; the M2M loader never ran the target query's loaders
