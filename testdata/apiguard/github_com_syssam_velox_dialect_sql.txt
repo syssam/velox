@@ -458,6 +458,7 @@
   method Selector.LeftJoin(TableView) *Selector
   method Selector.Len() int
   method Selector.Limit(int) *Selector
+  method Selector.LimitPerPartition(string, int) *Selector
   method Selector.New() *Selector
   method Selector.Not() *Selector
   method Selector.Offset(int) *Selector

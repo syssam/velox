@@ -2998,6 +2998,49 @@ func (w *WindowBuilder) Query() (string, []any) {
 	return w.String(), w.args
 }
 
+// partitionRowNumber is the column LimitPerPartition ranks rows under. It
+// never reaches the caller: the outer SELECT lists only the original columns.
+const partitionRowNumber = "velox_partition_row"
+
+// LimitPerPartition keeps at most n rows of every partition, where rows are
+// partitioned by the given column reference (which must be valid in the
+// selector's own scope, e.g. s.C("owner_id") or a joined table's column).
+// Rows are ranked by the selector's ORDER BY, so call it after the order is
+// set, and make that order total (end it with the primary key) or the rows
+// kept for a partition are not deterministic. It rewrites the selector into
+//
+//	SELECT <columns> FROM (
+//	  SELECT <columns>, (ROW_NUMBER() OVER (PARTITION BY <partition> ORDER BY <order>)) AS velox_partition_row
+//	  FROM ... WHERE ...
+//	) AS <table> WHERE velox_partition_row <= n ORDER BY velox_partition_row
+//
+// so each partition keeps its ranking order in the result. Only plain
+// selected columns survive the rewrite. It is how an eager-loaded to-many
+// edge is limited per parent instead of across all of them, and needs window
+// functions (SQLite 3.25+, PostgreSQL, MySQL 8).
+func (s *Selector) LimitPerPartition(partition string, n int) *Selector {
+	inner := s.Clone()
+	order := inner.order
+	inner.order = nil
+	inner.SetDistinct(false)
+	w := RowNumber().PartitionBy(partition)
+	w.order = order
+	columns := inner.UnqualifiedColumns()
+	inner.AppendSelectExprAs(w, partitionRowNumber)
+	alias := s.as
+	if alias == "" {
+		alias = s.TableName()
+	}
+	outer := Dialect(s.Dialect()).Select(columns...).
+		From(inner.As(alias)).
+		Where(LTE(partitionRowNumber, n)).
+		OrderBy(partitionRowNumber)
+	outer.ctx = s.ctx
+	outer.as = s.as
+	*s = *outer
+	return s
+}
+
 // Wrapper wraps a given Querier with different format.
 // Used to prefix/suffix other queries.
 type Wrapper struct {
