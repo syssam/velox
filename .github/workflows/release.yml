@@ -20,10 +20,10 @@ jobs:
     permissions:
       contents: write  # goreleaser creates the GitHub Release.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache: true
