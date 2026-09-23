@@ -819,7 +819,8 @@ func genTypedO2MLoader(
 		)
 	})
 
-	// Use query parameter directly — no clone, no reading from _q.withXxx.
+	// query is the caller's copy (the loader cloned the stored withXxx query
+	// first), so narrowing it here never leaks into a later run or clone.
 	if len(edge.Type.ForeignKeys) > 0 {
 		body.Id("query").Dot("withFKs").Op("=").True()
 	}
@@ -997,7 +998,8 @@ func genPartitionTrim(g *jen.Group, key string) {
 }
 
 // genTypedM2OLoader generates typed M2O edge loading with init/assign callbacks (Ent-style).
-// Uses `query` parameter directly (no clone), calls `query.All(ctx)` so interceptors apply.
+// Narrows `query` — the copy the loader cloned from the stored withXxx query —
+// and calls `query.All(ctx)` so interceptors apply.
 func genTypedM2OLoader(
 	body *jen.Group,
 	h gen.GeneratorHelper,
@@ -1050,7 +1052,7 @@ func genTypedM2OLoader(
 		jen.Return(jen.Nil()),
 	)
 
-	// Use query parameter directly, add WHERE target.id IN (fks...).
+	// Narrow the cloned query to the referenced targets: WHERE target.id IN (fks...).
 	body.Id("query").Dot("Where").Call(
 		jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
 			jen.Id("s").Dot("Where").Call(

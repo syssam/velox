@@ -3019,12 +3019,22 @@ const partitionRowNumber = "velox_partition_row"
 //	) AS <table> WHERE velox_partition_row <= n ORDER BY velox_partition_row
 //
 // so each partition keeps its ranking order in the result. Only plain
-// selected columns survive the rewrite. A LIMIT or OFFSET already set on the
-// selector moves to the outer query, where it caps the rows kept across all
-// partitions; left on the inner query it would cut rows before they are
-// ranked, starving later partitions. It is how an eager-loaded to-many edge
-// is limited per parent instead of across all of them, and needs window
-// functions (SQLite 3.25+, PostgreSQL, MySQL 8).
+// selected columns survive the rewrite. DISTINCT is dropped from the inner
+// query (inner.SetDistinct(false)): the row number makes every inner row
+// unique, so DISTINCT there would dedupe nothing, and a duplicate that
+// DISTINCT was meant to remove would already have taken a rank. A LIMIT or
+// OFFSET already set on the selector moves to the outer query, where it caps
+// the rows kept across all partitions; left on the inner query it would cut
+// rows before they are ranked, starving later partitions. It is how an
+// eager-loaded to-many edge is limited per parent instead of across all of
+// them.
+//
+// It needs window functions: SQLite 3.25+, PostgreSQL, MySQL 8.0+ and
+// MariaDB 10.2+; MySQL 5.7 rejects the query with a syntax error. Check
+// dialect.CapWindowFunctions on dialect.DriverCapabilities before calling
+// it. The generated eager loaders do, and without window functions they run
+// the selector unwrapped, in the same order, and keep each parent's first n
+// rows in memory.
 func (s *Selector) LimitPerPartition(partition string, n int) *Selector {
 	inner := s.Clone()
 	order := inner.order
