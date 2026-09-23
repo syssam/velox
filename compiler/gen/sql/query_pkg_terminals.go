@@ -15,6 +15,8 @@ func (qg *queryGen) genSQLAll() {
 	// Terminal methods
 	// =========================================================================
 
+	qg.genScanSelector()
+
 	// sqlAll — actual scan + edge loading logic, extracted for interceptor support.
 	qg.f.Commentf("sqlAll executes the SQL query and returns scanned %s entities.", qg.t.Name)
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("sqlAll").Params(
@@ -27,11 +29,10 @@ func (qg *queryGen) genSQLAll() {
 				jen.Id(qg.recv).Dot("schemaConfig"),
 			)
 		}
-		genEdgeFieldKeys(allBody, qg.h, qg.t, qg.recv)
 		allBody.List(jen.Id("nodes"), jen.Err()).Op(":=").Qual(runtimePkg, "ScanAll").Types(
 			qg.entityType(), jen.Op("*").Add(qg.entityType()),
 		).Call(
-			jen.Id("ctx"), jen.Id(qg.recv).Dot("config").Dot("Driver"), jen.Id(qg.recv).Dot("buildSelector"),
+			jen.Id("ctx"), jen.Id(qg.recv).Dot("config").Dot("Driver"), jen.Id(qg.recv).Dot(scanSelectorMethod(qg.t)),
 		)
 		allBody.If(jen.Err().Op("!=").Nil()).Block(
 			jen.Return(jen.Nil(), jen.Err()),

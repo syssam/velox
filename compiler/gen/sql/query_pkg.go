@@ -2,6 +2,7 @@ package sql
 
 import (
 	"go/token"
+	"strings"
 
 	"github.com/dave/jennifer/jen"
 
@@ -704,15 +705,15 @@ func (qg *queryGen) wireEdgePolicy(v jen.Code, edge *gen.Edge) jen.Code {
 	return jen.Add(v).Dot("policy").Op("=").Qual(runtimePkg, "EntityPolicy").Call(jen.Lit(edge.Type.Name))
 }
 
-// partitionTiebreak returns `<sel>.OrderBy(<sel>.C(<target>.<ID constant>))`,
-// the final ranking term of a per-parent limit that makes the rows kept for
-// each parent deterministic, or nil for a target without a single ID field
-// (a composite-ID edge schema), which is then ranked by its order alone.
+// partitionTiebreak returns `<sel>.C(<target>.<ID constant>)`, the final
+// ranking term of a per-parent limit that makes the rows kept for each
+// parent deterministic, or "" for a target without a single ID field (a
+// composite-ID edge schema), which is then ranked by its order alone.
 func partitionTiebreak(h gen.GeneratorHelper, edge *gen.Edge, sel string) jen.Code {
 	if edge.Type.ID == nil {
-		return nil
+		return jen.Lit("")
 	}
-	return jen.Id(sel).Dot("OrderBy").Call(jen.Id(sel).Dot("C").Call(jen.Qual(h.LeafPkgPath(edge.Type), edge.Type.ID.Constant())))
+	return jen.Id(sel).Dot("C").Call(jen.Qual(h.LeafPkgPath(edge.Type), edge.Type.ID.Constant()))
 }
 
 // genEdgeFieldKeys emits, for every to-one edge of t whose foreign key is a
@@ -726,18 +727,10 @@ func partitionTiebreak(h gen.GeneratorHelper, edge *gen.Edge, sel string) jen.Co
 // An auto-created key rides on withFKs; a declared one is an ordinary column
 // that Select() leaves out, so the loader had nothing to join on and the
 // edge came back nil with no error. Ent adds the same column in querySpec.
-// Emitted where rows of t are scanned into entities (sqlAll, and the M2M
-// loader that scans t itself) — not in buildSelector, which Select().Scan
-// also uses to scan into the caller's own struct.
+// Emitted once, into scanSelector (see scanSelectorMethod).
 func genEdgeFieldKeys(g *jen.Group, h gen.GeneratorHelper, t *gen.Type, recv string) {
-	for _, edge := range t.Edges {
-		if !edge.OwnFK() {
-			continue
-		}
-		fk, err := edge.ForeignKey()
-		if err != nil || !fk.UserDefined || fk.Field == nil {
-			continue
-		}
+	for _, edge := range edgeFieldKeyEdges(t) {
+		fk, _ := edge.ForeignKey()
 		g.If(
 			jen.Len(jen.Id(recv).Dot("ctx").Dot("Fields")).Op(">").Lit(0).
 				Op("&&").Id(recv).Dot(edgeCallbackField(edge)).Op("!=").Nil(),
@@ -745,6 +738,52 @@ func genEdgeFieldKeys(g *jen.Group, h gen.GeneratorHelper, t *gen.Type, recv str
 			jen.Id(recv).Dot("ctx").Dot("AppendFieldOnce").Call(jen.Qual(h.LeafPkgPath(t), fk.Field.Constant())),
 		)
 	}
+}
+
+// edgeFieldKeyEdges returns the to-one edges of t whose foreign key is a
+// user-declared field bound with .Field().
+func edgeFieldKeyEdges(t *gen.Type) []*gen.Edge {
+	var edges []*gen.Edge
+	for _, edge := range t.Edges {
+		if !edge.OwnFK() {
+			continue
+		}
+		if fk, err := edge.ForeignKey(); err == nil && fk.UserDefined && fk.Field != nil {
+			edges = append(edges, edge)
+		}
+	}
+	return edges
+}
+
+// scanSelectorMethod names the method building the selector that rows of
+// t are scanned into entities from. sqlAll and every many-to-many loader
+// targeting t read it, so the edge keys a projection needs are added in
+// one place — the M2M loader once scanned without them (56a8a7d). It is
+// scanSelector, emitted by genScanSelector, when t has .Field()-bound
+// edges, and buildSelector otherwise. Not buildSelector itself:
+// Select().Scan also uses that to scan into the caller's own struct.
+func scanSelectorMethod(t *gen.Type) string {
+	if len(edgeFieldKeyEdges(t)) > 0 {
+		return "scanSelector"
+	}
+	return "buildSelector"
+}
+
+// genScanSelector emits scanSelector for a type with .Field()-bound edges:
+// genEdgeFieldKeys, then buildSelector.
+func (qg *queryGen) genScanSelector() {
+	if scanSelectorMethod(qg.t) != "scanSelector" {
+		return
+	}
+	qg.f.Comment("scanSelector builds the selector rows are scanned into entities from:")
+	qg.f.Comment("a projected query still reads the keys of the .Field()-bound edges it")
+	qg.f.Comment("eager-loads, or those edges have nothing to join on.")
+	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("scanSelector").Params(
+		jen.Id("ctx").Qual("context", "Context"),
+	).Params(jen.Op("*").Qual(qg.sqlPkg, "Selector"), jen.Error()).BlockFunc(func(g *jen.Group) {
+		genEdgeFieldKeys(g, qg.h, qg.t, qg.recv)
+		g.Return(jen.Id(qg.recv).Dot("buildSelector").Call(jen.Id("ctx")))
+	})
 }
 
 func edgeCallbackField(e *gen.Edge) string {
@@ -785,7 +824,7 @@ func genTypedEdgeLoader(
 		if edge.OwnFK() {
 			genTypedM2OLoader(body, h, t, edge, recv, entityPkgPath, entityType, targetEntityType, sqlPkg, idType)
 		} else if edge.M2M() {
-			genM2MLoaderFallback(body, h, t, edge, recv, entityPkgPath, entityType)
+			genM2MLoader(body, h, t, edge, recv, entityPkgPath, entityType)
 		} else {
 			genTypedO2MLoader(body, h, t, edge, recv, entityPkgPath, entityType, targetEntityType, sqlPkg, idType)
 		}
@@ -850,18 +889,21 @@ func genTypedO2MLoader(
 	// parent's rows and keeps the first n of every one of them, in one query
 	// — or, on a server without window functions, in the assignment loop.
 	if !edge.Unique {
-		genPartitionLimit(body, h, edge, partitionLimit{
-			query:     "query",
-			keyType:   idType,
-			onErr:     jen.Return(jen.Err()),
-			sel:       "s",
-			partition: jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)),
-			wrap: func(stmts []jen.Code) []jen.Code {
-				return []jen.Code{jen.Id("query").Dot("modifiers").Op("=").Append(jen.Id("query").Dot("modifiers"),
-					jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(stmts...),
-				)}
-			},
-		})
+		body.List(jen.Id("limit"), jen.Err()).Op(":=").Qual(runtimePkg, "PlanPerParentLimit").Types(idType).Call(
+			jen.Id("ctx"), jen.Id("query").Dot("ctx"), jen.Id("query").Dot("config").Dot("Driver"), jen.Lit(edge.Name),
+		)
+		body.If(jen.Err().Op("!=").Nil()).Block(jen.Return(jen.Err()))
+		body.If(jen.Id("limit").Dot("Active")).Block(
+			jen.Id("query").Dot("modifiers").Op("=").Append(jen.Id("query").Dot("modifiers"),
+				jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "Selector")).Block(
+					jen.Id("limit").Dot("Apply").Call(
+						jen.Id("s"),
+						jen.Id("s").Dot("C").Call(jen.Qual(srcSubPkg, fkColumn)),
+						partitionTiebreak(h, edge, "s"),
+					),
+				),
+			),
+		)
 	}
 
 	// Execute sub-query: query.All(ctx) — interceptors apply!
@@ -917,92 +959,12 @@ func genTypedO2MLoader(
 			)),
 		)
 		if !edge.Unique {
-			genPartitionTrim(forBody, "parentID")
+			forBody.If(jen.Op("!").Id("limit").Dot("Keep").Call(jen.Id("parentID"))).Block(jen.Continue())
 		}
 		forBody.Id("assign").Call(jen.Id("node"), jen.Id("n"))
 	})
 
 	body.Return(jen.Nil())
-}
-
-// partitionLimit describes where a to-many loader applies its per-parent
-// limit: the target query variable, the parent key type, the statement run
-// when probing the server fails, the selector variable name inside the
-// statements wrap produces, and the partition column.
-type partitionLimit struct {
-	query     string
-	keyType   jen.Code
-	onErr     jen.Code
-	sel       string
-	partition jen.Code
-	wrap      func(stmts []jen.Code) []jen.Code
-}
-
-// genPartitionLimit emits the per-parent limit of a to-many loader:
-//
-//	var perParent *int
-//	var kept map[K]int
-//	if n := query.ctx.PartitionLimit; n != nil {
-//		caps, err := dialect.DriverCapabilities(ctx, query.config.Driver)
-//		...
-//		if caps.Has(dialect.CapWindowFunctions) {
-//			<order by id; LimitPerPartition(partition, *n)>
-//		} else {
-//			<order by id>
-//			perParent = n
-//			kept = make(map[K]int)
-//		}
-//	}
-//
-// Without window functions (MySQL < 8.0, MariaDB < 10.2) the query reads
-// every row in the edge's order plus the ID tiebreak — the same order the
-// window ranks by — and genPartitionTrim keeps each parent's first n, so the
-// loaded edges match the window path's row for row.
-func genPartitionLimit(g *jen.Group, h gen.GeneratorHelper, edge *gen.Edge, pl partitionLimit) {
-	var order []jen.Code
-	if tb := partitionTiebreak(h, edge, pl.sel); tb != nil {
-		order = append(order, tb)
-	}
-	window := append(append([]jen.Code{}, order...),
-		jen.Id(pl.sel).Dot("LimitPerPartition").Call(pl.partition, jen.Op("*").Id("n")))
-	fallback := []jen.Code{
-		jen.Comment("No window functions on this server: read every row in the"),
-		jen.Comment("ranking order and keep each parent's first n while assigning."),
-	}
-	if len(order) > 0 {
-		fallback = append(fallback, pl.wrap(order)...)
-	}
-	fallback = append(fallback,
-		jen.Id("perParent").Op("=").Id("n"),
-		jen.Id("kept").Op("=").Make(jen.Map(pl.keyType).Int()),
-	)
-	g.Var().Id("perParent").Op("*").Int()
-	g.Var().Id("kept").Map(pl.keyType).Int()
-	g.If(jen.Id("n").Op(":=").Id(pl.query).Dot("ctx").Dot("PartitionLimit"), jen.Id("n").Op("!=").Nil()).Block(
-		// A Limit/Offset on the edge query itself has no single meaning next
-		// to a per-parent limit: the window path applied it after ranking,
-		// the in-memory fallback before, so MySQL 5.7 and 8.x returned
-		// different rows. Reject the combination on every server.
-		jen.If(jen.Id(pl.query).Dot("ctx").Dot("Limit").Op("!=").Nil().Op("||").Id(pl.query).Dot("ctx").Dot("Offset").Op("!=").Nil()).Block(
-			jen.Err().Op(":=").Qual("errors", "New").Call(jen.Lit("velox: a per-parent limit cannot be combined with Limit or Offset on the "+edge.Name+" edge query")),
-			pl.onErr,
-		),
-		jen.List(jen.Id("caps"), jen.Err()).Op(":=").Qual(dialectPkg(), "DriverCapabilities").Call(jen.Id("ctx"), jen.Id(pl.query).Dot("config").Dot("Driver")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(pl.onErr),
-		jen.If(jen.Id("caps").Dot("Has").Call(jen.Qual(dialectPkg(), "CapWindowFunctions"))).Block(
-			pl.wrap(window)...,
-		).Else().Block(fallback...),
-	)
-}
-
-// genPartitionTrim emits the in-memory half of genPartitionLimit's
-// fallback, inside the loop that assigns rows to parents: a row beyond its
-// parent's first perParent is skipped.
-func genPartitionTrim(g *jen.Group, key string) {
-	g.If(jen.Id("perParent").Op("!=").Nil()).Block(
-		jen.If(jen.Id("kept").Index(jen.Id(key)).Op(">=").Op("*").Id("perParent")).Block(jen.Continue()),
-		jen.Id("kept").Index(jen.Id(key)).Op("++"),
-	)
 }
 
 // genTypedM2OLoader generates typed M2O edge loading with init/assign callbacks (Ent-style).
@@ -1029,25 +991,27 @@ func genTypedM2OLoader(
 	// Collect unique FK values from parents.
 	body.Id("fkSeen").Op(":=").Make(jen.Map(h.IDType(edge.Type)).Struct(), jen.Len(jen.Id("nodes")))
 	body.Var().Id("fks").Index().Any()
-	fkIsNillable := fk.Field.Nillable
-	body.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id("nodes")).BlockFunc(func(forBody *jen.Group) {
+	// fkValue emits `fkVal := <parent n's key>`, skipping (continue) a
+	// parent without one. Both loops over the parents read the key.
+	fkValue := func(forBody *jen.Group) {
 		fkStructField := fk.StructField()
-		if token.IsExported(fkStructField) {
-			if fkIsNillable {
-				// Exported pointer FK (e.g., *uuid.UUID): skip nil, dereference for map key.
-				// The neighbor map key is the non-pointer value type, so we must dereference.
-				forBody.If(jen.Id("n").Dot(fkStructField).Op("==").Nil()).Block(jen.Continue())
-				forBody.Id("fkVal").Op(":=").Op("*").Id("n").Dot(fkStructField)
-			} else {
-				// Exported non-pointer FK: use directly.
-				forBody.Id("fkVal").Op(":=").Id("n").Dot(fkStructField)
-			}
-		} else {
+		switch {
+		case token.IsExported(fkStructField) && fk.Field.Nillable:
+			// Exported pointer FK (e.g., *uuid.UUID): skip nil, dereference —
+			// the neighbor map is keyed by the non-pointer value type.
+			forBody.If(jen.Id("n").Dot(fkStructField).Op("==").Nil()).Block(jen.Continue())
+			forBody.Id("fkVal").Op(":=").Op("*").Id("n").Dot(fkStructField)
+		case token.IsExported(fkStructField):
+			forBody.Id("fkVal").Op(":=").Id("n").Dot(fkStructField)
+		default:
 			// Unexported FK: get via FKValue (returns pointer), dereference for map key.
 			forBody.Id("fkRaw").Op(":=").Id("n").Dot("FKValue").Call(jen.Lit(fk.Field.Name))
 			forBody.If(jen.Id("fkRaw").Op("==").Nil()).Block(jen.Continue())
 			forBody.Id("fkVal").Op(":=").Id("derefFK").Call(jen.Id("fkRaw")).Op(".").Parens(h.IDType(edge.Type))
 		}
+	}
+	body.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id("nodes")).BlockFunc(func(forBody *jen.Group) {
+		fkValue(forBody)
 		forBody.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("fkSeen").Index(jen.Id("fkVal")), jen.Op("!").Id("ok")).Block(
 			jen.Id("fkSeen").Index(jen.Id("fkVal")).Op("=").Struct().Values(),
 			jen.Id("fks").Op("=").Append(jen.Id("fks"), jen.Any().Call(jen.Id("fkVal"))),
@@ -1086,20 +1050,7 @@ func genTypedM2OLoader(
 
 	// Assign neighbors to parents via init/assign callbacks.
 	body.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id("nodes")).BlockFunc(func(forBody *jen.Group) {
-		fkStructField := fk.StructField()
-		if token.IsExported(fkStructField) {
-			if fkIsNillable {
-				// Pointer FK: skip nil, dereference for map key match.
-				forBody.If(jen.Id("n").Dot(fkStructField).Op("==").Nil()).Block(jen.Continue())
-				forBody.Id("fkVal").Op(":=").Op("*").Id("n").Dot(fkStructField)
-			} else {
-				forBody.Id("fkVal").Op(":=").Id("n").Dot(fkStructField)
-			}
-		} else {
-			forBody.Id("fkRaw").Op(":=").Id("n").Dot("FKValue").Call(jen.Lit(fk.Field.Name))
-			forBody.If(jen.Id("fkRaw").Op("==").Nil()).Block(jen.Continue())
-			forBody.Id("fkVal").Op(":=").Id("derefFK").Call(jen.Id("fkRaw")).Op(".").Parens(h.IDType(edge.Type))
-		}
+		fkValue(forBody)
 		forBody.If(
 			jen.List(jen.Id("neighbor"), jen.Id("ok")).Op(":=").Id("neighborByID").Index(jen.Id("fkVal")),
 			jen.Id("ok"),
@@ -1111,11 +1062,21 @@ func genTypedM2OLoader(
 	body.Return(jen.Nil())
 }
 
-// genM2MLoaderFallback generates M2M edge loading using JOIN + interceptor chain.
-// Instead of delegating to runtime.LoadM2MEdgeCore (which bypasses interceptors),
-// this builds the SQL with a JOIN on the pivot table and wraps execution in the
-// target query's interceptor chain, ensuring privacy rules are enforced.
-func genM2MLoaderFallback(
+// genM2MLoader generates a many-to-many edge loader as one call to
+// runtime.M2MLoad, which joins through the edge table, runs the target's
+// policy and interceptors, applies the per-parent limit, and loads the edges
+// nested under the target:
+//
+//	return runtime.M2MLoad[*TagQuery, entity.Post, entity.Tag, *entity.Tag, int, int]{
+//		Edge: "tags", JoinTable: post.TagsTable, ...
+//		Selector: (*TagQuery).buildSelector,
+//		...
+//	}.Load(ctx, query, nodes, init, assign)
+//
+// Everything that is not a name, a column or a type lives in the runtime,
+// once: the emitted loop it replaced was a second copy of sqlAll's scan and
+// grew a bug each time one of them changed.
+func genM2MLoader(
 	body *jen.Group,
 	h gen.GeneratorHelper,
 	t *gen.Type,
@@ -1123,227 +1084,59 @@ func genM2MLoaderFallback(
 	recv, entityPkgPath string,
 	entityType func() *jen.Statement,
 ) {
-	srcSubPkg := h.LeafPkgPath(t)
-	targetSubPkg := h.LeafPkgPath(edge.Type)
-	sqlPkg := h.SQLPkg()
-	veloxPkg := h.VeloxPkg()
-	idType := h.IDType(t)
-	targetEntityType := func() *jen.Statement { return jen.Qual(entityPkgPath, edge.Type.Name) }
-
 	if len(edge.Rel.Columns) < 2 {
 		body.Return(jen.Nil())
 		return
 	}
-
-	// Determine FK and ref columns based on inverse flag.
-	// For normal edges: Columns[0] = parent FK, Columns[1] = child FK in join table.
-	// For inverse edges: swap them.
-	var parentFKCol, childFKCol string
+	// Columns[0] holds the key of the edge's owner, Columns[1] the other
+	// side's; an inverse edge reads the join table the other way round.
+	parentFKCol, childFKCol := edge.Rel.Columns[0], edge.Rel.Columns[1]
 	if edge.IsInverse() {
-		parentFKCol = edge.Rel.Columns[1]
-		childFKCol = edge.Rel.Columns[0]
-	} else {
-		parentFKCol = edge.Rel.Columns[0]
-		childFKCol = edge.Rel.Columns[1]
+		parentFKCol, childFKCol = childFKCol, parentFKCol
 	}
-
-	// edgeIDs := make([]any, len(nodes))
-	// byID := make(map[int]*entity.Post)
-	// nids := make(map[int]map[*entity.Post]struct{})
-	body.Id("edgeIDs").Op(":=").Make(jen.Index().Any(), jen.Len(jen.Id("nodes")))
-	body.Id("byID").Op(":=").Make(jen.Map(idType).Op("*").Add(entityType()), jen.Len(jen.Id("nodes")))
-	body.Id("nids").Op(":=").Make(jen.Map(h.IDType(edge.Type)).Map(jen.Op("*").Add(entityType())).Struct(), jen.Len(jen.Id("nodes")))
-	body.For(jen.List(jen.Id("i"), jen.Id("node")).Op(":=").Range().Id("nodes")).BlockFunc(func(forBody *jen.Group) {
-		forBody.Id("edgeIDs").Index(jen.Id("i")).Op("=").Id("node").Dot("ID")
-		forBody.Id("byID").Index(jen.Id("node").Dot("ID")).Op("=").Id("node")
-		forBody.If(jen.Id("init").Op("!=").Nil()).Block(
-			jen.Id("init").Call(jen.Id("node")),
+	idType := h.IDType(t)
+	targetIDType := h.IDType(edge.Type)
+	targetEntity := jen.Qual(entityPkgPath, edge.Type.Name)
+	targetQuery := jen.Op("*").Id(edge.Type.Name + "Query")
+	body.Return(jen.Qual(runtimePkg, "M2MLoad").Types(
+		targetQuery.Clone(), entityType(), targetEntity.Clone(), jen.Op("*").Add(targetEntity.Clone()), idType, targetIDType,
+	).Values(jen.DictFunc(func(d jen.Dict) {
+		d[jen.Id("Edge")] = jen.Lit(edge.Name)
+		d[jen.Id("JoinTable")] = jen.Qual(h.LeafPkgPath(t), edge.TableConstant())
+		d[jen.Id("ParentColumn")] = jen.Lit(parentFKCol)
+		d[jen.Id("TargetColumn")] = jen.Lit(childFKCol)
+		d[jen.Id("TargetID")] = jen.Qual(h.LeafPkgPath(edge.Type), "FieldID")
+		d[jen.Id("ParentKey")] = jen.Func().Params(jen.Id("n").Op("*").Add(entityType())).Add(idType).Block(jen.Return(jen.Id("n").Dot("ID")))
+		d[jen.Id("TargetKey")] = jen.Func().Params(jen.Id("n").Op("*").Add(targetEntity.Clone())).Add(targetIDType).Block(jen.Return(jen.Id("n").Dot("ID")))
+		// The join table's parent key is scanned like the parent's own ID.
+		d[jen.Id("NewPivot")] = jen.Func().Params().Any().Block(jen.Return(jen.Id(t.ID.NewScanType())))
+		d[jen.Id("PivotKey")] = jen.Func().Params(jen.Id("v").Any()).Add(idType).Block(
+			jen.Id("pivotScan").Op(":=").Id("v").Assert(jen.Id(scanTypeOf(t.ID.NewScanType()))),
+			jen.Return(jen.Id(t.ID.ScanTypeField("pivotScan"))),
 		)
-	})
+		d[jen.Id("Selector")] = jen.Parens(targetQuery.Clone()).Dot(scanSelectorMethod(edge.Type))
+		d[jen.Id("Prepare")] = jen.Parens(targetQuery.Clone()).Dot("prepareQuery")
+		d[jen.Id("EagerLoad")] = jen.Parens(targetQuery.Clone()).Dot("eagerLoad")
+		d[jen.Id("Inters")] = jen.Id("query").Dot("inters").Dot(edge.Type.Name)
+		d[jen.Id("SetConfig")] = jen.Parens(jen.Op("*").Add(targetEntity.Clone())).Dot(edge.Type.SetConfigMethodName())
+		d[jen.Id("Config")] = jen.Id(recv).Dot("config")
+	})).Dot("Load").Call(jen.Id("ctx"), jen.Id("query"), jen.Id("nodes"), jen.Id("init"), jen.Id("assign")))
+}
 
-	// Build the QuerierFunc that does the JOIN + scan.
-	body.Var().Id("qr").Qual(veloxPkg, "Querier").Op("=").Qual(veloxPkg, "QuerierFunc").Call(
-		jen.Func().Params(
-			jen.Id("ctx").Qual("context", "Context"),
-			jen.Id("q").Qual(veloxPkg, "Query"),
-		).Params(jen.Qual(veloxPkg, "Value"), jen.Error()).BlockFunc(func(fnBody *jen.Group) {
-			targetQueryName := edge.Type.Name + "Query"
-
-			// tq := q.(*TagQuery)
-			fnBody.Id("tq").Op(":=").Id("q").Assert(jen.Op("*").Id(targetQueryName))
-			genEdgeFieldKeys(fnBody, h, edge.Type, "tq")
-
-			// selector, err := tq.buildSelector(ctx)
-			fnBody.List(jen.Id("selector"), jen.Err()).Op(":=").Id("tq").Dot("buildSelector").Call(jen.Id("ctx"))
-			fnBody.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Err()),
-			)
-
-			// joinT := sql.Table(post.TagsTable)
-			fnBody.Id("joinT").Op(":=").Qual(sqlPkg, "Table").Call(jen.Qual(srcSubPkg, edge.TableConstant()))
-
-			// selector.Join(joinT).On(selector.C(tag.FieldID), joinT.C("tag_id"))
-			fnBody.Id("selector").Dot("Join").Call(jen.Id("joinT")).Dot("On").Call(
-				jen.Id("selector").Dot("C").Call(jen.Qual(targetSubPkg, "FieldID")),
-				jen.Id("joinT").Dot("C").Call(jen.Lit(childFKCol)),
-			)
-
-			// selector.Where(sql.In(joinT.C("post_id"), edgeIDs...))
-			fnBody.Id("selector").Dot("Where").Call(
-				jen.Qual(sqlPkg, "In").Call(
-					jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)),
-					jen.Id("edgeIDs").Op("..."),
-				),
-			)
-
-			// cols := selector.SelectedColumns()
-			// selector.Select(joinT.C("post_id"))
-			// selector.AppendSelect(cols...)
-			// selector.SetDistinct(false)
-			fnBody.Id("cols").Op(":=").Id("selector").Dot("SelectedColumns").Call()
-			fnBody.Id("selector").Dot("Select").Call(jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)))
-			fnBody.Id("selector").Dot("AppendSelect").Call(jen.Id("cols").Op("..."))
-			fnBody.Id("selector").Dot("SetDistinct").Call(jen.False())
-
-			// A per-parent limit (runtime.Limit through WithEdgeLoad) ranks
-			// the rows of every parent by its join-table key and keeps the
-			// first n of each, in this one query — or, on a server without
-			// window functions, in the scan loop below.
-			genPartitionLimit(fnBody, h, edge, partitionLimit{
-				query:     "tq",
-				keyType:   idType,
-				onErr:     jen.Return(jen.Nil(), jen.Err()),
-				sel:       "selector",
-				partition: jen.Id("joinT").Dot("C").Call(jen.Lit(parentFKCol)),
-				wrap:      func(stmts []jen.Code) []jen.Code { return stmts },
-			})
-
-			// rows := &sql.Rows{}
-			// queryStr, args := selector.Query()
-			fnBody.Id("rows").Op(":=").Op("&").Qual(sqlPkg, "Rows").Values()
-			fnBody.List(jen.Id("queryStr"), jen.Id("args")).Op(":=").Id("selector").Dot("Query").Call()
-			fnBody.If(
-				jen.Err().Op(":=").Id("tq").Dot("config").Dot("Driver").Dot("Query").Call(
-					jen.Id("ctx"), jen.Id("queryStr"), jen.Id("args"), jen.Id("rows"),
-				),
-				jen.Err().Op("!=").Nil(),
-			).Block(
-				jen.Return(jen.Nil(), jen.Err()),
-			)
-			fnBody.Defer().Id("rows").Dot("Close").Call()
-
-			// columns, err := rows.Columns()
-			fnBody.List(jen.Id("columns"), jen.Err()).Op(":=").Id("rows").Dot("Columns").Call()
-			fnBody.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Err()),
-			)
-
-			// var result []*entity.Tag
-			fnBody.Var().Id("result").Index().Op("*").Add(targetEntityType())
-
-			// Scan loop
-			fnBody.For(jen.Id("rows").Dot("Next").Call()).BlockFunc(func(scanBody *jen.Group) {
-				// pivotScan := new(sql.NullInt64)
-				pivotNewScanType := t.ID.NewScanType()
-				scanBody.Id("pivotScan").Op(":=").Id(pivotNewScanType)
-
-				// scanValues, err := (&entity.Tag{}).ScanValues(columns[1:])
-				scanBody.List(jen.Id("scanValues"), jen.Err()).Op(":=").Parens(jen.Op("&").Add(targetEntityType()).Values()).Dot("ScanValues").Call(
-					jen.Id("columns").Index(jen.Lit(1).Op(":")),
-				)
-				scanBody.If(jen.Err().Op("!=").Nil()).Block(
-					jen.Return(jen.Nil(), jen.Err()),
-				)
-
-				// allValues := append([]any{pivotScan}, scanValues...)
-				scanBody.Id("allValues").Op(":=").Append(
-					jen.Index().Any().Values(jen.Id("pivotScan")),
-					jen.Id("scanValues").Op("..."),
-				)
-
-				// if err := rows.Scan(allValues...); err != nil { return nil, err }
-				scanBody.If(
-					jen.Err().Op(":=").Id("rows").Dot("Scan").Call(jen.Id("allValues").Op("...")),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					jen.Return(jen.Nil(), jen.Err()),
-				)
-
-				// node := &entity.Tag{}
-				// if err := node.AssignValues(columns[1:], scanValues); err != nil { return nil, err }
-				scanBody.Id("node").Op(":=").Op("&").Add(targetEntityType()).Values()
-				scanBody.If(
-					jen.Err().Op(":=").Id("node").Dot("AssignValues").Call(
-						jen.Id("columns").Index(jen.Lit(1).Op(":")),
-						jen.Id("scanValues"),
-					),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					jen.Return(jen.Nil(), jen.Err()),
-				)
-
-				// outValue := int(pivotScan.Int64)
-				pivotExtract := t.ID.ScanTypeField("pivotScan")
-				scanBody.Id("outValue").Op(":=").Id(pivotExtract)
-				genPartitionTrim(scanBody, "outValue")
-
-				// Deduplicate: group by target node ID, map parents.
-				scanBody.If(jen.Id("nids").Index(jen.Id("node").Dot("ID")).Op("==").Nil()).BlockFunc(func(ifBody *jen.Group) {
-					ifBody.Id("nids").Index(jen.Id("node").Dot("ID")).Op("=").Map(jen.Op("*").Add(entityType())).Struct().Values(
-						jen.Dict{jen.Id("byID").Index(jen.Id("outValue")): jen.Values()},
-					)
-					ifBody.Id("result").Op("=").Append(jen.Id("result"), jen.Id("node"))
-				}).Else().Block(
-					jen.Id("nids").Index(jen.Id("node").Dot("ID")).Index(jen.Id("byID").Index(jen.Id("outValue"))).Op("=").Struct().Values(),
-				)
-			})
-
-			// if err := rows.Err(); err != nil { return nil, err }
-			fnBody.If(jen.Err().Op(":=").Id("rows").Dot("Err").Call(), jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Err()),
-			)
-			// Close before loading nested edges: a driver holding one
-			// connection cannot run their queries while these rows are open.
-			fnBody.Id("rows").Dot("Close").Call()
-
-			// Edges loaded under this one (WithEdgeLoad("tags",
-			// runtime.WithEdge("posts")), WithTags(func(q){ q.WithPosts() })).
-			// Ent runs the target's sqlAll here; the scan above is its first
-			// half, eagerLoad the second.
-			fnBody.If(jen.Len(jen.Id("result")).Op(">").Lit(0)).Block(
-				jen.If(jen.Err().Op(":=").Id("tq").Dot("eagerLoad").Call(jen.Id("ctx"), jen.Id("result")), jen.Err().Op("!=").Nil()).Block(
-					jen.Return(jen.Nil(), jen.Err()),
-				),
-			)
-
-			fnBody.Return(jen.Id("result"), jen.Nil())
-		}),
-	)
-
-	// Run Traversers (privacy, soft-delete) before interceptor chain — matches O2M/M2O path.
-	body.If(jen.Err().Op(":=").Id("query").Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
-		jen.Return(jen.Err()),
-	)
-
-	// Execute through interceptor chain using velox.WithInterceptors.
-	// query.inters is *entity.InterceptorStore (SP-2); read the per-edge-target slice.
-	body.List(jen.Id("neighbors"), jen.Id("err")).Op(":=").Qual(veloxPkg, "WithInterceptors").Types(
-		jen.Index().Op("*").Add(targetEntityType()),
-	).Call(
-		jen.Id("ctx"), jen.Id("query"), jen.Id("qr"), jen.Id("query").Dot("inters").Dot(edge.Type.Name),
-	)
-	body.If(jen.Id("err").Op("!=").Nil()).Block(
-		jen.Return(jen.Id("err")),
-	)
-
-	// Assign neighbors to parents and inject config.
-	body.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id("neighbors")).BlockFunc(func(forBody *jen.Group) {
-		forBody.Id("n").Dot(edge.Type.SetConfigMethodName()).Call(jen.Id(recv).Dot("config"))
-		forBody.For(jen.List(jen.Id("parent")).Op(":=").Range().Id("nids").Index(jen.Id("n").Dot("ID"))).Block(
-			jen.Id("assign").Call(jen.Id("parent"), jen.Id("n")),
-		)
-	})
-	body.Return(jen.Nil())
+// scanTypeOf returns the type of the value a gen.Field NewScanType
+// expression allocates: "new(sql.NullInt64)" is a *sql.NullInt64,
+// "&sql.NullScanner{S: new(T)}" a *sql.NullScanner.
+func scanTypeOf(newExpr string) string {
+	if inner, ok := strings.CutPrefix(newExpr, "new("); ok {
+		return "*" + strings.TrimSuffix(inner, ")")
+	}
+	if lit, ok := strings.CutPrefix(newExpr, "&"); ok {
+		if i := strings.Index(lit, "{"); i >= 0 {
+			lit = lit[:i]
+		}
+		return "*" + lit
+	}
+	return newExpr
 }
 
 // genQueryHelpers generates the shared helpers.go for the query/ package.

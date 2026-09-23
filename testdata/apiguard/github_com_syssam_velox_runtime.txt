@@ -36,8 +36,26 @@
   field LoadConfig.Limit *int
   field LoadConfig.Orders []func(*github.com/syssam/velox/dialect/sql.Selector)
   field LoadConfig.Predicates []func(*github.com/syssam/velox/dialect/sql.Selector)
+  field M2MLoad.Config Config
+  field M2MLoad.EagerLoad func(Q, context.Context, []*T) error
+  field M2MLoad.Edge string
+  field M2MLoad.Inters []github.com/syssam/velox.Interceptor
+  field M2MLoad.JoinTable string
+  field M2MLoad.NewPivot func() any
+  field M2MLoad.ParentColumn string
+  field M2MLoad.ParentKey func(*P) K
+  field M2MLoad.PivotKey func(any) K
+  field M2MLoad.Prepare func(Q, context.Context) error
+  field M2MLoad.Selector func(Q, context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)
+  field M2MLoad.SetConfig func(*T, Config)
+  field M2MLoad.TargetColumn string
+  field M2MLoad.TargetID string
+  field M2MLoad.TargetKey func(*T) TK
   field NodeResolver.Resolve func(ctx context.Context, id any) (any, error)
   field NodeResolver.Type string
+  field PerParentLimit.Active bool
+  field PerParentLimit.N int
+  field PerParentLimit.Window bool
   field QueryContext.Fields []string
   field QueryContext.Limit *int
   field QueryContext.Offset *int
@@ -51,6 +69,11 @@
   method FieldCollectable.GetCtx() *QueryContext
   method FieldCollectable.GetIDColumn() string
   method FieldCollectable.WithEdgeLoad(string, ...LoadOption) FieldCollectable
+  method M2MLoad.Load(context.Context, Q, []*P, func(*P), func(*P, *T)) error
+  method M2MQuery.GetCtx() *QueryContext
+  method M2MQuery.GetDriver() github.com/syssam/velox/dialect.Driver
+  method PerParentLimit.Apply(*github.com/syssam/velox/dialect/sql.Selector, string, string)
+  method PerParentLimit.Keep(K) bool
   method PredicateAdder.AddPredicate(func(*github.com/syssam/velox/dialect/sql.Selector))
   method QueryContext.AppendFieldOnce(string)
   method QueryContext.Clone() *QueryContext
@@ -119,6 +142,7 @@ func NewLoadConfig(...LoadOption) *LoadConfig
 func NewSelector(string, *[]string, func(context.Context, any) error) Selector
 func NodeResolvers() map[string]NodeResolver
 func OrderBy(...func(*github.com/syssam/velox/dialect/sql.Selector)) LoadOption
+func PlanPerParentLimit[K comparable](context.Context, *QueryContext, github.com/syssam/velox/dialect.Driver, string) (PerParentLimit[K], error)
 func QueryGroupBy(context.Context, QueryReader, []string, []AggregateFunc, any) error
 func QueryScan(context.Context, QueryReader, any) error
 func QuerySelect(context.Context, QueryReader, []AggregateFunc, any) error
@@ -151,6 +175,8 @@ type Interceptor = Interceptor
 type InterfaceFieldMeta struct
 type LoadConfig struct
 type LoadOption func(*LoadConfig)
+type M2MLoad[Q M2MQuery, P any, T any, PT ScannableOf[T], K comparable, TK comparable] struct
+type M2MQuery interface
 type MutateFunc = MutateFunc
 type Mutation = Mutation
 type Mutator = Mutator
@@ -160,6 +186,7 @@ type NotFoundError = NotFoundError
 type NotLoadedError = NotLoadedError
 type NotSingularError = NotSingularError
 type Op = Op
+type PerParentLimit[K comparable] struct
 type PredicateAdder interface
 type Querier = Querier
 type QuerierFunc = QuerierFunc

@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	velox "github.com/syssam/velox"
@@ -785,31 +784,14 @@ func (q *UserQuery) loadPosts(ctx context.Context, query *PostQuery, nodes []*en
 	query.Where(func(s *sql.Selector) {
 		s.Where(sql.In(s.C(user.PostsColumn), fks...))
 	})
-	var perParent *int
-	var kept map[int64]int
-	if n := query.ctx.PartitionLimit; n != nil {
-		if query.ctx.Limit != nil || query.ctx.Offset != nil {
-			err := errors.New("velox: a per-parent limit cannot be combined with Limit or Offset on the posts edge query")
-			return err
-		}
-		caps, err := dialect.DriverCapabilities(ctx, query.config.Driver)
-		if err != nil {
-			return err
-		}
-		if caps.Has(dialect.CapWindowFunctions) {
-			query.modifiers = append(query.modifiers, func(s *sql.Selector) {
-				s.OrderBy(s.C(post.FieldID))
-				s.LimitPerPartition(s.C(user.PostsColumn), *n)
-			})
-		} else {
-			// No window functions on this server: read every row in the
-			// ranking order and keep each parent's first n while assigning.
-			query.modifiers = append(query.modifiers, func(s *sql.Selector) {
-				s.OrderBy(s.C(post.FieldID))
-			})
-			perParent = n
-			kept = make(map[int64]int)
-		}
+	limit, err := runtime.PlanPerParentLimit[int64](ctx, query.ctx, query.config.Driver, "posts")
+	if err != nil {
+		return err
+	}
+	if limit.Active {
+		query.modifiers = append(query.modifiers, func(s *sql.Selector) {
+			limit.Apply(s, s.C(user.PostsColumn), s.C(post.FieldID))
+		})
 	}
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -825,11 +807,8 @@ func (q *UserQuery) loadPosts(ctx context.Context, query *PostQuery, nodes []*en
 		if !ok {
 			return fmt.Errorf("velox: unexpected foreign-key %q returned %v for node %v", "user_id", parentID, n.ID)
 		}
-		if perParent != nil {
-			if kept[parentID] >= *perParent {
-				continue
-			}
-			kept[parentID]++
+		if !limit.Keep(parentID) {
+			continue
 		}
 		assign(node, n)
 	}

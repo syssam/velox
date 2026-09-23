@@ -1783,10 +1783,11 @@ func TestEdgeLoadersNarrowACopy(t *testing.T) {
 			t.Errorf("%s must narrow a copy of the stored query; first statement is %q", loader, first)
 		}
 	}
-	// The M2M loader scans its join rows itself; it must hand them to the
-	// target query's eagerLoad or every edge nested under it is dropped
-	// (behaviorally pinned by TestMultiDialect_EdgeLoadNestedUnderM2M).
-	if body := funcBody(t, src, ") loadTags("); !strings.Contains(body, "tq.eagerLoad(ctx, result)") {
+	// The M2M loader is runtime.M2MLoad, which scans the join rows itself;
+	// it must be handed the target query's eagerLoad or every edge nested
+	// under it is dropped (behaviorally pinned by
+	// TestMultiDialect_EdgeLoadNestedUnderM2M).
+	if body := funcBody(t, src, ") loadTags("); !strings.Contains(body, "EagerLoad:") || !strings.Contains(body, "(*TagQuery).eagerLoad") {
 		t.Errorf("loadTags does not run the target's eager loads\n%s", body)
 	}
 	if body := funcBody(t, src, ") sqlAll("); !strings.Contains(body, ".eagerLoad(ctx, nodes)") {
@@ -1812,19 +1813,61 @@ func TestPartitionLimitChecksWindowFunctions(t *testing.T) {
 	}
 	h.graph.Nodes = []*gen.Type{userType, postType, tagType}
 	src := genQueryPkg(h, userType, h.graph.Nodes, h.LeafPkgPath(userType)).GoString()
-	for _, loader := range []string{"loadPosts", "loadTags"} {
-		body := funcBody(t, src, ") "+loader+"(")
-		probe := strings.Index(body, "dialect.DriverCapabilities(ctx, ")
-		window := strings.Index(body, "caps.Has(dialect.CapWindowFunctions)")
-		partition := strings.Index(body, ".LimitPerPartition(")
-		if probe < 0 || window < 0 || partition < 0 || probe > window || window > partition {
-			t.Errorf("%s must check CapWindowFunctions on the driver before LimitPerPartition\n%s", loader, body)
-		}
-		if !strings.Contains(body, "perParent = n") {
-			t.Errorf("%s must keep the limit for the in-memory trim when the server has no window functions\n%s", loader, body)
-		}
-		if !strings.Contains(body, "kept[") || !strings.Contains(body, ">= *perParent") {
-			t.Errorf("%s must trim each parent's rows to the limit in memory\n%s", loader, body)
-		}
+	// The O2M loader plans the limit with the runtime (which probes the
+	// driver for CapWindowFunctions), ranks the edge query with Apply, and
+	// trims with Keep in the assignment loop; the three halves are pinned
+	// in runtime/edgeload_test.go.
+	body := funcBody(t, src, ") loadPosts(")
+	plan := strings.Index(body, "](ctx, query.ctx, query.config.Driver, \"posts\")")
+	apply := strings.Index(body, "limit.Apply(s, s.C(")
+	all := strings.Index(body, "query.All(ctx)")
+	keep := strings.Index(body, "if !limit.Keep(parentID) {")
+	if !strings.Contains(body, "limit, err := runtime.PlanPerParentLimit[") || plan < 0 || apply < 0 || all < 0 || keep < 0 || plan > apply || apply > all || all > keep {
+		t.Errorf("loadPosts must plan the per-parent limit, apply it to the edge query, then trim while assigning\n%s", body)
+	}
+	if strings.Contains(body, "LimitPerPartition") {
+		t.Errorf("loadPosts renders LimitPerPartition itself; only PerParentLimit.Apply may, after the capability check\n%s", body)
+	}
+	// The M2M loader is runtime.M2MLoad, which plans the limit the same way.
+	body = funcBody(t, src, ") loadTags(")
+	if !strings.Contains(body, "return runtime.M2MLoad[*TagQuery, ") || !strings.Contains(body, "}.Load(ctx, query, nodes, init, assign)") {
+		t.Errorf("loadTags must delegate to runtime.M2MLoad\n%s", body)
+	}
+}
+
+// TestM2MLoaderScansLikeSQLAll pins that the many-to-many loader builds its
+// selector with the same method sqlAll scans from. The M2M loader once
+// scanned its target with a hand-rolled copy of sqlAll that lacked the
+// .Field()-bound edge keys a projection needs (56a8a7d); scanSelectorMethod
+// is now the one place both read.
+func TestM2MLoaderScansLikeSQLAll(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	tagType := createTestType("Tag")
+	groupType := createTestType("Group")
+	fkField := &gen.Field{Name: "group_id", Type: &field.TypeInfo{Type: field.TypeInt}, UserDefined: true}
+	owner := createM2OEdge("group", groupType, "tags", "group_id")
+	owner.SetDef(&load.Edge{Field: "group_id"})
+	fk := &gen.ForeignKey{Field: fkField, Edge: owner, UserDefined: true}
+	owner.Rel.SetForeignKey(fk)
+	fkField.SetForeignKey(fk)
+	tagType.Edges = []*gen.Edge{owner}
+	tagType.Fields = append(tagType.Fields, fkField)
+	userType.Edges = []*gen.Edge{createM2MEdge("tags", tagType, "user_tags", []string{"user_id", "tag_id"})}
+	h.graph.Nodes = []*gen.Type{userType, tagType, groupType}
+
+	if got := scanSelectorMethod(tagType); got != "scanSelector" {
+		t.Fatalf("fixture has no .Field()-bound edge: scanSelectorMethod = %q", got)
+	}
+	tagSrc := genQueryPkg(h, tagType, h.graph.Nodes, h.LeafPkgPath(tagType)).GoString()
+	if body := funcBody(t, tagSrc, ") scanSelector("); !strings.Contains(body, "AppendFieldOnce(") || !strings.Contains(body, "q.buildSelector(ctx)") {
+		t.Errorf("scanSelector must add the edge keys, then build\n%s", body)
+	}
+	if body := funcBody(t, tagSrc, ") sqlAll("); !strings.Contains(body, "q.scanSelector)") {
+		t.Errorf("sqlAll must scan from scanSelector\n%s", body)
+	}
+	userSrc := genQueryPkg(h, userType, h.graph.Nodes, h.LeafPkgPath(userType)).GoString()
+	if body := funcBody(t, userSrc, ") loadTags("); !strings.Contains(body, "(*TagQuery).scanSelector,") {
+		t.Errorf("the M2M loader must scan its target from scanSelector, like sqlAll\n%s", body)
 	}
 }
