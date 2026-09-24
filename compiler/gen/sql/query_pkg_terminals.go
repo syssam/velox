@@ -196,6 +196,7 @@ func (qg *queryGen) genPrepareQuery() {
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("prepareQuery").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Error().BlockFunc(func(body *jen.Group) {
+		qg.genValidFieldsCheck(body, jen.Id(qg.recv).Dot("ctx").Dot("Fields"))
 		if qg.hasPolicy {
 			body.If(jen.Id(qg.recv).Dot("policy").Op("!=").Nil()).Block(
 				jen.If(
@@ -212,6 +213,20 @@ func (qg *queryGen) genPrepareQuery() {
 			jen.Id("ctx"), jen.Id(qg.recv), qg.inters(qg.recv),
 		))
 	})
+}
+
+// genValidFieldsCheck emits a loop returning a ValidationError for the first
+// name in fields that is not a column of the entity. Select and GroupBy take
+// field names as strings and the SQL builder writes them into the query
+// verbatim, so an unchecked name that is an expression runs as SQL — an
+// injection for any caller passing a client-chosen field (Ent parity).
+func (qg *queryGen) genValidFieldsCheck(body *jen.Group, fields jen.Code) {
+	body.For(jen.List(jen.Id("_"), jen.Id("f")).Op(":=").Range().Add(fields)).Block(
+		jen.If(jen.Op("!").Qual(qg.entitySubPkg, "ValidColumn").Call(jen.Id("f"))).Block(
+			jen.Return(validationErrorValue(qg.t, jen.Id("f"),
+				jen.Qual("fmt", "Errorf").Call(jen.Lit("invalid field %q for query"), jen.Id("f")))),
+		),
+	)
 }
 
 // genEntityTerminals emits the entity-returning terminals and their X

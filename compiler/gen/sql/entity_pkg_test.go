@@ -168,6 +168,29 @@ func TestGenEntityPkgFKValueMethod_NoFKs(t *testing.T) {
 	assert.NotContains(t, code, "FKValue")
 }
 
+// TestGenEntityPkgFKValueMethod_NilPointerIsUntypedNil pins that FKValue
+// returns an untyped nil for a NULL key. Returning the *int field directly
+// wrapped a nil pointer in a non-nil any, so the eager loaders' `== nil`
+// guard never fired and `derefFK(fk).(int)` panicked with "interface {} is
+// *int, not int" on every WithXxx() over a row with a NULL optional FK.
+func TestGenEntityPkgFKValueMethod_NilPointerIsUntypedNil(t *testing.T) {
+	t.Parallel()
+	helper := newMockHelper()
+	postType := createTestType("Post")
+	postType.ForeignKeys = []*gen.ForeignKey{{
+		Field: &gen.Field{Name: "user_posts", Type: &field.TypeInfo{Type: field.TypeInt}, Nillable: true, Optional: true},
+	}}
+	helper.graph.Nodes = []*gen.Type{postType}
+
+	f := helper.NewFile("entity")
+	genEntityPkgFKValueMethod(f, postType)
+	code := f.GoString()
+
+	assert.Contains(t, code, "if e.user_posts == nil {\n\t\t\treturn nil\n\t\t}")
+	assert.Contains(t, code, "return *e.user_posts")
+	assert.NotContains(t, code, "return e.user_posts\n")
+}
+
 // =============================================================================
 // genEntityPkgAssignValues Tests
 // =============================================================================

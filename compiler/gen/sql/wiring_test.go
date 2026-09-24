@@ -1915,3 +1915,83 @@ func TestUniqueEdgeSetterReplaces(t *testing.T) {
 		t.Errorf("SetAuthorID must replace the stored ID, not add to it\n%s", body)
 	}
 }
+
+// TestM2OLoaderMarksLoadedBeforeSkippingNullKey pins that a to-one loader
+// marks every parent loaded before it skips a parent whose key is NULL. It
+// used to skip first, so a parent with no target read back as "not loaded"
+// and the GraphQL resolver re-queried it — one extra query per such row.
+// Behaviorally pinned by examples/tree TestTree_EagerLoadParentOfRoot.
+func TestM2OLoaderMarksLoadedBeforeSkippingNullKey(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	author := createM2OEdge("author", userType, "posts", "user_posts")
+	author.Optional = true
+	postType.Edges = []*gen.Edge{author}
+	fk := &gen.ForeignKey{
+		Field: &gen.Field{Name: "user_posts", Type: &field.TypeInfo{Type: field.TypeInt}, Nillable: true, Optional: true},
+		Edge:  author,
+	}
+	author.Rel.SetForeignKey(fk)
+	postType.ForeignKeys = []*gen.ForeignKey{fk}
+	h.graph.Nodes = []*gen.Type{userType, postType}
+
+	body := funcBody(t, genQueryPkg(h, postType, h.graph.Nodes, h.LeafPkgPath(postType)).GoString(), ") loadAuthor(")
+	initAt, skipAt := strings.Index(body, "init(n)"), strings.Index(body, `FKValue("user_posts")`)
+	if initAt < 0 || skipAt < 0 {
+		t.Fatalf("fixture does not render the hidden-FK loader\n%s", body)
+	}
+	if initAt > skipAt {
+		t.Errorf("loadAuthor marks the edge loaded only after skipping NULL keys\n%s", body)
+	}
+}
+
+// TestQueryLevelTraversalPreparesSourceQuery pins that every query-level
+// QueryXxx path closure calls prepareQuery on the source query before
+// buildQuery. Without it the source's policy and traversers never ran: a
+// denied User query still returned its users' posts through QueryPosts().
+// Behaviorally pinned by TestQueryTraversal_ScopesTheSourceQuery.
+func TestQueryLevelTraversalPreparesSourceQuery(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	tagType := createTestType("Tag")
+	userType.Edges = []*gen.Edge{
+		createO2MEdge("posts", postType, "posts", "user_posts"),
+		createM2MEdge("tags", tagType, "user_tags", []string{"user_id", "tag_id"}),
+	}
+	h.graph.Nodes = []*gen.Type{userType, postType, tagType}
+	src := genQueryPkg(h, userType, h.graph.Nodes, h.LeafPkgPath(userType)).GoString()
+
+	for _, method := range []string{"QueryPosts", "QueryTags"} {
+		body := funcBody(t, src, "*UserQuery) "+method+"(")
+		prep, build := strings.Index(body, "q.prepareQuery(ctx)"), strings.Index(body, "q.buildQuery(ctx)")
+		if prep < 0 || build < 0 || prep > build {
+			t.Errorf("%s must prepare the source query before building it\n%s", method, body)
+		}
+	}
+}
+
+// TestSelectAndGroupByValidateFieldNames pins that prepareQuery (reached by
+// every Select terminal) validates q.ctx.Fields and GroupBy.Scan validates
+// its own field list, both before building SQL. Without the check a field
+// name went into the SELECT list verbatim — SQL injection for callers that
+// pass a client-chosen field. Behaviorally pinned by
+// TestSelectAndGroupBy_RejectUnknownFields.
+func TestSelectAndGroupByValidateFieldNames(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	h.graph.Nodes = []*gen.Type{userType}
+	src := genQueryPkg(h, userType, h.graph.Nodes, h.LeafPkgPath(userType)).GoString()
+
+	for decl, fields := range map[string]string{
+		"*UserQuery) prepareQuery(": "range q.ctx.Fields",
+		"*UserGroupBy) Scan(":       "range g.fields",
+	} {
+		body := funcBody(t, src, decl)
+		check, run := strings.Index(body, fields), strings.Index(body, "ValidColumn(f)")
+		if check < 0 || run < 0 {
+			t.Errorf("%s does not validate %s with ValidColumn\n%s", decl, fields, body)
+		}
+	}
+}

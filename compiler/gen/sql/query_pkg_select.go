@@ -320,6 +320,7 @@ func (qg *queryGen) genGroupByType() {
 		body.Id("ctx").Op("=").Id("setContextOp").Call(
 			jen.Id("ctx"), jen.Id("g").Dot("build").Dot("ctx"), jen.Qual(qg.h.VeloxPkg(), "OpQueryGroupBy"),
 		)
+		qg.genValidFieldsCheck(body, jen.Id("g").Dot("fields"))
 		body.If(jen.Id("g").Dot("build").Op("==").Nil()).Block(
 			jen.Return(jen.Id("g").Dot("sqlScan").Call(jen.Id("ctx"), jen.Id("v"))),
 		)

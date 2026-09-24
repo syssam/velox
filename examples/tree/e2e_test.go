@@ -96,3 +96,31 @@ func TestTree(t *testing.T) {
 
 	_ = laptops
 }
+
+// TestTree_EagerLoadParentOfRoot pins eager loading an optional edge whose
+// foreign key is NULL. The parent key is a hidden column (no .Field()), and
+// FKValue returned its nil *int wrapped in a non-nil any, so WithParent()
+// panicked with "interface {} is *int, not int" on any tree containing a
+// root. A root must also come back loaded-and-empty rather than unloaded —
+// an unloaded edge sends the GraphQL resolver back to the database per row.
+func TestTree_EagerLoadParentOfRoot(t *testing.T) {
+	ctx := context.Background()
+	client, err := velox.Open("sqlite", "file:tree_eager.db?mode=memory&_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, client.Close()) }()
+	require.NoError(t, client.Schema.Create(ctx))
+
+	root := client.Category.Create().SetName("Root").SetSlug("root").SaveX(ctx)
+	client.Category.Create().SetName("Child").SetSlug("child").SetParentID(root.ID).SaveX(ctx)
+
+	nodes, err := client.Category.Query().WithParent().Order(category.ByID()).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+
+	assert.True(t, nodes[0].Edges.ParentLoaded(), "a root's parent edge is loaded and empty")
+	assert.Nil(t, nodes[0].Edges.Parent)
+
+	require.True(t, nodes[1].Edges.ParentLoaded())
+	require.NotNil(t, nodes[1].Edges.Parent)
+	assert.Equal(t, "Root", nodes[1].Edges.Parent.Name)
+}

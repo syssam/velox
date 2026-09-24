@@ -161,6 +161,9 @@ func (q *PostQuery) QueryAuthor() entity.UserQuerier {
 	tq := NewUserQuery(q.config)
 	tq.inters = q.inters
 	tq.path = func(ctx context.Context) (*sql.Selector, error) {
+		if err := q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
 		from, err := q.buildQuery(ctx)
 		if err != nil {
 			return nil, err
@@ -215,6 +218,16 @@ func (q *PostQuery) eagerLoad(ctx context.Context, nodes []*entity.Post) error {
 // Traversers from the interceptor list. Privacy is invoked
 // explicitly here — it is NOT part of the interceptor chain.
 func (q *PostQuery) prepareQuery(ctx context.Context) error {
+	for _, f := range q.ctx.Fields {
+		if !post.ValidColumn(f) {
+			return &runtime.ValidationError{
+				Entity: "Post",
+				Err:    fmt.Errorf("invalid field %q for query", f),
+				Field:  f,
+				Name:   f,
+			}
+		}
+	}
 	return runtime.RunTraversers(ctx, q, q.inters.Post)
 }
 
@@ -738,6 +751,16 @@ func (g *PostGroupBy) Aggregate(fns ...runtime.AggregateFunc) entity.PostGroupBy
 // Scan applies the group-by query and scans the result into the given value.
 func (g *PostGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, g.build.ctx, velox.OpQueryGroupBy)
+	for _, f := range g.fields {
+		if !post.ValidColumn(f) {
+			return &runtime.ValidationError{
+				Entity: "Post",
+				Err:    fmt.Errorf("invalid field %q for query", f),
+				Field:  f,
+				Name:   f,
+			}
+		}
+	}
 	if g.build == nil {
 		return g.sqlScan(ctx, v)
 	}

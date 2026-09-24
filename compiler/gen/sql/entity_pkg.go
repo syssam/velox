@@ -503,6 +503,9 @@ func genEntityPkgValueMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 }
 
 // genEntityPkgFKValueMethod generates a FKValue method for unexported FK fields.
+// A NULL key must come back as an untyped nil: returning the *T field wraps a
+// nil pointer in a non-nil any, the eager loaders' `== nil` guard misses it,
+// and their type assertion on the key panics.
 func genEntityPkgFKValueMethod(f *jen.File, t *gen.Type) {
 	fks := t.UnexportedForeignKeys()
 	if len(fks) == 0 {
@@ -515,8 +518,14 @@ func genEntityPkgFKValueMethod(f *jen.File, t *gen.Type) {
 	).Any().BlockFunc(func(body *jen.Group) {
 		body.Switch(jen.Id("column")).BlockFunc(func(sw *jen.Group) {
 			for _, fk := range fks {
+				field := jen.Id(recv).Dot(fk.StructField())
+				if !fk.Field.Nillable {
+					sw.Case(jen.Lit(fk.Field.Name)).Block(jen.Return(field))
+					continue
+				}
 				sw.Case(jen.Lit(fk.Field.Name)).Block(
-					jen.Return(jen.Id(recv).Dot(fk.StructField())),
+					jen.If(jen.Id(recv).Dot(fk.StructField()).Op("==").Nil()).Block(jen.Return(jen.Nil())),
+					jen.Return(jen.Op("*").Add(field)),
 				)
 			}
 			sw.Default().Block(

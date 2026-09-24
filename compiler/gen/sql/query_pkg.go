@@ -629,6 +629,13 @@ func (qg *queryGen) genQueryEdges() {
 				jen.Op("*").Qual(qg.sqlPkg, "Selector"),
 				jen.Error(),
 			).BlockFunc(func(body *jen.Group) {
+				// The source query is scoped like any other read: without
+				// prepareQuery its policy and traversers never run, and the
+				// traversal returns the neighbors of rows they would deny
+				// or filter out (Ent calls it here too).
+				body.If(jen.Err().Op(":=").Id(qg.recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Err()),
+				)
 				body.List(jen.Id("from"), jen.Err()).Op(":=").Id(qg.recv).Dot("buildQuery").Call(jen.Id("ctx"))
 				body.If(jen.Err().Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Err()),
@@ -1011,13 +1018,16 @@ func genTypedM2OLoader(
 		}
 	}
 	body.For(jen.List(jen.Id("_"), jen.Id("n")).Op(":=").Range().Id("nodes")).BlockFunc(func(forBody *jen.Group) {
+		// Mark every parent loaded before skipping a NULL key: a parent with
+		// no target is loaded-and-empty, not unloaded (Ent parity). Marking
+		// after the skip made the GraphQL resolver re-query each such row.
+		forBody.If(jen.Id("init").Op("!=").Nil()).Block(
+			jen.Id("init").Call(jen.Id("n")),
+		)
 		fkValue(forBody)
 		forBody.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("fkSeen").Index(jen.Id("fkVal")), jen.Op("!").Id("ok")).Block(
 			jen.Id("fkSeen").Index(jen.Id("fkVal")).Op("=").Struct().Values(),
 			jen.Id("fks").Op("=").Append(jen.Id("fks"), jen.Any().Call(jen.Id("fkVal"))),
-		)
-		forBody.If(jen.Id("init").Op("!=").Nil()).Block(
-			jen.Id("init").Call(jen.Id("n")),
 		)
 	})
 	body.If(jen.Len(jen.Id("fks")).Op("==").Lit(0)).Block(
