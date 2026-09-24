@@ -170,21 +170,21 @@ else
 # ---------- security job ----------
 echo
 echo "==> security job (govulncheck)"
-if command -v govulncheck >/dev/null 2>&1; then
-    if govulncheck ./... >/tmp/ci-local-vuln.log 2>&1; then
-        record_pass "security"
-    else
-        tail -20 /tmp/ci-local-vuln.log
-        # govulncheck reports against the LOCAL Go toolchain. Stdlib findings
-        # "Fixed in: goX.Y.Z" usually mean your Go is behind CI's, not a real
-        # velox issue — CI pins go-version '1.26' (latest 1.26.x). If every
-        # finding is "Standard library", update Go to match CI and re-run.
-        echo "  note: local toolchain is $(go version | awk '{print $3}'); if findings are"
-        echo "        stdlib-only ('Fixed in: goX.Y.Z'), update Go to CI's 1.26.x and re-run."
-        record_fail "security"
-    fi
+# Same pinned version as ci.yml, built by the running toolchain. A binary on
+# PATH built by an older Go cannot load a newer stdlib ("file requires newer
+# Go version") and failed this job locally while CI passed.
+GOVULNCHECK_VERSION="v1.1.4"
+if go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./... >/tmp/ci-local-vuln.log 2>&1; then
+    record_pass "security"
 else
-    echo "  govulncheck not installed — skipping (install: go install golang.org/x/vuln/cmd/govulncheck@latest)"
+    tail -20 /tmp/ci-local-vuln.log
+    # govulncheck reports against the LOCAL Go toolchain. Stdlib findings
+    # "Fixed in: goX.Y.Z" usually mean your Go is behind CI's, not a real
+    # velox issue — CI pins go-version '1.26' (latest 1.26.x). If every
+    # finding is "Standard library", update Go to match CI and re-run.
+    echo "  note: local toolchain is $(go version | awk '{print $3}'); if findings are"
+    echo "        stdlib-only ('Fixed in: goX.Y.Z'), update Go to CI's 1.26.x and re-run."
+    record_fail "security"
 fi
 
 # ---------- examples matrix (mirrors ci.yml `examples` job exactly) ----------
@@ -200,6 +200,7 @@ EXAMPLES=(
     "examples/fulltest:build"
     "examples/globalid:test"
     "examples/json-field:test"
+    "examples/multitenant:test"
     "examples/tree:test"
     "examples/versioned-migration:test"
     "tests/external-module:test"
