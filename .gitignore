@@ -65,6 +65,7 @@ tests/integration/filter/
 tests/integration/hook/
 tests/integration/intercept/
 tests/integration/internal/
+tests/integration/like/
 tests/integration/migrate/
 tests/integration/pet/
 tests/integration/post/

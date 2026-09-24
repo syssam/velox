@@ -116,6 +116,9 @@ func (User) Edges() []velox.Edge {
 			Comment("Pets owned by this user (a .Field()-bound foreign key)"),
 		edge.To("comments", Comment.Type).
 			Comment("Comments written by this user"),
+		edge.To("liked_posts", Post.Type).
+			Comment("Posts this user liked, through the Like edge schema").
+			Through("likes", Like.Type),
 	}
 }
 

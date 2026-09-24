@@ -51,6 +51,9 @@ func (Post) Edges() []velox.Edge {
 			Required(),
 		edge.To("comments", Comment.Type),
 		edge.To("tags", Tag.Type),
+		edge.From("likers", User.Type).
+			Ref("liked_posts").
+			Through("likes", Like.Type),
 	}
 }
 

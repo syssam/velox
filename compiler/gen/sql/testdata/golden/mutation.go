@@ -445,8 +445,6 @@ func (m *UserMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an error if the field is not defined in the schema or is not nullable.
 func (m *UserMutation) ClearField(name string) error {
 	switch name {
-	case "bio":
-		m._bio = nil
 	case "nickname":
 		m._nickname = nil
 	default:
@@ -553,7 +551,7 @@ func (m *UserMutation) ClearEdge(name string) error {
 		m.ClearPosts()
 		return nil
 	}
-	return fmt.Errorf("unknown User unique edge %s", name)
+	return fmt.Errorf("unknown User edge %s", name)
 }
 
 // ResetEdge resets all changes for the edge with the given name.

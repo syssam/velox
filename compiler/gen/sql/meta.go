@@ -100,6 +100,36 @@ func genEntityRuntimeRegistration(h gen.GeneratorHelper, grp *jen.Group, t *gen.
 		}),
 	)
 
+	// An edge schema with defaults registers them, so an M2M edge declared
+	// Through() this entity fills them on the join row (Ent runs the join
+	// entity's defaults() there; the adding entity cannot import this one).
+	if t.IsEdgeSchema() && t.HasDefault() {
+		createArgs := []jen.Code{
+			jen.Qual(runtimePkg, "Config").Values(),
+			jen.Id("New"+mutName).Call(jen.Qual(runtimePkg, "Config").Values(), jen.Qual(runtimePkg, "OpCreate")),
+			jen.Nil(),
+		}
+		if t.NumPolicy() > 0 {
+			createArgs = append(createArgs, jen.Nil())
+		}
+		grp.Qual(runtimePkg, "RegisterEdgeSchemaDefaults").Call(
+			jen.Qual(leafPkg, "Table"),
+			jen.Func().Params().Index().Op("*").Qual(h.SQLGraphPkg(), "FieldSpec").BlockFunc(func(fn *jen.Group) {
+				fn.Id("c").Op(":=").Id("New" + t.CreateName()).Call(createArgs...)
+				// A DefaultFunc left nil fails here just as it would on the
+				// join entity's own create; the fields set so far still apply.
+				fn.Id("_").Op("=").Id("c").Dot("defaults").Call()
+				fn.List(jen.Id("_"), jen.Id("spec")).Op(":=").Id("c").Dot("createSpec").Call()
+				if t.HasOneFieldID() && t.ID.Default {
+					fn.If(jen.Id("spec").Dot("ID").Dot("Value").Op("!=").Nil()).Block(
+						jen.Return(jen.Append(jen.Id("spec").Dot("Fields"), jen.Id("spec").Dot("ID"))),
+					)
+				}
+				fn.Return(jen.Id("spec").Dot("Fields"))
+			}),
+		)
+	}
+
 	// Register a NodeResolver so that root client.Noder/Noders can resolve this
 	// entity by global ID. The resolver pulls Config from the context (injected
 	// by the generated Noder) and constructs a fresh entity client to call Get.

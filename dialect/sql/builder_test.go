@@ -2455,3 +2455,13 @@ func TestSetOpFuncs(t *testing.T) {
 			query)
 	})
 }
+
+// TestConflictDoesNothing pins how the executor tells a skipped conflict from
+// an updated one on MySQL, which renders DO NOTHING as a no-op update.
+func TestConflictDoesNothing(t *testing.T) {
+	require.True(t, ConflictDoesNothing(ConflictColumns("id"), DoNothing()))
+	require.False(t, ConflictDoesNothing(ConflictColumns("id"), ResolveWithIgnore()))
+	require.False(t, ConflictDoesNothing(ConflictColumns("id"), ResolveWithNewValues()))
+	require.False(t, ConflictDoesNothing(ConflictColumns("id")))
+	require.False(t, ConflictDoesNothing(DoNothing(), ResolveWithIgnore()), "an update wins over DO NOTHING")
+}

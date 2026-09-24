@@ -1044,6 +1044,9 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 	if q.Order != nil {
 		selector.ClearOrder()
 	}
+	if q.Limit != 0 || q.Offset != 0 {
+		return q.countWindow(ctx, drv, selector)
+	}
 	if q.countsAllRows(selector) {
 		// COUNT(*) instead of Ent's COUNT(<id>). The two are equal here: the
 		// id is the node's primary key (NOT NULL), and with no JOIN on the
@@ -1091,6 +1094,35 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 //     raw expression whose id column could be anything — generated code
 //     only ever passes the node table or a traversal selector as From,
 //   - the selector has no JOIN, so no row can carry a NULL id.
+//
+// countWindow counts the rows a limited or offset query returns. The window
+// must apply to those rows, not to the single COUNT row the aggregate
+// produces — there OFFSET skipped the count ("no rows in result set") and
+// LIMIT did nothing. Deliberate Ent deviation (Ent has the same bug): the
+// windowed query becomes a derived table and is counted from outside. Its
+// ORDER BY is already cleared; the count of a window does not depend on it.
+func (q *query) countWindow(ctx context.Context, drv dialect.Driver, selector *sql.Selector) (int, error) {
+	columns := q.Node.Columns
+	if len(columns) == 0 && q.Node.ID != nil {
+		columns = []string{q.Node.ID.Column}
+	}
+	qualified := make([]string, len(columns))
+	for i, c := range columns {
+		qualified[i] = selector.C(c)
+	}
+	// Keep the selection (and its DISTINCT under Unique): it decides which
+	// rows fill the window.
+	selector.Select(qualified...)
+	counter := q.builder.Select(sql.Count("*")).From(selector.As("t1"))
+	rows := &sql.Rows{}
+	query, args := counter.Query()
+	if err := drv.Query(ctx, query, args, rows); err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	return sql.ScanInt(rows)
+}
+
 func (q *query) countsAllRows(selector *sql.Selector) bool {
 	return !q.Unique &&
 		len(q.Node.Columns) == 0 &&
@@ -1431,6 +1463,9 @@ type creator struct {
 	// skipped is set when ON CONFLICT DO NOTHING hit a duplicate: no row
 	// was inserted, so there is no ID to attach the spec's edges to.
 	skipped bool
+	// idUnknown is set when a conflict resolved to an existing row whose
+	// ID the database cannot report (MySQL, non-numeric key).
+	idUnknown bool
 }
 
 func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
@@ -1463,6 +1498,10 @@ func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
 		// (or never-inserted) ID and attach them to nothing.
 		if c.skipped {
 			return nil
+		}
+		if c.idUnknown && len(c.Edges) > 0 {
+			return fmt.Errorf("velox: create: ON CONFLICT resolved to an existing %s row whose ID MySQL cannot "+
+				"report for a non-numeric key, so its edges cannot be linked; add them in a separate update", c.Table)
 		}
 		if err := c.addM2MEdges(ctx, []driver.Value{c.ID.Value}, edges[M2M]); err != nil {
 			return err
@@ -1561,6 +1600,10 @@ func (c *creator) ensureLastInsertID(insert *sql.InsertBuilder) {
 type batchCreator struct {
 	graph
 	*BatchCreateSpec
+	// skipped counts the rows an ON CONFLICT clause left out of the insert.
+	// Inserted IDs come back in insert order without saying which input
+	// they belong to, so once any row is skipped none can be matched.
+	skipped int
 }
 
 func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
@@ -1625,6 +1668,19 @@ func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
 		}
 		if err := c.batchInsert(ctx, tx, insert); err != nil {
 			return fmt.Errorf("insert nodes to table %q: %w", c.Nodes[0].Table, err)
+		}
+		// Linking edges needs each input's ID. After a skip the returned IDs
+		// cannot be matched to inputs, and assigning them by position linked
+		// edges to the wrong rows with no error (Ent does the same).
+		if c.skipped > 0 && slices.ContainsFunc(c.Nodes, func(n *CreateSpec) bool { return len(n.Edges) > 0 }) {
+			hint := "use sql.ResolveWithIgnore(), which returns every row, or create rows with edges one at a time"
+			if insert.Dialect() == dialect.MySQL {
+				// No RETURNING: IDs are inferred from LAST_INSERT_ID and the
+				// affected-row count, which no conflict resolution keeps exact.
+				hint = "MySQL reports no per-row IDs for a bulk upsert; create rows with edges one at a time"
+			}
+			return fmt.Errorf("velox: bulk create: ON CONFLICT did not insert every row, so the IDs "+
+				"cannot be matched to the rows and their edges cannot be linked; %s", hint)
 		}
 		if err := c.batchAddM2M(ctx, c.BatchCreateSpec); err != nil {
 			return err
@@ -1993,6 +2049,30 @@ func (c *creator) insertLastID(ctx context.Context, insert *sql.InsertBuilder) e
 	if err := c.tx.Exec(ctx, query, args, &res); err != nil {
 		return err
 	}
+	if len(c.OnConflict) > 0 {
+		// MySQL has no DO NOTHING or RETURNING: a conflict is a no-op or real
+		// UPDATE, affecting 0 or 2 rows; an insert affects 1.
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		switch {
+		case affected == 1:
+		case sql.ConflictDoesNothing(c.OnConflict...):
+			// Skipped, as DO NOTHING is on PostgreSQL and SQLite. The
+			// LAST_INSERT_ID(id) trick would name the existing row, and its
+			// edges would be written there.
+			c.skipped = true
+			c.ID.Value = nil
+			return nil
+		case !c.ID.Type.Numeric():
+			// Resolved to an existing row: its key is not the one sent, and
+			// MySQL can report only numeric auto-increment IDs.
+			c.idUnknown = true
+			c.ID.Value = nil
+			return nil
+		}
+	}
 	// If the ID field is not numeric (e.g. string),
 	// there is no way to scan the LAST_INSERT_ID.
 	if c.ID.Type.Numeric() {
@@ -2007,9 +2087,22 @@ func (c *creator) insertLastID(ctx context.Context, insert *sql.InsertBuilder) e
 
 // insertLastIDs invokes the batch insert query on the transaction and returns the LastInsertID of all entities.
 func (c *batchCreator) insertLastIDs(ctx context.Context, tx dialect.ExecQuerier, insert *sql.InsertBuilder) error {
-	query, args, err := insert.QueryErr()
-	if err != nil {
-		return err
+	query, args, qerr := insert.QueryErr()
+	if qerr != nil {
+		return qerr
+	}
+	// Keep the IDs the caller supplied (nil for database-generated ones): if
+	// a conflict skips rows, the returned IDs are restored away rather than
+	// left on inputs they do not belong to.
+	supplied := make([]driver.Value, len(c.Nodes))
+	for i, node := range c.Nodes {
+		supplied[i] = node.ID.Value
+	}
+	restore := func(returned int) {
+		c.skipped = len(c.Nodes) - returned
+		for i, node := range c.Nodes {
+			node.ID.Value = supplied[i]
+		}
 	}
 	// MySQL does not support the "RETURNING" clause.
 	if insert.Dialect() != dialect.MySQL {
@@ -2018,7 +2111,14 @@ func (c *batchCreator) insertLastIDs(ctx context.Context, tx dialect.ExecQuerier
 			return err
 		}
 		defer rows.Close()
+		returned := 0
+		defer func() {
+			if len(c.OnConflict) > 0 && returned < len(c.Nodes) {
+				restore(returned)
+			}
+		}()
 		for i := 0; rows.Next(); i++ {
+			returned++
 			if i >= len(c.Nodes) {
 				return fmt.Errorf("unexpected number of returned rows: got more than %d", len(c.Nodes))
 			}
@@ -2051,14 +2151,23 @@ func (c *batchCreator) insertLastIDs(ctx context.Context, tx dialect.ExecQuerier
 	if err := tx.Exec(ctx, query, args, &res); err != nil {
 		return err
 	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	// MySQL counts 1 per inserted row, 0 per unchanged and 2 per updated
+	// conflicting row, so LAST_INSERT_ID+i — or a caller-generated key — is
+	// only each input's ID when every row was inserted: affected equals the
+	// row count. (An update and an unchanged row can still cancel out; MySQL
+	// gives no way to tell.)
+	if len(c.OnConflict) > 0 && affected != int64(len(c.Nodes)) {
+		restore(0)
+		return nil
+	}
 	// If the ID field is not numeric (e.g. string),
 	// there is no way to scan the LAST_INSERT_ID.
 	if len(c.Nodes) > 0 && c.Nodes[0].ID.Type.Numeric() {
 		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		affected, err := res.RowsAffected()
 		if err != nil {
 			return err
 		}

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql/sqlgraph"
 )
 
 // =============================================================================
@@ -204,6 +205,37 @@ func ValidColumn(table, column string) error {
 // =============================================================================
 // Node Resolver Registry
 // =============================================================================
+
+// Edge-schema defaults: an M2M edge declared with Through() writes a row of
+// the join entity, whose fields may have defaults (Membership.joined_at =
+// time.Now). The join entity's client package registers a function that
+// returns those default fields; the entity adding the edge — which cannot
+// import the join entity's package — looks it up by the join table. Written
+// at init, read on the create/update path.
+var (
+	edgeDefaultsMu sync.RWMutex
+	edgeDefaults   = map[string]func() []*sqlgraph.FieldSpec{}
+)
+
+// RegisterEdgeSchemaDefaults registers the default-field builder of the edge
+// schema stored in table. Called from generated init() functions.
+func RegisterEdgeSchemaDefaults(table string, fn func() []*sqlgraph.FieldSpec) {
+	edgeDefaultsMu.Lock()
+	defer edgeDefaultsMu.Unlock()
+	edgeDefaults[table] = fn
+}
+
+// EdgeSchemaDefaults returns the default field values for a new row of the
+// edge schema stored in table, or nil when it has none registered.
+func EdgeSchemaDefaults(table string) []*sqlgraph.FieldSpec {
+	edgeDefaultsMu.RLock()
+	fn := edgeDefaults[table]
+	edgeDefaultsMu.RUnlock()
+	if fn == nil {
+		return nil
+	}
+	return fn()
+}
 
 // NodeRegistry provides a global registry for Node interface resolution.
 // Each entity package registers its resolver at init time, eliminating

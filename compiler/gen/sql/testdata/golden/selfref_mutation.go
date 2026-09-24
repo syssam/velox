@@ -402,7 +402,7 @@ func (m *EmployeeMutation) ClearEdge(name string) error {
 		m.ClearManager()
 		return nil
 	}
-	return fmt.Errorf("unknown Employee unique edge %s", name)
+	return fmt.Errorf("unknown Employee edge %s", name)
 }
 
 // ResetEdge resets all changes for the edge with the given name.

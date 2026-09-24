@@ -123,6 +123,7 @@ func BuildSelectorFrom(context.Context, QueryReader) (*github.com/syssam/velox/d
 func CloneSlice[T any]([]T) []T
 func ConfigFromContext(context.Context) Config
 func DeleteNodes(context.Context, *DeleterBase) (int, error)
+func EdgeSchemaDefaults(string) []*github.com/syssam/velox/dialect/sql/sqlgraph.FieldSpec
 func EntityPolicy(string) github.com/syssam/velox.Policy
 func ExtractID(any, github.com/syssam/velox/schema/field.Type) (any, error)
 func FindMutator(string) MutatorFunc
@@ -147,6 +148,7 @@ func QueryGroupBy(context.Context, QueryReader, []string, []AggregateFunc, any) 
 func QueryScan(context.Context, QueryReader, any) error
 func QuerySelect(context.Context, QueryReader, []AggregateFunc, any) error
 func RegisterColumns(string, func(string) bool)
+func RegisterEdgeSchemaDefaults(string, func() []*github.com/syssam/velox/dialect/sql/sqlgraph.FieldSpec)
 func RegisterEntity(EntityRegistration)
 func RegisterEntityPolicy(string, *github.com/syssam/velox.Policy)
 func RegisterMutator(string, MutatorFunc)

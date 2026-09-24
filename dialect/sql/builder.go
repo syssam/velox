@@ -286,6 +286,17 @@ func DoNothing() ConflictOption {
 	}
 }
 
+// ConflictDoesNothing reports whether opts resolve a conflict with DO NOTHING
+// (and no update). MySQL has no DO NOTHING; it is rendered as a no-op update,
+// so the executor needs this to tell "skipped" from "updated".
+func ConflictDoesNothing(opts ...ConflictOption) bool {
+	c := &conflict{}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c.action.nothing && len(c.action.update) == 0
+}
+
 // ResolveWithIgnore sets each column to itself to force an update and return the ID,
 // otherwise does not change any data. This may still trigger update hooks in the database.
 //

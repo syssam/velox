@@ -442,11 +442,6 @@ func (m *ArticleMutation) ClearField(name string) error {
 	switch name {
 	case "content":
 		m._content = nil
-	case "tags":
-		m._tags = nil
-		if m.appends != nil {
-			delete(m.appends, "tags")
-		}
 	default:
 		return fmt.Errorf("unknown Article nullable field %s", name)
 	}
@@ -556,7 +551,7 @@ func (m *ArticleMutation) ClearEdge(name string) error {
 		m.ClearAuthor()
 		return nil
 	}
-	return fmt.Errorf("unknown Article unique edge %s", name)
+	return fmt.Errorf("unknown Article edge %s", name)
 }
 
 // ResetEdge resets all changes for the edge with the given name.

@@ -334,7 +334,7 @@ func (m *TaskMutation) EdgeCleared(name string) bool {
 func (m *TaskMutation) ClearEdge(name string) error {
 	switch name {
 	}
-	return fmt.Errorf("unknown Task unique edge %s", name)
+	return fmt.Errorf("unknown Task edge %s", name)
 }
 
 // ResetEdge resets all changes for the edge with the given name.

@@ -356,7 +356,7 @@ func (m *PostMutation) ClearEdge(name string) error {
 		m.ClearAuthor()
 		return nil
 	}
-	return fmt.Errorf("unknown Post unique edge %s", name)
+	return fmt.Errorf("unknown Post edge %s", name)
 }
 
 // ResetEdge resets all changes for the edge with the given name.

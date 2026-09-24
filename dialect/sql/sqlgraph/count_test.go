@@ -44,11 +44,14 @@ func TestCountNodes_SQLShape(t *testing.T) {
 			args: []any{40},
 		},
 		{
-			name: "limit and offset",
+			// The window applies to the rows, not to the COUNT row: counting
+			// "FROM users LIMIT 3 OFFSET 4" skipped the only row the
+			// aggregate returns. Deliberate Ent deviation (Ent has the bug).
+			name: "limit and offset count the window",
 			spec: func() *QuerySpec {
 				return &QuerySpec{Node: usersID(), Limit: 3, Offset: 4}
 			},
-			want: "SELECT COUNT(*) FROM `users` LIMIT 3 OFFSET 4",
+			want: "SELECT COUNT(*) FROM (SELECT `users`.`id` FROM `users` LIMIT 3 OFFSET 4) AS `t1`",
 		},
 		{
 			name: "unique keeps COUNT(DISTINCT id)",

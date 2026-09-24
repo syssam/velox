@@ -172,16 +172,10 @@ func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderN
 	entityPkg := h.LeafPkgPath(t)
 	pkg := t.PackageDir()
 
-	autoDefault := h.FeatureEnabled(gen.FeatureAutoDefault.Name)
-	fieldNeedsDefault := func(fd *gen.Field) bool {
-		if fd.Default {
-			return true
-		}
-		if autoDefault && fd.Optional && !fd.Nillable && fd.Type != nil && (fd.Type.Type.IsStandardType() || fd.Type.Type == schemafield.TypeOther) {
-			return true
-		}
-		return false
-	}
+	// Only explicit Default()s are applied here, before hooks and check().
+	// FeatureAutoDefault's zero values are filled in createSpec instead —
+	// see genCreateAutoDefaults.
+	fieldNeedsDefault := func(fd *gen.Field) bool { return fd.Default }
 
 	genFieldDefault := func(grp *jen.Group, fd *gen.Field) {
 		grp.If(
@@ -201,8 +195,6 @@ func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderN
 				} else {
 					blk.Id("v").Op(":=").Qual(entityPkg, fd.DefaultName())
 				}
-			} else {
-				blk.Id("v").Op(":=").Add(baseZeroValue(h, fd))
 			}
 			blk.Id(recv).Dot("mutation").Dot(fd.MutationSet()).Call(jen.Id("v"))
 		})
@@ -217,6 +209,30 @@ func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderN
 		}
 		grp.Return(jen.Nil())
 	})
+}
+
+// genCreateAutoDefaults emits, at the top of createSpec, FeatureAutoDefault's
+// zero value for each unset Optional, non-Nillable field (its column is NOT
+// NULL). createSpec runs after check(), so the zero is never validated: it
+// used to be set in defaults(), and Optional().Positive() then rejected
+// every create that omitted the field — an Optional field turned required.
+// Ent validates only values the caller (or a hook) set.
+func genCreateAutoDefaults(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv string) {
+	if !h.FeatureEnabled(gen.FeatureAutoDefault.Name) {
+		return
+	}
+	for _, fd := range t.Fields {
+		if fd.Default || !fd.Optional || fd.Nillable || fd.Type == nil ||
+			(!fd.Type.Type.IsStandardType() && fd.Type.Type != schemafield.TypeOther) {
+			continue
+		}
+		grp.If(
+			jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
+			jen.Op("!").Id("ok"),
+		).Block(
+			jen.Id(recv).Dot("mutation").Dot(fd.MutationSet()).Call(baseZeroValue(h, fd)),
+		)
+	}
 }
 
 // genCreateCheck generates the check method for the root Create builder.
@@ -407,6 +423,7 @@ func genCreateSpecMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builde
 		jen.Op("*").Qual(entityReturnPkg, t.Name),
 		jen.Op("*").Qual(sqlGraphPkg, "CreateSpec"),
 	).BlockFunc(func(grp *jen.Group) {
+		genCreateAutoDefaults(h, grp, t, recv)
 		grp.Var().Defs(
 			jen.Id("_node").Op("=").Op("&").Qual(entityReturnPkg, t.Name).Values(),
 			jen.Id("_spec").Op("=").Qual(sqlGraphPkg, "NewCreateSpec").Call(
@@ -506,6 +523,9 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 				jen.Id("k"),
 			),
 		)
+		if d := edgeSchemaDefaults(edge, "edge"); d != nil {
+			blk.Add(d)
+		}
 		// Do NOT store the target in _node.Edges: create knows only its ID,
 		// and an ID-only stub marked loaded made Edges.XxxOrErr() — and the
 		// GraphQL resolver that trusts it — return the target with every

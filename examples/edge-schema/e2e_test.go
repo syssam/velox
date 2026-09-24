@@ -3,6 +3,7 @@ package edgeschema_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"example.com/edge-schema/velox"
 	"example.com/edge-schema/velox/membership"
@@ -75,4 +76,70 @@ func TestEdgeSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, owned, 1)
 	assert.Equal(t, engineering.ID, owned[0].GroupID)
+}
+
+// TestEdgeSchema_M2MThroughAppliesJoinDefaults pins that adding an M2M edge
+// through an edge schema fills the join entity's defaults. The join row was
+// written with only the two keys, so Membership.joined_at (Default(time.Now),
+// NOT NULL) failed every AddGroupIDs / AddUserIDs with a constraint error;
+// only Membership.Create() worked. Ent runs the join entity's defaults for
+// the edge; velox reads them from a registry the join entity fills at init.
+func TestEdgeSchema_M2MThroughAppliesJoinDefaults(t *testing.T) {
+	ctx := context.Background()
+	client, err := velox.Open("sqlite", "file:edge_defaults.db?mode=memory&_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, client.Close()) }()
+	require.NoError(t, client.Schema.Create(ctx))
+
+	g1 := client.Group.Create().SetName("g1").SaveX(ctx)
+	g2 := client.Group.Create().SetName("g2").SaveX(ctx)
+	before := time.Now().Add(-time.Minute)
+
+	u, err := client.User.Create().SetName("A").SetEmail("a@x").AddGroupIDs(g1.ID).Save(ctx)
+	require.NoError(t, err, "create through the M2M edge")
+	_, err = client.User.UpdateOne(u).AddGroupIDs(g2.ID).Save(ctx)
+	require.NoError(t, err, "update through the M2M edge")
+	_, err = client.Group.Create().SetName("g3").AddUserIDs(u.ID).Save(ctx)
+	require.NoError(t, err, "create from the inverse side")
+
+	ms, err := client.Membership.Query().Where(membership.UserIDField.EQ(u.ID)).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, ms, 3)
+	for _, m := range ms {
+		assert.Equal(t, membership.RoleMember, m.Role, "static default")
+		assert.True(t, m.JoinedAt.After(before), "Default(time.Now) applied: %v", m.JoinedAt)
+	}
+}
+
+// TestEdgeSchema_ThroughEdgeTargetsTheJoinTable pins that mutating the
+// generated through edge (User.memberships) addresses the join table. Its
+// edge spec said M2O, which means "the key is on the users table", so
+// AddMembershipIDs / ClearMemberships built SQL against users.user_id and
+// failed with "no such column". It is O2M with the key on memberships (Ent
+// emits O2M, Inverse: true); the join row's user_id is NOT NULL, so moving
+// or clearing it is a constraint error from the right table.
+func TestEdgeSchema_ThroughEdgeTargetsTheJoinTable(t *testing.T) {
+	ctx := context.Background()
+	client, err := velox.Open("sqlite", "file:edge_through.db?mode=memory&_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, client.Close()) }()
+	require.NoError(t, client.Schema.Create(ctx))
+
+	a := client.User.Create().SetName("A").SetEmail("a@x").SaveX(ctx)
+	b := client.User.Create().SetName("B").SetEmail("b@x").SaveX(ctx)
+	g := client.Group.Create().SetName("g").SaveX(ctx)
+	m := client.Membership.Create().SetUserID(a.ID).SetGroupID(g.ID).SaveX(ctx)
+
+	_, err = client.User.UpdateOne(b).AddMembershipIDs(m.ID).Save(ctx)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "no such column", "SQL must target the memberships table")
+	assert.True(t, velox.IsConstraintError(err), "moving an owned membership: got %v", err)
+
+	_, err = client.User.UpdateOne(a).ClearMemberships().Save(ctx)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "no such column")
+
+	got, err := client.Membership.Get(ctx, m.ID)
+	require.NoError(t, err)
+	assert.Equal(t, a.ID, got.UserID, "the failed mutations changed nothing")
 }

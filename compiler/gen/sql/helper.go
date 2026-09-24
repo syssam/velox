@@ -73,14 +73,31 @@ func edgeSpecBase(edge *gen.Edge, sqlGraphPkg string) (rel jen.Code, tableExpr j
 	switch {
 	case edge.M2M():
 		return jen.Qual(sqlGraphPkg, "M2M"), jen.Lit(table), colsLit, edge.IsInverse(), edge.Bidi
-	case edge.O2M() && !edge.IsInverse():
-		return jen.Qual(sqlGraphPkg, "O2M"), jen.Lit(table), colsLit, false, false
-	case edge.M2O() || (edge.O2M() && edge.IsInverse()):
+	case edge.O2M():
+		// An O2M edge marked inverse is the edge-schema edge generated for a
+		// Through() (User.memberships): the key still lives on the join
+		// table, so it is O2M with Inverse set, as Ent emits. Mapping it to
+		// M2O told sqlgraph the key was on the owner's table, and every
+		// Add/Remove/Clear built SQL against a column that does not exist.
+		return jen.Qual(sqlGraphPkg, "O2M"), jen.Lit(table), colsLit, edge.IsInverse(), false
+	case edge.M2O():
 		return jen.Qual(sqlGraphPkg, "M2O"), jen.Lit(table), colsLit, true, false
 	case edge.O2O():
 		return jen.Qual(sqlGraphPkg, "O2O"), jen.Lit(table), colsLit, edge.IsInverse(), edge.Bidi
 	}
 	return nil, nil, nil, false, false
+}
+
+// edgeSchemaDefaults returns the statement that fills an M2M edge spec's
+// join-row defaults from the edge schema's registered builder, or nil when
+// the edge has no Through() entity with defaults. The adding entity cannot
+// import the join entity's package, so the defaults come from a registry
+// (runtime.RegisterEdgeSchemaDefaults, emitted by genEntityRuntimeRegistration).
+func edgeSchemaDefaults(edge *gen.Edge, edgeVar string) jen.Code {
+	if !edge.M2M() || edge.Through == nil || !edge.Through.HasDefault() {
+		return nil
+	}
+	return jen.Id(edgeVar).Dot("Target").Dot("Fields").Op("=").Qual(runtimePkg, "EdgeSchemaDefaults").Call(jen.Lit(edge.Through.Table()))
 }
 
 // lowerFirst returns s with its first rune lowered (used for unexported function names).

@@ -60,6 +60,40 @@ var CommentSchema = EntitySchema{
 	}},
 }
 
+// LikeSchema is the schema configuration for Like.
+var LikeSchema = EntitySchema{
+	Edges: []EdgeConfig{{
+		Columns: []string{"user_id"},
+		Inverse: false,
+		Name:    "user",
+		Table:   "users",
+		Type:    "User",
+	}, {
+		Columns: []string{"post_id"},
+		Inverse: false,
+		Name:    "post",
+		Table:   "posts",
+		Type:    "Post",
+	}},
+	Fields: []FieldConfig{{
+		Column: "id",
+		Name:   "id",
+		Type:   "TypeInt",
+	}, {
+		Column: "liked_at",
+		Name:   "liked_at",
+		Type:   "TypeTime",
+	}, {
+		Column: "user_id",
+		Name:   "user_id",
+		Type:   "TypeInt",
+	}, {
+		Column: "post_id",
+		Name:   "post_id",
+		Type:   "TypeInt",
+	}},
+}
+
 // PetSchema is the schema configuration for Pet.
 var PetSchema = EntitySchema{
 	Edges: []EdgeConfig{{
@@ -104,6 +138,18 @@ var PostSchema = EntitySchema{
 		Name:    "tags",
 		Table:   "tags",
 		Type:    "Tag",
+	}, {
+		Columns: []string{"user_id", "post_id"},
+		Inverse: true,
+		Name:    "likers",
+		Table:   "users",
+		Type:    "User",
+	}, {
+		Columns: []string{"post_id"},
+		Inverse: true,
+		Name:    "likes",
+		Table:   "likes",
+		Type:    "Like",
 	}},
 	Fields: []FieldConfig{{
 		Column: "id",
@@ -214,6 +260,18 @@ var UserSchema = EntitySchema{
 		Name:    "comments",
 		Table:   "comments",
 		Type:    "Comment",
+	}, {
+		Columns: []string{"user_id", "post_id"},
+		Inverse: false,
+		Name:    "liked_posts",
+		Table:   "posts",
+		Type:    "Post",
+	}, {
+		Columns: []string{"user_id"},
+		Inverse: true,
+		Name:    "likes",
+		Table:   "likes",
+		Type:    "Like",
 	}},
 	Fields: []FieldConfig{{
 		Column: "id",
@@ -251,7 +309,7 @@ var UserSchema = EntitySchema{
 }
 
 // TypeSchemas maps entity type names to their schema configurations.
-var TypeSchemas = map[string]*EntitySchema{"Comment": &CommentSchema, "Pet": &PetSchema, "Post": &PostSchema, "Tag": &TagSchema, "Token": &TokenSchema, "User": &UserSchema}
+var TypeSchemas = map[string]*EntitySchema{"Comment": &CommentSchema, "Like": &LikeSchema, "Pet": &PetSchema, "Post": &PostSchema, "Tag": &TagSchema, "Token": &TokenSchema, "User": &UserSchema}
 
 // GetSchema returns the schema configuration for a given type name.
 func GetSchema(typeName string) (*EntitySchema, bool) {

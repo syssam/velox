@@ -389,6 +389,12 @@ func QueryGroupBy(ctx context.Context, q QueryReader, groupFields []string, fns 
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
+	// An aggregate or order term on an unknown column records its error on
+	// the builder rather than returning it; running the query anyway
+	// returned zeros or every column with a nil error (Ent checks too).
+	if err := selector.Err(); err != nil {
+		return err
+	}
 	drv := q.GetDriver()
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return err
@@ -449,6 +455,12 @@ func QuerySelect(ctx context.Context, q QueryReader, fns []AggregateFunc, v any)
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
+	// An aggregate or order term on an unknown column records its error on
+	// the builder rather than returning it; running the query anyway
+	// returned zeros or every column with a nil error (Ent checks too).
+	if err := selector.Err(); err != nil {
+		return err
+	}
 	drv := q.GetDriver()
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return err
@@ -486,6 +498,12 @@ func ScanAll[T any, PT ScannableOf[T]](ctx context.Context, drv dialect.Driver, 
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
+	// An aggregate or order term on an unknown column records its error on
+	// the builder rather than returning it; running the query anyway
+	// returned zeros or every column with a nil error (Ent checks too).
+	if err = selector.Err(); err != nil {
+		return nil, err
+	}
 	if qErr := drv.Query(ctx, query, args, rows); qErr != nil {
 		return nil, qErr
 	}

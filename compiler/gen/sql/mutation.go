@@ -505,21 +505,30 @@ func genMutationEdge(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen.
 			jen.Return(),
 		)
 	} else {
-		// skipSetters: still emit ClearXxx and XxxCleared methods so that
-		// update check() / HasClearedEdge and the ClearEdge(name) dispatcher
-		// can query/set the edge's cleared state. The FK field itself is
-		// written via the user-defined field setter; clearing the edge only
-		// toggles the cleared flag used by update planning.
+		// skipSetters: the edge is bound to a user-defined field (Ent's
+		// edge-field), and that field IS the edge's state: SetXxxID is the
+		// field setter, clearing the edge clears the column, and the edge
+		// reports what the field holds. Keeping separate edge state left
+		// ClearXxx writing a flag nothing read and XxxIDs/AddedEdges blind
+		// to SetXxxID, so hooks keyed on edge changes never fired.
+		fd := edge.Field()
 		clearMethod := edge.MutationClear()
 		f.Commentf("%s clears the %q edge.", clearMethod, edgeName)
-		f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id(clearMethod).Params().Block(
-			jen.Id("m").Dot(clearedFieldName).Op("=").True(),
-		)
+		f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id(clearMethod).Params().BlockFunc(func(body *jen.Group) {
+			body.Id("m").Dot(clearedFieldName).Op("=").True()
+			if fd.Nillable {
+				body.Id("m").Dot(fd.MutationClear()).Call()
+			}
+		})
 
 		clearedMethod := edge.MutationCleared()
 		f.Commentf("%s reports if the %q edge was cleared.", clearedMethod, edgeName)
+		cleared := jen.Id("m").Dot(clearedFieldName)
+		if fd.Nillable {
+			cleared = cleared.Op("||").Id("m").Dot(fd.MutationCleared()).Call()
+		}
 		f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id(clearedMethod).Params().Bool().Block(
-			jen.Return(jen.Id("m").Dot(clearedFieldName)),
+			jen.Return(cleared),
 		)
 	}
 
@@ -533,9 +542,7 @@ func genMutationEdge(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen.
 		// For field-backed edges, also reset the typed field pointer so the
 		// user-defined FK field is cleared alongside the edge.
 		if skipSetters {
-			if fk, err := edge.ForeignKey(); err == nil && fk.Field != nil {
-				body.Id("m").Dot("_" + fk.Field.Name).Op("=").Nil()
-			}
+			body.Id("m").Dot(edge.Field().MutationReset()).Call()
 		}
 	})
 
@@ -545,12 +552,25 @@ func genMutationEdge(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen.
 	f.Commentf("%s returns the %q edge IDs in the mutation.", idsMethod, edgeName)
 	f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id(idsMethod).Params().Params(
 		jen.Id("ids").Index().Add(idType),
-	).Block(
-		jen.For(jen.Id("id").Op(":=").Range().Id("m").Dot(fieldName)).Block(
+	).BlockFunc(func(body *jen.Group) {
+		if skipSetters {
+			body.If(jen.List(jen.Id("id"), jen.Id("ok")).Op(":=").Id("m").Dot(edge.Field().MutationGet()).Call(), jen.Id("ok")).Block(
+				jen.Id("ids").Op("=").Append(jen.Id("ids"), jen.Id("id")),
+			)
+			body.Return()
+			return
+		}
+		body.For(jen.Id("id").Op(":=").Range().Id("m").Dot(fieldName)).Block(
 			jen.Id("ids").Op("=").Append(jen.Id("ids"), jen.Id("id")),
-		),
-		jen.Return(),
-	)
+		)
+		body.Return()
+	})
+}
+
+// fieldBoundEdge reports whether e is a unique edge bound to a user-defined
+// field, whose mutation state is that field (see genMutationEdge).
+func fieldBoundEdge(e *gen.Edge) bool {
+	return e.Unique && e.Field() != nil && e.Field().UserDefined
 }
 
 // genMutationFieldAccessors generates all methods required by the velox.Mutation interface.
@@ -711,11 +731,13 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 		jen.Return(jen.Id("ok")),
 	)
 
-	// ClearField clears a field by name. Only Optional/Nillable fields can be cleared.
-	// Returns an error for unknown or non-nullable field names.
+	// ClearField clears a field by name. Only Nillable fields can be cleared,
+	// matching the typed ClearXxx and the UPDATE, which clears only those:
+	// an Optional, non-Nillable field is NOT NULL in velox. Accepting it
+	// recorded a clear that no statement ever applied.
 	hasClearable := false
 	for _, fd := range t.Fields {
-		if fd.Optional || fd.Nillable {
+		if fd.Nillable {
 			hasClearable = true
 			break
 		}
@@ -730,7 +752,7 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 		}
 		g.Switch(jen.Id("name")).BlockFunc(func(sw *jen.Group) {
 			for _, fd := range t.Fields {
-				if fd.Optional || fd.Nillable {
+				if fd.Nillable {
 					sw.Case(jen.Lit(fd.Name)).BlockFunc(func(blk *jen.Group) {
 						blk.Id("m").Dot("_" + fd.Name).Op("=").Nil()
 						if fd.SupportsMutationAdd() {
@@ -789,7 +811,11 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 	f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id("AddedEdges").Params().Index().String().BlockFunc(func(body *jen.Group) {
 		body.Id("edges").Op(":=").Make(jen.Index().String(), jen.Lit(0), jen.Lit(len(edges)))
 		for _, e := range edges {
-			body.If(jen.Id("m").Dot(e.BuilderField()).Op("!=").Nil()).Block(
+			added := jen.Id("m").Dot(e.BuilderField()).Op("!=").Nil()
+			if fieldBoundEdge(e) {
+				added = jen.Len(jen.Id("m").Dot(e.StructField() + "IDs").Call()).Op(">").Lit(0)
+			}
+			body.If(added).Block(
 				jen.Id("edges").Op("=").Append(jen.Id("edges"), jen.Lit(e.Name)),
 			)
 		}
@@ -803,6 +829,16 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 	).Index().Qual(h.VeloxPkg(), "Value").BlockFunc(func(body *jen.Group) {
 		body.Switch(jen.Id("name")).BlockFunc(func(sw *jen.Group) {
 			for _, e := range edges {
+				if fieldBoundEdge(e) {
+					sw.Case(jen.Lit(e.Name)).Block(
+						jen.Var().Id("ids").Index().Qual(h.VeloxPkg(), "Value"),
+						jen.For(jen.List(jen.Id("_"), jen.Id("id")).Op(":=").Range().Id("m").Dot(e.StructField()+"IDs").Call()).Block(
+							jen.Id("ids").Op("=").Append(jen.Id("ids"), jen.Id("id")),
+						),
+						jen.Return(jen.Id("ids")),
+					)
+					continue
+				}
 				sw.Case(jen.Lit(e.Name)).Block(
 					jen.Id("ids").Op(":=").Make(jen.Index().Qual(h.VeloxPkg(), "Value"), jen.Lit(0), jen.Len(jen.Id("m").Dot(e.BuilderField()))),
 					jen.For(jen.Id("id").Op(":=").Range().Id("m").Dot(e.BuilderField())).Block(
@@ -851,7 +887,11 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 	f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id("ClearedEdges").Params().Index().String().BlockFunc(func(body *jen.Group) {
 		body.Id("edges").Op(":=").Make(jen.Index().String(), jen.Lit(0), jen.Lit(len(edges)))
 		for _, e := range edges {
-			body.If(jen.Id("m").Dot("cleared" + e.StructField())).Block(
+			cleared := jen.Id("m").Dot("cleared" + e.StructField())
+			if fieldBoundEdge(e) {
+				cleared = jen.Id("m").Dot(e.MutationCleared()).Call()
+			}
+			body.If(cleared).Block(
 				jen.Id("edges").Op("=").Append(jen.Id("edges"), jen.Lit(e.Name)),
 			)
 		}
@@ -865,9 +905,11 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 	).Bool().BlockFunc(func(body *jen.Group) {
 		body.Switch(jen.Id("name")).BlockFunc(func(sw *jen.Group) {
 			for _, e := range edges {
-				sw.Case(jen.Lit(e.Name)).Block(
-					jen.Return(jen.Id("m").Dot("cleared" + e.StructField())),
-				)
+				cleared := jen.Id("m").Dot("cleared" + e.StructField())
+				if fieldBoundEdge(e) {
+					cleared = jen.Id("m").Dot(e.MutationCleared()).Call()
+				}
+				sw.Case(jen.Lit(e.Name)).Block(jen.Return(cleared))
 			}
 		})
 		body.Return(jen.False())
@@ -886,7 +928,7 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 				)
 			}
 		})
-		body.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("unknown "+t.Name+" unique edge %s"), jen.Id("name")))
+		body.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("unknown "+t.Name+" edge %s"), jen.Id("name")))
 	})
 
 	// ResetEdge resets an edge by name.

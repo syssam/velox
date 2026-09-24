@@ -784,6 +784,7 @@ func CompositeGT([]string, ...any) *Predicate
 func CompositeLT([]string, ...any) *Predicate
 func ConflictColumns(...string) ConflictOption
 func ConflictConstraint(string) ConflictOption
+func ConflictDoesNothing(...ConflictOption) bool
 func ConflictWhere(*Predicate) ConflictOption
 func Contains(string, string) *Predicate
 func ContainsFold(string, string) *Predicate

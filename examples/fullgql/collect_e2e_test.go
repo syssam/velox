@@ -498,3 +498,41 @@ func TestCollect_InterfaceFieldSharesEdgeWithDirectSelection(t *testing.T) {
 		assert.Equal(t, "ADMIN", n.Relations[0].Role)
 	})
 }
+
+// TestCollect_OptionalToOneWithNullKey pins that a GraphQL list selecting an
+// optional to-one edge works when some rows have no target. The collector
+// eager-loads the edge (WithParent/WithCategory), and the loader panicked on
+// the NULL key ("interface {} is *int, not int"): the whole list answered
+// "internal system error". Empty edges resolve to null without a query per
+// row — the edge is marked loaded-and-empty.
+func TestCollect_OptionalToOneWithNullKey(t *testing.T) {
+	client, gql, log := openCountingClient(t)
+	ctx := context.Background()
+	root, err := client.Category.Create().SetName("root").Save(ctx)
+	require.NoError(t, err)
+	_, err = client.Category.Create().SetName("child").SetParentID(root.ID).Save(ctx)
+	require.NoError(t, err)
+
+	var resp struct {
+		Categories struct {
+			Edges []struct {
+				Node struct {
+					Name   string
+					Parent *struct{ Name string }
+				}
+			}
+		}
+	}
+	log.reset()
+	gql.MustPost(`{ categories(first: 10) { edges { node { name parent { name } } } } }`, &resp)
+	parents := map[string]string{}
+	for _, e := range resp.Categories.Edges {
+		p := "<null>"
+		if e.Node.Parent != nil {
+			p = e.Node.Parent.Name
+		}
+		parents[e.Node.Name] = p
+	}
+	require.Equal(t, map[string]string{"root": "<null>", "child": "root"}, parents)
+	require.LessOrEqual(t, len(log.snapshot()), 3, "an empty edge must not cost a query per row: %v", log.snapshot())
+}

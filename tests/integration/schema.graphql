@@ -72,6 +72,13 @@ type Comment implements Node @goModel(model: "github.com/syssam/velox/tests/inte
   author: User!
 }
 
+type Like implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Like") {
+  id: ID!
+  likedAt: Time!
+  user: User!
+  post: Post!
+}
+
 type Pet implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Pet") {
   id: ID!
   name: String!
@@ -148,6 +155,64 @@ type Post implements Node @goModel(model: "github.com/syssam/velox/tests/integra
     orderBy: TagOrder
 
   ): TagConnection!
+  likers(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Users returned from the connection.
+    """
+    orderBy: [UserOrder!]
+
+    """
+    Filtering options for Users returned from the connection.
+    """
+    where: UserWhereInput
+  ): UserConnection!
+  likes(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Likes returned from the connection.
+    """
+    orderBy: LikeOrder
+
+  ): LikeConnection!
 }
 
 type Tag implements Node @goModel(model: "github.com/syssam/velox/tests/integration/entity.Tag") {
@@ -305,6 +370,67 @@ type User implements Node @goModel(model: "github.com/syssam/velox/tests/integra
     orderBy: [CommentOrder!]
 
   ): CommentConnection!
+  """
+  Posts this user liked, through the Like edge schema
+  """
+  likedPosts(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Posts returned from the connection.
+    """
+    orderBy: PostOrder
+
+    """
+    Filtering options for Posts returned from the connection.
+    """
+    where: PostWhereInput
+  ): PostConnection!
+  likes(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Likes returned from the connection.
+    """
+    orderBy: LikeOrder
+
+  ): LikeConnection!
 }
 
 
@@ -404,6 +530,28 @@ Properties by which Comment connections can be ordered.
 enum CommentOrderField @goModel(model: "github.com/syssam/velox/tests/integration/entity.CommentOrderField") {
   CREATED_AT
   UPDATED_AT
+}
+
+"""
+Ordering options for Like connections
+"""
+input LikeOrder @goModel(model: "github.com/syssam/velox/tests/integration/entity.LikeOrder") {
+  """
+  The ordering direction.
+  """
+  direction: OrderDirection! = ASC
+  """
+  The field by which to order Likes.
+  """
+  field: LikeOrderField!
+}
+"""
+Properties by which Like connections can be ordered.
+"""
+enum LikeOrderField @goModel(model: "github.com/syssam/velox/tests/integration/entity.LikeOrderField") {
+  LIKED_AT
+  USER_ID
+  POST_ID
 }
 
 """
@@ -573,6 +721,37 @@ type CommentEdge @goModel(model: "github.com/syssam/velox/tests/integration/enti
   The item at the end of the edge.
   """
   node: Comment
+  """
+  A cursor for use in pagination.
+  """
+  cursor: Cursor!
+}
+
+"""
+A connection to a list of items.
+"""
+type LikeConnection @goModel(model: "github.com/syssam/velox/tests/integration/entity.LikeConnection") {
+  """
+  A list of edges.
+  """
+  edges: [LikeEdge!]
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+  """
+  Identifies the total count of items in the connection.
+  """
+  totalCount: Int!
+}
+"""
+An edge in a connection.
+"""
+type LikeEdge @goModel(model: "github.com/syssam/velox/tests/integration/entity.LikeEdge") {
+  """
+  The item at the end of the edge.
+  """
+  node: Like
   """
   A cursor for use in pagination.
   """
@@ -781,6 +960,33 @@ type Query {
     orderBy: [CommentOrder!]
 
   ): CommentConnection!
+  likes(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Ordering options for Likes returned from the connection.
+    """
+    orderBy: LikeOrder
+
+  ): LikeConnection!
   pets(
     """
     Returns the elements in the list that come after the specified cursor.

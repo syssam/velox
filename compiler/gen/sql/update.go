@@ -838,6 +838,7 @@ func genUpdateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 		jen.For(jen.List(jen.Id("_"), jen.Id("k")).Op(":=").Range().Id("nodes")).Block(
 			jen.Id("edge").Dot("Target").Dot("Nodes").Op("=").Append(jen.Id("edge").Dot("Target").Dot("Nodes"), jen.Id("k")),
 		),
+		edgeSchemaDefaults(edge, "edge"),
 		jen.Id("spec").Dot("Edges").Dot("Add").Op("=").Append(
 			jen.Id("spec").Dot("Edges").Dot("Add"),
 			jen.Id("edge"),
