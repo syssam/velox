@@ -18,7 +18,10 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d velox_test"]
+      # Over TCP: during initialization the image runs a temporary server
+      # listening on the socket only, so a socket check reports ready before
+      # the restart that follows.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d velox_test"]
       interval: 2s
       timeout: 5s
       retries: 60
