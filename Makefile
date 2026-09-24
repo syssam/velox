@@ -1,4 +1,4 @@
-.PHONY: bench-hotpaths bench-baseline bench-compare bench-install
+.PHONY: bench-hotpaths bench-baseline bench-compare bench-install ci-docker ci-docker-db
 
 # Hot-path benchmarks guarded against regression.
 # Keep this list short — it's meant to catch the failure modes that
@@ -27,6 +27,12 @@ bench-compare: ## Compare bench-current.txt against bench-baseline.txt via bench
 	@if [ ! -f $(BENCH_BASELINE) ]; then echo "error: no baseline — run 'make bench-hotpaths' then 'make bench-baseline'" >&2; exit 1; fi
 	@if [ ! -f $(BENCH_OUT) ]; then echo "error: no current run — run 'make bench-hotpaths' first" >&2; exit 1; fi
 	benchstat $(BENCH_BASELINE) $(BENCH_OUT)
+
+ci-docker: ## Full local CI on throwaway DBs matching the CI matrix, with CI's Go (~45 min)
+	scripts/ci-docker.sh
+
+ci-docker-db: ## Only the live-DB jobs (integration + parity) on every CI database pair (~10 min)
+	scripts/ci-docker.sh --db
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)

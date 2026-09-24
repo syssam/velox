@@ -30,6 +30,14 @@
 #   scripts/ci-local.sh --integration  Also run live-DB integration tests.
 #   scripts/ci-local.sh --fuzz       Also run the full 10x 2min fuzz suite.
 #   scripts/ci-local.sh --all        Run everything.
+#   scripts/ci-local.sh --db-only    Only the live-DB jobs (integration + parity);
+#                                    used by scripts/ci-docker.sh for the second
+#                                    database pair of the CI matrix.
+#
+# Parity gets its own database, as in CI: VELOX_PARITY_POSTGRES/MYSQL, or
+# the VELOX_TEST_* DSNs with the velox_test database swapped for parity.
+# Sharing velox_test let the parity schema's tables break the integration
+# migration on the next run.
 
 set -euo pipefail
 
@@ -41,6 +49,7 @@ fi
 RUN_INTEGRATION=0
 RUN_FUZZ=0
 FAST=0
+DB_ONLY=0
 for arg in "$@"; do
     case "${arg}" in
         --integration) RUN_INTEGRATION=1 ;;
@@ -51,6 +60,7 @@ for arg in "$@"; do
         # security/examples-tests/parity/benchmark/fuzz/integration. ~6-9 min vs
         # ~15-20 min for the full run, so the git hook actually gets used.
         --fast) FAST=1 ;;
+        --db-only) DB_ONLY=1; RUN_INTEGRATION=1 ;;
         *) echo "unknown flag: ${arg}" >&2; exit 2 ;;
     esac
 done
@@ -65,6 +75,78 @@ generate_root_fixtures() {
     go run tests/integration/generate.go
     (cd examples/realworld && go run generate.go)
 }
+
+# ---------- DB jobs (shared by the full run and --db-only) ----------
+parity_dsn() {
+    # $1: explicit parity DSN (may be empty), $2: the VELOX_TEST_* DSN.
+    if [[ -n "$1" ]]; then echo "$1"; return; fi
+    local d="$2"
+    d="${d/dbname=velox_test/dbname=parity}"
+    d="${d/\/velox_test\?//parity?}"
+    echo "${d}"
+}
+
+run_parity() {
+    echo
+    echo "==> parity job (differential harness)"
+    # Without DSNs the suite runs SQLite only and the PG/MySQL dialect cases
+    # skip cleanly — still a real correctness net.
+    local pg my
+    pg="$(parity_dsn "${VELOX_PARITY_POSTGRES:-}" "${VELOX_TEST_POSTGRES:-}")"
+    my="$(parity_dsn "${VELOX_PARITY_MYSQL:-}" "${VELOX_TEST_MYSQL:-}")"
+    if (cd tests/parity && go run generate.go && VELOX_TEST_POSTGRES="${pg}" VELOX_TEST_MYSQL="${my}" go test ./... -count=1) >/tmp/ci-local-parity.log 2>&1; then
+        record_pass "parity"
+    else
+        tail -25 /tmp/ci-local-parity.log
+        record_fail "parity"
+    fi
+}
+
+run_integration() {
+    if [[ ${RUN_INTEGRATION} -ne 1 ]]; then
+        echo
+        echo "==> test-integration (skipped — pass --integration with DBs up)"
+        return
+    fi
+    echo
+    echo "==> test-integration (requires VELOX_TEST_POSTGRES / VELOX_TEST_MYSQL)"
+    if go test -tags integration -race -v ./dialect/sql/schema/ -run "Test(Postgres|MySQL|MultiDialect)" >/tmp/ci-local-integ.log 2>&1; then
+        record_pass "test-integration:schema"
+    else
+        tail -20 /tmp/ci-local-integ.log
+        record_fail "test-integration:schema"
+    fi
+    # Same selection as ci.yml's e2e step: the helper smoke tests AND the
+    # dialect-parameterized TestMultiDialect_* suite.
+    if go test -race -v ./tests/integration/ -run "Test(Postgres|MySQL)Helper|TestMultiDialect" >/tmp/ci-local-integ2.log 2>&1; then
+        record_pass "test-integration:e2e"
+    else
+        tail -20 /tmp/ci-local-integ2.log
+        record_fail "test-integration:e2e"
+    fi
+}
+
+summary() {
+    echo
+    if [[ ${#FAILED[@]} -eq 0 ]]; then
+        echo "==================================================="
+        echo "  ci-local: ALL PASS — safe to push"
+        echo "==================================================="
+        exit 0
+    fi
+    echo "==================================================="
+    echo "  ci-local: ${#FAILED[@]} failure(s):"
+    for f in "${FAILED[@]}"; do echo "    - ${f}"; done
+    echo "==================================================="
+    exit 1
+}
+
+if [[ ${DB_ONLY} -eq 1 ]]; then
+    generate_root_fixtures
+    run_integration
+    run_parity
+    summary
+fi
 
 # ---------- test job ----------
 echo
@@ -221,17 +303,7 @@ for entry in "${EXAMPLES[@]}"; do
     fi
 done
 
-# ---------- parity job (merge-blocking; SQLite always, PG/MySQL with env) ----------
-echo
-echo "==> parity job (differential harness)"
-# Without VELOX_TEST_POSTGRES/MYSQL the suite runs SQLite only and the
-# PG/MySQL dialect cases skip cleanly — still a real correctness net.
-if (cd tests/parity && go run generate.go && go test ./... -count=1) >/tmp/ci-local-parity.log 2>&1; then
-    record_pass "parity"
-else
-    tail -25 /tmp/ci-local-parity.log
-    record_fail "parity"
-fi
+run_parity
 
 # ---------- benchmark job ----------
 echo
@@ -282,37 +354,6 @@ else
     echo "==> fuzz job (skipped — pass --fuzz to run)"
 fi
 
-# ---------- optional: test-integration (needs live DBs) ----------
-if [[ ${RUN_INTEGRATION} -eq 1 ]]; then
-    echo
-    echo "==> test-integration (requires VELOX_TEST_POSTGRES / VELOX_TEST_MYSQL)"
-    if go test -tags integration -race -v ./dialect/sql/schema/ -run "Test(Postgres|MySQL|MultiDialect)" >/tmp/ci-local-integ.log 2>&1; then
-        record_pass "test-integration:schema"
-    else
-        tail -20 /tmp/ci-local-integ.log
-        record_fail "test-integration:schema"
-    fi
-    if go test -race -v ./tests/integration/ -run "Test(Postgres|MySQL)Helper" >/tmp/ci-local-integ2.log 2>&1; then
-        record_pass "test-integration:e2e"
-    else
-        tail -20 /tmp/ci-local-integ2.log
-        record_fail "test-integration:e2e"
-    fi
-else
-    echo
-    echo "==> test-integration (skipped — pass --integration with DBs up)"
-fi
+run_integration
 
-# ---------- summary ----------
-echo
-if [[ ${#FAILED[@]} -eq 0 ]]; then
-    echo "==================================================="
-    echo "  ci-local: ALL PASS — safe to push"
-    echo "==================================================="
-    exit 0
-fi
-echo "==================================================="
-echo "  ci-local: ${#FAILED[@]} failure(s):"
-for f in "${FAILED[@]}"; do echo "    - ${f}"; done
-echo "==================================================="
-exit 1
+summary

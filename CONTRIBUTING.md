@@ -33,6 +33,27 @@ go test -race ./...
 go test ./compiler/gen/sql/...
 ```
 
+### Running CI Locally
+
+`scripts/ci-local.sh` replays the jobs in `.github/workflows/ci.yml`; the git
+pre-push hook runs its `--fast` tier. To include the live-database jobs with
+the same database versions and Go release as CI, use Docker:
+
+```bash
+make ci-docker-db   # integration + parity on Postgres 16/MySQL 8.0 and 14/5.7 (~10 min)
+make ci-docker      # every job, incl. fuzz, then the DB jobs on the second pair (~45 min)
+```
+
+Each database pair runs in fresh tmpfs-backed containers (`docker-compose.ci.yml`,
+ports 55432/53306, so your own database containers are untouched) that are
+removed afterwards. The Go toolchain is the newest patch of the minor version
+`ci.yml` pins, downloaded via `GOTOOLCHAIN`; set `CI_GO=local` to use your
+installed Go. On Apple silicon, MySQL 5.7 runs under amd64 emulation.
+
+Reusing a long-lived local database for these tests is what this avoids:
+tables left by another schema (the parity harness once shared `velox_test`)
+make the next migration fail in ways CI never sees.
+
 ### Running Linter
 
 ```bash

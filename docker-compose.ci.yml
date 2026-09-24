@@ -1,0 +1,44 @@
+# Throwaway databases matching the CI test-integration matrix, for
+# scripts/ci-docker.sh (`make ci-docker`). Not for development use:
+# storage is tmpfs, so every `up` starts empty, like a CI service container.
+#
+# Versions and platform come from the environment the wrapper sets per
+# matrix leg; the ports stay off 5432/3306 so a developer's own database
+# containers are never touched.
+name: velox-ci
+
+services:
+  postgres:
+    image: postgres:${CI_PG_VERSION:-16}
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: velox_test
+    ports:
+      - "${CI_PG_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d velox_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  mysql:
+    image: mysql:${CI_MYSQL_VERSION:-8.0}
+    # mysql:5.7 is published for amd64 only; the wrapper passes linux/amd64
+    # for it and the host's native platform otherwise.
+    platform: ${CI_MYSQL_PLATFORM:-linux/amd64}
+    environment:
+      MYSQL_ROOT_PASSWORD: test
+      MYSQL_DATABASE: velox_test
+    ports:
+      - "${CI_MYSQL_PORT:-53306}:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      # Over TCP: during initialization the image runs a temporary server
+      # with networking disabled, so a socket ping reports ready too early.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -ptest --silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 90
