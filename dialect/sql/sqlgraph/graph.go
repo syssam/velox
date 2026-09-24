@@ -196,6 +196,14 @@ func Neighbors(d string, s *Step) (q *sql.Selector) {
 // SetNeighbors returns a Selector for evaluating the path-step
 // and getting the neighbors of set of vertices.
 // The input selector (s.From.V) is cloned to avoid mutating the caller's selector.
+//
+// Deliberate Ent deviation: the neighbors are selected with a semi-join,
+// `WHERE to.key IN (source keys)`, not a JOIN on the source set. A JOIN
+// returns a target once per source that reaches it — the author of two posts
+// twice — so Only() failed with NotSingular and Count() over-counted. Ent
+// hides that with a default DISTINCT, which Postgres and MySQL reject as
+// soon as the query orders by an expression outside the select list (e.g.
+// ByPostsCount). A semi-join yields each target once and needs no DISTINCT.
 func SetNeighbors(d string, s *Step) (q *sql.Selector) {
 	orig, ok := s.From.V.(*sql.Selector)
 	if !ok {
@@ -204,39 +212,36 @@ func SetNeighbors(d string, s *Step) (q *sql.Selector) {
 	// Clone to avoid mutating the caller's selector via .Select().
 	set := orig.Clone()
 	builder := sql.Dialect(d)
+	to := builder.Table(s.To.Table).Schema(s.To.Schema)
 	switch {
 	case s.ThroughEdgeTable():
 		pk1, pk2 := s.Edge.Columns[1], s.Edge.Columns[0]
 		if s.Edge.Inverse {
 			pk1, pk2 = pk2, pk1
 		}
-		to := builder.Table(s.To.Table).Schema(s.To.Schema)
-		set.Select(set.C(s.From.Column))
 		join := builder.Table(s.Edge.Table).Schema(s.Edge.Schema)
 		match := builder.Select(join.C(pk1)).
 			From(join).
-			Join(set).
-			On(join.C(pk2), set.C(s.From.Column))
-		q = builder.Select().
-			From(to).
-			Join(match).
-			On(to.C(s.To.Column), match.C(pk1))
+			Where(sql.In(join.C(pk2), sourceKeys(builder, set, s.From.Column)))
+		q = builder.Select().From(to).Where(sql.In(to.C(s.To.Column), match))
 	case s.FromEdgeOwner():
-		t1 := builder.Table(s.To.Table).Schema(s.To.Schema)
-		set.Select(set.C(s.Edge.Columns[0]))
-		q = builder.Select().
-			From(t1).
-			Join(set).
-			On(t1.C(s.To.Column), set.C(s.Edge.Columns[0]))
+		q = builder.Select().From(to).
+			Where(sql.In(to.C(s.To.Column), sourceKeys(builder, set, s.Edge.Columns[0])))
 	case s.ToEdgeOwner():
-		t1 := builder.Table(s.To.Table).Schema(s.To.Schema)
-		set.Select(set.C(s.From.Column))
-		q = builder.Select().
-			From(t1).
-			Join(set).
-			On(t1.C(s.Edge.Columns[0]), set.C(s.From.Column))
+		q = builder.Select().From(to).
+			Where(sql.In(to.C(s.Edge.Columns[0]), sourceKeys(builder, set, s.From.Column)))
 	}
 	return q
+}
+
+// sourceKeys projects the source set to column and wraps it as a derived
+// table, `SELECT t1.column FROM (<set>) AS t1`, for use inside IN. The
+// wrapper is what lets a limited source (Query().Limit(n).QueryXxx()) work
+// on MySQL, which rejects LIMIT directly inside an IN subquery.
+func sourceKeys(b *sql.DialectBuilder, set *sql.Selector, column string) *sql.Selector {
+	set.Select(set.C(column))
+	t := set.As("t1")
+	return b.Select(t.C(column)).From(t)
 }
 
 // HasNeighbors applies on the given Selector a neighbors check.
@@ -1423,6 +1428,9 @@ func (u *updater) ensureExists(ctx context.Context) error {
 type creator struct {
 	graph
 	*CreateSpec
+	// skipped is set when ON CONFLICT DO NOTHING hit a duplicate: no row
+	// was inserted, so there is no ID to attach the spec's edges to.
+	skipped bool
 }
 
 func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
@@ -1450,6 +1458,11 @@ func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
 		}
 		if err := c.insert(ctx, insert); err != nil {
 			return err
+		}
+		// DO NOTHING skipped the row; writing its edges would use a nil
+		// (or never-inserted) ID and attach them to nothing.
+		if c.skipped {
+			return nil
 		}
 		if err := c.addM2MEdges(ctx, []driver.Value{c.ID.Value}, edges[M2M]); err != nil {
 			return err
@@ -1514,6 +1527,10 @@ func (c *creator) scanInsertedID(err error) error {
 		return nil
 	}
 	if len(c.OnConflict) > 0 && errors.Is(err, stdsql.ErrNoRows) {
+		// No row was inserted, so no ID exists: clear a caller-generated
+		// one (a UUID) rather than report the ID of a row that is not there.
+		c.skipped = true
+		c.ID.Value = nil
 		return nil
 	}
 	return err

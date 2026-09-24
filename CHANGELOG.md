@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
+
+### Fixed
+- `WithXxx()` panicked (`interface {} is *int, not int`) when any row's optional foreign key was NULL — e.g. `WithParent()` on any tree with a root
+- A to-one edge set on create read back as a stub with only its ID filled in: `createPost { author { name } }` answered with an empty name. Create now leaves the edge unloaded, and the resolver queries it
+- `SetXxxID` on a unique edge called twice (or overridden by a hook) kept a random one of the two IDs; the last call now wins
+- A query-level traversal (`client.User.Query().QueryPosts()`) skipped the source's privacy policy and interceptors, so posts of denied or filtered users were returned
+- A query-level traversal returned a target once per source reaching it — the author of two posts twice, `Only()` failed with NotSingular. Traversals now select targets with a semi-join (`WHERE id IN (…)`), so each is returned once with no `DISTINCT`, and ordering by an edge count (`ByPostsCount`) works on PostgreSQL and MySQL
+- `Select()` and `GroupBy()` wrote field names into the SQL unchecked, so an expression passed as a field ran as SQL. Unknown fields now return a `ValidationError`
+- Upsert `UpdateNewValues()` overwrote immutable fields (`created_at`) and a caller-supplied ID on conflict; both are now kept. An upsert on a UUID ID returns the stored row's ID, not the one generated for the row that was not inserted
+- `OnConflict(...).DoNothing()` on a duplicate no longer writes the skipped row's edges, and returns the zero ID for a caller-generated key (as it already did for auto-increment keys)
+- `AppendXxx` called twice on one builder kept only the second value
+- `client.Mutate` with a hand-built `OpDeleteOne` mutation deleted every row in the table; it now deletes the row its ID names, errors without an ID, and returns NotFound when the row is absent
+
+### Changed
+- **BREAKING:** `AppendXxx` is generated only for JSON fields of slice type. On a struct or map field it stored a JSON array the entity could no longer decode, so every later read of the row failed
+- **BREAKING:** `OldXxx` / `OldField` called after the UPDATE ran return an error wrapping the new `runtime.ErrOldValueAfterMutation` instead of silently returning the new value (Ent parity). Read old values in the hook before calling `next.Mutate`; a value read there stays available afterwards
+- **BREAKING:** GraphQL `Noder` / `Noders` return an error wrapping the new `runtime.ErrAmbiguousNodeID` when an id matches rows in more than one entity type, instead of whichever resolver the registry map happened to try first (a different type from call to call). Relay IDs must be globally unique — enable `FeatureGlobalID`. Resolution goes through the new `runtime.ResolveNode`, which probes every type (one query each)
+- **BREAKING:** A unique edge that was eager-loaded but has no target (NULL key) is now marked loaded, and `XxxOrErr()` returns a NotFound error for it (Ent parity). It used to report "not loaded", and GraphQL re-queried each such row. GraphQL resolvers still return `null`
+
 ## [0.3.0] - 2026-09-24
 
 Regenerate after upgrading. Breaking changes are marked **BREAKING** below.

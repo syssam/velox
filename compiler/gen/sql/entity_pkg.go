@@ -207,17 +207,36 @@ func genEntityPkgEdgeAccessors(f *jen.File, t *gen.Type, e *gen.Edge, edgeIndex 
 	edgePascal := e.StructField()
 	returnType := entityPkgEdgeGoType(e)
 
-	// XxxOrErr — returns typed edge value or NotLoadedError
-	f.Commentf("%s returns the %s value or an error if the edge was not loaded.", edgePascal+"OrErr", e.Name)
-	f.Func().Params(jen.Id("e").Id(edgesName)).Id(edgePascal+"OrErr").Params().Params(
-		returnType,
-		jen.Error(),
-	).Block(
-		jen.If(jen.Id("e").Dot("loadedTypes").Index(jen.Lit(edgeIndex))).Block(
-			jen.Return(jen.Id("e").Dot(edgePascal), jen.Nil()),
-		),
-		jen.Return(jen.Nil(), jen.Qual(runtimePkg, "NewNotLoadedError").Call(jen.Lit(e.Name))),
-	)
+	// XxxOrErr — returns the typed edge value, NotLoadedError when it was
+	// not eager-loaded, and for a unique edge NotFoundError when it was
+	// loaded but has no target (a NULL key). Returning (nil, nil) there made
+	// `v, err := e.XxxOrErr(); if err != nil {…}; v.Field` panic (Ent parity).
+	if e.Unique {
+		f.Commentf("%s returns the %s value or an error if the edge was not loaded", edgePascal+"OrErr", e.Name)
+		f.Comment("in eager-loading, or loaded but was not found.")
+		f.Func().Params(jen.Id("e").Id(edgesName)).Id(edgePascal+"OrErr").Params().Params(
+			returnType,
+			jen.Error(),
+		).Block(
+			jen.If(jen.Id("e").Dot(edgePascal).Op("!=").Nil()).Block(
+				jen.Return(jen.Id("e").Dot(edgePascal), jen.Nil()),
+			).Else().If(jen.Id("e").Dot("loadedTypes").Index(jen.Lit(edgeIndex))).Block(
+				jen.Return(jen.Nil(), jen.Qual(veloxCorePkg, "NewNotFoundError").Call(jen.Lit(e.Type.Name))),
+			),
+			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "NewNotLoadedError").Call(jen.Lit(e.Name))),
+		)
+	} else {
+		f.Commentf("%s returns the %s value or an error if the edge was not loaded.", edgePascal+"OrErr", e.Name)
+		f.Func().Params(jen.Id("e").Id(edgesName)).Id(edgePascal+"OrErr").Params().Params(
+			returnType,
+			jen.Error(),
+		).Block(
+			jen.If(jen.Id("e").Dot("loadedTypes").Index(jen.Lit(edgeIndex))).Block(
+				jen.Return(jen.Id("e").Dot(edgePascal), jen.Nil()),
+			),
+			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "NewNotLoadedError").Call(jen.Lit(e.Name))),
+		)
+	}
 
 	// SetXxx — sets the typed edge value and marks it as loaded
 	f.Commentf("Set%s stores the %s edge value and marks it as loaded.", edgePascal, e.Name)

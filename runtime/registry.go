@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -227,6 +228,41 @@ func RegisterNodeResolver(table string, r NodeResolver) {
 	defer nodeMu.Unlock()
 	nodeRegistry[table] = r
 	slog.Debug("velox: registered node resolver", "table", table, "type", r.Type)
+}
+
+// ResolveNode resolves id against every registered NodeResolver and returns
+// the one node that has it. found is false when no type has the id. When
+// more than one does — per-table keys collide — it returns an error wrapping
+// ErrAmbiguousNodeID that names the types, never an arbitrary one of them:
+// the registry is a map, so "first match" differed from call to call.
+// Resolvers that do not handle the id's Go type are skipped like not-found.
+// Every type is probed, one query each; with FeatureGlobalID ids do not
+// collide and exactly one probe matches.
+func ResolveNode(ctx context.Context, id any) (node any, found bool, err error) {
+	resolvers := NodeResolvers()
+	names := slices.Sorted(maps.Keys(resolvers))
+	var types []string
+	for _, name := range names {
+		r := resolvers[name]
+		v, err := r.Resolve(ctx, id)
+		if err != nil {
+			if IsNotFound(err) || IsNodeIDTypeMismatch(err) {
+				continue
+			}
+			return nil, false, err
+		}
+		node = v
+		types = append(types, r.Type)
+	}
+	switch len(types) {
+	case 0:
+		return nil, false, nil
+	case 1:
+		return node, true, nil
+	default:
+		return nil, false, fmt.Errorf("%w: id %v is a %s; use globally unique IDs (FeatureGlobalID)",
+			ErrAmbiguousNodeID, id, strings.Join(types, " and a "))
+	}
 }
 
 // NodeResolvers returns a copy of all registered node resolvers.

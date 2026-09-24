@@ -40,10 +40,12 @@ func TestEntityLayerTypes(t *testing.T) {
 	_, err = u.Edges.ProfileOrErr()
 	assert.Error(t, err)
 
+	// Loaded but empty: a unique edge reports NotFound, never (nil, nil), so
+	// a caller that only checks err cannot go on to dereference nil (Ent parity).
 	u.Edges.MarkProfileLoaded()
 	prof, err := u.Edges.ProfileOrErr()
-	require.NoError(t, err)
-	assert.Nil(t, prof) // loaded but nil
+	assert.True(t, runtime.IsNotFound(err), "got %v", err)
+	assert.Nil(t, prof)
 
 	// M2O: Comment edges
 	c := &entity.Comment{}

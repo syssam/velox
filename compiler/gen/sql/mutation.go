@@ -53,6 +53,9 @@ func genMutation(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 			group.Id("oldValue").Func().Params(jen.Qual("context", "Context")).Params(jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Error())
 			group.Id("oldLoaded").Bool()
 			group.Id("oldCache").Op("*").Qual(entityReturnPkg, t.Name)
+			// done is set once the UPDATE has run; loading old values after
+			// that would read the new row (Ent parity).
+			group.Id("done").Bool()
 		}
 		// Typed edge state (matches Ent layout exactly)
 		for _, edge := range t.EdgesWithID() {
@@ -138,6 +141,12 @@ func genMutation(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 			),
 			jen.If(jen.Id("m").Dot("oldLoaded")).Block(
 				jen.Return(jen.Id("m").Dot("oldCache"), jen.Nil()),
+			),
+			jen.If(jen.Id("m").Dot("done")).Block(
+				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("%w: call "+t.Name+".OldXxx in the hook before next.Mutate"),
+					jen.Qual(runtimePkg, "ErrOldValueAfterMutation"),
+				)),
 			),
 			jen.List(jen.Id("old"), jen.Id("err")).Op(":=").Id("m").Dot("oldValue").Call(jen.Id("ctx")),
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(

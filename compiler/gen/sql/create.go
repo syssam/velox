@@ -374,7 +374,12 @@ func genCreateAssignID(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, nodeV
 				jen.Lit("unexpected "+t.Name+".ID type: %T"), jen.Id(specVar).Dot("ID").Dot("Value"),
 			)))
 		}
-		grp.If(jen.Id(specVar).Dot("ID").Dot("Value").Op("!=").Nil()).Block(assign)
+		// A nil value after CreateNode means ON CONFLICT DO NOTHING skipped
+		// the row: report the zero ID, as an auto-increment key does (0).
+		grp.If(jen.Id(specVar).Dot("ID").Dot("Value").Op("!=").Nil()).Block(assign).Else().Block(
+			jen.Var().Id("zero").Add(h.IDType(t)),
+			jen.Id(nodeVar).Dot(id.StructField()).Op("=").Id("zero"),
+		)
 		return
 	}
 	// Numeric ID: if the user did not supply one, sqlgraph sets _spec.ID.Value

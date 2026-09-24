@@ -382,6 +382,7 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (*entity.Post, error) {
 		}
 		return nil, runtime.MayWrapConstraintError(err)
 	}
+	_u.mutation.done = true
 	columns := post.Columns
 	if len(_u.selectFields) > 0 {
 		columns = make([]string, 0, len(_u.selectFields)+1)

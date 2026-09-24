@@ -23,6 +23,7 @@ type EmployeeMutation struct {
 	oldValue            func(context.Context) (*entity.Employee, error)
 	oldLoaded           bool
 	oldCache            *entity.Employee
+	done                bool
 	subordinates        map[int64]struct{}
 	removedSubordinates map[int64]struct{}
 	clearedSubordinates bool
@@ -88,6 +89,9 @@ func (m *EmployeeMutation) loadOld(ctx context.Context) (*entity.Employee, error
 	}
 	if m.oldLoaded {
 		return m.oldCache, nil
+	}
+	if m.done {
+		return nil, fmt.Errorf("%w: call Employee.OldXxx in the hook before next.Mutate", runtime.ErrOldValueAfterMutation)
 	}
 	old, err := m.oldValue(ctx)
 	if err != nil {

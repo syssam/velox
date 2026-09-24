@@ -324,10 +324,11 @@ func TestLiveDB_SetNeighbors_M2O_FKNameEqualsTargetPK(t *testing.T) {
 		count++
 	}
 	require.NoError(t, rows.Err())
-	// SetNeighbors joins each sales_order row to its terms row — one result
-	// per order, not per distinct terms. Orders 10,12 both point to Net30,
-	// order 11 points to Net60: 3 rows total (duplicates expected).
-	assert.Equal(t, 3, count)
+	// SetNeighbors selects the terms rows the orders point to with a
+	// semi-join, so each terms row comes back once: orders 10 and 12 share
+	// Net30, order 11 has Net60 — 2 rows. (It used to JOIN and return one
+	// row per order, 3 here, duplicating Net30.)
+	assert.Equal(t, 2, count)
 }
 
 // scanByColumn builds a []any scan target whose positions match cols.

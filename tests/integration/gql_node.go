@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	"github.com/syssam/velox/runtime"
@@ -16,49 +17,44 @@ type Noder interface {
 
 var ErrNodeNotFound = gqlrelay.ErrNodeNotFound
 
-// Noder returns a Node by its ID using the registered node resolvers.
-// It tries each registered resolver until one succeeds.
-// Not-found errors are skipped; all other errors (e.g., database failures) are returned immediately.
+// Noder returns the Node with the given ID. It returns ErrNodeNotFound when no
+// type has the ID, and an error wrapping runtime.ErrAmbiguousNodeID when more
+// than one does — Relay IDs must be globally unique (FeatureGlobalID).
 func (c *Client) Noder(ctx context.Context, id int) (Noder, error) {
 	ctx = runtime.WithConfigContext(ctx, c.RuntimeConfig())
-	for _, resolver := range runtime.NodeResolvers() {
-		result, err := resolver.Resolve(ctx, id)
-		if err != nil {
-			if runtime.IsNotFound(err) || runtime.IsNodeIDTypeMismatch(err) {
-				continue
-			}
-			return nil, err
-		}
-		if noder, ok := result.(Noder); ok {
-			return noder, nil
-		}
-	}
-	return nil, ErrNodeNotFound
+	return resolveNoder(ctx, id)
 }
 
-// Noders returns Nodes by their IDs, resolving each via the registered resolvers.
-// Unresolvable IDs produce nil entries (per Relay spec). Real errors are returned immediately.
+// Noders returns the Nodes with the given IDs. An ID no type has yields a nil
+// entry (per the Relay spec); any other error, including an ambiguous ID, is returned.
 func (c *Client) Noders(ctx context.Context, ids []int) ([]Noder, error) {
 	ctx = runtime.WithConfigContext(ctx, c.RuntimeConfig())
-	resolvers := runtime.NodeResolvers()
 	nodes := make([]Noder, len(ids))
 	for i, id := range ids {
-		for _, resolver := range resolvers {
-			result, err := resolver.Resolve(ctx, id)
-			if err != nil {
-				if runtime.IsNotFound(err) || runtime.IsNodeIDTypeMismatch(err) {
-					continue
-				}
-				return nil, err
-			}
-			if noder, ok := result.(Noder); ok {
-				nodes[i] = noder
-				break
-			}
+		n, err := resolveNoder(ctx, id)
+		if errors.Is(err, ErrNodeNotFound) {
+			continue
 		}
-		// nodes[i] remains nil if no resolver found (per Relay spec)
+		if err != nil {
+			return nil, err
+		}
+		nodes[i] = n
 	}
 	return nodes, nil
+}
+func resolveNoder(ctx context.Context, id int) (Noder, error) {
+	v, found, err := runtime.ResolveNode(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, ErrNodeNotFound
+	}
+	noder, ok := v.(Noder)
+	if !ok {
+		return nil, ErrNodeNotFound
+	}
+	return noder, nil
 }
 
 type (

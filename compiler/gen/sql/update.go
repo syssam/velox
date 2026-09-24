@@ -400,6 +400,11 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 			),
 			jen.Return(jen.Nil(), jen.Qual(runtimePkg, "MayWrapConstraintError").Call(jen.Id("err"))),
 		)
+		// The row now holds the new values: old-value loads must fail
+		// rather than read them back (see the mutation's done field).
+		if len(t.MutableFields()) > 0 {
+			grp.Id(recv).Dot("mutation").Dot("done").Op("=").True()
+		}
 		// Re-query the entity to return the updated version. Select() narrows
 		// the columns read back (and nothing else); an unknown column is
 		// rejected up front rather than surfacing as a driver-level

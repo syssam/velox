@@ -30,6 +30,7 @@ type ArticleMutation struct {
 	oldValue      func(context.Context) (*entity.Article, error)
 	oldLoaded     bool
 	oldCache      *entity.Article
+	done          bool
 	author        map[int64]struct{}
 	removedAuthor map[int64]struct{}
 	clearedAuthor bool
@@ -92,6 +93,9 @@ func (m *ArticleMutation) loadOld(ctx context.Context) (*entity.Article, error) 
 	}
 	if m.oldLoaded {
 		return m.oldCache, nil
+	}
+	if m.done {
+		return nil, fmt.Errorf("%w: call Article.OldXxx in the hook before next.Mutate", runtime.ErrOldValueAfterMutation)
 	}
 	old, err := m.oldValue(ctx)
 	if err != nil {

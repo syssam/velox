@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/syssam/velox/runtime"
+
 	gqlgenpkg "example.com/fullgql/gqlgen"
 	"example.com/fullgql/velox"
 	"example.com/fullgql/velox/category"
@@ -2001,4 +2003,40 @@ func TestSchemaHook_MergeDoesNotClobberHookStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, stamped,
 		"the last-registered hook was overwritten by the schema hook in the shared store")
+}
+
+// TestNoder_CollidingIDsAreAnErrorNotARandomType pins that node(id:) never
+// guesses between entity types that share an id. With per-table keys, User 1
+// and Category 1 both exist; Noder tried the resolvers in map order and
+// returned whichever matched first — a different type from call to call.
+// It now reports runtime.ErrAmbiguousNodeID, and an id only one type has
+// still resolves.
+func TestNoder_CollidingIDsAreAnErrorNotARandomType(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+	cfg := client.RuntimeConfig()
+
+	u, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Alice", Email: "amb@n.com"}).Save(ctx)
+	require.NoError(t, err)
+	cat, err := client.Category.Create().SetName("c").Save(ctx)
+	require.NoError(t, err)
+	require.Equal(t, u.ID, cat.ID, "fixture: the two tables must share an id")
+
+	for range 20 {
+		_, err = client.Noder(ctx, u.ID)
+		require.ErrorIs(t, err, runtime.ErrAmbiguousNodeID)
+	}
+	require.Contains(t, err.Error(), "Category")
+	require.Contains(t, err.Error(), "User")
+
+	_, err = client.Noders(ctx, []int{u.ID})
+	require.ErrorIs(t, err, runtime.ErrAmbiguousNodeID)
+
+	u2, err := userclient.NewUserClient(cfg).Create().
+		SetInput(userclient.CreateUserInput{Name: "Bob", Email: "amb2@n.com"}).Save(ctx)
+	require.NoError(t, err)
+	n, err := client.Noder(ctx, u2.ID)
+	require.NoError(t, err, "an id only User has must resolve")
+	require.IsType(t, &entity.User{}, n)
 }

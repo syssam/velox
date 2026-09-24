@@ -285,6 +285,10 @@ func TestNeighbors(t *testing.T) {
 	}
 }
 
+// TestSetNeighbors pins the semi-join shape of a traversal: targets are
+// selected with WHERE key IN (source keys), so each comes back once without
+// DISTINCT, and the source is a derived table so a LIMIT on it also works
+// on MySQL. Ent renders a JOIN here; see SetNeighbors for why velox does not.
 func TestSetNeighbors(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -299,7 +303,7 @@ func TestSetNeighbors(t *testing.T) {
 				To("pets", "id"),
 				Edge(O2M, false, "users", "owner_id"),
 			),
-			wantQuery: `SELECT * FROM "pets" JOIN (SELECT "users"."id" FROM "users" WHERE "name" = $1) AS "t1" ON "pets"."owner_id" = "t1"."id"`,
+			wantQuery: `SELECT * FROM "pets" WHERE "pets"."owner_id" IN (SELECT "t1"."id" FROM (SELECT "users"."id" FROM "users" WHERE "name" = $1) AS "t1")`,
 			wantArgs:  []any{"a8m"},
 		},
 		{
@@ -309,7 +313,7 @@ func TestSetNeighbors(t *testing.T) {
 				To("users", "id"),
 				Edge(M2O, true, "pets", "owner_id"),
 			),
-			wantQuery: `SELECT * FROM "users" JOIN (SELECT "pets"."owner_id" FROM "pets" WHERE "name" = $1) AS "t1" ON "users"."id" = "t1"."owner_id"`,
+			wantQuery: `SELECT * FROM "users" WHERE "users"."id" IN (SELECT "t1"."owner_id" FROM (SELECT "pets"."owner_id" FROM "pets" WHERE "name" = $1) AS "t1")`,
 			wantArgs:  []any{"pedro"},
 		},
 		{
@@ -319,17 +323,8 @@ func TestSetNeighbors(t *testing.T) {
 				To("groups", "id"),
 				Edge(M2M, false, "user_groups", "user_id", "group_id"),
 			),
-			wantQuery: `
-SELECT *
-FROM "groups"
-JOIN
-  (SELECT "user_groups"."group_id"
-   FROM "user_groups"
-   JOIN
-     (SELECT "users"."id"
-      FROM "users"
-      WHERE "name" = $1) AS "t1" ON "user_groups"."user_id" = "t1"."id") AS "t1" ON "groups"."id" = "t1"."group_id"`,
-			wantArgs: []any{"a8m"},
+			wantQuery: `SELECT * FROM "groups" WHERE "groups"."id" IN (SELECT "user_groups"."group_id" FROM "user_groups" WHERE "user_groups"."user_id" IN (SELECT "t1"."id" FROM (SELECT "users"."id" FROM "users" WHERE "name" = $1) AS "t1"))`,
+			wantArgs:  []any{"a8m"},
 		},
 		{
 			name: "M2M/2types/inverse",
@@ -338,17 +333,8 @@ JOIN
 				To("users", "id"),
 				Edge(M2M, true, "user_groups", "user_id", "group_id"),
 			),
-			wantQuery: `
-SELECT *
-FROM "users"
-JOIN
-  (SELECT "user_groups"."user_id"
-   FROM "user_groups"
-   JOIN
-     (SELECT "groups"."id"
-      FROM "groups"
-      WHERE "name" = $1) AS "t1" ON "user_groups"."group_id" = "t1"."id") AS "t1" ON "users"."id" = "t1"."user_id"`,
-			wantArgs: []any{"GitHub"},
+			wantQuery: `SELECT * FROM "users" WHERE "users"."id" IN (SELECT "user_groups"."user_id" FROM "user_groups" WHERE "user_groups"."group_id" IN (SELECT "t1"."id" FROM (SELECT "groups"."id" FROM "groups" WHERE "name" = $1) AS "t1"))`,
+			wantArgs:  []any{"GitHub"},
 		},
 		{
 			name: "schema/O2M/2types",
@@ -361,7 +347,7 @@ JOIN
 				step.To.Schema = "s1"
 				return step
 			}(),
-			wantQuery: `SELECT * FROM "s1"."pets" JOIN (SELECT "s2"."users"."id" FROM "s2"."users" WHERE "name" = $1) AS "t1" ON "s1"."pets"."owner_id" = "t1"."id"`,
+			wantQuery: `SELECT * FROM "s1"."pets" WHERE "s1"."pets"."owner_id" IN (SELECT "t1"."id" FROM (SELECT "s2"."users"."id" FROM "s2"."users" WHERE "name" = $1) AS "t1")`,
 			wantArgs:  []any{"a8m"},
 		},
 		{
@@ -375,7 +361,7 @@ JOIN
 				step.To.Schema = "s1"
 				return step
 			}(),
-			wantQuery: `SELECT * FROM "s1"."users" JOIN (SELECT "s2"."pets"."owner_id" FROM "s2"."pets" WHERE "name" = $1) AS "t1" ON "s1"."users"."id" = "t1"."owner_id"`,
+			wantQuery: `SELECT * FROM "s1"."users" WHERE "s1"."users"."id" IN (SELECT "t1"."owner_id" FROM (SELECT "s2"."pets"."owner_id" FROM "s2"."pets" WHERE "name" = $1) AS "t1")`,
 			wantArgs:  []any{"pedro"},
 		},
 		{
@@ -390,17 +376,8 @@ JOIN
 				step.Edge.Schema = "s3"
 				return step
 			}(),
-			wantQuery: `
-SELECT *
-FROM "s1"."groups"
-JOIN
-  (SELECT "s3"."user_groups"."group_id"
-   FROM "s3"."user_groups"
-   JOIN
-     (SELECT "s2"."users"."id"
-      FROM "s2"."users"
-      WHERE "name" = $1) AS "t1" ON "s3"."user_groups"."user_id" = "t1"."id") AS "t1" ON "s1"."groups"."id" = "t1"."group_id"`,
-			wantArgs: []any{"a8m"},
+			wantQuery: `SELECT * FROM "s1"."groups" WHERE "s1"."groups"."id" IN (SELECT "s3"."user_groups"."group_id" FROM "s3"."user_groups" WHERE "s3"."user_groups"."user_id" IN (SELECT "t1"."id" FROM (SELECT "s2"."users"."id" FROM "s2"."users" WHERE "name" = $1) AS "t1"))`,
+			wantArgs:  []any{"a8m"},
 		},
 		{
 			name: "schema/M2M/2types/inverse",
@@ -414,17 +391,8 @@ JOIN
 				step.Edge.Schema = "s3"
 				return step
 			}(),
-			wantQuery: `
-SELECT *
-FROM "s1"."users"
-JOIN
-  (SELECT "s3"."user_groups"."user_id"
-   FROM "s3"."user_groups"
-   JOIN
-     (SELECT "s2"."groups"."id"
-      FROM "s2"."groups"
-      WHERE "name" = $1) AS "t1" ON "s3"."user_groups"."group_id" = "t1"."id") AS "t1" ON "s1"."users"."id" = "t1"."user_id"`,
-			wantArgs: []any{"GitHub"},
+			wantQuery: `SELECT * FROM "s1"."users" WHERE "s1"."users"."id" IN (SELECT "s3"."user_groups"."user_id" FROM "s3"."user_groups" WHERE "s3"."user_groups"."group_id" IN (SELECT "t1"."id" FROM (SELECT "s2"."groups"."id" FROM "s2"."groups" WHERE "name" = $1) AS "t1"))`,
+			wantArgs:  []any{"GitHub"},
 		},
 	}
 	for _, tt := range tests {
@@ -2847,5 +2815,34 @@ func TestUpdateNodeInsideTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all expectations were met (no unexpected Begin/Commit/Rollback)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestCreateNode_DoNothingConflictSkipsEdges pins that when ON CONFLICT DO
+// NOTHING hits a duplicate (RETURNING yields no row), CreateNode writes none
+// of the spec's edges. It used to go on with the unset ID: the join insert
+// or the FK update ran with a nil key. sqlmock fails the test on any
+// statement after the INSERT other than the COMMIT.
+func TestCreateNode_DoNothingConflictSkipsEdges(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO "users" .* ON CONFLICT DO NOTHING RETURNING "id"`).
+		WithArgs("a8m").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectCommit()
+
+	spec := &CreateSpec{
+		Table:      "users",
+		ID:         &FieldSpec{Column: "id", Type: field.TypeInt},
+		Fields:     []*FieldSpec{{Column: "name", Type: field.TypeString, Value: "a8m"}},
+		OnConflict: []sql.ConflictOption{sql.DoNothing()},
+		Edges: []*EdgeSpec{
+			{Rel: M2M, Table: "user_groups", Columns: []string{"user_id", "group_id"}, Target: &EdgeTarget{Nodes: []driver.Value{2}, IDSpec: &FieldSpec{Column: "id"}}},
+			{Rel: O2M, Table: "pets", Columns: []string{"owner_id"}, Target: &EdgeTarget{Nodes: []driver.Value{3}, IDSpec: &FieldSpec{Column: "id"}}},
+		},
+	}
+	require.NoError(t, CreateNode(context.Background(), sql.OpenDB(dialect.Postgres, db), spec))
+	require.Nil(t, spec.ID.Value)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

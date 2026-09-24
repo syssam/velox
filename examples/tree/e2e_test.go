@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syssam/velox/runtime"
 
 	_ "modernc.org/sqlite"
 )
@@ -119,6 +120,10 @@ func TestTree_EagerLoadParentOfRoot(t *testing.T) {
 
 	assert.True(t, nodes[0].Edges.ParentLoaded(), "a root's parent edge is loaded and empty")
 	assert.Nil(t, nodes[0].Edges.Parent)
+	// Loaded-and-empty reads as NotFound, never (nil, nil): callers that
+	// only check err must not go on to dereference a nil parent (Ent parity).
+	_, err = nodes[0].Edges.ParentOrErr()
+	assert.True(t, runtime.IsNotFound(err), "ParentOrErr on a root: got %v", err)
 
 	require.True(t, nodes[1].Edges.ParentLoaded())
 	require.NotNil(t, nodes[1].Edges.Parent)

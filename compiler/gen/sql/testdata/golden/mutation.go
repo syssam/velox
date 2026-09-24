@@ -28,6 +28,7 @@ type UserMutation struct {
 	oldValue      func(context.Context) (*entity.User, error)
 	oldLoaded     bool
 	oldCache      *entity.User
+	done          bool
 	posts         map[int64]struct{}
 	removedPosts  map[int64]struct{}
 	clearedPosts  bool
@@ -90,6 +91,9 @@ func (m *UserMutation) loadOld(ctx context.Context) (*entity.User, error) {
 	}
 	if m.oldLoaded {
 		return m.oldCache, nil
+	}
+	if m.done {
+		return nil, fmt.Errorf("%w: call User.OldXxx in the hook before next.Mutate", runtime.ErrOldValueAfterMutation)
 	}
 	old, err := m.oldValue(ctx)
 	if err != nil {

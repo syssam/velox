@@ -25,6 +25,7 @@ type TaskMutation struct {
 	oldValue      func(context.Context) (*entity.Task, error)
 	oldLoaded     bool
 	oldCache      *entity.Task
+	done          bool
 	predicates    []predicate.Task
 }
 
@@ -84,6 +85,9 @@ func (m *TaskMutation) loadOld(ctx context.Context) (*entity.Task, error) {
 	}
 	if m.oldLoaded {
 		return m.oldCache, nil
+	}
+	if m.done {
+		return nil, fmt.Errorf("%w: call Task.OldXxx in the hook before next.Mutate", runtime.ErrOldValueAfterMutation)
 	}
 	old, err := m.oldValue(ctx)
 	if err != nil {

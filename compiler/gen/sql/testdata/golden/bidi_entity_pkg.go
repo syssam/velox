@@ -31,10 +31,13 @@ type PostEdges struct {
 	totalCount  map[string]int
 }
 
-// AuthorOrErr returns the author value or an error if the edge was not loaded.
+// AuthorOrErr returns the author value or an error if the edge was not loaded
+// in eager-loading, or loaded but was not found.
 func (e PostEdges) AuthorOrErr() (*User, error) {
-	if e.loadedTypes[0] {
+	if e.Author != nil {
 		return e.Author, nil
+	} else if e.loadedTypes[0] {
+		return nil, velox.NewNotFoundError("User")
 	}
 	return nil, runtime.NewNotLoadedError("author")
 }

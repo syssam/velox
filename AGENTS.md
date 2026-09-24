@@ -116,6 +116,19 @@ CONTRIBUTING.md § Dead-API Guard. Never allowlist something generated code shou
 **Dialect differences go through `dialect.Capability` flags**, never string
 comparisons on the dialect name.
 
+**Ent is the parity reference, not the spec.** Some deviations are
+deliberate because Ent's behavior is wrong for users; do not "restore
+parity" on them without reading why. Query-level traversals
+(`sqlgraph.SetNeighbors`) are semi-joins, `WHERE key IN (SELECT … FROM
+(<source>) AS t1)`, not Ent's JOIN + default `DISTINCT`: the DISTINCT makes
+Postgres and MySQL reject a traversal ordered by an unselected expression
+(`ByPostsCount`), which SQLite accepts, so only a live-database run shows
+it. `client.Mutate` scopes an `OpDeleteOne` mutation to its ID (Ent's
+identical path is unreachable only because its constructor is
+unexported). Before claiming parity, read the Ent template line — a
+misread `_node.<fk> = &nodes[0]` once shipped an ID-only edge stub as
+"Ent parity".
+
 ## Authorization: the split that matters
 
 Two mechanisms with different reach. The difference is measured in

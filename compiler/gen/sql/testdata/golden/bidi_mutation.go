@@ -24,6 +24,7 @@ type PostMutation struct {
 	oldValue      func(context.Context) (*entity.Post, error)
 	oldLoaded     bool
 	oldCache      *entity.Post
+	done          bool
 	author        map[int64]struct{}
 	removedAuthor map[int64]struct{}
 	clearedAuthor bool
@@ -86,6 +87,9 @@ func (m *PostMutation) loadOld(ctx context.Context) (*entity.Post, error) {
 	}
 	if m.oldLoaded {
 		return m.oldCache, nil
+	}
+	if m.done {
+		return nil, fmt.Errorf("%w: call Post.OldXxx in the hook before next.Mutate", runtime.ErrOldValueAfterMutation)
 	}
 	old, err := m.oldValue(ctx)
 	if err != nil {

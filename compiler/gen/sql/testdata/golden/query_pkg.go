@@ -430,9 +430,6 @@ func (q *UserQuery) sqlIDs(ctx context.Context) ([]int64, error) {
 		if err != nil {
 			return nil, err
 		}
-		if q.ctx.Unique == nil {
-			q.Unique(true)
-		}
 	}
 	spec := q.querySpec()
 	spec.Node.Columns = []string{user.FieldID}

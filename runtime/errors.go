@@ -40,6 +40,20 @@ type ValidationError = velox.ValidationError
 // resolution succeeds or fails depending on map iteration order.
 var ErrNodeIDTypeMismatch = errors.New("velox: NodeResolver: id type mismatch")
 
+// ErrAmbiguousNodeID is returned by ResolveNode (and so by the generated
+// Noder/Noders) when an id matches rows in more than one entity type. With
+// per-table auto-increment keys, User 1 and Todo 1 both exist; picking one
+// would answer node(id:) with an arbitrary type. Relay IDs must be globally
+// unique — enable FeatureGlobalID. Test with errors.Is.
+var ErrAmbiguousNodeID = errors.New("velox: node id matches more than one type")
+
+// ErrOldValueAfterMutation is returned by OldXxx / OldField when the old
+// row is requested after the UPDATE has run. At that point the row holds
+// the new values, so returning them as "old" would silently corrupt audit
+// and diff logic. Read old values in the hook before calling next.Mutate —
+// a value read there stays available afterwards. Test with errors.Is.
+var ErrOldValueAfterMutation = errors.New("velox: old values are only available before the mutation runs")
+
 // IsNodeIDTypeMismatch reports whether err came from a NodeResolver that
 // does not handle the given id type.
 func IsNodeIDTypeMismatch(err error) bool {

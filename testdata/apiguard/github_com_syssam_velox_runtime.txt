@@ -152,6 +152,7 @@ func RegisterEntityPolicy(string, *github.com/syssam/velox.Policy)
 func RegisterMutator(string, MutatorFunc)
 func RegisterNodeResolver(string, NodeResolver)
 func RegisterQueryFactory(string, QueryFunc)
+func ResolveNode(context.Context, any) (any, bool, error)
 func RunTraversers(context.Context, Query, []Interceptor) error
 func ScanAll[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error)) ([]*T, error)
 func ScanFirst[T any, PT ScannableOf[T]](context.Context, github.com/syssam/velox/dialect.Driver, func(context.Context) (*github.com/syssam/velox/dialect/sql.Selector, error), string) (*T, error)
@@ -202,7 +203,9 @@ type Traverser = Traverser
 type TxDriverUnwrapper interface
 type ValidationError = ValidationError
 type Value = Value
+var ErrAmbiguousNodeID error
 var ErrNodeIDTypeMismatch error
+var ErrOldValueAfterMutation error
 var NewConstraintError func(msg string, wrap error) *github.com/syssam/velox.ConstraintError
 var NewNotFoundError func(label string) *github.com/syssam/velox.NotFoundError
 var NewNotLoadedError func(edge string) *github.com/syssam/velox.NotLoadedError

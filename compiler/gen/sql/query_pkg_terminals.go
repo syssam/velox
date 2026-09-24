@@ -550,9 +550,10 @@ func (qg *queryGen) genIDTerminals() {
 			ifBody.If(jen.Err().Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Err()),
 			)
-			ifBody.If(jen.Id(qg.recv).Dot("ctx").Dot("Unique").Op("==").Nil()).Block(
-				jen.Id(qg.recv).Dot("Unique").Call(jen.True()),
-			)
+			// No default DISTINCT: sqlgraph.SetNeighbors selects a
+			// traversal's targets with a semi-join, which yields each once,
+			// and DISTINCT would reject ordering by an unselected expression
+			// (ByXxxCount) on Postgres and MySQL.
 		})
 		body.Id("spec").Op(":=").Id(qg.recv).Dot("querySpec").Call()
 		body.Id("spec").Dot("Node").Dot("Columns").Op("=").Index().String().Values(jen.Qual(qg.entitySubPkg, "FieldID"))

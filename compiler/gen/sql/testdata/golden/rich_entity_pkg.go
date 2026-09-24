@@ -38,10 +38,13 @@ type ArticleEdges struct {
 	totalCount  map[string]int
 }
 
-// AuthorOrErr returns the author value or an error if the edge was not loaded.
+// AuthorOrErr returns the author value or an error if the edge was not loaded
+// in eager-loading, or loaded but was not found.
 func (e ArticleEdges) AuthorOrErr() (*Author, error) {
-	if e.loadedTypes[0] {
+	if e.Author != nil {
 		return e.Author, nil
+	} else if e.loadedTypes[0] {
+		return nil, velox.NewNotFoundError("Author")
 	}
 	return nil, runtime.NewNotLoadedError("author")
 }
