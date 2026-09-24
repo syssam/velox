@@ -3,6 +3,7 @@ package sql
 import (
 	"go/parser"
 	"go/token"
+	"reflect"
 	"testing"
 
 	"github.com/dave/jennifer/jen"
@@ -25,7 +26,7 @@ func TestMutation_JSONFieldAppend(t *testing.T) {
 	userType := createTestTypeWithFields("User", []*gen.Field{
 		{
 			Name: "tags",
-			Type: &field.TypeInfo{Type: field.TypeJSON},
+			Type: &field.TypeInfo{Type: field.TypeJSON, Ident: "[]string", RType: &field.RType{Kind: reflect.Slice}},
 		},
 	})
 	helper.graph.Nodes = []*gen.Type{userType}

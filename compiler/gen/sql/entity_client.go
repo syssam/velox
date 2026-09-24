@@ -445,7 +445,7 @@ func genEntityClientEdgePathClosure(h gen.GeneratorHelper, grp *jen.Group, t *ge
 
 // genEntitySubPkgMutateMethod generates the private mutate method on the entity client
 // for entity sub-package mode. Dispatches based on Op to the appropriate local builder.
-func genEntitySubPkgMutateMethod(_ gen.GeneratorHelper, f *jen.File, t *gen.Type) {
+func genEntitySubPkgMutateMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 	clientName := t.ClientName()
 	mutName := t.MutationName()
 
@@ -478,8 +478,44 @@ func genEntitySubPkgMutateMethod(_ gen.GeneratorHelper, f *jen.File, t *gen.Type
 			sw.Case(jen.Qual(runtimePkg, "OpUpdateOne")).BlockFunc(func(grp *jen.Group) {
 				builderCall(grp, t.UpdateOneName(), "Save")
 			})
-			sw.Case(jen.Qual(runtimePkg, "OpDelete"), jen.Qual(runtimePkg, "OpDeleteOne")).BlockFunc(func(grp *jen.Group) {
+			if !t.HasOneFieldID() {
+				sw.Case(jen.Qual(runtimePkg, "OpDelete"), jen.Qual(runtimePkg, "OpDeleteOne")).BlockFunc(func(grp *jen.Group) {
+					builderCall(grp, t.DeleteName(), "Exec")
+				})
+				return
+			}
+			sw.Case(jen.Qual(runtimePkg, "OpDelete")).BlockFunc(func(grp *jen.Group) {
 				builderCall(grp, t.DeleteName(), "Exec")
+			})
+			// The delete builder reads only predicates. DeleteOneID adds the
+			// ID predicate itself; a mutation reaching here was built by the
+			// caller (NewXxxMutation + SetID are exported), so mutate must
+			// add it too — sharing OpDelete's case deleted every row.
+			sw.Case(jen.Qual(runtimePkg, "OpDeleteOne")).BlockFunc(func(grp *jen.Group) {
+				grp.If(jen.Id("m").Dot("id").Op("==").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("velox: missing ID for %s DeleteOne mutation"), jen.Lit(t.Name),
+					)),
+				)
+				grp.Id("id").Op(":=").Op("*").Id("m").Dot("id")
+				grp.Id("m").Dot("Where").Call(
+					jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(
+						jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
+							jen.Id("s").Dot("C").Call(jen.Qual(h.LeafPkgPath(t), "FieldID")),
+							jen.Id("id"),
+						)),
+					),
+				)
+				args := []jen.Code{jen.Id("c").Dot("config"), jen.Id("m"), jen.Id("c").Dot("Hooks").Call()}
+				if t.NumPolicy() > 0 {
+					args = append(args, jen.Id("c").Dot("policy"))
+				}
+				grp.List(jen.Id("n"), jen.Err()).Op(":=").Id("New" + t.DeleteName()).Call(args...).Dot("Exec").Call(jen.Id("ctx"))
+				grp.If(jen.Err().Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Err()))
+				grp.If(jen.Id("n").Op("==").Lit(0)).Block(
+					jen.Return(jen.Nil(), jen.Qual(h.VeloxPkg(), "NewNotFoundError").Call(jen.Lit(t.Name))),
+				)
+				grp.Return(jen.Id("n"), jen.Nil())
 			})
 			sw.Default().Block(
 				jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(

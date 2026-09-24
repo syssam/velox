@@ -753,7 +753,7 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 // jsonAppendRelevant reports whether the type has any JSON fields that could receive Append values.
 func jsonAppendRelevant(t *gen.Type) bool {
 	for _, fd := range t.Fields {
-		if fd.IsJSON() {
+		if fd.SupportsMutationAppend() {
 			return true
 		}
 	}

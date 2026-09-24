@@ -228,6 +228,9 @@ func (m *ArticleMutation) AppendTags(v any) {
 	if m.appends == nil {
 		m.appends = make(map[string]any)
 	}
+	if prev, ok := m.appends["tags"].(any); ok {
+		v = append(prev[:len(prev):len(prev)], v...)
+	}
 	m.appends["tags"] = v
 }
 

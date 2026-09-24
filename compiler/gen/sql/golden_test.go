@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -486,7 +487,7 @@ func goldenTestTypeRich() (*featureMockHelper, *gen.Type, *gen.Type) {
 		},
 		{
 			Name:     "tags",
-			Type:     &field.TypeInfo{Type: field.TypeJSON},
+			Type:     &field.TypeInfo{Type: field.TypeJSON, Ident: "[]string", RType: &field.RType{Kind: reflect.Slice}},
 			Optional: true,
 		},
 		createEnumField("status", []string{"draft", "review", "published"}),

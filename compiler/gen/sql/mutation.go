@@ -22,7 +22,7 @@ func genMutation(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 
 	hasJSONField := false
 	for _, fd := range t.Fields {
-		if fd.IsJSON() {
+		if fd.SupportsMutationAppend() {
 			hasJSONField = true
 			break
 		}
@@ -243,7 +243,7 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 		if fd.SupportsMutationAdd() {
 			body.Id("m").Dot(addField).Op("=").Nil()
 		}
-		if fd.IsJSON() {
+		if fd.SupportsMutationAppend() {
 			body.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
 				jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(column)),
 			)
@@ -294,14 +294,27 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 		)
 	}
 
-	// AppendXxx for JSON slice fields
-	if fd.IsJSON() {
+	// AppendXxx for JSON slice fields only: the UPDATE concatenates JSON
+	// arrays, so on a struct or map column it stored an array the entity
+	// could no longer decode (Ent gates on SupportsMutationAppend too).
+	// Repeated calls accumulate; the stored slice is capacity-clamped so the
+	// second append never writes into the first caller's backing array.
+	if fd.SupportsMutationAppend() {
 		f.Commentf("Append%s appends v to the %q field.", fieldPascal, column)
 		f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id("Append"+fieldPascal).Params(
 			jen.Id("v").Add(h.BaseType(fd)),
 		).Block(
 			jen.If(jen.Id("m").Dot("appends").Op("==").Nil()).Block(
 				jen.Id("m").Dot("appends").Op("=").Make(jen.Map(jen.String()).Any()),
+			),
+			jen.If(
+				jen.List(jen.Id("prev"), jen.Id("ok")).Op(":=").Id("m").Dot("appends").Index(jen.Lit(column)).Assert(h.BaseType(fd)),
+				jen.Id("ok"),
+			).Block(
+				jen.Id("v").Op("=").Append(
+					jen.Id("prev").Index(jen.Empty(), jen.Len(jen.Id("prev")), jen.Len(jen.Id("prev"))),
+					jen.Id("v").Op("..."),
+				),
 			),
 			jen.Id("m").Dot("appends").Index(jen.Lit(column)).Op("=").Id("v"),
 		)
@@ -318,7 +331,7 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 			if fd.SupportsMutationAdd() {
 				body.Id("m").Dot(addField).Op("=").Nil()
 			}
-			if fd.IsJSON() {
+			if fd.SupportsMutationAppend() {
 				body.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
 					jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(column)),
 				)
@@ -347,7 +360,7 @@ func genMutationField(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen
 		if fd.SupportsMutationAdd() {
 			body.Id("m").Dot(addField).Op("=").Nil()
 		}
-		if fd.IsJSON() {
+		if fd.SupportsMutationAppend() {
 			body.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
 				jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(column)),
 			)
@@ -714,7 +727,7 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 						if fd.SupportsMutationAdd() {
 							blk.Id("m").Dot("_add" + fd.Name).Op("=").Nil()
 						}
-						if fd.IsJSON() {
+						if fd.SupportsMutationAppend() {
 							blk.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
 								jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(fd.Name)),
 							)
@@ -745,7 +758,7 @@ func genMutationFieldAccessors(h gen.GeneratorHelper, f *jen.File, mutName strin
 					if fd.SupportsMutationAdd() {
 						blk.Id("m").Dot("_add" + fd.Name).Op("=").Nil()
 					}
-					if fd.IsJSON() {
+					if fd.SupportsMutationAppend() {
 						blk.If(jen.Id("m").Dot("appends").Op("!=").Nil()).Block(
 							jen.Delete(jen.Id("m").Dot("appends"), jen.Lit(fd.Name)),
 						)

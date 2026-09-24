@@ -327,7 +327,7 @@ func genCreateSQLSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNa
 		// because `config` is unexported, so we call the exported SetConfig.
 		grp.Id("_node").Dot(t.SetConfigMethodName()).Call(jen.Id(recv).Dot("config"))
 		// Assign auto-generated ID if the type has a single numeric auto-ID.
-		genCreateAssignID(grp, t, "_node", "_spec")
+		genCreateAssignID(h, grp, t, "_node", "_spec")
 		// Record the ID on mutation state (for hooks and follow-up calls).
 		if t.HasOneFieldID() {
 			grp.Id(recv).Dot("mutation").Dot("SetID").Call(
@@ -344,14 +344,37 @@ func genCreateSQLSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNa
 // genCreateAssignID emits the code that assigns the auto-generated ID from
 // spec.ID.Value onto the returned node. Only applies to numeric ID types where
 // the user did not explicitly supply an ID.
-func genCreateAssignID(grp *jen.Group, t *gen.Type, nodeVar, specVar string) {
+func genCreateAssignID(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, nodeVar, specVar string) {
 	if !t.HasOneFieldID() {
 		return
 	}
 	id := t.ID
-	// Non-numeric IDs (string, UUID, bytes, other) must be user-supplied and
-	// are already set in createSpec. Skip the auto-ID extraction.
+	// Non-numeric IDs (string, UUID) are supplied by the caller or DefaultID
+	// and already set in createSpec — but on an upsert's conflict path the
+	// row keeps its stored ID, and RETURNING scans that into _spec.ID.Value
+	// as the driver's raw value. Take it from there (Ent's create.tmpl), or
+	// ID(ctx) returns the generated ID of a row that was never inserted.
 	if !id.Type.Type.Numeric() {
+		if id.HasValueScanner() || id.Type.RType == nil || id.Type.RType.IsPtr() {
+			return
+		}
+		assign := jen.If(
+			jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id(specVar).Dot("ID").Dot("Value").Assert(h.IDType(t)),
+			jen.Id("ok"),
+		).Block(
+			jen.Id(nodeVar).Dot(id.StructField()).Op("=").Id("v"),
+		)
+		if id.Type.ValueScanner() {
+			assign.Else().If(
+				jen.Err().Op(":=").Id(nodeVar).Dot(id.StructField()).Dot("Scan").Call(jen.Id(specVar).Dot("ID").Dot("Value")),
+				jen.Err().Op("!=").Nil(),
+			).Block(jen.Return(jen.Nil(), jen.Err()))
+		} else {
+			assign.Else().Block(jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(
+				jen.Lit("unexpected "+t.Name+".ID type: %T"), jen.Id(specVar).Dot("ID").Dot("Value"),
+			)))
+		}
+		grp.If(jen.Id(specVar).Dot("ID").Dot("Value").Op("!=").Nil()).Block(assign)
 		return
 	}
 	// Numeric ID: if the user did not supply one, sqlgraph sets _spec.ID.Value
@@ -982,13 +1005,37 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 
 	// UpdateNewValues method
 	f.Comment("UpdateNewValues updates the mutable fields using the new values that were set on create.")
-	f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("UpdateNewValues").Params().Add(upserterRet.Clone()).Block(
-		jen.Id("u").Dot("create").Dot("conflict").Op("=").Append(
+	// ResolveWithNewValues rewrites every inserted column, so the ID (when
+	// the caller supplies it) and immutable fields are set back to their
+	// stored values — otherwise the conflict UPDATE replaces a UUID primary
+	// key and created_at with the new row's. Ent adds the same SetIgnore.
+	leafPkg := h.LeafPkgPath(t)
+	udfID := t.HasOneFieldID() && t.ID.UserDefined
+	immutable := t.ImmutableFields()
+	f.Func().Params(jen.Id("u").Op("*").Id(upsertName)).Id("UpdateNewValues").Params().Add(upserterRet.Clone()).BlockFunc(func(grp *jen.Group) {
+		grp.Id("u").Dot("create").Dot("conflict").Op("=").Append(
 			jen.Id("u").Dot("create").Dot("conflict"),
 			jen.Qual(sqlPkg, "ResolveWithNewValues").Call(),
-		),
-		jen.Return(jen.Id("u")),
-	)
+		)
+		if udfID || len(immutable) > 0 {
+			grp.Add(eagerConflict(jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "UpdateSet")).BlockFunc(func(set *jen.Group) {
+				if udfID {
+					set.If(jen.Id("u").Dot("create").Dot("mutation").Dot("id").Op("!=").Nil()).Block(
+						jen.Id("s").Dot("SetIgnore").Call(jen.Qual(leafPkg, t.ID.Constant())),
+					)
+				}
+				for _, fd := range immutable {
+					set.If(
+						jen.List(jen.Id("_"), jen.Id("exists")).Op(":=").Id("u").Dot("create").Dot("mutation").Dot(fd.MutationGet()).Call(),
+						jen.Id("exists"),
+					).Block(
+						jen.Id("s").Dot("SetIgnore").Call(jen.Qual(leafPkg, fd.Constant())),
+					)
+				}
+			})))
+		}
+		grp.Return(jen.Id("u"))
+	})
 
 	// Ignore method
 	f.Comment("Ignore sets each column to itself in case of conflict.")
@@ -1161,7 +1208,7 @@ func genFieldSetter(h gen.GeneratorHelper, f *jen.File, builderName, recv string
 	}
 
 	// AppendXxx for JSON slice fields (update builders only)
-	if isUpdate && fd.IsJSON() {
+	if isUpdate && fd.SupportsMutationAppend() {
 		f.Commentf("Append%s appends v to the %q field.", fieldPascal, fd.Name)
 		f.Func().Params(jen.Id(recv).Op("*").Id(builderName)).Id("Append"+fieldPascal).Params(
 			jen.Id("v").Add(h.BaseType(fd)),

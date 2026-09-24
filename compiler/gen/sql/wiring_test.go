@@ -13,6 +13,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -884,7 +885,7 @@ func TestMutationJSONAppendsSymmetry(t *testing.T) {
 		createTestField("title", field.TypeString),
 		{
 			Name:     "data",
-			Type:     &field.TypeInfo{Type: field.TypeJSON},
+			Type:     &field.TypeInfo{Type: field.TypeJSON, Ident: "[]string", RType: &field.RType{Kind: reflect.Slice}},
 			Optional: true,
 			Nillable: true,
 		},
@@ -1993,5 +1994,77 @@ func TestSelectAndGroupByValidateFieldNames(t *testing.T) {
 		if check < 0 || run < 0 {
 			t.Errorf("%s does not validate %s with ValidColumn\n%s", decl, fields, body)
 		}
+	}
+}
+
+// TestUpsertKeepsImmutableColumnsAndReadsBackStringID pins two halves of
+// Ent's upsert contract. UpdateNewValues must SetIgnore a caller-supplied ID
+// and every immutable field — ResolveWithNewValues alone rewrote a UUID
+// primary key and created_at on conflict. And sqlSave must take a
+// non-numeric ID from _spec.ID.Value, where RETURNING reports the stored
+// row's ID on the conflict path; it skipped non-numeric IDs, so ID(ctx)
+// returned the generated ID of a row that was never inserted. Behaviorally
+// pinned by TestUpsertUpdateNewValues_KeepsImmutableColumns.
+func TestUpsertKeepsImmutableColumnsAndReadsBackStringID(t *testing.T) {
+	h := newFeatureMockHelper().withFeatures(gen.FeatureUpsert.Name)
+	tok := createTestType("Token")
+	tok.ID = &gen.Field{
+		Name:        "id",
+		UserDefined: true,
+		Type:        &field.TypeInfo{Type: field.TypeString, RType: &field.RType{Kind: reflect.String}},
+	}
+	tok.Fields = append(tok.Fields, &gen.Field{Name: "created_at", Type: &field.TypeInfo{Type: field.TypeTime}, Immutable: true})
+	h.graph.Nodes = []*gen.Type{tok}
+
+	file, err := genCreate(h, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := file.GoString()
+
+	body := funcBody(t, src, "*TokenUpsert) UpdateNewValues(")
+	for _, want := range []string{"ResolveWithNewValues()", "SetIgnore(token.FieldID)", "SetIgnore(token.FieldCreatedAt)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("UpdateNewValues is missing %s\n%s", want, body)
+		}
+	}
+	if body := funcBody(t, src, "*TokenCreate) sqlSave("); !strings.Contains(body, "_spec.ID.Value.(string)") {
+		t.Errorf("sqlSave does not read the stored ID back from _spec.ID.Value\n%s", body)
+	}
+}
+
+// TestJSONAppendOnlyForSlicesAndAccumulates pins that AppendXxx exists only
+// for slice-typed JSON fields and that repeated calls accumulate. On a
+// struct or map column the UPDATE's JSON-array concatenation stored an array
+// that no read could decode again; and each call overwrote the previous
+// one's value. Behaviorally pinned by TestJSONAppend_RepeatedCallsAccumulate
+// and examples/json-field.
+func TestJSONAppendOnlyForSlicesAndAccumulates(t *testing.T) {
+	h := newFeatureMockHelper()
+	product := createTestType("Product")
+	product.Fields = append(product.Fields,
+		&gen.Field{Name: "tags", Type: &field.TypeInfo{Type: field.TypeJSON, Ident: "[]string", RType: &field.RType{Kind: reflect.Slice}}},
+		&gen.Field{Name: "specs", Type: &field.TypeInfo{Type: field.TypeJSON, Ident: "schema.Specs", RType: &field.RType{Kind: reflect.Struct}}},
+		&gen.Field{Name: "metadata", Type: &field.TypeInfo{Type: field.TypeJSON, Ident: "map[string]any", RType: &field.RType{Kind: reflect.Map}}},
+	)
+	h.graph.Nodes = []*gen.Type{product}
+
+	mutation := genMutation(h, product).GoString()
+	update, err := genUpdate(h, product)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range []string{mutation, update.GoString()} {
+		if !strings.Contains(src, ") AppendTags(") {
+			t.Fatalf("fixture: AppendTags missing")
+		}
+		for _, bad := range []string{") AppendSpecs(", ") AppendMetadata("} {
+			if strings.Contains(src, bad) {
+				t.Errorf("Append generated for a non-slice JSON field: %s", bad)
+			}
+		}
+	}
+	if body := funcBody(t, mutation, "*ProductMutation) AppendTags("); !strings.Contains(body, "append(prev[:len(prev):len(prev)], v...)") {
+		t.Errorf("AppendTags must accumulate onto a capacity-clamped copy\n%s", body)
 	}
 }
