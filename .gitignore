@@ -97,3 +97,6 @@ benchmarks/fixtures/ent/ent/*
 # Transient bench run output. testdata/bench-baseline.txt IS tracked
 # (frozen reference); testdata/bench-current.txt is the per-run output.
 testdata/bench-current.txt
+
+# goreleaser output
+/dist/

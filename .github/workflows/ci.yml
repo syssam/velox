@@ -20,6 +20,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write  # Codecov upload authenticates with GitHub OIDC; no secret needed.
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +113,9 @@ jobs:
           fi
       - uses: codecov/codecov-action@v6
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          # OIDC instead of a CODECOV_TOKEN secret: main is a protected
+          # branch, where Codecov rejects tokenless uploads.
+          use_oidc: true
           files: ./coverage.out
         if: matrix.go-version == 'stable'
         continue-on-error: true

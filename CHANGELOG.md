@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-24
+
+Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
+
 ### Changed
 - **BREAKING:** With the GraphQL extension, `CollectFields(ctx, satisfies ...string) (XxxQuerier, error)` is part of the generated `entity.XxxQuerier` interface, so list resolvers call `client.Xxx.Query().CollectFields(ctx)` without asserting `*query.XxxQuery`. The concrete method now returns `entity.XxxQuerier` (like the other chainers) instead of `*query.XxxQuery`
 - Generated `Paginate` skips its `COUNT` query unless the GraphQL selection reads `totalCount` (Ent parity; `pageInfo` comes from the limit+1 row). Outside a GraphQL operation it keeps counting. New `gqlrelay.TotalCountSelected(ctx)`. Regenerate after upgrading
@@ -207,7 +211,8 @@ Regenerate after upgrading: generated import paths moved.
 - Package-level documentation (doc.go files)
 - Usage examples in documentation
 
-[Unreleased]: https://github.com/syssam/velox/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/syssam/velox/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/syssam/velox/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/syssam/velox/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/syssam/velox/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/syssam/velox/releases/tag/v0.1.0

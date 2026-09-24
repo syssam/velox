@@ -1,6 +1,6 @@
 # Roadmap
 
-Velox is pre-1.0 (latest tag `v0.2.1`; see [CHANGELOG.md](CHANGELOG.md)).
+Velox is pre-1.0 (latest tag `v0.3.0`; see [CHANGELOG.md](CHANGELOG.md)).
 This document is the answer to two questions the README's
 [Feature Stability](README.md#feature-stability) table raises but does not
 answer: **what must be true before v1.0.0**, and **what does it take
