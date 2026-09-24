@@ -2,6 +2,9 @@ package runtime
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/syssam/velox/dialect/sql"
 )
@@ -135,3 +138,48 @@ func MaskNotFound(err error) error {
 	}
 	return err
 }
+
+// ApplyEdgePolicy applies the privacy policy of entity (the target of an
+// edge predicate) to s, the subquery an edge predicate — HasPosts(),
+// HasPostsWith(...) — selects the target rows through. It is called by
+// generated edge predicates whose target declares a Policy.
+//
+// Without it the subquery read the target table unscoped: no query object
+// existed, so the target's policy never ran, and a filter such as
+// users(where: {hasPostsWith: {title: "…"}}) answered whether rows the
+// caller may not read exist. A policy that filters (FilterFunc) narrows the
+// subquery to the rows it allows; a policy that denies records its error on
+// s, which fails the whole query — the same outcome as eager-loading a
+// denied edge.
+func ApplyEdgePolicy(s *sql.Selector, entity string) {
+	policy := EntityPolicy(entity)
+	if policy == nil {
+		return
+	}
+	// Policies may filter through edges themselves (Post visible if its
+	// author is): a cycle — User's filter through posts, Post's through
+	// author — would re-evaluate forever. Fail closed instead.
+	ctx := s.Context()
+	chain, _ := ctx.Value(edgePolicyChainKey{}).([]string)
+	if slices.Contains(chain, entity) {
+		s.AddError(fmt.Errorf("velox: privacy policies form a cycle through edge predicates: %s",
+			strings.Join(append(slices.Clone(chain), entity), " -> ")))
+		return
+	}
+	ctx = context.WithValue(ctx, edgePolicyChainKey{}, append(slices.Clone(chain), entity))
+	s.WithContext(ctx)
+	q := NewEntityQuery(entity, Config{})
+	if err := policy.EvalQuery(ctx, q); err != nil {
+		s.AddError(err)
+		return
+	}
+	if r, ok := q.(QueryReader); ok {
+		for _, p := range r.GetPredicates() {
+			p(s)
+		}
+	}
+}
+
+// edgePolicyChainKey carries the entities whose policies are being applied
+// to nested edge subqueries, to detect a cycle between policies.
+type edgePolicyChainKey struct{}

@@ -328,22 +328,23 @@ func (User) Annotations() []schema.Annotation { // import "github.com/syssam/vel
 }
 ```
 
-### Pagination returns an empty page even though `hasNextPage` was true
+### Pagination returns an empty or repeated page
 
-**Cause**: ordering by a NULL-able column. When a page boundary lands on a
-row whose order value is NULL, the cursor carries that NULL and the composite
-cursor predicate (`col = ? / col > ?`) can never match — SQL three-valued
-logic evaluates every arm to NULL. Pagination dead-ends; rows after the NULL
-block are unreachable. Ent (entgql) behaves identically — the limitation is
-inherited, not a velox bug.
+Older velox versions (and Ent) produced this in two cases, both fixed —
+regenerate and upgrade if you see it:
 
-**Solutions**:
+- **ordering by a NULL-able column**, when a page boundary landed on a NULL
+  value: the cursor predicate compared `col > NULL`, which never matches;
+- **ordering by a time column on SQLite**, when the stored values were in a
+  zone other than the server process's local zone: the cursor decoded the
+  time in the local zone, and SQLite compares times as text.
 
-1. Order by a `NOT NULL` column (`created_at`, `id`, or any non-`Optional`,
-   non-`Nillable` field).
-2. Give the nullable column a `Default()` so stored values are never NULL.
+If it persists, check that every value of the order column was written in
+the same time zone. SQLite compares times as text, so values written with
+different offsets do not sort chronologically even without pagination;
+store times in UTC.
 
-Pinned by `tests/integration/e2e_multidialect_null_test.go::TestPaginate_NullableOrder_NullCursorDeadEnds`.
+Pinned by `tests/integration/e2e_cursor_keyset_test.go::TestMultiDialect_CursorKeysetWalks`.
 
 ---
 

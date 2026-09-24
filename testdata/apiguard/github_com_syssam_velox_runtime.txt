@@ -118,6 +118,7 @@ const OpDelete github.com/syssam/velox.Op
 const OpDeleteOne github.com/syssam/velox.Op
 const OpUpdate github.com/syssam/velox.Op
 const OpUpdateOne github.com/syssam/velox.Op
+func ApplyEdgePolicy(*github.com/syssam/velox/dialect/sql.Selector, string)
 func BuildQueryFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func BuildSelectorFrom(context.Context, QueryReader) (*github.com/syssam/velox/dialect/sql.Selector, error)
 func CloneSlice[T any]([]T) []T

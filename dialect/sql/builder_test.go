@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -2464,4 +2465,37 @@ func TestConflictDoesNothing(t *testing.T) {
 	require.False(t, ConflictDoesNothing(ConflictColumns("id"), ResolveWithNewValues()))
 	require.False(t, ConflictDoesNothing(ConflictColumns("id")))
 	require.False(t, ConflictDoesNothing(DoNothing(), ResolveWithIgnore()), "an update wins over DO NOTHING")
+}
+
+// TestSubqueryErrorsReachTheOuterQuery pins that an error recorded on a
+// subquery survives into the query that embeds it. EXISTS (…) and IN (…)
+// render the subquery through Builder.Wrap, which copied its text and args
+// but dropped its errors, so a failed subquery ran as if it had succeeded.
+// Edge predicates (HasXxxWith) depend on this to fail a query whose target
+// policy denies.
+func TestSubqueryErrorsReachTheOuterQuery(t *testing.T) {
+	denied := errors.New("denied")
+	for name, wrap := range map[string]func(*Selector) *Predicate{
+		"exists": func(s *Selector) *Predicate { return Exists(s) },
+		"in":     func(s *Selector) *Predicate { return In("id", s) },
+	} {
+		inner := Select("id").From(Table("posts"))
+		inner.AddError(denied)
+		outer := Select("*").From(Table("users")).Where(wrap(inner))
+		outer.Query()
+		require.ErrorIs(t, outer.Err(), denied, name)
+
+		// UPDATE renders into a clone of itself; its errors must come back.
+		inner = Select("id").From(Table("posts"))
+		inner.AddError(denied)
+		upd := Update("users").Set("age", 1).Where(wrap(inner))
+		upd.Query()
+		require.ErrorIs(t, upd.Err(), denied, "update "+name)
+	}
+
+	branch := Select("id").From(Table("posts"))
+	branch.AddError(denied)
+	u := Union(Select("id").From(Table("users")), branch)
+	u.Query()
+	require.ErrorIs(t, u.(interface{ Err() error }).Err(), denied, "union branch")
 }

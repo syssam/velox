@@ -8,6 +8,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sql"
 )
 
@@ -174,13 +175,10 @@ func CursorsPredicate(after *Cursor, before *Cursor, idField string, field strin
 					s.Where(sql.LT(s.C(idField), after.ID))
 				})
 			}
-		} else if direction == OrderDirectionAsc {
-			predicates = append(predicates, func(s *sql.Selector) {
-				s.Where(sql.CompositeGT([]string{field, idField}, after.Value, after.ID))
-			})
 		} else {
+			asc := direction == OrderDirectionAsc
 			predicates = append(predicates, func(s *sql.Selector) {
-				s.Where(sql.CompositeLT([]string{field, idField}, after.Value, after.ID))
+				s.Where(keysetAfter(s, []string{field, idField}, []bool{asc, asc}, []any{after.Value, after.ID}))
 			})
 		}
 	}
@@ -196,13 +194,12 @@ func CursorsPredicate(after *Cursor, before *Cursor, idField string, field strin
 					s.Where(sql.GT(s.C(idField), before.ID))
 				})
 			}
-		} else if direction == OrderDirectionAsc {
-			predicates = append(predicates, func(s *sql.Selector) {
-				s.Where(sql.CompositeLT([]string{field, idField}, before.Value, before.ID))
-			})
 		} else {
+			// Rows before the cursor are the rows after it in the reversed
+			// order, which also reverses where NULLs sort.
+			asc := direction != OrderDirectionAsc
 			predicates = append(predicates, func(s *sql.Selector) {
-				s.Where(sql.CompositeGT([]string{field, idField}, before.Value, before.ID))
+				s.Where(keysetAfter(s, []string{field, idField}, []bool{asc, asc}, []any{before.Value, before.ID}))
 			})
 		}
 	}
@@ -284,28 +281,60 @@ func multiPredicate(cursor *Cursor, opts *MultiCursorsOptions, invert bool) (fun
 		fields = append(fields, opts.FieldID)
 		directions = append(directions, opts.DirectionID)
 	}
+	asc := make([]bool, len(directions))
+	for i, d := range directions {
+		asc[i] = (d == OrderDirectionAsc) != invert
+	}
 	return func(s *sql.Selector) {
-		// Given terms: x DESC, y ASC, etc. Generate:
-		// (x < x1 OR (x = x1 AND y > y1) OR (x = x1 AND y = y1 AND id > last))
-		var or []*sql.Predicate
-		for i := range fields {
-			var ands []*sql.Predicate
-			for j := range i {
-				ands = append(ands, sql.EQ(s.C(fields[j]), vals[j]))
-			}
-			asc := directions[i] == OrderDirectionAsc
-			if invert {
-				asc = !asc
-			}
-			if asc {
-				ands = append(ands, sql.GT(s.C(fields[i]), vals[i]))
-			} else {
-				ands = append(ands, sql.LT(s.C(fields[i]), vals[i]))
-			}
-			or = append(or, sql.And(ands...))
-		}
-		s.Where(sql.Or(or...))
+		s.Where(keysetAfter(s, fields, asc, vals))
 	}, nil
+}
+
+// keysetAfter returns the predicate that selects the rows strictly after the
+// cursor values vals in the order `fields` sorted by asc, with NULL placed
+// where the selector's dialect sorts it (dialect.CapNullsFirst). Terms:
+//
+//	(x after x1) OR (x = x1 AND y after y1) OR (x = x1 AND y = y1 AND id after id1)
+//
+// where "= NULL" is IS NULL and "after" depends on NULL placement: a NULL
+// cursor value is followed only by non-NULL values when NULLs sort first,
+// by nothing when they sort last; a non-NULL value is followed by the NULLs
+// too when they sort last. The plain row comparison `(x, id) > (x1, id1)`
+// is NULL whenever x or x1 is, so a walk stopped at the first NULL row.
+func keysetAfter(s *sql.Selector, fields []string, asc []bool, vals []any) *sql.Predicate {
+	nullsFirstAsc := dialect.GetCapabilities(s.Dialect()).Has(dialect.CapNullsFirst)
+	var or []*sql.Predicate
+	for i, f := range fields {
+		col := s.C(f)
+		nullsFirst := asc[i] == nullsFirstAsc
+		var after *sql.Predicate
+		switch {
+		case vals[i] == nil && nullsFirst:
+			after = sql.NotNull(col)
+		case vals[i] == nil:
+			// NULLs sort last here: nothing follows a NULL on this column.
+		case asc[i] && nullsFirst:
+			after = sql.GT(col, vals[i])
+		case asc[i]:
+			after = sql.Or(sql.GT(col, vals[i]), sql.IsNull(col))
+		case nullsFirst:
+			after = sql.LT(col, vals[i])
+		default:
+			after = sql.Or(sql.LT(col, vals[i]), sql.IsNull(col))
+		}
+		if after != nil {
+			ands := make([]*sql.Predicate, 0, i+1)
+			for j := range i {
+				if vals[j] == nil {
+					ands = append(ands, sql.IsNull(s.C(fields[j])))
+				} else {
+					ands = append(ands, sql.EQ(s.C(fields[j]), vals[j]))
+				}
+			}
+			or = append(or, sql.And(append(ands, after)...))
+		}
+	}
+	return sql.Or(or...)
 }
 
 // LimitPerRow returns a query modifier that limits the number of rows returned

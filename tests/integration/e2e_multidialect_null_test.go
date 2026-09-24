@@ -247,53 +247,56 @@ func TestMultiDialect_PaginateNullableOrder_NonNullCursors(t *testing.T) {
 	})
 }
 
-// TestPaginate_NullableOrder_NullCursorDeadEnds documents a KNOWN, Ent-parity
-// limitation rather than desired behavior: when a page boundary lands on a
-// row whose order value is NULL, pagination dead-ends. With an explicit
-// orderBy the cursor's Value is the []any of order-column values — including
-// a Go nil for the NULL column (BuildUserConnection's cursorFn) — so
-// gqlrelay.multiPredicate emits `nickname = NULL` / `nickname > NULL` arms
-// that SQL three-valued logic never satisfies: the next page is EMPTY even
-// though HasNextPage was true. entgql builds its multi-order cursors and
-// composite predicate the same way, so Ent dead-ends identically; fixing it
-// requires NULL-aware cursor predicates with dialect-aware NULLS FIRST/LAST
-// handling, a deliberate non-goal until Ent parity stops being the bar.
-//
-// SQLite-only on purpose: the page on which the dead-end occurs depends on
-// NULL placement (SQLite/MySQL sort NULLs first under ASC, Postgres last).
-// Recommended user-facing pattern (docs/troubleshooting.md): don't paginate
-// by a nullable column — order by a NOT NULL column, or give the column a
-// DEFAULT so values are never NULL.
-//
-// If this test starts failing because page 2 returns rows, velox has grown
-// NULL-aware cursors — delete this pin and extend the NonNullCursors sweep
-// above to mixed NULL data.
-func TestPaginate_NullableOrder_NullCursorDeadEnds(t *testing.T) {
-	client := openTestClient(t)
-	ctx := context.Background()
+// TestMultiDialect_PaginateNullableOrder_NullCursors pins that Paginate
+// ordered by a NULL-able column reaches every row when page boundaries land
+// on NULL values, forward and backward, ascending and descending, on every
+// dialect. The cursor predicate compared `nickname = NULL` / `nickname >
+// NULL`, which SQL never satisfies, so the next page was empty with
+// HasNextPage true (entgql does the same). It is now NULL-aware and places
+// NULLs where each dialect sorts them (dialect.CapNullsFirst: first in
+// ascending order on SQLite and MySQL, last on PostgreSQL).
+func TestMultiDialect_PaginateNullableOrder_NullCursors(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, client *integration.Client) {
+		ctx := context.Background()
+		nicks := []*string{strp("bbb"), nil, nil, strp("aaa"), nil, strp("ccc")}
+		for i, n := range nicks {
+			createUserNick(t, client, fmt.Sprintf("Null%d", i), fmt.Sprintf("null%d@multi.com", i), n)
+		}
 
-	// id 1 carries a value; ids 2,3 are NULL; id 4 carries a value.
-	createUserNick(t, client, "NullA", "nulla@x.com", strp("bbb")) // id 1
-	createUserNick(t, client, "NullB", "nullb@x.com", nil)         // id 2
-	createUserNick(t, client, "NullC", "nullc@x.com", nil)         // id 3
-	createUserNick(t, client, "NullD", "nulld@x.com", strp("aaa")) // id 4
+		for _, dir := range []entity.OrderDirection{entity.OrderDirectionAsc, entity.OrderDirectionDesc} {
+			orderBy := userOrderBy(t, "NICKNAME", dir)
+			all, err := client.User.Query().Paginate(ctx, nil, ptr(100), nil, nil, withUserOrder(t, orderBy))
+			require.NoError(t, err)
+			want := ids(all)
+			require.Len(t, want, len(nicks))
 
-	orderBy := userOrderBy(t, "NICKNAME", entity.OrderDirectionAsc)
-	first := 2
+			var fwd []int
+			var after *gqlrelay.Cursor
+			for range nicks {
+				conn, err := client.User.Query().Paginate(ctx, after, ptr(2), nil, nil, withUserOrder(t, orderBy))
+				require.NoError(t, err)
+				fwd = append(fwd, ids(conn)...)
+				if !conn.PageInfo.HasNextPage {
+					break
+				}
+				c := roundTripCursor(t, conn.PageInfo.EndCursor)
+				after = &c
+			}
+			require.Equal(t, want, fwd, "%s forward walk", dir)
 
-	// Page 1: SQLite sorts NULLs first under ASC → ids 2, 3. The end cursor
-	// points at id 3 and carries Value=[]any{nil} (NULL nickname).
-	p1, err := client.User.Query().Paginate(ctx, nil, &first, nil, nil, withUserOrder(t, orderBy))
-	require.NoError(t, err)
-	require.Equal(t, []int{2, 3}, ids(p1), "NULL rows sort first on SQLite")
-	require.True(t, p1.PageInfo.HasNextPage, "two non-NULL rows remain after page 1")
-
-	// Page 2: every arm of the composite predicate compares against NULL and
-	// fails, so the page is empty — ids 1 and 4 are unreachable by design
-	// (inherited from entgql). This is the pinned limitation.
-	after := roundTripCursor(t, p1.PageInfo.EndCursor)
-	p2, err := client.User.Query().Paginate(ctx, &after, &first, nil, nil, withUserOrder(t, orderBy))
-	require.NoError(t, err)
-	assert.Empty(t, ids(p2),
-		"a NULL-valued cursor dead-ends pagination (Ent parity) — rows after the NULL block are unreachable")
+			var bwd []int
+			var before *gqlrelay.Cursor
+			for range nicks {
+				conn, err := client.User.Query().Paginate(ctx, nil, nil, before, ptr(2), withUserOrder(t, orderBy))
+				require.NoError(t, err)
+				bwd = append(ids(conn), bwd...)
+				if !conn.PageInfo.HasPreviousPage {
+					break
+				}
+				c := roundTripCursor(t, conn.PageInfo.StartCursor)
+				before = &c
+			}
+			require.Equal(t, want, bwd, "%s backward walk", dir)
+		}
+	})
 }

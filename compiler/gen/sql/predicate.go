@@ -441,25 +441,46 @@ func genEdgePredicates(h gen.GeneratorHelper, f *jen.File, t *gen.Type, edge *ge
 		return append(stmts, stampStmts...)
 	}
 
+	// A target with a privacy policy is read through its policy inside the
+	// edge subquery (runtime.ApplyEdgePolicy); otherwise HasXxx/HasXxxWith
+	// answer whether rows the caller may not read exist.
+	var edgePolicy jen.Code
+	if h.FeatureEnabled(gen.FeaturePrivacy.Name) && edge.Type.NumPolicy() > 0 {
+		edgePolicy = jen.Qual(runtimePkg, "ApplyEdgePolicy").Call(jen.Id("s"), jen.Lit(edge.Type.Name))
+	}
+
 	// Build the Has predicate function body
 	schemaStmts := schemaConfigStatements()
 	hasBody := make([]jen.Code, 0, 2+len(schemaStmts))
-	hasBody = append(hasBody,
-		jen.Id("step").Op(":=").Qual(h.SQLGraphPkg(), "NewStep").Call(
-			jen.Qual(h.SQLGraphPkg(), "From").Call(
-				jen.Id("Table"),
-				jen.Id(t.ID.Constant()),
+	if edgePolicy != nil {
+		// Reading the target table needs the full step (with To); the
+		// existence-only step below has no target.
+		hasBody = append(hasBody, jen.Id("step").Op(":=").Id("new"+structField+"Step").Call())
+	} else {
+		hasBody = append(hasBody,
+			jen.Id("step").Op(":=").Qual(h.SQLGraphPkg(), "NewStep").Call(
+				jen.Qual(h.SQLGraphPkg(), "From").Call(
+					jen.Id("Table"),
+					jen.Id(t.ID.Constant()),
+				),
+				jen.Qual(h.SQLGraphPkg(), "Edge").Call(
+					jen.Qual(h.SQLGraphPkg(), h.EdgeRelType(edge)),
+					jen.Lit(edge.IsInverse()),
+					jen.Id(edge.TableConstant()),
+					edgeColumns(),
+				),
 			),
-			jen.Qual(h.SQLGraphPkg(), "Edge").Call(
-				jen.Qual(h.SQLGraphPkg(), h.EdgeRelType(edge)),
-				jen.Lit(edge.IsInverse()),
-				jen.Id(edge.TableConstant()),
-				edgeColumns(),
-			),
-		),
-	)
+		)
+	}
 	hasBody = append(hasBody, schemaStmts...)
-	hasBody = append(hasBody, jen.Qual(h.SQLGraphPkg(), "HasNeighbors").Call(jen.Id("s"), jen.Id("step")))
+	if edgePolicy != nil {
+		hasBody = append(hasBody, jen.Qual(h.SQLGraphPkg(), "HasNeighborsWith").Call(
+			jen.Id("s"), jen.Id("step"),
+			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(edgePolicy),
+		))
+	} else {
+		hasBody = append(hasBody, jen.Qual(h.SQLGraphPkg(), "HasNeighbors").Call(jen.Id("s"), jen.Id("step")))
+	}
 
 	// Has predicate
 	f.Commentf("Has%s applies the HasEdge predicate on the %q edge.", structField, edge.Name)
@@ -477,11 +498,14 @@ func genEdgePredicates(h gen.GeneratorHelper, f *jen.File, t *gen.Type, edge *ge
 		jen.Qual(h.SQLGraphPkg(), "HasNeighborsWith").Call(
 			jen.Id("s"),
 			jen.Id("step"),
-			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).Block(
-				jen.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Id("preds")).Block(
+			jen.Func().Params(jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector")).BlockFunc(func(fn *jen.Group) {
+				if edgePolicy != nil {
+					fn.Add(edgePolicy)
+				}
+				fn.For(jen.List(jen.Id("_"), jen.Id("p")).Op(":=").Range().Id("preds")).Block(
 					jen.Id("p").Call(jen.Id("s")),
-				),
-			),
+				)
+			}),
 		),
 	)
 

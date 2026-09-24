@@ -33,6 +33,12 @@ const (
 	// 10.2), so the static MySQL set leaves the flag out and only a driver
 	// that asked its server for the version grants it: see DriverCapabilities.
 	CapWindowFunctions
+	// CapNullsFirst indicates that NULL sorts before every non-NULL value in
+	// ascending order (and after them in descending order), as on SQLite and
+	// MySQL; PostgreSQL sorts NULL last in ascending order. Keyset pagination
+	// consults it so a cursor on a NULL order value selects the rows the
+	// ORDER BY actually places after it (gqlrelay.CursorsPredicate).
+	CapNullsFirst
 )
 
 // Capabilities describes the feature set of a database dialect.
@@ -63,8 +69,8 @@ func (c Capabilities) HasAny(caps ...Capability) bool {
 // dialectCaps maps dialect names to their capability sets.
 var dialectCaps = map[string]Capabilities{
 	Postgres: {CapForUpdate | CapForShare | CapWindowFunctions},
-	MySQL:    {CapForUpdate | CapForShare | CapLockWithDistinct},
-	SQLite:   {CapWindowFunctions},
+	MySQL:    {CapForUpdate | CapForShare | CapLockWithDistinct | CapNullsFirst},
+	SQLite:   {CapWindowFunctions | CapNullsFirst},
 }
 
 // GetCapabilities returns the capability set for the named dialect.

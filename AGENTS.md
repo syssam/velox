@@ -147,9 +147,17 @@ scoped and that one is not" — which matters, because narrowing a read that
 guards an invariant (a dependency `Exist()` before a delete) corrupts data
 rather than leaking it. `examples/multitenant/` is the worked reference.
 
-Neither mechanism reaches edge-predicate subqueries (`HasXxxWith(...)`);
-they are built directly on a `*sql.Selector` and never become a Query. That
-is pinned as a known gap in `tests/integration/e2e_authz_known_gaps_test.go`.
+Edge predicates (`HasXxx()`, `HasXxxWith(...)`) compile to a subquery on a
+`*sql.Selector` that never becomes a Query. The target's **Policy** is applied
+there anyway (`runtime.ApplyEdgePolicy`, emitted for every edge whose target
+declares one): a filtering policy narrows the subquery and a denying one fails
+the whole read or write — pinned by
+`tests/integration/e2e_edge_predicate_policy_test.go`. Interceptors do not
+reach it; that remains pinned in `e2e_authz_known_gaps_test.go`, one more
+reason row-level authorization belongs in `Policy()`. The subquery's errors
+must survive rendering — `Builder.Wrap`, `UpdateBuilder.Query` and sqlgraph's
+post-render `Err()` checks carry them; a write that ran past a denied edge
+policy would do so with the subquery unscoped.
 
 ## Test discipline
 

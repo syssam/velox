@@ -898,7 +898,14 @@ func DeleteNodes(ctx context.Context, drv dialect.Driver, spec *DeleteSpec) (int
 	if pred := spec.Predicate; pred != nil {
 		pred(selector)
 	}
-	query, args := builder.Delete(spec.Node.Table).Schema(spec.Node.Schema).FromSelect(selector).Query()
+	del := builder.Delete(spec.Node.Table).Schema(spec.Node.Schema).FromSelect(selector)
+	query, args := del.Query()
+	// A denied edge-predicate policy leaves its subquery unfiltered and
+	// records the error, which surfaces only when the SQL is rendered:
+	// executing anyway would delete without the policy's scope.
+	if err := del.Err(); err != nil {
+		return 0, err
+	}
 	if err := drv.Exec(ctx, query, args, &res); err != nil {
 		return 0, err
 	}
@@ -977,6 +984,11 @@ func QueryEdges(ctx context.Context, drv dialect.Driver, spec *EdgeQuerySpec) er
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
+	// An error recorded inside a subquery (a denied edge-predicate policy)
+	// reaches the outer selector only when the SQL is rendered.
+	if err := selector.Err(); err != nil {
+		return err
+	}
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
@@ -1005,6 +1017,11 @@ func (q *query) nodes(ctx context.Context, drv dialect.Driver) error {
 		return err
 	}
 	query, args := selector.Query()
+	// An error recorded inside a subquery (a denied edge-predicate policy)
+	// reaches the outer selector only when the SQL is rendered.
+	if err = selector.Err(); err != nil {
+		return err
+	}
 	if err = drv.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
@@ -1077,6 +1094,11 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 		}
 	}
 	query, args := selector.Query()
+	// An error recorded inside a subquery (a denied edge-predicate policy)
+	// reaches the outer selector only when the SQL is rendered.
+	if err := selector.Err(); err != nil {
+		return 0, err
+	}
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return 0, err
 	}
@@ -1116,6 +1138,9 @@ func (q *query) countWindow(ctx context.Context, drv dialect.Driver, selector *s
 	counter := q.builder.Select(sql.Count("*")).From(selector.As("t1"))
 	rows := &sql.Rows{}
 	query, args := counter.Query()
+	if err := counter.Err(); err != nil {
+		return 0, err
+	}
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return 0, err
 	}
@@ -1212,6 +1237,9 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 	if !update.Empty() {
 		var res sql.Result
 		query, args := update.Query()
+		if err := update.Err(); err != nil {
+			return err
+		}
 		if err := tx.Exec(ctx, query, args, &res); err != nil {
 			return err
 		}
@@ -1246,6 +1274,11 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 		Where(idp)
 	rows := &sql.Rows{}
 	query, args := selector.Query()
+	// An error recorded inside a subquery (a denied edge-predicate policy)
+	// reaches the outer selector only when the SQL is rendered.
+	if err := selector.Err(); err != nil {
+		return err
+	}
 	if err := tx.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
@@ -1302,6 +1335,9 @@ func (u *updater) nodes(ctx context.Context, drv dialect.Driver) (int, error) {
 			query, args = selector.Query()
 			qerr        error
 		)
+		if qerr = selector.Err(); qerr != nil {
+			return 0, qerr
+		}
 		if qerr = u.tx.Query(ctx, query, args, rows); qerr != nil {
 			return 0, fmt.Errorf("querying table %s: %w", u.Node.Table, qerr)
 		}
@@ -1347,6 +1383,9 @@ func (u *updater) updateTable(ctx context.Context, stmt *sql.UpdateBuilder) (int
 		res         sql.Result
 		query, args = stmt.Query()
 	)
+	if err := stmt.Err(); err != nil {
+		return 0, err
+	}
 	if err := u.tx.Exec(ctx, query, args, &res); err != nil {
 		return 0, err
 	}
@@ -1440,8 +1479,13 @@ func (u *updater) scan(rows *sql.Rows) error {
 
 func (u *updater) ensureExists(ctx context.Context) error {
 	exists := u.builder.Select().From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema)).Where(sql.EQ(u.Node.ID.Column, u.Node.ID.Value))
+	exists.WithContext(ctx) // predicates read the request context (edge-predicate policies, schema config)
 	u.Predicate(exists)
-	query, args := u.builder.SelectExpr(sql.Exists(exists)).Query()
+	check := u.builder.SelectExpr(sql.Exists(exists))
+	query, args := check.Query()
+	if err := check.Err(); err != nil {
+		return err
+	}
 	rows := &sql.Rows{}
 	if err := u.tx.Query(ctx, query, args, rows); err != nil {
 		return err

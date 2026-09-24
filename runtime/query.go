@@ -156,6 +156,11 @@ func BuildQueryFrom(ctx context.Context, q QueryReader) (*sql.Selector, error) {
 		selector = sql.Select().From(sql.Table(q.GetTable()))
 	}
 	selector.SetDialect(q.GetDriver().Dialect())
+	// Predicates read the request context from the selector: edge predicates
+	// take the schema config from it and evaluate the target's privacy
+	// policy with it (runtime.ApplyEdgePolicy). Without it they ran with
+	// context.Background() on every path built here (All, Select, GroupBy).
+	selector.WithContext(ctx)
 	for _, p := range q.GetPredicates() {
 		p(selector)
 	}

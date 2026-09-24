@@ -673,6 +673,9 @@ func (u *UpdateBuilder) Query() (string, []any) {
 		b.WriteString(" LIMIT ")
 		b.WriteString(strconv.Itoa(*u.limit))
 	}
+	// Errors raised while rendering (a failed subquery in WHERE) land on the
+	// clone; keep them, as Selector.Query does, or Err() never reports them.
+	u.AddError(b.Err())
 	return b.String(), b.args
 }
 
@@ -2305,6 +2308,7 @@ func (q *setOpQuerier) Query() (string, []any) {
 			b.WriteString(")")
 		}
 	}
+	q.AddError(b.Err())
 	return b.String(), b.args
 }
 
@@ -3166,6 +3170,7 @@ type exprFunc struct {
 func (e *exprFunc) Query() (string, []any) {
 	b := e.clone()
 	e.fn(&b)
+	e.AddError(b.Err())
 	return b.Query()
 }
 
@@ -3503,6 +3508,9 @@ func (b *Builder) Wrap(f func(*Builder)) *Builder {
 	b.WriteString(nb.String())
 	b.args = append(b.args, nb.args...)
 	b.total = nb.total
+	// Keep the wrapped query's errors: EXISTS (…) and IN (…) render
+	// subqueries here, and dropping them ran a failed subquery as valid.
+	b.errs = append(b.errs, nb.errs...)
 	return b
 }
 

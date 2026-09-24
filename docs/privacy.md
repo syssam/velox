@@ -177,10 +177,16 @@ policy, or under a viewer whose role bypasses it. Do not rely on
 remembering a per-call-site opt-out: an opt-out that is forgotten fails
 in the destructive direction, and nothing detects it afterwards.
 
-**Edge predicates are not scoped.** `HasTodosWith(...)` compiles to an
-EXISTS subquery built directly on a `*sql.Selector`; it never becomes a
-Query, so no privacy rule observes it. A caller can therefore learn
-whether out-of-scope rows exist by filtering through an edge.
+**Edge predicates are scoped by the target's policy.** `HasTodos()` and
+`HasTodosWith(...)` compile to a subquery, and velox evaluates the Todo
+policy for it: a `FilterFunc` narrows the subquery to the rows the viewer may
+read, so filtering users through the edge (`users(where: {hasTodosWith: …})`)
+cannot reveal whether out-of-scope todos exist; a rule that denies fails the
+whole query — or the bulk `Update().Where(...)` / `Delete().Where(...)` — with
+that error. Policies that filter through edges to each other (Todo through
+its owner, User through its todos) are reported as a cycle rather than
+evaluated forever. Interceptors do not reach edge subqueries; keep row-level
+rules in `Policy()`.
 
 The tenant viewer must implement `privacy.TenantIDer`:
 

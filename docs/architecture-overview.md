@@ -269,28 +269,21 @@ client.User.CreateBulk(builders...).
 Pinned by `tests/integration/e2e_bulk_create_test.go:566` (DoNothing failure
 case) and `:646` (ResolveWithIgnore correct case).
 
-### 4.8. Don't paginate by a nullable column
+### 4.8. Paginating by a nullable column
 
-Cursor (Relay) pagination ordered by a NULL-able field dead-ends when a page
-boundary lands on a row whose order value is NULL: the cursor carries the
-NULL, every arm of the composite row-value predicate compares against `NULL`,
-and SQL three-valued logic makes the next page come back **empty** even
-though `hasNextPage` was `true`. Ent (entgql) has the identical behavior —
-this is inherited, not a velox regression.
+Cursor (Relay) pagination ordered by a NULL-able field reaches every row,
+including across page boundaries that land on a NULL value. The cursor
+predicate is NULL-aware and places NULLs where the dialect's `ORDER BY` puts
+them — first under `ASC` on SQLite and MySQL, last on Postgres
+(`dialect.CapNullsFirst`). Ent (entgql) dead-ends here instead: its
+predicate compares `col > NULL`, which SQL never satisfies.
 
-Safe patterns:
+Plain `ORDER BY` over nullable columns follows the same dialect rule, so the
+position of NULL rows in a page differs between dialects even though every
+dialect returns every row exactly once.
 
-- order by a `NOT NULL` column (any non-`Optional`, non-`Nillable` field, or
-  the always-present `created_at`/`id`),
-- or give the nullable column a `Default()` so stored values are never NULL.
-
-Plain (non-cursor) `ORDER BY` over nullable columns is fine — but note NULL
-placement is dialect-divergent: SQLite and MySQL sort NULLs first under
-`ASC`, Postgres sorts them last.
-
-Pinned by `tests/integration/e2e_multidialect_null_test.go::TestPaginate_NullableOrder_NullCursorDeadEnds`
-(the dead-end) and `::TestMultiDialect_PaginateNullableOrder_NonNullCursors`
-(the supported all-values case).
+Pinned by `tests/integration/e2e_multidialect_null_test.go::TestMultiDialect_PaginateNullableOrder_NullCursors`
+and `e2e_cursor_keyset_test.go::TestMultiDialect_CursorKeysetWalks`.
 
 ---
 
