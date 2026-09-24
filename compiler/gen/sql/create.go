@@ -437,7 +437,7 @@ func genCreateSpecMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builde
 // All edge metadata (table, columns, target ID column) is emitted as literals
 // so an entity sub-package does not need to import the target sub-package
 // (avoids cross-entity import cycles).
-func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen.Edge, _, fieldPkg, sqlGraphPkg, nodeVar, specVar string) {
+func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen.Edge, _, fieldPkg, sqlGraphPkg, _, specVar string) {
 	_ = t
 	idsMethod := edge.StructField() + "IDs"
 	targetType := edge.Type
@@ -478,23 +478,10 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 				jen.Id("k"),
 			),
 		)
-		// For OwnFK edges (the FK column lives on this entity's row →
-		// single-pointer edge target on the entity's Edges struct),
-		// pre-populate _node.Edges.<EdgeName> with a stub carrying just the
-		// ID so callers can navigate via Edges.XxxOrErr() right after
-		// Create.Save without an extra DB round-trip. Matches Ent's
-		// `_node.<edge_field> = &nodes[0]` pattern adapted to velox's
-		// Edges-struct architecture. Other field values on the stub stay
-		// zero; callers needing the full target must call .QueryXxx().
-		// Uses Edge.OwnFK() (M2O || O2O+inverse/Bidi) — see type_edge.go.
-		if edge.OwnFK() && targetType != nil {
-			sharedEntityPkg := h.SharedEntityPkg()
-			blk.Id(nodeVar).Dot("Edges").Dot("Set" + edge.StructField()).Call(
-				jen.Op("&").Qual(sharedEntityPkg, targetType.Name).Values(jen.Dict{
-					jen.Id(targetType.ID.StructField()): jen.Id("nodes").Index(jen.Lit(0)),
-				}),
-			)
-		}
+		// Do NOT store the target in _node.Edges: create knows only its ID,
+		// and an ID-only stub marked loaded made Edges.XxxOrErr() — and the
+		// GraphQL resolver that trusts it — return the target with every
+		// other field zero. The edge stays unloaded; QueryXxx() reads it.
 		blk.Id(specVar).Dot("Edges").Op("=").Append(
 			jen.Id(specVar).Dot("Edges"),
 			jen.Id("edge"),

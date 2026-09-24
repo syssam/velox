@@ -187,10 +187,7 @@ func (m *EmployeeMutation) SubordinatesIDs() (ids []int64) {
 
 // SetManagerID sets the "manager" edge to the Employee entity by id.
 func (m *EmployeeMutation) SetManagerID(id int64) {
-	if m.manager == nil {
-		m.manager = make(map[int64]struct{})
-	}
-	m.manager[id] = struct{}{}
+	m.manager = map[int64]struct{}{id: {}}
 }
 
 // ClearManager clears the "manager" edge.

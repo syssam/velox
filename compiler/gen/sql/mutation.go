@@ -401,16 +401,17 @@ func genMutationEdge(h gen.GeneratorHelper, f *jen.File, mutName string, t *gen.
 	clearedFieldName := "cleared" + edge.StructField() // e.g. "clearedPosts"
 
 	if !skipSetters && edge.Unique {
-		// SetXxxID — unique edge stores single ID in the typed map.
+		// SetXxxID — a unique edge holds one ID, so a later call (a hook
+		// overriding the caller, say) replaces the earlier one. Adding to the
+		// map kept both and let map order pick which was written.
 		setMethod := edge.MutationSet()
 		f.Commentf("%s sets the %q edge to the %s entity by id.", setMethod, edgeName, edge.Type.Name)
 		f.Func().Params(jen.Id("m").Op("*").Id(mutName)).Id(setMethod).Params(
 			jen.Id("id").Add(idType),
 		).Block(
-			jen.If(jen.Id("m").Dot(fieldName).Op("==").Nil()).Block(
-				jen.Id("m").Dot(fieldName).Op("=").Make(jen.Map(idType).Struct()),
-			),
-			jen.Id("m").Dot(fieldName).Index(jen.Id("id")).Op("=").Struct().Values(),
+			jen.Id("m").Dot(fieldName).Op("=").Map(idType).Struct().Values(jen.Dict{
+				jen.Id("id"): jen.Values(),
+			}),
 		)
 
 		// ClearXxx

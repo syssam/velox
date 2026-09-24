@@ -1871,3 +1871,47 @@ func TestM2MLoaderScansLikeSQLAll(t *testing.T) {
 		t.Errorf("the M2M loader must scan its target from scanSelector, like sqlAll\n%s", body)
 	}
 }
+
+// TestCreateDoesNotMarkOwnFKEdgesLoaded pins that createSpec never stores a
+// target entity in Edges. The only thing create knows about an M2O target is
+// its ID, so a stub stored there carries zero-valued fields and no config
+// while the edge reports itself loaded: the GraphQL resolver trusts
+// Edges.XxxOrErr() and returned `author { name }` as "" after createPost,
+// and stub.QueryXxx() panicked on the nil driver. Ent sets only the FK
+// column. Behaviorally pinned by e2e_create_edge_test.go.
+func TestCreateDoesNotMarkOwnFKEdgesLoaded(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	postType.Edges = []*gen.Edge{createM2OEdge("author", userType, "posts", "user_posts")}
+	h.graph.Nodes = []*gen.Type{userType, postType}
+
+	file, err := genCreate(h, postType)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := funcBody(t, file.GoString(), ") createSpec(")
+	if !strings.Contains(body, `"user_posts"`) {
+		t.Fatalf("fixture does not emit the author edge spec\n%s", body)
+	}
+	if strings.Contains(body, ".Edges.Set") {
+		t.Errorf("createSpec marks an edge loaded with an ID-only stub\n%s", body)
+	}
+}
+
+// TestUniqueEdgeSetterReplaces pins that SetXxxID on a unique edge replaces
+// the stored ID. It used to add to the map, so SetAuthorID(a).SetAuthorID(b)
+// — or a hook overriding the caller's value — kept both, and whichever the
+// map iterated first was written. Ent stores a single *ID.
+func TestUniqueEdgeSetterReplaces(t *testing.T) {
+	h := newFeatureMockHelper()
+	userType := createTestType("User")
+	postType := createTestType("Post")
+	postType.Edges = []*gen.Edge{createM2OEdge("author", userType, "posts", "user_posts")}
+	h.graph.Nodes = []*gen.Type{userType, postType}
+
+	body := funcBody(t, genMutation(h, postType).GoString(), ") SetAuthorID(")
+	if strings.Contains(body, "== nil") || !strings.Contains(body, "m.author = map[") {
+		t.Errorf("SetAuthorID must replace the stored ID, not add to it\n%s", body)
+	}
+}

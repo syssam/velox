@@ -150,10 +150,7 @@ func (m *PostMutation) ResetContent() {
 
 // SetAuthorID sets the "author" edge to the User entity by id.
 func (m *PostMutation) SetAuthorID(id int64) {
-	if m.author == nil {
-		m.author = make(map[int64]struct{})
-	}
-	m.author[id] = struct{}{}
+	m.author = map[int64]struct{}{id: {}}
 }
 
 // ClearAuthor clears the "author" edge.
