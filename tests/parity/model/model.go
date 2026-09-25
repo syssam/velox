@@ -1,5 +1,7 @@
 package model
 
+import "sort"
+
 import "velox.test/parity/op"
 
 // author is the in-memory author entity, keyed by its creation handle.
@@ -142,6 +144,15 @@ func (st *State) step(idx int, o op.Op) Result {
 		return st.queryPostsByStatus(v.Status)
 	case op.CountPosts:
 		n := st.livePostCount()
+		return Result{Scalar: &n, Err: ErrOK}
+	case op.QueryAuthorsOfPostsByPostCount:
+		return st.queryAuthorsOfPostsByPostCount(v.Status)
+	case op.CountPostsWindow:
+		// The rows the windowed query returns: skip Offset, keep at most Limit.
+		n := max(st.livePostCount()-v.Offset, 0)
+		if v.Limit > 0 {
+			n = min(n, v.Limit)
+		}
 		return Result{Scalar: &n, Err: ErrOK}
 	case op.SumViewCount:
 		return st.sumViewCount()
@@ -359,6 +370,32 @@ func (st *State) queryPostsByStatus(status string) Result {
 		if p.status == status {
 			rows = append(rows, postRow(p))
 		}
+	}
+	return Result{Rows: rows, Err: ErrOK}
+}
+
+func (st *State) queryAuthorsOfPostsByPostCount(status string) Result {
+	counts := map[int]int{}
+	matched := map[int]bool{}
+	for _, p := range st.livePosts() {
+		counts[p.authorRef]++
+		if p.status == status {
+			matched[p.authorRef] = true
+		}
+	}
+	handles := make([]int, 0, len(matched))
+	for h := range matched {
+		handles = append(handles, h)
+	}
+	sort.Slice(handles, func(i, j int) bool {
+		if counts[handles[i]] != counts[handles[j]] {
+			return counts[handles[i]] > counts[handles[j]]
+		}
+		return handles[i] < handles[j]
+	})
+	var rows []Row
+	for _, h := range handles {
+		rows = append(rows, Row{"id": Ref{Handle: h}})
 	}
 	return Result{Rows: rows, Err: ErrOK}
 }

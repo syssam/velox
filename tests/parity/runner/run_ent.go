@@ -133,6 +133,10 @@ func (x *entExec) step(ctx context.Context, idx int, o op.Op) model.Result {
 		return x.queryPostsByStatus(ctx, v)
 	case op.CountPosts:
 		return x.countPosts(ctx)
+	case op.CountPostsWindow:
+		return x.countPostsWindow(ctx, v)
+	case op.QueryAuthorsOfPostsByPostCount:
+		return x.queryAuthorsOfPostsByPostCount(ctx, v)
 	case op.SumViewCount:
 		return x.sumViewCount(ctx)
 	case op.LoadAuthorPosts:
@@ -446,6 +450,37 @@ func (x *entExec) queryPostsByStatus(ctx context.Context, v op.QueryPostsByStatu
 
 func (x *entExec) countPosts(ctx context.Context) model.Result {
 	n, err := x.c.Post.Query().Count(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	return model.Result{Scalar: &n, Err: model.ErrOK}
+}
+
+func (x *entExec) queryAuthorsOfPostsByPostCount(ctx context.Context, v op.QueryAuthorsOfPostsByPostCount) model.Result {
+	authors, err := x.c.Post.Query().
+		Where(post.StatusEQ(post.Status(v.Status))).
+		QueryAuthor().
+		Order(author.ByPostsCount(entsql.OrderDesc()), author.ByID()).
+		All(ctx)
+	if err != nil {
+		return entErrResult(err)
+	}
+	var rows []model.Row
+	for _, a := range authors {
+		rows = append(rows, model.Row{"id": model.Ref{Handle: x.reg.handleForID(kindAuthor, a.ID)}})
+	}
+	return model.Result{Rows: rows, Err: model.ErrOK}
+}
+
+func (x *entExec) countPostsWindow(ctx context.Context, v op.CountPostsWindow) model.Result {
+	q := x.c.Post.Query()
+	if v.Offset > 0 {
+		q = q.Offset(v.Offset)
+	}
+	if v.Limit > 0 {
+		q = q.Limit(v.Limit)
+	}
+	n, err := q.Count(ctx)
 	if err != nil {
 		return entErrResult(err)
 	}

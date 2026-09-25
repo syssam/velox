@@ -127,6 +127,8 @@ const (
 	kDeletePost
 	kQueryPostsByStatus
 	kCountPosts
+	kCountPostsWindow
+	kQueryAuthorsOfPostsByPostCount
 	kCountPostTags
 	kCountAuthorsWithBio
 	kSumViewCount
@@ -151,7 +153,7 @@ const (
 func (s *state) satisfiable() []opKind {
 	out := []opKind{
 		kCreateAuthor, kCreateTag, kUpsertTag, kBulkCreateTags,
-		kQueryPostsByStatus, kCountPosts, kSumViewCount, kSumTagUsage,
+		kQueryPostsByStatus, kCountPosts, kCountPostsWindow, kQueryAuthorsOfPostsByPostCount, kSumViewCount, kSumTagUsage,
 		kCountAuthorsWithBio, kPaginatePosts,
 	}
 	if len(s.authors) > 0 {
@@ -298,6 +300,10 @@ func buildOp(c *cursor, st *state, kind opKind, idx int) op.Op {
 		return op.QueryPostsByStatus{Status: pick(c, statuses)}
 	case kCountPosts:
 		return op.CountPosts{}
+	case kQueryAuthorsOfPostsByPostCount:
+		return op.QueryAuthorsOfPostsByPostCount{Status: pick(c, statuses)}
+	case kCountPostsWindow:
+		return op.CountPostsWindow{Limit: c.next(4), Offset: c.next(4)} // 0 = unset
 	case kSumViewCount:
 		return op.SumViewCount{}
 	case kLoadAuthorPosts:
@@ -506,7 +512,7 @@ func Validate(prog op.Program) error {
 			// match is an agreed 0-row no-op). BulkDeletePostsByStatus is
 			// curated-only, never fuzzed — see buildOp's kBulkAddViewCountByStatus
 			// note for why a status-scoped delete needs status tracking to fuzz.
-		case op.QueryPostsByStatus, op.CountPosts, op.SumViewCount, op.SumTagUsage, op.CountAuthorsWithBio:
+		case op.QueryPostsByStatus, op.CountPosts, op.CountPostsWindow, op.QueryAuthorsOfPostsByPostCount, op.SumViewCount, op.SumTagUsage, op.CountAuthorsWithBio:
 			// Always satisfiable; no refs.
 		default:
 			return fmt.Errorf("op %d: Validate saw unknown op type %T", i, o)

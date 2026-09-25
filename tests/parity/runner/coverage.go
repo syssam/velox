@@ -41,6 +41,8 @@ var allOpKinds = opKindNames([]op.Op{
 	op.BulkDeletePostsByStatus{},
 	op.QueryPostsByStatus{},
 	op.CountPosts{},
+	op.CountPostsWindow{},
+	op.QueryAuthorsOfPostsByPostCount{},
 	op.CountPostTags{},
 	op.CountAuthorsWithBio{},
 	op.SumViewCount{},

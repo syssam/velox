@@ -168,6 +168,27 @@ type QueryPostsByStatus struct {
 // CountPosts returns the live post count.
 type CountPosts struct{}
 
+// QueryAuthorsOfPostsByPostCount traverses from the live posts with Status
+// to their authors — each author once — ordered by the author's live post
+// count descending, then creation order. It is a deliberate Ent divergence:
+// Ent selects a traversal's targets with a JOIN plus a default DISTINCT,
+// which PostgreSQL and MySQL reject once the ORDER BY names the unselected
+// post count; velox selects them with a semi-join. Expected verdict: Pass on
+// SQLite, EntDivergent on PostgreSQL and MySQL.
+type QueryAuthorsOfPostsByPostCount struct {
+	Status string
+}
+
+// CountPostsWindow counts the live posts a query limited by Offset and Limit
+// (0 = unset) returns, carried as a Scalar. It is a deliberate Ent
+// divergence: Ent applies the window to the single COUNT row, so
+// Offset(n).Count() fails with "no rows" and Limit(n).Count() counts every
+// row; velox counts the windowed rows. Expected verdict: EntDivergent.
+type CountPostsWindow struct {
+	Limit  int
+	Offset int
+}
+
 // CountPostTags returns the number of tags attached to the post at PostRef (the
 // M2M edge degree), carried as a Scalar. It is the order-independent observable
 // for AddTagToPost / RemoveTagFromPost, which were previously unobserved.
@@ -203,29 +224,31 @@ type PaginatePosts struct {
 	OrderBy   []OrderTerm
 }
 
-func (CreateAuthor) isOp()             {}
-func (CreatePost) isOp()               {}
-func (CreateComment) isOp()            {}
-func (CreateTag) isOp()                {}
-func (UpsertTag) isOp()                {}
-func (BulkCreateTags) isOp()           {}
-func (AddTagToPost) isOp()             {}
-func (RemoveTagFromPost) isOp()        {}
-func (SetAuthorBio) isOp()             {}
-func (BulkAddViewCountByStatus) isOp() {}
-func (BulkDeletePostsByStatus) isOp()  {}
-func (SetPostLabels) isOp()            {}
-func (AppendPostLabels) isOp()         {}
-func (UpdatePostViewCount) isOp()      {}
-func (DeletePost) isOp()               {}
-func (QueryPostsByStatus) isOp()       {}
-func (CountPosts) isOp()               {}
-func (CountPostTags) isOp()            {}
-func (CountAuthorsWithBio) isOp()      {}
-func (SumViewCount) isOp()             {}
-func (SumTagUsage) isOp()              {}
-func (LoadAuthorPosts) isOp()          {}
-func (PaginatePosts) isOp()            {}
+func (CreateAuthor) isOp()                   {}
+func (CreatePost) isOp()                     {}
+func (CreateComment) isOp()                  {}
+func (CreateTag) isOp()                      {}
+func (UpsertTag) isOp()                      {}
+func (BulkCreateTags) isOp()                 {}
+func (AddTagToPost) isOp()                   {}
+func (RemoveTagFromPost) isOp()              {}
+func (SetAuthorBio) isOp()                   {}
+func (BulkAddViewCountByStatus) isOp()       {}
+func (BulkDeletePostsByStatus) isOp()        {}
+func (SetPostLabels) isOp()                  {}
+func (AppendPostLabels) isOp()               {}
+func (UpdatePostViewCount) isOp()            {}
+func (DeletePost) isOp()                     {}
+func (QueryPostsByStatus) isOp()             {}
+func (CountPosts) isOp()                     {}
+func (CountPostsWindow) isOp()               {}
+func (QueryAuthorsOfPostsByPostCount) isOp() {}
+func (CountPostTags) isOp()                  {}
+func (CountAuthorsWithBio) isOp()            {}
+func (SumViewCount) isOp()                   {}
+func (SumTagUsage) isOp()                    {}
+func (LoadAuthorPosts) isOp()                {}
+func (PaginatePosts) isOp()                  {}
 
 // Format renders a Program as a replayable, human-readable listing: one line per
 // op, "<index>: <TypeName>{<key:value ...>}". It reflects each op's fields,

@@ -359,6 +359,42 @@ func curatedPrograms() []progCase {
 			expect: expectAllPass,
 		},
 		{
+			// Deliberate Ent divergence: a traversal ordered by an unselected
+			// edge count. Ent's JOIN + default DISTINCT is rejected by
+			// PostgreSQL (42P10) and MySQL (3065); velox's semi-join is not.
+			// SQLite accepts both, so the verdict is Pass there and
+			// EntDivergent on the servers — expectVeloxCorrect admits both.
+			name: "traversal_ordered_by_edge_count",
+			prog: op.Program{
+				op.CreateAuthor{Name: "A", Role: "user"},                                    // 0
+				op.CreateAuthor{Name: "B", Role: "user"},                                    // 1
+				op.CreateAuthor{Name: "C", Role: "user"},                                    // 2
+				op.CreatePost{Title: "a1", Status: "published", ViewCount: 1, AuthorRef: 0}, // 3
+				op.CreatePost{Title: "b1", Status: "published", ViewCount: 1, AuthorRef: 1}, // 4
+				op.CreatePost{Title: "b2", Status: "draft", ViewCount: 1, AuthorRef: 1},     // 5
+				op.CreatePost{Title: "c1", Status: "draft", ViewCount: 1, AuthorRef: 2},     // 6
+				op.QueryAuthorsOfPostsByPostCount{Status: "published"},                      // [B, A]
+				op.QueryAuthorsOfPostsByPostCount{Status: "draft"},                          // [B, C]
+			},
+			expect: expectVeloxCorrect,
+		},
+		{
+			// Deliberate Ent divergence: Count over a window counts the rows
+			// the windowed query returns. Ent applies OFFSET/LIMIT to the
+			// single COUNT row — Offset(2).Count() fails with "no rows",
+			// Limit(2).Count() counts all 5 — so the verdict is EntDivergent,
+			// which expectVeloxCorrect admits; velox must match the reference.
+			name: "count_window",
+			prog: append(sixPosts(5),
+				op.CountPostsWindow{Limit: 2},            // 2
+				op.CountPostsWindow{Offset: 2},           // 3
+				op.CountPostsWindow{Offset: 3, Limit: 1}, // 1
+				op.CountPostsWindow{Offset: 9},           // 0
+				op.CountPostsWindow{Limit: 9},            // 5
+			),
+			expect: expectVeloxCorrect,
+		},
+		{
 			name: "delete_then_aggregate",
 			prog: append(sixPosts(3),
 				op.DeletePost{PostRef: 2}, // remove view_count 2

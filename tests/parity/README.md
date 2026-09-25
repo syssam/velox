@@ -98,6 +98,27 @@ itself a finding the matrix documents: a JSON-append bug that a SQLite-only
 harness would have wrongly attributed as a general "ent is broken" signal is
 revealed to be engine-specific.
 
+### Deliberate divergences from Ent
+
+velox departs from Ent on purpose where Ent's result is wrong. Each departure
+has a curated case whose expected verdict is `EntDivergent` (Ent is the outlier
+against the reference model), so the harness separates an intended difference
+from a regression: a change that breaks velox here shows up as `VeloxBug`, and
+a change that "restores Ent parity" makes the reference disagree with velox.
+
+| curated case | op | SQLite | Postgres | MySQL | why |
+|---|---|---|---|---|---|
+| `count_window` | `CountPostsWindow` | `EntDivergent` | `EntDivergent` | `EntDivergent` | Ent applies OFFSET/LIMIT to the single COUNT row: `Offset(n).Count()` fails with "no rows", `Limit(n).Count()` counts every row. velox counts the windowed rows. |
+| `traversal_ordered_by_edge_count` | `QueryAuthorsOfPostsByPostCount` | all-`Pass` | `EntDivergent` | `EntDivergent` | Ent selects a traversal's targets with JOIN + default DISTINCT, which Postgres (42P10) and MySQL (3065) reject once ORDER BY names the unselected post count. velox uses a semi-join. SQLite accepts both. |
+| `json_append` | `AppendPostLabels` | `EntDivergent` | all-`Pass` | all-`Pass` | see above |
+
+Other velox departures are outside this harness's schema and are pinned by the
+root module's tests instead: edge predicates apply the target's privacy policy
+(`e2e_edge_predicate_policy_test.go`), NULL- and time-zone-safe cursors
+(`e2e_cursor_keyset_test.go`), and bulk upserts that refuse to link edges to
+rows whose IDs they cannot match (`e2e_bulk_do_nothing_edges_test.go`). The
+list and its reasons are in the repository's `AGENTS.md`.
+
 A `VeloxBug` verdict on **any** dialect (velox ≠ reference while ent = reference)
 is a real velox bug the harness is designed to catch — it fails the suite and CI
 rather than being silenced.

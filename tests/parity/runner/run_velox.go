@@ -16,6 +16,7 @@ import (
 
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sql"
 
 	"velox.test/parity/model"
 	"velox.test/parity/op"
@@ -24,6 +25,7 @@ import (
 	tagclient "velox.test/parity/velox/client/tag"
 	"velox.test/parity/velox/entity"
 	"velox.test/parity/velox/post"
+	"velox.test/parity/velox/query"
 	"velox.test/parity/velox/tag"
 )
 
@@ -129,6 +131,10 @@ func (x *veloxExec) step(ctx context.Context, idx int, o op.Op) model.Result {
 		return x.queryPostsByStatus(ctx, v)
 	case op.CountPosts:
 		return x.countPosts(ctx)
+	case op.CountPostsWindow:
+		return x.countPostsWindow(ctx, v)
+	case op.QueryAuthorsOfPostsByPostCount:
+		return x.queryAuthorsOfPostsByPostCount(ctx, v)
 	case op.SumViewCount:
 		return x.sumViewCount(ctx)
 	case op.LoadAuthorPosts:
@@ -456,6 +462,37 @@ func (x *veloxExec) queryPostsByStatus(ctx context.Context, v op.QueryPostsBySta
 
 func (x *veloxExec) countPosts(ctx context.Context) model.Result {
 	n, err := x.c.Post.Query().Count(ctx)
+	if err != nil {
+		return veloxErrResult(err)
+	}
+	return model.Result{Scalar: &n, Err: model.ErrOK}
+}
+
+func (x *veloxExec) queryAuthorsOfPostsByPostCount(ctx context.Context, v op.QueryAuthorsOfPostsByPostCount) model.Result {
+	authors, err := x.c.Post.Query().
+		Where(post.StatusField.EQ(post.Status(v.Status))).(*query.PostQuery).
+		QueryAuthor().
+		Order(author.ByPostsCount(sql.OrderDesc()), author.ByID()).
+		All(ctx)
+	if err != nil {
+		return veloxErrResult(err)
+	}
+	var rows []model.Row
+	for _, a := range authors {
+		rows = append(rows, model.Row{"id": model.Ref{Handle: x.reg.handleForID(kindAuthor, a.ID)}})
+	}
+	return model.Result{Rows: rows, Err: model.ErrOK}
+}
+
+func (x *veloxExec) countPostsWindow(ctx context.Context, v op.CountPostsWindow) model.Result {
+	q := x.c.Post.Query()
+	if v.Offset > 0 {
+		q = q.Offset(v.Offset)
+	}
+	if v.Limit > 0 {
+		q = q.Limit(v.Limit)
+	}
+	n, err := q.Count(ctx)
 	if err != nil {
 		return veloxErrResult(err)
 	}
