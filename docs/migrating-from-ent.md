@@ -9,7 +9,7 @@ This guide is for teams running Ent in production who want to migrate to Velox. 
 Velox targets teams hitting Ent's scale limits:
 
 - **Code generation speed** — Velox uses Jennifer (programmatic AST) instead of `text/template`. On a 50-entity schema: ~3.2× faster generation, ~2.1× less memory.
-- **Privacy as explicit field** — Ent wires privacy as `Hooks[0]`. Velox stores it as a typed `policy` field evaluated before hooks and again after them, on the values that are written. Execution order is unambiguous.
+- **Privacy as explicit field** — Ent wires privacy as `Hooks[0]`. Velox stores it as a typed `policy` field evaluated before hooks and — when hooks are registered — again after them, on the values that are written. Execution order is unambiguous.
 - **Shared interceptor pointer** — Ent clones `[]Interceptor` on every query clone. Velox uses `*entity.InterceptorStore`; registrations are immediately visible to all existing queries.
 - **Safer mutations** — Ent's `u.Update()` uses `u.config` (the entity's embedded driver, which may be a committed `*txDriver`). Velox does not generate `Update()`/`Delete()` on entities; callers use `client.User.UpdateOne(u)` which always uses the live client driver.
 
@@ -154,7 +154,7 @@ This is the most significant structural difference.
 task.Hooks[0] = func(next ent.Mutator) ent.Mutator { ... }
 ```
 
-**Velox** emits a `RuntimePolicy` variable set by `schema.Policy()` in `init()`, then stores it as a typed `policy` field on each entity client — evaluated explicitly before hooks run, and again after them (before the SQL) on the mutation the hooks produced. Rules run twice per write, so they must be free of side effects; see [privacy.md](privacy.md#when-a-mutation-policy-runs).
+**Velox** emits a `RuntimePolicy` variable set by `schema.Policy()` in `init()`, then stores it as a typed `policy` field on each entity client — evaluated explicitly before hooks run, and — when hooks are registered — again after them (before the SQL) on the mutation the hooks produced. With hooks, rules run twice per write, so they must be free of side effects; see [privacy.md](privacy.md#when-a-mutation-policy-runs).
 
 The **schema authoring API is identical**:
 

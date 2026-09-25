@@ -180,26 +180,53 @@ func assertSetPath(queryVar string, sqlPkg string, pathClosure jen.Code) *jen.St
 	).Dot("SetPath").Call(pathClosure)
 }
 
-// genPolicyAfterHooks emits the second mutation-policy evaluation, placed
-// at the top of sqlSave/sqlExec — after the hook chain, before the write.
+// genPolicyAfterHooks emits the tail of a Save/Exec that runs the hook chain
+// with exec (sqlSave or sqlExec) at its core.
 //
-// Save/Exec evaluate the policy once before hooks so a denied request never
-// reaches a hook with side effects (mail, audit rows). But a hook may set or
-// change fields, and the policy must judge the values that are actually
-// written: without this check a hook that stamps a forbidden value writes
-// past every rule. Ent's policy runs as schema Hooks[0], i.e. after client
-// Use() hooks and before schema hooks, so neither of its positions sees the
-// final mutation either.
-func genPolicyAfterHooks(grp *jen.Group, t *gen.Type, recv string, mutation jen.Code, zero jen.Code) {
+// Save/Exec evaluate the mutation policy once before hooks, so a denied
+// request never reaches a hook with side effects (mail, audit rows). A hook
+// may then set or change fields, and the policy must judge the values that
+// are actually written, so with hooks the chain's core is exec+"AfterHooks"
+// (genPolicyAfterHooksMethod), which evaluates the policy again first.
+// Without hooks nothing can change the mutation between the two points, so
+// exec is called directly and the rules run once. Ent's policy runs as
+// schema Hooks[0] — after client Use() hooks, before schema hooks — so a
+// value a schema hook sets is never checked there.
+func genPolicyAfterHooks(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv, exec string, result, mutation jen.Code) {
+	withHooks := func(core string) jen.Code {
+		return jen.Qual(h.VeloxPkg(), "WithHooks").Types(
+			result, mutation, jen.Op("*").Add(mutation),
+		).Call(jen.Id("ctx"), jen.Id(recv).Dot(core), jen.Id(recv).Dot("mutation"), jen.Id("hooks"))
+	}
+	if t.NumPolicy() == 0 {
+		grp.Return(withHooks(exec))
+		return
+	}
+	grp.If(jen.Len(jen.Id("hooks")).Op("==").Lit(0)).Block(
+		jen.Return(jen.Id(recv).Dot(exec).Call(jen.Id("ctx"))),
+	)
+	grp.Return(withHooks(exec + "AfterHooks"))
+}
+
+// genPolicyAfterHooksMethod emits exec+"AfterHooks": the policy evaluated on
+// the mutation the hooks produced (WithHooks copies it back into the
+// builder), then exec. See genPolicyAfterHooks.
+func genPolicyAfterHooksMethod(f *jen.File, t *gen.Type, recv, builder, exec string, result, zero jen.Code) {
 	if t.NumPolicy() == 0 {
 		return
 	}
-	grp.Comment("Re-evaluate the policy on the mutation the hooks produced.")
-	grp.If(jen.Id(recv).Dot("policy").Op("!=").Nil()).Block(
-		jen.If(jen.Err().Op(":=").Id(recv).Dot("policy").Dot("EvalMutation").Call(jen.Id("ctx"), mutation), jen.Err().Op("!=").Nil()).Block(
-			jen.Return(zero, jen.Err()),
+	f.Commentf("%sAfterHooks evaluates the policy again on the mutation the hooks produced, then runs %s.", exec, exec)
+	f.Func().Params(jen.Id(recv).Op("*").Id(builder)).Id(exec+"AfterHooks").Params(
+		jen.Id("ctx").Qual("context", "Context"),
+	).Params(result, jen.Error()).Block(
+		jen.If(jen.Id(recv).Dot("policy").Op("!=").Nil()).Block(
+			jen.If(jen.Err().Op(":=").Id(recv).Dot("policy").Dot("EvalMutation").Call(jen.Id("ctx"), jen.Id(recv).Dot("mutation")), jen.Err().Op("!=").Nil()).Block(
+				jen.Return(zero, jen.Err()),
+			),
 		),
+		jen.Return(jen.Id(recv).Dot(exec).Call(jen.Id("ctx"))),
 	)
+	f.Line()
 }
 
 // genSchemaHooksLocal emits a local hook slice that merges the builder's

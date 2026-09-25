@@ -372,17 +372,18 @@ func (_cb *ArticleCreateBulk) saveChunk(ctx context.Context, builders []*Article
 	if len(builders) == 0 {
 		return []*entity.Article{}, nil
 	}
+	for _, b := range builders {
+		if err := b.defaults(); err != nil {
+			return nil, err
+		}
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(builders))
 	nodes := make([]*entity.Article, len(builders))
 	mutators := make([]runtime.Mutator, len(builders))
-	var defaultsErr error
 	for i := range builders {
 		func(i int, root context.Context) {
 			builder := builders[i]
-			if err := builder.defaults(); err != nil {
-				defaultsErr = err
-				return
-			}
+			allHooks := builder.hooks
 			var mut runtime.Mutator = runtime.MutateFunc(func(ctx context.Context, m runtime.Mutation) (runtime.Value, error) {
 				mutation, ok := m.(*ArticleMutation)
 				if !ok {
@@ -413,15 +414,11 @@ func (_cb *ArticleCreateBulk) saveChunk(ctx context.Context, builders []*Article
 				}
 				return nodes[i], nil
 			})
-			allHooks := builder.hooks
 			for j := len(allHooks) - 1; j >= 0; j-- {
 				mut = allHooks[j](mut)
 			}
 			mutators[i] = mut
 		}(i, ctx)
-	}
-	if defaultsErr != nil {
-		return nil, defaultsErr
 	}
 	if len(mutators) > 0 {
 		if _, err := mutators[0].Mutate(ctx, builders[0].mutation); err != nil {

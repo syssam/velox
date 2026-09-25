@@ -79,11 +79,11 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 	)
 
 	// sqlExec (named method — Ent pattern)
+	genPolicyAfterHooksMethod(f, t, recv, deleteName, "sqlExec", jen.Int(), jen.Lit(0))
 	f.Commentf("sqlExec executes the SQL delete for %s after hooks have run.", t.Name)
 	f.Func().Params(jen.Id(recv).Op("*").Id(deleteName)).Id("sqlExec").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Int(), jen.Error()).BlockFunc(func(grp *jen.Group) {
-		genPolicyAfterHooks(grp, t, recv, jen.Id(recv).Dot("mutation"), jen.Lit(0))
 		genConvertPredicates(grp, recv, h.SQLPkg())
 		baseDict := jen.Dict{
 			jen.Id("Driver"):     jen.Id(recv).Dot("config").Dot("Driver"),
@@ -123,14 +123,7 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		genSchemaHooksLocal(h, grp, t, recv, "hooks")
-		mutationType := jen.Id(mutName)
-		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
-			jen.Int(),
-			mutationType,
-			jen.Op("*").Add(mutationType),
-		).Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("sqlExec"), jen.Id(recv).Dot("mutation"), jen.Id("hooks"),
-		))
+		genPolicyAfterHooks(h, grp, t, recv, "sqlExec", jen.Int(), jen.Id(mutName))
 	})
 
 	// ExecX

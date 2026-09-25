@@ -2069,14 +2069,19 @@ func TestJSONAppendOnlyForSlicesAndAccumulates(t *testing.T) {
 	}
 }
 
-// TestPolicyReevaluatedAfterHooks pins the second mutation-policy check at
-// the top of every write path that runs after the hook chain. Save/Exec keep
-// the pre-hook check so a denied request never reaches a hook with side
-// effects; the post-hook one makes the policy judge the values a hook set.
-// Without it a hook could write past every rule — behaviorally pinned by
+// TestPolicyReevaluatedAfterHooks pins the second mutation-policy check.
+// Save/Exec keep the pre-hook check so a denied request never reaches a hook
+// with side effects; with hooks registered, the chain's core is
+// sqlSave/sqlExecAfterHooks, which judges the values the hooks produced.
+// Without hooks the mutation cannot change, so Save calls sqlSave directly
+// and the rules run once. Behaviorally pinned by
 // tests/integration/e2e_policy_after_hooks_test.go.
 func TestPolicyReevaluatedAfterHooks(t *testing.T) {
 	userType := createTypeWithPolicies(t, "User", []*load.Position{{MixedIn: false}})
+	// A defaulted field, so bulk create has defaults() to order against.
+	userType.Fields = append(userType.Fields, &gen.Field{
+		Name: "status", Type: &field.TypeInfo{Type: field.TypeString}, Default: true,
+	})
 	helper := newFeatureMockHelper().withFeatures("privacy")
 	helper.graph = &gen.Graph{
 		Config: &gen.Config{Package: "github.com/test/project/ent"},
@@ -2094,43 +2099,55 @@ func TestPolicyReevaluatedAfterHooks(t *testing.T) {
 	updateSrc := render(genUpdate(helper, userType))
 	deleteSrc := render(genDelete(helper, userType))
 
-	for _, tc := range []struct{ src, fn string }{
-		{createSrc, ") sqlSave("},
-		{updateSrc, "func (_u *UserUpdate) sqlSave("},
-		{updateSrc, "func (_u *UserUpdateOne) sqlSave("},
-		{deleteSrc, ") sqlExec("},
+	for _, tc := range []struct{ src, builder, exec, save string }{
+		{createSrc, "UserCreate", "sqlSave", ") Save("},
+		{updateSrc, "UserUpdate", "sqlSave", "func (_u *UserUpdate) Save("},
+		{updateSrc, "UserUpdateOne", "sqlSave", "func (_u *UserUpdateOne) Save("},
+		{deleteSrc, "UserDelete", "sqlExec", ") Exec("},
 	} {
-		body := funcBodyFrom(tc.src, tc.fn)
-		if body == "" {
-			t.Fatalf("function %q not found", tc.fn)
+		after := funcBodyFrom(tc.src, "*"+tc.builder+") "+tc.exec+"AfterHooks(")
+		if !strings.Contains(after, "policy.EvalMutation(ctx,") || !strings.Contains(after, "."+tc.exec+"(ctx)") {
+			t.Errorf("%s.%sAfterHooks must evaluate the policy, then run %s\n%s", tc.builder, tc.exec, tc.exec, after)
 		}
-		if !strings.Contains(body, "policy.EvalMutation(ctx,") {
-			t.Errorf("%s must re-evaluate the policy after hooks\n%s", tc.fn, body)
+		save := funcBodyFrom(tc.src, tc.save)
+		if !strings.Contains(save, "if len(hooks) == 0 {") || !strings.Contains(save, "."+tc.exec+"(ctx)") {
+			t.Errorf("%s: without hooks Save must call %s directly (rules run once)\n%s", tc.builder, tc.exec, save)
+		}
+		if !strings.Contains(save, "."+tc.exec+"AfterHooks, ") {
+			t.Errorf("%s: with hooks the chain's core must be %sAfterHooks\n%s", tc.builder, tc.exec, save)
+		}
+		if strings.Contains(funcBodyFrom(tc.src, "*"+tc.builder+") "+tc.exec+"("), "EvalMutation") {
+			t.Errorf("%s.%s must not evaluate the policy itself — the no-hook path would run it twice", tc.builder, tc.exec)
 		}
 	}
 
-	// Bulk create: the per-row mutator (inside the hook chain) re-checks the
-	// mutation the hooks produced, not the builder's original one.
-	if !strings.Contains(createSrc, "builder.policy.EvalMutation(ctx, mutation)") {
-		t.Error("bulk create mutator must re-evaluate the policy on the hooked mutation")
+	// Bulk create: the per-row mutator re-checks the hooked mutation, only
+	// when the row has hooks; defaults run before the pre-hook check.
+	if !strings.Contains(createSrc, "len(allHooks) > 0 && builder.policy != nil") ||
+		!strings.Contains(createSrc, "builder.policy.EvalMutation(ctx, mutation)") {
+		t.Error("bulk create mutator must re-evaluate the policy on the hooked mutation when the row has hooks")
+	}
+	chunk := funcBodyFrom(createSrc, ") saveChunk(")
+	if d, p := strings.Index(chunk, "b.defaults()"), strings.Index(chunk, "b.policy.EvalMutation"); d < 0 || p < 0 || d > p {
+		t.Errorf("bulk create must apply defaults before the pre-hook policy check, like single-row Save\n%s", chunk)
 	}
 
-	// Both checks exist: one before hooks, one after.
 	for _, tc := range []struct {
 		name string
 		src  string
 		want int
 	}{
-		{"create (Save, bulk pre-check, sqlSave, bulk mutator)", createSrc, 4},
-		{"update (two Saves, two sqlSaves)", updateSrc, 4},
-		{"delete (Exec, sqlExec)", deleteSrc, 2},
+		{"create (Save, bulk pre-check, sqlSaveAfterHooks, bulk mutator)", createSrc, 4},
+		{"update (two Saves, two sqlSaveAfterHooks)", updateSrc, 4},
+		{"delete (Exec, sqlExecAfterHooks)", deleteSrc, 2},
 	} {
 		if got := strings.Count(tc.src, "EvalMutation(ctx,"); got != tc.want {
 			t.Errorf("%s: %d EvalMutation calls, want %d", tc.name, got, tc.want)
 		}
 	}
 
-	if strings.Contains(render(genCreate(helper, createTestType("Post"))), "EvalMutation") {
+	plain := render(genCreate(helper, createTestType("Post")))
+	if strings.Contains(plain, "EvalMutation") || strings.Contains(plain, "AfterHooks") {
 		t.Error("an entity without a policy must not evaluate one")
 	}
 }

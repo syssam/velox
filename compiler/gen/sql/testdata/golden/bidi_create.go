@@ -259,6 +259,7 @@ func (_cb *PostCreateBulk) saveChunk(ctx context.Context, builders []*PostCreate
 	for i := range builders {
 		func(i int, root context.Context) {
 			builder := builders[i]
+			allHooks := builder.hooks
 			var mut runtime.Mutator = runtime.MutateFunc(func(ctx context.Context, m runtime.Mutation) (runtime.Value, error) {
 				mutation, ok := m.(*PostMutation)
 				if !ok {
@@ -289,7 +290,6 @@ func (_cb *PostCreateBulk) saveChunk(ctx context.Context, builders []*PostCreate
 				}
 				return nodes[i], nil
 			})
-			allHooks := builder.hooks
 			for j := len(allHooks) - 1; j >= 0; j-- {
 				mut = allHooks[j](mut)
 			}

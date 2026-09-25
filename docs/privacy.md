@@ -164,18 +164,23 @@ mutation policy runs again after the hooks (see below).
 
 ### When a mutation policy runs
 
-A write evaluates its mutation policy twice:
+A write evaluates its mutation policy:
 
 1. **Before the hooks**, so a denied request never reaches a hook with
-   side effects (sending mail, writing an audit row).
-2. **After the hooks, before the SQL**, on the mutation the hooks
-   produced. A hook that sets or changes a field cannot write past a
-   rule: the rule sees the value that is actually stored.
+   side effects (sending mail, writing an audit row). Defaults are
+   applied first, so a rule sees default values — in a bulk create too.
+2. **After the hooks, before the SQL** — only when hooks are
+   registered — on the mutation the hooks produced. A hook that sets or
+   changes a field cannot write past a rule: the rule sees the value
+   that is actually stored.
 
-Rules therefore run twice per write and must not count calls or have
-other side effects. A `FilterFunc` rule appends its predicate twice
-(`WHERE tenant_id = $1 AND tenant_id = $2`), which is harmless. For a
-bulk create, the second check runs once per row.
+Without hooks nothing can change the mutation between the two points,
+so the second evaluation is skipped and each rule runs once per write.
+With hooks, rules run twice and must not count calls or have other side
+effects; a rule that queries the database pays that query twice. A
+`FilterFunc` rule then appends its predicate twice (`WHERE tenant_id = $1
+AND tenant_id = $2`), which is harmless. In a bulk create, rows are
+checked individually.
 
 Ent evaluates the policy once, as schema hook `Hooks[0]`: after hooks
 registered with `client.Use`, before schema hooks. A value set by a

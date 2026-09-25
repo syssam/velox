@@ -90,3 +90,61 @@ func TestPolicy_SeesValuesWrittenByHooks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"alice"}, names, "no hook-written forbidden name reached the table")
 }
+
+// TestPolicy_RunsOnceWithoutHooks pins the cost of the post-hook check: it
+// runs only when hooks are registered. Without them nothing can change the
+// mutation between the two points, so every write evaluates its rules once —
+// the same count as before the post-hook check existed.
+func TestPolicy_RunsOnceWithoutHooks(t *testing.T) {
+	ctx := context.Background()
+	var calls int
+	var roles []any
+	prev := user.RuntimePolicy
+	t.Cleanup(func() { user.RuntimePolicy = prev })
+	user.RuntimePolicy = privacy.Policy{
+		Mutation: privacy.MutationPolicy{
+			privacy.MutationRuleFunc(func(_ context.Context, m velox.Mutation) error {
+				calls++
+				if m.Op().Is(velox.OpCreate) {
+					v, _ := m.Field(user.FieldRole)
+					roles = append(roles, v)
+				}
+				return privacy.Skip
+			}),
+		},
+	}
+	c := openTestClient(t)
+	newUser := func(name string) *userclient.UserCreate {
+		return c.User.Create().SetName(name).SetEmail(name + "@ph").SetAge(30).SetCreatedAt(now).SetUpdatedAt(now)
+	}
+
+	writes := func(round string) {
+		t.Helper()
+		u, err := newUser("a" + round).Save(ctx)
+		require.NoError(t, err)
+		_, err = c.User.CreateBulk(newUser("b"+round), newUser("c"+round)).Save(ctx)
+		require.NoError(t, err)
+		_, err = c.User.UpdateOneID(u.ID).SetAge(31).Save(ctx)
+		require.NoError(t, err)
+		_, err = c.User.Update().Where(user.IDField.EQ(u.ID)).SetAge(32).Save(ctx)
+		require.NoError(t, err)
+		_, err = c.User.Delete().Where(user.IDField.EQ(u.ID)).Exec(ctx)
+		require.NoError(t, err)
+	}
+	const perRound = 6 // create + 2 bulk rows + update one + update + delete
+
+	writes("1")
+	require.Equal(t, perRound, calls, "without hooks every write evaluates its rules once")
+	// Bulk create applies defaults before the policy, as single-row Save
+	// does, so a rule sees the defaulted role on every row.
+	require.Equal(t, []any{user.RoleUser, user.RoleUser, user.RoleUser}, roles)
+
+	c.User.Use(func(next integration.Mutator) integration.Mutator {
+		return integration.MutateFunc(func(ctx context.Context, m integration.Mutation) (integration.Value, error) {
+			return next.Mutate(ctx, m)
+		})
+	})
+	calls = 0
+	writes("2")
+	require.Equal(t, 2*perRound, calls, "with hooks each write is checked before and after them")
+}

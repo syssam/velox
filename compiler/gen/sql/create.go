@@ -339,11 +339,11 @@ func genCreateCheck(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName
 // proven two-output pattern. Edges (O2M/M2O/M2M) are added via spec.Edges so
 // sqlgraph handles junction inserts and FK column materialization.
 func genCreateSQLSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName, recv, entityReturnPkg string, upsertEnabled bool) {
+	genPolicyAfterHooksMethod(f, t, recv, builderName, "sqlSave", jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Nil())
 	f.Commentf("sqlSave executes the SQL create for %s after hooks have run.", t.Name)
 	f.Func().Params(jen.Id(recv).Op("*").Id(builderName)).Id("sqlSave").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Error()).BlockFunc(func(grp *jen.Group) {
-		genPolicyAfterHooks(grp, t, recv, jen.Id(recv).Dot("mutation"), jen.Nil())
 		// Call check() to validate required fields and run validators (after hooks).
 		grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.Nil(), jen.Id("err")),
@@ -590,14 +590,7 @@ func genCreateSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderName,
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		genSchemaHooksLocal(h, grp, t, recv, "hooks")
-		mutationType := jen.Id(t.MutationName())
-		grp.Return(jen.Qual(h.VeloxPkg(), "WithHooks").Types(
-			jen.Op("*").Qual(entityReturnPkg, t.Name),
-			mutationType,
-			jen.Op("*").Add(mutationType),
-		).Call(
-			jen.Id("ctx"), jen.Id(recv).Dot("sqlSave"), jen.Id(recv).Dot("mutation"), jen.Id("hooks"),
-		))
+		genPolicyAfterHooks(h, grp, t, recv, "sqlSave", jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Id(t.MutationName()))
 	})
 }
 
@@ -804,17 +797,25 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 		grp.If(jen.Len(jen.Id("builders")).Op("==").Lit(0)).Block(
 			jen.Return(jen.Index().Op("*").Qual(entityReturnPkg, t.Name).Values(), jen.Nil()),
 		)
-		// Explicit per-row privacy check — runs before hooks since privacy no longer rides on Hooks[0].
-		if t.NumPolicy() > 0 {
-			grp.For(jen.List(jen.Id("_"), jen.Id("b")).Op(":=").Range().Id("builders")).Block(
-				jen.If(jen.Id("b").Dot("policy").Op("!=").Nil()).Block(
-					jen.If(jen.Id("err").Op(":=").Id("b").Dot("policy").Dot("EvalMutation").Call(
-						jen.Id("ctx"), jen.Id("b").Dot("mutation"),
-					), jen.Id("err").Op("!=").Nil()).Block(
+		// Per row, before any hook runs: defaults, then the policy — the
+		// order single-row Save uses, so a rule sees default values.
+		if t.NeedsDefaults() || t.NumPolicy() > 0 {
+			grp.For(jen.List(jen.Id("_"), jen.Id("b")).Op(":=").Range().Id("builders")).BlockFunc(func(loop *jen.Group) {
+				if t.NeedsDefaults() {
+					loop.If(jen.Id("err").Op(":=").Id("b").Dot("defaults").Call(), jen.Id("err").Op("!=").Nil()).Block(
 						jen.Return(jen.Nil(), jen.Id("err")),
-					),
-				),
-			)
+					)
+				}
+				if t.NumPolicy() > 0 {
+					loop.If(jen.Id("b").Dot("policy").Op("!=").Nil()).Block(
+						jen.If(jen.Id("err").Op(":=").Id("b").Dot("policy").Dot("EvalMutation").Call(
+							jen.Id("ctx"), jen.Id("b").Dot("mutation"),
+						), jen.Id("err").Op("!=").Nil()).Block(
+							jen.Return(jen.Nil(), jen.Id("err")),
+						),
+					)
+				}
+			})
 		}
 		grp.Id("specs").Op(":=").Make(
 			jen.Index().Op("*").Qual(h.SQLGraphPkg(), "CreateSpec"),
@@ -823,25 +824,19 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 		grp.Id("nodes").Op(":=").Make(jen.Index().Op("*").Qual(entityReturnPkg, t.Name), jen.Len(jen.Id("builders")))
 		grp.Id("mutators").Op(":=").Make(jen.Index().Qual(runtimePkg, "Mutator"), jen.Len(jen.Id("builders")))
 
-		// Track a chunk-local defaults error so a failing defaults()
-		// call in the IIFE stops the loop without panicking on a nil
-		// mutator when we kick the chain.
-		if t.NeedsDefaults() {
-			grp.Var().Id("defaultsErr").Error()
-		}
-
 		grp.For(jen.Id("i").Op(":=").Range().Id("builders")).BlockFunc(func(outer *jen.Group) {
 			outer.Func().Params(
 				jen.Id("i").Int(),
 				jen.Id("root").Qual("context", "Context"),
 			).BlockFunc(func(iife *jen.Group) {
 				iife.Id("builder").Op(":=").Id("builders").Index(jen.Id("i"))
-				if t.NeedsDefaults() {
-					iife.If(jen.Id("err").Op(":=").Id("builder").Dot("defaults").Call(), jen.Id("err").Op("!=").Nil()).Block(
-						jen.Id("defaultsErr").Op("=").Id("err"),
-						jen.Return(),
-					)
-				}
+				// Combine the builder's runtime hooks (from c.Use) with
+				// the package-level Hooks slice — same cap-clamped merge
+				// single-row Save uses. Hooks is a package-level var declared
+				// in the {entity}/ leaf package (by genPackageRuntimeVars);
+				// after cycle-break this bulk builder lives in
+				// client/{entity}/, so the ref is qualified.
+				genSchemaHooksLocal(h, iife, t, "builder", "allHooks")
 				iife.Var().Id("mut").Qual(runtimePkg, "Mutator").Op("=").Qual(runtimePkg, "MutateFunc").Call(
 					jen.Func().Params(
 						jen.Id("ctx").Qual("context", "Context"),
@@ -851,7 +846,15 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 						inner.If(jen.Op("!").Id("ok")).Block(
 							jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("velox: unexpected mutation type %T"), jen.Id("m"))),
 						)
-						genPolicyAfterHooks(inner, t, "builder", jen.Id("mutation"), jen.Nil())
+						// Hooks may have changed the row: judge what is written.
+						// Without hooks it is what saveChunk already checked.
+						if t.NumPolicy() > 0 {
+							inner.If(jen.Len(jen.Id("allHooks")).Op(">").Lit(0).Op("&&").Id("builder").Dot("policy").Op("!=").Nil()).Block(
+								jen.If(jen.Err().Op(":=").Id("builder").Dot("policy").Dot("EvalMutation").Call(jen.Id("ctx"), jen.Id("mutation")), jen.Err().Op("!=").Nil()).Block(
+									jen.Return(jen.Nil(), jen.Err()),
+								),
+							)
+						}
 						inner.If(jen.Id("err").Op(":=").Id("builder").Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 							jen.Return(jen.Nil(), jen.Id("err")),
 						)
@@ -915,14 +918,6 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 						inner.Return(jen.Id("nodes").Index(jen.Id("i")), jen.Nil())
 					}),
 				)
-				// Combine the builder's runtime hooks (from c.Use) with
-				// the package-level Hooks slice — same cap-clamped merge
-				// single-row Save uses. Hooks is a package-level var declared
-				// in the {entity}/ leaf package (by genPackageRuntimeVars);
-				// after cycle-break this bulk builder lives in
-				// client/{entity}/, so the ref is qualified. Privacy is
-				// evaluated separately in saveChunk before the mutator chain.
-				genSchemaHooksLocal(h, iife, t, "builder", "allHooks")
 				iife.For(
 					jen.Id("j").Op(":=").Len(jen.Id("allHooks")).Op("-").Lit(1),
 					jen.Id("j").Op(">=").Lit(0),
@@ -933,11 +928,6 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 				iife.Id("mutators").Index(jen.Id("i")).Op("=").Id("mut")
 			}).Call(jen.Id("i"), jen.Id("ctx"))
 		})
-		if t.NeedsDefaults() {
-			grp.If(jen.Id("defaultsErr").Op("!=").Nil()).Block(
-				jen.Return(jen.Nil(), jen.Id("defaultsErr")),
-			)
-		}
 		grp.If(jen.Len(jen.Id("mutators")).Op(">").Lit(0)).Block(
 			jen.If(
 				jen.List(jen.Id("_"), jen.Id("err")).Op(":=").
