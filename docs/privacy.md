@@ -159,7 +159,27 @@ func (Todo) Hooks() []velox.Hook {
 
 The hook makes the column unspoofable (it overwrites whatever the caller
 supplied) and unomittable; `TenantRule` then remains as a defence in
-depth rather than the only check.
+depth rather than the only check. It checks the stamped value: the
+mutation policy runs again after the hooks (see below).
+
+### When a mutation policy runs
+
+A write evaluates its mutation policy twice:
+
+1. **Before the hooks**, so a denied request never reaches a hook with
+   side effects (sending mail, writing an audit row).
+2. **After the hooks, before the SQL**, on the mutation the hooks
+   produced. A hook that sets or changes a field cannot write past a
+   rule: the rule sees the value that is actually stored.
+
+Rules therefore run twice per write and must not count calls or have
+other side effects. A `FilterFunc` rule appends its predicate twice
+(`WHERE tenant_id = $1 AND tenant_id = $2`), which is harmless. For a
+bulk create, the second check runs once per row.
+
+Ent evaluates the policy once, as schema hook `Hooks[0]`: after hooks
+registered with `client.Use`, before schema hooks. A value set by a
+schema hook is never checked there.
 
 If the tenant column is not a string, implement `privacy.TenantIDValuer`
 on the viewer so the predicate binds with the column's own type;

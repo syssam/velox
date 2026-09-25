@@ -83,6 +83,7 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 	f.Func().Params(jen.Id(recv).Op("*").Id(deleteName)).Id("sqlExec").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Int(), jen.Error()).BlockFunc(func(grp *jen.Group) {
+		genPolicyAfterHooks(grp, t, recv, jen.Id(recv).Dot("mutation"), jen.Lit(0))
 		genConvertPredicates(grp, recv, h.SQLPkg())
 		baseDict := jen.Dict{
 			jen.Id("Driver"):     jen.Id(recv).Dot("config").Dot("Driver"),

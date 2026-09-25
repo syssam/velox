@@ -159,6 +159,15 @@ must survive rendering — `Builder.Wrap`, `UpdateBuilder.Query` and sqlgraph's
 post-render `Err()` checks carry them; a write that ran past a denied edge
 policy would do so with the subquery unscoped.
 
+A write evaluates its mutation policy **twice**: in `Save`/`Exec` before the
+hooks (a denied request never reaches a hook with side effects) and at the
+top of `sqlSave`/`sqlExec` — and in each bulk-create row mutator — after
+them, on the mutation the hooks produced (`genPolicyAfterHooks`). Do not
+drop either: without the first a denied request runs hooks, without the
+second a hook writes past every rule. Pinned by
+`wiring_test.go::TestPolicyReevaluatedAfterHooks` and
+`tests/integration/e2e_policy_after_hooks_test.go`.
+
 ## Test discipline
 
 **A test of SQL that differs by dialect runs on every dialect.** Use

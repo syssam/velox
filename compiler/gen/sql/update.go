@@ -142,6 +142,7 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 	f.Func().Params(jen.Id(recv).Op("*").Id(updateName)).Id("sqlSave").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Int(), jen.Error()).BlockFunc(func(grp *jen.Group) {
+		genPolicyAfterHooks(grp, t, recv, jen.Id(recv).Dot("mutation"), jen.Lit(0))
 		// Validate required edges before executing SQL.
 		if updateNeedsCheck(t) {
 			grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
@@ -344,6 +345,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 	f.Func().Params(jen.Id(recv).Op("*").Id(updateOneName)).Id("sqlSave").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Error()).BlockFunc(func(grp *jen.Group) {
+		genPolicyAfterHooks(grp, t, recv, jen.Id(recv).Dot("mutation"), jen.Nil())
 		// Validate required edges before executing SQL.
 		if updateNeedsCheck(t) {
 			grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(

@@ -180,6 +180,28 @@ func assertSetPath(queryVar string, sqlPkg string, pathClosure jen.Code) *jen.St
 	).Dot("SetPath").Call(pathClosure)
 }
 
+// genPolicyAfterHooks emits the second mutation-policy evaluation, placed
+// at the top of sqlSave/sqlExec — after the hook chain, before the write.
+//
+// Save/Exec evaluate the policy once before hooks so a denied request never
+// reaches a hook with side effects (mail, audit rows). But a hook may set or
+// change fields, and the policy must judge the values that are actually
+// written: without this check a hook that stamps a forbidden value writes
+// past every rule. Ent's policy runs as schema Hooks[0], i.e. after client
+// Use() hooks and before schema hooks, so neither of its positions sees the
+// final mutation either.
+func genPolicyAfterHooks(grp *jen.Group, t *gen.Type, recv string, mutation jen.Code, zero jen.Code) {
+	if t.NumPolicy() == 0 {
+		return
+	}
+	grp.Comment("Re-evaluate the policy on the mutation the hooks produced.")
+	grp.If(jen.Id(recv).Dot("policy").Op("!=").Nil()).Block(
+		jen.If(jen.Err().Op(":=").Id(recv).Dot("policy").Dot("EvalMutation").Call(jen.Id("ctx"), mutation), jen.Err().Op("!=").Nil()).Block(
+			jen.Return(zero, jen.Err()),
+		),
+	)
+}
+
 // genSchemaHooksLocal emits a local hook slice that merges the builder's
 // runtime hooks with the schema-level Hooks array declared in the entity's
 // leaf package.

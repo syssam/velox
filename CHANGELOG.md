@@ -42,6 +42,7 @@ Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
 - Selectors built for `All`, `Select`, `GroupBy` and eager loads now carry the request context, which edge predicates read (for the schema config under `FeatureSchemaConfig`, and for the target's policy)
 
 ### Changed
+- **BREAKING:** A mutation policy is also evaluated after the hooks, before the SQL runs, on the mutation the hooks produced. A hook that set a value a rule rejects used to write it: the only check ran before the hooks. The pre-hook check stays, so a denied request still never reaches a hook. Rules now run twice per write (once per row, after hooks, in a bulk create) and must not have side effects; a `FilterFunc` appends its predicate twice, which is harmless
 - **BREAKING:** The generic `ClearField(name)` accepts only Nillable fields, matching the typed `ClearXxx`. An Optional, non-Nillable field (NOT NULL in velox) was accepted, listed in `ClearedFields()`, and never cleared
 - **BREAKING:** `AppendXxx` is generated only for JSON fields of slice type. On a struct or map field it stored a JSON array the entity could no longer decode, so every later read of the row failed
 - **BREAKING:** `OldXxx` / `OldField` called after the UPDATE ran return an error wrapping the new `runtime.ErrOldValueAfterMutation` instead of silently returning the new value (Ent parity). Read old values in the hook before calling `next.Mutate`; a value read there stays available afterwards

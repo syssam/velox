@@ -343,6 +343,7 @@ func genCreateSQLSave(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNa
 	f.Func().Params(jen.Id(recv).Op("*").Id(builderName)).Id("sqlSave").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Error()).BlockFunc(func(grp *jen.Group) {
+		genPolicyAfterHooks(grp, t, recv, jen.Id(recv).Dot("mutation"), jen.Nil())
 		// Call check() to validate required fields and run validators (after hooks).
 		grp.If(jen.Id("err").Op(":=").Id(recv).Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.Nil(), jen.Id("err")),
@@ -850,6 +851,7 @@ func genCreateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, createName, 
 						inner.If(jen.Op("!").Id("ok")).Block(
 							jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("velox: unexpected mutation type %T"), jen.Id("m"))),
 						)
+						genPolicyAfterHooks(inner, t, "builder", jen.Id("mutation"), jen.Nil())
 						inner.If(jen.Id("err").Op(":=").Id("builder").Dot("check").Call(), jen.Id("err").Op("!=").Nil()).Block(
 							jen.Return(jen.Nil(), jen.Id("err")),
 						)

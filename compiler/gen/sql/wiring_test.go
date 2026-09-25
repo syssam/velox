@@ -2068,3 +2068,83 @@ func TestJSONAppendOnlyForSlicesAndAccumulates(t *testing.T) {
 		t.Errorf("AppendTags must accumulate onto a capacity-clamped copy\n%s", body)
 	}
 }
+
+// TestPolicyReevaluatedAfterHooks pins the second mutation-policy check at
+// the top of every write path that runs after the hook chain. Save/Exec keep
+// the pre-hook check so a denied request never reaches a hook with side
+// effects; the post-hook one makes the policy judge the values a hook set.
+// Without it a hook could write past every rule — behaviorally pinned by
+// tests/integration/e2e_policy_after_hooks_test.go.
+func TestPolicyReevaluatedAfterHooks(t *testing.T) {
+	userType := createTypeWithPolicies(t, "User", []*load.Position{{MixedIn: false}})
+	helper := newFeatureMockHelper().withFeatures("privacy")
+	helper.graph = &gen.Graph{
+		Config: &gen.Config{Package: "github.com/test/project/ent"},
+		Nodes:  []*gen.Type{userType},
+	}
+
+	render := func(f *jen.File, err error) string {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.GoString()
+	}
+	createSrc := render(genCreate(helper, userType))
+	updateSrc := render(genUpdate(helper, userType))
+	deleteSrc := render(genDelete(helper, userType))
+
+	for _, tc := range []struct{ src, fn string }{
+		{createSrc, ") sqlSave("},
+		{updateSrc, "func (_u *UserUpdate) sqlSave("},
+		{updateSrc, "func (_u *UserUpdateOne) sqlSave("},
+		{deleteSrc, ") sqlExec("},
+	} {
+		body := funcBodyFrom(tc.src, tc.fn)
+		if body == "" {
+			t.Fatalf("function %q not found", tc.fn)
+		}
+		if !strings.Contains(body, "policy.EvalMutation(ctx,") {
+			t.Errorf("%s must re-evaluate the policy after hooks\n%s", tc.fn, body)
+		}
+	}
+
+	// Bulk create: the per-row mutator (inside the hook chain) re-checks the
+	// mutation the hooks produced, not the builder's original one.
+	if !strings.Contains(createSrc, "builder.policy.EvalMutation(ctx, mutation)") {
+		t.Error("bulk create mutator must re-evaluate the policy on the hooked mutation")
+	}
+
+	// Both checks exist: one before hooks, one after.
+	for _, tc := range []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"create (Save, bulk pre-check, sqlSave, bulk mutator)", createSrc, 4},
+		{"update (two Saves, two sqlSaves)", updateSrc, 4},
+		{"delete (Exec, sqlExec)", deleteSrc, 2},
+	} {
+		if got := strings.Count(tc.src, "EvalMutation(ctx,"); got != tc.want {
+			t.Errorf("%s: %d EvalMutation calls, want %d", tc.name, got, tc.want)
+		}
+	}
+
+	if strings.Contains(render(genCreate(helper, createTestType("Post"))), "EvalMutation") {
+		t.Error("an entity without a policy must not evaluate one")
+	}
+}
+
+// funcBodyFrom returns the source from the first occurrence of needle to
+// the end of that top-level function.
+func funcBodyFrom(src, needle string) string {
+	i := strings.Index(src, needle)
+	if i < 0 {
+		return ""
+	}
+	end := strings.Index(src[i:], "\n}\n")
+	if end < 0 {
+		return src[i:]
+	}
+	return src[i : i+end]
+}
