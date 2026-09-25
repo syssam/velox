@@ -206,7 +206,8 @@ func TestInterceptor_EdgeQueryFires(t *testing.T) {
 // OldField() calls. That SELECT goes through runtime.ScanFirst →
 // drv.Query directly, bypassing the interceptor chain.
 //
-// This is deliberate, matches Ent, and is the right design:
+// This is deliberate (Ent's loader, m.Client().X.Get, does run
+// interceptors — velox departs from it here) and is the right design:
 //   - Hooks run INSIDE the mutation path; the interceptor chain is
 //     for the USER's query surface.
 //   - Audit-log interceptors should observe user queries, not every
@@ -214,6 +215,10 @@ func TestInterceptor_EdgeQueryFires(t *testing.T) {
 //   - Caching/RLS interceptors on loadOld would be semantically
 //     confusing (loadOld is a point-in-time pre-image, not a
 //     user-visible query).
+//
+// The entity's query POLICY does apply to the load (runtime.ApplyEntityPolicy;
+// TestOldValue_ReadsThroughTheQueryPolicy): that one is authorization, and a
+// hook must not be handed a row the viewer may not read.
 //
 // If you're reading this test because you expected interceptors to
 // fire on OldField loads: don't. Put your logic in a mutation hook

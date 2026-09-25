@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/testschema/types"
 )
@@ -57,5 +58,25 @@ func (Token) Fields() []velox.Field {
 			GoType(types.Weight(0)).
 			Positive().
 			Default(1),
+	}
+}
+
+// Edges of the Token: the inverse side of User.token, a one-to-one edge
+// whose key (user_token) lives on this table.
+func (Token) Edges() []velox.Edge {
+	return []velox.Edge{
+		edge.From("owner", User.Type).
+			Ref("token").
+			Unique(),
+	}
+}
+
+// Hooks of the Token: a pass-through schema hook. It changes nothing; it
+// makes the generated Save/Exec paths merge schema hooks into the runtime
+// hook store (the cap-clamped append) in the root module. Required by
+// TestTestschemaCoversGeneratorShapes.
+func (Token) Hooks() []velox.Hook {
+	return []velox.Hook{
+		func(next velox.Mutator) velox.Mutator { return next },
 	}
 }

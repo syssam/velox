@@ -149,7 +149,7 @@ rather than leaking it. `examples/multitenant/` is the worked reference.
 
 Edge predicates (`HasXxx()`, `HasXxxWith(...)`) compile to a subquery on a
 `*sql.Selector` that never becomes a Query. The target's **Policy** is applied
-there anyway (`runtime.ApplyEdgePolicy`, emitted for every edge whose target
+there anyway (`runtime.ApplyEntityPolicy`, emitted for every edge whose target
 declares one): a filtering policy narrows the subquery and a denying one fails
 the whole read or write — pinned by
 `tests/integration/e2e_edge_predicate_policy_test.go`. Interceptors do not
@@ -160,6 +160,20 @@ post-render `Err()` checks carry them; a write that ran past a denied edge
 policy would do so with the subquery unscoped.
 
 ## Test discipline
+
+**A test of SQL that differs by dialect runs on every dialect.** Use
+`forEachDialect` (tests/integration) for anything touching upserts and
+conflicts, returned IDs, cursors and ordering, JSON, NULL placement, time
+columns, row locking, or generated DISTINCT/subqueries; CI runs it against
+PostgreSQL and MySQL. SQLite accepts things the others reject and hides
+things they expose: in one review pass six fixes passed on SQLite and failed
+on a real server — three MySQL upsert paths (no RETURNING), a DISTINCT that
+Postgres and MySQL reject under ORDER BY, and two cursor bugs. Run locally
+with `VELOX_TEST_POSTGRES` / `VELOX_TEST_MYSQL` set, or `make ci-docker-db`.
+
+**testschema must cover every schema shape the generator branches on.**
+`TestTestschemaCoversGeneratorShapes` fails when one disappears; when the
+generator grows a branch, add the shape there and a test exercising it.
 
 **A test that calls a generator without asserting on its output is worse
 than no test.** It fills the coverage metric while hiding that the generated

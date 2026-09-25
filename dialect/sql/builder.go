@@ -35,6 +35,23 @@ type querierErr interface {
 	Err() error
 }
 
+// QueryErr renders q and returns the error recorded while building or
+// rendering it. Builders record errors instead of returning them — an
+// unknown column in an aggregate, a failed subquery, a denied edge-predicate
+// policy — and several only surface during rendering, so reading Err()
+// before Query() misses them and skipping Err() executes a broken statement.
+// Code that executes statements (runtime, sqlgraph) renders through this;
+// a guard test rejects a bare Query() there.
+func QueryErr(q Querier) (string, []any, error) {
+	query, args := q.Query()
+	if qe, ok := q.(querierErr); ok {
+		if err := qe.Err(); err != nil {
+			return "", nil, err
+		}
+	}
+	return query, args, nil
+}
+
 // ColumnBuilder is a builder for column definition in table creation.
 type ColumnBuilder struct {
 	Builder

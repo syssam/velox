@@ -116,6 +116,10 @@ func (User) Edges() []velox.Edge {
 			Comment("Pets owned by this user (a .Field()-bound foreign key)"),
 		edge.To("comments", Comment.Type).
 			Comment("Comments written by this user"),
+		// The testschema's one-to-one edge, between an int-keyed and a
+		// UUID-keyed entity. Required by TestTestschemaCoversGeneratorShapes.
+		edge.To("token", Token.Type).
+			Unique(),
 		edge.To("liked_posts", Post.Type).
 			Comment("Posts this user liked, through the Like edge schema").
 			Through("likes", Like.Type),

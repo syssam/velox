@@ -471,22 +471,36 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 				loader.If(jen.Op("!").Id("ok")).Block(
 					jen.Return(jen.Nil(), jen.Qual("errors", "New").Call(jen.Lit("velox: missing ID for OldField"))),
 				)
+				// The old row is read through the entity's query policy, as
+				// Ent's Client().X.Get does: a mutation policy that filters
+				// does not stop hooks from running, and OldXxx must not hand
+				// them a row the viewer may not read. Interceptors are left
+				// out on purpose (TestInterceptor_OldFieldBypass).
+				applyPolicy := h.FeatureEnabled(gen.FeaturePrivacy.Name) && t.NumPolicy() > 0
+				ctxParam := jen.Id("_")
+				if applyPolicy {
+					ctxParam = jen.Id("ctx")
+				}
 				loader.Id("build").Op(":=").Func().Params(
-					jen.Id("_").Qual("context", "Context"),
+					ctxParam.Qual("context", "Context"),
 				).Params(
 					jen.Op("*").Qual(h.SQLPkg(), "Selector"), jen.Error(),
-				).Block(
-					jen.Id("s").Op(":=").Qual(h.SQLPkg(), "Select").Call(jen.Qual(entityPkg, "Columns").Op("...")).Dot("From").Call(
+				).BlockFunc(func(b *jen.Group) {
+					b.Id("s").Op(":=").Qual(h.SQLPkg(), "Select").Call(jen.Qual(entityPkg, "Columns").Op("...")).Dot("From").Call(
 						jen.Qual(h.SQLPkg(), "Table").Call(jen.Qual(entityPkg, "Table")),
-					),
-					jen.Id("s").Dot("SetDialect").Call(jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call()),
-					jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
+					)
+					b.Id("s").Dot("SetDialect").Call(jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call())
+					b.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
 						jen.Id("s").Dot("C").Call(jen.Qual(entityPkg, "FieldID")),
 						jen.Id("id"),
-					)),
-					jen.Id("s").Dot("Limit").Call(jen.Lit(1)),
-					jen.Return(jen.Id("s"), jen.Nil()),
-				)
+					))
+					if applyPolicy {
+						b.Id("s").Dot("WithContext").Call(jen.Id("ctx"))
+						b.Qual(runtimePkg, "ApplyEntityPolicy").Call(jen.Id("s"), jen.Lit(t.Name))
+					}
+					b.Id("s").Dot("Limit").Call(jen.Lit(1))
+					b.Return(jen.Id("s"), jen.Nil())
+				})
 				loader.List(jen.Id("_old"), jen.Id("err")).Op(":=").Qual(runtimePkg, "ScanFirst").Types(
 					jen.Qual(entityReturnPkg, t.Name), jen.Op("*").Qual(entityReturnPkg, t.Name),
 				).Call(jen.Id("ctx"), jen.Id(recv).Dot("config").Dot("Driver"), jen.Id("build"), jen.Lit(t.Name))

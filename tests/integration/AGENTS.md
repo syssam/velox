@@ -106,7 +106,7 @@ expect may simply be absent rather than renamed.
 | `Like` | `likes` | `like/` | user→User, post→Post |
 | `Pet` | `pets` | `pet/` | owner→User |
 | `Post` | `posts` | `post/` | author→User, comments→Comment, tags→Tag, likers→User, likes→Like |
-| `Tag` | `tags` | `tag/` | posts→Post |
-| `Token` | `tokens` | `token/` | — |
-| `User` | `users` | `user/` | posts→Post, pets→Pet, comments→Comment, liked_posts→Post, likes→Like |
+| `Tag` | `tags` | `tag/` | posts→Post, parent→Tag, children→Tag |
+| `Token` | `tokens` | `token/` | owner→User |
+| `User` | `users` | `user/` | posts→Post, pets→Pet, comments→Comment, token→Token, liked_posts→Post, likes→Like |
 

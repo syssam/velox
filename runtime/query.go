@@ -158,7 +158,7 @@ func BuildQueryFrom(ctx context.Context, q QueryReader) (*sql.Selector, error) {
 	selector.SetDialect(q.GetDriver().Dialect())
 	// Predicates read the request context from the selector: edge predicates
 	// take the schema config from it and evaluate the target's privacy
-	// policy with it (runtime.ApplyEdgePolicy). Without it they ran with
+	// policy with it (runtime.ApplyEntityPolicy). Without it they ran with
 	// context.Background() on every path built here (All, Select, GroupBy).
 	selector.WithContext(ctx)
 	for _, p := range q.GetPredicates() {
@@ -393,12 +393,9 @@ func QueryGroupBy(ctx context.Context, q QueryReader, groupFields []string, fns 
 		m(selector)
 	}
 	rows := &sql.Rows{}
-	query, args := selector.Query()
-	// An aggregate or order term on an unknown column records its error on
-	// the builder rather than returning it; running the query anyway
-	// returned zeros or every column with a nil error (Ent checks too).
-	if err := selector.Err(); err != nil {
-		return err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return qerr
 	}
 	drv := q.GetDriver()
 	if err := drv.Query(ctx, query, args, rows); err != nil {
@@ -459,12 +456,9 @@ func QuerySelect(ctx context.Context, q QueryReader, fns []AggregateFunc, v any)
 		m(selector)
 	}
 	rows := &sql.Rows{}
-	query, args := selector.Query()
-	// An aggregate or order term on an unknown column records its error on
-	// the builder rather than returning it; running the query anyway
-	// returned zeros or every column with a nil error (Ent checks too).
-	if err := selector.Err(); err != nil {
-		return err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return qerr
 	}
 	drv := q.GetDriver()
 	if err := drv.Query(ctx, query, args, rows); err != nil {
@@ -502,12 +496,9 @@ func ScanAll[T any, PT ScannableOf[T]](ctx context.Context, drv dialect.Driver, 
 		return nil, err
 	}
 	rows := &sql.Rows{}
-	query, args := selector.Query()
-	// An aggregate or order term on an unknown column records its error on
-	// the builder rather than returning it; running the query anyway
-	// returned zeros or every column with a nil error (Ent checks too).
-	if err = selector.Err(); err != nil {
-		return nil, err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return nil, qerr
 	}
 	if qErr := drv.Query(ctx, query, args, rows); qErr != nil {
 		return nil, qErr

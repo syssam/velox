@@ -888,6 +888,7 @@ func P(...func(*Builder)) *Predicate
 func PredicateAnd[P ~func(*Selector)](...P) P
 func PredicateNot[P ~func(*Selector)](...P) P
 func PredicateOr[P ~func(*Selector)](...P) P
+func QueryErr(Querier) (string, []any, error)
 func Raw(string) Querier
 func ResolveWith(func(*UpdateSet)) ConflictOption
 func ResolveWithIgnore() ConflictOption

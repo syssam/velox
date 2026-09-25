@@ -8,6 +8,7 @@ import (
 
 	"github.com/syssam/velox/runtime"
 	integration "github.com/syssam/velox/tests/integration"
+	testschema "github.com/syssam/velox/testschema"
 )
 
 // TestOldValue_AfterMutationIsAnError pins that OldXxx called after the
@@ -67,4 +68,42 @@ func TestOldValue_AfterMutationIsAnError(t *testing.T) {
 		require.NoError(t, postErr, "a value loaded before the UPDATE stays readable")
 		require.Equal(t, "before", post)
 	})
+}
+
+// TestOldValue_ReadsThroughTheQueryPolicy pins that the row OldXxx loads is
+// read through the entity's query policy, as Ent's m.Client().X.Get does.
+// The loader scanned the table directly, and a mutation policy that filters
+// does not stop hooks from running, so a hook could be handed — and put into
+// an error message or a log — a row the viewer may not read. Interceptors
+// are still skipped on purpose (TestInterceptor_OldFieldBypass).
+func TestOldValue_ReadsThroughTheQueryPolicy(t *testing.T) {
+	base := context.Background()
+	c := openTestClient(t)
+	alice := createUser(t, c, "alice", "alice@ov")
+	bob := createUser(t, c, "bob", "bob@ov")
+
+	type oldNamer interface {
+		OldName(context.Context) (string, error)
+	}
+	var old string
+	var oldErr error
+	c.User.Use(func(next integration.Mutator) integration.Mutator {
+		return integration.MutateFunc(func(ctx context.Context, m integration.Mutation) (integration.Value, error) {
+			if m.Op().Is(integration.OpUpdateOne) {
+				old, oldErr = m.(oldNamer).OldName(ctx)
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+
+	scoped := testschema.FilterUserQueryToNameContext(base, "alice")
+	_, err := c.User.UpdateOneID(alice.ID).SetAge(31).Save(scoped)
+	require.NoError(t, err)
+	require.NoError(t, oldErr)
+	require.Equal(t, "alice", old)
+
+	old, oldErr = "", nil
+	_, _ = c.User.UpdateOneID(bob.ID).SetAge(31).Save(scoped)
+	require.Error(t, oldErr, "bob is outside the query policy's scope, got old name %q", old)
+	require.Empty(t, old)
 }

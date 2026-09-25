@@ -47,6 +47,10 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 		}
 		if upsertEnabled {
 			group.Id("conflict").Index().Qual(h.SQLPkg(), "ConflictOption")
+			if len(autoDefaultFields(h, t)) > 0 {
+				// Columns createSpec zero-filled for FeatureAutoDefault.
+				group.Id("autoDefaulted").Index().String()
+			}
 		}
 	})
 
@@ -218,21 +222,44 @@ func genCreateDefaults(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderN
 // every create that omitted the field — an Optional field turned required.
 // Ent validates only values the caller (or a hook) set.
 func genCreateAutoDefaults(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv string) {
-	if !h.FeatureEnabled(gen.FeatureAutoDefault.Name) {
-		return
+	fields := autoDefaultFields(h, t)
+	// The builder records the columns it zero-filled so an upsert's
+	// UpdateNewValues leaves them alone: the caller never set them, and
+	// copying the zero onto the conflicting row reset its stored value.
+	track := len(fields) > 0 && h.FeatureEnabled(gen.FeatureUpsert.Name)
+	if track {
+		grp.Id(recv).Dot("autoDefaulted").Op("=").Nil()
 	}
+	leafPkg := h.LeafPkgPath(t)
+	for _, fd := range fields {
+		grp.If(
+			jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
+			jen.Op("!").Id("ok"),
+		).BlockFunc(func(blk *jen.Group) {
+			blk.Id(recv).Dot("mutation").Dot(fd.MutationSet()).Call(baseZeroValue(h, fd))
+			if track {
+				blk.Id(recv).Dot("autoDefaulted").Op("=").Append(jen.Id(recv).Dot("autoDefaulted"), jen.Qual(leafPkg, fd.Constant()))
+			}
+		})
+	}
+}
+
+// autoDefaultFields returns the fields FeatureAutoDefault zero-fills when the
+// caller leaves them unset: Optional, non-Nillable (NOT NULL), without an
+// explicit Default().
+func autoDefaultFields(h gen.GeneratorHelper, t *gen.Type) []*gen.Field {
+	if !h.FeatureEnabled(gen.FeatureAutoDefault.Name) {
+		return nil
+	}
+	var fields []*gen.Field
 	for _, fd := range t.Fields {
 		if fd.Default || !fd.Optional || fd.Nillable || fd.Type == nil ||
 			(!fd.Type.Type.IsStandardType() && fd.Type.Type != schemafield.TypeOther) {
 			continue
 		}
-		grp.If(
-			jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot(fd.MutationGet()).Call(),
-			jen.Op("!").Id("ok"),
-		).Block(
-			jen.Id(recv).Dot("mutation").Dot(fd.MutationSet()).Call(baseZeroValue(h, fd)),
-		)
+		fields = append(fields, fd)
 	}
+	return fields
 }
 
 // genCreateCheck generates the check method for the root Create builder.
@@ -1042,8 +1069,16 @@ func genCreateUpsert(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builderNam
 			jen.Id("u").Dot("create").Dot("conflict"),
 			jen.Qual(sqlPkg, "ResolveWithNewValues").Call(),
 		)
-		if udfID || len(immutable) > 0 {
+		autoDefaulted := len(autoDefaultFields(h, t)) > 0
+		if udfID || len(immutable) > 0 || autoDefaulted {
 			grp.Add(eagerConflict(jen.Func().Params(jen.Id("s").Op("*").Qual(sqlPkg, "UpdateSet")).BlockFunc(func(set *jen.Group) {
+				if autoDefaulted {
+					// Read when the INSERT is rendered, after createSpec
+					// recorded which columns it zero-filled.
+					set.For(jen.List(jen.Id("_"), jen.Id("c")).Op(":=").Range().Id("u").Dot("create").Dot("autoDefaulted")).Block(
+						jen.Id("s").Dot("SetIgnore").Call(jen.Id("c")),
+					)
+				}
 				if udfID {
 					set.If(jen.Id("u").Dot("create").Dot("mutation").Dot("id").Op("!=").Nil()).Block(
 						jen.Id("s").Dot("SetIgnore").Call(jen.Qual(leafPkg, t.ID.Constant())),

@@ -16,16 +16,16 @@ type throughEdgePolicy struct{ next string }
 
 func (p throughEdgePolicy) EvalQuery(ctx context.Context, _ velox.Query) error {
 	sub := sql.Select("id").From(sql.Table(p.next)).WithContext(ctx)
-	ApplyEdgePolicy(sub, p.next)
+	ApplyEntityPolicy(sub, p.next)
 	return sub.Err()
 }
 
 func (throughEdgePolicy) EvalMutation(context.Context, velox.Mutation) error { return nil }
 
-// TestApplyEdgePolicy_CycleFailsClosed pins that two policies filtering
+// TestApplyEntityPolicy_CycleFailsClosed pins that two policies filtering
 // through edges to each other end in an error naming the cycle, not in
 // unbounded recursion (a stack overflow that takes the process down).
-func TestApplyEdgePolicy_CycleFailsClosed(t *testing.T) {
+func TestApplyEntityPolicy_CycleFailsClosed(t *testing.T) {
 	var a, b velox.Policy = throughEdgePolicy{next: "EdgePolicyCycB"}, throughEdgePolicy{next: "EdgePolicyCycA"}
 	for name, p := range map[string]*velox.Policy{"EdgePolicyCycA": &a, "EdgePolicyCycB": &b} {
 		RegisterQueryFactory(name, func(Config) any { return struct{}{} })
@@ -42,6 +42,6 @@ func TestApplyEdgePolicy_CycleFailsClosed(t *testing.T) {
 		})
 	}
 	s := sql.Select("id").From(sql.Table("a"))
-	ApplyEdgePolicy(s, "EdgePolicyCycA")
+	ApplyEntityPolicy(s, "EdgePolicyCycA")
 	require.ErrorContains(t, s.Err(), "EdgePolicyCycA -> EdgePolicyCycB -> EdgePolicyCycA")
 }

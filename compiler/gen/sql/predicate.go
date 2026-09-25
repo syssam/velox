@@ -442,11 +442,11 @@ func genEdgePredicates(h gen.GeneratorHelper, f *jen.File, t *gen.Type, edge *ge
 	}
 
 	// A target with a privacy policy is read through its policy inside the
-	// edge subquery (runtime.ApplyEdgePolicy); otherwise HasXxx/HasXxxWith
+	// edge subquery (runtime.ApplyEntityPolicy); otherwise HasXxx/HasXxxWith
 	// answer whether rows the caller may not read exist.
 	var edgePolicy jen.Code
 	if h.FeatureEnabled(gen.FeaturePrivacy.Name) && edge.Type.NumPolicy() > 0 {
-		edgePolicy = jen.Qual(runtimePkg, "ApplyEdgePolicy").Call(jen.Id("s"), jen.Lit(edge.Type.Name))
+		edgePolicy = jen.Qual(runtimePkg, "ApplyEntityPolicy").Call(jen.Id("s"), jen.Lit(edge.Type.Name))
 	}
 
 	// Build the Has predicate function body

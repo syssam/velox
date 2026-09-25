@@ -899,12 +899,9 @@ func DeleteNodes(ctx context.Context, drv dialect.Driver, spec *DeleteSpec) (int
 		pred(selector)
 	}
 	del := builder.Delete(spec.Node.Table).Schema(spec.Node.Schema).FromSelect(selector)
-	query, args := del.Query()
-	// A denied edge-predicate policy leaves its subquery unfiltered and
-	// records the error, which surfaces only when the SQL is rendered:
-	// executing anyway would delete without the policy's scope.
-	if err := del.Err(); err != nil {
-		return 0, err
+	query, args, qerr := sql.QueryErr(del)
+	if qerr != nil {
+		return 0, qerr
 	}
 	if err := drv.Exec(ctx, query, args, &res); err != nil {
 		return 0, err
@@ -983,11 +980,9 @@ func QueryEdges(ctx context.Context, drv dialect.Driver, spec *EdgeQuerySpec) er
 		p(selector)
 	}
 	rows := &sql.Rows{}
-	query, args := selector.Query()
-	// An error recorded inside a subquery (a denied edge-predicate policy)
-	// reaches the outer selector only when the SQL is rendered.
-	if err := selector.Err(); err != nil {
-		return err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return qerr
 	}
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return err
@@ -1016,11 +1011,9 @@ func (q *query) nodes(ctx context.Context, drv dialect.Driver) error {
 	if err != nil {
 		return err
 	}
-	query, args := selector.Query()
-	// An error recorded inside a subquery (a denied edge-predicate policy)
-	// reaches the outer selector only when the SQL is rendered.
-	if err = selector.Err(); err != nil {
-		return err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return qerr
 	}
 	if err = drv.Query(ctx, query, args, rows); err != nil {
 		return err
@@ -1093,11 +1086,9 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 			selector.Count(columns...)
 		}
 	}
-	query, args := selector.Query()
-	// An error recorded inside a subquery (a denied edge-predicate policy)
-	// reaches the outer selector only when the SQL is rendered.
-	if err := selector.Err(); err != nil {
-		return 0, err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return 0, qerr
 	}
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return 0, err
@@ -1137,9 +1128,9 @@ func (q *query) countWindow(ctx context.Context, drv dialect.Driver, selector *s
 	selector.Select(qualified...)
 	counter := q.builder.Select(sql.Count("*")).From(selector.As("t1"))
 	rows := &sql.Rows{}
-	query, args := counter.Query()
-	if err := counter.Err(); err != nil {
-		return 0, err
+	query, args, qerr := sql.QueryErr(counter)
+	if qerr != nil {
+		return 0, qerr
 	}
 	if err := drv.Query(ctx, query, args, rows); err != nil {
 		return 0, err
@@ -1236,9 +1227,9 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 	}
 	if !update.Empty() {
 		var res sql.Result
-		query, args := update.Query()
-		if err := update.Err(); err != nil {
-			return err
+		query, args, qerr := sql.QueryErr(update)
+		if qerr != nil {
+			return qerr
 		}
 		if err := tx.Exec(ctx, query, args, &res); err != nil {
 			return err
@@ -1273,11 +1264,9 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 		// changed by the UPDATE statement.
 		Where(idp)
 	rows := &sql.Rows{}
-	query, args := selector.Query()
-	// An error recorded inside a subquery (a denied edge-predicate policy)
-	// reaches the outer selector only when the SQL is rendered.
-	if err := selector.Err(); err != nil {
-		return err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return qerr
 	}
 	if err := tx.Query(ctx, query, args, rows); err != nil {
 		return err
@@ -1330,12 +1319,11 @@ func (u *updater) nodes(ctx context.Context, drv dialect.Driver) (int, error) {
 	u.tx = tx
 	affected, err := func() (int, error) {
 		var (
-			ids         []driver.Value
-			rows        = &sql.Rows{}
-			query, args = selector.Query()
-			qerr        error
+			ids  []driver.Value
+			rows = &sql.Rows{}
 		)
-		if qerr = selector.Err(); qerr != nil {
+		query, args, qerr := sql.QueryErr(selector)
+		if qerr != nil {
 			return 0, qerr
 		}
 		if qerr = u.tx.Query(ctx, query, args, rows); qerr != nil {
@@ -1379,12 +1367,10 @@ func (u *updater) updateTable(ctx context.Context, stmt *sql.UpdateBuilder) (int
 	if stmt.Empty() {
 		return 0, nil
 	}
-	var (
-		res         sql.Result
-		query, args = stmt.Query()
-	)
-	if err := stmt.Err(); err != nil {
-		return 0, err
+	var res sql.Result
+	query, args, qerr := sql.QueryErr(stmt)
+	if qerr != nil {
+		return 0, qerr
 	}
 	if err := u.tx.Exec(ctx, query, args, &res); err != nil {
 		return 0, err
@@ -1482,9 +1468,9 @@ func (u *updater) ensureExists(ctx context.Context) error {
 	exists.WithContext(ctx) // predicates read the request context (edge-predicate policies, schema config)
 	u.Predicate(exists)
 	check := u.builder.SelectExpr(sql.Exists(exists))
-	query, args := check.Query()
-	if err := check.Err(); err != nil {
-		return err
+	query, args, qerr := sql.QueryErr(check)
+	if qerr != nil {
+		return qerr
 	}
 	rows := &sql.Rows{}
 	if err := u.tx.Query(ctx, query, args, rows); err != nil {
@@ -1707,7 +1693,10 @@ func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
 		// we interact with an edge-schema with composite primary key.
 		if c.Nodes[0].ID == nil {
 			c.ensureConflict(insert)
-			query, args := insert.Query()
+			query, args, qerr := sql.QueryErr(insert)
+			if qerr != nil {
+				return qerr
+			}
 			return tx.Exec(ctx, query, args, nil)
 		}
 		if err := c.batchInsert(ctx, tx, insert); err != nil {
@@ -1842,7 +1831,10 @@ func (g *graph) clearM2MEdges(ctx context.Context, ids []driver.Value, edges Edg
 			// generated code), it should be the same for all EdgeSpecs.
 			deleter.Schema(edges[0].Schema)
 		}
-		query, args := deleter.Query()
+		query, args, qerr := sql.QueryErr(deleter)
+		if qerr != nil {
+			return qerr
+		}
 		if err := g.tx.Exec(ctx, query, args, nil); err != nil {
 			return fmt.Errorf("remove m2m edge for table %s: %w", table, err)
 		}
@@ -1889,7 +1881,10 @@ func (g *graph) addM2MEdges(ctx context.Context, ids []driver.Value, edges EdgeS
 		if len(edges[0].Target.Fields) == 0 {
 			insert.OnConflict(sql.DoNothing())
 		}
-		query, args := insert.Query()
+		query, args, qerr := sql.QueryErr(insert)
+		if qerr != nil {
+			return qerr
+		}
 		if err := g.tx.Exec(ctx, query, args, nil); err != nil {
 			return fmt.Errorf("add m2m edge for table %s: %w", table, err)
 		}
@@ -1939,7 +1934,10 @@ func (g *graph) batchAddM2M(ctx context.Context, spec *BatchCreateSpec) error {
 		}
 	}
 	for _, table := range insertKeys(tables) {
-		query, args := tables[table].Query()
+		query, args, qerr := sql.QueryErr(tables[table])
+		if qerr != nil {
+			return qerr
+		}
 		if err := g.tx.Exec(ctx, query, args, nil); err != nil {
 			return fmt.Errorf("add m2m edge for table %s: %w", table, err)
 		}
@@ -1958,10 +1956,12 @@ func (g *graph) clearFKEdges(ctx context.Context, ids []driver.Value, edges []*E
 		if nodes := edge.Target.Nodes; len(nodes) > 0 {
 			pred = matchIDs(edge.Target.IDSpec.Column, edge.Target.Nodes, edge.Columns[0], ids)
 		}
-		query, args := g.builder.Update(edge.Table).
+		query, args, qerr := sql.QueryErr(g.builder.Update(edge.Table).
 			SetNull(edge.Columns[0]).
-			Where(pred).
-			Query()
+			Where(pred))
+		if qerr != nil {
+			return qerr
+		}
 		if err := g.tx.Exec(ctx, query, args, nil); err != nil {
 			return fmt.Errorf("add %s edge for table %s: %w", edge.Rel, edge.Table, err)
 		}
@@ -1986,11 +1986,13 @@ func (g *graph) addFKEdges(ctx context.Context, ids []driver.Value, edges []*Edg
 		if len(edge.Target.Nodes) > 1 {
 			p = sql.InValues(edge.Target.IDSpec.Column, edge.Target.Nodes...)
 		}
-		query, args := g.builder.Update(edge.Table).
+		query, args, qerr := sql.QueryErr(g.builder.Update(edge.Table).
 			Schema(edge.Schema).
 			Set(edge.Columns[0], id).
-			Where(sql.And(p, sql.IsNull(edge.Columns[0]))).
-			Query()
+			Where(sql.And(p, sql.IsNull(edge.Columns[0]))))
+		if qerr != nil {
+			return qerr
+		}
 		var res sql.Result
 		if err := g.tx.Exec(ctx, query, args, &res); err != nil {
 			return fmt.Errorf("add %s edge for table %s: %w", edge.Rel, edge.Table, err)

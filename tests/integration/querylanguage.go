@@ -194,6 +194,18 @@ var TagSchema = EntitySchema{
 		Name:    "posts",
 		Table:   "posts",
 		Type:    "Post",
+	}, {
+		Columns: []string{"tag_children"},
+		Inverse: true,
+		Name:    "parent",
+		Table:   "tags",
+		Type:    "Tag",
+	}, {
+		Columns: []string{"tag_children"},
+		Inverse: false,
+		Name:    "children",
+		Table:   "tags",
+		Type:    "Tag",
 	}},
 	Fields: []FieldConfig{{
 		Column: "id",
@@ -208,7 +220,13 @@ var TagSchema = EntitySchema{
 
 // TokenSchema is the schema configuration for Token.
 var TokenSchema = EntitySchema{
-	Edges: []EdgeConfig{},
+	Edges: []EdgeConfig{{
+		Columns: []string{"user_token"},
+		Inverse: true,
+		Name:    "owner",
+		Table:   "users",
+		Type:    "User",
+	}},
 	Fields: []FieldConfig{{
 		Column: "id",
 		Name:   "id",
@@ -260,6 +278,12 @@ var UserSchema = EntitySchema{
 		Name:    "comments",
 		Table:   "comments",
 		Type:    "Comment",
+	}, {
+		Columns: []string{"user_token"},
+		Inverse: false,
+		Name:    "token",
+		Table:   "tokens",
+		Type:    "Token",
 	}, {
 		Columns: []string{"user_id", "post_id"},
 		Inverse: false,

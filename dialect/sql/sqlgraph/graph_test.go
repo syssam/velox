@@ -1944,11 +1944,11 @@ func TestUpdateNode(t *testing.T) {
 					WithArgs(1, 2, 1, 2).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				// Add new groups.
-				mock.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`) VALUES (?, ?), (?, ?), (?, ?)")).
+				mock.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`) VALUES (?, ?), (?, ?), (?, ?) ON DUPLICATE KEY UPDATE `group_id` = `group_users`.`group_id`, `user_id` = `group_users`.`user_id`")).
 					WithArgs(5, 1, 6, 1, 8, 1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				// Add new friends.
-				mock.ExpectExec(escape("INSERT INTO `user_friends` (`user_id`, `friend_id`) VALUES (?, ?), (?, ?)")).
+				mock.ExpectExec(escape("INSERT INTO `user_friends` (`user_id`, `friend_id`) VALUES (?, ?), (?, ?) ON DUPLICATE KEY UPDATE `user_id` = `user_friends`.`user_id`, `friend_id` = `user_friends`.`friend_id`")).
 					WithArgs(1, 4, 4, 1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectQuery(escape("SELECT `id`, `name`, `age` FROM `users` WHERE `id` = ?")).
@@ -1997,7 +1997,7 @@ func TestUpdateNode(t *testing.T) {
 			usr := &user{}
 			tt.spec.Assign = usr.assign
 			tt.spec.ScanValues = usr.values
-			err = UpdateNode(context.Background(), sql.OpenDB("", db), tt.spec)
+			err = UpdateNode(context.Background(), sql.OpenDB(dialect.MySQL, db), tt.spec)
 			require.Equal(t, tt.wantErr, err != nil, err)
 			require.Equal(t, tt.wantUser, usr)
 		})
@@ -2208,11 +2208,11 @@ func TestUpdateNodes(t *testing.T) {
 					WithArgs(1, 4, 1, 4).
 					WillReturnResult(sqlmock.NewResult(0, 2))
 				// Attach new groups to user.
-				mock.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`) VALUES (?, ?), (?, ?)")).
+				mock.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`) VALUES (?, ?), (?, ?) ON DUPLICATE KEY UPDATE `group_id` = `group_users`.`group_id`, `user_id` = `group_users`.`user_id`")).
 					WithArgs(7, 1, 8, 1).
 					WillReturnResult(sqlmock.NewResult(0, 2))
 				// Attach new friends to user.
-				mock.ExpectExec(escape("INSERT INTO `user_followers` (`user_id`, `follower_id`) VALUES (?, ?), (?, ?)")).
+				mock.ExpectExec(escape("INSERT INTO `user_followers` (`user_id`, `follower_id`) VALUES (?, ?), (?, ?) ON DUPLICATE KEY UPDATE `user_id` = `user_followers`.`user_id`, `follower_id` = `user_followers`.`follower_id`")).
 					WithArgs(1, 9, 9, 1).
 					WillReturnResult(sqlmock.NewResult(0, 2))
 				mock.ExpectCommit()
@@ -2258,11 +2258,11 @@ func TestUpdateNodes(t *testing.T) {
 					WithArgs(10, 20, 4, 10, 20, 4).
 					WillReturnResult(sqlmock.NewResult(0, 2))
 				// Attach new groups to user.
-				mock.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`) VALUES (?, ?), (?, ?), (?, ?), (?, ?)")).
+				mock.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`) VALUES (?, ?), (?, ?), (?, ?), (?, ?) ON DUPLICATE KEY UPDATE `group_id` = `group_users`.`group_id`, `user_id` = `group_users`.`user_id`")).
 					WithArgs(7, 10, 7, 20, 8, 10, 8, 20).
 					WillReturnResult(sqlmock.NewResult(0, 4))
 				// Attach new friends to user.
-				mock.ExpectExec(escape("INSERT INTO `user_followers` (`user_id`, `follower_id`) VALUES (?, ?), (?, ?), (?, ?), (?, ?)")).
+				mock.ExpectExec(escape("INSERT INTO `user_followers` (`user_id`, `follower_id`) VALUES (?, ?), (?, ?), (?, ?), (?, ?) ON DUPLICATE KEY UPDATE `user_id` = `user_followers`.`user_id`, `follower_id` = `user_followers`.`follower_id`")).
 					WithArgs(10, 9, 9, 10, 20, 9, 9, 20).
 					WillReturnResult(sqlmock.NewResult(0, 4))
 				mock.ExpectCommit()
@@ -2298,7 +2298,7 @@ func TestUpdateNodes(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
 			tt.prepare(mock)
-			affected, err := UpdateNodes(context.Background(), sql.OpenDB("", db), tt.spec)
+			affected, err := UpdateNodes(context.Background(), sql.OpenDB(dialect.MySQL, db), tt.spec)
 			require.Equal(t, tt.wantErr, err != nil, err)
 			require.Equal(t, tt.wantAffected, affected)
 		})

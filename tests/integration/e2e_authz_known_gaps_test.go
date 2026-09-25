@@ -20,7 +20,7 @@ import (
 // built directly on a *sql.Selector; no PostQuery object is ever
 // constructed, so the Post interceptors (traversers) do not run for it.
 //
-// The Post *Policy* does run there — runtime.ApplyEdgePolicy, pinned by
+// The Post *Policy* does run there — runtime.ApplyEntityPolicy, pinned by
 // e2e_edge_predicate_policy_test.go — which is why row-level authorization
 // belongs in Policy(), not in interceptors (a query-shaping layer that also
 // never reaches writes). An interceptor-only tenant filter still leaves an

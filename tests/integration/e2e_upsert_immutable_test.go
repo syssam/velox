@@ -43,6 +43,33 @@ func TestUpsertUpdateNewValues_KeepsImmutableColumns(t *testing.T) {
 			require.True(t, got.CreatedAt.Equal(old), "immutable created_at was overwritten: %v", got.CreatedAt)
 		})
 
+		// FeatureAutoDefault zero-fills an unset Optional field so the NOT
+		// NULL column has a value to insert; UpdateNewValues copied that zero
+		// onto the conflicting row and reset its stored value. A field the
+		// caller did set is still updated.
+		t.Run("unset_optional_field_kept", func(t *testing.T) {
+			u, err := c.User.Create().SetName("a").SetEmail("ad@x").SetAge(40).
+				SetCreatedAt(time.Now()).SetUpdatedAt(time.Now()).Save(ctx)
+			require.NoError(t, err)
+
+			err = c.User.Create().SetName("b").SetEmail("ad@x").
+				SetCreatedAt(time.Now()).SetUpdatedAt(time.Now()).
+				OnConflictColumns(user.FieldEmail).UpdateNewValues().Exec(ctx)
+			require.NoError(t, err)
+			got, err := c.User.Get(ctx, u.ID)
+			require.NoError(t, err)
+			require.Equal(t, 40, got.Age, "age was never set on the upsert")
+			require.Equal(t, "b", got.Name)
+
+			err = c.User.Create().SetName("c").SetEmail("ad@x").SetAge(41).
+				SetCreatedAt(time.Now()).SetUpdatedAt(time.Now()).
+				OnConflictColumns(user.FieldEmail).UpdateNewValues().Exec(ctx)
+			require.NoError(t, err)
+			got, err = c.User.Get(ctx, u.ID)
+			require.NoError(t, err)
+			require.Equal(t, 41, got.Age, "a value the caller sets is updated")
+		})
+
 		t.Run("user_defined_id", func(t *testing.T) {
 			tk, err := c.Token.Create().SetName("tok").Save(ctx)
 			require.NoError(t, err)

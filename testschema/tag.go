@@ -51,6 +51,13 @@ func (Tag) Edges() []velox.Edge {
 	return []velox.Edge{
 		edge.From("posts", Post.Type).
 			Ref("tags"),
+		// The testschema's self-referencing edge. parent is also its only
+		// OPTIONAL to-one edge whose key is a hidden column (no .Field()):
+		// the shape whose NULL keys crashed eager loading. Required by
+		// TestTestschemaCoversGeneratorShapes.
+		edge.To("children", Tag.Type).
+			From("parent").
+			Unique(),
 	}
 }
 

@@ -139,10 +139,15 @@ func MaskNotFound(err error) error {
 	return err
 }
 
-// ApplyEdgePolicy applies the privacy policy of entity (the target of an
-// edge predicate) to s, the subquery an edge predicate — HasPosts(),
-// HasPostsWith(...) — selects the target rows through. It is called by
-// generated edge predicates whose target declares a Policy.
+// ApplyEntityPolicy applies the query privacy policy of entity to s, a
+// selector over that entity's table that has no query object behind it. It
+// is called by generated code in two places:
+//
+//   - edge predicates — HasPosts(), HasPostsWith(...) — for the subquery
+//     they select the target rows through, when the target declares a Policy;
+//   - the old-value loader behind OldXxx, which reads the row a hook is
+//     about to update; it applies the policy (as Ent's Client().X.Get does)
+//     but, deliberately, not the interceptors.
 //
 // Without it the subquery read the target table unscoped: no query object
 // existed, so the target's policy never ran, and a filter such as
@@ -151,7 +156,7 @@ func MaskNotFound(err error) error {
 // subquery to the rows it allows; a policy that denies records its error on
 // s, which fails the whole query — the same outcome as eager-loading a
 // denied edge.
-func ApplyEdgePolicy(s *sql.Selector, entity string) {
+func ApplyEntityPolicy(s *sql.Selector, entity string) {
 	policy := EntityPolicy(entity)
 	if policy == nil {
 		return

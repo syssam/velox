@@ -236,9 +236,9 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 		limit.Apply(selector, joinT.C(l.ParentColumn), selector.C(l.TargetID))
 	}
 	rows := &sql.Rows{}
-	query, args := selector.Query()
-	if err = selector.Err(); err != nil {
-		return nil, err
+	query, args, qerr := sql.QueryErr(selector)
+	if qerr != nil {
+		return nil, qerr
 	}
 	if err = tq.GetDriver().Query(ctx, query, args, rows); err != nil {
 		return nil, err
