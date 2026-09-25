@@ -1,8 +1,10 @@
 package model
 
-import "sort"
+import (
+	"sort"
 
-import "velox.test/parity/op"
+	"velox.test/parity/op"
+)
 
 // author is the in-memory author entity, keyed by its creation handle.
 type author struct {
