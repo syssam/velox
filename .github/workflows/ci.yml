@@ -343,6 +343,14 @@ jobs:
           cache: true
       - name: Test contrib/otelvelox
         run: go -C contrib/otelvelox test -race ./...
+      # graphqlgo needs graphql-go's Go 1.27 floor, which the root module
+      # does not carry; its go.mod names the toolchain.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: contrib/graphqlgo/go.mod
+          cache: true
+      - name: Test contrib/graphqlgo
+        run: go -C contrib/graphqlgo test -race ./...
 
   test-integration:
     # Mirrors ent's pattern of covering multiple DB versions: pin latest +

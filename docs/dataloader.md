@@ -92,7 +92,7 @@ price must not see the items narrowed to the columns the client selected:
 
 ```go
 q := r.Client.Order.Query()
-if nodeSelects(ctx, "totalCents") { // the engine's selection API
+if nodeSelects(ctx, "totalCents") { // graphqlgo.NodeSelects under graphql-go
 	q = q.WithItems()
 }
 return q.(entity.OrderPaginatable).Paginate(ctx, after, first, before, last, opts...)
@@ -103,9 +103,17 @@ return q.(entity.OrderPaginatable).Paginate(ctx, after, first, before, last, opt
 The collector reads the selection through `gqlrelay.SelectedField`. Under
 gqlgen that needs nothing. Another engine puts a source on each operation's
 context with `gqlrelay.WithSelectionSource`; without one, collection is a
-no-op and `Paginate` always counts. graphql-go's `examples/veloxfx`
-(`internal/veloxgql`) is a complete source in about seventy lines, over its
-`graphql.Selection` API.
+no-op and `Paginate` always counts.
+
+For [graphql-go](https://github.com/syssam/graphql-go) that is
+`contrib/graphqlgo`, a separate module so the root one needs neither
+graphql-go nor its Go 1.27:
+
+```go
+exec := graphql.NewExecutor(schema, graphqlgo.Collect())
+```
+
+`graphqlgo.NodeSelects(ctx, "totalCents")` is the `nodeSelects` above.
 
 Connection edges are paged from the loaded slice by the generated entity
 method only when their target's ID orders in memory the way the database
