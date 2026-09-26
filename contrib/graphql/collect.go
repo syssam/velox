@@ -165,6 +165,20 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 			})
 		}
 
+		// LoadsFor: GraphQL field name (a custom resolver) → the edges it
+		// reads, from graphql.Map(...).Loads, loaded whole when selected.
+		if loads := loadsForEdges(g, t); len(loads) > 0 {
+			grp.Id(metaVar).Dot("LoadsFor").Op("=").Map(jen.String()).Index().String().ValuesFunc(func(d *jen.Group) {
+				for _, name := range slices.Sorted(maps.Keys(loads)) {
+					keys := make([]jen.Code, 0, len(loads[name]))
+					for _, k := range loads[name] {
+						keys = append(keys, jen.Lit(k))
+					}
+					d.Lit(name).Op(":").Values(keys...)
+				}
+			})
+		}
+
 		// InterfaceFields: GraphQL interface field → contributing edge keys
 		// and the type conditions its selection may use.
 		if groups, err := g.interfaceFieldGroups(t); err == nil && len(groups) > 0 {
@@ -230,12 +244,34 @@ func (g *Generator) genEntityCollectionInit(f *jen.File, t *gen.Type, metaVar st
 
 // collectedForColumns returns, for each GraphQL field name named in a
 // graphql.CollectedFor annotation on t's fields, the schema field names to
-// collect for it, in schema declaration order.
+// collect for it, in schema declaration order, followed by those a
+// graphql.Map(...).Reads names. The ID is always selected and is left out.
 func collectedForColumns(g *Generator, t *gen.Type) map[string][]string {
 	out := map[string][]string{}
 	for _, fld := range t.Fields {
 		for _, name := range g.getFieldAnnotation(fld).GetCollectedFor() {
 			out[name] = append(out[name], fld.Name)
+		}
+	}
+	for _, rm := range g.getTypeAnnotation(t).ResolverMappings {
+		name := resolverBaseName(rm.FieldName)
+		for _, fld := range rm.ReadFields {
+			if fld != "id" && !slices.Contains(out[name], fld) {
+				out[name] = append(out[name], fld)
+			}
+		}
+	}
+	return out
+}
+
+// loadsForEdges returns, for each graphql.Map field declaring Loads, the
+// keys into CollectMeta.Edges of the edges it reads.
+func loadsForEdges(g *Generator, t *gen.Type) map[string][]string {
+	out := map[string][]string{}
+	for _, rm := range g.getTypeAnnotation(t).ResolverMappings {
+		for _, e := range rm.LoadEdges {
+			name := resolverBaseName(rm.FieldName)
+			out[name] = append(out[name], camel(e))
 		}
 	}
 	return out

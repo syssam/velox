@@ -84,19 +84,39 @@ Every path to the same edge — aliases, fragments, an interface field next to a
 direct selection — lands in one eager-loaded query whose projection is the
 union of what each path reads.
 
-An edge the resolver loads itself before collecting (`Query().WithItems()`,
-then `Paginate` or `CollectFields`) is left whole: every column, every row.
-The collector still collects the edges beneath it. This is how a custom
-field that reads an edge gets all of it — `totalCents` summing each item's
-price must not see the items narrowed to the columns the client selected:
+### Custom fields that read an edge
+
+A custom resolver field is invisible to the collector: it cannot know that
+`totalCents` sums every item's price. Declare it where the field is declared,
+and the collector loads what the resolver reads, under any engine:
 
 ```go
-q := r.Client.Order.Query()
-if nodeSelects(ctx, "totalCents") { // graphqlgo.NodeSelects under graphql-go
-	q = q.WithItems()
+func (Order) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		graphql.Resolvers(
+			graphql.Map("totalCents", "Int!").Loads("items"),
+			graphql.Map("label", "String!").Reads("status"),
+		),
+	}
 }
-return q.(entity.OrderPaginatable).Paginate(ctx, after, first, before, last, opts...)
 ```
+
+- `Loads(edges...)`: whenever the field is selected, each edge is loaded
+  whole — every column and every row, even where the client also selects the
+  edge narrowly or pages it — in one query for all parents. Edges selected
+  beneath it are still collected.
+- `Reads(fields...)`: the entity's own columns the resolver reads. The
+  entity stays projected; a mapped field declaring neither keeps it
+  `SELECT *`.
+
+An unknown edge or field, or an edge hidden from the GraphQL type, fails
+generation naming the mapping. Without the declaration the answer can be
+silently wrong: `totalCents items { quantity }` would load the items with
+only `quantity`, and sum zero prices.
+
+An edge the resolver loads itself before collecting (`Query().WithItems()`,
+then `Paginate` or `CollectFields`) is also left whole; that is the escape
+hatch for a field velox does not declare, such as one in hand-written SDL.
 
 ### Engines other than gqlgen
 
@@ -113,7 +133,9 @@ graphql-go nor its Go 1.27:
 exec := graphql.NewExecutor(schema, graphqlgo.Collect())
 ```
 
-`graphqlgo.NodeSelects(ctx, "totalCents")` is the `nodeSelects` above.
+For a field in hand-written SDL, which no `graphql.Map` declares,
+`graphqlgo.NodeSelects(ctx, "totalCents")` tells a connection resolver
+whether to load the edge itself.
 
 Connection edges are paged from the loaded slice by the generated entity
 method only when their target's ID orders in memory the way the database

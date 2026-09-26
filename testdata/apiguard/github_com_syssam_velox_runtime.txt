@@ -2,6 +2,7 @@
   field CollectMeta.Edges map[string]EdgeMeta
   field CollectMeta.FieldColumns map[string]string
   field CollectMeta.InterfaceFields map[string]InterfaceFieldMeta
+  field CollectMeta.LoadsFor map[string][]string
   field Config.Debug bool
   field Config.Driver github.com/syssam/velox/dialect.Driver
   field Config.HookStore any

@@ -117,3 +117,59 @@ func TestMarkCollectFields(t *testing.T) {
 	ann := extractGraphQLAnnotation(skipped.Annotations)
 	assert.True(t, ann.IsSkipType())
 }
+
+// graphql.Map(...).Loads and .Reads reach the generated CollectMeta: the
+// edges under LoadsFor by their collection key, and the columns merged into
+// CollectedFor, so the collector loads the edges whole and keeps projecting.
+func TestGenEntityCollection_EmitsMapLoadsAndReads(t *testing.T) {
+	graph := mockGraph()
+	g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
+	typ := graph.Nodes[0] // User: fields email, name, ...; edge posts
+	typ.Annotations = map[string]any{AnnotationName: Annotation{ResolverMappings: []ResolverMapping{
+		Map("postCount", "Int!").Loads("posts"),
+		Map("greeting", "String!").Reads("name", "email").Loads("posts"),
+		Map("plain", "String!"),
+	}}}
+	require.NoError(t, g.validateResolverMappings(typ))
+
+	code := g.genEntityCollection(typ).GoString()
+	require.Contains(t, code, `.LoadsFor = map[string][]string{`)
+	assert.Contains(t, code, `"postCount": {"posts"}`)
+	assert.Contains(t, code, `"greeting": {"posts"}`)
+	assert.Contains(t, code, `"greeting": {FieldName, FieldEmail}`)
+	assert.NotContains(t, code, `"plain":`, "a Map declaring nothing stays unknown to the collector")
+}
+
+// A Loads or Reads naming something the entity does not have fails the
+// build, naming the mapping, rather than generating a load that never
+// happens.
+func TestValidateResolverMappings_LoadsAndReads(t *testing.T) {
+	for name, tc := range map[string]struct {
+		rm   ResolverMapping
+		want string
+	}{
+		"unknown edge":  {Map("x", "Int!").Loads("comments"), `Map("x").Loads("comments"): User has no edge "comments"`},
+		"unknown field": {Map("x", "Int!").Reads("nickname"), `Map("x").Reads("nickname"): User has no field "nickname"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			graph := mockGraph()
+			g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
+			typ := graph.Nodes[0]
+			typ.Annotations = map[string]any{AnnotationName: Annotation{ResolverMappings: []ResolverMapping{tc.rm}}}
+			err := g.validateResolverMappings(typ)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+
+	t.Run("edge hidden from the GraphQL type", func(t *testing.T) {
+		graph := mockGraph()
+		g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
+		typ := graph.Nodes[0]
+		typ.Edges[0].Annotations = map[string]any{AnnotationName: Annotation{Skip: SkipType}}
+		typ.Annotations = map[string]any{AnnotationName: Annotation{ResolverMappings: []ResolverMapping{Map("x", "Int!").Loads("posts")}}}
+		err := g.validateResolverMappings(typ)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not on the GraphQL type")
+	})
+}

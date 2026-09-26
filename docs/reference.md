@@ -166,6 +166,9 @@ graphql.Resolvers(
     graphql.Map("priceListItem(priceListId: ID!)", "PriceListItem!").WithComment("..."),
     graphql.Map("glAccount", "PublicGlAccount!"),
     graphql.Map("approver", "PublicUser"),
+    // What the resolver reads, so field collection loads it (see dataloader.md):
+    graphql.Map("totalCents", "Int!").Loads("items"),
+    graphql.Map("displayName", "String!").Reads("first_name", "last_name"),
 )
 ```
 

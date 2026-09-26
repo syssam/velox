@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"slices"
 	"maps"
 	"strings"
 
@@ -324,6 +325,40 @@ type ResolverMapping struct {
 	// Comment is the GraphQL description for this field.
 	// Emitted as a triple-quoted string (""") above the field definition.
 	Comment string
+	// LoadEdges are the edges the resolver reads, by schema edge name. Set
+	// with Loads.
+	LoadEdges []string `json:"load_edges,omitempty"`
+	// ReadFields are the entity's own fields the resolver reads, by schema
+	// field name. Set with Reads.
+	ReadFields []string `json:"read_fields,omitempty"`
+}
+
+// Loads declares the edges the resolver reads. Whenever the field is
+// selected, field collection eager-loads each of them whole -- every column
+// and every row, whatever the client selected beneath it -- so a resolver
+// summing an edge's rows sees all of them, and a list of parents costs one
+// query per edge rather than one per parent. Edges selected beneath a loaded
+// edge are still collected.
+//
+//	graphql.Map("totalCents", "Int!").Loads("items")
+//
+// A field that declares Loads or Reads is taken at its word: the entity is
+// still projected, onto the columns Reads names. A mapped field declaring
+// neither keeps the entity unprojected (SELECT *), since its resolver might
+// read any column.
+func (rm ResolverMapping) Loads(edges ...string) ResolverMapping {
+	rm.LoadEdges = append(slices.Clip(rm.LoadEdges), edges...)
+	return rm
+}
+
+// Reads declares the entity's own fields the resolver reads, by schema field
+// name. Field collection selects their columns whenever the field is, and
+// keeps projecting the rest of the entity's selection.
+//
+//	graphql.Map("displayName", "String!").Reads("first_name", "last_name")
+func (rm ResolverMapping) Reads(fields ...string) ResolverMapping {
+	rm.ReadFields = append(slices.Clip(rm.ReadFields), fields...)
+	return rm
 }
 
 // resolverBaseName extracts the field name without inline arguments.

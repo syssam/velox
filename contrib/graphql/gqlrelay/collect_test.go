@@ -531,3 +531,48 @@ func TestCollectFields_CallerConfiguredEdgeIsLoadedWhole(t *testing.T) {
 	require.NotNil(t, created.Ctx.PartitionLimit)
 	assert.Equal(t, 3, *created.Ctx.PartitionLimit)
 }
+
+// A custom resolver that declared the edges it reads (graphql.Map(...).Loads)
+// gets them whole whenever it is selected: every column and every row, even
+// where the client also selects the edge narrowly or pages it. The parent is
+// still projected, onto the columns declared with Reads.
+func TestCollectFields_LoadsForLoadsTheEdgeWhole(t *testing.T) {
+	meta := userMeta()
+	meta.LoadsFor = map[string][]string{"postCount": {"posts"}, "badge": {"company"}}
+	meta.CollectedFor = map[string][]string{"badge": {"age"}}
+	newQ := func() *collectQuery {
+		q := newCollectQuery(meta)
+		q.ChildMeta = map[string]*runtime.CollectMeta{
+			"posts":   {FieldColumns: map[string]string{"title": "title", "body": "body"}, Edges: map[string]runtime.EdgeMeta{"author": {Name: "author", Unique: true, FKColumns: []string{"post_author"}}}},
+			"company": {FieldColumns: map[string]string{"name": "name"}},
+		}
+		return q
+	}
+
+	q := newQ()
+	require.NoError(t, CollectFields(newGQLContext(t, ast.SelectionSet{field("name"), field("postCount"), field("badge")}), q, q.Meta))
+	assert.ElementsMatch(t, []string{"id", "name", "age", "company_users"}, q.Ctx.Fields, "the parent stays projected: Reads columns and the edges' keys")
+	require.Contains(t, q.Children, "posts", "a Relay edge nothing else selects is loaded for the resolver")
+	assert.Empty(t, q.Children["posts"].Ctx.Fields, "every column")
+	assert.Nil(t, q.Children["posts"].Ctx.PartitionLimit, "every row")
+	assert.Empty(t, q.Children["company"].Ctx.Fields)
+
+	// Selected beside the resolver, narrowly and paged: still whole, and what
+	// the client selects beneath it is still collected.
+	q = newQ()
+	sel := ast.SelectionSet{
+		field("postCount"),
+		connField("posts", map[string]string{"first": "2"}, nodeSel(field("title"), field("author", field("name")))),
+	}
+	require.NoError(t, CollectFields(newGQLContext(t, sel), q, q.Meta))
+	posts := q.Children["posts"]
+	assert.Empty(t, posts.Ctx.Fields, "not narrowed to title")
+	assert.Nil(t, posts.Ctx.PartitionLimit, "not capped to the first page")
+	require.Contains(t, posts.Children, "author", "edges beneath are collected")
+
+	// Without the resolver selected, the same edge is narrowed and capped.
+	q = newQ()
+	require.NoError(t, CollectFields(newGQLContext(t, sel[1:]), q, q.Meta))
+	assert.ElementsMatch(t, []string{"id", "title", "post_author"}, q.Children["posts"].Ctx.Fields)
+	require.NotNil(t, q.Children["posts"].Ctx.PartitionLimit)
+}

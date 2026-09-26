@@ -299,6 +299,29 @@ func (g *Generator) validateResolverMappings(t *gen.Type) error {
 				return fmt.Errorf("graphql: %s: Map(%q) conflicts with existing field", t.Name, baseName)
 			}
 		}
+		for _, name := range rm.LoadEdges {
+			if findEdge(t, name) == nil {
+				return fmt.Errorf("graphql: %s: Map(%q).Loads(%q): %s has no edge %q", t.Name, baseName, name, t.Name, name)
+			}
+			if findEdge(&gen.Type{Edges: g.filterEdges(t.Edges, SkipType)}, name) == nil {
+				return fmt.Errorf("graphql: %s: Map(%q).Loads(%q): the edge is not on the GraphQL type, so field collection cannot load it", t.Name, baseName, name)
+			}
+		}
+		for _, name := range rm.ReadFields {
+			if !slices.ContainsFunc(t.Fields, func(f *gen.Field) bool { return f.Name == name }) && name != "id" {
+				return fmt.Errorf("graphql: %s: Map(%q).Reads(%q): %s has no field %q", t.Name, baseName, name, t.Name, name)
+			}
+		}
+	}
+	return nil
+}
+
+// findEdge returns t's edge named name, or nil.
+func findEdge(t *gen.Type, name string) *gen.Edge {
+	for _, e := range t.Edges {
+		if e.Name == name {
+			return e
+		}
 	}
 	return nil
 }

@@ -82,6 +82,12 @@ type CollectMeta struct {
 	// several columns can be collected for one name. Without an entry the
 	// collector treats the field as unknown and falls back to SELECT *.
 	CollectedFor map[string][]string
+	// LoadsFor maps a GraphQL field name with a custom resolver to the edges
+	// it reads (keys into Edges), from graphql.Map(...).Loads. Selecting the
+	// field eager-loads each of them whole: every column and every row, so
+	// the resolver reads what it would have queried itself. A field listed
+	// here is known to the collector; its columns are CollectedFor's.
+	LoadsFor map[string][]string
 	// InterfaceFields maps a GraphQL interface field (graphql.InterfaceField)
 	// to the edges that back it, so selecting the field eager-loads every
 	// contributing edge — or, when the selection is covered by __typename and

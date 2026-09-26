@@ -108,6 +108,10 @@ type edgeSelection struct {
 	// Their resolver answers from the loaded edge, so it is loaded whole
 	// (no per-parent limit) and projected for these selections too.
 	viaInterface []occurrence
+	// whole is set when a custom resolver declared that it reads the edge
+	// (graphql.Map(...).Loads): every row and every column is loaded,
+	// whatever else selects it.
+	whole bool
 }
 
 // collect projects q onto what the given fields select and schedules the
@@ -179,6 +183,18 @@ func collect(
 				}
 				continue
 			}
+			// A custom resolver declaring the edges it reads
+			// (graphql.Map(...).Loads): load them whole, and select the
+			// columns it declared with Reads, if any.
+			if keys, ok := meta.LoadsFor[name]; ok {
+				selected = append(selected, meta.CollectedFor[name]...)
+				for _, key := range keys {
+					edge := meta.Edges[key]
+					selected = append(selected, edge.FKColumns...)
+					edgeFor(edge).whole = true
+				}
+				continue
+			}
 			// A custom resolver whose columns were declared via
 			// graphql.CollectedFor: select exactly those.
 			if cols, ok := meta.CollectedFor[name]; ok {
@@ -213,27 +229,28 @@ func collect(
 //
 // An edge an interface field reaches is always loaded whole — its resolver
 // reads every loaded row — and projected for the union of the direct and
-// the interface selections.
+// the interface selections. An edge a custom resolver declared it reads
+// (es.whole) is loaded whole and not projected at all.
 func collectEdge(q runtime.FieldCollectable, es *edgeSelection) {
 	if es.meta.Unique || !es.meta.Relay {
 		child := q.WithEdgeLoad(es.meta.Name)
-		collectChild(child, append(occurrences(es.fields, nil), es.viaInterface...))
+		collectChild(child, append(occurrences(es.fields, nil), es.viaInterface...), es.whole)
 		return
 	}
 	var (
 		nodes     []SelectedField
-		load      = len(es.viaInterface) > 0
+		load      = len(es.viaInterface) > 0 || es.whole
 		unlimited = load
 		limit     int
 	)
 	if !es.meta.PagesLoaded {
 		// The entity method would query the edge per row regardless; only
-		// an interface field reads the loaded edge.
+		// an interface field or a declaring resolver reads the loaded edge.
 		if !load {
 			return
 		}
 		child := q.WithEdgeLoad(es.meta.Name)
-		collectChild(child, es.viaInterface)
+		collectChild(child, es.viaInterface, es.whole)
 		return
 	}
 	for _, field := range es.fields {
@@ -274,25 +291,29 @@ func collectEdge(q runtime.FieldCollectable, es *edgeSelection) {
 		child.GetCtx().PartitionLimit = nil
 	}
 	if len(nodes) == 0 && len(es.viaInterface) == 0 {
-		if owned {
+		if owned && !es.whole {
 			child.GetCtx().AppendFieldOnce(child.GetIDColumn())
 		}
 		return
 	}
-	collectChild(child, append(occurrences(nodes, nil), es.viaInterface...))
+	collectChild(child, append(occurrences(nodes, nil), es.viaInterface...), es.whole)
 }
 
 // collectChild recurses into an eager-loaded edge query when it carries its
 // own metadata; otherwise the edge is loaded unprojected. A query the caller
-// configured before collection (WithX) is not projected either, but the
-// edges beneath it are still collected.
-func collectChild(child runtime.FieldCollectable, fields []occurrence) {
+// configured before collection (WithX), or one a custom resolver reads
+// whole, is not projected either, but the edges beneath it are still
+// collected.
+func collectChild(child runtime.FieldCollectable, fields []occurrence, whole bool) {
+	if child == nil {
+		return
+	}
 	mc, ok := child.(MetaCollectable)
 	if !ok {
 		return
 	}
 	if meta := mc.CollectMeta(); meta != nil {
-		collect(mc, meta, fields, mc.GetCtx().EdgeLoadCreated)
+		collect(mc, meta, fields, mc.GetCtx().EdgeLoadCreated && !whole)
 	}
 }
 
