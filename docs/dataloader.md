@@ -84,6 +84,29 @@ Every path to the same edge — aliases, fragments, an interface field next to a
 direct selection — lands in one eager-loaded query whose projection is the
 union of what each path reads.
 
+An edge the resolver loads itself before collecting (`Query().WithItems()`,
+then `Paginate` or `CollectFields`) is left whole: every column, every row.
+The collector still collects the edges beneath it. This is how a custom
+field that reads an edge gets all of it — `totalCents` summing each item's
+price must not see the items narrowed to the columns the client selected:
+
+```go
+q := r.Client.Order.Query()
+if nodeSelects(ctx, "totalCents") { // the engine's selection API
+	q = q.WithItems()
+}
+return q.(entity.OrderPaginatable).Paginate(ctx, after, first, before, last, opts...)
+```
+
+### Engines other than gqlgen
+
+The collector reads the selection through `gqlrelay.SelectedField`. Under
+gqlgen that needs nothing. Another engine puts a source on each operation's
+context with `gqlrelay.WithSelectionSource`; without one, collection is a
+no-op and `Paginate` always counts. graphql-go's `examples/veloxfx`
+(`internal/veloxgql`) is a complete source in about seventy lines, over its
+`graphql.Selection` API.
+
 Connection edges are paged from the loaded slice by the generated entity
 method only when their target's ID orders in memory the way the database
 orders it (numeric and UUID IDs); edges to entities with string IDs are

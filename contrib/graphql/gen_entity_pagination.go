@@ -272,7 +272,9 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		// GraphQL field collection (Ent parity: entgql's Paginate calls
 		// collectField on edges.node): project the columns the selection
 		// reads and eager-load the edges it traverses. A no-op outside a
-		// gqlgen resolver. Runs after the count, which must not be projected.
+		// resolver: gqlgen's, or another engine's that installed
+		// gqlrelay.WithSelectionSource. Runs after the count, which must not
+		// be projected.
 		grp.If(
 			jen.Err().Op(":=").Qual(gqlrelayPkg, "CollectConnectionFields").Call(
 				jen.Id("ctx"), jen.Id("q"), jen.Op("&").Qual(subEntityPkg, t.Name+"CollectMeta"),

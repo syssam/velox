@@ -74,7 +74,7 @@ func (q *collectQuery) loadConfig(t *testing.T, name string) *runtime.LoadConfig
 
 // newGQLContext creates a context with gqlgen field and operation contexts
 // for the given selection set.
-func newGQLContext(t *testing.T, selections ast.SelectionSet) context.Context {
+func newGQLContext(t testing.TB, selections ast.SelectionSet) context.Context {
 	t.Helper()
 	collected := graphql.CollectedField{
 		Field:      &ast.Field{Name: "user", Alias: "user", SelectionSet: selections},

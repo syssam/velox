@@ -371,7 +371,7 @@ func LimitPerRow(partitionBy string, limit int, orderBy ...sql.Querier) func(s *
 // type names — so a resolver can build the node from the foreign key it
 // already holds instead of querying the target table.
 func InterfaceFieldCoveredByID(field graphql.CollectedField, oc *graphql.OperationContext, satisfies ...string) bool {
-	return coveredByID(gqlgenField{oc: oc, f: field}, satisfies)
+	return coveredByID(&gqlgenField{oc: oc, f: field}, satisfies)
 }
 
 // coveredByID is InterfaceFieldCoveredByID under any engine.

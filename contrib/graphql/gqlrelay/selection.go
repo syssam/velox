@@ -52,7 +52,7 @@ func selectedField(ctx context.Context) (SelectedField, bool) {
 	if fc == nil || !graphql.HasOperationContext(ctx) {
 		return nil, false
 	}
-	return gqlgenField{oc: graphql.GetOperationContext(ctx), f: fc.Field}, true
+	return &gqlgenField{oc: graphql.GetOperationContext(ctx), f: fc.Field}, true
 }
 
 // gqlgenField is SelectedField over gqlgen's collected fields.
@@ -61,20 +61,28 @@ type gqlgenField struct {
 	f  graphql.CollectedField
 }
 
-func (g gqlgenField) FieldName() string { return g.f.Name }
+func (g *gqlgenField) FieldName() string { return g.f.Name }
 
-func (g gqlgenField) Arguments() map[string]any {
+func (g *gqlgenField) Arguments() map[string]any {
 	if g.f.Field == nil {
 		return nil
 	}
 	return g.f.ArgumentMap(g.oc.Variables)
 }
 
-func (g gqlgenField) Fields(satisfies []string) []SelectedField {
+// Fields wraps every collected field in one backing array: a gqlgenField
+// boxed on its own is an allocation per selected field, on a path that runs
+// for every resolver that collects.
+func (g *gqlgenField) Fields(satisfies []string) []SelectedField {
 	collected := graphql.CollectFields(g.oc, g.f.Selections, satisfies)
+	if len(collected) == 0 {
+		return nil
+	}
+	backing := make([]gqlgenField, len(collected))
 	out := make([]SelectedField, len(collected))
 	for i, f := range collected {
-		out[i] = gqlgenField{oc: g.oc, f: f}
+		backing[i] = gqlgenField{oc: g.oc, f: f}
+		out[i] = &backing[i]
 	}
 	return out
 }
