@@ -587,6 +587,27 @@ func genUpdateSpecBuild(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, recv
 			continue
 		}
 		typedField := "_" + fd.Name
+		if fd.SupportsMutationAppend() {
+			// SetXxx then AppendXxx on one mutation writes the set value
+			// with the appended elements; the append modifier below skips
+			// the column. The modifier alone concatenated onto the stored
+			// value and the set value was lost.
+			grp.If(jen.Id(recv).Dot("mutation").Dot(typedField).Op("!=").Nil()).Block(
+				jen.Id("v").Op(":=").Op("*").Id(recv).Dot("mutation").Dot(typedField),
+				jen.If(
+					jen.List(jen.Id("a"), jen.Id("ok")).Op(":=").Id(recv).Dot("mutation").Dot("appends").Index(jen.Lit(fd.StorageKey())).Assert(h.BaseType(fd)),
+					jen.Id("ok"),
+				).Block(
+					jen.Id("v").Op("=").Append(jen.Id("v").Index(jen.Empty(), jen.Len(jen.Id("v")), jen.Len(jen.Id("v"))), jen.Id("a").Op("...")),
+				),
+				jen.Id("spec").Dot("SetField").Call(
+					jen.Lit(fd.StorageKey()),
+					jen.Qual(fieldPkg, h.FieldTypeConstant(fd)),
+					jen.Id("v"),
+				),
+			)
+			continue
+		}
 		setStmt := jen.If(jen.Id(recv).Dot("mutation").Dot(typedField).Op("!=").Nil()).Block(
 			jen.Id("spec").Dot("SetField").Call(
 				jen.Lit(fd.StorageKey()),
@@ -678,6 +699,17 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 		grp.For(
 			jen.List(jen.Id("col"), jen.Id("val")).Op(":=").Range().Id(recv).Dot("mutation").Dot("appends"),
 		).BlockFunc(func(forGrp *jen.Group) {
+			// A column also set in this mutation already carries the
+			// appended elements (see the SetField above).
+			forGrp.Switch(jen.Id("col")).BlockFunc(func(sw *jen.Group) {
+				for _, fd := range t.MutableFields() {
+					if fd.SupportsMutationAppend() && !(fd.IsEdgeField() && !fd.UserDefined) {
+						sw.Case(jen.Lit(fd.StorageKey())).Block(
+							jen.If(jen.Id(recv).Dot("mutation").Dot("_" + fd.Name).Op("!=").Nil()).Block(jen.Continue()),
+						)
+					}
+				}
+			})
 			forGrp.Id("colCopy").Op(":=").Id("col")
 			forGrp.Id("valCopy").Op(":=").Id("val")
 			forGrp.Id("d").Op(":=").Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call()

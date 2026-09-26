@@ -324,8 +324,9 @@ func TestBuilder(t *testing.T) {
 				Set("age", 1).
 				Add("age", 2).
 				Where(HasPrefix("nickname", "a8m")),
-			wantQuery: "UPDATE `users` SET `age` = ?, `age` = COALESCE(`users`.`age`, 0) + ? WHERE `nickname` LIKE ?",
-			wantArgs:  []any{1, 2, "a8m%"},
+			// Set then Add is one assignment of the sum.
+			wantQuery: "UPDATE `users` SET `age` = ? WHERE `nickname` LIKE ?",
+			wantArgs:  []any{3, "a8m%"},
 		},
 		{
 			input: Update("users").
@@ -370,8 +371,9 @@ func TestBuilder(t *testing.T) {
 				Set("age", 1).
 				Add("age", 2).
 				Where(HasPrefixFold("nickname", "a8m")),
-			wantQuery: "UPDATE `users` SET `age` = ?, `age` = COALESCE(`users`.`age`, 0) + ? WHERE LOWER(`nickname`) LIKE ?",
-			wantArgs:  []any{1, 2, "a8m%"},
+			// Set then Add is one assignment of the sum.
+			wantQuery: "UPDATE `users` SET `age` = ? WHERE LOWER(`nickname`) LIKE ?",
+			wantArgs:  []any{3, "a8m%"},
 		},
 		{
 			input: Update("users").
@@ -409,8 +411,9 @@ func TestBuilder(t *testing.T) {
 				Set("age", 1).
 				Add("age", 2).
 				Where(HasSuffixFold("nickname", "a8m")),
-			wantQuery: "UPDATE `users` SET `age` = ?, `age` = COALESCE(`users`.`age`, 0) + ? WHERE LOWER(`nickname`) LIKE ?",
-			wantArgs:  []any{1, 2, "%a8m"},
+			// Set then Add is one assignment of the sum.
+			wantQuery: "UPDATE `users` SET `age` = ? WHERE LOWER(`nickname`) LIKE ?",
+			wantArgs:  []any{3, "%a8m"},
 		},
 		{
 			input: Update("users").
@@ -2559,4 +2562,41 @@ func TestSelector_SubqueryRendersAloneAfterNesting(t *testing.T) {
 	q, args = sub.Query()
 	require.Equal(t, `SELECT "owner" FROM "pets" WHERE "kind" = $1`, q)
 	require.Equal(t, []any{"cat"}, args)
+}
+
+// TestUpdateBuilder_AddAfterAssignment pins that Add on a column already
+// assigned updates that assignment instead of adding a second one, which
+// PostgreSQL rejects ("multiple assignments to same column") and SQLite
+// resolved by dropping the first.
+func TestUpdateBuilder_AddAfterAssignment(t *testing.T) {
+	for name, tc := range map[string]struct {
+		b     *UpdateBuilder
+		query string
+		args  []any
+	}{
+		"set then add": {
+			Dialect(dialect.Postgres).Update("users").Set("age", 5).Add("age", 1),
+			`UPDATE "users" SET "age" = $1`, []any{6},
+		},
+		"set float then add int": {
+			Dialect(dialect.Postgres).Update("users").Set("score", 1.5).Add("score", 2),
+			`UPDATE "users" SET "score" = $1`, []any{3.5},
+		},
+		"add twice": {
+			Dialect(dialect.Postgres).Update("users").Add("age", 1).Add("age", 2),
+			`UPDATE "users" SET "age" = (COALESCE("users"."age", 0) + $1) + $2`, []any{1, 2},
+		},
+		"set expression then add": {
+			Dialect(dialect.Postgres).Update("users").Set("age", Expr(`"age" * 2`)).Add("age", 1),
+			`UPDATE "users" SET "age" = ("age" * 2) + $1`, []any{1},
+		},
+		"add then set": {
+			Dialect(dialect.Postgres).Update("users").Add("age", 1).Set("age", 5),
+			`UPDATE "users" SET "age" = $1`, []any{5},
+		},
+	} {
+		query, args := tc.b.Query()
+		require.Equal(t, tc.query, query, name)
+		require.Equal(t, tc.args, args, name)
+	}
 }

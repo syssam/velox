@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -599,7 +600,34 @@ func (u *UpdateBuilder) Set(column string, v any) *UpdateBuilder {
 
 // Add adds a numeric value to the given column. Note that, calling Set(c)
 // after Add(c) will erase previous calls with c from the builder.
+//
+// Add after Set(c, x) (or after another Add) assigns the column once:
+// x+v, computed here when both are numbers, else (x) + v. A second
+// assignment of the same column is rejected by PostgreSQL ("multiple
+// assignments to same column") and on SQLite the first one was dropped.
 func (u *UpdateBuilder) Add(column string, v any) *UpdateBuilder {
+	for i := range u.columns {
+		if u.columns[i] != column {
+			continue
+		}
+		if sum, ok := addNumbers(u.values[i], v); ok {
+			u.values[i] = sum
+			return u
+		}
+		prev := u.values[i]
+		u.values[i] = ExprFunc(func(b *Builder) {
+			b.Wrap(func(b *Builder) {
+				if q, ok := prev.(Querier); ok {
+					b.Join(q)
+				} else {
+					b.Arg(prev)
+				}
+			})
+			b.WriteString(" + ")
+			b.Arg(v)
+		})
+		return u
+	}
 	u.columns = append(u.columns, column)
 	u.values = append(u.values, ExprFunc(func(b *Builder) {
 		b.WriteString("COALESCE")
@@ -610,6 +638,27 @@ func (u *UpdateBuilder) Add(column string, v any) *UpdateBuilder {
 		b.Arg(v)
 	}))
 	return u
+}
+
+// addNumbers returns a+b in a's type when both are Go numbers b converts
+// to, as Set-then-Add on one column means.
+func addNumbers(a, b any) (any, bool) {
+	av, bv := reflect.ValueOf(a), reflect.ValueOf(b)
+	if !av.IsValid() || !bv.IsValid() || !bv.CanConvert(av.Type()) {
+		return nil, false
+	}
+	bc, sum := bv.Convert(av.Type()), reflect.New(av.Type()).Elem()
+	switch {
+	case av.CanInt():
+		sum.SetInt(av.Int() + bc.Int())
+	case av.CanUint():
+		sum.SetUint(av.Uint() + bc.Uint())
+	case av.CanFloat():
+		sum.SetFloat(av.Float() + bc.Float())
+	default:
+		return nil, false
+	}
+	return sum.Interface(), true
 }
 
 // SetNull sets a column as null value.

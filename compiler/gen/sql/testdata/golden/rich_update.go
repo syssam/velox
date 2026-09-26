@@ -215,7 +215,11 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 		spec.SetField("updated_at", field.TypeTime, *_u.mutation._updated_at)
 	}
 	if _u.mutation._tags != nil {
-		spec.SetField("tags", field.TypeJSON, *_u.mutation._tags)
+		v := *_u.mutation._tags
+		if a, ok := _u.mutation.appends["tags"].(any); ok {
+			v = append(v[:len(v):len(v)], a...)
+		}
+		spec.SetField("tags", field.TypeJSON, v)
 	}
 	if _u.mutation._status != nil {
 		spec.SetField("status", field.TypeEnum, *_u.mutation._status)
@@ -232,6 +236,12 @@ func (_u *ArticleUpdate) sqlSave(ctx context.Context) (int, error) {
 		}
 	}
 	for col, val := range _u.mutation.appends {
+		switch col {
+		case "tags":
+			if _u.mutation._tags != nil {
+				continue
+			}
+		}
 		colCopy := col
 		valCopy := val
 		d := _u.config.Driver.Dialect()
@@ -541,7 +551,11 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 		spec.SetField("updated_at", field.TypeTime, *_u.mutation._updated_at)
 	}
 	if _u.mutation._tags != nil {
-		spec.SetField("tags", field.TypeJSON, *_u.mutation._tags)
+		v := *_u.mutation._tags
+		if a, ok := _u.mutation.appends["tags"].(any); ok {
+			v = append(v[:len(v):len(v)], a...)
+		}
+		spec.SetField("tags", field.TypeJSON, v)
 	}
 	if _u.mutation._status != nil {
 		spec.SetField("status", field.TypeEnum, *_u.mutation._status)
@@ -558,6 +572,12 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 		}
 	}
 	for col, val := range _u.mutation.appends {
+		switch col {
+		case "tags":
+			if _u.mutation._tags != nil {
+				continue
+			}
+		}
 		colCopy := col
 		valCopy := val
 		d := _u.config.Driver.Dialect()
