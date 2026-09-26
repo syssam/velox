@@ -7,7 +7,6 @@ package gqlgen
 
 import (
 	"context"
-	"fmt"
 
 	"example.com/fullgql/velox"
 	categoryclient "example.com/fullgql/velox/client/category"
@@ -114,11 +113,6 @@ func (r *mutationResolver) UpdateWorkspace(ctx context.Context, id int, input wo
 	return r.Client.Workspace.UpdateOneID(id).SetInput(input).Save(ctx)
 }
 
-// Thumbnail is the resolver for the thumbnail field.
-func (r *productResolver) Thumbnail(ctx context.Context, obj *entity.Product) (*string, error) {
-	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
-}
-
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id int) (velox.Noder, error) {
 	return r.Client.Noder(ctx, id)
@@ -193,21 +187,8 @@ func (r *queryResolver) Workspaces(ctx context.Context, after *gqlrelay.Cursor, 
 	return r.Client.Workspace.Query().Paginate(ctx, after, first, before, last, entity.WithWorkspaceOrder(orderBy), entity.WithWorkspaceFilter(where.Filter))
 }
 
-// Thumbnail is the resolver for the thumbnail field.
-func (r *createProductInputResolver) Thumbnail(ctx context.Context, obj *productclient.CreateProductInput, data *string) error {
-	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
-}
-
-// Thumbnail is the resolver for the thumbnail field.
-func (r *updateProductInputResolver) Thumbnail(ctx context.Context, obj *productclient.UpdateProductInput, data *string) error {
-	panic(fmt.Errorf("not implemented: Thumbnail - thumbnail"))
-}
-
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
-
-// Product returns ProductResolver implementation.
-func (r *Resolver) Product() ProductResolver { return &productResolver{r} }
 
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
@@ -215,19 +196,6 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 // User returns UserResolver implementation.
 func (r *Resolver) User() UserResolver { return &userResolver{r} }
 
-// CreateProductInput returns CreateProductInputResolver implementation.
-func (r *Resolver) CreateProductInput() CreateProductInputResolver {
-	return &createProductInputResolver{r}
-}
-
-// UpdateProductInput returns UpdateProductInputResolver implementation.
-func (r *Resolver) UpdateProductInput() UpdateProductInputResolver {
-	return &updateProductInputResolver{r}
-}
-
 type mutationResolver struct{ *Resolver }
-type productResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
-type createProductInputResolver struct{ *Resolver }
-type updateProductInputResolver struct{ *Resolver }

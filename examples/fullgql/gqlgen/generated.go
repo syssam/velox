@@ -55,11 +55,8 @@ type Config struct {
 
 type ResolverRoot interface {
 	Mutation() MutationResolver
-	Product() ProductResolver
 	Query() QueryResolver
 	User() UserResolver
-	CreateProductInput() CreateProductInputResolver
-	UpdateProductInput() UpdateProductInputResolver
 }
 
 type DirectiveRoot struct {
@@ -327,9 +324,6 @@ type MutationResolver interface {
 	CreateWorkspace(ctx context.Context, input workspaceclient.CreateWorkspaceInput) (*entity.Workspace, error)
 	UpdateWorkspace(ctx context.Context, id int, input workspaceclient.UpdateWorkspaceInput) (*entity.Workspace, error)
 }
-type ProductResolver interface {
-	Thumbnail(ctx context.Context, obj *entity.Product) (*string, error)
-}
 type QueryResolver interface {
 	Node(ctx context.Context, id int) (velox.Noder, error)
 	Nodes(ctx context.Context, ids []int) ([]velox.Noder, error)
@@ -346,13 +340,6 @@ type QueryResolver interface {
 }
 type UserResolver interface {
 	Summary(ctx context.Context, obj *entity.User) (string, error)
-}
-
-type CreateProductInputResolver interface {
-	Thumbnail(ctx context.Context, obj *productclient.CreateProductInput, data *string) error
-}
-type UpdateProductInputResolver interface {
-	Thumbnail(ctx context.Context, obj *productclient.UpdateProductInput, data *string) error
 }
 
 type executableSchema struct {
@@ -1696,7 +1683,7 @@ scalar Time
 """
 The builtin Bytes type (base64-encoded)
 """
-scalar Bytes
+scalar Bytes @goModel(model: "github.com/syssam/velox/contrib/graphql/gqlrelay.Bytes")
 
 """
 An object with an ID.
@@ -7503,10 +7490,10 @@ func (ec *executionContext) _Product_thumbnail(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_Product_thumbnail,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Product().Thumbnail(ctx, obj)
+			return obj.Thumbnail, nil
 		},
 		nil,
-		ec.marshalOBytes2ᚖstring,
+		ec.marshalOBytes2ᚖᚕbyte,
 		true,
 		false,
 	)
@@ -7516,8 +7503,8 @@ func (ec *executionContext) fieldContext_Product_thumbnail(_ context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "Product",
 		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Bytes does not have child fields")
 		},
@@ -12791,13 +12778,11 @@ func (ec *executionContext) unmarshalInputCreateProductInput(ctx context.Context
 			it.Stock = data
 		case "thumbnail":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("thumbnail"))
-			data, err := ec.unmarshalOBytes2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOBytes2ᚖᚕbyte(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			if err = ec.resolvers.CreateProductInput().Thumbnail(ctx, &it, data); err != nil {
-				return it, err
-			}
+			it.Thumbnail = data
 		case "published":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("published"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -14296,13 +14281,11 @@ func (ec *executionContext) unmarshalInputUpdateProductInput(ctx context.Context
 			it.Stock = data
 		case "thumbnail":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("thumbnail"))
-			data, err := ec.unmarshalOBytes2ᚖstring(ctx, v)
+			data, err := ec.unmarshalOBytes2ᚖᚕbyte(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			if err = ec.resolvers.UpdateProductInput().Thumbnail(ctx, &it, data); err != nil {
-				return it, err
-			}
+			it.Thumbnail = data
 		case "clearThumbnail":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearThumbnail"))
 			data, err := ec.unmarshalOBoolean2bool(ctx, v)
@@ -16426,38 +16409,7 @@ func (ec *executionContext) _Product(ctx context.Context, sel ast.SelectionSet, 
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "thumbnail":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Product_thumbnail(ctx, field, obj)
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			out.Values[i] = ec._Product_thumbnail(ctx, field, obj)
 		case "published":
 			out.Values[i] = ec._Product_published(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -19684,22 +19636,34 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) unmarshalOBytes2ᚖstring(ctx context.Context, v any) (*string, error) {
+func (ec *executionContext) unmarshalOBytes2ᚕbyte(ctx context.Context, v any) ([]byte, error) {
 	if v == nil {
 		return nil, nil
 	}
-	res, err := graphql.UnmarshalString(v)
-	return &res, graphql.ErrorOnPath(ctx, err)
+	res, err := gqlrelay.UnmarshalBytes(v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOBytes2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+func (ec *executionContext) marshalOBytes2ᚕbyte(ctx context.Context, sel ast.SelectionSet, v []byte) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	_ = sel
 	_ = ctx
-	res := graphql.MarshalString(*v)
+	res := gqlrelay.MarshalBytes(v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOBytes2ᚖᚕbyte(ctx context.Context, v any) (*[]byte, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalOBytes2ᚕbyte(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOBytes2ᚖᚕbyte(ctx context.Context, sel ast.SelectionSet, v *[]byte) graphql.Marshaler {
+	return ec.marshalOBytes2ᚕbyte(ctx, sel, *v)
 }
 
 func (ec *executionContext) marshalOCategory2ᚖexampleᚗcomᚋfullgqlᚋveloxᚋentityᚐCategory(ctx context.Context, sel ast.SelectionSet, v *entity.Category) graphql.Marshaler {
