@@ -1,6 +1,10 @@
 package graphql
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 // A typed-JSON scalar can only be declared for a NAMED type. The guard used
 // to be a deny-list of spellings (`any`, `interface{}` with and without the
@@ -31,4 +35,20 @@ func TestIsGenericGoType(t *testing.T) {
 			t.Errorf("isGenericGoType(%q) = true, want false", id)
 		}
 	}
+}
+
+// graphql.Directives on an edge renders on the edge's field, as it does on a
+// scalar field. It used to be dropped silently, so an edge annotated with an
+// authorization directive was served unguarded while the schema read as if
+// it were guarded.
+func TestGenEdgeField_RendersDirectives(t *testing.T) {
+	graph := mockGraph()
+	g := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"})
+	user := graph.Nodes[0]
+	edge := user.Edges[0] // posts
+	edge.Annotations = map[string]any{AnnotationName: Annotation{Directives: []Directive{
+		NewDirective("requiresScopes", map[string]any{"scopes": [][]string{{"posts:read"}}}),
+	}}}
+	got := g.genEdgeField(user, edge)
+	assert.Contains(t, got, `@requiresScopes(scopes: [["posts:read"]])`)
 }

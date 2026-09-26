@@ -90,6 +90,9 @@ func (g *Generator) genEdgeField(_ *gen.Type, e *gen.Edge) string {
 	} else {
 		fieldDef = fmt.Sprintf("%s: [%s!]!", name, targetType)
 	}
+	// graphql.Directives on the edge, as on a field: an authorization
+	// directive such as @requiresScopes guards an edge like any other field.
+	fieldDef += renderDirectives(g.getEdgeAnnotation(e).GetDirectives())
 
 	if comment != "" {
 		return sdlDescription(comment, "  ") + "  " + fieldDef

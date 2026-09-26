@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
+	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -557,47 +560,95 @@ func renderDirectives(dirs []Directive) string {
 	return " " + strings.Join(parts, " ")
 }
 
-// formatDirectiveArg formats a directive argument value for SDL output.
-// Strings are quoted, booleans and numbers use their literal form.
-// Unsupported types (maps, slices, structs) are quoted as strings
-// to prevent invalid SDL from schema annotations.
+// formatDirectiveArg formats a directive argument value as a GraphQL literal.
+//
+// Lists and input objects are valid argument values -- @requiresScopes takes
+// [[String!]!]!, @cacheControl and federation directives take objects -- and
+// annotations reach the generator through JSON, so a list arrives as []any,
+// an object as map[string]any and every number as float64. Strings are
+// escaped with JSON's rules, which are a subset of GraphQL's; Go's %q is not
+// (\x00, \a). A type with no GraphQL literal is rendered as a quoted string
+// and logged, rather than emitting invalid SDL.
 func formatDirectiveArg(v any) string {
-	switch val := v.(type) {
-	case string:
-		return fmt.Sprintf("%q", val)
-	case bool:
-		return fmt.Sprintf("%t", val)
-	case int:
-		return fmt.Sprintf("%d", val)
-	case int8:
-		return fmt.Sprintf("%d", val)
-	case int16:
-		return fmt.Sprintf("%d", val)
-	case int32:
-		return fmt.Sprintf("%d", val)
-	case int64:
-		return fmt.Sprintf("%d", val)
-	case uint:
-		return fmt.Sprintf("%d", val)
-	case uint8:
-		return fmt.Sprintf("%d", val)
-	case uint16:
-		return fmt.Sprintf("%d", val)
-	case uint32:
-		return fmt.Sprintf("%d", val)
-	case uint64:
-		return fmt.Sprintf("%d", val)
-	case float32:
-		return fmt.Sprintf("%g", val)
-	case float64:
-		return fmt.Sprintf("%g", val)
+	var b strings.Builder
+	writeDirectiveArg(&b, v)
+	return b.String()
+}
+
+func writeDirectiveArg(b *strings.Builder, v any) {
+	if v == nil {
+		b.WriteString("null")
+		return
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.String:
+		writeGraphQLString(b, rv.String())
+	case reflect.Bool:
+		b.WriteString(strconv.FormatBool(rv.Bool()))
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		b.WriteString(strconv.FormatInt(rv.Int(), 10))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		b.WriteString(strconv.FormatUint(rv.Uint(), 10))
+	case reflect.Float32, reflect.Float64:
+		f := rv.Float()
+		// An integer that went through JSON is a float64; 300 must stay
+		// 300, and a large one must not become 1e+06, which is a Float
+		// literal an Int argument rejects.
+		if f == math.Trunc(f) && math.Abs(f) < 1<<53 {
+			b.WriteString(strconv.FormatInt(int64(f), 10))
+		} else {
+			b.WriteString(strconv.FormatFloat(f, 'g', -1, 64))
+		}
+	case reflect.Slice, reflect.Array:
+		b.WriteByte('[')
+		for i := range rv.Len() {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			writeDirectiveArg(b, rv.Index(i).Interface())
+		}
+		b.WriteByte(']')
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			break
+		}
+		keys := make([]string, 0, rv.Len())
+		for _, k := range rv.MapKeys() {
+			keys = append(keys, k.String())
+		}
+		slices.Sort(keys)
+		b.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(k)
+			b.WriteString(": ")
+			writeDirectiveArg(b, rv.MapIndex(reflect.ValueOf(k).Convert(rv.Type().Key())).Interface())
+		}
+		b.WriteByte('}')
+		return
 	default:
-		// Unknown types are quoted as strings to prevent SDL injection.
-		// Maps, slices, and structs are not valid GraphQL directive arguments.
 		slog.Warn("graphql: unsupported directive argument type, using string representation",
 			"type", fmt.Sprintf("%T", v), "value", v)
-		return fmt.Sprintf("%q", fmt.Sprintf("%v", v))
+		writeGraphQLString(b, fmt.Sprintf("%v", v))
+		return
 	}
+	if rv.Kind() == reflect.Map {
+		slog.Warn("graphql: directive argument map without string keys, using string representation",
+			"type", fmt.Sprintf("%T", v), "value", v)
+		writeGraphQLString(b, fmt.Sprintf("%v", v))
+	}
+}
+
+// writeGraphQLString writes s as a GraphQL string literal.
+func writeGraphQLString(b *strings.Builder, s string) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s) // a string always encodes
+	b.Write(bytes.TrimSuffix(buf.Bytes(), []byte("\n")))
 }
 
 // =============================================================================

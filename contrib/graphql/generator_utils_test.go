@@ -730,9 +730,22 @@ func TestFormatDirectiveArg(t *testing.T) {
 		{"bool false", false, "false"},
 		{"float64", 3.14, "3.14"},
 		{"float32", float32(2.5), "2.5"},
-		// Unsupported types are quoted as strings (safe fallback)
-		{"map", map[string]any{"key": "val"}, `"map[key:val]"`},
-		{"slice", []string{"a", "b"}, `"[a b]"`},
+		// Lists and input objects are GraphQL values: @requiresScopes takes
+		// [[String!]!]!, and annotations arrive through JSON as []any,
+		// map[string]any and float64.
+		{"list", []string{"a", "b"}, `["a", "b"]`},
+		{"nested list", [][]string{{"orders:read"}, {"admin"}}, `[["orders:read"], ["admin"]]`},
+		{"list from JSON", []any{[]any{"x"}}, `[["x"]]`},
+		{"object sorted by key", map[string]any{"maxAge": 300.0, "scope": "PRIVATE"}, `{maxAge: 300, scope: "PRIVATE"}`},
+		{"integer from JSON", 300.0, "300"},
+		{"large integer from JSON", 1e6, "1000000"},
+		{"null", nil, "null"},
+		// Escaped as GraphQL, where Go's %q would write \x00 or \a.
+		{"control characters", "a\x00b\a", `"a\u0000b\u0007"`},
+		{"html is not escaped", "<a&b>", `"<a&b>"`},
+		// Something with no GraphQL literal is quoted, not emitted raw.
+		{"struct", struct{ A int }{1}, `"{1}"`},
+		{"map with non-string keys", map[int]string{1: "a"}, `"map[1:a]"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
