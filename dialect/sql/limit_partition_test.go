@@ -1,6 +1,8 @@
 package sql
 
 import (
+	"context"
+	stdsql "database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -116,4 +118,43 @@ func TestDialectBuilderExpr_KeepsArguments(t *testing.T) {
 	query, args := Dialect(dialect.Postgres).Select("a").From(Table("t")).Where(NEQ("b", 1)).OrderExpr(x).Query()
 	require.Equal(t, `SELECT "a" FROM "t" WHERE "b" <> $1 ORDER BY "a" = $2`, query)
 	require.Equal(t, []any{1, 7}, args)
+}
+
+// An aliased selection is exposed by the derived table only under its
+// alias. The outer query selected it by its source column, which the
+// derived table does not have, so the statement failed — reachable from
+// an eager load limited per parent and ordered by a term that selects an
+// alias (sqlgraph's selectTerms); an aliased expression was dropped.
+func TestSelector_LimitPerPartition_KeepsAliases(t *testing.T) {
+	db, err := stdsql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	ctx := context.Background()
+	_, err = db.ExecContext(ctx, `CREATE TABLE posts (id INTEGER PRIMARY KEY, owner_id INTEGER);
+		INSERT INTO posts VALUES (1, 1), (2, 1), (3, 1), (4, 2)`)
+	require.NoError(t, err)
+
+	d := Dialect(dialect.SQLite)
+	posts := d.Table("posts")
+	s := d.Select(posts.C("id")).
+		AppendSelectAs(posts.C("owner_id"), "parent").
+		AppendSelectExprAs(Expr("id * 10"), "score").
+		From(posts).
+		OrderBy(posts.C("id"))
+	s.LimitPerPartition(posts.C("owner_id"), 2)
+	query, args := s.Query()
+	rows, err := db.QueryContext(ctx, query, args...)
+	require.NoError(t, err, query)
+	defer rows.Close()
+	cols, err := rows.Columns()
+	require.NoError(t, err)
+	require.Equal(t, []string{"id", "parent", "score"}, cols)
+	var got [][3]int
+	for rows.Next() {
+		var r [3]int
+		require.NoError(t, rows.Scan(&r[0], &r[1], &r[2]))
+		got = append(got, r)
+	}
+	require.NoError(t, rows.Err())
+	require.ElementsMatch(t, [][3]int{{1, 1, 10}, {2, 1, 20}, {4, 2, 40}}, got)
 }

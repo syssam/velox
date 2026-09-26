@@ -954,14 +954,14 @@ func TestBuilder(t *testing.T) {
 			wantArgs:  []any{"bar", "baz"},
 		},
 		{
-			// EqualFold uses ILIKE for case-insensitive equality, not pattern matching.
-			// LIKE wildcards (%, _) are NOT escaped because they are treated as literal characters.
+			// EqualFold on PostgreSQL is ILIKE, a pattern match: % and _ are
+			// wildcards and must be escaped to compare as themselves.
 			input: Dialect(dialect.Postgres).
 				Select().
 				From(Table("users")).
 				Where(Or(EqualFold("name", "BAR%"), EqualFold("name", "%BAZ"))),
 			wantQuery: `SELECT * FROM "users" WHERE "name" ILIKE $1 OR "name" ILIKE $2`,
-			wantArgs:  []any{"bar%", "%baz"},
+			wantArgs:  []any{"bar\\%", "\\%baz"},
 		},
 		{
 			input: Dialect(dialect.Postgres).
@@ -969,7 +969,7 @@ func TestBuilder(t *testing.T) {
 				From(Table("users")).
 				Where(Or(EqualFold("name", "BAR\\"), EqualFold("name", "\\BAZ"))),
 			wantQuery: `SELECT * FROM "users" WHERE "name" ILIKE $1 OR "name" ILIKE $2`,
-			wantArgs:  []any{"bar\\", "\\baz"},
+			wantArgs:  []any{"bar\\\\", "\\\\baz"},
 		},
 		{
 			input: Dialect(dialect.MySQL).
@@ -2498,4 +2498,33 @@ func TestSubqueryErrorsReachTheOuterQuery(t *testing.T) {
 	u := Union(Select("id").From(Table("users")), branch)
 	u.Query()
 	require.ErrorIs(t, u.(interface{ Err() error }).Err(), denied, "union branch")
+}
+
+// TestQuery_RenderingIsRepeatable pins that rendering a DELETE, or a
+// statement prefixed by a WITH clause, twice gives the same SQL. Both wrote
+// into their own buffer, so a second render appended a second statement
+// (`DELETE … ?DELETE … ?`) or a doubled `WITH …`.
+func TestQuery_RenderingIsRepeatable(t *testing.T) {
+	for name, q := range map[string]Querier{
+		"delete": Delete("users").Where(EQ("id", 1)),
+		"with":   Select("*").From(Table("v")).Prefix(With("v").As(Select().From(Table("users")))),
+	} {
+		q1, a1 := q.Query()
+		q2, a2 := q.Query()
+		require.Equal(t, q1, q2, name)
+		require.Equal(t, a1, a2, name)
+	}
+}
+
+// TestUpdateSet_UpdateColumnsInResolver pins that an ON CONFLICT resolver
+// sees the columns it sets, not the INSERT's: sqlgraph's MySQL upsert asks
+// UpdateColumns whether the ID column is already being updated.
+func TestUpdateSet_UpdateColumnsInResolver(t *testing.T) {
+	var got []string
+	Dialect(dialect.MySQL).Insert("users").Columns("name", "age").Values("a", 1).
+		OnConflict(ResolveWith(func(u *UpdateSet) {
+			u.Set("score", 1)
+			got = u.UpdateColumns()
+		})).Query()
+	require.Equal(t, []string{"score"}, got)
 }

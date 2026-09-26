@@ -362,8 +362,11 @@ func TestUpdateSetColumns(t *testing.T) {
 		columns:       []string{"name", "age"},
 	}
 	u.UpdateBuilder.SetNull("active")
+	u.UpdateBuilder.Set("score", 1)
 	require.Equal(t, []string{"name", "age"}, u.Columns())
-	require.Equal(t, []string{"active", "name", "age"}, u.UpdateColumns())
+	// The UPDATE columns, not the INSERT ones: ensureLastInsertID reads
+	// them to decide whether the ID column is already being set.
+	require.Equal(t, []string{"active", "score"}, u.UpdateColumns())
 }
 
 // ---------------------------------------------------------------------------

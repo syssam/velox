@@ -554,18 +554,26 @@ func (p *PathOptions) mysqlFunc(fn string, b *sql.Builder) {
 
 // mysqlPath writes the JSON path in MySQL (or SQLite) format.
 func (p *PathOptions) mysqlPath(b *sql.Builder) {
-	b.WriteString(`'$`)
+	var path strings.Builder
+	path.WriteByte('$')
 	for _, p := range p.Path {
 		switch _, isIndex := isJSONIdx(p); {
 		case isIndex:
-			b.WriteString(p)
+			path.WriteString(p)
 		case p == "*" || isQuoted(p) || isIdentifier(p):
-			b.WriteString("." + p)
+			path.WriteString("." + p)
 		default:
-			b.WriteString(`."` + p + `"`)
+			path.WriteString(`."` + p + `"`)
 		}
 	}
-	b.Byte('\'')
+	// The path is a string literal: a quote in a key ended it early, so
+	// the rest of the key ran as SQL. MySQL also reads backslash escapes
+	// in literals, where `\'` would re-escape the doubled quote.
+	lit := path.String()
+	if b.Dialect() == dialect.MySQL {
+		lit = strings.ReplaceAll(lit, `\`, `\\`)
+	}
+	b.WriteString("'" + strings.ReplaceAll(lit, "'", "''") + "'")
 }
 
 // pgTextPath writes the JSON path in PostgreSQL text format: `"a"->'b'->>'c'`.
@@ -594,11 +602,20 @@ func (p *PathOptions) pgArrayPath(b *sql.Builder) {
 		if idx, ok := isJSONIdx(s); ok {
 			s = idx
 		}
-		// Escape single quotes and closing braces in path components.
-		s = strings.ReplaceAll(s, "'", "''")
-		b.WriteString(s)
+		b.WriteString(strings.ReplaceAll(pgArrayElem(s), "'", "''"))
 	}
 	b.WriteString("}'")
+}
+
+// pgArrayElem quotes a text[] element when the array syntax would
+// otherwise read it differently: a comma splits it in two, braces nest,
+// whitespace is trimmed, and a bare NULL is the null element.
+func pgArrayElem(s string) string {
+	if s != "" && !strings.EqualFold(s, "NULL") && !strings.ContainsAny(s, ",{}\"\\ \t\n\r\v\f") {
+		return s
+	}
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+	return `"` + r.Replace(s) + `"`
 }
 
 // ParsePath parses the "dotpath" for the DotPath option.

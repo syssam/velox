@@ -530,3 +530,37 @@ func TestAppend(t *testing.T) {
 		})
 	}
 }
+
+// TestPath_KeysAreEscapedInLiterals pins that a path key cannot end the
+// string literal the path is written into. MySQL and SQLite wrote the key
+// raw into '$."…"', so a quote in it ran the rest of the key as SQL; on
+// MySQL a backslash before the doubled quote re-escaped it. PostgreSQL's
+// text[] path split a key containing a comma into two path elements.
+func TestPath_KeysAreEscapedInLiterals(t *testing.T) {
+	for _, tt := range []struct {
+		dialect, key, want string
+	}{
+		{dialect.SQLite, "it's", "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"it''s\"') = ?"},
+		{dialect.MySQL, "it's", "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"it''s\"') = ?"},
+		{dialect.MySQL, `a\' OR 1=1 -- `, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\\\'' OR 1=1 -- \"') = ?"},
+		{dialect.SQLite, `a\b`, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\b\"') = ?"},
+	} {
+		q, _ := sql.Dialect(tt.dialect).Select("*").From(sql.Table("t")).
+			Where(sqljson.ValueEQ("c", 1, sqljson.Path(tt.key))).Query()
+		require.Equal(t, tt.want, q, "%s %q", tt.dialect, tt.key)
+	}
+
+	for key, want := range map[string]string{
+		"a,b":   `'{"a,b"}'`,
+		`q"x`:   `'{"q\"x"}'`,
+		"it's":  `'{it''s}'`,
+		"NULL":  `'{"NULL"}'`,
+		"a b":   `'{"a b"}'`,
+		"plain": `'{plain}'`,
+	} {
+		u := sql.Dialect(dialect.Postgres).Update("t")
+		sqljson.Append(u, "c", []string{"x"}, sqljson.Path(key))
+		q, _ := u.Query()
+		require.Contains(t, q, "jsonb_set(\"c\", "+want+",", "key %q: %s", key, q)
+	}
+}

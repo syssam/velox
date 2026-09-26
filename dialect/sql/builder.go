@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -419,7 +420,8 @@ func (u *UpdateSet) Columns() []string {
 
 // UpdateColumns returns all columns in the `UPDATE` statement.
 func (u *UpdateSet) UpdateColumns() []string {
-	return append(u.nulls, u.columns...)
+	// u.columns alone resolves to the INSERT columns, not the UPDATE ones.
+	return append(slices.Clone(u.nulls), u.UpdateBuilder.columns...)
 }
 
 // Set sets a column to a given value.
@@ -773,14 +775,18 @@ func (d *DeleteBuilder) FromSelect(s *Selector) *DeleteBuilder {
 
 // Query returns query representation of a `DELETE` statement.
 func (d *DeleteBuilder) Query() (string, []any) {
-	d.WriteString("DELETE FROM ")
-	d.writeSchema(d.schema)
-	d.Ident(d.table)
+	// Render into a clone, as UpdateBuilder does: writing into d appended
+	// a second statement to the first on every further call.
+	b := d.clone()
+	b.WriteString("DELETE FROM ")
+	b.writeSchema(d.schema)
+	b.Ident(d.table)
 	if d.where != nil {
-		d.WriteString(" WHERE ")
-		d.Join(d.where)
+		b.WriteString(" WHERE ")
+		b.Join(d.where)
 	}
-	return d.String(), d.args
+	d.AddError(b.Err())
+	return b.String(), b.args
 }
 
 // Predicate is a where predicate.
@@ -1344,11 +1350,12 @@ func (p *Predicate) EqualFold(col, sub string) *Predicate {
 			b.Ident(col).WriteString(" COLLATE utf8mb4_general_ci = ")
 			b.Arg(strings.ToLower(sub))
 		case dialect.Postgres:
-			// ILIKE is case-insensitive equality, not a LIKE pattern.
-			// Do not escape LIKE wildcards (%, _) — they have no special
-			// meaning in this context and escaping would corrupt the value.
+			// ILIKE is a pattern match: an unescaped % or _ in sub is a
+			// wildcard, so EqualFold("name", "a%") matched every name
+			// starting with "a". Backslash is ILIKE's default escape.
 			b.Ident(col).WriteString(" ILIKE ")
-			b.Arg(strings.ToLower(sub))
+			w, _ := escape(sub)
+			b.Arg(strings.ToLower(w))
 		default: // SQLite.
 			f.Lower(col)
 			b.WriteString(f.String())
@@ -1921,21 +1928,24 @@ func (s *Selector) SelectedColumns() []string {
 func (s *Selector) UnqualifiedColumns() []string {
 	columns := make([]string, 0, len(s.selection))
 	for i := range s.selection {
-		c := s.selection[i].c
-		if c == "" {
-			continue
+		if c := s.selection[i].c; c != "" {
+			columns = append(columns, s.unqualified(c))
 		}
-		if s.isIdent(c) {
-			parts := strings.FieldsFunc(c, func(r rune) bool {
-				return r == '`' || r == '"'
-			})
-			if n := len(parts); n > 0 && parts[n-1] != "" {
-				c = parts[n-1]
-			}
-		}
-		columns = append(columns, c)
 	}
 	return columns
+}
+
+// unqualified strips the table qualifier from a quoted column identifier.
+func (s *Selector) unqualified(c string) string {
+	if s.isIdent(c) {
+		parts := strings.FieldsFunc(c, func(r rune) bool {
+			return r == '`' || r == '"'
+		})
+		if n := len(parts); n > 0 && parts[n-1] != "" {
+			c = parts[n-1]
+		}
+	}
+	return c
 }
 
 // From sets the source of `FROM` clause.
@@ -2933,26 +2943,30 @@ func (w *WithBuilder) C(column string) string {
 
 // Query returns query representation of a `WITH` clause.
 func (w *WithBuilder) Query() (string, []any) {
-	w.WriteString("WITH ")
+	// Render into a clone: writing into w repeated the WITH clause each
+	// time the statement it prefixes was rendered again.
+	b := w.clone()
+	b.WriteString("WITH ")
 	if w.recursive {
-		w.WriteString("RECURSIVE ")
+		b.WriteString("RECURSIVE ")
 	}
 	for i, cte := range w.ctes {
 		if i > 0 {
-			w.Comma()
+			b.Comma()
 		}
-		w.Ident(cte.name)
+		b.Ident(cte.name)
 		if len(cte.columns) > 0 {
-			w.Byte('(')
-			w.IdentComma(cte.columns...)
-			w.Byte(')')
+			b.Byte('(')
+			b.IdentComma(cte.columns...)
+			b.Byte(')')
 		}
-		w.WriteString(" AS ")
-		w.Wrap(func(b *Builder) {
+		b.WriteString(" AS ")
+		b.Wrap(func(b *Builder) {
 			b.Join(cte.s)
 		})
 	}
-	return w.String(), w.args
+	w.AddError(b.Err())
+	return b.String(), b.args
 }
 
 // implement the table view interface.
@@ -3082,7 +3096,17 @@ func (s *Selector) LimitPerPartition(partition string, n int) *Selector {
 	inner.SetDistinct(false)
 	w := RowNumber().PartitionBy(partition)
 	w.order = order
-	columns := inner.UnqualifiedColumns()
+	// The outer query reads the derived table, which exposes an aliased
+	// selection only by its alias (UnqualifiedColumns gives the source
+	// column and skips aliased expressions).
+	columns := make([]string, 0, len(inner.selection))
+	for _, sel := range inner.selection {
+		if sel.as != "" {
+			columns = append(columns, sel.as)
+		} else if sel.c != "" {
+			columns = append(columns, inner.unqualified(sel.c))
+		}
+	}
 	inner.AppendSelectExprAs(w, partitionRowNumber)
 	alias := s.as
 	if alias == "" {
