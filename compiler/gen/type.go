@@ -339,6 +339,9 @@ func (t Type) Receiver() string {
 
 // Pos returns the filename:line position information of this type in the schema.
 func (t Type) Pos() string {
+	if t.schema == nil {
+		return ""
+	}
 	return t.schema.Pos
 }
 

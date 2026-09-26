@@ -46,7 +46,7 @@ func TestGenMigrateSchema_OnDeleteAnnotationCompilesAndRendersConstName(t *testi
 	}}
 	helper.graph.Nodes = []*gen.Type{userType, postType}
 
-	code := genMigrateSchema(helper).GoString()
+	code := mustMigrateSchema(t, helper).GoString()
 	t.Log("\n" + code)
 	assert.Contains(t, code, "schema.Cascade",
 		"FK OnDelete must render the Go constant schema.Cascade")
@@ -92,7 +92,7 @@ func TestGenMigrateSchema_OnDeleteOnAssocEdgeRendersOnM2OSide(t *testing.T) {
 	}}
 	helper.graph.Nodes = []*gen.Type{userType, postType}
 
-	code := genMigrateSchema(helper).GoString()
+	code := mustMigrateSchema(t, helper).GoString()
 	t.Log("\n" + code)
 	assert.Contains(t, code, "schema.Cascade",
 		"assoc-side (e.Ref) OnDelete annotation must render schema.Cascade on the M2O FK")
@@ -122,13 +122,7 @@ func TestDeleteAction_OnDeleteAnnotationRendersConstName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.action), func(t *testing.T) {
-			edge := &gen.Edge{
-				Name: "children",
-				Annotations: gen.Annotations{
-					sqlschema.AnnotationName: sqlschema.Annotation{OnDelete: tc.action},
-				},
-			}
-			rendered := fmt.Sprintf("%#v", deleteAction(edge))
+			rendered := fmt.Sprintf("%#v", referenceOption(tc.action))
 			assert.Contains(t, rendered, "schema."+tc.wantConst,
 				"OnDelete %q must render the Go constant schema.%s", tc.action, tc.wantConst)
 			assert.NotContains(t, rendered, "schema."+tc.badLiteral,
@@ -146,7 +140,8 @@ func TestGenMigrate_ReturnsTwoFiles(t *testing.T) {
 	helper := newMockHelper()
 	helper.graph.Nodes = []*gen.Type{createTestType("User")}
 
-	files := genMigrate(helper)
+	files, err := genMigrate(helper)
+	require.NoError(t, err)
 	assert.NotNil(t, files.Schema)
 	assert.NotNil(t, files.Migrate)
 }
@@ -160,7 +155,7 @@ func TestGenMigrateSchema_BasicEntity(t *testing.T) {
 	helper := newMockHelper()
 	helper.graph.Nodes = []*gen.Type{createTestType("User")}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -180,7 +175,7 @@ func TestGenMigrateSchema_MultipleEntities(t *testing.T) {
 		createTestType("Comment"),
 	}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -194,38 +189,12 @@ func TestGenMigrateSchema_MultipleEntities(t *testing.T) {
 
 func TestGenMigrateSchema_WithEdges(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-	userType := createTestType("User")
-	postType := createTestType("Post")
-
-	postType.Edges = []*gen.Edge{{
-		Name:   "author",
-		Type:   userType,
-		Unique: true,
-		Rel: gen.Relation{
-			Type:    gen.M2O,
-			Table:   "posts",
-			Columns: []string{"author_id"},
-		},
-	}}
-	userType.Edges = []*gen.Edge{{
-		Name:   "posts",
-		Type:   postType,
-		Unique: false,
-		Rel: gen.Relation{
-			Type:    gen.O2M,
-			Table:   "posts",
-			Columns: []string{"author_id"},
-		},
-	}}
-	helper.graph.Nodes = []*gen.Type{userType, postType}
-
-	file := genMigrateSchema(helper)
-	require.NotNil(t, file)
-
-	code := file.GoString()
+	code := migrateSchemaFor(t,
+		&load.Schema{Name: "User", Edges: []*load.Edge{{Name: "posts", Type: "Post"}}},
+		&load.Schema{Name: "Post", Edges: []*load.Edge{{Name: "author", Type: "User", RefName: "posts", Inverse: true, Unique: true}}},
+	)
 	assert.Contains(t, code, "PostTable")
-	assert.Contains(t, code, "ForeignKeys")
+	assert.Contains(t, code, `"user_posts"`, "the O2M FK column on posts")
 	assert.Contains(t, code, "func init()")
 }
 
@@ -240,24 +209,10 @@ func TestGenMigrateSchema_WithEdges(t *testing.T) {
 // join-table path (its own literal emission sites).
 func TestGenMigrateSchema_GofmtSimplifiedLiterals(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-	postType := createTestType("Post")
-	tagType := createTestType("Tag")
-
-	postType.Edges = []*gen.Edge{{
-		Name: "tags", Type: tagType, Unique: false,
-		Rel: gen.Relation{Type: gen.M2M, Table: "post_tags", Columns: []string{"post_id", "tag_id"}},
-	}}
-	tagType.Edges = []*gen.Edge{{
-		Name: "posts", Type: postType, Unique: false, Inverse: "tags",
-		Rel: gen.Relation{Type: gen.M2M, Table: "post_tags", Columns: []string{"post_id", "tag_id"}},
-	}}
-	helper.graph.Nodes = []*gen.Type{postType, tagType}
-
-	file := genMigrateSchema(helper)
-	require.NotNil(t, file)
-	code := file.GoString()
-
+	code := migrateSchemaFor(t,
+		&load.Schema{Name: "Post", Edges: []*load.Edge{{Name: "tags", Type: "Tag"}}},
+		&load.Schema{Name: "Tag", Edges: []*load.Edge{{Name: "posts", Type: "Post", RefName: "tags", Inverse: true}}},
+	)
 	require.Contains(t, code, "PostTagsColumns", "fixture must reach the join-table path")
 	assert.NotContains(t, code, "&schema.Column{",
 		"column slice elements must be bare {...} literals (gofmt -s form)")
@@ -285,7 +240,7 @@ func TestGenMigrateSchema_WithM2OEdgeAndFK(t *testing.T) {
 	postType.Edges = []*gen.Edge{m2oEdge}
 	helper.graph.Nodes = []*gen.Type{userType, postType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -317,7 +272,7 @@ func TestGenMigrateSchema_WithO2OEdge(t *testing.T) {
 	profileType.Edges = []*gen.Edge{o2oEdge}
 	helper.graph.Nodes = []*gen.Type{userType, profileType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -336,7 +291,7 @@ func TestGenMigrateSchema_WithFields(t *testing.T) {
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -358,7 +313,7 @@ func TestGenMigrateSchema_WithSchemaFields(t *testing.T) {
 	})
 	helper.graph.Nodes = []*gen.Type{userType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -369,46 +324,14 @@ func TestGenMigrateSchema_WithSchemaFields(t *testing.T) {
 
 func TestGenMigrateSchema_WithM2OEdgeAndFKInit(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-	userType := createTestTypeWithSchema(t, "User", &load.Schema{})
-	postType := createTestTypeWithSchema(t, "Post", &load.Schema{})
-
-	// M2O edge with Rel.Columns set so edgeFKColumn returns non-nil
-	// and the init() body generates FK ref table assignments
-	m2oEdge := &gen.Edge{
-		Name:   "author",
-		Type:   userType,
-		Unique: true,
-		Rel: gen.Relation{
-			Type:    gen.M2O,
-			Table:   "posts",
-			Columns: []string{"author_id"},
-		},
-	}
-	postType.Edges = []*gen.Edge{m2oEdge}
-	// Also add the O2M reverse edge on user
-	o2mEdge := &gen.Edge{
-		Name:   "posts",
-		Type:   postType,
-		Unique: false,
-		Rel: gen.Relation{
-			Type:    gen.O2M,
-			Table:   "posts",
-			Columns: []string{"author_id"},
-		},
-	}
-	userType.Edges = []*gen.Edge{o2mEdge}
-	helper.graph.Nodes = []*gen.Type{userType, postType}
-
-	file := genMigrateSchema(helper)
-	require.NotNil(t, file)
-
-	code := file.GoString()
-	// The init() should contain FK ref table assignment
-	assert.Contains(t, code, "RefTable")
-	assert.Contains(t, code, "PostTable")
-	assert.Contains(t, code, "UserTable")
-	assert.Contains(t, code, "ForeignKeys")
+	code := migrateSchemaFor(t,
+		&load.Schema{Name: "User", Edges: []*load.Edge{{Name: "posts", Type: "Post"}}},
+		&load.Schema{Name: "Post", Edges: []*load.Edge{{Name: "author", Type: "User", RefName: "posts", Inverse: true, Unique: true}}},
+	)
+	// RefTable is assigned in init(): as a literal, a self or mutual
+	// reference would be an initialization cycle.
+	assert.Contains(t, code, "PostTable.ForeignKeys[0].RefTable = UserTable")
+	assert.Contains(t, code, "RefColumns: []*schema.Column{UserColumns[0]}")
 }
 
 func TestGenMigrateSchema_MultipleM2OEdges(t *testing.T) {
@@ -443,7 +366,7 @@ func TestGenMigrateSchema_MultipleM2OEdges(t *testing.T) {
 	}
 	helper.graph.Nodes = []*gen.Type{userType, categoryType, postType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -454,33 +377,13 @@ func TestGenMigrateSchema_MultipleM2OEdges(t *testing.T) {
 
 func TestGenMigrateSchema_O2OEdgeInverseOwnFK(t *testing.T) {
 	t.Parallel()
-	helper := newMockHelper()
-	userType := createTestTypeWithSchema(t, "User", &load.Schema{})
-	profileType := createTestTypeWithSchema(t, "Profile", &load.Schema{})
-
-	// O2O edge where profile owns FK (inverse side holds the FK in Velox convention)
-	profileType.Edges = []*gen.Edge{
-		{
-			Name:    "owner",
-			Inverse: "profile",
-			Type:    userType,
-			Unique:  true,
-			Rel: gen.Relation{
-				Type:    gen.O2O,
-				Table:   "profiles",
-				Columns: []string{"owner_id"},
-			},
-		},
-	}
-	helper.graph.Nodes = []*gen.Type{userType, profileType}
-
-	file := genMigrateSchema(helper)
-	require.NotNil(t, file)
-
-	code := file.GoString()
-	assert.Contains(t, code, "ProfileTable")
-	assert.Contains(t, code, "ForeignKeys")
-	assert.Contains(t, code, "RefTable")
+	// O2O: the inverse side (Profile.owner) holds the FK.
+	code := migrateSchemaFor(t,
+		&load.Schema{Name: "User", Edges: []*load.Edge{{Name: "profile", Type: "Profile", Unique: true}}},
+		&load.Schema{Name: "Profile", Edges: []*load.Edge{{Name: "owner", Type: "User", RefName: "profile", Inverse: true, Unique: true}}},
+	)
+	assert.Contains(t, code, `Name:     "user_profile"`)
+	assert.Contains(t, code, "ProfileTable.ForeignKeys[0].RefTable = UserTable")
 }
 
 func TestGenMigrateSchema_O2OBidiOwnFK(t *testing.T) {
@@ -504,7 +407,7 @@ func TestGenMigrateSchema_O2OBidiOwnFK(t *testing.T) {
 	}
 	helper.graph.Nodes = []*gen.Type{userType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -521,7 +424,7 @@ func TestGenMigrateSchema_WithIndexes(t *testing.T) {
 	}
 	helper.graph.Nodes = []*gen.Type{userType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -544,7 +447,7 @@ func TestGenMigrateSchema_PartialIndexWhereClause(t *testing.T) {
 	}}
 	helper.graph.Nodes = []*gen.Type{userType}
 
-	file := genMigrateSchema(helper)
+	file := mustMigrateSchema(t, helper)
 	require.NotNil(t, file)
 
 	code := file.GoString()
@@ -734,7 +637,7 @@ func TestDeleteAction(t *testing.T) {
 		// matching Ent. Assert the RENDERED action — the prior non-nil check could
 		// not tell SetNull from any other action, leaving this default unpinned.
 		edge := &gen.Edge{Name: "profile", Optional: true}
-		rendered := fmt.Sprintf("%#v", deleteAction(edge))
+		rendered := fmt.Sprintf("%#v", referenceOption(edge.DeleteAction(edge.Optional)))
 		assert.Contains(t, rendered, "schema.SetNull",
 			"optional/nullable FK defaults to SetNull (matches Ent)")
 	})
@@ -745,60 +648,11 @@ func TestDeleteAction(t *testing.T) {
 		// ("..._to_Cascade") and only checked non-nil, so it asserted nothing and
 		// the wrong name went unnoticed.
 		edge := &gen.Edge{Name: "author", Optional: false}
-		rendered := fmt.Sprintf("%#v", deleteAction(edge))
+		rendered := fmt.Sprintf("%#v", referenceOption(edge.DeleteAction(edge.Optional)))
 		assert.Contains(t, rendered, "schema.NoAction",
 			"required/non-nullable FK defaults to NoAction (matches Ent)")
 		assert.NotContains(t, rendered, "schema.Cascade",
 			"required FK must NOT default to Cascade")
-	})
-}
-
-func TestEdgeFKColumn(t *testing.T) {
-	t.Parallel()
-	t.Run("M2O_edge_generates_FK_column", func(t *testing.T) {
-		userType := createTestType("User")
-		postType := createTestType("Post")
-
-		edge := &gen.Edge{
-			Name: "author", Type: userType, Unique: true,
-			Rel: gen.Relation{Type: gen.M2O, Columns: []string{"author_id"}},
-		}
-		col := edgeFKColumn(edge, postType)
-		require.NotNil(t, col)
-		assert.Equal(t, "author_id", col.Name)
-		assert.Equal(t, field.TypeInt64, col.Type)
-		assert.False(t, col.Nullable)
-	})
-
-	t.Run("O2M_edge_returns_nil", func(t *testing.T) {
-		postType := createTestType("Post")
-		edge := &gen.Edge{
-			Name: "posts", Type: postType, Unique: false,
-			Rel: gen.Relation{Type: gen.O2M},
-		}
-		col := edgeFKColumn(edge, createTestType("User"))
-		assert.Nil(t, col)
-	})
-
-	t.Run("optional_edge_nullable_FK", func(t *testing.T) {
-		userType := createTestType("User")
-		edge := &gen.Edge{
-			Name: "author", Type: userType, Unique: true, Optional: true,
-			Rel: gen.Relation{Type: gen.M2O, Columns: []string{"author_id"}},
-		}
-		col := edgeFKColumn(edge, createTestType("Post"))
-		require.NotNil(t, col)
-		assert.True(t, col.Nullable)
-	})
-
-	t.Run("M2M_edge_returns_nil", func(t *testing.T) {
-		tagType := createTestType("Tag")
-		edge := &gen.Edge{
-			Name: "tags", Type: tagType, Unique: false,
-			Rel: gen.Relation{Type: gen.M2M},
-		}
-		col := edgeFKColumn(edge, createTestType("Post"))
-		assert.Nil(t, col)
 	})
 }
 
@@ -894,31 +748,6 @@ func TestGenColumnDict(t *testing.T) {
 	})
 }
 
-func TestFindColumnIndex(t *testing.T) {
-	t.Parallel()
-	typ := createTestType("User")
-
-	t.Run("id_column", func(t *testing.T) {
-		assert.Equal(t, 0, findColumnIndex(typ, "id"))
-	})
-
-	t.Run("first_field", func(t *testing.T) {
-		assert.Equal(t, 1, findColumnIndex(typ, "name"))
-	})
-
-	t.Run("second_field", func(t *testing.T) {
-		assert.Equal(t, 2, findColumnIndex(typ, "email"))
-	})
-
-	t.Run("third_field", func(t *testing.T) {
-		assert.Equal(t, 3, findColumnIndex(typ, "age"))
-	})
-
-	t.Run("not_found_returns_negative_one", func(t *testing.T) {
-		assert.Equal(t, -1, findColumnIndex(typ, "nonexistent"))
-	})
-}
-
 // =============================================================================
 // Integration Tests
 // =============================================================================
@@ -938,7 +767,8 @@ func TestGenMigrate_FullWorkflow(t *testing.T) {
 	}}
 	helper.graph.Nodes = []*gen.Type{userType, postType}
 
-	files := genMigrate(helper)
+	files, err := genMigrate(helper)
+	require.NoError(t, err)
 	require.NotNil(t, files.Schema)
 	require.NotNil(t, files.Migrate)
 
@@ -968,143 +798,6 @@ func BenchmarkPascal(b *testing.B) {
 			_ = pascal(input)
 		}
 	}
-}
-
-// =============================================================================
-// genPrimaryKey Tests
-// =============================================================================
-
-func TestGenPrimaryKey(t *testing.T) {
-	t.Parallel()
-	userType := createTestType("User")
-
-	code := genPrimaryKey(userType, "UserColumns", migrateSchemaPkg)
-	assert.NotNil(t, code)
-
-	// Render the code to verify structure
-	f := jen.NewFile("test")
-	f.Var().Id("pk").Op("=").Add(code)
-	output := f.GoString()
-	assert.Contains(t, output, "UserColumns")
-	assert.Contains(t, output, "schema")
-}
-
-// =============================================================================
-// genForeignKeysSchema Tests
-// =============================================================================
-
-func TestGenForeignKeysSchema_NoEdges(t *testing.T) {
-	t.Parallel()
-	userType := createTestType("User")
-	userType.Edges = nil
-
-	code := genForeignKeysSchema(userType)
-	assert.NotNil(t, code)
-
-	f := jen.NewFile("test")
-	f.Var().Id("fks").Op("=").Add(code)
-	output := f.GoString()
-	assert.Contains(t, output, "nil")
-}
-
-func TestGenForeignKeysSchema_WithM2OEdge(t *testing.T) {
-	t.Parallel()
-	userType := createTestType("User")
-	postType := createTestType("Post")
-
-	edge := createM2OEdge("author", userType, "posts", "author_id")
-	postType.Edges = []*gen.Edge{edge}
-
-	code := genForeignKeysSchema(postType)
-	assert.NotNil(t, code)
-
-	f := jen.NewFile("test")
-	f.Var().Id("fks").Op("=").Add(code)
-	output := f.GoString()
-	// Symbol format: {ownerTable}_{refTable}_{assocEdgeName} (matches graph_tables.go
-	// fkSymbol and Ent). This M2O edge is standalone (no inverse), so the assoc name
-	// is the edge's own name "author". A bidirectional M2O (inverse side) instead
-	// uses e.Inverse — see TestGenForeignKeysSchema_BidiM2OUsesAssocName.
-	assert.Contains(t, output, "Symbol")
-	assert.Contains(t, output, "posts_users_author")
-}
-
-// TestGenForeignKeysSchema_BidiM2OUsesAssocName pins the assoc-name rule for the
-// bidirectional case — the one the standalone WithM2OEdge test never exercised, so
-// the M2O FK constraint symbol silently drifted from graph_tables.go and Ent. For a
-// bidirectional O2M/M2O pair the FK is emitted from the M2O (inverse) side, but the
-// symbol must use the assoc edge name (e.Inverse), not the M2O edge's own name.
-func TestGenForeignKeysSchema_BidiM2OUsesAssocName(t *testing.T) {
-	t.Parallel()
-	postType := createTestType("Post")
-	commentType := createTestType("Comment")
-	// Comment.post: the M2O / FK-owning side of Post --O2M--> Comment. It is an
-	// inverse edge whose assoc-edge name (on Post) is "comments".
-	edge := createM2OEdge("post", postType, "comments", "post_comments")
-	edge.Inverse = "comments"
-	commentType.Edges = []*gen.Edge{edge}
-
-	f := jen.NewFile("test")
-	f.Var().Id("fks").Op("=").Add(genForeignKeysSchema(commentType))
-	code := f.GoString()
-	assert.Contains(t, code, "comments_posts_comments",
-		"bidirectional M2O FK symbol must use the assoc edge name (matches graph_tables.go + Ent)")
-	assert.NotContains(t, code, "comments_posts_post",
-		"must NOT use the M2O edge name — that was the silent drift from the reference builder and Ent")
-}
-
-func TestGenForeignKeysSchema_SkipsO2M(t *testing.T) {
-	t.Parallel()
-	userType := createTestType("User")
-	postType := createTestType("Post")
-
-	edge := createO2MEdge("posts", postType, "posts", "user_id")
-	userType.Edges = []*gen.Edge{edge}
-
-	code := genForeignKeysSchema(userType)
-	assert.NotNil(t, code)
-
-	f := jen.NewFile("test")
-	f.Var().Id("fks").Op("=").Add(code)
-	output := f.GoString()
-	// O2M edges don't own FK, so should be nil
-	assert.Contains(t, output, "nil")
-}
-
-// =============================================================================
-// genIndexesSchema Tests
-// =============================================================================
-
-func TestGenIndexesSchema_NoIndexes(t *testing.T) {
-	t.Parallel()
-	userType := createTestType("User")
-	userType.Indexes = nil
-
-	code := genIndexesSchema(userType, migrateSchemaPkg)
-	assert.NotNil(t, code)
-
-	f := jen.NewFile("test")
-	f.Var().Id("idxs").Op("=").Add(code)
-	output := f.GoString()
-	assert.Contains(t, output, "nil")
-}
-
-func TestGenIndexesSchema_WithIndexes(t *testing.T) {
-	t.Parallel()
-	userType := createTestType("User")
-	userType.Indexes = []*gen.Index{
-		{Name: "user_email", Unique: true, Columns: []string{"email"}},
-		{Name: "user_status_name", Unique: false, Columns: []string{"status", "name"}},
-	}
-
-	code := genIndexesSchema(userType, migrateSchemaPkg)
-	assert.NotNil(t, code)
-
-	f := jen.NewFile("test")
-	f.Var().Id("idxs").Op("=").Add(code)
-	output := f.GoString()
-	assert.Contains(t, output, "user_email")
-	assert.Contains(t, output, "user_status_name")
 }
 
 func BenchmarkFieldTypeCode(b *testing.B) {
@@ -1199,7 +892,7 @@ func TestMigrateSchemaMatchesReferenceBuilder(t *testing.T) {
 
 	helper := newMockHelper()
 	helper.graph = graph
-	code := genMigrateSchema(helper).GoString()
+	code := mustMigrateSchema(t, helper).GoString()
 
 	// jen.Dict renders keys alphabetically, so OnDelete precedes Symbol
 	// within each ForeignKey literal.
@@ -1212,4 +905,26 @@ func TestMigrateSchemaMatchesReferenceBuilder(t *testing.T) {
 
 	assert.Equal(t, want, got,
 		"the reference builder and the shipped migrate schema disagree on FK symbols or referential actions")
+}
+
+// mustMigrateSchema renders migrate/schema.go, failing the test on a
+// Graph.Tables error.
+func mustMigrateSchema(t testing.TB, h gen.GeneratorHelper) *jen.File {
+	t.Helper()
+	f, err := genMigrateSchema(h)
+	if err != nil {
+		t.Fatalf("genMigrateSchema: %v", err)
+	}
+	return f
+}
+
+// migrateSchemaFor renders migrate/schema.go for a graph built from real
+// schemas, so edges are resolved on both sides as in generation.
+func migrateSchemaFor(t testing.TB, schemas ...*load.Schema) string {
+	t.Helper()
+	graph, err := gen.NewGraph(&gen.Config{Package: "example.com/app/velox"}, schemas...)
+	require.NoError(t, err)
+	helper := newMockHelper()
+	helper.graph = graph
+	return mustMigrateSchema(t, helper).GoString()
 }

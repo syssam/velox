@@ -180,7 +180,7 @@ func (d *Dialect) GenFeature(feature string) (*jen.File, error) {
 }
 
 // GenMigrate generates the migrate package files.
-func (d *Dialect) GenMigrate() (gen.MigrateFiles, error) { return genMigrate(d.helper), nil }
+func (d *Dialect) GenMigrate() (gen.MigrateFiles, error) { return genMigrate(d.helper) }
 
 // GenSchemaConfig generates the internal/schemaconfig.go file.
 func (d *Dialect) GenSchemaConfig() (*jen.File, error) {

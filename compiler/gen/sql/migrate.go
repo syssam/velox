@@ -18,11 +18,15 @@ import (
 // This creates two files:
 //   - migrate/schema.go: Table and column definitions
 //   - migrate/migrate.go: Schema type with Create() method
-func genMigrate(h gen.GeneratorHelper) gen.MigrateFiles {
-	return gen.MigrateFiles{
-		Schema:  genMigrateSchema(h),
-		Migrate: genMigrateMigrate(h),
+func genMigrate(h gen.GeneratorHelper) (gen.MigrateFiles, error) {
+	schemaFile, err := genMigrateSchema(h)
+	if err != nil {
+		return gen.MigrateFiles{}, err
 	}
+	return gen.MigrateFiles{
+		Schema:  schemaFile,
+		Migrate: genMigrateMigrate(h),
+	}, nil
 }
 
 // migrateSchemaPkg is the import path of the migration schema package
@@ -31,211 +35,180 @@ func genMigrate(h gen.GeneratorHelper) gen.MigrateFiles {
 const migrateSchemaPkg = "github.com/syssam/velox/dialect/sql/schema"
 
 // genMigrateSchema generates migrate/schema.go with table definitions.
-func genMigrateSchema(h gen.GeneratorHelper) *jen.File {
+//
+// It renders the tables Graph.Tables builds and builds none of its own. A
+// second builder here drifted from Graph.Tables for years: a one-way O2M
+// edge lost its foreign-key column, an optional edge field became NOT NULL
+// with ON DELETE SET NULL, O2O edge fields lost UNIQUE, composite-key edge
+// schemas panicked at init, views were created as tables, and Through on
+// the inverse edge emitted the join table twice. Change migrations in
+// Graph.Tables.
+func genMigrateSchema(h gen.GeneratorHelper) (*jen.File, error) {
 	f := h.NewFile("migrate")
-
-	// Imports
 	schemaPkg := migrateSchemaPkg
 	fieldPkg := "github.com/syssam/velox/schema/field"
 	f.ImportName(schemaPkg, "schema")
 	f.ImportName(fieldPkg, "field")
 
 	graph := h.Graph()
+	tables, err := graph.Tables()
+	if err != nil {
+		return nil, fmt.Errorf("velox/gen: migrate schema: %w", err)
+	}
 
-	// Generate column and table definitions for each entity
+	// Entity tables keep the node's name (UserTable/UserColumns), join
+	// tables their table name in PascalCase (UserGroupsTable).
+	nodeVar := make(map[string]string, len(graph.Nodes))
 	for _, t := range graph.Nodes {
-		columnsVar := pascal(t.Name) + "Columns"
-		tableVar := pascal(t.Name) + "Table"
+		if !t.IsView() {
+			nodeVar[t.Table()] = pascal(t.Name)
+		}
+	}
+	varOf := make(map[*schema.Table]string, len(tables))
+	for _, t := range tables {
+		name, ok := nodeVar[t.Name]
+		if !ok {
+			parts := strings.Split(t.Name, "_")
+			for i, p := range parts {
+				parts[i] = pascal(p)
+			}
+			name = strings.Join(parts, "")
+		}
+		varOf[t] = name
+	}
+	// colRef renders a reference to column c of table t by its position in
+	// the table's columns slice, so every table shares one *Column value.
+	colRef := func(t *schema.Table, c *schema.Column) (jen.Code, error) {
+		for i, tc := range t.Columns {
+			if tc == c {
+				return jen.Id(varOf[t] + "Columns").Index(jen.Lit(i)), nil
+			}
+		}
+		return nil, fmt.Errorf("velox/gen: migrate schema: column %q is not a column of table %q", c.Name, t.Name)
+	}
+	colRefs := func(t *schema.Table, cs []*schema.Column) (jen.Code, error) {
+		refs := make([]jen.Code, 0, len(cs))
+		for _, c := range cs {
+			r, err := colRef(t, c)
+			if err != nil {
+				return nil, err
+			}
+			refs = append(refs, r)
+		}
+		return jen.Index().Op("*").Qual(schemaPkg, "Column").Values(refs...), nil
+	}
 
-		// Generate columns slice
-		f.Comment("// " + columnsVar + " holds the columns for the \"" + t.Table() + "\" table.")
+	for _, t := range tables {
+		columnsVar, tableVar := varOf[t]+"Columns", varOf[t]+"Table"
+		f.Comment("// " + columnsVar + " holds the columns for the \"" + t.Name + "\" table.")
 		// Elements are bare composite literals ({...}, not &schema.Column{...})
 		// so the output is already gofmt -s simplified — otherwise the regen
 		// script's format pass and the generator ping-pong the file forever.
 		f.Var().Id(columnsVar).Op("=").Index().Op("*").Qual(schemaPkg, "Column").ValuesFunc(func(g *jen.Group) {
-			// ID/Primary key column
-			if t.ID != nil {
-				pk := t.ID.PK()
-				g.Values(genColumnDict(pk, fieldPkg))
-			}
-
-			// Other columns — skip fields annotated with sqlschema.Skip()
-			for _, fld := range t.Fields {
-				if a := fld.EntSQL(); a != nil && a.Skip {
-					continue
-				}
-				col := fld.Column()
-				g.Values(genColumnDict(col, fieldPkg))
-			}
-
-			// Edge FK columns (M2O and O2O edges that own the FK)
-			for _, e := range t.Edges {
-				if fkCol := edgeFKColumn(e, t); fkCol != nil {
-					g.Values(genColumnDict(fkCol, fieldPkg))
-				}
+			for _, c := range t.Columns {
+				g.Values(genColumnDict(c, fieldPkg))
 			}
 		})
 		f.Line()
 
-		// Generate table definition
-		f.Comment("// " + tableVar + " holds the schema information for the \"" + t.Table() + "\" table.")
+		pk, err := colRefs(t, t.PrimaryKey)
+		if err != nil {
+			return nil, err
+		}
 		tableDict := jen.Dict{
-			jen.Id("Name"):        jen.Lit(t.Table()),
-			jen.Id("Columns"):     jen.Id(columnsVar),
-			jen.Id("PrimaryKey"):  genPrimaryKey(t, columnsVar, schemaPkg),
-			jen.Id("ForeignKeys"): genForeignKeysSchema(t),
-			jen.Id("Indexes"):     genIndexesSchema(t, schemaPkg),
+			jen.Id("Name"):       jen.Lit(t.Name),
+			jen.Id("Columns"):    jen.Id(columnsVar),
+			jen.Id("PrimaryKey"): pk,
 		}
-		if comment := t.TableComment(); comment != "" {
-			tableDict[jen.Id("Comment")] = jen.Lit(comment)
-		}
-		if ant := t.EntSQL(); ant != nil {
-			if ant.Schema != "" {
-				tableDict[jen.Id("Schema")] = jen.Lit(ant.Schema)
+		if len(t.ForeignKeys) > 0 {
+			fks := make([]jen.Code, 0, len(t.ForeignKeys))
+			for _, fk := range t.ForeignKeys {
+				cols, err := colRefs(t, fk.Columns)
+				if err != nil {
+					return nil, err
+				}
+				refCols, err := colRefs(fk.RefTable, fk.RefColumns)
+				if err != nil {
+					return nil, err
+				}
+				d := jen.Dict{
+					jen.Id("Symbol"):     jen.Lit(fk.Symbol),
+					jen.Id("Columns"):    cols,
+					jen.Id("RefColumns"): refCols,
+				}
+				if fk.OnDelete != "" {
+					d[jen.Id("OnDelete")] = referenceOption(fk.OnDelete)
+				}
+				if fk.OnUpdate != "" {
+					d[jen.Id("OnUpdate")] = referenceOption(fk.OnUpdate)
+				}
+				fks = append(fks, jen.Values(d))
 			}
+			tableDict[jen.Id("ForeignKeys")] = jen.Index().Op("*").Qual(schemaPkg, "ForeignKey").Values(fks...)
+		}
+		if len(t.Indexes) > 0 {
+			const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
+			idxs := make([]jen.Code, 0, len(t.Indexes))
+			for _, idx := range t.Indexes {
+				cols, err := colRefs(t, idx.Columns)
+				if err != nil {
+					return nil, err
+				}
+				d := jen.Dict{
+					jen.Id("Name"):    jen.Lit(idx.Name),
+					jen.Id("Unique"):  jen.Lit(idx.Unique),
+					jen.Id("Columns"): cols,
+				}
+				if ant := idx.Annotation; ant != nil {
+					if antDict := genIndexAnnotationDict(ant); len(antDict) > 0 {
+						d[jen.Id("Annotation")] = jen.Op("&").Qual(sqlschemaPkg, "IndexAnnotation").Values(antDict)
+					}
+				}
+				idxs = append(idxs, jen.Values(d))
+			}
+			tableDict[jen.Id("Indexes")] = jen.Index().Op("*").Qual(schemaPkg, "Index").Values(idxs...)
+		}
+		if t.Comment != "" {
+			tableDict[jen.Id("Comment")] = jen.Lit(t.Comment)
+		}
+		if t.Schema != "" {
+			tableDict[jen.Id("Schema")] = jen.Lit(t.Schema)
+		}
+		if ant := t.Annotation; ant != nil {
 			if antDict := genTableAnnotationDict(ant); len(antDict) > 0 {
 				const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
 				tableDict[jen.Id("Annotation")] = jen.Op("&").Qual(sqlschemaPkg, "Annotation").Values(antDict)
 			}
 		}
+		f.Comment("// " + tableVar + " holds the schema information for the \"" + t.Name + "\" table.")
 		f.Var().Id(tableVar).Op("=").Op("&").Qual(schemaPkg, "Table").Values(tableDict)
 		f.Line()
 	}
 
-	// Generate M2M join tables.
-	// For each non-inverse M2M edge without Through (plain M2M), generate a junction table.
-	type m2mJoin struct {
-		varName    string
-		colsVar    string
-		tableName  string
-		col1, col2 string
-		ref1, ref2 string // entity table var names for FK references
-	}
-	var m2mJoins []m2mJoin
-	for _, t := range graph.Nodes {
-		for _, e := range t.Edges {
-			if e.IsInverse() || e.Rel.Type != gen.M2M {
-				continue
-			}
-			if e.Through != nil {
-				continue // Through edge schema creates its own entity table
-			}
-			if len(e.Rel.Columns) < 2 {
-				continue
-			}
-			// PascalCase the table name: "todo_tags" -> "TodoTags"
-			parts := strings.Split(e.Rel.Table, "_")
-			for i, p := range parts {
-				parts[i] = pascal(p)
-			}
-			joinVar := strings.Join(parts, "")
-			colsVar := joinVar + "Columns"
-			tableVar := joinVar + "Table"
-			j := m2mJoin{
-				varName:   tableVar,
-				colsVar:   colsVar,
-				tableName: e.Rel.Table,
-				col1:      e.Rel.Columns[0],
-				col2:      e.Rel.Columns[1],
-				ref1:      pascal(t.Name) + "Table",
-				ref2:      pascal(e.Type.Name) + "Table",
-			}
-			m2mJoins = append(m2mJoins, j)
-
-			// Generate columns using actual ID types from referenced entities.
-			col1Type := "TypeInt"
-			if t.ID != nil {
-				col1Type = t.ID.Type.ConstName()
-			}
-			col2Type := "TypeInt"
-			if e.Type != nil && e.Type.ID != nil {
-				col2Type = e.Type.ID.Type.ConstName()
-			}
-			f.Commentf("// %s holds the columns for the %q join table.", colsVar, j.tableName)
-			// Bare {...} elements — gofmt -s simplified, same as the entity
-			// columns slice above.
-			f.Var().Id(colsVar).Op("=").Index().Op("*").Qual(schemaPkg, "Column").Values(
-				jen.Values(jen.Dict{
-					jen.Id("Name"): jen.Lit(j.col1),
-					jen.Id("Type"): jen.Qual(fieldPkg, col1Type),
-				}),
-				jen.Values(jen.Dict{
-					jen.Id("Name"): jen.Lit(j.col2),
-					jen.Id("Type"): jen.Qual(fieldPkg, col2Type),
-				}),
-			)
-			f.Line()
-
-			// Generate table
-			sym1, sym2 := m2mFKSymbols(e, j.col1, j.col2)
-			f.Commentf("// %s holds the schema information for the %q join table.", tableVar, j.tableName)
-			f.Var().Id(tableVar).Op("=").Op("&").Qual(schemaPkg, "Table").Values(jen.Dict{
-				jen.Id("Name"):       jen.Lit(j.tableName),
-				jen.Id("Columns"):    jen.Id(colsVar),
-				jen.Id("PrimaryKey"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(0)), jen.Id(colsVar).Index(jen.Lit(1))),
-				// Bare {...} elements — gofmt -s simplified, matching
-				// genForeignKeysSchema's entity-table FK emission.
-				jen.Id("ForeignKeys"): jen.Index().Op("*").Qual(schemaPkg, "ForeignKey").Values(
-					jen.Values(jen.Dict{
-						jen.Id("Columns"):    jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(0))),
-						jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(j.ref1).Dot("PrimaryKey").Index(jen.Lit(0))),
-						jen.Id("OnDelete"):   jen.Qual(schemaPkg, "Cascade"),
-						jen.Id("Symbol"):     jen.Lit(sym1),
-					}),
-					jen.Values(jen.Dict{
-						jen.Id("Columns"):    jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(colsVar).Index(jen.Lit(1))),
-						jen.Id("RefColumns"): jen.Index().Op("*").Qual(schemaPkg, "Column").Values(jen.Id(j.ref2).Dot("PrimaryKey").Index(jen.Lit(0))),
-						jen.Id("OnDelete"):   jen.Qual(schemaPkg, "Cascade"),
-						jen.Id("Symbol"):     jen.Lit(sym2),
-					}),
-				),
-			})
-			f.Line()
-		}
-	}
-
-	// Generate Tables slice
 	f.Comment("// Tables holds all the tables in the schema.")
 	f.Var().Id("Tables").Op("=").Index().Op("*").Qual(schemaPkg, "Table").ValuesFunc(func(g *jen.Group) {
-		for _, t := range graph.Nodes {
-			g.Id(pascal(t.Name) + "Table")
-		}
-		for _, j := range m2mJoins {
-			g.Id(j.varName)
+		for _, t := range tables {
+			g.Id(varOf[t] + "Table")
 		}
 	})
 	f.Line()
 
-	// Generate init function to set foreign key references
+	// RefTable is set in init: a table referencing itself, or two tables
+	// referencing each other, would be an initialization cycle as literals.
 	f.Func().Id("init").Params().BlockFunc(func(g *jen.Group) {
-		for _, t := range graph.Nodes {
-			tableVar := pascal(t.Name) + "Table"
-			fkIdx := 0
-			for _, e := range t.Edges {
-				// Only M2O edges and O2O edges where this table owns the FK.
-				// For O2O, the inverse (edge.From) or bidi side owns the FK.
-				if e.Rel.Type != gen.M2O && (e.Rel.Type != gen.O2O || (!e.IsInverse() && !e.Bidi)) {
-					continue
-				}
-				if e.Type == nil {
-					continue
-				}
-				// Check if this edge generates a FK (either via field association or implicit FK column)
-				if e.Field() != nil || edgeFKColumn(e, t) != nil {
-					refTableVar := pascal(e.Type.Name) + "Table"
-					g.Id(tableVar).Dot("ForeignKeys").Index(jen.Lit(fkIdx)).Dot("RefTable").Op("=").Id(refTableVar)
-					fkIdx++
-				}
+		for _, t := range tables {
+			for i, fk := range t.ForeignKeys {
+				g.Id(varOf[t] + "Table").Dot("ForeignKeys").Index(jen.Lit(i)).Dot("RefTable").Op("=").Id(varOf[fk.RefTable] + "Table")
 			}
 		}
-		// Set RefTable for M2M join table foreign keys.
-		for _, j := range m2mJoins {
-			g.Id(j.varName).Dot("ForeignKeys").Index(jen.Lit(0)).Dot("RefTable").Op("=").Id(j.ref1)
-			g.Id(j.varName).Dot("ForeignKeys").Index(jen.Lit(1)).Dot("RefTable").Op("=").Id(j.ref2)
-		}
 	})
+	return f, nil
+}
 
-	return f
+// referenceOption renders a referential action as its Go constant
+// (schema.SetNull). The SQL literal ("SET NULL") is not a Go identifier.
+func referenceOption(o schema.ReferenceOption) jen.Code {
+	return jen.Qual(migrateSchemaPkg, o.ConstName())
 }
 
 // genMigrateMigrate generates migrate/migrate.go with the Schema type.
@@ -394,6 +367,9 @@ func genColumnDict(col *schema.Column, fieldPkg string) jen.Dict {
 	if col.Collation != "" {
 		dict[jen.Id("Collation")] = jen.Lit(col.Collation)
 	}
+	if col.Attr != "" {
+		dict[jen.Id("Attr")] = jen.Lit(col.Attr)
+	}
 	if col.Comment != "" {
 		dict[jen.Id("Comment")] = jen.Lit(col.Comment)
 	}
@@ -412,153 +388,6 @@ func genColumnDict(col *schema.Column, fieldPkg string) jen.Dict {
 		dict[jen.Id("SchemaType")] = jen.Map(jen.String()).String().Values(stElems...)
 	}
 	return dict
-}
-
-// edgeFKColumn returns the FK column for an edge if it should be included in the table.
-// Returns nil if the edge doesn't have a FK column on this table.
-func edgeFKColumn(e *gen.Edge, t *gen.Type) *schema.Column {
-	// Only M2O edges and O2O edges where this table owns the FK.
-	// For O2O, the inverse (edge.From) or bidi side owns the FK.
-	if e.Rel.Type != gen.M2O && (e.Rel.Type != gen.O2O || (!e.IsInverse() && !e.Bidi)) {
-		return nil
-	}
-	// If the edge has a field-edge (edge-field pattern), the column is already included
-	if e.Field() != nil {
-		return nil
-	}
-	// Get FK column name
-	fkName := e.Rel.Column()
-	if fkName == "" {
-		return nil
-	}
-	// Build the FK column from the referenced entity's PK column so that Type, Size,
-	// and SchemaType all match the target table's primary key (BUG 2, 4 fixes).
-	col := &schema.Column{
-		Name:     fkName,
-		Nullable: e.Optional,
-		Unique:   e.Rel.Type == gen.O2O, // O2O FK must be unique to enforce the constraint.
-	}
-	if e.Type != nil && e.Type.ID != nil {
-		// Use Column() (not PK()) so we get SchemaType and Size from the field definition.
-		refCol := e.Type.ID.Column()
-		col.Type = refCol.Type
-		col.Size = refCol.Size
-		col.SchemaType = refCol.SchemaType
-	} else {
-		col.Type = field.TypeInt64
-	}
-	return col
-}
-
-// genPrimaryKey generates the PrimaryKey field for a table.
-func genPrimaryKey(t *gen.Type, columnsVar string, schemaPkg string) jen.Code {
-	return jen.Index().Op("*").Qual(schemaPkg, "Column").Values(
-		jen.Id(columnsVar).Index(jen.Lit(0)), // First column is always ID
-	)
-}
-
-// genForeignKeysSchema generates foreign key definitions for a type.
-func genForeignKeysSchema(t *gen.Type) jen.Code {
-	var fks []jen.Code
-	columnsVar := pascal(t.Name) + "Columns"
-
-	// Track which edge FK columns are added (for edges without field association).
-	// Start after the non-skipped fields (same skip logic as the column loop).
-	edgeFKIdx := 1
-	for _, fld := range t.Fields {
-		if a := fld.EntSQL(); a != nil && a.Skip {
-			continue
-		}
-		edgeFKIdx++
-	}
-
-	for _, e := range t.Edges {
-		// Only M2O edges and O2O edges where this table owns the FK.
-		// For O2O, the inverse (edge.From) or bidi side owns the FK.
-		if e.Rel.Type != gen.M2O && (e.Rel.Type != gen.O2O || (!e.IsInverse() && !e.Bidi)) {
-			continue
-		}
-		if e.Type == nil {
-			continue
-		}
-
-		fkSymbol := fkSymbolForEdge(e, t.Table(), e.Type.Table())
-		refColumnsVar := pascal(e.Type.Name) + "Columns"
-
-		var fkColIdx int
-		// Check if edge has a field association
-		if fld := e.Field(); fld != nil {
-			// Find the field index
-			fkColIdx = findColumnIndex(t, fld.StorageKey())
-			if fkColIdx < 0 {
-				continue
-			}
-		} else if edgeFKColumn(e, t) != nil {
-			// Edge has an implicit FK column added after fields
-			fkColIdx = edgeFKIdx
-			edgeFKIdx++
-		} else {
-			continue
-		}
-
-		// Determine OnDelete action based on annotation or edge optionality
-		onDelete := deleteAction(e)
-
-		fks = append(fks, jen.Values(jen.Dict{
-			jen.Id("Symbol"): jen.Lit(fkSymbol),
-			jen.Id("Columns"): jen.Index().Op("*").Qual(migrateSchemaPkg, "Column").Values(
-				jen.Id(columnsVar).Index(jen.Lit(fkColIdx)),
-			),
-			jen.Id("RefColumns"): jen.Index().Op("*").Qual(migrateSchemaPkg, "Column").Values(
-				jen.Id(refColumnsVar).Index(jen.Lit(0)), // Reference ID column
-			),
-			jen.Id("OnDelete"): onDelete,
-		}))
-	}
-
-	if len(fks) == 0 {
-		return jen.Nil()
-	}
-	return jen.Index().Op("*").Qual(migrateSchemaPkg, "ForeignKey").Values(fks...)
-}
-
-// genIndexesSchema generates index definitions for a type.
-func genIndexesSchema(t *gen.Type, schemaPkg string) jen.Code {
-	const sqlschemaPkg = "github.com/syssam/velox/dialect/sqlschema"
-	var indexes []jen.Code
-	columnsVar := pascal(t.Name) + "Columns"
-
-	for _, idx := range t.Indexes {
-		idxDict := jen.Dict{
-			jen.Id("Name"):   jen.Lit(idx.Name),
-			jen.Id("Unique"): jen.Lit(idx.Unique),
-		}
-
-		// Find column indices
-		var colRefs []jen.Code
-		for _, col := range idx.Columns {
-			colIndex := findColumnIndex(t, col)
-			if colIndex < 0 {
-				continue
-			}
-			colRefs = append(colRefs, jen.Id(columnsVar).Index(jen.Lit(colIndex)))
-		}
-		idxDict[jen.Id("Columns")] = jen.Index().Op("*").Qual(schemaPkg, "Column").Values(colRefs...)
-
-		// Thread IndexAnnotation (e.g. partial-index WHERE clause) into the generated index.
-		if ant := idx.EntSQL(); ant != nil {
-			if antDict := genIndexAnnotationDict(ant); len(antDict) > 0 {
-				idxDict[jen.Id("Annotation")] = jen.Op("&").Qual(sqlschemaPkg, "IndexAnnotation").Values(antDict)
-			}
-		}
-
-		indexes = append(indexes, jen.Values(idxDict))
-	}
-
-	if len(indexes) == 0 {
-		return jen.Nil()
-	}
-	return jen.Index().Op("*").Qual(schemaPkg, "Index").Values(indexes...)
 }
 
 // genIndexAnnotationDict builds a jen.Dict for the non-zero fields of an IndexAnnotation.
@@ -641,37 +470,6 @@ func genIndexAnnotationDict(ant *sqlschema.IndexAnnotation) jen.Dict {
 	return d
 }
 
-// findColumnIndex finds the index of a column in the type's columnsVar slice.
-// The slice layout is: [0: ID, 1..n: fields (excl. skipped), n+1..: implicit edge FK cols].
-// Returns -1 if the column is not found.
-func findColumnIndex(t *gen.Type, colName string) int {
-	// 0: ID
-	if t.ID != nil && t.ID.StorageKey() == colName {
-		return 0
-	}
-	// 1..n: regular fields (skipped fields occupy no slot)
-	idx := 1
-	for _, f := range t.Fields {
-		if a := f.EntSQL(); a != nil && a.Skip {
-			continue
-		}
-		if f.StorageKey() == colName {
-			return idx
-		}
-		idx++
-	}
-	// idx..: implicit edge FK columns (those not bound to a field via .Field())
-	for _, e := range t.Edges {
-		if edgeFKColumn(e, t) != nil {
-			if e.Rel.Column() == colName {
-				return idx
-			}
-			idx++
-		}
-	}
-	return -1
-}
-
 // fieldTypeCode returns the Jennifer code for a field type constant.
 func fieldTypeCode(ft field.Type, fieldPkg string) jen.Code {
 	switch ft {
@@ -731,41 +529,6 @@ func pascal(s string) string {
 // fkSymbolForEdge returns the FK constraint symbol for O2O/O2M/M2O edges,
 // matching the runtime fkSymbol() in graph_tables.go and Ent (entc/gen/graph.go).
 //
-// The name component is the ASSOC (non-inverse) edge's name. velox emits the FK
-// from the M2O / FK-owning side, but both graph_tables.go::fkSymbol and Ent build
-// the FK from the assoc edge, so the symbol must use the assoc name to agree. For
-// a bidirectional O2M/M2O pair the M2O side is inverse, and its assoc-edge name is
-// e.Inverse; a standalone M2O has no inverse and uses its own name. Without this,
-// a bidirectional FK got the M2O edge name (e.g. comments_posts_post) instead of
-// the assoc name (comments_posts_comments) — a silent drift from both the
-// graph_tables reference builder and Ent. StorageKey symbols are honored first;
-// e.StorageKey() already resolves to the assoc edge's key for inverse edges.
-func fkSymbolForEdge(e *gen.Edge, ownerTable, refTable string) string {
-	if k, _ := e.StorageKey(); k != nil && len(k.Symbols) == 1 {
-		return k.Symbols[0]
-	}
-	name := e.Name
-	if e.IsInverse() {
-		name = e.Inverse
-	}
-	return fmt.Sprintf("%s_%s_%s", ownerTable, refTable, name)
-}
-
-// m2mFKSymbols returns the two FK constraint symbols for an M2M join table,
-// matching the runtime fkSymbols() in graph_tables.go (BUG 1 M2M fix).
-func m2mFKSymbols(e *gen.Edge, col1Name, col2Name string) (string, string) {
-	s1 := fmt.Sprintf("%s_%s", e.Rel.Table, col1Name)
-	s2 := fmt.Sprintf("%s_%s", e.Rel.Table, col2Name)
-	if k, _ := e.StorageKey(); k != nil {
-		if len(k.Symbols) > 0 {
-			s1 = k.Symbols[0]
-		}
-		if len(k.Symbols) > 1 {
-			s2 = k.Symbols[1]
-		}
-	}
-	return s1, s2
-}
 
 // genTableAnnotationDict builds a jen.Dict for the non-zero annotation fields that
 // Atlas needs at the table level: CHECK constraints, charset, collation, options (RISK 7).
@@ -797,20 +560,4 @@ func genTableAnnotationDict(ant *sqlschema.Annotation) jen.Dict {
 		d[jen.Id("Options")] = jen.Lit(ant.Options)
 	}
 	return d
-}
-
-// deleteAction returns the Jennifer code for the ON DELETE referential action.
-// Checks the edge's sqlschema.OnDelete annotation first, then falls back to
-// default: NoAction for required edges, SetNull for optional edges.
-// This matches the graph-level deleteAction in graph.go.
-func deleteAction(e *gen.Edge) jen.Code {
-	schemaPkg := "github.com/syssam/velox/dialect/sql/schema"
-
-	// Delegate the decision to Edge.DeleteAction (the single source of truth,
-	// shared with the graph-level table builder) keyed on the FK column's
-	// nullability — which this generator builds as e.Optional (see edgeFKColumn).
-	// ConstName() maps the SQL literal value ("CASCADE", "SET NULL") to the Go
-	// constant name (schema.Cascade, schema.SetNull); rendering the raw literal
-	// would emit an undefined identifier (schema.CASCADE) or invalid Go.
-	return jen.Qual(schemaPkg, e.DeleteAction(e.Optional).ConstName())
 }
