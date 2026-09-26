@@ -72,6 +72,9 @@ func genCreate(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) { //nolint
 		if t.NumPolicy() > 0 {
 			d[jen.Id("policy")] = jen.Id("policy")
 		}
+		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+			d[jen.Id("schemaConfig")] = jen.Qual(h.InternalPkg(), "SchemaConfigFromRuntime").Call(jen.Id("c"))
+		}
 		grp.Return(jen.Op("&").Id(createName).Values(d))
 	})
 
@@ -462,6 +465,11 @@ func genCreateSpecMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builde
 				}),
 			),
 		)
+		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+			// The bulk path renders one INSERT from the first spec's Schema;
+			// every builder of a bulk shares the client's config.
+			grp.Id("_spec").Dot("Schema").Op("=").Id(recv).Dot("schemaConfig").Dot(t.Name)
+		}
 		// User-defined ID: read the typed id pointer from mutation and set
 		// both node and spec. Direct field access preserves the typed IDType
 		// (e.g. uuid.UUID) — going through mutation.ID() would lose type info
@@ -511,7 +519,6 @@ func genCreateSpecMethod(h gen.GeneratorHelper, f *jen.File, t *gen.Type, builde
 // so an entity sub-package does not need to import the target sub-package
 // (avoids cross-entity import cycles).
 func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen.Edge, _, fieldPkg, sqlGraphPkg, _, specVar string) {
-	_ = t
 	idsMethod := edge.StructField() + "IDs"
 	targetType := edge.Type
 	targetIDStorage := "id"
@@ -538,6 +545,9 @@ func genCreateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 				jen.Id("Type"):   targetIDTypeConst,
 			}),
 		}),
+	}
+	if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+		dict[jen.Id("Schema")] = jen.Id("c").Dot("schemaConfig").Dot(edgeSchemaFieldName(t, edge))
 	}
 
 	grp.If(

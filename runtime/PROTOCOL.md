@@ -88,15 +88,31 @@ Do not swap `QuerySelect` for `QueryScan` during generator refactors; the aggreg
 
 ---
 
-## 7. Generator layout invariants
+## 7. Alternate schemas (`sql/schemaconfig`)
 
-7.1. Exactly one production generator per output file. Legacy parallel generators (`entity.go`, `query.go`, `query_execute.go`, `query_select.go`, `entity_edges.go`, `entity_crud.go`, `entity_traversal.go`) were removed 2026-04-13. Do not recreate them; parallel paths drift silently.
+Everything in this section is emitted only when the feature is enabled; with it disabled the generated code carries no schema config at all.
 
-7.2. Per-entity generators: `entity_client.go`, `entity_pkg.go`, `entity_helpers.go`, `entity_scan.go`, `entity_hooks.go`, `mutation.go`, `predicate.go`, `query_pkg.go`, `create.go`, `update.go`, `delete.go`, `meta.go`.
+7.1. The client's `AlternateSchema(SchemaConfig)` travels in `runtime.Config.SchemaConfig` (set by the generated `config.runtimeConfig()`). Every builder constructor — `NewXxxCreate`, `NewXxxUpdate`, `NewXxxUpdateOne`, `NewXxxDelete`, `NewXxxQuery` — initializes its `schemaConfig` field with the generated `internal.SchemaConfigFromRuntime(cfg)`. A builder whose `schemaConfig` stays zero targets the default schema silently.
 
-7.3. Graph-level generators: `client.go`, `client_options.go`, `velox.go`, `tx.go`, `migrate.go`.
+7.2. Node specs take the entity's schema: `CreateSpec.Schema`, `UpdateSpec.Node.Schema`, `DeleterBase.Schema`, and the UpdateOne read-back / `OldXxx` loader tables. Edge specs, traversal steps and the M2M loader's `runtime.M2MLoad.JoinSchema` follow Ent's rule: an edge owning its FK uses the entity's own schema, an M2M edge its join table's field (`<Owner><Edge>`, the edge schema's type for a `Through` edge), any other edge the target's schema.
 
-7.4. Shared helpers live in `helper.go` (e.g. `assertSetInterStore`, `assertSetPath`, `edgeSpecBase`, `genFieldSetter`, `genEdgeSetter`).
+7.3. The generated query exposes `GetSchema() string`, an optional extension of `QueryReader` that `runtime.BuildQueryFrom` and `runtime.MakeQuerySpec` check to qualify the query's own table. Queries generated without the feature do not implement it and render unqualified tables.
+
+7.4. Edge predicates (`HasXxx`) read the config from the selector's context (`internal.SchemaConfigFromContext`). Every terminal that renders SQL — `sqlAll`, `sqlCount`, `sqlIDs`, `Scan`, `Select`/`GroupBy` `sqlScan`, `SQL`, `Explain` — and update/delete `sqlSave`/`sqlExec` put it there with `internal.NewSchemaConfigContext`.
+
+**Pinned by:** `TestSchemaConfigReachesEveryBuilder`; behavior by `tests/integration/e2e_alternate_schema_test.go`
+
+---
+
+## 8. Generator layout invariants
+
+8.1. Exactly one production generator per output file. Legacy parallel generators (`entity.go`, `query.go`, `query_execute.go`, `query_select.go`, `entity_edges.go`, `entity_crud.go`, `entity_traversal.go`) were removed 2026-04-13. Do not recreate them; parallel paths drift silently.
+
+8.2. Per-entity generators: `entity_client.go`, `entity_pkg.go`, `entity_helpers.go`, `entity_scan.go`, `entity_hooks.go`, `mutation.go`, `predicate.go`, `query_pkg.go`, `create.go`, `update.go`, `delete.go`, `meta.go`.
+
+8.3. Graph-level generators: `client.go`, `client_options.go`, `velox.go`, `tx.go`, `migrate.go`.
+
+8.4. Shared helpers live in `helper.go` (e.g. `assertSetInterStore`, `assertSetPath`, `edgeSpecBase`, `genFieldSetter`, `genEdgeSetter`).
 
 ---
 

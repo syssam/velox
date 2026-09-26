@@ -7,6 +7,7 @@
   field Config.HookStore any
   field Config.InterStore any
   field Config.Log func(...any)
+  field Config.SchemaConfig any
   field DeleterBase.Driver github.com/syssam/velox/dialect.Driver
   field DeleterBase.FieldTypes map[string]github.com/syssam/velox/schema/field.Type
   field DeleterBase.IDColumn string
@@ -40,6 +41,7 @@
   field M2MLoad.EagerLoad func(Q, context.Context, []*T) error
   field M2MLoad.Edge string
   field M2MLoad.Inters []github.com/syssam/velox.Interceptor
+  field M2MLoad.JoinSchema string
   field M2MLoad.JoinTable string
   field M2MLoad.NewPivot func() any
   field M2MLoad.ParentColumn string

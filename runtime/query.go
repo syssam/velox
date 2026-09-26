@@ -91,6 +91,23 @@ type QueryReader interface {
 	GetWithFKs() bool
 }
 
+// schemaGetter is implemented by query builders generated with the
+// sql/schemaconfig feature. GetSchema returns the schema (database) that
+// qualifies the query's own table — the AlternateSchema the client was
+// configured with — or "" for the default. Kept optional so that queries
+// generated without the feature satisfy QueryReader unchanged.
+type schemaGetter interface {
+	GetSchema() string
+}
+
+// schemaOf returns the schema qualifying q's own table, or "".
+func schemaOf(q QueryReader) string {
+	if sg, ok := q.(schemaGetter); ok {
+		return sg.GetSchema()
+	}
+	return ""
+}
+
 // PredicateAdder is the minimal interface implemented by generated
 // query builders so the generated per-entity Filter can inject raw
 // SQL-level predicates without reaching into the query's internal
@@ -153,7 +170,7 @@ func BuildQueryFrom(ctx context.Context, q QueryReader) (*sql.Selector, error) {
 	} else if from != nil {
 		selector = from
 	} else {
-		selector = sql.Select().From(sql.Table(q.GetTable()))
+		selector = sql.Select().From(sql.Table(q.GetTable()).Schema(schemaOf(q)))
 	}
 	selector.SetDialect(q.GetDriver().Dialect())
 	// Predicates read the request context from the selector: edge predicates
@@ -235,6 +252,7 @@ func MakeQuerySpec(q QueryReader, idFieldType field.Type) *sqlgraph.QuerySpec {
 	qctx := q.GetCtx()
 	spec := sqlgraph.NewQuerySpec(table, cols,
 		&sqlgraph.FieldSpec{Column: idCol, Type: idFieldType})
+	spec.Node.Schema = schemaOf(q)
 
 	if qctx.Unique != nil {
 		spec.Unique = *qctx.Unique

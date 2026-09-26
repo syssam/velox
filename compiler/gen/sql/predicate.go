@@ -568,3 +568,18 @@ func genSchemaConfigStampStep(t *gen.Type, edge *gen.Edge) []jen.Code {
 		jen.Id("step").Dot("Edge").Dot("Schema").Op("=").Id("schemaConfig").Dot(edgeSchemaFieldName(t, edge)),
 	}
 }
+
+// genSchemaConfigStampFromRuntime stamps step.To.Schema and step.Edge.Schema
+// from the schema config carried by cfg (a runtime.Config expression) when
+// the sql/schemaconfig feature is enabled. Used by the one-vertex edge
+// queries (entity.QueryXxx, client.QueryXxx(v)), which build their step
+// outside any query builder.
+func genSchemaConfigStampFromRuntime(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen.Edge, cfg *jen.Statement) {
+	if !h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+		return
+	}
+	grp.Id("schemaConfig").Op(":=").Qual(h.InternalPkg(), "SchemaConfigFromRuntime").Call(cfg)
+	for _, stmt := range genSchemaConfigStampStep(t, edge) {
+		grp.Add(stmt)
+	}
+}

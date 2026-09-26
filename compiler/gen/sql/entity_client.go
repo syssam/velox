@@ -434,6 +434,7 @@ func genEntityClientEdgePathClosure(h gen.GeneratorHelper, grp *jen.Group, t *ge
 			edgeColumns,
 		),
 	)
+	genSchemaConfigStampFromRuntime(h, grp, t, e, jen.Id(configVar).Dot("config"))
 	grp.Return(
 		jen.Qual(sqlgraphPkg, "Neighbors").Call(
 			jen.Id(configVar).Dot("config").Dot("Driver").Dot("Dialect").Call(),

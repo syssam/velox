@@ -91,6 +91,9 @@ func genUpdateBulk(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, m
 		if t.NumPolicy() > 0 {
 			d[jen.Id("policy")] = jen.Id("policy")
 		}
+		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+			d[jen.Id("schemaConfig")] = jen.Qual(h.InternalPkg(), "SchemaConfigFromRuntime").Call(jen.Id("c"))
+		}
 		grp.Return(jen.Op("&").Id(updateName).Values(d))
 	})
 
@@ -272,6 +275,9 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		if t.NumPolicy() > 0 {
 			d[jen.Id("policy")] = jen.Id("policy")
 		}
+		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+			d[jen.Id("schemaConfig")] = jen.Qual(h.InternalPkg(), "SchemaConfigFromRuntime").Call(jen.Id("c"))
+		}
 		grp.Return(jen.Op("&").Id(updateOneName).Values(d))
 	})
 
@@ -430,7 +436,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 			jen.Op("*").Qual(h.SQLPkg(), "Selector"), jen.Error(),
 		).Block(
 			jen.Id("s").Op(":=").Qual(h.SQLPkg(), "Select").Call(jen.Id("columns").Op("...")).Dot("From").Call(
-				jen.Qual(h.SQLPkg(), "Table").Call(jen.Qual(entityPkg, "Table")),
+				updateOwnTable(h, t, recv),
 			),
 			jen.Id("s").Dot("SetDialect").Call(jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call()),
 			jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
@@ -482,7 +488,7 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 					jen.Op("*").Qual(h.SQLPkg(), "Selector"), jen.Error(),
 				).BlockFunc(func(b *jen.Group) {
 					b.Id("s").Op(":=").Qual(h.SQLPkg(), "Select").Call(jen.Qual(entityPkg, "Columns").Op("...")).Dot("From").Call(
-						jen.Qual(h.SQLPkg(), "Table").Call(jen.Qual(entityPkg, "Table")),
+						updateOwnTable(h, t, recv),
 					)
 					b.Id("s").Dot("SetDialect").Call(jen.Id(recv).Dot("config").Dot("Driver").Dot("Dialect").Call())
 					b.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(
@@ -786,7 +792,22 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 
 	if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
 		grp.Id("spec").Dot("Node").Dot("Schema").Op("=").Id(recv).Dot("schemaConfig").Dot(t.Name)
+		// Edge predicates in Where (HasXxx) read the schema config from the
+		// selector's context, as they do on a query.
+		grp.Id("ctx").Op("=").Qual(h.InternalPkg(), "NewSchemaConfigContext").Call(jen.Id("ctx"), jen.Id(recv).Dot("schemaConfig"))
 	}
+}
+
+// updateOwnTable returns the sql.Table expression of t's own table for the
+// reads an update builder runs itself (the UpdateOne read-back and the
+// OldXxx loader), qualified with the configured schema when the
+// sql/schemaconfig feature is enabled.
+func updateOwnTable(h gen.GeneratorHelper, t *gen.Type, recv string) *jen.Statement {
+	tbl := jen.Qual(h.SQLPkg(), "Table").Call(jen.Qual(h.LeafPkgPath(t), "Table"))
+	if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+		tbl = tbl.Dot("Schema").Call(jen.Id(recv).Dot("schemaConfig").Dot(t.Name))
+	}
+	return tbl
 }
 
 // jsonAppendRelevant reports whether the type has any JSON fields that could receive Append values.
@@ -801,7 +822,6 @@ func jsonAppendRelevant(t *gen.Type) bool {
 
 // genUpdateEdge emits EdgeSpec appends to spec.Edges.Add / spec.Edges.Clear for a single edge.
 func genUpdateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen.Edge, _, fieldPkg, sqlGraphPkg, recv string) {
-	_ = t
 	targetType := edge.Type
 	targetIDStorage := "id"
 	if targetType != nil && targetType.ID != nil {
@@ -815,8 +835,9 @@ func genUpdateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 		return
 	}
 
+	schemaConfigEnabled := h.FeatureEnabled(gen.FeatureSchemaConfig.Name)
 	makeEdgeSpec := func() *jen.Statement {
-		return jen.Op("&").Qual(sqlGraphPkg, "EdgeSpec").Values(jen.Dict{
+		d := jen.Dict{
 			jen.Id("Rel"):     rel,
 			jen.Id("Inverse"): jen.Lit(inverse),
 			jen.Id("Table"):   tableConst,
@@ -828,7 +849,11 @@ func genUpdateEdge(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, edge *gen
 					jen.Id("Type"):   targetIDTypeConst,
 				}),
 			}),
-		})
+		}
+		if schemaConfigEnabled {
+			d[jen.Id("Schema")] = jen.Id(recv).Dot("schemaConfig").Dot(edgeSchemaFieldName(t, edge))
+		}
+		return jen.Op("&").Qual(sqlGraphPkg, "EdgeSpec").Values(d)
 	}
 
 	_ = edge.Name

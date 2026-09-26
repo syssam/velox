@@ -23,12 +23,7 @@ func (qg *queryGen) genSQLAll() {
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Index().Op("*").Add(qg.entityType()), jen.Error()).BlockFunc(func(allBody *jen.Group) {
 		// Push SchemaConfig into context so where predicates can read it.
-		if qg.schemaConfigEnabled {
-			allBody.Id("ctx").Op("=").Qual(qg.h.InternalPkg(), "NewSchemaConfigContext").Call(
-				jen.Id("ctx"),
-				jen.Id(qg.recv).Dot("schemaConfig"),
-			)
-		}
+		qg.schemaConfigCtx(allBody, jen.Id(qg.recv))
 		allBody.List(jen.Id("nodes"), jen.Err()).Op(":=").Qual(runtimePkg, "ScanAll").Types(
 			qg.entityType(), jen.Op("*").Add(qg.entityType()),
 		).Call(
@@ -346,6 +341,7 @@ func (qg *queryGen) genCountExist() {
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("sqlCount").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Int(), jen.Error()).BlockFunc(func(body *jen.Group) {
+		qg.schemaConfigCtx(body, jen.Id(qg.recv))
 		// Resolve graph traversal path.
 		body.Var().Id("from").Op("*").Qual(qg.sqlPkg, "Selector")
 		body.If(jen.Id(qg.recv).Dot("path").Op("!=").Nil()).BlockFunc(func(ifBody *jen.Group) {
@@ -443,17 +439,18 @@ func (qg *queryGen) genSQLExplain() {
 	qg.f.Comment("but does not execute the query.")
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("SQL").Params(
 		jen.Id("ctx").Qual("context", "Context"),
-	).Params(jen.String(), jen.Index().Any(), jen.Error()).Block(
-		jen.If(jen.Err().Op(":=").Id(qg.recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
+	).Params(jen.String(), jen.Index().Any(), jen.Error()).BlockFunc(func(body *jen.Group) {
+		body.If(jen.Err().Op(":=").Id(qg.recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
 			jen.Return(jen.Lit(""), jen.Nil(), jen.Err()),
-		),
-		jen.List(jen.Id("selector"), jen.Err()).Op(":=").Id(qg.recv).Dot("buildSelector").Call(jen.Id("ctx")),
-		jen.If(jen.Err().Op("!=").Nil()).Block(
+		)
+		qg.schemaConfigCtx(body, jen.Id(qg.recv))
+		body.List(jen.Id("selector"), jen.Err()).Op(":=").Id(qg.recv).Dot("buildSelector").Call(jen.Id("ctx"))
+		body.If(jen.Err().Op("!=").Nil()).Block(
 			jen.Return(jen.Lit(""), jen.Nil(), jen.Err()),
-		),
-		jen.List(jen.Id("query"), jen.Id("args")).Op(":=").Id("selector").Dot("Query").Call(),
-		jen.Return(jen.Id("query"), jen.Id("args"), jen.Nil()),
-	)
+		)
+		body.List(jen.Id("query"), jen.Id("args")).Op(":=").Id("selector").Dot("Query").Call()
+		body.Return(jen.Id("query"), jen.Id("args"), jen.Nil())
+	})
 
 	// Explain — returns a *runtime.QueryPlan describing the query without executing.
 	qg.f.Comment("Explain returns the query's execution plan without executing it.")
@@ -466,6 +463,7 @@ func (qg *queryGen) genSQLExplain() {
 			jen.Return(jen.Nil(), jen.Err()),
 		)
 
+		qg.schemaConfigCtx(body, jen.Id(qg.recv))
 		// Build selector
 		body.List(jen.Id("selector"), jen.Err()).Op(":=").Id(qg.recv).Dot("buildSelector").Call(jen.Id("ctx"))
 		body.If(jen.Err().Op("!=").Nil()).Block(
@@ -546,6 +544,7 @@ func (qg *queryGen) genIDTerminals() {
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("sqlIDs").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Params(jen.Index().Add(qg.idType), jen.Error()).BlockFunc(func(body *jen.Group) {
+		qg.schemaConfigCtx(body, jen.Id(qg.recv))
 		body.Var().Id("from").Op("*").Qual(qg.sqlPkg, "Selector")
 		body.If(jen.Id(qg.recv).Dot("path").Op("!=").Nil()).BlockFunc(func(ifBody *jen.Group) {
 			ifBody.Var().Id("err").Error()

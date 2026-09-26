@@ -25,4 +25,12 @@ type Config struct {
 	// InterStore is a pointer to the generated entity.InterceptorStore struct.
 	// Entity client constructors type-assert this once to *entity.InterceptorStore.
 	InterStore any
+	// SchemaConfig carries the generated internal.SchemaConfig value set by
+	// the client's AlternateSchema option (feature sql/schemaconfig): the
+	// zero SchemaConfig when the option was not given, nil when the feature
+	// is disabled. Every
+	// generated builder reads it once in its constructor through the
+	// generated internal.SchemaConfigFromRuntime and qualifies each table it
+	// renders with the configured schema.
+	SchemaConfig any
 }

@@ -220,12 +220,18 @@ func (qg *queryGen) genConstructorAndWiring() {
 	qg.f.Commentf("New%s creates a new %s.", qg.queryName, qg.queryName)
 	qg.f.Func().Id("New" + qg.queryName).Params(
 		jen.Id("cfg").Qual(runtimePkg, "Config"),
-	).Op("*").Id(qg.queryName).Block(
-		jen.Return(jen.Op("&").Id(qg.queryName).Values(jen.Dict{
+	).Op("*").Id(qg.queryName).BlockFunc(func(body *jen.Group) {
+		d := jen.Dict{
 			jen.Id("config"): jen.Id("cfg"),
 			jen.Id("ctx"):    jen.Op("&").Qual(runtimePkg, "QueryContext").Values(jen.Dict{jen.Id("Type"): jen.Lit(qg.t.Name)}),
-		})),
-	)
+		}
+		if qg.schemaConfigEnabled {
+			// The client's AlternateSchema, carried by runtime.Config: every
+			// query — client, edge, eager-load, Noder — starts from it.
+			d[jen.Id("schemaConfig")] = jen.Qual(qg.h.InternalPkg(), "SchemaConfigFromRuntime").Call(jen.Id("cfg"))
+		}
+		body.Return(jen.Op("&").Id(qg.queryName).Values(d))
+	})
 
 	// =========================================================================
 	// SetPath — allows external callers (wrapper, contrib) to set the path
@@ -317,7 +323,29 @@ func (qg *queryGen) genConstructorAndWiring() {
 		).Block(
 			jen.Id(qg.recv).Dot("schemaConfig").Op("=").Id("sc"),
 		)
+
+		// GetSchema — read by runtime.MakeQuerySpec and runtime.BuildQueryFrom
+		// (an optional extension of runtime.QueryReader) to qualify the
+		// query's own table.
+		qg.f.Commentf("GetSchema returns the schema qualifying the %s table. Read by the runtime query builders.", qg.t.Name)
+		qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("GetSchema").Params().String().Block(
+			jen.Return(jen.Id(qg.recv).Dot("schemaConfig").Dot(qg.t.Name)),
+		)
 	}
+}
+
+// schemaConfigCtx emits `ctx = internal.NewSchemaConfigContext(ctx, <q>.schemaConfig)`
+// when the sql/schemaconfig feature is enabled: edge predicates (HasXxx)
+// read the schema config from the selector's context. Emitted by every
+// terminal that hands ctx to the runtime or sqlgraph to render the query.
+func (qg *queryGen) schemaConfigCtx(g *jen.Group, q *jen.Statement) {
+	if !qg.schemaConfigEnabled {
+		return
+	}
+	g.Id("ctx").Op("=").Qual(qg.h.InternalPkg(), "NewSchemaConfigContext").Call(
+		jen.Id("ctx"),
+		q.Dot("schemaConfig"),
+	)
 }
 
 // genFieldCollectable emits the accessors the GraphQL field collector uses:
@@ -1113,6 +1141,9 @@ func genM2MLoader(
 	).Values(jen.DictFunc(func(d jen.Dict) {
 		d[jen.Id("Edge")] = jen.Lit(edge.Name)
 		d[jen.Id("JoinTable")] = jen.Qual(h.LeafPkgPath(t), edge.TableConstant())
+		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+			d[jen.Id("JoinSchema")] = jen.Id(recv).Dot("schemaConfig").Dot(edgeSchemaFieldName(t, edge))
+		}
 		d[jen.Id("ParentColumn")] = jen.Lit(parentFKCol)
 		d[jen.Id("TargetColumn")] = jen.Lit(childFKCol)
 		d[jen.Id("TargetID")] = jen.Qual(h.LeafPkgPath(edge.Type), "FieldID")

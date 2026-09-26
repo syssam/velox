@@ -113,6 +113,10 @@ type M2MLoad[Q M2MQuery, P, T any, PT ScannableOf[T], K, TK comparable] struct {
 	// columns holding the parent's and the target's key.
 	JoinTable    string
 	ParentColumn string
+	// JoinSchema is the schema (database) qualifying JoinTable, set from the
+	// client's AlternateSchema when the sql/schemaconfig feature is enabled;
+	// "" leaves the table unqualified.
+	JoinSchema   string
 	TargetColumn string
 	// TargetID is the target table's ID column.
 	TargetID string
@@ -221,7 +225,7 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 	if err != nil {
 		return nil, err
 	}
-	joinT := sql.Table(l.JoinTable)
+	joinT := sql.Table(l.JoinTable).Schema(l.JoinSchema)
 	selector.Join(joinT).On(selector.C(l.TargetID), joinT.C(l.TargetColumn))
 	selector.Where(sql.In(joinT.C(l.ParentColumn), edgeIDs...))
 	cols := selector.SelectedColumns()

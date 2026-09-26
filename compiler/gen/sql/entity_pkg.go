@@ -745,6 +745,7 @@ func genEntityPkgEdgeQueryMethods(h gen.GeneratorHelper, f *jen.File, t *gen.Typ
 						edgeColumns,
 					),
 				)
+				genSchemaConfigStampFromRuntime(h, body, t, e, jen.Id("_e").Dot("config"))
 				body.Return(
 					jen.Qual(sqlgraphPkg, "Neighbors").Call(
 						jen.Id("_e").Dot("config").Dot("Driver").Dot("Dialect").Call(),

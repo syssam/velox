@@ -2165,3 +2165,120 @@ func funcBodyFrom(src, needle string) string {
 	}
 	return src[i : i+end]
 }
+
+// TestSchemaConfigReachesEveryBuilder pins the sql/schemaconfig wiring.
+// AlternateSchema once stored its SchemaConfig on the root config and no
+// builder read it: every builder's schemaConfig field stayed zero and every
+// statement went to the default schema. The config now travels in
+// runtime.Config.SchemaConfig and every constructor reads it; each spec,
+// edge spec, join-table load and one-vertex edge query takes its schema from
+// it. With the feature off none of it may be emitted. Behaviorally pinned by
+// tests/integration/e2e_alternate_schema_test.go.
+func TestSchemaConfigReachesEveryBuilder(t *testing.T) {
+	fixture := func(features ...string) (*featureMockHelper, *gen.Type) {
+		h := newFeatureMockHelper().withFeatures(features...)
+		userType := createTestType("User")
+		postType := createTestType("Post")
+		tagType := createTestType("Tag")
+		userType.Edges = []*gen.Edge{
+			createO2MEdge("posts", postType, "posts", "user_posts"),
+			createM2MEdge("tags", tagType, "user_tags", []string{"user_id", "tag_id"}),
+		}
+		h.graph.Nodes = []*gen.Type{userType, postType, tagType}
+		return h, userType
+	}
+	space := regexp.MustCompile(`\s+`)
+	render := func(h *featureMockHelper, u *gen.Type) map[string]string {
+		create, err := genCreate(h, u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		update, err := genUpdate(h, u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		del, err := genDelete(h, u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{
+			"client":        genClient(h).GoString(),
+			"create":        create.GoString(),
+			"update":        update.GoString(),
+			"delete":        del.GoString(),
+			"query":         genQueryPkg(h, u, h.graph.Nodes, h.LeafPkgPath(u)).GoString(),
+			"entity client": genEntityClient(h, u).GoString(),
+			"entity":        genEntityPkgFileWithRegistry(h, u, h.graph.Nodes, nil).GoString(),
+		}
+		for k, v := range out {
+			out[k] = space.ReplaceAllString(v, " ")
+		}
+		return out
+	}
+
+	t.Run("enabled", func(t *testing.T) {
+		h, u := fixture(gen.FeatureSchemaConfig.Name)
+		src := render(h, u)
+		want := map[string][]string{
+			"client": {"SchemaConfig: c.schemaConfig"},
+			"create": {
+				"schemaConfig: internal.SchemaConfigFromRuntime(c)",
+				"_spec.Schema = c.schemaConfig.User",
+				"Schema: c.schemaConfig.Post,",     // O2M: the target's table
+				"Schema: c.schemaConfig.UserTags,", // M2M: the join table
+			},
+			"update": {
+				"schemaConfig: internal.SchemaConfigFromRuntime(c)",
+				"spec.Node.Schema = _u.schemaConfig.User",
+				"Schema: _u.schemaConfig.UserTags,",
+				"ctx = internal.NewSchemaConfigContext(ctx, _u.schemaConfig)",
+				"sql.Table(user.Table).Schema(_u.schemaConfig.User)",
+			},
+			"delete": {
+				"schemaConfig: internal.SchemaConfigFromRuntime(c)",
+				"Schema: _d.schemaConfig.User,",
+				"ctx = internal.NewSchemaConfigContext(ctx, _d.schemaConfig)",
+			},
+			"query": {
+				"schemaConfig: internal.SchemaConfigFromRuntime(cfg)",
+				"func (q *UserQuery) GetSchema() string { return q.schemaConfig.User }",
+				"JoinSchema: q.schemaConfig.UserTags,",
+				"step.Edge.Schema = schemaConfig.UserTags",
+			},
+			"entity client": {
+				"schemaConfig := internal.SchemaConfigFromRuntime(c.config)",
+				"step.Edge.Schema = schemaConfig.UserTags",
+			},
+			"entity": {
+				"schemaConfig := internal.SchemaConfigFromRuntime(_e.config)",
+				"step.To.Schema = schemaConfig.Tag",
+			},
+		}
+		for file, snippets := range want {
+			for _, s := range snippets {
+				if !strings.Contains(src[file], s) {
+					t.Errorf("%s: missing %q", file, s)
+				}
+			}
+		}
+		// Every query terminal that renders SQL carries the config into ctx,
+		// where edge predicates (HasXxx) read it.
+		for _, fn := range []string{") sqlAll(", ") sqlCount(", ") sqlIDs(", ") SQL(", ") Scan(", "Select) sqlScan(", "GroupBy) sqlScan("} {
+			body := funcBodyFrom(src["query"], fn)
+			if !strings.Contains(body, "ctx = internal.NewSchemaConfigContext(ctx, ") {
+				t.Errorf("%s does not carry the schema config into ctx\n%s", fn, body)
+			}
+		}
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		h, u := fixture()
+		for file, s := range render(h, u) {
+			for _, bad := range []string{"chemaConfig", "JoinSchema", "GetSchema"} {
+				if strings.Contains(s, bad) {
+					t.Errorf("%s: %s emitted with the feature disabled", file, bad)
+				}
+			}
+		}
+	})
+}

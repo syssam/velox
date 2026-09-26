@@ -65,6 +65,9 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		if t.NumPolicy() > 0 {
 			d[jen.Id("policy")] = jen.Id("policy")
 		}
+		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+			d[jen.Id("schemaConfig")] = jen.Qual(h.InternalPkg(), "SchemaConfigFromRuntime").Call(jen.Id("c"))
+		}
 		grp.Return(jen.Op("&").Id(deleteName).Values(d))
 	})
 
@@ -95,6 +98,9 @@ func genDeleteInto(h gen.GeneratorHelper, f *jen.File, t *gen.Type) {
 		}
 		if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
 			baseDict[jen.Id("Schema")] = jen.Id(recv).Dot("schemaConfig").Dot(t.Name)
+			// Edge predicates in Where (HasXxx) read the schema config from
+			// the selector's context, as they do on a query.
+			grp.Id("ctx").Op("=").Qual(h.InternalPkg(), "NewSchemaConfigContext").Call(jen.Id("ctx"), jen.Id(recv).Dot("schemaConfig"))
 		}
 		grp.Id("base").Op(":=").Op("&").Qual(runtimePkg, "DeleterBase").Values(baseDict)
 		grp.List(jen.Id("affected"), jen.Id("err")).Op(":=").Qual(runtimePkg, "DeleteNodes").Call(

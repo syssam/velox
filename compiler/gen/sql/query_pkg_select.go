@@ -165,14 +165,15 @@ func (qg *queryGen) genSelectEntry() {
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("Scan").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 		jen.Id("v").Any(),
-	).Error().Block(
-		jen.If(jen.Err().Op(":=").Id(qg.recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
+	).Error().BlockFunc(func(body *jen.Group) {
+		body.If(jen.Err().Op(":=").Id(qg.recv).Dot("prepareQuery").Call(jen.Id("ctx")), jen.Err().Op("!=").Nil()).Block(
 			jen.Return(jen.Id("err")),
-		),
-		jen.Return(jen.Qual(runtimePkg, "QueryScan").Call(
+		)
+		qg.schemaConfigCtx(body, jen.Id(qg.recv))
+		body.Return(jen.Qual(runtimePkg, "QueryScan").Call(
 			jen.Id("ctx"), jen.Id(qg.recv), jen.Id("v"),
-		)),
-	)
+		))
+	})
 
 	qg.f.Comment("ScanX is like Scan, but panics if an error occurs.")
 	qg.f.Func().Params(jen.Id(qg.recv).Op("*").Id(qg.queryName)).Id("ScanX").Params(
@@ -244,14 +245,15 @@ func (qg *queryGen) genSelectType() {
 	qg.f.Func().Params(jen.Id("s").Op("*").Id(qg.selectName)).Id("sqlScan").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 		jen.Id("v").Any(),
-	).Error().Block(
-		jen.Return(jen.Qual(runtimePkg, "QuerySelect").Call(
+	).Error().BlockFunc(func(body *jen.Group) {
+		qg.schemaConfigCtx(body, jen.Id("s").Dot(qg.queryName))
+		body.Return(jen.Qual(runtimePkg, "QuerySelect").Call(
 			jen.Id("ctx"),
 			jen.Id("s").Dot(qg.queryName),
 			jen.Id("s").Dot("Fns").Call(),
 			jen.Id("v"),
-		)),
-	)
+		))
+	})
 
 	// Scan and ScanX on *XxxSelect — explicit methods so the call is
 	// not the promoted runtime.Selector one. Scan threads the call through the
@@ -340,15 +342,16 @@ func (qg *queryGen) genGroupByType() {
 	qg.f.Func().Params(jen.Id("g").Op("*").Id(qg.gbName)).Id("sqlScan").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 		jen.Id("v").Any(),
-	).Error().Block(
-		jen.Return(jen.Qual(runtimePkg, "QueryGroupBy").Call(
+	).Error().BlockFunc(func(body *jen.Group) {
+		qg.schemaConfigCtx(body, jen.Id("g").Dot("build"))
+		body.Return(jen.Qual(runtimePkg, "QueryGroupBy").Call(
 			jen.Id("ctx"),
 			jen.Id("g").Dot("build"),
 			jen.Id("g").Dot("fields"),
 			jen.Id("g").Dot("Fns").Call(),
 			jen.Id("v"),
-		)),
-	)
+		))
+	})
 }
 
 // genClonePrivate emits clone(), which must copy every typed field —

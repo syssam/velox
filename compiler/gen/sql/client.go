@@ -94,14 +94,19 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	f.Comment("runtimeConfig returns a runtime.Config derived from the local config.")
 	f.Comment("HookStore and InterStore carry pointers to the typed store structs,")
 	f.Comment("type-asserted once by each entity client constructor.")
+	rtDict := jen.Dict{
+		jen.Id("Driver"):     jen.Id("c").Dot("driver"),
+		jen.Id("Debug"):      jen.Id("c").Dot("debug"),
+		jen.Id("Log"):        jen.Id("c").Dot("log"),
+		jen.Id("HookStore"):  jen.Id("c").Dot("hooks"),
+		jen.Id("InterStore"): jen.Id("c").Dot("inters"),
+	}
+	if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
+		// Read by every builder constructor (internal.SchemaConfigFromRuntime).
+		rtDict[jen.Id("SchemaConfig")] = jen.Id("c").Dot("schemaConfig")
+	}
 	f.Func().Params(jen.Id("c").Op("*").Id("config")).Id("runtimeConfig").Params().Qual(runtimePkg, "Config").Block(
-		jen.Return(jen.Qual(runtimePkg, "Config").Values(jen.Dict{
-			jen.Id("Driver"):     jen.Id("c").Dot("driver"),
-			jen.Id("Debug"):      jen.Id("c").Dot("debug"),
-			jen.Id("Log"):        jen.Id("c").Dot("log"),
-			jen.Id("HookStore"):  jen.Id("c").Dot("hooks"),
-			jen.Id("InterStore"): jen.Id("c").Dot("inters"),
-		})),
+		jen.Return(jen.Qual(runtimePkg, "Config").Values(rtDict)),
 	)
 
 	// Public RuntimeConfig method for external use.

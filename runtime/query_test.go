@@ -788,3 +788,40 @@ func TestCloneSlice_PopulatedDeepCopy(t *testing.T) {
 	assert.Len(t, src, 3, "appending to the clone must not affect the source")
 	_ = got
 }
+
+// schemaQuery is a query generated with the sql/schemaconfig feature: it
+// implements the optional GetSchema extension of QueryReader.
+type schemaQuery struct {
+	*testQuery
+	schema string
+}
+
+func (q *schemaQuery) GetSchema() string { return q.schema }
+
+// The query's own table takes the schema the generated query reports; a
+// query without GetSchema, or with an empty schema, stays unqualified.
+func TestQuerySchemaQualifiesOwnTable(t *testing.T) {
+	drv := &mockDriver{dialectName: dialect.Postgres}
+	plain := newTestQuery(drv, "users", []string{"id"}, "id", nil, "User")
+	alt := &schemaQuery{testQuery: newTestQuery(drv, "users", []string{"id"}, "id", nil, "User"), schema: "alt"}
+	unset := &schemaQuery{testQuery: newTestQuery(drv, "users", []string{"id"}, "id", nil, "User")}
+
+	for _, tc := range []struct {
+		name string
+		q    QueryReader
+		want string
+	}{
+		{"plain", plain, `FROM "users"`},
+		{"alt", alt, `FROM "alt"."users"`},
+		{"unset", unset, `FROM "users"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sel, err := BuildSelectorFrom(context.Background(), tc.q)
+			require.NoError(t, err)
+			query, _ := sel.Query()
+			assert.Contains(t, query, tc.want)
+			assert.Equal(t, schemaOf(tc.q), MakeQuerySpec(tc.q, field.TypeInt).Node.Schema)
+		})
+	}
+	assert.Equal(t, "alt", MakeQuerySpec(alt, field.TypeInt).Node.Schema)
+}

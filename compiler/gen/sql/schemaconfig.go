@@ -62,5 +62,18 @@ func genSchemaConfig(h gen.GeneratorHelper, graph *gen.Graph) *jen.File {
 		)),
 	)
 
+	f.Line()
+
+	// SchemaConfigFromRuntime function
+	f.Comment("SchemaConfigFromRuntime returns the SchemaConfig the client was configured with")
+	f.Comment("(AlternateSchema), carried by runtime.Config, or an empty one if there isn't one.")
+	f.Comment("Every generated builder reads it once in its constructor.")
+	f.Func().Id("SchemaConfigFromRuntime").Params(
+		jen.Id("c").Qual(runtimePkg, "Config"),
+	).Id("SchemaConfig").Block(
+		jen.List(jen.Id("config"), jen.Id("_")).Op(":=").Id("c").Dot("SchemaConfig").Assert(jen.Id("SchemaConfig")),
+		jen.Return(jen.Id("config")),
+	)
+
 	return f
 }
