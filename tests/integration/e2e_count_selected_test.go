@@ -99,7 +99,7 @@ func TestMultiDialect_CountSelectedAcrossShapes(t *testing.T) {
 		}
 		check := func(name string, n int, err error, want int) {
 			t.Helper()
-			if !(err == nil && n == want) {
+			if err != nil || n != want {
 				t.Errorf("%s: got %d err=%v, want %d", name, n, err, want)
 			}
 		}

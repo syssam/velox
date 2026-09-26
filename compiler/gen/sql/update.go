@@ -709,7 +709,7 @@ func genUpdateEdgesAndModifiers(h gen.GeneratorHelper, grp *jen.Group, t *gen.Ty
 			// appended elements (see the SetField above).
 			forGrp.Switch(jen.Id("col")).BlockFunc(func(sw *jen.Group) {
 				for _, fd := range t.MutableFields() {
-					if fd.SupportsMutationAppend() && !(fd.IsEdgeField() && !fd.UserDefined) {
+					if fd.SupportsMutationAppend() && (!fd.IsEdgeField() || fd.UserDefined) {
 						sw.Case(jen.Lit(fd.StorageKey())).Block(
 							jen.If(jen.Id(recv).Dot("mutation").Dot("_" + fd.Name).Op("!=").Nil()).Block(jen.Continue()),
 						)
