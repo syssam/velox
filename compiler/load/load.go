@@ -516,8 +516,14 @@ func needsLink(binPath, target string, flags []string) bool {
 // environment assignment (GOROOT='…' …/link -o …). Comparing base names
 // also keeps the unrelated `cat >$WORK/b001/importcfg.link` line from
 // counting as a link step.
+//
+// A Go installed under a path with a space (C:\Program Files\Go) prints the
+// tool quoted, and splitting on spaces leaves the closing quote on the last
+// piece: `link.exe"`. Quotes are trimmed before comparing, or that install
+// reused a stale loader forever, as the separator once did.
 func hasLinkAction(line string) bool {
 	for _, f := range strings.Fields(line) {
+		f = strings.Trim(f, `"'`)
 		if i := strings.LastIndexAny(f, `/\`); i >= 0 {
 			f = f[i+1:]
 		}

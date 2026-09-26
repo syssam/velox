@@ -237,6 +237,10 @@ type Generator struct {
 	// typedJSONScalars caches the result of collectTypedJSONScalars to avoid
 	// redundant iteration when called from multiple generation paths.
 	typedJSONScalars map[string]typedJSONScalar
+
+	// written is every file this run wrote, for the manifest. A pointer,
+	// shared by the shallow copies some generators make of g.
+	written *writtenFiles
 }
 
 // NewGenerator creates a new GraphQL generator.
@@ -280,6 +284,7 @@ func NewGenerator(g *gen.Graph, cfg Config) *Generator {
 		config:      cfg,
 		workers:     min(runtime.GOMAXPROCS(0), 16),
 		samePackage: samePackage,
+		written:     &writtenFiles{},
 	}
 	gqlGen.buildEnumNamesCache()
 	gqlGen.typedJSONScalars = gqlGen.collectTypedJSONScalars()
@@ -665,7 +670,10 @@ func (g *Generator) Generate(ctx context.Context) error {
 	// - DataLoaders: Use graph-gophers/dataloader or similar
 	// - Error handling: Use gqlgen's gqlerror package
 
-	return errg.Wait()
+	if err := errg.Wait(); err != nil {
+		return err
+	}
+	return g.pruneStale()
 }
 
 // Generate is a convenience function to generate GraphQL code.
@@ -734,6 +742,7 @@ func (g *Generator) writeSchema(ctx context.Context, content, subdir, filename s
 		return err
 	}
 	path := filepath.Join(dir, filename)
+	g.track(path)
 	// atomicWriteFile skips the write when content is unchanged — preserves
 	// the SDL's mtime so make rules gating `gqlgen generate` on schema.graphql
 	// don't re-fire after a no-op velox regen.
@@ -745,6 +754,7 @@ func (g *Generator) writeFile(ctx context.Context, f *jen.File, filename string)
 		return err
 	}
 	path := filepath.Join(g.config.OutDir, filename)
+	g.track(path)
 	formatted, err := gen.FormatJenFile(f, path)
 	if err != nil {
 		return fmt.Errorf("format %s: %w", path, err)
@@ -768,6 +778,7 @@ func (g *Generator) writeFileSubdir(ctx context.Context, f *jen.File, subdir, fi
 		return fmt.Errorf("create subdirectory %s: %w", subdir, err)
 	}
 	path := filepath.Join(dir, filename)
+	g.track(path)
 	formatted, err := gen.FormatJenFile(f, path)
 	if err != nil {
 		return fmt.Errorf("format %s: %w", path, err)

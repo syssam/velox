@@ -259,6 +259,9 @@ func TestHasLinkAction(t *testing.T) {
 		"/usr/local/go/pkg/tool/darwin_arm64/link -o $WORK/b001/exe/a.out -importcfg ...",
 		`GOROOT='C:\go' C:\go\pkg\tool\windows_amd64\link.exe -o C:\Users\x\AppData\Local\Temp\go-build\b001\exe\a.out`,
 		"link -o out.bin",
+		// A Go installed under a path with a space prints the tool quoted.
+		`"C:\Program Files\Go\pkg\tool\windows_amd64\link.exe" -o C:\Users\x\AppData\Local\Temp\go-build\b001\exe\a.out`,
+		`GOROOT='/Users/me/My Go' '/Users/me/My Go/pkg/tool/darwin_arm64/link' -o $WORK/b001/exe/a.out`,
 	}
 	for _, line := range links {
 		if !hasLinkAction(line) {
@@ -275,6 +278,7 @@ func TestHasLinkAction(t *testing.T) {
 		// Mentions "link" only as part of a file name.
 		"cat >$WORK/b001/importcfg.link << 'EOF' # internal",
 		"GOROOT='/opt/homebrew/Cellar/go/1.26.3/libexec' /opt/homebrew/Cellar/go/1.26.3/libexec/pkg/tool/darwin_arm64/compile -o $WORK/b001/_pkg_.a -importcfg $WORK/b001/importcfg.link",
+		`"C:\Program Files\Go\pkg\tool\windows_amd64\compile.exe" -o pkg.a`,
 	}
 	for _, line := range notLinks {
 		if hasLinkAction(line) {

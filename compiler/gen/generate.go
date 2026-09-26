@@ -523,9 +523,17 @@ func (g *JenniferGenerator) cleanupStaleFiles() error {
 // writeManifest writes the current set of generated files to the manifest file.
 // Uses atomic temp-file + rename (skipped when unchanged) to prevent
 // corruption on crash.
+//
+// Paths are written with forward slashes, whatever the OS: the manifest is
+// committed with the generated code, and one written with backslashes on
+// Windows read as stale everywhere else.
 func (g *JenniferGenerator) writeManifest() error {
-	slices.Sort(g.generatedFiles)
-	data := strings.Join(g.generatedFiles, "\n") + "\n"
+	paths := make([]string, len(g.generatedFiles))
+	for i, p := range g.generatedFiles {
+		paths[i] = filepath.ToSlash(p)
+	}
+	slices.Sort(paths)
+	data := strings.Join(paths, "\n") + "\n"
 	outPath := filepath.Join(g.outDir, manifestFile)
 	_, err := WriteFileIfChanged(outPath, []byte(data), 0o644)
 	return err
@@ -540,7 +548,7 @@ func (g *JenniferGenerator) readManifest() ([]string, error) {
 	var paths []string
 	for line := range strings.SplitSeq(string(data), "\n") {
 		if line != "" {
-			paths = append(paths, line)
+			paths = append(paths, filepath.FromSlash(line))
 		}
 	}
 	return paths, nil
