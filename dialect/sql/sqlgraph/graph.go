@@ -1250,9 +1250,18 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 		// In case there are zero affected rows by this statement, we need to distinguish
 		// between the case of "record was not found" and "record was not changed".
 		if affected == 0 && u.Predicate != nil {
-			if err := u.ensureExists(ctx); err != nil {
+			if err := u.ensureExists(ctx, idp); err != nil {
 				return err
 			}
+		}
+	} else if u.Predicate != nil {
+		// No column changes, so no UPDATE statement applied the predicate:
+		// check it before writing the edges. Without this, UpdateOne(id).
+		// Where(p) with only edge changes — or a mutation policy's row
+		// filter, which arrives as the predicate — wrote the edges of a row
+		// the predicate excludes.
+		if err := u.ensureExists(ctx, idp); err != nil {
+			return err
 		}
 	}
 	if id != nil {
@@ -1472,8 +1481,10 @@ func (u *updater) scan(rows *sql.Rows) error {
 	return u.Assign(columns, values)
 }
 
-func (u *updater) ensureExists(ctx context.Context) error {
-	exists := u.builder.Select().From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema)).Where(sql.EQ(u.Node.ID.Column, u.Node.ID.Value))
+func (u *updater) ensureExists(ctx context.Context, idp *sql.Predicate) error {
+	// idp identifies the row by its ID or, for an edge schema, its
+	// composite key (Node.ID is nil there).
+	exists := u.builder.Select().From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema)).Where(idp)
 	exists.WithContext(ctx) // predicates read the request context (edge-predicate policies, schema config)
 	u.Predicate(exists)
 	check := u.builder.SelectExpr(sql.Exists(exists))
@@ -1491,7 +1502,14 @@ func (u *updater) ensureExists(ctx context.Context) error {
 		return err
 	}
 	if !found {
-		return &NotFoundError{table: u.Node.Table, id: u.Node.ID.Value}
+		var id driver.Value
+		switch {
+		case u.Node.ID != nil:
+			id = u.Node.ID.Value
+		case len(u.Node.CompositeID) == 2:
+			id = []driver.Value{u.Node.CompositeID[0].Value, u.Node.CompositeID[1].Value}
+		}
+		return &NotFoundError{table: u.Node.Table, id: id}
 	}
 	return nil
 }

@@ -2892,3 +2892,26 @@ func TestUpdateNode_PredicateSeesRequestContext(t *testing.T) {
 	require.NoError(t, UpdateNode(ctx, sql.OpenDB(dialect.SQLite, db), spec))
 	require.Equal(t, "req", seen)
 }
+
+// TestUpdateNode_CompositeKeyPredicateWithoutColumns pins the edge-schema
+// path of the existence check: an UpdateOne on a composite-key row whose
+// predicate excludes it, with no column changes, must report NotFound.
+// ensureExists read Node.ID, which is nil for a composite key.
+func TestUpdateNode_CompositeKeyPredicateWithoutColumns(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT EXISTS (SELECT * FROM `memberships` WHERE (`user_id` = ? AND `group_id` = ?) AND `role` = ?)")).
+		WithArgs(1, 2, "admin").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectRollback()
+	spec := NewUpdateSpec("memberships", nil,
+		&FieldSpec{Column: "user_id", Type: field.TypeInt, Value: 1},
+		&FieldSpec{Column: "group_id", Type: field.TypeInt, Value: 2},
+	)
+	spec.Predicate = func(s *sql.Selector) { s.Where(sql.EQ("role", "admin")) }
+	err = UpdateNode(context.Background(), sql.OpenDB(dialect.MySQL, db), spec)
+	var nf *NotFoundError
+	require.ErrorAs(t, err, &nf)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

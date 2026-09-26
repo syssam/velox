@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
 
 ### Fixed
+- **Security:** `UpdateOne(id).Where(p)` with only edge changes (`AddXxxIDs`, `ClearXxx`) wrote the edges even when `p` excluded the row, because only the UPDATE statement applied `p` and there was none. A mutation policy's row filter arrives as that predicate, so a caller could link rows the policy scoped out. The predicate is now checked first, and the row reports NotFound (Ent has the same bug)
 - Migrations were built by a second table builder in the migrate generator that had drifted from `Graph.Tables`. It now renders `Graph.Tables`, which fixes: a one-way O2M edge (no inverse) created without its foreign-key column; an optional edge field on an O2O edge created NOT NULL (with ON DELETE SET NULL, which MySQL rejects) and without UNIQUE; an edge schema with a composite key generating a migrate package that panicked at init; views created as tables; `Through` on the inverse edge creating the join table twice; and tables annotated `sqlschema.Skip` being migrated. **Regenerate**
 - `WithXxx()` panicked (`interface {} is *int, not int`) when any row's optional foreign key was NULL — e.g. `WithParent()` on any tree with a root
 - A to-one edge set on create read back as a stub with only its ID filled in: `createPost { author { name } }` answered with an empty name. Create now leaves the edge unloaded, and the resolver queries it
