@@ -12,6 +12,8 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sql"
 )
 
 // TestCursor_TimeKeepsItsOffset pins that a time order value survives the
@@ -68,4 +70,32 @@ func TestCursor_DecodesTokensOfTheOldTimeEncoding(t *testing.T) {
 	got, ok := out.Value.(time.Time)
 	require.True(t, ok, "decoded %T", out.Value)
 	require.True(t, got.Equal(at))
+}
+
+// TestCursor_ZeroOrderValueIsNotNull pins that an order value equal to its
+// type's zero value survives the cursor round trip. With `omitempty` on
+// Value, msgpack dropped 0, "", false and 0.0, the token decoded with a nil
+// Value, and CursorsPredicate — which reads nil as a NULL order value —
+// asked the next page for `score IS NULL`: paging past a row sorted on 0
+// returned an empty or truncated page on every dialect. (Ent's entgql
+// carries the same tag, but does not turn a nil value into IS NULL.)
+func TestCursor_ZeroOrderValueIsNotNull(t *testing.T) {
+	for _, v := range []any{int64(0), "", false, 0.0} {
+		var buf bytes.Buffer
+		Cursor{ID: 5, Value: v}.MarshalGQL(&buf)
+		var out Cursor
+		require.NoError(t, out.UnmarshalGQL(strings.Trim(buf.String(), `"`)))
+		require.NotNil(t, out.Value, "order value %#v decoded as NULL", v)
+		require.EqualValues(t, v, out.Value)
+
+		for _, d := range []string{dialect.Postgres, dialect.MySQL, dialect.SQLite} {
+			s := sql.Dialect(d).Select("*").From(sql.Table("t"))
+			for _, p := range CursorsPredicate(&out, nil, "id", "score", OrderDirectionAsc) {
+				p(s)
+			}
+			query, args := s.Query()
+			require.NotContains(t, query, "IS NULL AND", "%s: order value %#v compiled as NULL: %s", d, v, query)
+			require.Contains(t, args, out.Value, "%s: order value %#v not bound: %s", d, v, query)
+		}
+	}
 }

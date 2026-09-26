@@ -72,9 +72,14 @@ func (o *OrderDirection) UnmarshalGQL(v any) error {
 }
 
 // Cursor is a pagination cursor.
+//
+// Value carries no omitempty: msgpack's omitempty drops an interface
+// holding a zero value (0, "", false), not only nil, and a nil Value is
+// what CursorsPredicate reads as a NULL order value. A row sorted on 0
+// then produced `col IS NULL` for the next page instead of `col > 0`.
 type Cursor struct {
 	ID     any           `msgpack:"i"`
-	Value  velox.Value   `msgpack:"v,omitempty"`
+	Value  velox.Value   `msgpack:"v"`
 	Values []velox.Value `msgpack:"vs,omitempty"`
 }
 

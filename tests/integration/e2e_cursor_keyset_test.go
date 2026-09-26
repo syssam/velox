@@ -29,6 +29,9 @@ import (
 //   - a time order value stored at an offset other than the process's local
 //     zone: the cursor decoded it in the local zone, and SQLite, which
 //     compares times as text, returned an empty or repeated page.
+//   - an order value equal to its type's zero value (""): the cursor's
+//     msgpack `omitempty` dropped it, the next page read it as NULL and
+//     asked for `nickname IS NULL`, skipping every non-NULL row after it.
 //
 // Cursors round-trip through their GraphQL encoding, as between requests.
 func TestMultiDialect_CursorKeysetWalks(t *testing.T) {
@@ -40,7 +43,7 @@ func TestMultiDialect_CursorKeysetWalks(t *testing.T) {
 		zone, err := time.LoadLocation("America/New_York")
 		require.NoError(t, err)
 		base := time.Date(2026, 1, 1, 0, 0, 0, 0, zone)
-		nicks := []*string{nil, ptr("b"), nil, ptr("a"), ptr("b"), nil, ptr("c")}
+		nicks := []*string{nil, ptr("b"), nil, ptr(""), ptr("a"), ptr("b"), nil, ptr("c"), ptr("")}
 		for i, n := range nicks {
 			_, err := c.User.Create().SetName(fmt.Sprintf("u%d", i)).SetEmail(fmt.Sprintf("u%d@ck", i)).
 				SetAge(30).SetRole(user.RoleUser).SetNillableNickname(n).
