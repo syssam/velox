@@ -71,6 +71,7 @@ func (q *ArticleQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) run
 		if q.withAuthor == nil {
 			q.withAuthor = NewAuthorQuery(q.config)
 			q.withAuthor.inters = q.inters
+			q.withAuthor.ctx.EdgeLoadCreated = true
 		}
 		q.withAuthor.applyLoad(runtime.NewLoadConfig(opts...), false)
 		return q.withAuthor

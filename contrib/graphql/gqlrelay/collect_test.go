@@ -46,7 +46,15 @@ func (q *collectQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) run
 	child := q.Children[name]
 	if child == nil {
 		child = newCollectQuery(q.ChildMeta[name])
+		child.Ctx.EdgeLoadCreated = true
 		q.Children[name] = child
+	}
+	for _, o := range opts {
+		var c runtime.LoadConfig
+		o(&c)
+		if c.Limit != nil {
+			child.Ctx.PartitionLimit = c.Limit
+		}
 	}
 	return child
 }
@@ -487,4 +495,39 @@ func TestCollectFields_InterfaceFieldSharesEdgeWithDirectSelection(t *testing.T)
 			assert.Contains(t, child.Ctx.Fields, "owner_id")
 		}
 	})
+}
+
+// An edge the resolver loaded itself (WithItems before Paginate) is read by
+// code the collector cannot see -- a computed total over every item, say.
+// Narrowing it to the columns the client selected, or capping it to the
+// first page, answered that total from zero values and partial rows. The
+// collector may still load edges beneath it.
+func TestCollectFields_CallerConfiguredEdgeIsLoadedWhole(t *testing.T) {
+	q := newUserQuery()
+	q.ChildMeta["posts"] = &runtime.CollectMeta{
+		FieldColumns: map[string]string{"title": "title", "body": "body"},
+		Edges:        map[string]runtime.EdgeMeta{"author": {Name: "author", Unique: true, FKColumns: []string{"post_author"}}},
+	}
+	explicit := newCollectQuery(q.ChildMeta["posts"])
+	explicit.ChildMeta = map[string]*runtime.CollectMeta{"author": {FieldColumns: map[string]string{"name": "name"}}}
+	q.Children["posts"] = explicit // as WithPosts() left it: EdgeLoadCreated false
+
+	sel := ast.SelectionSet{connField("posts", map[string]string{"first": "2"},
+		nodeSel(field("title"), field("author", field("name"))))}
+	require.NoError(t, CollectFields(newGQLContext(t, sel), q, q.Meta))
+
+	assert.Empty(t, explicit.Ctx.Fields, "the caller's edge query keeps every column")
+	assert.Nil(t, explicit.Ctx.PartitionLimit, "the caller's edge query keeps every row")
+	author := explicit.Children["author"]
+	require.NotNil(t, author, "edges beneath the caller's query are still collected")
+	assert.ElementsMatch(t, []string{"id", "name"}, author.Ctx.Fields, "and a query the collector created is projected")
+
+	// The same selection without the caller's load is narrowed and capped.
+	q = newUserQuery()
+	q.ChildMeta["posts"] = explicit.Meta
+	require.NoError(t, CollectFields(newGQLContext(t, sel), q, q.Meta))
+	created := q.Children["posts"]
+	assert.ElementsMatch(t, []string{"id", "title", "post_author"}, created.Ctx.Fields)
+	require.NotNil(t, created.Ctx.PartitionLimit)
+	assert.Equal(t, 3, *created.Ctx.PartitionLimit)
 }

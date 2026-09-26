@@ -71,6 +71,7 @@ func (q *UserQuery) WithEdgeLoad(name string, opts ...runtime.LoadOption) runtim
 		if q.withPosts == nil {
 			q.withPosts = NewPostQuery(q.config)
 			q.withPosts.inters = q.inters
+			q.withPosts.ctx.EdgeLoadCreated = true
 		}
 		q.withPosts.applyLoad(runtime.NewLoadConfig(opts...), true)
 		return q.withPosts

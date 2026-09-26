@@ -58,6 +58,7 @@
   field PerParentLimit.Active bool
   field PerParentLimit.N int
   field PerParentLimit.Window bool
+  field QueryContext.EdgeLoadCreated bool
   field QueryContext.Fields []string
   field QueryContext.Limit *int
   field QueryContext.Offset *int

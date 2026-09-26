@@ -391,6 +391,9 @@ func (qg *queryGen) genFieldCollectable() {
 					// query so client.Intercept() fires on eager-loads
 					// as well as direct queries.
 					jen.Id(qg.recv).Dot(callbackField).Dot("inters").Op("=").Id(qg.recv).Dot("inters"),
+					// Only a query created here may be narrowed by the
+					// collector; one the caller configured is loaded whole.
+					jen.Id(qg.recv).Dot(callbackField).Dot("ctx").Dot("EdgeLoadCreated").Op("=").True(),
 				}
 				if p := qg.wireEdgePolicy(jen.Id(qg.recv).Dot(callbackField), edge); p != nil {
 					initStmts = append(initStmts, p)

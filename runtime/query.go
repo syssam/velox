@@ -28,6 +28,13 @@ type QueryContext struct {
 	// loader applies it with sql.Selector.LimitPerPartition, partitioned by
 	// the key that links each row to its parent.
 	PartitionLimit *int
+	// EdgeLoadCreated marks an edge query that WithEdgeLoad created, as
+	// opposed to one the caller configured with a WithX method. The GraphQL
+	// field collector narrows the columns and caps the rows only of the
+	// former: code reading an edge the caller loaded itself -- a computed
+	// field summing its rows, say -- needs all of them, whatever the client
+	// selected beneath it.
+	EdgeLoadCreated bool
 }
 
 // Clone returns a deep copy of the QueryContext.

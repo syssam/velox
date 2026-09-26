@@ -36,7 +36,7 @@ func CollectFields(ctx context.Context, q runtime.FieldCollectable, meta *runtim
 	if !ok || meta == nil {
 		return nil
 	}
-	collect(q, meta, []occurrence{{field: fc, satisfies: satisfies}})
+	collect(q, meta, []occurrence{{field: fc, satisfies: satisfies}}, true)
 	return nil
 }
 
@@ -55,7 +55,7 @@ func CollectConnectionFields(ctx context.Context, q runtime.FieldCollectable, me
 		q.GetCtx().AppendFieldOnce(q.GetIDColumn())
 		return nil
 	}
-	collect(q, meta, occurrences(nodes, nil))
+	collect(q, meta, occurrences(nodes, nil), true)
 	return nil
 }
 
@@ -112,11 +112,13 @@ type edgeSelection struct {
 
 // collect projects q onto what the given fields select and schedules the
 // edges they traverse. Each field is one occurrence of the same entity in
-// the selection (an alias, or the node of a connection).
+// the selection (an alias, or the node of a connection). project is false
+// for an edge query the caller configured itself, which keeps every column.
 func collect(
 	q runtime.FieldCollectable,
 	meta *runtime.CollectMeta,
 	parents []occurrence,
+	project bool,
 ) {
 	var (
 		unknownSeen bool
@@ -191,7 +193,7 @@ func collect(
 		collectEdge(q, es)
 	}
 	// Only apply column projection if all fields are known.
-	if !unknownSeen {
+	if project && !unknownSeen {
 		for _, col := range selected {
 			q.GetCtx().AppendFieldOnce(col)
 		}
@@ -263,22 +265,34 @@ func collectEdge(q runtime.FieldCollectable, es *edgeSelection) {
 	if child == nil {
 		return
 	}
+	// The caller's own load of this edge is left whole: a per-parent limit
+	// would hand code that reads it (a computed field) a partial edge. Only
+	// WithEdgeLoad sets PartitionLimit, and it did not create this query, so
+	// nil is the value the caller left.
+	owned := child.GetCtx().EdgeLoadCreated
+	if !owned {
+		child.GetCtx().PartitionLimit = nil
+	}
 	if len(nodes) == 0 && len(es.viaInterface) == 0 {
-		child.GetCtx().AppendFieldOnce(child.GetIDColumn())
+		if owned {
+			child.GetCtx().AppendFieldOnce(child.GetIDColumn())
+		}
 		return
 	}
 	collectChild(child, append(occurrences(nodes, nil), es.viaInterface...))
 }
 
 // collectChild recurses into an eager-loaded edge query when it carries its
-// own metadata; otherwise the edge is loaded unprojected.
+// own metadata; otherwise the edge is loaded unprojected. A query the caller
+// configured before collection (WithX) is not projected either, but the
+// edges beneath it are still collected.
 func collectChild(child runtime.FieldCollectable, fields []occurrence) {
 	mc, ok := child.(MetaCollectable)
 	if !ok {
 		return
 	}
 	if meta := mc.CollectMeta(); meta != nil {
-		collect(mc, meta, fields)
+		collect(mc, meta, fields, mc.GetCtx().EdgeLoadCreated)
 	}
 }
 
