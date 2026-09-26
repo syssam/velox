@@ -273,7 +273,7 @@ func (g *Generator) graphIDType() jen.Code {
 		case field.TypeString:
 			return jen.String()
 		case field.TypeUUID:
-			return jen.Qual("github.com/google/uuid", "UUID")
+			return uuidGoType(g.graph.IDType)
 		default:
 			return jen.Int()
 		}

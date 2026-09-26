@@ -743,6 +743,22 @@ func (g *Generator) isOrderedField(fld *gen.Field) bool {
 	return false
 }
 
+// uuidGoType returns the Go type of a UUID field: the schema's own type
+// when it has one (a named type, gofrs/uuid.UUID), else google/uuid.UUID.
+// Hard-coding google/uuid made the generated input types disagree with the
+// predicates and setters (item.RefField.In takes the field's own type), so
+// the generated package did not compile.
+func uuidGoType(t *field.TypeInfo) jen.Code {
+	if t != nil && t.PkgPath != "" && t.Ident != "" {
+		name := t.Ident
+		if i := strings.LastIndex(name, "."); i >= 0 {
+			name = name[i+1:]
+		}
+		return jen.Qual(t.PkgPath, name)
+	}
+	return jen.Qual("github.com/google/uuid", "UUID")
+}
+
 // goWhereInputFieldType returns the Go type for a field in where input.
 // For enum types, it returns the fully qualified type (e.g., category.Status).
 func (g *Generator) goWhereInputFieldType(fld *gen.Field, entityName string) jen.Code {
@@ -755,7 +771,7 @@ func (g *Generator) goWhereInputFieldType(fld *gen.Field, entityName string) jen
 		return jen.Qual("time", "Time")
 	}
 	if fld.IsUUID() {
-		return jen.Qual("github.com/google/uuid", "UUID")
+		return uuidGoType(fld.Type)
 	}
 	if fld.IsEnum() {
 		// Check if enum has custom GoType (like schematype.Currency)

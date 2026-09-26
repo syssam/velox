@@ -584,7 +584,7 @@ func (g *Generator) goInputFieldType(f *gen.Field, entityName string) jen.Code {
 		return jen.Qual("time", "Time")
 	}
 	if f.IsUUID() {
-		return jen.Qual("github.com/google/uuid", "UUID")
+		return uuidGoType(f.Type)
 	}
 	if f.IsEnum() {
 		// Check if enum has custom GoType (like schematype.Currency)
@@ -722,7 +722,7 @@ func (g *Generator) edgeIDType(e *gen.Edge) jen.Code {
 			return jen.Int()
 		}
 		if e.Type.ID.IsUUID() {
-			return jen.Qual("github.com/google/uuid", "UUID")
+			return uuidGoType(e.Type.ID.Type)
 		}
 		if e.Type.ID.IsString() {
 			return jen.String()
