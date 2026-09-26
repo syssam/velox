@@ -217,11 +217,21 @@ case "$MODE" in
         echo "Results: $OUT"
         ;;
     inc|incremental)
-        # Incremental rebuild: Velox vs Ent on the SAME 50-entity schema — THE
-        # architectural claim. Per-entity packages mean a one-entity change
-        # recompiles one small package; Ent's flat ent/ package recompiles all
-        # 50 entities' code. Forces recompilation with a real content change
-        # (Go's build cache is content-addressed, so a bare `touch` is a no-op).
+        # Incremental rebuild: Velox vs Ent on the SAME 50-entity schema, two
+        # ways, because they measure different things:
+        #
+        #   touch  a unique comment appended to one entity's generated code.
+        #          Export data does not change, so nothing that imports the
+        #          package recompiles: the floor, what a generated-code-only
+        #          change costs.
+        #   edit   a field added to one entity's schema, regenerated, rebuilt.
+        #          This is what changing an entity costs. It changes the shared
+        #          packages both generators emit (velox's entity/, query/ and
+        #          filter/; Ent's ent/), and everything importing them
+        #          recompiles too.
+        #
+        # Go's build cache is content-addressed, so every change is unique (a
+        # fixed marker would be a cache hit measuring a no-op).
         # Output: benchmarks/results/incremental.txt
         echo "=== Velox vs Ent — incremental rebuild benchmark ==="
         mkdir -p benchmarks/results
@@ -230,6 +240,9 @@ case "$MODE" in
         EDIR="$ROOT/benchmarks/fixtures/ent"
         OUT="$ROOT/benchmarks/results/incremental.txt"
         RUNS="${BENCH_RUNS:-5}"
+        # One toolchain for both: each fixture's go directive would otherwise
+        # pick its own, and the comparison would include the compiler's version.
+        export GOTOOLCHAIN="$(cd "$EDIR" && go env GOVERSION)"
 
         # Clean regen. Velox's generated output (velox/velox/) is separate from
         # its schema (velox/schema/), and a bare regen leaves stale orphan files
@@ -254,20 +267,12 @@ case "$MODE" in
         [[ -f "$EFILE" ]] || EFILE=$(find "$EDIR/ent" -maxdepth 1 -name '*.go' \
             -not -name 'client.go' -not -name 'ent.go' -not -name 'runtime.go' | head -1)
 
-        # build_secs <dir> <target> — wall seconds of one go build via /usr/bin/time -p.
-        # Do NOT redirect go build's own fds here: /usr/bin/time writes its timing
-        # to stderr, so suppressing the command's stderr would swallow it too.
-        # Send everything to awk and let it pick the `real` line.
-        build_secs() { ( cd "$1" && { /usr/bin/time -p go build "$2"; } 2>&1 | awk '/^real/{print $2}' ); }
+        # build_secs <dir> <target> — wall seconds of one go build.
+        build_secs() { ( cd "$1" && TIMEFORMAT=%R && { time go build "$2" >/dev/null 2>&1; } 2>&1 ); }
         median() { printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END{print a[int((NR+1)/2)]}'; }
 
         vt=(); et=()
-        echo "  measuring incremental rebuild ($RUNS runs each)..."
-        # The appended marker MUST be unique per build. Go's build cache is
-        # content-addressed, so a fixed comment (e.g. "// inc bench 1") would
-        # produce a file byte-identical to a prior run's — a cache HIT, measuring
-        # a no-op instead of a recompile. A nanosecond token forces a real
-        # recompile every time.
+        echo "  measuring touch ($RUNS runs each)..."
         for i in $(seq 1 "$RUNS"); do
             printf '\n// inc bench %s %s\n' "$i" "$(date +%s%N)" >> "$VFILE"
             vt+=("$(build_secs "$VDIR" ./velox/...)")
@@ -276,17 +281,44 @@ case "$MODE" in
         done
         VMED=$(median "${vt[@]}"); EMED=$(median "${et[@]}")
 
+        # edit <dir> <schema file> <target> <run> — add a field to one entity,
+        # regenerate (untimed), and print the rebuild's wall seconds.
+        edit() {
+            local anchor='field.Bool("active").Default(false),'
+            sed -i.bak "s|$anchor|$anchor field.String(\"bench_edit_$4_$(date +%s%N)\").Optional(),|" "$2"
+            rm -f "$2.bak"
+            ( cd "$1" && go run generate.go >/dev/null 2>&1 ) || { echo "ERROR: regenerate failed in $1" >&2; exit 1; }
+            build_secs "$1" "$3"
+            # A failed build returns fast and would read as a fast rebuild.
+            ( cd "$1" && go build "$3" >/dev/null 2>&1 ) || { echo "ERROR: edited schema does not build in $1" >&2; exit 1; }
+        }
+        VSCHEMA="$VDIR/schema/order.go"; ESCHEMA="$EDIR/ent/schema/order.go"
+        cp "$VSCHEMA" "$VSCHEMA.orig"; cp "$ESCHEMA" "$ESCHEMA.orig"
+        vs=(); es=()
+        echo "  measuring edit ($RUNS runs each)..."
+        for i in $(seq 1 "$RUNS"); do
+            vs+=("$(edit "$VDIR" "$VSCHEMA" ./velox/... "$i")")
+            es+=("$(edit "$EDIR" "$ESCHEMA" ./ent/... "$i")")
+        done
+        mv "$VSCHEMA.orig" "$VSCHEMA"; mv "$ESCHEMA.orig" "$ESCHEMA"
+        (cd "$VDIR" && go run generate.go >/dev/null 2>&1)
+        (cd "$EDIR" && go run generate.go >/dev/null 2>&1)
+        VSMED=$(median "${vs[@]}"); ESMED=$(median "${es[@]}")
+
         ENTITIES=$(ls "$EDIR/ent/schema/"*.go 2>/dev/null | wc -l | tr -d ' ')
         {
             echo "Velox vs Ent — incremental rebuild (1-entity change)"
             echo "Schema: ${ENTITIES} entities  |  Runs: ${RUNS}  |  $(date -u '+%Y-%m-%d %H:%M UTC')"
-            echo "Platform: $(uname -sr) $(uname -m)  |  $(go version | awk '{print $3}')"
+            echo "Platform: $(uname -sr) $(uname -m), $(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu) CPUs  |  $(go version | awk '{print $3}')"
             echo "---"
-            echo "velox runs (s): ${vt[*]}"
-            echo "ent   runs (s): ${et[*]}"
-            echo "velox median: ${VMED}s"
-            echo "ent   median: ${EMED}s"
-            awk -v v="$VMED" -v e="$EMED" 'BEGIN{printf "ratio: %.1fx faster incremental rebuild for velox\n", e/v}'
+            echo "touch (comment in generated code, no export-data change)"
+            echo "  velox runs (s): ${vt[*]}"
+            echo "  ent   runs (s): ${et[*]}"
+            awk -v v="$VMED" -v e="$EMED" 'BEGIN{printf "  median: velox %ss, ent %ss (%.1fx)\n", v, e, e/v}'
+            echo "edit (field added to one entity's schema, regenerated, rebuilt)"
+            echo "  velox runs (s): ${vs[*]}"
+            echo "  ent   runs (s): ${es[*]}"
+            awk -v v="$VSMED" -v e="$ESMED" 'BEGIN{printf "  median: velox %ss, ent %ss (%.1fx)\n", v, e, e/v}'
         } | tee "$OUT"
         ;;
     *)

@@ -85,6 +85,13 @@ examples/erp/
 # not a build dependency). Clone manually when needed.
 .references/
 
+# The velox side of the Velox-vs-Ent benchmark. The bare `velox` pattern
+# above hid this directory, schemas included, so `run.sh inc` and `vs-ent`
+# could not run from a checkout. Its generated output (velox/velox/) stays
+# ignored by that same pattern.
+!benchmarks/fixtures/velox/
+benchmarks/fixtures/velox/velox.graphql
+
 # Ent-generated code in benchmark fixtures. We author the schemas
 # (tracked under ent/schema/) but do not vendor Ent's generator output —
 # benchmarks/run.sh regenerates it locally on first run.

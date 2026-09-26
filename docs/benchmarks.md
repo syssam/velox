@@ -97,24 +97,29 @@ Velox uses more total CPU (~110s user vs ~68s user) because the Go compiler proc
 
 Both have exactly **57 Go packages**.
 
-#### Incremental rebuild — change one entity, recompile (5 runs)
+#### Incremental rebuild (5 runs)
 
-This is the everyday dev-loop cost, and where the per-entity-package architecture
-pays off. **It must be measured by forcing an actual recompile.** Go's build
-cache is content-addressed, so a fixed `touch` marker produces a file
-byte-identical to a prior run — a cache *hit* that measures a no-op. (An earlier
-version of this doc reported a bogus "both ~0.2s, tie" for exactly this reason.)
-`./benchmarks/run.sh inc` appends a unique token to one entity's generated file
-to force recompilation:
+**It must be measured by forcing an actual recompile.** Go's build cache is
+content-addressed, so a fixed `touch` marker produces a file byte-identical to a
+prior run — a cache *hit* that measures a no-op. (An earlier version of this doc
+reported a bogus "both ~0.2s, tie" for exactly this reason.)
 
-| | Ent | Velox |
-|---|-----|-------|
-| Avg wall time | ~8s | **~0.7s** |
-| What recompiles | the flat `ent/` package — all 50 entities, 262 files | one small per-entity package |
+And it must be measured on the change it claims to describe.
+`./benchmarks/run.sh inc` measures two, on the same toolchain for both (Linux,
+4 CPUs, go1.26.1, medians of 5):
 
-**Velox is ~12x faster here on this 50-entity schema, and the gap widens with
-schema size:** Ent's single package grows with every entity added, while velox's
-per-entity package stays constant. This is the architectural reason Velox exists.
+| Change | Ent | Velox | What recompiles |
+|---|-----|-------|---|
+| **Entity edit**: a field added to one entity's schema, regenerated | 27.5s | **17.0s** (1.6x) | Ent: the flat `ent/` package. Velox: the shared `entity/`, `query/` and `filter/` packages, and every package importing them |
+| **Generated-code-only**: a comment appended to one generated file | 27.1s | **0.47s** (58x) | Ent: the flat `ent/` package. Velox: that one per-entity package, whose export data does not change |
+
+Until 2026-09 this section quoted only the second row, as "change one entity,
+~12x, and the gap widens with schema size". An entity edit is the first row.
+The per-entity split does not reach it, because velox's `entity/` package holds
+every entity's struct -- edges refer from one to another, which is what keeps
+them in one package -- and each `client/{entity}/` imports it. On a 300-entity
+schema the same edit recompiled 605 packages
+(`graphql-go/docs/large-schemas.md` has that measurement).
 
 ### Generated Code Metrics
 
@@ -223,7 +228,7 @@ go test -bench=BenchmarkGraph_Gen -benchmem -count=3 ./compiler/gen/
 | Generation consistency | **Velox** | 0.08s range vs 0.88s |
 | Cold compile wall time | **Ent** | 9% faster |
 | Cold compile memory | **Velox** | 2.2x less |
-| Incremental rebuild | **Velox** | ~12x faster (grows with schema) |
+| Rebuild after an entity edit | **Velox** | 1.6x faster |
 | Total generated code | **Velox** | 31% fewer lines |
 | Max file size | **Velox** | 5.9x smaller |
 | File count | **Ent** | 2.2x fewer files |

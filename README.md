@@ -53,7 +53,8 @@ Benchmarked with identical 50-entity schemas including GraphQL (Relay connection
 
 | Metric | Ent | Velox | Delta |
 |--------|-----|-------|-------|
-| **Incremental rebuild** (change 1 entity) | ~8–18s | **~0.7s** | **10–25x faster** |
+| **Rebuild after an entity edit**¹ | 27.5s | **17.0s** | 1.6x faster |
+| **Rebuild after a generated-code-only change**¹ | 27.1s | **0.47s** | 58x faster |
 | **Code generation time** | 6.32s | 2.00s | 3.2x faster |
 | **Generation peak memory** | 1.86 GB | 0.89 GB | 2.1x less |
 | **Total generated lines** | 335,365 | 230,280 | 31% fewer |
@@ -62,11 +63,13 @@ Benchmarked with identical 50-entity schemas including GraphQL (Relay connection
 | **Cold compile time** | 12.4s | 13.5s | Ent 9% faster |
 | **Cold compile memory** | 3.31 GB | 1.54 GB | 2.2x less |
 
-The headline is **incremental rebuild** — the cost of the everyday dev loop (change one entity, recompile). Velox generates one small package per entity, so a one-entity change recompiles just that package (~0.7s). Ent generates a single flat `ent/` package (262 files for this schema), so any one-entity change recompiles **all 50 entities' code** (~8s, and it grows with schema size). On this 50-entity schema that's ~12x; the gap widens as the schema grows. Reproduce with [`./benchmarks/run.sh inc`](benchmarks/run.sh).
+¹ Linux, 4 CPUs, go1.26.1, median of 5; reproduce with [`./benchmarks/run.sh inc`](benchmarks/run.sh).
+
+**The two rebuild rows measure different things, and only the first is what changing an entity costs.** Adding a field to one entity regenerates the packages every entity shares -- velox's `entity/`, `query/` and `filter/`, Ent's `ent/` -- and everything importing them recompiles: 1.6x. The second row appends a comment to one generated file, which changes no package's export data, so velox recompiles one small package where Ent recompiles its whole flat package. This README used to quote only that second kind of change, as "10–25x faster incremental rebuild (change 1 entity)"; the entity edit was never measured, and the velox fixture it was measured on had never been committed.
 
 The trade-off is honest: a *cold* full build is ~9% slower (more packages to compile from scratch), and codegen is ~3x faster with ~2x less memory. Generated files are also dramatically smaller — Ent's `mutation.go` alone is 56K lines vs Velox's largest file at 9.4K lines.
 
-**When Velox makes sense:** large, actively-developed schemas where the incremental rebuild loop is the bottleneck. For a small-to-medium schema you iterate on rarely, **use Ent** — it's mature, battle-tested, and the build-time gap won't matter to you.
+**When Velox makes sense:** large, actively-developed schemas, where generation time, generation and compile memory and file size matter, and an entity edit rebuilds about 1.6x faster. For a small-to-medium schema you iterate on rarely, **use Ent** — it's mature, battle-tested, and the build-time gap won't matter to you.
 
 ## Features
 

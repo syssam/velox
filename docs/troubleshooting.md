@@ -422,8 +422,10 @@ Two facts determine what a regeneration actually costs:
 2. **Go's build cache is content-addressed, not mtime-based.** Even a file
    rewritten with identical bytes would not invalidate compiled packages.
    Recompilation happens only for packages whose source content actually
-   changed — and velox's per-entity package split keeps that blast radius
-   small (the measured 10–25× incremental-rebuild advantage).
+   changed. A change confined to one entity's own package recompiles only
+   that package, but a schema edit also changes the shared `entity/`,
+   `query/` and `filter/` packages, and everything importing them
+   recompiles (see `docs/benchmarks.md`).
 
 To also skip the *generation step itself* when no schema changed, use a
 standard make stamp — declarative and immune to stale-skip bugs, which is why

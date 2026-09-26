@@ -19,10 +19,12 @@ schema-as-Go. The closest sibling is [Ent](https://entgo.io/) — velox borrows
 the schema DSL, hook/interceptor model, and privacy layer almost verbatim.
 The main divergence is _generated layout_: where Ent emits a single
 flat package, velox emits a graph of small per-entity sub-packages. This
-keeps incremental rebuilds fast and memory-light at large schema sizes —
-the measured headline numbers are a **10–25× faster incremental rebuild
-(~0.7s vs ~8–18s at 50 entities) and ~75% lower peak codegen RSS than
-Ent**, and the curve stays linear out to 328 entities. See
+keeps builds memory-light at large schema sizes -- **~75% lower peak codegen
+RSS than Ent** -- and a rebuild after an entity edit **1.6× faster (17.0s vs
+27.5s at 50 entities, 4 CPUs)**. A change that leaves every package's export
+data alone recompiles one small package (0.47s against Ent's 27.1s), but an
+entity edit is not such a change: it regenerates the shared `entity/`,
+`query/` and `filter/` packages, and everything importing them recompiles. See
 [`docs/benchmarks.md`](benchmarks.md) for the current methodology and
 numbers, and [`docs/reports/scale-performance-2026-04-25.md`](reports/scale-performance-2026-04-25.md)
 for the scale study.

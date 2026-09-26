@@ -91,5 +91,5 @@ edge-method `where` autobind (zero resolver code), multi-order Relay
 pagination with e2e guards, NULL-aware cursor pagination
 (`dialect.CapNullsFirst`, beyond Ent parity), the three-way parity differential harness
 (reference ⟷ velox ⟷ ent) across the dialect matrix, per-tier CI coverage
-gates, and the 10–25× incremental-rebuild advantage measured in
-`docs/benchmarks.md`.
+gates, and the incremental-rebuild comparison in `docs/benchmarks.md` (1.6× on an
+entity edit; the earlier 10–25× measured a comment appended to generated code).
