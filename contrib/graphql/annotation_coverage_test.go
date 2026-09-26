@@ -510,9 +510,14 @@ func TestAnnotation_Name(t *testing.T) {
 func TestAnnotation_Merge_TypeMismatch(t *testing.T) {
 	ann := Annotation{Type: "User"}
 	// Merge with non-Annotation should return original
-	result := ann.Merge(&extensionAnnotation{})
+	result := ann.Merge(otherAnnotation{})
 	assert.Equal(t, ann, result)
 }
+
+// otherAnnotation is an annotation of some other extension.
+type otherAnnotation struct{}
+
+func (otherAnnotation) Name() string { return "other" }
 
 func TestMergeAnnotations_AllBranches(t *testing.T) {
 	t.Run("Type", func(t *testing.T) {

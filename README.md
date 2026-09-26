@@ -531,11 +531,11 @@ SQLite uses [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) (pure Go
 Optional extension for generating GraphQL schemas and resolvers (works with [gqlgen](https://gqlgen.com/)):
 
 ```go
-import "github.com/syssam/velox/contrib/graphql"
+import "github.com/syssam/velox/contrib/graphql/graphqlgen"
 
-ex, err := graphql.NewExtension(
-    graphql.WithConfigPath("./gqlgen.yml"),
-    graphql.WithSchemaPath("./velox/schema.graphql"),
+ex, err := graphqlgen.NewExtension(
+    graphqlgen.WithConfigPath("./gqlgen.yml"),
+    graphqlgen.WithSchemaPath("./velox/schema.graphql"),
 )
 
 cfg, err := gen.NewConfig(gen.WithTarget("./velox"))

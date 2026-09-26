@@ -8,15 +8,15 @@ import (
 
 	"github.com/syssam/velox/compiler"
 	"github.com/syssam/velox/compiler/gen"
-	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/graphqlgen"
 )
 
 func main() {
 	// Create GraphQL extension with schema generation enabled.
-	ex, err := graphql.NewExtension(
-		graphql.WithSchemaGenerator(),
-		graphql.WithSchemaPath("./velox/schema.graphql"),
-		graphql.WithConfigPath("./gqlgen.yml"),
+	ex, err := graphqlgen.NewExtension(
+		graphqlgen.WithSchemaGenerator(),
+		graphqlgen.WithSchemaPath("./velox/schema.graphql"),
+		graphqlgen.WithConfigPath("./gqlgen.yml"),
 	)
 	if err != nil {
 		slog.Error("creating graphql extension", "error", err)

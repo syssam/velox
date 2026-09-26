@@ -17,7 +17,7 @@ import (
 
 	"github.com/syssam/velox/compiler"
 	"github.com/syssam/velox/compiler/gen"
-	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/graphqlgen"
 )
 
 func main() {
@@ -49,9 +49,9 @@ func main() {
 	// alongside the Go output so a downstream gqlgen run would see a
 	// complete schema, though tests/integration doesn't actually call
 	// gqlgen — the tests drive the Go API directly.
-	ex, err := graphql.NewExtension(
-		graphql.WithSchemaGenerator(),
-		graphql.WithSchemaPath("./tests/integration/schema.graphql"),
+	ex, err := graphqlgen.NewExtension(
+		graphqlgen.WithSchemaGenerator(),
+		graphqlgen.WithSchemaPath("./tests/integration/schema.graphql"),
 	)
 	if err != nil {
 		slog.Error("creating graphql extension", "error", err)

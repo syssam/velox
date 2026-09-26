@@ -15,7 +15,7 @@ import (
 
 	"github.com/syssam/velox/compiler"
 	"github.com/syssam/velox/compiler/gen"
-	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/graphqlgen"
 )
 
 func main() {
@@ -34,9 +34,9 @@ func generateVelox() {
 		log.Fatalf("creating velox config: %v", err)
 	}
 
-	vex, err := graphql.NewExtension(
-		graphql.WithSchemaGenerator(),
-		graphql.WithSchemaPath("./velox/schema.graphql"),
+	vex, err := graphqlgen.NewExtension(
+		graphqlgen.WithSchemaGenerator(),
+		graphqlgen.WithSchemaPath("./velox/schema.graphql"),
 	)
 	if err != nil {
 		log.Fatalf("creating velox graphql extension: %v", err)

@@ -191,6 +191,7 @@ if [[ -f coverage.out ]]; then
     check_pkg "github.com/syssam/velox/dialect" 85
     check_pkg "github.com/syssam/velox/compiler/gen" 80
     check_pkg "github.com/syssam/velox/contrib/graphql" 80
+    check_pkg "github.com/syssam/velox/contrib/graphql/graphqlgen" 80
     check_pkg "github.com/syssam/velox/dialect/sql/schema" 80
     check_pkg "github.com/syssam/velox/dialect/sql/sqlgraph" 80
     check_pkg "github.com/syssam/velox/compiler/load" 75

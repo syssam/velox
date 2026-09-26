@@ -24,13 +24,13 @@
 //
 //	    "github.com/syssam/velox/compiler"
 //	    "github.com/syssam/velox/compiler/gen"
-//	    "github.com/syssam/velox/contrib/graphql"
+//	    "github.com/syssam/velox/contrib/graphql/graphqlgen"
 //	)
 //
 //	func main() {
-//	    ex, err := graphql.NewExtension(
-//	        graphql.WithConfigPath("./gqlgen.yml"),
-//	        graphql.WithSchemaPath("./velox/schema.graphql"),
+//	    ex, err := graphqlgen.NewExtension(
+//	        graphqlgen.WithConfigPath("./gqlgen.yml"),
+//	        graphqlgen.WithSchemaPath("./velox/schema.graphql"),
 //	    )
 //	    if err != nil {
 //	        log.Fatalf("creating graphql extension: %v", err)
@@ -284,9 +284,9 @@ func TemplateDir(dir string) Option {
 // registering hooks, templates and global annotations in one
 // simple call.
 //
-//	ex, err := graphql.NewExtension(
-//		graphql.WithConfigPath("../gqlgen.yml"),
-//		graphql.WithSchemaPath("../schema.graphql"),
+//	ex, err := graphqlgen.NewExtension(
+//		graphqlgen.WithConfigPath("../gqlgen.yml"),
+//		graphqlgen.WithSchemaPath("../schema.graphql"),
 //	)
 //	if err != nil {
 //		log.Fatalf("creating graphql extension: %v", err)

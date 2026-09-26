@@ -263,3 +263,40 @@ func TestMerge_QueryFieldAnnotationNilPointer(t *testing.T) {
 	result := a.Merge(b).(Annotation)
 	assert.Equal(t, "User", result.Type, "nil pointer should be no-op")
 }
+
+// =============================================================================
+// MergeAnnotations delegates to mergeAnnotations test
+// =============================================================================
+
+func TestMergeAnnotations_DelegatesToMerge(t *testing.T) {
+	a := Annotation{
+		RelayConnection: true,
+		Type:            "Member",
+		Skip:            SkipWhereInput,
+	}
+	b := Annotation{
+		QueryField: true,
+		Skip:       SkipOrderField,
+		FieldName:  "userName",
+	}
+
+	// MergeAnnotations (standalone) should produce the same result as sequential Merge
+	merged := MergeAnnotations(a, b)
+	sequential := mergeAnnotations(mergeAnnotations(Annotation{}, a), b)
+
+	if merged.Skip != sequential.Skip {
+		t.Errorf("Skip: MergeAnnotations=%d, sequential=%d", merged.Skip, sequential.Skip)
+	}
+	if merged.RelayConnection != sequential.RelayConnection {
+		t.Error("RelayConnection mismatch")
+	}
+	if merged.QueryField != sequential.QueryField {
+		t.Error("QueryField mismatch")
+	}
+	if merged.Type != sequential.Type {
+		t.Errorf("Type: MergeAnnotations=%q, sequential=%q", merged.Type, sequential.Type)
+	}
+	if merged.FieldName != sequential.FieldName {
+		t.Errorf("FieldName: MergeAnnotations=%q, sequential=%q", merged.FieldName, sequential.FieldName)
+	}
+}

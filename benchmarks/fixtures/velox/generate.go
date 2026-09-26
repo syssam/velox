@@ -10,14 +10,14 @@ import (
 
 	"github.com/syssam/velox/compiler"
 	"github.com/syssam/velox/compiler/gen"
-	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/graphqlgen"
 )
 
 func main() {
-	ex, err := graphql.NewExtension(
-		graphql.WithSchemaGenerator(),
-		graphql.WithSchemaPath("velox.graphql"),
-		graphql.WithWhereInputs(true),
+	ex, err := graphqlgen.NewExtension(
+		graphqlgen.WithSchemaGenerator(),
+		graphqlgen.WithSchemaPath("velox.graphql"),
+		graphqlgen.WithWhereInputs(true),
 	)
 	if err != nil {
 		log.Fatalf("creating graphql extension: %v", err)

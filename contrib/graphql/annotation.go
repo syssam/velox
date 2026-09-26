@@ -46,6 +46,9 @@ const (
 	SkipInputs = SkipMutationCreateInput | SkipMutationUpdateInput
 )
 
+// Is reports whether m has flag set.
+func (m SkipMode) Is(flag SkipMode) bool { return m&flag != 0 }
+
 // MutationType is a bitmask for entity-level mutation control.
 type MutationType uint
 
@@ -361,14 +364,30 @@ func (rm ResolverMapping) Reads(fields ...string) ResolverMapping {
 	return rm
 }
 
-// resolverBaseName extracts the field name without inline arguments.
-// "priceListItem(priceListId: ID!)" → "priceListItem"
-// "glAccount" → "glAccount"
+// BaseName is the mapped field's name without its inline arguments:
+// "priceListItem(priceListId: ID!)" is "priceListItem".
+func (rm ResolverMapping) BaseName() string { return resolverBaseName(rm.FieldName) }
+
 func resolverBaseName(fieldName string) string {
 	if before, _, ok := strings.Cut(fieldName, "("); ok {
 		return before
 	}
 	return fieldName
+}
+
+// appendUnique appends each of items not already in base.
+func appendUnique(base []string, items ...string) []string {
+	seen := make(map[string]struct{}, len(base))
+	for _, s := range base {
+		seen[s] = struct{}{}
+	}
+	for _, s := range items {
+		if _, ok := seen[s]; !ok {
+			base = append(base, s)
+			seen[s] = struct{}{}
+		}
+	}
+	return base
 }
 
 // WithComment adds a GraphQL description to the resolver mapping.

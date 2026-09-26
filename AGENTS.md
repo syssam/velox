@@ -21,7 +21,9 @@ Schemas in `schema/` (or `testschema/` for tests) flow through
 | `runtime/` | non-generated runtime: query/mutation execution, stores, registries |
 | `privacy/` | policy rules (`QueryRule`, `MutationRule`, `Allow`/`Deny`/`Skip`) |
 | `dialect/sql/` | SQL builder, sqlgraph, dialects, migration |
-| `contrib/graphql/` | opt-in GraphQL generation |
+| `contrib/graphql/` | GraphQL annotations only: schemas import it, so every server links it (`TestAnnotationsImportNoGenerator`) |
+| `contrib/graphql/graphqlgen/` | the GraphQL generator, run from `generate.go` |
+| `contrib/graphql/gqlgentx/` | gqlgen transaction middleware |
 
 ## Commands
 

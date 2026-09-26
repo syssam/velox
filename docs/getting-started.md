@@ -236,13 +236,13 @@ import (
 
     "github.com/syssam/velox/compiler"
     "github.com/syssam/velox/compiler/gen"
-    "github.com/syssam/velox/contrib/graphql"
+    "github.com/syssam/velox/contrib/graphql/graphqlgen"
 )
 
 func main() {
-    ex, err := graphql.NewExtension(
-        graphql.WithConfigPath("./gqlgen.yml"),
-        graphql.WithSchemaPath("./velox/schema.graphql"),
+    ex, err := graphqlgen.NewExtension(
+        graphqlgen.WithConfigPath("./gqlgen.yml"),
+        graphqlgen.WithSchemaPath("./velox/schema.graphql"),
     )
     if err != nil {
         slog.Error("creating graphql extension", "error", err)

@@ -244,13 +244,19 @@ This is intentional: `client.User.UpdateOne(u)` always uses `c.config` (the live
 
 ## GraphQL (entgql → contrib/graphql)
 
+Ent keeps its annotations and its generator in one package, entgql, so a
+server whose generated runtime imports the schema package (for a default
+function, a hook or a policy) links the generator. Velox splits them: schemas import `contrib/graphql` for annotations, and
+`generate.go` imports `contrib/graphql/graphqlgen` for the extension. entgql's
+`Transactioner` is `contrib/graphql/gqlgentx.Transactioner`.
+
 | Ent (entgql) | Velox (contrib/graphql) | Notes |
 |---|---|---|
 | `entgql.RelayConnection()` | `graphql.RelayConnection()` | Identical semantics |
 | `entgql.QueryField()` | `graphql.QueryField()` | Identical |
 | `entgql.Mutations(entgql.MutationCreate())` | `graphql.Mutations(graphql.MutationCreate())` | Identical |
 | `entgql.Skip(entgql.SkipAll)` | `graphql.Skip(graphql.SkipAll)` | Identical |
-| `entgql.WhereInputs(true)` on extension | `graphql.WithWhereInputs(true)` | Same — but Velox uses a whitelist model by default; fields must opt-in with `graphql.WhereInput()` annotation |
+| `entgql.WhereInputs(true)` on extension | `graphqlgen.WithWhereInputs(true)` | Same — but Velox uses a whitelist model by default; fields must opt-in with `graphql.WhereInput()` annotation |
 | `entgql.OrderField("NAME")` | `graphql.OrderField("NAME")` | Identical |
 
 **WhereInput opt-in (Velox only):**

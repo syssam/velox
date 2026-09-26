@@ -1,8 +1,8 @@
 package schema
 
 import (
-	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
