@@ -48,6 +48,18 @@ func TestMultiDialect_CountSelectedFields(t *testing.T) {
 		n, err = c.User.Query().Unique(true).Select(user.FieldName, user.FieldAge).Count(ctx)
 		count("distinct (name, age)", n, err, 4)
 
+		// The query survives its Count: sqlgraph qualified the selected
+		// fields in place ("users"."nickname"), and the next Count or All
+		// on the same query failed validation.
+		sel := c.User.Query().Select(user.FieldNickname)
+		for range 2 {
+			n, err = sel.Count(ctx)
+			count("repeated Count", n, err, 3)
+		}
+		us, err := sel.All(ctx)
+		require.NoError(t, err, "All after Count")
+		require.Len(t, us, 6)
+
 		// A field selected on the query, as CollectFields selects them. One
 		// NULL-able field: counted, it would give the non-NULL rows (3).
 		q := c.User.Query().(*query.UserQuery)

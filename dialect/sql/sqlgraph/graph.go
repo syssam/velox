@@ -1075,7 +1075,10 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 	} else {
 		// If no columns were selected in count,
 		// the default selection is by node ids.
-		columns := q.Node.Columns
+		// Qualify a copy: Node.Columns can be the caller's own slice (the
+		// generated Count passes the query's selected fields), and
+		// qualifying it in place broke the next Count or All on the query.
+		columns := slices.Clone(q.Node.Columns)
 		if len(columns) == 0 && q.Node.ID != nil {
 			columns = append(columns, q.Node.ID.Column)
 		}
