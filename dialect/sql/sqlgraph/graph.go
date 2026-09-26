@@ -1121,8 +1121,16 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 // windowed query becomes a derived table and is counted from outside. Its
 // ORDER BY is already cleared; the count of a window does not depend on it.
 func (q *query) countWindow(ctx context.Context, drv dialect.Driver, selector *sql.Selector) (int, error) {
-	columns := q.Node.Columns
-	if len(columns) == 0 && q.Node.ID != nil {
+	// A column selected twice would repeat a column name in the derived
+	// table, which MySQL rejects.
+	var columns []string
+	for _, c := range q.Node.Columns {
+		if !slices.Contains(columns, c) {
+			columns = append(columns, c)
+		}
+	}
+	selected := len(columns)
+	if selected == 0 && q.Node.ID != nil {
 		columns = []string{q.Node.ID.Column}
 	}
 	qualified := make([]string, len(columns))
@@ -1132,7 +1140,15 @@ func (q *query) countWindow(ctx context.Context, drv dialect.Driver, selector *s
 	// Keep the selection (and its DISTINCT under Unique): it decides which
 	// rows fill the window.
 	selector.Select(qualified...)
-	counter := q.builder.Select(sql.Count("*")).From(selector.As("t1"))
+	counter := q.builder.Select().From(selector.As("t1"))
+	if selected == 1 {
+		// One selected field counts its non-NULL values, as COUNT(f) does
+		// without a window; counting rows here made Limit(n) change the
+		// answer for Select(f).Count().
+		counter.Select(sql.Count(q.builder.Table("t1").C(columns[0])))
+	} else {
+		counter.Select(sql.Count("*"))
+	}
 	rows := &sql.Rows{}
 	query, args, qerr := sql.QueryErr(counter)
 	if qerr != nil {

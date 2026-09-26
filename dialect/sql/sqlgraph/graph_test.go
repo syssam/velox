@@ -2349,7 +2349,7 @@ func TestQueryNodes(t *testing.T) {
 		WithArgs(40).
 		WillReturnRows(sqlmock.NewRows([]string{"COUNT"}).
 			AddRow(3))
-	mock.ExpectQuery(escape("SELECT COUNT(*) FROM (SELECT DISTINCT `users`.`name` FROM `users` WHERE `age` < ? LIMIT 3 OFFSET 4 FOR UPDATE NOWAIT) AS `t1`")).
+	mock.ExpectQuery(escape("SELECT COUNT(`t1`.`name`) FROM (SELECT DISTINCT `users`.`name` FROM `users` WHERE `age` < ? LIMIT 3 OFFSET 4 FOR UPDATE NOWAIT) AS `t1`")).
 		WithArgs(40).
 		WillReturnRows(sqlmock.NewRows([]string{"COUNT"}).
 			AddRow(3))
