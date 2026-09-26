@@ -1,4 +1,23 @@
-.PHONY: bench-hotpaths bench-baseline bench-compare bench-install ci-docker ci-docker-db
+.PHONY: generate test lint check bench-hotpaths bench-baseline bench-compare bench-install ci-docker ci-docker-db
+
+# CI's pinned linter version, read from ci.yml so the two cannot drift. A
+# different local version reports zero issues on code CI rejects.
+GOLANGCI_LINT_VERSION := $(shell sed -n 's/^ *version: *\(v2\.[0-9.]*\).*/\1/p' .github/workflows/ci.yml | head -1)
+
+generate: ## Generate the gitignored fixtures the root module's tests import
+	go run tests/integration/generate.go
+	cd examples/realworld && go run generate.go
+
+test: generate ## Generate fixtures, then run every test in the root module
+	go test ./...
+
+lint: ## Run golangci-lint at CI's pinned version
+	@test -n "$(GOLANGCI_LINT_VERSION)" || { echo "error: golangci-lint version not found in .github/workflows/ci.yml" >&2; exit 1; }
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+
+check: generate ## What CI's test job runs: race + coverage, then lint
+	go test -race -cover ./...
+	$(MAKE) lint
 
 # Hot-path benchmarks guarded against regression.
 # Keep this list short — it's meant to catch the failure modes that

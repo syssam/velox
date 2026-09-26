@@ -14,12 +14,21 @@ Thank you for your interest in contributing to Velox! This guide will help you g
 ```bash
 git clone https://github.com/syssam/velox.git
 cd velox
-go test ./...
+make test
 ```
+
+The root module's tests import generated code that is gitignored
+(`tests/integration/…`, `examples/realworld/velox`), so a plain
+`go test ./...` on a fresh clone fails with `no required module provides
+package`. `make test` runs `make generate` first; after that, plain
+`go test ./...` works until the generators change.
 
 ### Running Tests
 
 ```bash
+# Generate the fixtures the tests import (once per clone, and after generator changes)
+make generate
+
 # Run all tests
 go test ./...
 

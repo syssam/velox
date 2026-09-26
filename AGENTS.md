@@ -26,9 +26,10 @@ Schemas in `schema/` (or `testschema/` for tests) flow through
 ## Commands
 
 ```bash
+make generate                                   # gitignored fixtures the root tests import; needed on a fresh clone
 go test ./...                                   # all tests
-go test -race -cover ./...                      # what CI runs
-golangci-lint run                               # must pass with zero warnings
+make check                                      # what CI's test job runs: -race -cover, then lint
+make lint                                       # golangci-lint at CI's pinned version; must print 0 issues
 gofmt -s -w . && goimports -w .                 # format
 go run tests/integration/generate.go            # regenerate the integration prototype
 go test ./compiler/gen/sql/ -update-golden      # after intentional codegen changes
