@@ -810,31 +810,21 @@ func BenchmarkFieldTypeCode(b *testing.B) {
 	}
 }
 
-// TestMigrateSchemaMatchesReferenceBuilder is the differential guard between
-// the two foreign-key builders velox maintains in parallel:
+// TestMigrateSchemaMatchesReferenceBuilder checks that migrate/schema.go
+// renders exactly the foreign keys Graph.Tables builds: the same symbols,
+// each with the same referential action.
 //
-//   - compiler/gen/graph_tables.go (Graph.Tables) — the REFERENCE builder,
-//     used by tests and tooling, with its own fkSymbol/fkSymbols/deleteAction.
-//     It SKIPS inverse edges and builds each FK from the assoc side.
-//   - compiler/gen/sql/migrate.go (genMigrateSchema) — the PRODUCTION path,
-//     rendering the static Tables slice that actually ships, with its own
-//     fkSymbolForEdge/m2mFKSymbols. It iterates the M2O (FK-owning) side.
-//
-// They read the same relationship from OPPOSITE ends, and they have drifted
-// twice: once on the referential action (an assoc-side sqlschema.OnDelete
-// silently degraded to NoAction — a CASCADE-class data-integrity divergence)
-// and once on the constraint symbol (the M2O edge name was used instead of the
-// assoc edge name). Both were caught downstream or by the parity harness, then
-// pinned with hand-written per-property assertions that a reviewer must
-// remember to extend for the next property.
-//
-// This asserts wholesale agreement: same set of FK symbols, same referential
-// action for each.
+// genMigrateSchema once had a table builder of its own, reading each
+// relationship from the opposite end, and the two drifted repeatedly — an
+// assoc-side sqlschema.OnDelete degraded to NoAction, the constraint symbol
+// used the M2O edge name, and columns, keys and tables went missing. It now
+// renders Graph.Tables, so this pins the rendering rather than a second
+// builder.
 //
 // The graph is built through gen.NewGraph from load.Schema rather than by
 // assembling gen.Edge values directly. A hand-assembled fixture silently
-// registered only the inverse halves of each relationship, so the reference
-// builder skipped them all and "agreed" with production on an empty set.
+// registered only the inverse halves of each relationship, so the builder
+// skipped them all and the check passed on an empty set.
 func TestMigrateSchemaMatchesReferenceBuilder(t *testing.T) {
 	t.Parallel()
 
