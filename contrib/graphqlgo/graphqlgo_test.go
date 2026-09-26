@@ -199,6 +199,11 @@ type (
 // newSchema binds sdl, calling onUser and onPosts from the root resolvers.
 func newSchema(t *testing.T, onUser, onPosts, onNode func(context.Context)) *graphql.Schema {
 	t.Helper()
+	return newSchemaFrom(t, sdl, onUser, onPosts, onNode)
+}
+
+func newSchemaFrom(t *testing.T, sdl string, onUser, onPosts, onNode func(context.Context)) *graphql.Schema {
+	t.Helper()
 	s, err := graphql.NewSchema(graphql.SDL(sdl),
 		graphql.Object[graphql.Root]("Query",
 			graphql.Resolve("user", func(ctx context.Context, _ graphql.Root) (*user, error) {
@@ -452,5 +457,45 @@ func TestNodeSelects(t *testing.T) {
 	}
 	if want := []bool{false, true, false}; !slices.Equal(got, want) {
 		t.Errorf("NodeSelects(body) = %v, want %v", got, want)
+	}
+}
+
+// A field authorization withholds is not loaded: the caller lacks the scope
+// for User.posts (Null) and User.email (Zero), so velox neither joins the
+// posts nor selects the email column -- rows the caller may not see are
+// never read. A Redact outcome resolves the field, so its column stays.
+func TestCollectSkipsWhatAuthorizationWithholds(t *testing.T) {
+	guarded := "directive @requiresScopes(scopes: [[String!]!]!) on FIELD_DEFINITION | OBJECT\n" +
+		strings.NewReplacer(
+			"  email: String!\n", "  email: String! @requiresScopes(scopes: [[\"pii\"]])\n",
+			"  name: String!\n", "  name: String! @requiresScopes(scopes: [[\"profile\"]])\n",
+			"  posts(first: Int, after: String, where: PostWhere): PostConnection!\n",
+			"  posts(first: Int, after: String, where: PostWhere): PostConnection @requiresScopes(scopes: [[\"posts\"]])\n",
+		).Replace(sdl)
+	outcomes := map[string]graphql.Outcome{
+		"User.posts": graphql.Null(),
+		"User.email": graphql.Zero(),
+		"User.name":  graphql.Redact(func(any) any { return "***" }),
+	}
+	authz := graphql.WithAuthorizer(graphql.AuthorizerFunc(func(_ context.Context, shape *graphql.AuthShape, d *graphql.Decision) error {
+		for i, site := range shape.Sites() {
+			if o, ok := outcomes[site.Coord]; ok {
+				if err := d.Set(i, o); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}))
+	var p plans
+	s := newSchemaFrom(t, guarded,
+		func(ctx context.Context) { observeUser(ctx, &p) },
+		func(context.Context) {}, func(context.Context) {})
+	execute(t, graphql.NewExecutor(s, graphqlgo.Collect(), authz),
+		`{ user { name email company { name } posts(first: 2) { edges { node { title } } } } }`, nil)
+
+	want := "columns [id name user_company]\nload company limit all\n  columns [id name]\n"
+	if p.user != want {
+		t.Errorf("planned\n%s\nwant\n%s", p.user, want)
 	}
 }

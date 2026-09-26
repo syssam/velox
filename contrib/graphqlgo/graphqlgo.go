@@ -43,7 +43,7 @@ func source(ctx context.Context) (gqlrelay.SelectedField, bool) {
 	if oc := graphql.OperationFrom(ctx); oc != nil {
 		vars = oc.Variables
 	}
-	return &field{name: fc.Field.Name, sel: fc.Selection(), vars: vars}, true
+	return &field{name: fc.Field.Name, sel: fc.Selection(), vars: vars, ctx: ctx}, true
 }
 
 // field is gqlrelay.SelectedField over graphql.Selection.
@@ -52,6 +52,9 @@ type field struct {
 	args map[string]any
 	sel  graphql.Selection
 	vars map[string]any
+	// ctx is the resolver's, which carries the operation's authorization
+	// Decision.
+	ctx context.Context
 }
 
 func (f *field) FieldName() string         { return f.name }
@@ -63,6 +66,10 @@ func (f *field) Arguments() map[string]any { return f.args }
 // the interface names find nothing and the object's fields are the answer.
 // Two names can yield one response key, and a concrete selection answers
 // every name with itself, so each key is kept once.
+//
+// A field authorization withholds -- Deny, Null or Zero for this request --
+// is left out: velox neither selects its column nor loads anything beneath
+// it, so rows the caller may not see are never queried.
 func (f *field) Fields(satisfies []string) []gqlrelay.SelectedField {
 	var (
 		backing []field
@@ -70,6 +77,9 @@ func (f *field) Fields(satisfies []string) []gqlrelay.SelectedField {
 	)
 	add := func(s graphql.Selection) {
 		for sf := range s.Fields() {
+			if sf.Withheld(f.ctx) {
+				continue
+			}
 			if seen != nil {
 				if seen[sf.Alias] {
 					continue
@@ -80,7 +90,7 @@ func (f *field) Fields(satisfies []string) []gqlrelay.SelectedField {
 			// the error the client should see; planned without arguments,
 			// the worst case is an edge loaded that nothing then reads.
 			args, _ := sf.ArgumentMap(f.vars)
-			backing = append(backing, field{name: sf.Name, args: args, sel: sf.Selection(), vars: f.vars})
+			backing = append(backing, field{name: sf.Name, args: args, sel: sf.Selection(), vars: f.vars, ctx: f.ctx})
 		}
 	}
 	if len(satisfies) == 0 {

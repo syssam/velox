@@ -8,7 +8,7 @@ replace github.com/syssam/velox => ../..
 
 require (
 	github.com/99designs/gqlgen v0.17.86
-	github.com/syssam/graphql-go v0.0.0-20260926145152-28e57f1692b6
+	github.com/syssam/graphql-go v0.0.0-20260926154251-135bb6be891a
 	github.com/syssam/velox v0.0.0-00010101000000-000000000000
 	github.com/vektah/gqlparser/v2 v2.5.58
 )
