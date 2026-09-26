@@ -34,6 +34,7 @@ Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
 - An eager load limited per parent and ordered by a term that selects an alias failed with "no such column": `LimitPerPartition` read aliased selections by their source column, which the derived table does not expose
 - `UpdateSet.UpdateColumns()` returned the INSERT columns instead of the columns set in the conflict resolver
 - Rendering a `DeleteBuilder`, or a statement with a `WITH` prefix, a second time appended a second copy of the statement; a `Selector` rendered twice on PostgreSQL numbered its placeholders from `$2` (Ent has the same bug)
+- `Select(f).Count()` counted every row, and `Select(f).Unique(true).Count()` did not count distinct `f`: the generated count dropped the selection. It now counts non-NULL `f` and distinct `f`, as Ent does. Several selected columns are counted from a derived table (`COUNT(a, b)` is rejected by PostgreSQL and SQLite), and a connection's `totalCount` clears the fields `CollectFields` selected before counting. **Regenerate**
 - `GroupBy(...).Aggregate(...)`, `Aggregate(...)` and `Order(...)` on an unknown column returned zeros or every column with a nil error; the builder's error is now returned
 - An M2M edge declared `Through()` an edge schema now fills the join entity's defaults (e.g. `joined_at` = `time.Now`); `AddXxxIDs` failed with a NOT NULL error before
 - Mutating an edge schema's generated edge (`AddMembershipIDs`, `ClearMemberships`) built SQL against the wrong table ("no such column")

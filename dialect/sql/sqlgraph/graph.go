@@ -1054,7 +1054,10 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 	if q.Order != nil {
 		selector.ClearOrder()
 	}
-	if q.Limit != 0 || q.Offset != 0 {
+	// COUNT takes one column (COUNT(a, b) is rejected by PostgreSQL and
+	// SQLite), so several selected columns are counted from a derived
+	// table too: `SELECT COUNT(*) FROM (SELECT [DISTINCT] a, b …)`.
+	if q.Limit != 0 || q.Offset != 0 || len(q.Node.Columns) > 1 {
 		return q.countWindow(ctx, drv, selector)
 	}
 	if q.countsAllRows(selector) {

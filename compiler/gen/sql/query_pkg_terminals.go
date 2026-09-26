@@ -355,9 +355,12 @@ func (qg *queryGen) genCountExist() {
 				jen.Return(jen.Lit(0), jen.Err()),
 			)
 		})
-		// Build a spec with nil columns so the SQL is COUNT(*).
+		// Count the selected fields, as Ent does: Select(f).Count() counts
+		// non-NULL f and Select(f).Unique(true).Count() distinct f. With no
+		// selection the columns are nil and the SQL is COUNT(*). Resetting
+		// them unconditionally counted every row for both.
 		body.Id("spec").Op(":=").Id(qg.recv).Dot("querySpec").Call()
-		body.Id("spec").Dot("Node").Dot("Columns").Op("=").Nil()
+		body.Id("spec").Dot("Node").Dot("Columns").Op("=").Id(qg.recv).Dot("ctx").Dot("Fields")
 		body.Id("spec").Dot("From").Op("=").Id("from")
 		body.Return(jen.Qual(qg.sqlgraphPkg, "CountNodes").Call(
 			jen.Id("ctx"), jen.Id(qg.recv).Dot("config").Dot("Driver"), jen.Id("spec"),

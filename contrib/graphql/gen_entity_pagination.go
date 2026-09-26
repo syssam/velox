@@ -129,8 +129,14 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 		// operation): pageInfo comes from the limit+1 row, not the count,
 		// so a page without totalCount costs one query (Ent parity).
 		grp.Var().Id("totalCount").Int()
+		//
+		// The clone's selected fields are cleared first, as in Ent: Count
+		// counts the selected columns, and CollectFields selects several,
+		// which would render an invalid COUNT(a, b).
 		grp.If(jen.Qual(gqlrelayPkg, "TotalCountSelected").Call(jen.Id("ctx"))).Block(
-			jen.List(jen.Id("n"), jen.Err()).Op(":=").Id("q").Dot("Clone").Call().Dot("Count").Call(jen.Id("ctx")),
+			jen.Id("c").Op(":=").Id("q").Dot("clone").Call(),
+			jen.Id("c").Dot("ctx").Dot("Fields").Op("=").Nil(),
+			jen.List(jen.Id("n"), jen.Err()).Op(":=").Id("c").Dot("Count").Call(jen.Id("ctx")),
 			jen.If(jen.Err().Op("!=").Nil()).Block(
 				jen.Return(jen.Nil(), jen.Err()),
 			),
