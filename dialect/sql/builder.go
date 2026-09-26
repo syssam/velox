@@ -73,11 +73,15 @@ func (c *ColumnBuilder) Type(t string) *ColumnBuilder {
 
 // Query returns query representation of a Column.
 func (c *ColumnBuilder) Query() (string, []any) {
-	c.Ident(c.name)
+	// Render into a clone, as the other builders do: writing into c
+	// appended a second definition on every further call.
+	b := c.clone()
+	b.Ident(c.name)
 	if c.typ != "" {
-		c.Pad().WriteString(c.typ)
+		b.Pad().WriteString(c.typ)
 	}
-	return c.String(), c.args
+	c.AddError(b.Err())
+	return b.String(), b.args
 }
 
 // ViewBuilder is a query builder for `CREATE VIEW` statement.
@@ -140,18 +144,22 @@ func (v *ViewBuilder) As(as Querier) *ViewBuilder {
 //
 //	(view definition)
 func (v *ViewBuilder) Query() (string, []any) {
-	v.WriteString("CREATE VIEW ")
+	// Render into a clone: writing into v appended a second CREATE VIEW
+	// on every further call.
+	b := v.clone()
+	b.WriteString("CREATE VIEW ")
 	if v.exists {
-		v.WriteString("IF NOT EXISTS ")
+		b.WriteString("IF NOT EXISTS ")
 	}
-	v.writeSchema(v.schema)
-	v.Ident(v.name)
+	b.writeSchema(v.schema)
+	b.Ident(v.name)
 	if len(v.columns) > 0 {
-		v.Pad().Wrap(func(b *Builder) { b.JoinComma(v.columns...) })
+		b.Pad().Wrap(func(b *Builder) { b.JoinComma(v.columns...) })
 	}
-	v.WriteString(" AS ")
-	v.Join(v.as)
-	return v.String(), v.args
+	b.WriteString(" AS ")
+	b.Join(v.as)
+	v.AddError(b.Err())
+	return b.String(), b.args
 }
 
 // InsertBuilder is a builder for `INSERT INTO` statement.
@@ -3531,11 +3539,18 @@ func (b *Builder) join(qs []Querier, sep string) *Builder {
 			b.WriteString(sep)
 		}
 		st, ok := q.(state)
+		var total int
 		if ok {
 			st.SetDialect(b.dialect)
+			total = st.Total()
 			st.SetTotal(b.total)
 		}
 		query, args := q.Query()
+		if ok {
+			// Restore the child's own numbering: a subquery rendered here
+			// and later on its own started at the parent's $N.
+			st.SetTotal(total)
+		}
 		b.WriteString(query)
 		b.args = append(b.args, args...)
 		b.total += len(args)

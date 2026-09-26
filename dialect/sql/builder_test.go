@@ -2500,12 +2500,14 @@ func TestSubqueryErrorsReachTheOuterQuery(t *testing.T) {
 	require.ErrorIs(t, u.(interface{ Err() error }).Err(), denied, "union branch")
 }
 
-// TestQuery_RenderingIsRepeatable pins that rendering a DELETE, or a
-// statement prefixed by a WITH clause, twice gives the same SQL. Both wrote
-// into their own buffer, so a second render appended a second statement
-// (`DELETE … ?DELETE … ?`) or a doubled `WITH …`.
+// TestQuery_RenderingIsRepeatable pins that rendering a DELETE, a CREATE
+// VIEW, a column definition, or a statement prefixed by a WITH clause twice
+// gives the same SQL. Each wrote into its own buffer, so a second render
+// appended a second statement (`DELETE … ?DELETE … ?`) or a doubled `WITH …`.
 func TestQuery_RenderingIsRepeatable(t *testing.T) {
 	for name, q := range map[string]Querier{
+		"column": Column("age").Type("int"),
+		"view":   CreateView("adults").As(Select("*").From(Table("users")).Where(GT("age", 17))),
 		"delete": Delete("users").Where(EQ("id", 1)),
 		"with":   Select("*").From(Table("v")).Prefix(With("v").As(Select().From(Table("users")))),
 	} {
@@ -2541,4 +2543,20 @@ func TestSelector_QueryIsRepeatableOnPostgres(t *testing.T) {
 	require.Equal(t, `SELECT * FROM "users" WHERE "name" = $1 AND "id" IN (SELECT "owner" FROM "pets" WHERE "kind" = $2)`, q1)
 	require.Equal(t, q1, q2)
 	require.Equal(t, a1, a2)
+}
+
+// TestSelector_SubqueryRendersAloneAfterNesting pins that rendering a
+// selector inside another leaves its own placeholder numbering alone:
+// Builder.join set the parent's running total on the subquery and kept it,
+// so rendering the subquery on its own afterwards started at $3.
+func TestSelector_SubqueryRendersAloneAfterNesting(t *testing.T) {
+	d := Dialect(dialect.Postgres)
+	sub := d.Select("owner").From(Table("pets")).Where(EQ("kind", "cat"))
+	outer := d.Select("*").From(Table("users")).Where(And(EQ("a", 1), EQ("b", 2), In("id", sub)))
+	q, args := outer.Query()
+	require.Equal(t, `SELECT * FROM "users" WHERE "a" = $1 AND "b" = $2 AND "id" IN (SELECT "owner" FROM "pets" WHERE "kind" = $3)`, q)
+	require.Equal(t, []any{1, 2, "cat"}, args)
+	q, args = sub.Query()
+	require.Equal(t, `SELECT "owner" FROM "pets" WHERE "kind" = $1`, q)
+	require.Equal(t, []any{"cat"}, args)
 }
