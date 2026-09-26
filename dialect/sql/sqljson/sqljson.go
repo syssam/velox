@@ -563,7 +563,9 @@ func (p *PathOptions) mysqlPath(b *sql.Builder) {
 		case p == "*" || isQuoted(p) || isIdentifier(p):
 			path.WriteString("." + p)
 		default:
-			path.WriteString(`."` + p + `"`)
+			// A quoted key follows JSON string rules: a quote or backslash
+			// in it would end the key or escape the next character.
+			path.WriteString(`."` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(p) + `"`)
 		}
 	}
 	// The path is a string literal: a quote in a key ended it early, so

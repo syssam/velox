@@ -542,8 +542,10 @@ func TestPath_KeysAreEscapedInLiterals(t *testing.T) {
 	}{
 		{dialect.SQLite, "it's", "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"it''s\"') = ?"},
 		{dialect.MySQL, "it's", "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"it''s\"') = ?"},
-		{dialect.MySQL, `a\' OR 1=1 -- `, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\\\'' OR 1=1 -- \"') = ?"},
-		{dialect.SQLite, `a\b`, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\b\"') = ?"},
+		// JSON escapes the backslash (\\), then MySQL's literal doubles both.
+		{dialect.MySQL, `a\' OR 1=1 -- `, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\\\\\\\'' OR 1=1 -- \"') = ?"},
+		{dialect.SQLite, `a\b`, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\\\b\"') = ?"},
+		{dialect.SQLite, `a"b`, "SELECT * FROM `t` WHERE JSON_EXTRACT(`c`, '$.\"a\\\"b\"') = ?"},
 	} {
 		q, _ := sql.Dialect(tt.dialect).Select("*").From(sql.Table("t")).
 			Where(sqljson.ValueEQ("c", 1, sqljson.Path(tt.key))).Query()
