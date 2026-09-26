@@ -621,6 +621,7 @@ func (u *UpdateBuilder) Where(p *Predicate) *UpdateBuilder {
 // FromSelect makes it possible to update entities that match the sub-query.
 func (u *UpdateBuilder) FromSelect(s *Selector) *UpdateBuilder {
 	u.Where(s.where)
+	u.errs = append(u.errs, s.errs...)
 	if t := s.Table(); t != nil {
 		u.table = t.name
 	}
@@ -763,6 +764,7 @@ func (d *DeleteBuilder) Where(p *Predicate) *DeleteBuilder {
 // FromSelect makes it possible to delete a sub query.
 func (d *DeleteBuilder) FromSelect(s *Selector) *DeleteBuilder {
 	d.Where(s.where)
+	d.errs = append(d.errs, s.errs...)
 	if t := s.Table(); t != nil {
 		d.table = t.name
 	}
@@ -2048,9 +2050,13 @@ func (s *Selector) SetP(p *Predicate) *Selector {
 	return s
 }
 
-// FromSelect copies the predicate from a selector.
+// FromSelect copies the predicate from a selector, and the errors recorded
+// on it: a predicate that failed (an edge predicate whose target policy
+// denied the read) must fail the statement it is copied into, not leave
+// it running unscoped.
 func (s *Selector) FromSelect(s2 *Selector) *Selector {
 	s.where = s2.where
+	s.errs = append(s.errs, s2.errs...)
 	return s
 }
 

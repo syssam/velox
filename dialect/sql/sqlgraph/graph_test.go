@@ -2846,3 +2846,49 @@ func TestCreateNode_DoNothingConflictSkipsEdges(t *testing.T) {
 	require.Nil(t, spec.ID.Value)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+// TestHasNeighborsWith_CarriesPredicateErrors pins that an error the
+// predicate records on the target subquery (a denied target policy) fails
+// the outer query for every edge shape. The many-to-many branch copied only
+// the predicate selector's WHERE into the join subquery and lost the error.
+func TestHasNeighborsWith_CarriesPredicateErrors(t *testing.T) {
+	denied := errors.New("denied by target policy")
+	pred := func(s *sql.Selector) { s.AddError(denied) }
+	for name, step := range map[string]*Step{
+		"M2O": NewStep(From("pets", "id"), To("users", "id"), Edge(M2O, true, "pets", "owner_id")),
+		"O2M": NewStep(From("users", "id"), To("pets", "id"), Edge(O2M, false, "pets", "owner_id")),
+		"M2M": NewStep(From("posts", "id"), To("tags", "id"), Edge(M2M, false, "post_tags", "post_id", "tag_id")),
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := sql.Dialect(dialect.SQLite).Select("*").From(sql.Table(step.From.Table))
+			HasNeighborsWith(s, step, pred)
+			_, _, err := sql.QueryErr(s)
+			require.ErrorIs(t, err, denied)
+		})
+	}
+}
+
+type updateNodeCtxKey struct{}
+
+// TestUpdateNode_PredicateSeesRequestContext pins that UpdateNode (UpdateOne)
+// hands the request context to its predicate's selector, as UpdateNodes,
+// DeleteNodes and ensureExists do: edge predicates read it to evaluate the
+// target's privacy policy, which otherwise neither filtered nor denied.
+func TestUpdateNode_PredicateSeesRequestContext(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mock.ExpectBegin()
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	ctx := context.WithValue(context.Background(), updateNodeCtxKey{}, "req")
+	var seen any
+	spec := NewUpdateSpec("users", nil, NewFieldSpec("id", field.TypeInt))
+	spec.Node.ID.Value = 1
+	spec.SetField("name", field.TypeString, "x")
+	spec.Predicate = func(s *sql.Selector) {
+		seen = s.Context().Value(updateNodeCtxKey{})
+		s.Where(sql.EQ("name", "a"))
+	}
+	require.NoError(t, UpdateNode(ctx, sql.OpenDB(dialect.SQLite, db), spec))
+	require.Equal(t, "req", seen)
+}

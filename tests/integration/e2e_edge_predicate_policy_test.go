@@ -9,6 +9,7 @@ import (
 	integration "github.com/syssam/velox/tests/integration"
 	"github.com/syssam/velox/tests/integration/entity"
 	"github.com/syssam/velox/tests/integration/post"
+	"github.com/syssam/velox/tests/integration/tag"
 	"github.com/syssam/velox/tests/integration/user"
 	testschema "github.com/syssam/velox/testschema"
 )
@@ -114,5 +115,50 @@ func TestMultiDialect_EdgePredicatePolicyOnWrites(t *testing.T) {
 		require.Len(t, ps, 2, "nothing was deleted")
 		require.Equal(t, 7, ps[0].ViewCount, "alice-post")
 		require.Equal(t, 0, ps[1].ViewCount, "bob-post was never in scope, and the denied update did not run")
+	})
+}
+
+// TestMultiDialect_EdgePredicatePolicyM2MAndUpdateOne pins the two paths
+// the tests above did not reach. A many-to-many edge predicate builds its
+// subquery through the join table and copied only the target selector's
+// WHERE (Selector.FromSelect), dropping the denied policy's error: the
+// read returned posts and the delete removed them. UpdateOne built its
+// predicate selector without the request context, so the target's policy
+// saw none and neither filtered nor denied: UpdateOneID(bobPost) with a
+// HasAuthorWith predicate updated a post outside the User policy's scope.
+func TestMultiDialect_EdgePredicatePolicyM2MAndUpdateOne(t *testing.T) {
+	forEachDialect(t, func(t *testing.T, c *integration.Client) {
+		base := context.Background()
+		seedPostWithTag(t, c)
+		denyTag := testschema.DenyTagQueryContext(base)
+		_, err := c.Tag.Query().All(denyTag)
+		require.Error(t, err, "fixture: the Tag policy denies")
+		_, err = c.Post.Query().Where(post.HasTagsWith(tag.IDField.GT(0))).All(denyTag)
+		require.Error(t, err, "HasTagsWith under a denying Tag policy")
+		_, err = c.Post.Delete().Where(post.HasTags()).Exec(denyTag)
+		require.Error(t, err, "delete through a denied many-to-many edge")
+		n, err := c.Post.Query().Where(post.HasTags()).Count(base)
+		require.NoError(t, err)
+		require.Equal(t, 1, n, "the denied delete did not run")
+
+		var bobPost int
+		for _, name := range []string{"alice", "bob"} {
+			u, err := c.User.Create().SetName(name).SetEmail(name + "@uo").SetAge(30).
+				SetRole(user.RoleUser).SetCreatedAt(now).SetUpdatedAt(now).Save(base)
+			require.NoError(t, err)
+			p, err := c.Post.Create().SetTitle(name + "-uo").SetContent("c").SetStatus(post.StatusPublished).
+				SetViewCount(0).SetAuthorID(u.ID).SetCreatedAt(now).SetUpdatedAt(now).Save(base)
+			require.NoError(t, err)
+			bobPost = p.ID
+		}
+		scoped := testschema.FilterUserQueryToNameContext(base, "alice")
+		_, err = c.Post.UpdateOneID(bobPost).Where(post.HasAuthorWith(user.IDField.GT(0))).SetViewCount(7).Save(scoped)
+		require.Error(t, err, "bob's post is outside the User policy's scope")
+		denied := testschema.EnforceUserPrivacyContext(base)
+		_, err = c.Post.UpdateOneID(bobPost).Where(post.HasAuthor()).SetViewCount(9).Save(denied)
+		require.Error(t, err, "UpdateOne through a denied edge")
+		p, err := c.Post.Get(base, bobPost)
+		require.NoError(t, err)
+		require.Zero(t, p.ViewCount, "neither update ran")
 	})
 }

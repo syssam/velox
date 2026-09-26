@@ -1212,7 +1212,10 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 	}
 	update := u.builder.Update(u.Node.Table).Schema(u.Node.Schema).Where(idp)
 	if pred := u.Predicate; pred != nil {
-		selector := u.builder.Select().From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema))
+		// Predicates read the request context (edge-predicate policies,
+		// schema config), as in nodes, DeleteNodes and ensureExists.
+		selector := u.builder.Select().From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema)).
+			WithContext(ctx)
 		pred(selector)
 		update.FromSelect(selector)
 	}
