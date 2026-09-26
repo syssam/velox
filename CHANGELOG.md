@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
 
+### Added
+- GraphQL field collection works under engines other than gqlgen. `gqlrelay.WithSelectionSource` puts a `gqlrelay.SelectedField` source on the request context, and the generated `CollectFields` and `Paginate` read the selection from it: columns are projected, edges eager-loaded and `COUNT(*)` skipped when `totalCount` is not selected, as under gqlgen, which stays the default and needs nothing. Before this, collection was a silent no-op outside a gqlgen resolver.
+
 ### Fixed
 - `SetX(v).AddX(d)` on one update builder rendered two assignments of the column: PostgreSQL rejected the statement and SQLite dropped the Set. `UpdateBuilder.Add` after an assignment now updates it (the sum, or `(x) + d` for an expression), which also covers upsert resolvers. `SetX(a).AppendX(b)` appended `b` to the stored value and lost `a`; it now writes `a` followed by `b` (Ent has both bugs). **Regenerate**
 - GraphQL `Bytes` fields could not be read or written: the generated SDL declared `scalar Bytes` without a Go binding, so gqlgen bound it to string and generated resolver stubs that panicked. The scalar now binds to `gqlrelay.MarshalBytes`/`UnmarshalBytes` (standard base64). Remove the generated `Thumbnail`-style stubs gqlgen moves to the end of your resolver files. A Nillable Bytes field (`*[]byte`) resolves through a generated `XxxOrNil() []byte` accessor, since gqlgen dereferences a nil `*[]byte` itself. **Regenerate**

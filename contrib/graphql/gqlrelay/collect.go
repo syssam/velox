@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/99designs/gqlgen/graphql"
-
 	"github.com/syssam/velox/runtime"
 )
 
@@ -23,7 +21,8 @@ type MetaCollectable interface {
 // resolved in ctx: it projects the columns the selection reads and
 // eager-loads the edges it traverses, recursively, so a nested selection
 // costs one query per edge instead of one per parent row. It is a no-op
-// outside a gqlgen resolver.
+// outside a resolver: the selection comes from gqlgen, or from the engine a
+// WithSelectionSource context names.
 //
 // The generated (*XxxQuery).CollectFields method calls it; call that from a
 // resolver that returns entities directly (a list or single node). Paginate
@@ -33,11 +32,11 @@ type MetaCollectable interface {
 // field the metadata cannot map to columns — a custom resolver without a
 // graphql.CollectedFor annotation might read any column.
 func CollectFields(ctx context.Context, q runtime.FieldCollectable, meta *runtime.CollectMeta, satisfies ...string) error {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || meta == nil || !graphql.HasOperationContext(ctx) {
+	fc, ok := selectedField(ctx)
+	if !ok || meta == nil {
 		return nil
 	}
-	collect(graphql.GetOperationContext(ctx), q, meta, []occurrence{{field: fc.Field, satisfies: satisfies}})
+	collect(q, meta, []occurrence{{field: fc, satisfies: satisfies}})
 	return nil
 }
 
@@ -46,18 +45,17 @@ func CollectFields(ctx context.Context, q runtime.FieldCollectable, meta *runtim
 // being resolved in ctx. The generated Paginate methods call it before
 // running the page query, as Ent's do.
 func CollectConnectionFields(ctx context.Context, q runtime.FieldCollectable, meta *runtime.CollectMeta) error {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || meta == nil || !graphql.HasOperationContext(ctx) {
+	fc, ok := selectedField(ctx)
+	if !ok || meta == nil {
 		return nil
 	}
-	opCtx := graphql.GetOperationContext(ctx)
-	nodes, _ := connectionSelection(opCtx, fc.Field)
+	nodes, _ := connectionSelection(fc)
 	if len(nodes) == 0 {
 		// No node is read (totalCount/pageInfo only): the key is enough.
 		q.GetCtx().AppendFieldOnce(q.GetIDColumn())
 		return nil
 	}
-	collect(opCtx, q, meta, occurrences(nodes, nil))
+	collect(q, meta, occurrences(nodes, nil))
 	return nil
 }
 
@@ -67,28 +65,29 @@ func CollectConnectionFields(ctx context.Context, q runtime.FieldCollectable, me
 // pageInfo never needs the count: hasNextPage and hasPreviousPage come from
 // fetching one row past the page.
 //
-// Outside a gqlgen resolver it returns true — a direct Paginate call has no
-// selection to consult. Inside one it reads the selection of the field
+// Outside a resolver it returns true — a direct Paginate call has no
+// selection to consult. A resolver of another engine is one only when its
+// context carries WithSelectionSource. Inside one it reads the selection of the field
 // being resolved, so a resolver that calls Paginate for a connection nested
 // in its own result type (not the field it resolves) gets no count; resolve
 // such a connection in its own field resolver.
 func TotalCountSelected(ctx context.Context) bool {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || !graphql.HasOperationContext(ctx) {
+	fc, ok := selectedField(ctx)
+	if !ok {
 		return true
 	}
-	_, use := connectionSelection(graphql.GetOperationContext(ctx), fc.Field)
+	_, use := connectionSelection(fc)
 	return use.totalCount
 }
 
 // occurrence is one selection of an entity: a field (or a connection's
 // node) and the type conditions its fragments are collected under.
 type occurrence struct {
-	field     graphql.CollectedField
+	field     SelectedField
 	satisfies []string
 }
 
-func occurrences(fields []graphql.CollectedField, satisfies []string) []occurrence {
+func occurrences(fields []SelectedField, satisfies []string) []occurrence {
 	out := make([]occurrence, len(fields))
 	for i, f := range fields {
 		out[i] = occurrence{field: f, satisfies: satisfies}
@@ -104,7 +103,7 @@ func occurrences(fields []graphql.CollectedField, satisfies []string) []occurren
 type edgeSelection struct {
 	meta runtime.EdgeMeta
 	// fields are the direct selections of the edge.
-	fields []graphql.CollectedField
+	fields []SelectedField
 	// viaInterface are the selections of interface fields the edge backs.
 	// Their resolver answers from the loaded edge, so it is loaded whole
 	// (no per-parent limit) and projected for these selections too.
@@ -115,7 +114,6 @@ type edgeSelection struct {
 // edges they traverse. Each field is one occurrence of the same entity in
 // the selection (an alias, or the node of a connection).
 func collect(
-	opCtx *graphql.OperationContext,
 	q runtime.FieldCollectable,
 	meta *runtime.CollectMeta,
 	parents []occurrence,
@@ -138,16 +136,17 @@ func collect(
 		return es
 	}
 	for _, parent := range parents {
-		for _, field := range graphql.CollectFields(opCtx, parent.field.Selections, parent.satisfies) {
-			switch field.Name {
+		for _, field := range parent.field.Fields(parent.satisfies) {
+			name := field.FieldName()
+			switch name {
 			case "id", "__typename":
 				continue
 			}
-			if col, ok := meta.FieldColumns[field.Name]; ok {
+			if col, ok := meta.FieldColumns[name]; ok {
 				selected = append(selected, col)
 				continue
 			}
-			if edge, ok := meta.Edges[field.Name]; ok {
+			if edge, ok := meta.Edges[name]; ok {
 				// Columns of this table the edge needs (a foreign key it
 				// owns); empty when the key lives on the other side.
 				selected = append(selected, edge.FKColumns...)
@@ -159,14 +158,14 @@ func collect(
 			// contributing edge. When all of them own their foreign key and
 			// the selection needs only __typename/id, the resolver builds
 			// the node from the key, so only the key columns are selected.
-			if ifm, ok := meta.InterfaceFields[field.Name]; ok {
+			if ifm, ok := meta.InterfaceFields[name]; ok {
 				for _, key := range ifm.Edges {
 					selected = append(selected, meta.Edges[key].FKColumns...)
 				}
 				// Skip the edge loads only when the resolver can actually
 				// answer from the keys; otherwise this would trade one join
 				// for a query per row.
-				if ifm.FastPath && InterfaceFieldCoveredByID(field, opCtx, ifm.Satisfies...) {
+				if ifm.FastPath && coveredByID(field, ifm.Satisfies) {
 					continue
 				}
 				// The selection is collected under every implementor's type
@@ -180,7 +179,7 @@ func collect(
 			}
 			// A custom resolver whose columns were declared via
 			// graphql.CollectedFor: select exactly those.
-			if cols, ok := meta.CollectedFor[field.Name]; ok {
+			if cols, ok := meta.CollectedFor[name]; ok {
 				selected = append(selected, cols...)
 				continue
 			}
@@ -189,7 +188,7 @@ func collect(
 		}
 	}
 	for _, es := range edges {
-		collectEdge(opCtx, q, es)
+		collectEdge(q, es)
 	}
 	// Only apply column projection if all fields are known.
 	if !unknownSeen {
@@ -213,14 +212,14 @@ func collect(
 // An edge an interface field reaches is always loaded whole — its resolver
 // reads every loaded row — and projected for the union of the direct and
 // the interface selections.
-func collectEdge(opCtx *graphql.OperationContext, q runtime.FieldCollectable, es *edgeSelection) {
+func collectEdge(q runtime.FieldCollectable, es *edgeSelection) {
 	if es.meta.Unique || !es.meta.Relay {
 		child := q.WithEdgeLoad(es.meta.Name)
-		collectChild(opCtx, child, append(occurrences(es.fields, nil), es.viaInterface...))
+		collectChild(child, append(occurrences(es.fields, nil), es.viaInterface...))
 		return
 	}
 	var (
-		nodes     []graphql.CollectedField
+		nodes     []SelectedField
 		load      = len(es.viaInterface) > 0
 		unlimited = load
 		limit     int
@@ -232,15 +231,15 @@ func collectEdge(opCtx *graphql.OperationContext, q runtime.FieldCollectable, es
 			return
 		}
 		child := q.WithEdgeLoad(es.meta.Name)
-		collectChild(opCtx, child, es.viaInterface)
+		collectChild(child, es.viaInterface)
 		return
 	}
 	for _, field := range es.fields {
-		args := field.ArgumentMap(opCtx.Variables)
+		args := field.Arguments()
 		if args["after"] != nil || args["before"] != nil || args["where"] != nil || args["orderBy"] != nil {
 			continue
 		}
-		occNodes, occ := connectionSelection(opCtx, field)
+		occNodes, occ := connectionSelection(field)
 		if !occ.rows {
 			continue
 		}
@@ -268,18 +267,18 @@ func collectEdge(opCtx *graphql.OperationContext, q runtime.FieldCollectable, es
 		child.GetCtx().AppendFieldOnce(child.GetIDColumn())
 		return
 	}
-	collectChild(opCtx, child, append(occurrences(nodes, nil), es.viaInterface...))
+	collectChild(child, append(occurrences(nodes, nil), es.viaInterface...))
 }
 
 // collectChild recurses into an eager-loaded edge query when it carries its
 // own metadata; otherwise the edge is loaded unprojected.
-func collectChild(opCtx *graphql.OperationContext, child runtime.FieldCollectable, fields []occurrence) {
+func collectChild(child runtime.FieldCollectable, fields []occurrence) {
 	mc, ok := child.(MetaCollectable)
 	if !ok {
 		return
 	}
 	if meta := mc.CollectMeta(); meta != nil {
-		collect(opCtx, mc, meta, fields)
+		collect(mc, meta, fields)
 	}
 }
 
@@ -294,17 +293,17 @@ type connectionUse struct {
 
 // connectionSelection returns the node selections of a connection field
 // (edges { node { ... } }, one per occurrence) and what else it reads.
-func connectionSelection(opCtx *graphql.OperationContext, conn graphql.CollectedField) ([]graphql.CollectedField, connectionUse) {
+func connectionSelection(conn SelectedField) ([]SelectedField, connectionUse) {
 	var (
-		nodes []graphql.CollectedField
+		nodes []SelectedField
 		use   connectionUse
 	)
-	for _, f := range graphql.CollectFields(opCtx, conn.Selections, nil) {
-		switch f.Name {
+	for _, f := range conn.Fields(nil) {
+		switch f.FieldName() {
 		case "edges":
 			use.rows = true
-			for _, n := range graphql.CollectFields(opCtx, f.Selections, nil) {
-				if n.Name == "node" {
+			for _, n := range f.Fields(nil) {
+				if n.FieldName() == "node" {
 					nodes = append(nodes, n)
 				}
 			}
@@ -320,7 +319,8 @@ func connectionSelection(opCtx *graphql.OperationContext, conn graphql.Collected
 
 // gqlToInt converts a GraphQL argument value to int.
 // AST-parsed IntValue yields int64, while gqlgen resolvers may pass int.
-// JSON-parsed numbers may arrive as float64.
+// JSON-parsed numbers arrive as float64, or as json.Number from an engine
+// that keeps their precision.
 func gqlToInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:
