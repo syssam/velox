@@ -225,6 +225,9 @@ func (e *state) evalBinary(expr *querylanguage.BinaryExpr) *sql.Predicate {
 			return sql.ColumnsOp(e.field(field), e.field(x), binary[expr.Op])
 		case *querylanguage.Value:
 			c := e.field(field)
+			if vs, ok := x.V.([]any); ok && (expr.Op == querylanguage.OpIn || expr.Op == querylanguage.OpNotIn) {
+				return e.inList(c, expr.Op, vs)
+			}
 			return sql.P(func(b *sql.Builder) {
 				b.Ident(c).WriteOp(binary[expr.Op])
 				args(b, x)
@@ -293,6 +296,41 @@ func (e *state) field(f *querylanguage.Field) string {
 	_, ok := e.context.Fields[f.Name]
 	expect(ok || e.context.ID.Column == f.Name, "field %q was not found for node %q", f.Name, e.context.Type)
 	return e.selector.C(f.Name)
+}
+
+// inList renders c IN (...) / c NOT IN (...). An empty list is FALSE / NOT
+// FALSE, as sql.In renders it: "IN ()" is a syntax error on PostgreSQL and
+// MySQL. A *querylanguage.Field element (querylanguage.In(x, &Field{...}))
+// is a column reference, not a value to bind.
+func (e *state) inList(c string, op querylanguage.Op, vs []any) *sql.Predicate {
+	if len(vs) == 0 {
+		if op == querylanguage.OpIn {
+			return sql.False()
+		}
+		return sql.Not(sql.False())
+	}
+	elems := make([]func(*sql.Builder), len(vs))
+	for i, v := range vs {
+		switch v := v.(type) {
+		case *querylanguage.Field:
+			col := e.field(v)
+			elems[i] = func(b *sql.Builder) { b.Ident(col) }
+		case querylanguage.Expr:
+			panic(evalError{fmt.Sprintf("unsupported expression %T in an IN list", v)})
+		default:
+			elems[i] = func(b *sql.Builder) { b.Arg(v) }
+		}
+	}
+	return sql.P(func(b *sql.Builder) {
+		b.Ident(c).WriteOp(binary[op]).Byte('(')
+		for i, elem := range elems {
+			if i > 0 {
+				b.Comma()
+			}
+			elem(b)
+		}
+		b.Byte(')')
+	})
 }
 
 func args(b *sql.Builder, v *querylanguage.Value) {

@@ -77,6 +77,31 @@ func TestGraph_EvalP(t *testing.T) {
 		wantArgs  []any
 		wantErr   bool
 	}{
+		// An empty IN list is FALSE (NOT FALSE for NOT IN): "IN ()" is a
+		// syntax error on PostgreSQL and MySQL.
+		{
+			s:         sql.Dialect(dialect.Postgres).Select().From(sql.Table("users")),
+			p:         querylanguage.FieldIn("name"),
+			wantQuery: `SELECT * FROM "users" WHERE FALSE`,
+		},
+		{
+			s:         sql.Dialect(dialect.Postgres).Select().From(sql.Table("users")),
+			p:         querylanguage.FieldNotIn("name"),
+			wantQuery: `SELECT * FROM "users" WHERE NOT (FALSE)`,
+		},
+		{
+			s:         sql.Dialect(dialect.Postgres).Select().From(sql.Table("users")),
+			p:         querylanguage.FieldIn("name", "a", "b"),
+			wantQuery: `SELECT * FROM "users" WHERE "users"."name" IN ($1, $2)`,
+			wantArgs:  []any{"a", "b"},
+		},
+		// A field in the list is a column, not a value bound as a parameter.
+		{
+			s:         sql.Dialect(dialect.Postgres).Select().From(sql.Table("users")),
+			p:         querylanguage.In(&querylanguage.Field{Name: "name"}, &querylanguage.Field{Name: "last"}, &querylanguage.Value{V: "x"}),
+			wantQuery: `SELECT * FROM "users" WHERE "users"."name" IN ("users"."last", $1)`,
+			wantArgs:  []any{"x"},
+		},
 		{
 			s:         sql.Dialect(dialect.Postgres).Select().From(sql.Table("users")),
 			p:         querylanguage.FieldHasPrefix("name", "a"),
