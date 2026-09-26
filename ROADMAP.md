@@ -52,7 +52,7 @@ Ordered roughly by how much they de-risk the release, not by effort.
   reason per-annotation.
 - [ ] **Documented limitations are part of the contract.** Known, deliberate
   divergences and inherited Ent limitations (no `(*Entity).Update()`,
-  `DoNothing` IDs, NULL-cursor pagination dead-end) are documented in
+  `DoNothing` IDs) are documented in
   `docs/architecture-overview.md` §4 and pinned by tests. Any new limitation
   discovered before v1.0 gets the same treatment — a pin test plus a gotcha
   entry — or a fix.
@@ -73,9 +73,14 @@ the rationale:
   error; the caller owns the chunking policy).
 - Union SDL / resolver scaffolding for `graphql.UnionMember` (Go markers
   only, matching every other gqlgen-bound ORM).
-- NULL-aware cursor pagination beyond Ent parity (requires dialect-aware
-  `NULLS FIRST/LAST` emission; revisit only if Ent parity stops being the
-  compatibility bar or ≥3 real users hit it).
+- Per-client `Policy()`. A policy stays process-global, as in Ent: who is
+  asking is a property of the request, carried in the context
+  (`privacy.DecisionContext`, a viewer role), not of the client handle. A
+  per-client policy would make a write's authorization depend on which
+  handle the caller picked — an easy mistake that fails silently. The need
+  for scoped vs. unscoped reads is met by per-client interceptors for reads
+  plus a system role in the context for internal work, under one global
+  policy for writes; `examples/multitenant` is the worked reference.
 
 ## Already shipped
 
@@ -83,7 +88,8 @@ Kept here so the checklist above reads against the right baseline: the
 model-elimination 2-layer architecture, Ent-style shared hook/interceptor
 stores, explicit privacy policy fields, entity `Unwrap()` tx-detach parity,
 edge-method `where` autobind (zero resolver code), multi-order Relay
-pagination with e2e guards, the three-way parity differential harness
+pagination with e2e guards, NULL-aware cursor pagination
+(`dialect.CapNullsFirst`, beyond Ent parity), the three-way parity differential harness
 (reference ⟷ velox ⟷ ent) across the dialect matrix, per-tier CI coverage
 gates, and the 10–25× incremental-rebuild advantage measured in
 `docs/benchmarks.md`.

@@ -285,6 +285,28 @@ dialect returns every row exactly once.
 Pinned by `tests/integration/e2e_multidialect_null_test.go::TestMultiDialect_PaginateNullableOrder_NullCursors`
 and `e2e_cursor_keyset_test.go::TestMultiDialect_CursorKeysetWalks`.
 
+### 4.9. Case-insensitive predicates fold only ASCII on SQLite
+
+`EqualFold`, `ContainsFold`, `HasPrefixFold` and `HasSuffixFold` lower the
+value in Go (Unicode-aware) and the column in SQL. SQLite's built-in
+`lower()` folds only ASCII, so a stored `"ÜBER"` stays `"Über"` and does not
+match `EqualFold("über")`, while a stored `"über"` does match
+`EqualFold("ÜBER")`. PostgreSQL (`ILIKE`) and MySQL (`utf8mb4_general_ci`)
+fold by their collation. Ent behaves the same. If you need Unicode folding
+on SQLite, store a normalized (lowercased) copy of the column and query that.
+
+Pinned by `tests/integration/e2e_equal_fold_test.go::TestSQLite_EqualFoldFoldsOnlyASCII`.
+
+### 4.10. SQL builders are not safe for concurrent use
+
+A `*sql.Selector` (and the other builders in `dialect/sql`) is mutable state,
+like a `strings.Builder`: rendering one sets the dialect, and for the duration
+of the render the running placeholder count, on every subquery it contains. Build a query per request
+or goroutine; do not share one subquery selector between queries rendered
+concurrently. Rendering the same builder again from one goroutine is
+supported and gives the same SQL (pinned by
+`dialect/sql/placeholders_test.go::TestPostgresPlaceholders_AcrossShapes`).
+
 ---
 
 ## 5. GraphQL Extension Contract

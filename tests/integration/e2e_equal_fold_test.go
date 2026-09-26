@@ -43,3 +43,19 @@ func TestMultiDialect_EqualFoldIsNotAPattern(t *testing.T) {
 		}
 	})
 }
+
+// TestSQLite_EqualFoldFoldsOnlyASCII pins a documented limitation
+// (docs/architecture-overview.md §4.9): SQLite's lower() folds only ASCII,
+// so a non-ASCII upper-case value stored in the column does not fold.
+func TestSQLite_EqualFoldFoldsOnlyASCII(t *testing.T) {
+	c := openTestClient(t)
+	ctx := context.Background()
+	for i, name := range []string{"ÜBER", "über"} {
+		_, err := c.User.Create().SetName(name).SetEmail(string(rune('a'+i)) + "@ascii").SetAge(30).
+			SetRole(user.RoleUser).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
+		require.NoError(t, err)
+	}
+	names, err := c.User.Query().Where(user.NameField.EqualFold("ÜBER")).Select(user.FieldName).Strings(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []string{"über"}, names, "the stored lower-case value matches; the stored upper-case one does not fold")
+}
