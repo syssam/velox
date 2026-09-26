@@ -33,7 +33,7 @@ Regenerate after upgrading. Breaking changes are marked **BREAKING** below.
 - A JSON path key containing a quote (`sqljson.Path("it's")`) ended the MySQL/SQLite path literal early, so the rest of the key ran as SQL; on PostgreSQL a key with a comma, brace or double quote was read as several `text[]` path elements. Keys are now escaped for each dialect (Ent has the same bug)
 - An eager load limited per parent and ordered by a term that selects an alias failed with "no such column": `LimitPerPartition` read aliased selections by their source column, which the derived table does not expose
 - `UpdateSet.UpdateColumns()` returned the INSERT columns instead of the columns set in the conflict resolver
-- Rendering a `DeleteBuilder`, or a statement with a `WITH` prefix, a second time appended a second copy of the statement (Ent has the same bug)
+- Rendering a `DeleteBuilder`, or a statement with a `WITH` prefix, a second time appended a second copy of the statement; a `Selector` rendered twice on PostgreSQL numbered its placeholders from `$2` (Ent has the same bug)
 - `GroupBy(...).Aggregate(...)`, `Aggregate(...)` and `Order(...)` on an unknown column returned zeros or every column with a nil error; the builder's error is now returned
 - An M2M edge declared `Through()` an edge schema now fills the join entity's defaults (e.g. `joined_at` = `time.Now`); `AddXxxIDs` failed with a NOT NULL error before
 - Mutating an edge schema's generated edge (`AddMembershipIDs`, `ClearMemberships`) built SQL against the wrong table ("no such column")

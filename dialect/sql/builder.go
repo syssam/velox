@@ -2770,7 +2770,9 @@ func (s *Selector) Query() (string, []any) {
 		b.WriteString(strconv.Itoa(*s.offset))
 	}
 	s.joinLock(&b)
-	s.total = b.total
+	// s.total is not advanced: a parent numbers its placeholders from the
+	// args it gets back (Builder.join), and advancing it here numbered a
+	// second render of the same selector from $2 with one argument.
 	s.AddError(b.Err())
 	return b.String(), b.args
 }

@@ -2528,3 +2528,17 @@ func TestUpdateSet_UpdateColumnsInResolver(t *testing.T) {
 		})).Query()
 	require.Equal(t, []string{"score"}, got)
 }
+
+// TestSelector_QueryIsRepeatableOnPostgres pins that a selector rendered
+// twice numbers its placeholders the same way both times. Query stored the
+// running total on the selector, so the second render started at $2 while
+// binding a single argument.
+func TestSelector_QueryIsRepeatableOnPostgres(t *testing.T) {
+	s := Dialect(dialect.Postgres).Select("*").From(Table("users")).
+		Where(And(EQ("name", "a"), In("id", Select("owner").From(Table("pets")).Where(EQ("kind", "cat")))))
+	q1, a1 := s.Query()
+	q2, a2 := s.Query()
+	require.Equal(t, `SELECT * FROM "users" WHERE "name" = $1 AND "id" IN (SELECT "owner" FROM "pets" WHERE "kind" = $2)`, q1)
+	require.Equal(t, q1, q2)
+	require.Equal(t, a1, a2)
+}
