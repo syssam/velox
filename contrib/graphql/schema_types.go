@@ -11,6 +11,7 @@ import (
 	gqlgenTemplates "github.com/99designs/gqlgen/codegen/templates"
 
 	"github.com/syssam/velox/compiler/gen"
+	"github.com/syssam/velox/schema/field"
 )
 
 // typedJSONScalar holds information about a typed JSON scalar.
@@ -600,6 +601,18 @@ func (g *Generator) genField(t *gen.Type, f *gen.Field) string {
 	return fieldDef
 }
 
+// isNillableBytes reports whether f is a Nillable Bytes field, typed
+// *[]byte on the entity.
+func isNillableBytes(f *gen.Field) bool {
+	return f.Type != nil && f.Type.Type == field.TypeBytes && f.Nillable
+}
+
+// nillableBytesAccessor names the generated method GraphQL resolves a
+// Nillable Bytes field through (see genNillableBytesAccessors).
+func nillableBytesAccessor(f *gen.Field) string {
+	return f.StructField() + "OrNil"
+}
+
 // buildGoFieldDirective consolidates all @goField params for a field.
 //
 // Emits `@goField(name: <go-struct-field>)` whenever gqlgen's default
@@ -634,7 +647,12 @@ func (g *Generator) buildGoFieldDirective(f *gen.Field) string {
 		sdlName = camel(f.Name)
 	}
 	structField := f.StructField()
-	if gqlgenTemplates.ToGo(sdlName) != structField {
+	if isNillableBytes(f) {
+		// Resolve through the generated []byte accessor: gqlgen
+		// dereferences a *[]byte without a nil check, so a NULL value
+		// panicked ("internal system error").
+		parts = append(parts, fmt.Sprintf("name: %q", nillableBytesAccessor(f)))
+	} else if gqlgenTemplates.ToGo(sdlName) != structField {
 		parts = append(parts, fmt.Sprintf("name: %q", structField))
 	}
 

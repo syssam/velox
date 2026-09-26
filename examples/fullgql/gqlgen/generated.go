@@ -165,15 +165,15 @@ type ComplexityRoot struct {
 	}
 
 	Product struct {
-		CreatedAt func(childComplexity int) int
-		ID        func(childComplexity int) int
-		Name      func(childComplexity int) int
-		Price     func(childComplexity int) int
-		Published func(childComplexity int) int
-		Stock     func(childComplexity int) int
-		Tags      func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) int
-		Thumbnail func(childComplexity int) int
-		UpdatedAt func(childComplexity int) int
+		CreatedAt      func(childComplexity int) int
+		ID             func(childComplexity int) int
+		Name           func(childComplexity int) int
+		Price          func(childComplexity int) int
+		Published      func(childComplexity int) int
+		Stock          func(childComplexity int) int
+		Tags           func(childComplexity int, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.TagOrder, where *filter.TagWhereInput) int
+		ThumbnailOrNil func(childComplexity int) int
+		UpdatedAt      func(childComplexity int) int
 	}
 
 	ProductConnection struct {
@@ -933,11 +933,11 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Product.Tags(childComplexity, args["after"].(*gqlrelay.Cursor), args["first"].(*int), args["before"].(*gqlrelay.Cursor), args["last"].(*int), args["orderBy"].(*entity.TagOrder), args["where"].(*filter.TagWhereInput)), true
 	case "Product.thumbnail":
-		if e.complexity.Product.Thumbnail == nil {
+		if e.complexity.Product.ThumbnailOrNil == nil {
 			break
 		}
 
-		return e.complexity.Product.Thumbnail(childComplexity), true
+		return e.complexity.Product.ThumbnailOrNil(childComplexity), true
 	case "Product.updatedAt":
 		if e.complexity.Product.UpdatedAt == nil {
 			break
@@ -1931,7 +1931,7 @@ type Product implements Node @goModel(model: "example.com/fullgql/velox/entity.P
   name: String!
   price: Float!
   stock: Int!
-  thumbnail: Bytes
+  thumbnail: Bytes @goField(name: "ThumbnailOrNil")
   published: Boolean!
   """
   Tags associated with this product
@@ -7490,10 +7490,10 @@ func (ec *executionContext) _Product_thumbnail(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_Product_thumbnail,
 		func(ctx context.Context) (any, error) {
-			return obj.Thumbnail, nil
+			return obj.ThumbnailOrNil(), nil
 		},
 		nil,
-		ec.marshalOBytes2ᚖᚕbyte,
+		ec.marshalOBytes2ᚕbyte,
 		true,
 		false,
 	)
@@ -7503,7 +7503,7 @@ func (ec *executionContext) fieldContext_Product_thumbnail(_ context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "Product",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Bytes does not have child fields")

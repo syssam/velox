@@ -11,10 +11,8 @@ import (
 // GraphQL as base64. The SDL declared `scalar Bytes` without a Go binding,
 // so gqlgen bound it to string and generated resolver stubs that panicked:
 // every read or write of Product.thumbnail answered "internal system error".
-//
-// Not covered: reading NULL from a Nillable Bytes field (*[]byte) still
-// fails, because gqlgen dereferences a nil pointer-to-slice before the
-// scalar's marshaler runs.
+// Reading NULL from the Nillable (*[]byte) field goes through the generated
+// ThumbnailOrNil accessor: gqlgen dereferences a nil *[]byte itself.
 func TestBytesFieldRoundTrip(t *testing.T) {
 	_, gql, _ := openCountingClient(t)
 	var created struct {
@@ -36,4 +34,10 @@ func TestBytesFieldRoundTrip(t *testing.T) {
 	var resp map[string]any
 	err := gql.Post(`mutation { createProduct(input: {name: "q", price: 1, thumbnail: "not base64!"}) { id } }`, &resp)
 	require.Error(t, err, "a value that is not base64 is rejected")
+
+	var unset struct {
+		CreateProduct struct{ Thumbnail *string }
+	}
+	gql.MustPost(`mutation { createProduct(input: {name: "r", price: 1}) { thumbnail } }`, &unset)
+	require.Nil(t, unset.CreateProduct.Thumbnail, "an unset Bytes field reads as null")
 }

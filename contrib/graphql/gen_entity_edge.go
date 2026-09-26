@@ -26,7 +26,8 @@ func (g *Generator) genEntityEdge(t *gen.Type) *jen.File {
 	}
 
 	edges := g.filterEdges(t.Edges, SkipType)
-	if len(edges) == 0 {
+	bytesFields := g.nillableBytesFields(t)
+	if len(edges) == 0 && len(bytesFields) == 0 {
 		return nil
 	}
 
@@ -57,9 +58,33 @@ func (g *Generator) genEntityEdge(t *gen.Type) *jen.File {
 	// Interface fields (graphql.InterfaceField). Validation errors surface
 	// at generation start (validateInterfaceFields), so a failure here is
 	// unreachable in a run that got this far.
-	_ = g.genInterfaceFieldMethods(f, t, typeName)
+	if len(edges) > 0 {
+		_ = g.genInterfaceFieldMethods(f, t, typeName)
+	}
+
+	for _, fd := range bytesFields {
+		accessor := nillableBytesAccessor(fd)
+		f.Commentf("%s returns the %q field, or nil when it is NULL. GraphQL", accessor, fd.Name)
+		f.Comment("resolves the field through it: gqlgen dereferences a nil *[]byte.")
+		f.Func().Params(jen.Id("m").Op("*").Id(typeName)).Id(accessor).Params().Index().Byte().Block(
+			jen.If(jen.Id("m").Dot(fd.StructField()).Op("==").Nil()).Block(jen.Return(jen.Nil())),
+			jen.Return(jen.Op("*").Id("m").Dot(fd.StructField())),
+		)
+	}
 
 	return f
+}
+
+// nillableBytesFields returns the type's GraphQL-visible Nillable Bytes
+// fields, which get a []byte accessor (see isNillableBytes).
+func (g *Generator) nillableBytesFields(t *gen.Type) []*gen.Field {
+	var out []*gen.Field
+	for _, fd := range g.filterFields(t.Fields, SkipType) {
+		if isNillableBytes(fd) && (!g.isEdgeFKField(t, fd) || !g.shouldSkipEdgeFKField(t, fd)) {
+			out = append(out, fd)
+		}
+	}
+	return out
 }
 
 // genSimpleEdgeMethod generates a unique edge method (returns single entity or nil).
