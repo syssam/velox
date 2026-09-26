@@ -76,6 +76,7 @@ tests/integration/tag/
 tests/integration/token/
 tests/integration/user/
 tests/integration/.velox-manifest
+tests/integration/.velox-graphql-manifest
 
 # Examples not for public distribution
 examples/erp/
