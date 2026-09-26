@@ -2,7 +2,12 @@
 
 package ent
 
-import "github.com/syssam/velox/dialect/sql"
+import (
+	"fmt"
+	"reflect"
+
+	"github.com/syssam/velox/dialect/sql"
+)
 
 // EntitySchema represents a schema configuration for runtime filtering.
 type EntitySchema struct {
@@ -116,7 +121,9 @@ const (
 	OpHasSuffix = "has_suffix"
 )
 
-// ApplyFilter applies a RuntimeFilter to a SQL Selector.
+// ApplyFilter applies a RuntimeFilter to a SQL Selector. An unknown operator,
+// or a value of the wrong type for its operator, fails the query rather than
+// leaving it unfiltered.
 func ApplyFilter(s *sql.Selector, filter *RuntimeFilter, column string) {
 	if filter == nil {
 		return
@@ -134,6 +141,18 @@ func ApplyFilter(s *sql.Selector, filter *RuntimeFilter, column string) {
 		s.Where(sql.LT(column, filter.Value))
 	case OpLTE:
 		s.Where(sql.LTE(column, filter.Value))
+	case OpIn:
+		if vs, ok := filterValues(filter.Value); ok {
+			s.Where(sql.In(column, vs...))
+		} else {
+			s.AddError(fmt.Errorf("velox: filter %q on %q needs a list value, got %T", filter.Op, column, filter.Value))
+		}
+	case OpNotIn:
+		if vs, ok := filterValues(filter.Value); ok {
+			s.Where(sql.NotIn(column, vs...))
+		} else {
+			s.AddError(fmt.Errorf("velox: filter %q on %q needs a list value, got %T", filter.Op, column, filter.Value))
+		}
 	case OpIsNull:
 		s.Where(sql.IsNull(column))
 	case OpIsNotNull:
@@ -141,14 +160,35 @@ func ApplyFilter(s *sql.Selector, filter *RuntimeFilter, column string) {
 	case OpContains:
 		if v, ok := filter.Value.(string); ok {
 			s.Where(sql.Contains(column, v))
+		} else {
+			s.AddError(fmt.Errorf("velox: filter %q on %q needs a string value, got %T", filter.Op, column, filter.Value))
 		}
 	case OpHasPrefix:
 		if v, ok := filter.Value.(string); ok {
 			s.Where(sql.HasPrefix(column, v))
+		} else {
+			s.AddError(fmt.Errorf("velox: filter %q on %q needs a string value, got %T", filter.Op, column, filter.Value))
 		}
 	case OpHasSuffix:
 		if v, ok := filter.Value.(string); ok {
 			s.Where(sql.HasSuffix(column, v))
+		} else {
+			s.AddError(fmt.Errorf("velox: filter %q on %q needs a string value, got %T", filter.Op, column, filter.Value))
 		}
+	default:
+		s.AddError(fmt.Errorf("velox: unknown filter operator %q on %q", filter.Op, column))
 	}
+}
+
+// filterValues returns the elements of a slice or array value.
+func filterValues(v any) ([]any, bool) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		return nil, false
+	}
+	vs := make([]any, rv.Len())
+	for i := range vs {
+		vs[i] = rv.Index(i).Interface()
+	}
+	return vs, true
 }

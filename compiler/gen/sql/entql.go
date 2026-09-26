@@ -95,10 +95,37 @@ func genEntQL(h gen.GeneratorHelper) *jen.File {
 		jen.Id("OpHasSuffix").Op("=").Lit("has_suffix"),
 	)
 
-	// ApplyFilter helper
-	f.Comment("ApplyFilter applies a RuntimeFilter to a SQL Selector.")
+	// ApplyFilter helper. It fails closed: an operator it does not know, or
+	// a value of the wrong type, records an error on the selector so the
+	// query fails. Ignoring it — as it once did for in/not_in — ran the
+	// query unfiltered.
+	sqlPkg := h.SQLPkg()
+	where := func(pred jen.Code) jen.Code { return jen.Id("s").Dot("Where").Call(pred) }
+	fail := func(format string, args ...jen.Code) jen.Code {
+		return jen.Id("s").Dot("AddError").Call(jen.Qual("fmt", "Errorf").Call(append([]jen.Code{jen.Lit(format)}, args...)...))
+	}
+	stringOp := func(fn string) jen.Code {
+		return jen.If(jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id("filter").Dot("Value").Op(".").Parens(jen.String()), jen.Id("ok")).Block(
+			where(jen.Qual(sqlPkg, fn).Call(jen.Id("column"), jen.Id("v"))),
+		).Else().Block(
+			fail("velox: filter %q on %q needs a string value, got %T", jen.Id("filter").Dot("Op"), jen.Id("column"), jen.Id("filter").Dot("Value")),
+		)
+	}
+	listOp := func(fn string) jen.Code {
+		return jen.If(jen.List(jen.Id("vs"), jen.Id("ok")).Op(":=").Id("filterValues").Call(jen.Id("filter").Dot("Value")), jen.Id("ok")).Block(
+			where(jen.Qual(sqlPkg, fn).Call(jen.Id("column"), jen.Id("vs").Op("..."))),
+		).Else().Block(
+			fail("velox: filter %q on %q needs a list value, got %T", jen.Id("filter").Dot("Op"), jen.Id("column"), jen.Id("filter").Dot("Value")),
+		)
+	}
+	binary := func(fn string) jen.Code {
+		return where(jen.Qual(sqlPkg, fn).Call(jen.Id("column"), jen.Id("filter").Dot("Value")))
+	}
+	f.Comment("ApplyFilter applies a RuntimeFilter to a SQL Selector. An unknown operator,")
+	f.Comment("or a value of the wrong type for its operator, fails the query rather than")
+	f.Comment("leaving it unfiltered.")
 	f.Func().Id("ApplyFilter").Params(
-		jen.Id("s").Op("*").Qual(h.SQLPkg(), "Selector"),
+		jen.Id("s").Op("*").Qual(sqlPkg, "Selector"),
 		jen.Id("filter").Op("*").Id("RuntimeFilter"),
 		jen.Id("column").String(),
 	).Block(
@@ -106,46 +133,38 @@ func genEntQL(h gen.GeneratorHelper) *jen.File {
 			jen.Return(),
 		),
 		jen.Switch(jen.Id("filter").Dot("Op")).BlockFunc(func(grp *jen.Group) {
-			grp.Case(jen.Id("OpEQ")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "EQ").Call(jen.Id("column"), jen.Id("filter").Dot("Value"))),
-			)
-			grp.Case(jen.Id("OpNEQ")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "NEQ").Call(jen.Id("column"), jen.Id("filter").Dot("Value"))),
-			)
-			grp.Case(jen.Id("OpGT")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "GT").Call(jen.Id("column"), jen.Id("filter").Dot("Value"))),
-			)
-			grp.Case(jen.Id("OpGTE")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "GTE").Call(jen.Id("column"), jen.Id("filter").Dot("Value"))),
-			)
-			grp.Case(jen.Id("OpLT")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "LT").Call(jen.Id("column"), jen.Id("filter").Dot("Value"))),
-			)
-			grp.Case(jen.Id("OpLTE")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "LTE").Call(jen.Id("column"), jen.Id("filter").Dot("Value"))),
-			)
-			grp.Case(jen.Id("OpIsNull")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "IsNull").Call(jen.Id("column"))),
-			)
-			grp.Case(jen.Id("OpIsNotNull")).Block(
-				jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "NotNull").Call(jen.Id("column"))),
-			)
-			grp.Case(jen.Id("OpContains")).Block(
-				jen.If(jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id("filter").Dot("Value").Op(".").Parens(jen.String()), jen.Id("ok")).Block(
-					jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "Contains").Call(jen.Id("column"), jen.Id("v"))),
-				),
-			)
-			grp.Case(jen.Id("OpHasPrefix")).Block(
-				jen.If(jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id("filter").Dot("Value").Op(".").Parens(jen.String()), jen.Id("ok")).Block(
-					jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "HasPrefix").Call(jen.Id("column"), jen.Id("v"))),
-				),
-			)
-			grp.Case(jen.Id("OpHasSuffix")).Block(
-				jen.If(jen.List(jen.Id("v"), jen.Id("ok")).Op(":=").Id("filter").Dot("Value").Op(".").Parens(jen.String()), jen.Id("ok")).Block(
-					jen.Id("s").Dot("Where").Call(jen.Qual(h.SQLPkg(), "HasSuffix").Call(jen.Id("column"), jen.Id("v"))),
-				),
+			grp.Case(jen.Id("OpEQ")).Block(binary("EQ"))
+			grp.Case(jen.Id("OpNEQ")).Block(binary("NEQ"))
+			grp.Case(jen.Id("OpGT")).Block(binary("GT"))
+			grp.Case(jen.Id("OpGTE")).Block(binary("GTE"))
+			grp.Case(jen.Id("OpLT")).Block(binary("LT"))
+			grp.Case(jen.Id("OpLTE")).Block(binary("LTE"))
+			grp.Case(jen.Id("OpIn")).Block(listOp("In"))
+			grp.Case(jen.Id("OpNotIn")).Block(listOp("NotIn"))
+			grp.Case(jen.Id("OpIsNull")).Block(where(jen.Qual(sqlPkg, "IsNull").Call(jen.Id("column"))))
+			grp.Case(jen.Id("OpIsNotNull")).Block(where(jen.Qual(sqlPkg, "NotNull").Call(jen.Id("column"))))
+			grp.Case(jen.Id("OpContains")).Block(stringOp("Contains"))
+			grp.Case(jen.Id("OpHasPrefix")).Block(stringOp("HasPrefix"))
+			grp.Case(jen.Id("OpHasSuffix")).Block(stringOp("HasSuffix"))
+			grp.Default().Block(
+				fail("velox: unknown filter operator %q on %q", jen.Id("filter").Dot("Op"), jen.Id("column")),
 			)
 		}),
+	)
+
+	// filterValues flattens any slice or array (a decoded JSON list is
+	// []any; a Go caller may pass []int) into the arguments of IN.
+	f.Comment("filterValues returns the elements of a slice or array value.")
+	f.Func().Id("filterValues").Params(jen.Id("v").Any()).Params(jen.Index().Any(), jen.Bool()).Block(
+		jen.Id("rv").Op(":=").Qual("reflect", "ValueOf").Call(jen.Id("v")),
+		jen.If(jen.Id("rv").Dot("Kind").Call().Op("!=").Qual("reflect", "Slice").Op("&&").Id("rv").Dot("Kind").Call().Op("!=").Qual("reflect", "Array")).Block(
+			jen.Return(jen.Nil(), jen.False()),
+		),
+		jen.Id("vs").Op(":=").Make(jen.Index().Any(), jen.Id("rv").Dot("Len").Call()),
+		jen.For(jen.Id("i").Op(":=").Range().Id("vs")).Block(
+			jen.Id("vs").Index(jen.Id("i")).Op("=").Id("rv").Dot("Index").Call(jen.Id("i")).Dot("Interface").Call(),
+		),
+		jen.Return(jen.Id("vs"), jen.True()),
 	)
 
 	return f

@@ -332,52 +332,58 @@ func TestGetSchema(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// TestApplyFilter_AllOperators pins the WHERE clause each operator renders.
+// in and not_in were missing from the switch and fell through to "no
+// filter": the query ran unfiltered and returned every row.
 func TestApplyFilter_AllOperators(t *testing.T) {
-	// Test that ApplyFilter with each operator produces valid SQL without panicking.
 	ops := []struct {
 		op    string
 		value any
+		where string
+		args  []any
 	}{
-		{integration.OpEQ, "alice"},
-		{integration.OpNEQ, "bob"},
-		{integration.OpGT, "a"},
-		{integration.OpGTE, "a"},
-		{integration.OpLT, "z"},
-		{integration.OpLTE, "z"},
-		{integration.OpContains, "li"},
-		{integration.OpHasPrefix, "al"},
-		{integration.OpHasSuffix, "ce"},
-		{integration.OpIsNull, nil},
-		{integration.OpIsNotNull, nil},
+		{integration.OpEQ, "alice", "`name` = ?", []any{"alice"}},
+		{integration.OpNEQ, "bob", "`name` <> ?", []any{"bob"}},
+		{integration.OpGT, "a", "`name` > ?", []any{"a"}},
+		{integration.OpGTE, "a", "`name` >= ?", []any{"a"}},
+		{integration.OpLT, "z", "`name` < ?", []any{"z"}},
+		{integration.OpLTE, "z", "`name` <= ?", []any{"z"}},
+		{integration.OpIn, []any{"a", "b"}, "`name` IN (?, ?)", []any{"a", "b"}},
+		{integration.OpIn, []string{"a"}, "`name` IN (?)", []any{"a"}},
+		{integration.OpNotIn, []int{1, 2}, "`name` NOT IN (?, ?)", []any{1, 2}},
+		{integration.OpContains, "li", "`name` LIKE ?", []any{"%li%"}},
+		{integration.OpHasPrefix, "al", "`name` LIKE ?", []any{"al%"}},
+		{integration.OpHasSuffix, "ce", "`name` LIKE ?", []any{"%ce"}},
+		{integration.OpIsNull, nil, "`name` IS NULL", nil},
+		{integration.OpIsNotNull, nil, "`name` IS NOT NULL", nil},
 	}
-
 	for _, tc := range ops {
 		t.Run(tc.op, func(t *testing.T) {
-			s := velsql.Select("id", "name").From(velsql.Table("users"))
-			filter := &integration.RuntimeFilter{
-				Field: "name",
-				Op:    tc.op,
-				Value: tc.value,
-			}
-			integration.ApplyFilter(s, filter, "name")
-			// Verify the selector can produce valid SQL.
-			query, _ := s.Query()
-			assert.NotEmpty(t, query)
+			s := velsql.Dialect(dialect.SQLite).Select("id").From(velsql.Table("users"))
+			integration.ApplyFilter(s, &integration.RuntimeFilter{Field: "name", Op: tc.op, Value: tc.value}, "name")
+			query, args, err := velsql.QueryErr(s)
+			require.NoError(t, err)
+			assert.Equal(t, "SELECT `id` FROM `users` WHERE "+tc.where, query)
+			assert.Equal(t, tc.args, args)
 		})
 	}
 }
 
-func TestApplyFilter_UnknownOp(t *testing.T) {
-	// Unknown operators are silently ignored (no-op).
-	s := velsql.Select("id").From(velsql.Table("users"))
-	filter := &integration.RuntimeFilter{
-		Field: "name",
-		Op:    "unknown_op",
-		Value: "test",
+// TestApplyFilter_FailsClosed pins that a filter ApplyFilter cannot apply
+// fails the query instead of being dropped: an unknown operator, a list
+// operator without a list, a string operator without a string.
+func TestApplyFilter_FailsClosed(t *testing.T) {
+	for _, f := range []*integration.RuntimeFilter{
+		{Field: "name", Op: "unknown_op", Value: "test"},
+		{Field: "name", Op: integration.OpIn, Value: "a"},
+		{Field: "name", Op: integration.OpNotIn, Value: 1},
+		{Field: "name", Op: integration.OpContains, Value: 5},
+	} {
+		s := velsql.Select("id").From(velsql.Table("users"))
+		integration.ApplyFilter(s, f, "name")
+		_, _, err := velsql.QueryErr(s)
+		assert.Error(t, err, "%s %v", f.Op, f.Value)
 	}
-	integration.ApplyFilter(s, filter, "name")
-	query, _ := s.Query()
-	assert.NotContains(t, query, "WHERE")
 }
 
 func TestApplyFilter_Nil(t *testing.T) {
