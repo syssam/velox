@@ -1,8 +1,8 @@
 package graphql
 
 import (
-	"slices"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/syssam/velox/schema"
