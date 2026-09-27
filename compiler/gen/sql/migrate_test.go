@@ -918,3 +918,13 @@ func migrateSchemaFor(t testing.TB, schemas ...*load.Schema) string {
 	helper.graph = graph
 	return mustMigrateSchema(t, helper).GoString()
 }
+
+// The generated migrate package is what a deployed binary migrates from, so a
+// column's bounds must survive into it.
+func TestGenColumnDictBounds(t *testing.T) {
+	col := &schema.Column{Name: "stock", Type: field.TypeInt, Bounds: []field.Bound{{Op: ">=", Value: "0"}}}
+	f := jen.NewFile("migrate")
+	f.Var().Id("c").Op("=").Op("&").Qual("github.com/syssam/velox/dialect/sql/schema", "Column").Values(genColumnDict(col, "github.com/syssam/velox/schema/field"))
+	assert.Contains(t, f.GoString(), `Bounds: []field.Bound{{`)
+	assert.Contains(t, f.GoString(), `Op:    ">="`)
+}

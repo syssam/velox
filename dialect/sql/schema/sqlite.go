@@ -89,9 +89,7 @@ func (d *SQLite) atOpen(conn dialect.ExecQuerier) (migrate.Driver, error) {
 }
 
 func (d *SQLite) atTable(t1 *Table, t2 *schema.Table) {
-	if t1.Annotation != nil {
-		setAtChecks(t1, t2)
-	}
+	setAtChecks(t1, t2, quoteDouble)
 }
 
 func (d *SQLite) supportsDefault(*Column) bool {

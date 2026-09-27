@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"go/format"
 	"log"
 	"os"
@@ -15,7 +16,13 @@ import (
 	"github.com/syssam/velox/schema/field"
 )
 
+// check compares the output with numeric.go instead of writing it: an edit
+// made to numeric.go and not to the template is deleted by the next
+// go generate, and this is how a test notices first.
+var check = flag.Bool("check", false, "fail if numeric.go differs from the template's output")
+
 func main() {
+	flag.Parse()
 	buf, err := os.ReadFile("internal/numeric.tmpl")
 	if err != nil {
 		log.Fatal("reading template file:", err)
@@ -49,6 +56,16 @@ func main() {
 	}
 	if buf, err = format.Source(b.Bytes()); err != nil {
 		log.Fatal("formatting output:", err)
+	}
+	if *check {
+		cur, rerr := os.ReadFile("numeric.go")
+		if rerr != nil {
+			log.Fatal("reading numeric.go:", rerr)
+		}
+		if !bytes.Equal(cur, buf) {
+			log.Fatal("numeric.go differs from internal/numeric.tmpl: edit the template and run go generate")
+		}
+		return
 	}
 	if err = os.WriteFile("numeric.go", buf, 0o644); err != nil {
 		log.Fatal("writing go file:", err)

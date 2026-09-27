@@ -1199,7 +1199,23 @@ func (a *Atlas) pkRange(et *Table) (int64, error) {
 	return int64(idx << 32), nil
 }
 
-func setAtChecks(et *Table, at *schema.Table) {
+// setAtChecks adds the table's CHECK constraints: those its annotation spells
+// out, and one per column whose numeric validators set bounds. quote quotes
+// an identifier the dialect's way.
+func setAtChecks(et *Table, at *schema.Table, quote func(string) string) {
+	for _, c := range et.Columns {
+		if len(c.Bounds) == 0 {
+			continue
+		}
+		conds := make([]string, len(c.Bounds))
+		for i, b := range c.Bounds {
+			conds[i] = quote(c.Name) + " " + b.Op + " " + b.Value
+		}
+		at.AddChecks(&schema.Check{Name: boundsCheckName(et.Name, c.Name), Expr: strings.Join(conds, " AND ")})
+	}
+	if et.Annotation == nil {
+		return
+	}
 	if check := et.Annotation.Check; check != "" {
 		at.AddChecks(&schema.Check{
 			Expr: check,
@@ -1219,6 +1235,26 @@ func setAtChecks(et *Table, at *schema.Table) {
 		}
 	}
 }
+
+// boundsCheckName names a column's bounds constraint as PostgreSQL names an
+// unnamed one, <table>_<column>_check. Constraint names are unique per schema
+// in MySQL and silently truncated past 63 bytes in PostgreSQL, where a
+// truncated name would differ from this one on every diff, so a long name is
+// cut and a hash of the whole appended.
+func boundsCheckName(table, column string) string {
+	name := table + "_" + column + "_check"
+	const maxLen = 63
+	if len(name) <= maxLen {
+		return name
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return fmt.Sprintf("%s_%08x", name[:maxLen-9], h.Sum32())
+}
+
+func quoteDouble(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
+
+func quoteBacktick(s string) string { return "`" + strings.ReplaceAll(s, "`", "``") + "`" }
 
 // descIndexes returns a map holding the DESC mapping if exist.
 func descIndexes(idx *Index) map[string]bool {

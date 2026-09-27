@@ -260,7 +260,7 @@ func TestSetAtChecks(t *testing.T) {
 			Annotation: &sqlschema.Annotation{Check: "age > 0"},
 		}
 		at := schema.NewTable("test")
-		setAtChecks(et, at)
+		setAtChecks(et, at, quoteDouble)
 		require.Len(t, at.Checks(), 1)
 		assert.Equal(t, "age > 0", at.Checks()[0].Expr)
 	})
@@ -275,7 +275,7 @@ func TestSetAtChecks(t *testing.T) {
 			},
 		}
 		at := schema.NewTable("test")
-		setAtChecks(et, at)
+		setAtChecks(et, at, quoteDouble)
 		require.Len(t, at.Checks(), 2)
 		// Sorted by name
 		assert.Equal(t, "check_age", at.Checks()[0].Name)
@@ -292,7 +292,7 @@ func TestSetAtChecks(t *testing.T) {
 			},
 		}
 		at := schema.NewTable("test")
-		setAtChecks(et, at)
+		setAtChecks(et, at, quoteDouble)
 		require.Len(t, at.Checks(), 2)
 	})
 }

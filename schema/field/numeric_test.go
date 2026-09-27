@@ -3,6 +3,7 @@ package field_test
 import (
 	"database/sql"
 	"database/sql/driver"
+	"reflect"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -1594,4 +1595,30 @@ func TestNumericFieldBuilderChain(t *testing.T) {
 	assert.Equal(t, `json:"count,omitempty"`, fd.Tag)
 	assert.Equal(t, "counter", fd.StorageKey)
 	assert.Equal(t, int64(0), fd.Default)
+}
+
+// Each numeric validator records the bound it enforces, so a migration can
+// enforce it too; a float's Positive and Negative are strict.
+func TestNumericValidatorsRecordBounds(t *testing.T) {
+	type b = field.Bound
+	for name, tc := range map[string]struct {
+		got  []field.Bound
+		want []field.Bound
+	}{
+		"int Min":         {field.Int("a").Min(3).Descriptor().Bounds, []b{{Op: ">=", Value: "3"}}},
+		"int Max":         {field.Int("a").Max(9).Descriptor().Bounds, []b{{Op: "<=", Value: "9"}}},
+		"int Range":       {field.Int64("a").Range(1, 5).Descriptor().Bounds, []b{{Op: ">=", Value: "1"}, {Op: "<=", Value: "5"}}},
+		"int NonNegative": {field.Int("a").NonNegative().Descriptor().Bounds, []b{{Op: ">=", Value: "0"}}},
+		"int Positive":    {field.Int8("a").Positive().Descriptor().Bounds, []b{{Op: ">=", Value: "1"}}},
+		"int Negative":    {field.Int16("a").Negative().Descriptor().Bounds, []b{{Op: "<=", Value: "-1"}}},
+		"uint Max":        {field.Uint8("a").Max(200).Descriptor().Bounds, []b{{Op: "<=", Value: "200"}}},
+		"float Positive":  {field.Float("a").Positive().Descriptor().Bounds, []b{{Op: ">", Value: "0"}}},
+		"float Negative":  {field.Float32("a").Negative().Descriptor().Bounds, []b{{Op: "<", Value: "0"}}},
+		"float Range":     {field.Float("a").Range(0.5, 2.25).Descriptor().Bounds, []b{{Op: ">=", Value: "0.5"}, {Op: "<=", Value: "2.25"}}},
+		"custom Validate": {field.Int("a").Validate(func(int) error { return nil }).Descriptor().Bounds, nil},
+	} {
+		if !reflect.DeepEqual(tc.got, tc.want) {
+			t.Errorf("%s: bounds %v, want %v", name, tc.got, tc.want)
+		}
+	}
 }

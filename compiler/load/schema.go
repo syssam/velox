@@ -51,6 +51,7 @@ type Field struct {
 	UpdateDefault    bool                    `json:"update_default,omitempty"`
 	Immutable        bool                    `json:"immutable,omitempty"`
 	Validators       int                     `json:"validators,omitempty"`
+	Bounds           []field.Bound           `json:"bounds,omitempty"`
 	StorageKey       string                  `json:"storage_key,omitempty"`
 	Position         *Position               `json:"position,omitempty"`
 	Sensitive        bool                    `json:"sensitive,omitempty"`
@@ -142,6 +143,7 @@ func NewField(fd *field.Descriptor) (*Field, error) {
 		Immutable:        fd.Immutable,
 		StorageKey:       fd.StorageKey,
 		Validators:       len(fd.Validators),
+		Bounds:           fd.Bounds,
 		Sensitive:        fd.Sensitive,
 		SchemaType:       fd.SchemaType,
 		Annotations:      make(map[string]any),

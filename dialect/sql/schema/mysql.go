@@ -76,6 +76,15 @@ func (d *MySQL) atOpen(conn dialect.ExecQuerier) (migrate.Driver, error) {
 
 func (d *MySQL) atTable(t1 *Table, t2 *schema.Table) {
 	t2.SetCharset("utf8mb4").SetCollation("utf8mb4_bin")
+	// Check if the connected database supports the CHECK clause.
+	// For MySQL, is >= "8.0.16" and for MariaDB it is "10.2.1".
+	v1, v2 := d.version, "8.0.16"
+	if v, ok := d.mariadb(); ok {
+		v1, v2 = v, "10.2.1"
+	}
+	if compareVersions(v1, v2) >= 0 {
+		setAtChecks(t1, t2, quoteBacktick)
+	}
 	if t1.Annotation == nil {
 		return
 	}
@@ -89,15 +98,6 @@ func (d *MySQL) atTable(t1 *Table, t2 *schema.Table) {
 		t2.AddAttrs(&mysql.CreateOptions{
 			V: opts,
 		})
-	}
-	// Check if the connected database supports the CHECK clause.
-	// For MySQL, is >= "8.0.16" and for MariaDB it is "10.2.1".
-	v1, v2 := d.version, "8.0.16"
-	if v, ok := d.mariadb(); ok {
-		v1, v2 = v, "10.2.1"
-	}
-	if compareVersions(v1, v2) >= 0 {
-		setAtChecks(t1, t2)
 	}
 }
 

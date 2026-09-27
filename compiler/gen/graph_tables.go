@@ -34,7 +34,11 @@ func (g *Graph) Tables() (all []*schema.Table, err error) {
 				continue
 			}
 			if !f.IsEdgeField() {
-				table.AddColumn(f.Column())
+				col := f.Column()
+				if g.featureEnabled(FeatureCheckBounds) && f.def != nil {
+					col.Bounds = f.def.Bounds
+				}
+				table.AddColumn(col)
 			}
 		}
 		switch {

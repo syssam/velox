@@ -127,6 +127,7 @@ func (b *intBuilder) Unique() *intBuilder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *intBuilder) Range(i, j int) *intBuilder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -138,6 +139,7 @@ func (b *intBuilder) Range(i, j int) *intBuilder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *intBuilder) Min(i int) *intBuilder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -149,6 +151,7 @@ func (b *intBuilder) Min(i int) *intBuilder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *intBuilder) Max(i int) *intBuilder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -334,6 +337,7 @@ func (b *uintBuilder) Unique() *uintBuilder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *uintBuilder) Range(i, j uint) *uintBuilder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -345,6 +349,7 @@ func (b *uintBuilder) Range(i, j uint) *uintBuilder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *uintBuilder) Min(i uint) *uintBuilder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -356,6 +361,7 @@ func (b *uintBuilder) Min(i uint) *uintBuilder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *uintBuilder) Max(i uint) *uintBuilder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -531,6 +537,7 @@ func (b *int8Builder) Unique() *int8Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *int8Builder) Range(i, j int8) *int8Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int8) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -542,6 +549,7 @@ func (b *int8Builder) Range(i, j int8) *int8Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *int8Builder) Min(i int8) *int8Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int8) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -553,6 +561,7 @@ func (b *int8Builder) Min(i int8) *int8Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *int8Builder) Max(i int8) *int8Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int8) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -738,6 +747,7 @@ func (b *int16Builder) Unique() *int16Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *int16Builder) Range(i, j int16) *int16Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int16) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -749,6 +759,7 @@ func (b *int16Builder) Range(i, j int16) *int16Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *int16Builder) Min(i int16) *int16Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int16) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -760,6 +771,7 @@ func (b *int16Builder) Min(i int16) *int16Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *int16Builder) Max(i int16) *int16Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int16) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -945,6 +957,7 @@ func (b *int32Builder) Unique() *int32Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *int32Builder) Range(i, j int32) *int32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int32) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -956,6 +969,7 @@ func (b *int32Builder) Range(i, j int32) *int32Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *int32Builder) Min(i int32) *int32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int32) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -967,6 +981,7 @@ func (b *int32Builder) Min(i int32) *int32Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *int32Builder) Max(i int32) *int32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int32) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -1152,6 +1167,7 @@ func (b *int64Builder) Unique() *int64Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *int64Builder) Range(i, j int64) *int64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int64) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -1163,6 +1179,7 @@ func (b *int64Builder) Range(i, j int64) *int64Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *int64Builder) Min(i int64) *int64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int64) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -1174,6 +1191,7 @@ func (b *int64Builder) Min(i int64) *int64Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *int64Builder) Max(i int64) *int64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int64) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -1359,6 +1377,7 @@ func (b *uint8Builder) Unique() *uint8Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *uint8Builder) Range(i, j uint8) *uint8Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint8) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -1370,6 +1389,7 @@ func (b *uint8Builder) Range(i, j uint8) *uint8Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *uint8Builder) Min(i uint8) *uint8Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint8) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -1381,6 +1401,7 @@ func (b *uint8Builder) Min(i uint8) *uint8Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *uint8Builder) Max(i uint8) *uint8Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint8) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -1556,6 +1577,7 @@ func (b *uint16Builder) Unique() *uint16Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *uint16Builder) Range(i, j uint16) *uint16Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint16) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -1567,6 +1589,7 @@ func (b *uint16Builder) Range(i, j uint16) *uint16Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *uint16Builder) Min(i uint16) *uint16Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint16) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -1578,6 +1601,7 @@ func (b *uint16Builder) Min(i uint16) *uint16Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *uint16Builder) Max(i uint16) *uint16Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint16) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -1753,6 +1777,7 @@ func (b *uint32Builder) Unique() *uint32Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *uint32Builder) Range(i, j uint32) *uint32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint32) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -1764,6 +1789,7 @@ func (b *uint32Builder) Range(i, j uint32) *uint32Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *uint32Builder) Min(i uint32) *uint32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint32) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -1775,6 +1801,7 @@ func (b *uint32Builder) Min(i uint32) *uint32Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *uint32Builder) Max(i uint32) *uint32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint32) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -1950,6 +1977,7 @@ func (b *uint64Builder) Unique() *uint64Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *uint64Builder) Range(i, j uint64) *uint64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint64) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -1961,6 +1989,7 @@ func (b *uint64Builder) Range(i, j uint64) *uint64Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *uint64Builder) Min(i uint64) *uint64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint64) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -1972,6 +2001,7 @@ func (b *uint64Builder) Min(i uint64) *uint64Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *uint64Builder) Max(i uint64) *uint64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint64) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -2160,6 +2190,7 @@ func (b *float64Builder) Unique() *float64Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *float64Builder) Range(i, j float64) *float64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -2171,6 +2202,7 @@ func (b *float64Builder) Range(i, j float64) *float64Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *float64Builder) Min(i float64) *float64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -2182,6 +2214,7 @@ func (b *float64Builder) Min(i float64) *float64Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *float64Builder) Max(i float64) *float64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -2194,6 +2227,7 @@ func (b *float64Builder) Max(i float64) *float64Builder {
 // Positive adds a validator that requires the value to be strictly greater than 0.
 // Operation fails if the validator fails.
 func (b *float64Builder) Positive() *float64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
 		if v <= 0 {
 			return fmt.Errorf("value %v must be positive (> 0)", v)
@@ -2206,6 +2240,7 @@ func (b *float64Builder) Positive() *float64Builder {
 // Negative adds a validator that requires the value to be strictly less than 0.
 // Operation fails if the validator fails.
 func (b *float64Builder) Negative() *float64Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
 		if v >= 0 {
 			return fmt.Errorf("value %v must be negative (< 0)", v)
@@ -2383,6 +2418,7 @@ func (b *float32Builder) Unique() *float32Builder {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *float32Builder) Range(i, j float32) *float32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -2394,6 +2430,7 @@ func (b *float32Builder) Range(i, j float32) *float32Builder {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *float32Builder) Min(i float32) *float32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -2405,6 +2442,7 @@ func (b *float32Builder) Min(i float32) *float32Builder {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *float32Builder) Max(i float32) *float32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -2417,6 +2455,7 @@ func (b *float32Builder) Max(i float32) *float32Builder {
 // Positive adds a validator that requires the value to be strictly greater than 0.
 // Operation fails if the validator fails.
 func (b *float32Builder) Positive() *float32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
 		if v <= 0 {
 			return fmt.Errorf("value %v must be positive (> 0)", v)
@@ -2429,6 +2468,7 @@ func (b *float32Builder) Positive() *float32Builder {
 // Negative adds a validator that requires the value to be strictly less than 0.
 // Operation fails if the validator fails.
 func (b *float32Builder) Negative() *float32Builder {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
 		if v >= 0 {
 			return fmt.Errorf("value %v must be negative (< 0)", v)

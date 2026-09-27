@@ -308,6 +308,9 @@ type Column struct {
 	indexes    Indexes           // linked indexes.
 	foreign    *ForeignKey       // linked foreign-key.
 	Comment    string            // optional column comment.
+	// Bounds are limits the field's numeric validators set, enforced as one
+	// CHECK constraint when gen.FeatureCheckBounds generated the schema.
+	Bounds []field.Bound
 }
 
 // Expr represents a raw expression. It is used to distinguish between

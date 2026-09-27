@@ -1,6 +1,9 @@
   field Annotation.ID []string
   field Annotation.StructTag map[string]string
+  field Bound.Op string
+  field Bound.Value string
   field Descriptor.Annotations []github.com/syssam/velox/schema.Annotation
+  field Descriptor.Bounds []Bound
   field Descriptor.Comment string
   field Descriptor.Default any
   field Descriptor.Deprecated bool
@@ -122,6 +125,7 @@ func Uint64(string) *uint64Builder
 func Uint8(string) *uint8Builder
 type Annotation struct
 type BinaryValueScanner[T interface{encoding.BinaryMarshaler; encoding.BinaryUnmarshaler}] struct
+type Bound struct
 type Descriptor struct
 type EnumValues interface
 type RType struct

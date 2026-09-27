@@ -241,6 +241,25 @@ var (
 		Description: "Expose all fields and edges in GraphQL WhereInput by default (Ent-compatible behavior)",
 	}
 
+	// FeatureCheckBounds enforces numeric validators in the database too: a
+	// field with Min, Max, Range, Positive, Negative or NonNegative gets a
+	// CHECK constraint on its column, named <table>_<column>_check.
+	//
+	// A validator runs on SetX(v) and never on AddX(d), which is SET x = x + d
+	// in SQL: a stock count validated NonNegative() goes below zero the first
+	// time two orders take the last unit, and nothing reports it. The
+	// constraint makes that statement fail instead.
+	//
+	// It is off by default because adding a constraint to a table fails when
+	// rows already violate it -- rows AddX already wrote past a bound. Enable
+	// it on a new schema, or after checking the data.
+	FeatureCheckBounds = Feature{
+		Name:        "sql/checkbounds",
+		Stage:       Beta,
+		Default:     false,
+		Description: "Adds a CHECK constraint for each field's numeric validators (Min, Max, Range, Positive, Negative), so AddX cannot write past them",
+	}
+
 	// AllFeatures holds a list of all feature-flags.
 	AllFeatures = []Feature{
 		FeaturePrivacy,
@@ -260,6 +279,7 @@ var (
 		FeatureEntPredicates,
 		FeatureAutoDefault,
 		FeatureWhereInputAll,
+		FeatureCheckBounds,
 	}
 	// allFeatures includes all public and private features.
 	allFeatures = append(AllFeatures, featureMultiSchema)

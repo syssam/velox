@@ -31,6 +31,12 @@ func Float(name string) *float64Builder { return &float64Builder{&Descriptor{
 	}}
 }
 
+// Float64 returns a new Field with type float64.
+// It is an alias for Float, provided for naming symmetry with Float32.
+func Float64(name string) *float64Builder {
+	return Float(name)
+}
+
 // Float32 returns a new Field with type float32.
 func Float32(name string) *float32Builder { return &float32Builder{&Descriptor{
 		Name: name,
@@ -54,6 +60,7 @@ func (b *{{ $builder }}) Unique() *{{ $builder }} {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -65,6 +72,7 @@ func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *{{ $builder }}) Min(i {{ $t }}) *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -76,6 +84,7 @@ func (b *{{ $builder }}) Min(i {{ $t }}) *{{ $builder }} {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -144,6 +153,15 @@ func (b *{{ $builder }}) Comment(c string) *{{ $builder }} {
 // Unlike edges, fields are required by default.
 func (b *{{ $builder }}) Optional() *{{ $builder }} {
 	b.desc.Optional = true
+	return b
+}
+
+// Nullable makes the field NULL in the database and *T (pointer) in Go.
+// Equivalent to Optional().Nillable() — use when "this field can be absent"
+// should mean NULL at every layer.
+func (b *{{ $builder }}) Nullable() *{{ $builder }} {
+	b.desc.Optional = true
+	b.desc.Nillable = true
 	return b
 }
 
@@ -237,7 +255,7 @@ func (b *{{ $builder }}) Deprecated(reason ...string) *{{ $builder }} {
 	return b
 }
 
-// Descriptor implements the ent.Field interface by returning its descriptor.
+// Descriptor implements the velox.Field interface by returning its descriptor.
 func (b *{{ $builder }}) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc({{ $t }}Type)
@@ -250,7 +268,7 @@ func (b *{{ $builder }}) Descriptor() *Descriptor {
 
 var (
 	{{- range $t := $.Ints }}
-		{{ $t }}Type = reflect.TypeOf({{ $t }}(0))
+		{{ $t }}Type = reflect.TypeFor[{{ $t }}]()
 	{{- end }}
 )
 
@@ -270,6 +288,7 @@ func (b *{{ $builder }}) Unique() *{{ $builder }} {
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
 func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v  {{ $t }}) error {
 		if v < i || v > j {
 			return fmt.Errorf("value %v out of range [%v, %v]", v, i, j)
@@ -281,6 +300,7 @@ func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
 func (b *{{ $builder }}) Min(i  {{ $t }}) *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v  {{ $t }}) error {
 		if v < i {
 			return fmt.Errorf("value %v less than minimum %v", v, i)
@@ -292,6 +312,7 @@ func (b *{{ $builder }}) Min(i  {{ $t }}) *{{ $builder }} {
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
 func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
 		if v > i {
 			return fmt.Errorf("value %v greater than maximum %v", v, i)
@@ -304,6 +325,7 @@ func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
 // Positive adds a validator that requires the value to be strictly greater than 0.
 // Operation fails if the validator fails.
 func (b *{{ $builder }}) Positive() *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
 		if v <= 0 {
 			return fmt.Errorf("value %v must be positive (> 0)", v)
@@ -316,6 +338,7 @@ func (b *{{ $builder }}) Positive() *{{ $builder }} {
 // Negative adds a validator that requires the value to be strictly less than 0.
 // Operation fails if the validator fails.
 func (b *{{ $builder }}) Negative() *{{ $builder }} {
+	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
 		if v >= 0 {
 			return fmt.Errorf("value %v must be negative (< 0)", v)
@@ -373,6 +396,15 @@ func (b *{{ $builder }}) Comment(c string) *{{ $builder }} {
 // Unlike edges, fields are required by default.
 func (b *{{ $builder }}) Optional() *{{ $builder }} {
 	b.desc.Optional = true
+	return b
+}
+
+// Nullable makes the field NULL in the database and *T (pointer) in Go.
+// Equivalent to Optional().Nillable() — use when "this field can be absent"
+// should mean NULL at every layer.
+func (b *{{ $builder }}) Nullable() *{{ $builder }} {
+	b.desc.Optional = true
+	b.desc.Nillable = true
 	return b
 }
 
@@ -468,7 +500,7 @@ func (b *{{ $builder }}) Deprecated(reason ...string) *{{ $builder }} {
 	return b
 }
 
-// Descriptor implements the ent.Field interface by returning its descriptor.
+// Descriptor implements the velox.Field interface by returning its descriptor.
 func (b *{{ $builder }}) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc({{ $t }}Type)
@@ -480,7 +512,7 @@ func (b *{{ $builder }}) Descriptor() *Descriptor {
 
 var (
 {{- range $t := $.Floats }}
-    {{ $t }}Type = reflect.TypeOf({{ $t }}(0))
+    {{ $t }}Type = reflect.TypeFor[{{ $t }}]()
 {{- end }}
 )
 

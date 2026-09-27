@@ -373,6 +373,13 @@ func genColumnDict(col *schema.Column, fieldPkg string) jen.Dict {
 	if col.Comment != "" {
 		dict[jen.Id("Comment")] = jen.Lit(col.Comment)
 	}
+	if len(col.Bounds) > 0 {
+		dict[jen.Id("Bounds")] = jen.Index().Qual(fieldPkg, "Bound").ValuesFunc(func(g *jen.Group) {
+			for _, b := range col.Bounds {
+				g.Values(jen.Dict{jen.Id("Op"): jen.Lit(b.Op), jen.Id("Value"): jen.Lit(b.Value)})
+			}
+		})
+	}
 	// Include SchemaType for TypeOther fields (like decimal) that need dialect-specific types.
 	// Iterate in sorted order for deterministic generated output.
 	if len(col.SchemaType) > 0 {

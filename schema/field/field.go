@@ -1506,6 +1506,15 @@ func (b *otherBuilder) Descriptor() *Descriptor {
 	return b.desc
 }
 
+// Bound is a limit a numeric validator places on a field's value, kept as
+// data beside the validator so a migration can also enforce it in the
+// database: a validator sees SetX(v), but AddX(d) is SET x = x + d in SQL, and
+// no validator sees what that leaves.
+type Bound struct {
+	Op    string `json:"op"`    // >=, <=, > or <
+	Value string `json:"value"` // a numeric literal
+}
+
 // A Descriptor for field configuration.
 type Descriptor struct {
 	Tag              string                  // struct tag.
@@ -1520,6 +1529,7 @@ type Descriptor struct {
 	Default          any                     // default value on create.
 	UpdateDefault    any                     // default value on update.
 	Validators       []any                   // validator functions.
+	Bounds           []Bound                 // limits Min, Max, Range, Positive and Negative place on a numeric value.
 	StorageKey       string                  // sql column name.
 	Enums            []struct{ N, V string } // enum values.
 	Sensitive        bool                    // sensitive info string field.
