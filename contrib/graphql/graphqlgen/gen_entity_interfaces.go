@@ -6,10 +6,6 @@ import (
 	"github.com/syssam/velox/compiler/gen"
 )
 
-// gqlgenGraphqlPkg is gqlgen's runtime package, needed by the polymorphic
-// fast path to inspect the field selection.
-const gqlgenGraphqlPkg = "github.com/99designs/gqlgen/graphql"
-
 // genInterfacesShared emits entity/gql_interfaces.go: one Go interface per
 // generated GraphQL interface (see generatedInterfaces) with a marker
 // method, and that marker on every implementor. gqlgen binds the GraphQL
@@ -129,7 +125,7 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 		fkFields[e.Name] = fkPointerField(t, e)
 	}
 	if fastPath {
-		f.ImportName(gqlgenGraphqlPkg, "graphql")
+		f.ImportName(gqlrelayPkg, "gqlrelay")
 	}
 
 	// probe emits the always-correct path: reuse the eager-loaded edge if
@@ -182,9 +178,8 @@ func (g *Generator) genPolymorphicUniqueMethod(f *jen.File, t *gen.Type, ifc *in
 						jen.Return(jen.Nil(), jen.Qual(runtimePkgPath, "MaskNotFound").Call(jen.Id("err"))),
 					),
 					jen.If(
-						jen.Id("fc").Op(":=").Qual(gqlgenGraphqlPkg, "GetFieldContext").Call(jen.Id("ctx")),
-						jen.Id("fc").Op("==").Nil().Op("||").Op("!").Qual(gqlrelayPkg, "InterfaceFieldCoveredByID").Call(
-							append([]jen.Code{jen.Id("fc").Dot("Field"), jen.Qual(gqlgenGraphqlPkg, "GetOperationContext").Call(jen.Id("ctx"))}, satisfies...)...,
+						jen.Op("!").Qual(gqlrelayPkg, "SelectionCoveredByID").Call(
+							append([]jen.Code{jen.Id("ctx")}, satisfies...)...,
 						),
 					).Block(
 						jen.List(jen.Id("val"), jen.Id("err")).Op(":=").Id("m").Dot("Query"+edgePascal).Call().Dot("Only").Call(jen.Id("ctx")),

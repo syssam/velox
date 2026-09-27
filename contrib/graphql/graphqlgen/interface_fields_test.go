@@ -174,7 +174,7 @@ func TestInterfaceField_ResolverMethods(t *testing.T) {
 	assert.Contains(t, bookmark, "func (m *Bookmark) Item(ctx context.Context) (BookmarkItem, error)")
 	// Fast path: the populated foreign key names the concrete type.
 	assert.Contains(t, bookmark, "case m.bookmarks_todo != nil:")
-	assert.Contains(t, bookmark, `gqlrelay.InterfaceFieldCoveredByID(fc.Field, graphql.GetOperationContext(ctx), "BookmarkItem", "Todo", "Project")`)
+	assert.Contains(t, bookmark, `gqlrelay.SelectionCoveredByID(ctx, "BookmarkItem", "Todo", "Project")`)
 	assert.Contains(t, bookmark, "return &Todo{ID: *m.bookmarks_todo}, nil")
 	assert.Contains(t, bookmark, "return &Project{ID: *m.bookmarks_project}, nil")
 	// Foreign keys are NOT selected unless the query asks for them, so with
@@ -197,7 +197,7 @@ func TestInterfaceField_ResolverWithoutFKFastPath(t *testing.T) {
 	}
 	code := g.genEntityEdge(types["Bookmark"]).GoString()
 	assert.Contains(t, code, "func (m *Bookmark) Item(ctx context.Context) (BookmarkItem, error)")
-	assert.NotContains(t, code, "InterfaceFieldCoveredByID")
+	assert.NotContains(t, code, "SelectionCoveredByID")
 	assert.Contains(t, code, "m.QueryTodo().Only(ctx)")
 	assert.Contains(t, code, "m.QueryProject().Only(ctx)")
 	assert.Contains(t, code, "!runtime.IsNotFound(err)")

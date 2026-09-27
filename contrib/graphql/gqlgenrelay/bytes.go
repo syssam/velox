@@ -1,4 +1,4 @@
-package gqlrelay
+package gqlgenrelay
 
 import (
 	"encoding/base64"
@@ -34,10 +34,10 @@ func UnmarshalBytes(v any) ([]byte, error) {
 	case string:
 		b, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
-			return nil, fmt.Errorf("gqlrelay: Bytes must be a base64 string: %w", err)
+			return nil, fmt.Errorf("gqlgenrelay: Bytes must be a base64 string: %w", err)
 		}
 		return b, nil
 	default:
-		return nil, fmt.Errorf("gqlrelay: Bytes must be a base64 string, got %T", v)
+		return nil, fmt.Errorf("gqlgenrelay: Bytes must be a base64 string, got %T", v)
 	}
 }

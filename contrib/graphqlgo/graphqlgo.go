@@ -10,6 +10,10 @@
 //
 // Without it the same resolvers still answer correctly, one query per edge
 // per row and a COUNT(*) per connection.
+//
+// Generate with graphqlgen.WithoutGQLGen() so the server links no gqlgen:
+// by default the generated code imports gqlgenrelay, which is how a gqlgen
+// server collects with nothing to wire.
 package graphqlgo
 
 import (

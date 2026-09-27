@@ -295,7 +295,7 @@ scalar Time
 		buf.WriteString(`"""
 The builtin Bytes type (base64-encoded)
 """
-scalar Bytes @goModel(model: "github.com/syssam/velox/contrib/graphql/gqlrelay.Bytes")
+scalar Bytes @goModel(model: "github.com/syssam/velox/contrib/graphql/gqlgenrelay.Bytes")
 `)
 	}
 	// Generate custom scalars for typed JSON fields (sorted for deterministic output)

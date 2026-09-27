@@ -82,6 +82,10 @@ func (g *Generator) genCollectionQueries(nodes []*gen.Type) *jen.File {
 	f.ImportName("context", "context")
 	f.ImportName(runtimePkgPath, "runtime")
 	f.ImportName(gqlrelayPkg, "gqlrelay")
+	if !g.config.WithoutGQLGen {
+		// Field collection reads gqlgen's request context through it.
+		f.Anon(gqlgenRelay)
+	}
 
 	for _, t := range nodes {
 		entityPkg := g.entityPkgPath(t)

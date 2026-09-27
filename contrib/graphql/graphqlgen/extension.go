@@ -366,6 +366,18 @@ func WithWhereInputs(enabled bool) ExtensionOption {
 	}
 }
 
+// WithoutGQLGen generates code that does not import gqlgen. By default the
+// generated query package imports gqlgenrelay, which lets field collection
+// read gqlgen's request context with nothing to wire; a server on another
+// engine sets this and installs that engine's selection source instead
+// (contrib/graphqlgo's Collect, for graphql-go).
+func WithoutGQLGen() ExtensionOption {
+	return func(e *Extension) error {
+		e.config.WithoutGQLGen = true
+		return nil
+	}
+}
+
 // WithMutations sets the global default for mutation generation.
 // Default is true. Per-entity control via graphql.Mutations() annotation.
 func WithMutations(enabled bool) ExtensionOption {

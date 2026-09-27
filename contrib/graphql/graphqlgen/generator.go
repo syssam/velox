@@ -134,6 +134,13 @@ type Config struct {
 	// Default zero value (SchemaSplitNone) produces a single file.
 	SchemaSplitMode SchemaSplitMode
 
+	// WithoutGQLGen leaves gqlgenrelay out of the generated code, so a
+	// server on another engine links no gqlgen. Field collection then reads
+	// the selection only from a source the engine installs
+	// (gqlrelay.WithSelectionSource; graphqlgo.Collect does it for
+	// graphql-go). Set via WithoutGQLGen().
+	WithoutGQLGen bool
+
 	// --- Global defaults (typically controlled per-entity via annotations) ---
 
 	// RelayConnection enables Relay-style cursor connections globally.

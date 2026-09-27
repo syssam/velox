@@ -24,6 +24,8 @@ Schemas in `schema/` (or `testschema/` for tests) flow through
 | `contrib/graphql/` | GraphQL annotations only: schemas import it, so every server links it (`TestAnnotationsImportNoGenerator`) |
 | `contrib/graphql/graphqlgen/` | the GraphQL generator, run from `generate.go` |
 | `contrib/graphql/gqlgentx/` | gqlgen transaction middleware |
+| `contrib/graphql/gqlrelay/` | runtime of generated GraphQL code; imports no engine (`TestImportsNoEngine`) |
+| `contrib/graphql/gqlgenrelay/` | gqlgen's selection source and `Bytes` marshalers; generated code imports it unless `graphqlgen.WithoutGQLGen()` |
 
 ## Commands
 

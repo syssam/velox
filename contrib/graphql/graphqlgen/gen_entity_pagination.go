@@ -17,6 +17,7 @@ import (
 
 const (
 	gqlrelayPkg   = "github.com/syssam/velox/contrib/graphql/gqlrelay"
+	gqlgenRelay   = "github.com/syssam/velox/contrib/graphql/gqlgenrelay"
 	dialectSQLPkg = "github.com/syssam/velox/dialect/sql"
 )
 

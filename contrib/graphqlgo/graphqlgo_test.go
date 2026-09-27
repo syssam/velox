@@ -14,6 +14,8 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/validator"
 
+	// The reference side of the differential reads gqlgen's request context.
+	_ "github.com/syssam/velox/contrib/graphql/gqlgenrelay"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	"github.com/syssam/velox/contrib/graphqlgo"
 	"github.com/syssam/velox/runtime"

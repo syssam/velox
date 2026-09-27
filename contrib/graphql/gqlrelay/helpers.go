@@ -1,12 +1,9 @@
 package gqlrelay
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
-
-	"github.com/99designs/gqlgen/graphql"
 
 	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sql"
@@ -106,35 +103,6 @@ func PageLoaded[T any](nodes []T, cmpID func(a, b T) int, first, last *int) (Loa
 		page.HasPreviousPage = true
 	}
 	return page, nil
-}
-
-// CollectedField returns the collected field for the given path in the GraphQL context.
-func CollectedField(ctx context.Context, path ...string) *graphql.CollectedField {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil {
-		return nil
-	}
-	field := fc.Field
-	oc := graphql.GetOperationContext(ctx)
-walk:
-	for _, name := range path {
-		for _, f := range graphql.CollectFields(oc, field.Selections, nil) {
-			if f.Alias == name {
-				field = f
-				continue walk
-			}
-		}
-		return nil
-	}
-	return &field
-}
-
-// HasCollectedField reports whether the given field path exists in the GraphQL context.
-func HasCollectedField(ctx context.Context, path ...string) bool {
-	if graphql.GetFieldContext(ctx) == nil {
-		return true
-	}
-	return CollectedField(ctx, path...) != nil
 }
 
 // PaginateLimit returns the query limit based on first/last pagination parameters.
@@ -365,16 +333,7 @@ func LimitPerRow(partitionBy string, limit int, orderBy ...sql.Querier) func(s *
 	}
 }
 
-// InterfaceFieldCoveredByID reports whether a selection on a polymorphic
-// interface field needs nothing beyond __typename and id — across every
-// inline fragment, hence satisfies lists the interface and its implementor
-// type names — so a resolver can build the node from the foreign key it
-// already holds instead of querying the target table.
-func InterfaceFieldCoveredByID(field graphql.CollectedField, oc *graphql.OperationContext, satisfies ...string) bool {
-	return coveredByID(&gqlgenField{oc: oc, f: field}, satisfies)
-}
-
-// coveredByID is InterfaceFieldCoveredByID under any engine.
+// coveredByID is SelectionCoveredByID over a known field.
 func coveredByID(field SelectedField, satisfies []string) bool {
 	for _, f := range field.Fields(satisfies) {
 		switch f.FieldName() {

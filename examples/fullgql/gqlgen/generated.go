@@ -29,6 +29,7 @@ import (
 	"example.com/fullgql/velox/user"
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
+	"github.com/syssam/velox/contrib/graphql/gqlgenrelay"
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -1683,7 +1684,7 @@ scalar Time
 """
 The builtin Bytes type (base64-encoded)
 """
-scalar Bytes @goModel(model: "github.com/syssam/velox/contrib/graphql/gqlrelay.Bytes")
+scalar Bytes @goModel(model: "github.com/syssam/velox/contrib/graphql/gqlgenrelay.Bytes")
 
 """
 An object with an ID.
@@ -19640,7 +19641,7 @@ func (ec *executionContext) unmarshalOBytes2ᚕbyte(ctx context.Context, v any) 
 	if v == nil {
 		return nil, nil
 	}
-	res, err := gqlrelay.UnmarshalBytes(v)
+	res, err := gqlgenrelay.UnmarshalBytes(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -19650,7 +19651,7 @@ func (ec *executionContext) marshalOBytes2ᚕbyte(ctx context.Context, sel ast.S
 	}
 	_ = sel
 	_ = ctx
-	res := gqlrelay.MarshalBytes(v)
+	res := gqlgenrelay.MarshalBytes(v)
 	return res
 }
 

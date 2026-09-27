@@ -2,8 +2,9 @@ package gqlrelay
 
 import (
 	"context"
-
-	"github.com/99designs/gqlgen/graphql"
+	"log/slog"
+	"sync"
+	"sync/atomic"
 )
 
 // SelectedField is one field of a GraphQL selection as the engine executing
@@ -40,49 +41,55 @@ func WithSelectionSource(ctx context.Context, src SelectionSource) context.Conte
 	return context.WithValue(ctx, selectionSourceKey{}, src)
 }
 
+// defaultSource answers when the context carries no source of its own.
+// gqlgenrelay sets it to gqlgen's request context when it is imported, which
+// generated code does unless it was generated for another engine; this
+// package imports no engine, so a server not built on gqlgen links none.
+var defaultSource atomic.Pointer[SelectionSource]
+
+// SetDefaultSelectionSource sets the source field collection reads when the
+// context carries none (see WithSelectionSource). An engine adapter calls it
+// from init; the last call wins.
+func SetDefaultSelectionSource(src SelectionSource) {
+	defaultSource.Store(&src)
+}
+
 // selectedField returns the field being resolved in ctx: from a source the
-// context carries, which is explicit and so wins, or else from gqlgen.
+// context carries, which is explicit and so wins, or else from the default.
 func selectedField(ctx context.Context) (SelectedField, bool) {
-	if src, ok := ctx.Value(selectionSourceKey{}).(SelectionSource); ok && src != nil {
+	src, installed := ctx.Value(selectionSourceKey{}).(SelectionSource)
+	if installed && src != nil {
 		if f, ok := src(ctx); ok {
 			return f, true
 		}
 	}
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || !graphql.HasOperationContext(ctx) {
+	if def := defaultSource.Load(); def != nil && *def != nil {
+		return (*def)(ctx)
+	}
+	if installed {
+		// The engine's source has no field here: outside a resolver.
 		return nil, false
 	}
-	return &gqlgenField{oc: graphql.GetOperationContext(ctx), f: fc.Field}, true
+	warnNoSource.Do(func() {
+		slog.Warn("velox: GraphQL field collection has no selection source, so it projects and eager-loads nothing: " +
+			"code generated for gqlgen imports gqlgenrelay (regenerate), and another engine installs its own " +
+			"(gqlrelay.WithSelectionSource; graphqlgo.Collect for graphql-go)")
+	})
+	return nil, false
 }
 
-// gqlgenField is SelectedField over gqlgen's collected fields.
-type gqlgenField struct {
-	oc *graphql.OperationContext
-	f  graphql.CollectedField
-}
+// warnNoSource says once that collection is running blind. Without it, code
+// generated before gqlgenrelay existed compiles, runs, and quietly goes
+// back to a query per row.
+var warnNoSource sync.Once
 
-func (g *gqlgenField) FieldName() string { return g.f.Name }
-
-func (g *gqlgenField) Arguments() map[string]any {
-	if g.f.Field == nil {
-		return nil
-	}
-	return g.f.ArgumentMap(g.oc.Variables)
-}
-
-// Fields wraps every collected field in one backing array: a gqlgenField
-// boxed on its own is an allocation per selected field, on a path that runs
-// for every resolver that collects.
-func (g *gqlgenField) Fields(satisfies []string) []SelectedField {
-	collected := graphql.CollectFields(g.oc, g.f.Selections, satisfies)
-	if len(collected) == 0 {
-		return nil
-	}
-	backing := make([]gqlgenField, len(collected))
-	out := make([]SelectedField, len(collected))
-	for i, f := range collected {
-		backing[i] = gqlgenField{oc: g.oc, f: f}
-		out[i] = &backing[i]
-	}
-	return out
+// SelectionCoveredByID reports whether the field being resolved in ctx
+// selects nothing beyond __typename and id -- across every inline fragment,
+// hence satisfies lists the interface and its implementor type names -- so a
+// resolver can build the node from the foreign key it already holds instead
+// of querying the target table. With no selection to read it reports false,
+// and the caller queries.
+func SelectionCoveredByID(ctx context.Context, satisfies ...string) bool {
+	f, ok := selectedField(ctx)
+	return ok && coveredByID(f, satisfies)
 }

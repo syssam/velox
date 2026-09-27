@@ -174,3 +174,17 @@ func TestValidateResolverMappings_LoadsAndReads(t *testing.T) {
 		assert.Contains(t, err.Error(), "not on the GraphQL type")
 	})
 }
+
+// Field collection under gqlgen reads gqlgen's request context through
+// gqlgenrelay, so the generated query package imports it; generated for
+// another engine, it must not, or that engine's servers link gqlgen.
+func TestGenCollectionQueries_GQLGenImport(t *testing.T) {
+	graph := mockGraph()
+	const imp = `_ "github.com/syssam/velox/contrib/graphql/gqlgenrelay"`
+
+	code := NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox"}).genCollectionQueries(graph.Nodes).GoString()
+	assert.Contains(t, code, imp, "gqlgen servers would collect nothing")
+
+	code = NewGenerator(graph, Config{ORMPackage: "example.com/app/velox", Package: "velox", WithoutGQLGen: true}).genCollectionQueries(graph.Nodes).GoString()
+	assert.NotContains(t, code, "gqlgen")
+}
