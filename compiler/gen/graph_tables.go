@@ -228,8 +228,10 @@ func fkColumn(e *Edge, owner *schema.Table, refPK *schema.Column) *schema.Column
 	// If the foreign-key also functions as a primary key, it cannot be nullable.
 	ispk := len(owner.PrimaryKey) == 1 && owner.PrimaryKey[0].Name == e.Rel.Column()
 	column := &schema.Column{Name: e.Rel.Column(), Size: refPK.Size, Type: refPK.Type, SchemaType: refPK.SchemaType, Nullable: !ispk}
-	// O2O relations are enforced using a unique index.
-	column.Unique = e.Rel.Type == O2O
+	// O2O relations are enforced using a unique index, unless the schema declared the edge
+	// many-to-one in intent (sqlschema.NonUniqueFK): a unidirectional to(...).Unique() edge
+	// has no inverse and is classified O2O whatever the author meant.
+	column.Unique = e.Rel.Type == O2O && !e.NonUniqueFK()
 	// Foreign key was defined as an edge field.
 	if e.Rel.fk != nil && e.Rel.fk.Field != nil {
 		fc := e.Rel.fk.Field.Column()

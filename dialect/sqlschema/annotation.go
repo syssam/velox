@@ -162,6 +162,14 @@ type Annotation struct {
 	// OnDelete sets the ON DELETE cascade action.
 	OnDelete CascadeAction
 
+	// NonUniqueFK declares that a to-one edge is many-to-one in intent, so its
+	// foreign-key column is NOT unique even though the edge is classified one-to-one.
+	// A unidirectional `edge.To("x", T).Unique()` has no inverse and so is one-to-one,
+	// and a one-to-one column is UNIQUE. When many rows are meant to point at one (a
+	// parent, a merge target, a creator), set this instead of adding an inverse edge, which
+	// would also add a to-many edge and whatever is generated from it. See NonUniqueFK().
+	NonUniqueFK bool
+
 	// OnUpdate sets the ON UPDATE cascade action.
 	OnUpdate CascadeAction
 
@@ -391,6 +399,9 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 	if ant.OnDelete != "" {
 		a.OnDelete = ant.OnDelete
 	}
+	if ant.NonUniqueFK {
+		a.NonUniqueFK = true
+	}
 	if ant.OnUpdate != "" {
 		a.OnUpdate = ant.OnUpdate
 	}
@@ -479,6 +490,24 @@ func Size(size int64) Annotation {
 //	    Annotations(sql.OnDelete(sql.Cascade))
 func OnDelete(action CascadeAction) Annotation {
 	return Annotation{OnDelete: action}
+}
+
+// NonUniqueFK declares that a to-one edge is many-to-one in intent: its foreign-key
+// column is not UNIQUE, although a unidirectional Unique() edge is classified one-to-one
+// and a one-to-one column is.
+//
+// Use it where many rows point at one, and the schema has no inverse edge to say so:
+//
+//	edge.To("merged_into", Customer.Type).
+//	    Field("merged_into_id").
+//	    Unique().
+//	    Annotations(sql.NonUniqueFK())
+//
+// Adding an inverse (`edge.From("merged_from", Customer.Type).Ref("merged_into")`) is the
+// other way to make the relationship many-to-one, but it also adds a to-many edge and
+// everything generated from it. A genuine one-to-one needs nothing: it stays unique.
+func NonUniqueFK() Annotation {
+	return Annotation{NonUniqueFK: true}
 }
 
 // OnUpdate sets the ON UPDATE cascade action for an edge.

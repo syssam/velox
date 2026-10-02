@@ -341,6 +341,22 @@ func (e Edge) DeleteAction(nullable bool) sqlschema.CascadeAction {
 	return sqlschema.NoAction
 }
 
+// NonUniqueFK reports whether the schema declared this edge many-to-one in intent with
+// sqlschema.NonUniqueFK(), so its foreign-key column must not be UNIQUE. Like
+// DeleteAction, the annotation may sit on either end of the relationship, and the edge's
+// own annotation is checked first.
+func (e Edge) NonUniqueFK() bool {
+	if ant := e.EntSQL(); ant != nil && ant.NonUniqueFK {
+		return true
+	}
+	if e.Ref != nil {
+		if ant := e.Ref.EntSQL(); ant != nil && ant.NonUniqueFK {
+			return true
+		}
+	}
+	return false
+}
+
 // Index returns the index of the edge in the schema.
 // Used mainly to extract its position in the "loadedTypes" array.
 func (e Edge) Index() (int, error) {

@@ -15,6 +15,7 @@ import (
 	"github.com/syssam/velox/dialect"
 	entsql "github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/dialect/sql/schema"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -53,6 +54,23 @@ var (
 			Edges:  []*load.Edge{{Name: "owner", Type: "User", RefName: "card", Inverse: true, Unique: true, Field: "owner_id"}},
 		},
 	}
+	// A self-referential to-one edge bound to its own field, declared many-to-one in intent
+	// (merged_into: many customers point at one). With no inverse it is classified O2O, so the
+	// opt-out is what keeps its column from being UNIQUE.
+	selfRefManyToOne = []*load.Schema{{
+		Name:   "Customer",
+		Fields: []*load.Field{{Name: "merged_into_id", Info: intInfo(), Optional: true}},
+		Edges: []*load.Edge{{
+			Name: "merged_into", Type: "Customer", Unique: true, Field: "merged_into_id",
+			Annotations: map[string]any{(sqlschema.Annotation{}).Name(): sqlschema.NonUniqueFK()},
+		}},
+	}}
+	// The same shape without the opt-out, which stays one-to-one.
+	selfRefOneToOne = []*load.Schema{{
+		Name:   "Customer",
+		Fields: []*load.Field{{Name: "merged_into_id", Info: intInfo(), Optional: true}},
+		Edges:  []*load.Edge{{Name: "merged_into", Type: "Customer", Unique: true, Field: "merged_into_id"}},
+	}}
 	// An edge schema keyed by its two edge fields.
 	compositeKeyEdgeSchema = []*load.Schema{
 		{Name: "User", Edges: []*load.Edge{{Name: "groups", Type: "Group", Through: &struct{ N, T string }{"memberships", "Membership"}}}},
@@ -97,6 +115,16 @@ func TestMigrateSchema_OptionalO2OEdgeFieldIsNullableAndUnique(t *testing.T) {
 	cols := columnsLiteral(migrateSchemaFor(t, optionalO2OEdgeField...), "Card")
 	require.Contains(t, cols, "Nullable: true", "ON DELETE SET NULL needs a nullable column")
 	require.Contains(t, cols, "Unique:   true", "an O2O foreign key is unique")
+}
+
+// The opt-out reaches the rendered migrate/schema.go, which is what ships.
+func TestMigrateSchema_NonUniqueFKOmitsUniqueFromTheRenderedColumn(t *testing.T) {
+	t.Parallel()
+	opted := columnsLiteral(migrateSchemaFor(t, selfRefManyToOne...), "Customer")
+	require.Contains(t, opted, `"merged_into_id"`)
+	require.NotContains(t, opted, "Unique:", "an opted-out column must not render Unique")
+	plain := columnsLiteral(migrateSchemaFor(t, selfRefOneToOne...), "Customer")
+	require.Contains(t, plain, "Unique:   true", "the default still renders Unique")
 }
 
 func TestMigrateSchema_CompositeKeyEdgeSchema(t *testing.T) {
@@ -167,6 +195,19 @@ func TestMigrateSchema_ShapesMigrateAndWork(t *testing.T) {
 		var owner stdsql.NullInt64
 		require.NoError(t, db.QueryRow(`SELECT owner_id FROM cards WHERE id = 11`).Scan(&owner))
 		require.False(t, owner.Valid, "ON DELETE SET NULL")
+	})
+	t.Run("self-referential edge declared many-to-one", func(t *testing.T) {
+		db := migrate(t, selfRefManyToOne...)
+		exec(t, db, `INSERT INTO customers (id) VALUES (1)`)
+		exec(t, db, `INSERT INTO customers (id, merged_into_id) VALUES (2, 1)`)
+		exec(t, db, `INSERT INTO customers (id, merged_into_id) VALUES (3, 1)`) // a second loser, same winner
+	})
+	t.Run("self-referential edge left one-to-one", func(t *testing.T) {
+		db := migrate(t, selfRefOneToOne...)
+		exec(t, db, `INSERT INTO customers (id) VALUES (1)`)
+		exec(t, db, `INSERT INTO customers (id, merged_into_id) VALUES (2, 1)`)
+		_, err := db.Exec(`INSERT INTO customers (id, merged_into_id) VALUES (3, 1)`)
+		require.Error(t, err, "without the opt-out the one-to-one rule still holds")
 	})
 	t.Run("composite key edge schema", func(t *testing.T) {
 		db := migrate(t, compositeKeyEdgeSchema...)
