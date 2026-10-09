@@ -1,6 +1,7 @@
 package graphqlgen
 
 import (
+	"reflect"
 	"regexp"
 	"slices"
 	"testing"
@@ -39,6 +40,11 @@ func TestWhereFieldsAndOrderFieldsAreTheSchema(t *testing.T) {
 			{Name: "age", Type: &field.TypeInfo{Type: field.TypeInt}, Optional: true, Nillable: true, Annotations: filterable},
 			{Name: "active", Type: &field.TypeInfo{Type: field.TypeBool}, Annotations: filterable},
 			{Name: "created_at", Type: &field.TypeInfo{Type: field.TypeTime}, Annotations: filterable},
+			// A JSON list: the generated Go input has IsNil and NotNil
+			// for a nillable one where the schema has only what the
+			// annotation names.
+			{Name: "tags", Type: &field.TypeInfo{Type: field.TypeJSON, Ident: "[]string", RType: &field.RType{Kind: reflect.Slice, Ident: "[]string"}}, Optional: true, Nillable: true,
+				Annotations: map[string]any{graphql.AnnotationName: &graphql.Annotation{WhereOps: graphql.OpHas, HasWhereOps: true}}},
 		},
 		Annotations: map[string]any{},
 	}
@@ -74,12 +80,15 @@ func TestWhereFieldsAndOrderFieldsAreTheSchema(t *testing.T) {
 	}
 	for name, want := range map[string]struct{ field, op string }{
 		"logIn": {"log", "In"}, "nameNotIn": {"name_not", "In"}, "titleContains": {"title", "Contains"},
-		"nameNot": {"name_not", "EQ"}, "ageIsNil": {"age", "IsNil"},
+		"nameNot": {"name_not", "EQ"}, "ageIsNil": {"age", "IsNil"}, "tagsHas": {"tags", "Has"},
 	} {
 		w, ok := by[name]
 		if !ok || w.Field == nil || w.Field.Name != want.field || w.Op != want.op {
 			t.Errorf("%s: got %+v, want field %s with %s", name, w, want.field, want.op)
 		}
+	}
+	if _, listed := by["tagsIsNil"]; listed {
+		t.Error("tagsIsNil is described and is not in the schema")
 	}
 	if w := by["hasPosts"]; w.Edge == nil || w.Edge.Name != "posts" || w.With {
 		t.Errorf("hasPosts: %+v", w)
@@ -107,4 +116,46 @@ func regexpIndex(s, pattern string) int {
 		return loc[0]
 	}
 	return 0
+}
+
+// An entity hidden from the schema keeps its where input in every split
+// mode: another entity's hasXWith names it. Split per entity, the hidden
+// entity had no file, and so no where input.
+func TestSchemaFiles_HiddenEntityKeepsItsWhereInput(t *testing.T) {
+	filterable := map[string]any{graphql.AnnotationName: &graphql.Annotation{WhereInputEnabled: true}}
+	secret := &entgen.Type{
+		Name: "Secret",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			{Name: "label", Type: &field.TypeInfo{Type: field.TypeString}, Annotations: filterable},
+		},
+		Annotations: map[string]any{graphql.AnnotationName: &graphql.Annotation{Skip: graphql.SkipType}},
+	}
+	user := &entgen.Type{
+		Name:        "User",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields:      []*entgen.Field{{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}, Annotations: filterable}},
+		Annotations: map[string]any{},
+	}
+	user.Edges = []*entgen.Edge{{Name: "secrets", Type: secret, Annotations: filterable}}
+	graph := &entgen.Graph{Config: &entgen.Config{Package: "example/ent"}, Nodes: []*entgen.Type{user, secret}}
+	for _, mode := range []SchemaSplitMode{SchemaSplitNone, SchemaSplitByCategory, SchemaSplitPerEntity} {
+		g := NewGenerator(graph, Config{Package: "graphql", ORMPackage: "example/ent", WhereInputs: true, SchemaSplitMode: mode})
+		files, err := g.SchemaFiles()
+		if err != nil {
+			t.Fatalf("mode %v: %v", mode, err)
+		}
+		var all string
+		for _, src := range files {
+			all += src
+		}
+		for _, want := range []string{"hasSecretsWith: [SecretWhereInput!]", "input SecretWhereInput"} {
+			if !regexp.MustCompile(regexp.QuoteMeta(want)).MatchString(all) {
+				t.Errorf("mode %v: the schema does not contain %q", mode, want)
+			}
+		}
+		if regexp.MustCompile(`(?m)^type Secret\b`).MatchString(all) {
+			t.Errorf("mode %v: the hidden entity has a type", mode)
+		}
+	}
 }

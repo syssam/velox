@@ -491,13 +491,10 @@ func (g *Generator) Generate(ctx context.Context) error {
 			rootSchema := g.genPerEntityRootSchema()
 			errg.Go(func() error { return g.writeSchema(ctx, rootSchema, "", schemaFilename) })
 			// Per-entity files contain entity type, enums, WhereInput, OrderBy, Connection/Edge, mutation inputs
-			// Every non-skipped entity gets a per-entity file (at minimum contains the type definition)
-			nodes := g.filterNodes(g.graph.Nodes, graphql.SkipType)
-			for _, t := range nodes {
-				errg.Go(func() error {
-					filename := fmt.Sprintf("velox_%s.graphql", strings.ToLower(t.Name))
-					return g.writeSchema(ctx, g.genEntitySchemaFile(t), "", filename)
-				})
+			// Every non-skipped entity gets a per-entity file (at minimum contains the type definition);
+			// a hidden one that is filtered through gets its where input.
+			for filename, src := range g.perEntitySchemaFiles() {
+				errg.Go(func() error { return g.writeSchema(ctx, src, "", filename) })
 			}
 		default: // SchemaSplitNone
 			errg.Go(func() error { return g.writeSchema(ctx, g.genFullSchema(), "", schemaFilename) })
