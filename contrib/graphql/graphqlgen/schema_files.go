@@ -41,6 +41,56 @@ func (g *Generator) OrderFields(t *gen.Type) []OrderField {
 	return out
 }
 
+// WhereField is one field of an entity's <Type>WhereInput and what it filters
+// on: a field with an operator, or an edge.
+type WhereField struct {
+	// Name is the field's name in the schema: nameContains, hasPosts.
+	Name string
+	// Field and Op are the field filtered and the operator ("EQ", "NotIn",
+	// "ContainsFold", ...), for a filter on a field.
+	Field *gen.Field
+	Op    string
+	// Edge is the edge, for hasPosts and hasPostsWith; With tells the two
+	// apart.
+	Edge *gen.Edge
+	With bool
+}
+
+// WhereFields returns the fields of t's where input after not, and and or,
+// in the order the schema lists them: what each one filters on, so that a
+// generator of its own Go does not have to read that back out of a name
+// (nameIn is "name" with In, or a field called name_in).
+func (g *Generator) WhereFields(t *gen.Type) []WhereField {
+	var out []WhereField
+	add := func(f *gen.Field) {
+		name := camel(f.Name)
+		for _, op := range g.getWhereInputFieldOps(f) {
+			n := name
+			if op.Name != "EQ" {
+				n += op.Name
+			}
+			out = append(out, WhereField{Name: n, Field: f, Op: op.Name})
+		}
+	}
+	if t.ID != nil && !g.skipFieldInWhereInput(t, t.ID) {
+		add(t.ID)
+	}
+	for _, f := range t.Fields {
+		if !g.skipFieldInWhereInput(t, f) {
+			add(f)
+		}
+	}
+	for _, e := range t.Edges {
+		if e.Type == nil || e.Type.HasCompositeID() || g.skipEdgeInWhereInput(t, e) {
+			continue
+		}
+		out = append(out,
+			WhereField{Name: "has" + pascal(e.Name), Edge: e},
+			WhereField{Name: "has" + pascal(e.Name) + "With", Edge: e, With: true})
+	}
+	return out
+}
+
 // SchemaFiles returns the GraphQL schema Generate would write, as SDL text by
 // file path relative to the schema directory, and writes nothing: no schema
 // file and no Go code.
