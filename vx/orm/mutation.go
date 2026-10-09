@@ -317,6 +317,9 @@ func (m *Mutation) WhereP(ps ...func(*sql.Selector)) {
 // Filter returns the mutation as the target of privacy filter rules.
 func (m *Mutation) Filter() privacy.Filter { return m }
 
+// HasColumn reports whether the table of the entity has the column.
+func (m *Mutation) HasColumn(column string) bool { return m.c.M.col(column) >= 0 }
+
 // mutate runs exec for the mutation, inside the policy of the entity and the
 // hooks of the schema and of the database handle.
 //

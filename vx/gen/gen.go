@@ -127,6 +127,13 @@ func (g *generator) predicateNames() {
 // Generate writes package entity, one package per entity and the
 // schemainit package for graph into cfg.Target.
 func Generate(graph *vgen.Graph, cfg Config) error {
+	// A graph that was loaded from a package (and not built by a test) has
+	// source to read.
+	if graph.Config != nil && graph.Schema != "" {
+		if err := checkAssertions(graph.Schema); err != nil {
+			return err
+		}
+	}
 	g := &generator{cfg: cfg, by: map[string]*ent{}, taken: map[string]bool{}}
 	for _, t := range graph.Nodes {
 		g.taken[t.Name] = true

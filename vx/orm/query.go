@@ -54,6 +54,11 @@ func (q *Query) WhereP(ps ...func(*sql.Selector)) {
 // Filter returns the query as the target of privacy filter rules.
 func (q *Query) Filter() privacy.Filter { return q }
 
+// HasColumn reports whether the table of the entity queried has the column:
+// for a rule shared by many entities (a mixin's), which filters on a column
+// only some of them have.
+func (q *Query) HasColumn(column string) bool { return q.c.M.col(column) >= 0 }
+
 // Limit caps the number of rows.
 func (q *Query) Limit(n int) { q.c.Lim = n }
 

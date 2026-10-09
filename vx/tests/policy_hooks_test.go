@@ -496,3 +496,46 @@ func TestPolicy_DeniedLoadWithNothingToLoad(t *testing.T) {
 	_, err = client.Tag.Query(db).WithParent().All(ctx)
 	assert.NoError(t, err)
 }
+
+// A rule shared by many entities (a mixin's tenant filter) asks the filter
+// whether the table has the column it filters on. Queries and mutations both
+// answer, for a field's column and for a foreign key that is no field.
+func TestFilter_HasColumn(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	type columnChecker interface{ HasColumn(string) bool }
+
+	seen := map[string]bool{}
+	db.Intercept(velox.TraverseFunc(func(_ context.Context, q velox.Query) error {
+		cc, ok := q.(*orm.Query).Filter().(columnChecker)
+		if !ok {
+			return errors.New("the filter of a query does not answer HasColumn")
+		}
+		seen["query "+q.(*orm.Query).Type()+" age"] = cc.HasColumn("age")
+		seen["query "+q.(*orm.Query).Type()+" user_posts"] = cc.HasColumn("user_posts")
+		return nil
+	}))
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			cc, ok := m.(*orm.Mutation).Filter().(columnChecker)
+			if !ok {
+				return nil, errors.New("the filter of a mutation does not answer HasColumn")
+			}
+			seen["mutation "+m.Type()+" age"] = cc.HasColumn("age")
+			seen["mutation "+m.Type()+" no_such"] = cc.HasColumn("no_such")
+			return next.Mutate(ctx, m)
+		})
+	})
+	ann := newUser(t, db, "ann", 30)
+	newPost(t, db, ann, "a1")
+	_, err := client.User.Query(db).All(ctx)
+	require.NoError(t, err)
+	_, err = client.Post.Query(db).All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{
+		"query User age": true, "query User user_posts": false,
+		"query Post age": false, "query Post user_posts": true,
+		"mutation User age": true, "mutation User no_such": false,
+		"mutation Post age": false, "mutation Post no_such": false,
+	}, seen)
+}

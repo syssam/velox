@@ -372,9 +372,20 @@ A hook receives `*orm.Mutation`, one type for every entity, through the
 `velox.Mutation` interface: `m.Field("workspace_id")`,
 `m.SetField("workspace_id", id)`, `m.OldField(ctx, "status")`.
 
-**A hook that type-asserts the mutation to an interface of typed setters
-(`SetWorkspaceID(int64)`) never matches and silently does nothing.** Rewrite
-it with `Field`/`SetField`.
+**A hook that type-asserts the mutation to an interface of typed accessors
+(`SetWorkspaceID(int64)`, `WorkspaceID() (int64, bool)`) is refused at
+generation.** That is how Ent's documentation writes a hook many entities
+share, and here no mutation has such methods: the assertion would fail for
+every entity and the hook would do nothing, with no error (the tenant of a
+new row not written). `vxgen` reads the source of the schema package and of
+the packages of its module it uses, and names each assertion on a
+`velox.Mutation`, `velox.Query` or `privacy.Filter` that can never hold.
+Rewrite it with `Field`/`SetField`, which work with velox's generated code
+too, so it can be done before moving.
+
+A filter rule shared by many entities asks the filter whether the table has
+the column it filters on: `f.(interface{ HasColumn(string) bool })`, on
+queries and mutations alike.
 
 `conn.Use(hooks...)` and `conn.Intercept(interceptors...)` register on the
 handle, at start-up. A policy covers every read (terminals, eager loads,

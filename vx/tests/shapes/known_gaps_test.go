@@ -140,6 +140,54 @@ var gapCases = []gapCase{
 	// Composite ids are not in milestone 1: an error, not a panic.
 	{name: "edge schema with a composite id", schema: compositeSchema,
 		want: generateFails, wantSubstr: "Membership: entities without a single-column id are not supported yet"},
+	// Code of the schema that asserts a mutation to an interface of typed
+	// accessors, the way Ent's documentation writes a hook shared by many
+	// entities. No mutation has such methods here, so the hook would do
+	// nothing for every entity, silently: generation fails and says where.
+	{name: "hook asserts the mutation to typed setters",
+		schema: labelEntities("Thing") + `
+func stamp(m velox.Mutation) {
+	if s, ok := m.(interface{ SetLabel(string) }); ok {
+		s.SetLabel("x")
+	}
+}
+
+var _ = stamp
+`,
+		want: generateFails, wantSubstr: "a velox.Mutation is asserted to an interface with SetLabel"},
+	{name: "hook switches on the mutation's typed getters",
+		schema: labelEntities("Thing") + `
+type withLabel interface{ Label() (string, bool) }
+
+func read(m velox.Mutation) string {
+	switch m := m.(type) {
+	case withLabel:
+		v, _ := m.Label()
+		return v
+	default:
+		return ""
+	}
+}
+
+var _ = read
+`,
+		want: generateFails, wantSubstr: "a velox.Mutation is asserted to an interface with Label"},
+	// The control: what a mutation does have, by name, passes.
+	{name: "hook asserts the mutation to what it has",
+		schema: labelEntities("Thing") + `
+func stamp(m velox.Mutation) {
+	if c, ok := m.(interface{ HasColumn(string) bool }); ok && c.HasColumn("label") {
+		_ = m.SetField("label", "x")
+	}
+	switch m.(type) {
+	case interface{ Field(string) (velox.Value, bool) }:
+	case nil:
+	}
+}
+
+var _ = stamp
+`,
+		want: builds},
 	// Names velox's schema loader rejects before the vx generator runs.
 	{name: "entity named Query", schema: labelEntities("Query"),
 		want: loadFails, wantSubstr: `schema name conflicts with ent predeclared identifier \"Query\"`},
