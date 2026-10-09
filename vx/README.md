@@ -423,6 +423,30 @@ The root package links `schemainit`, so a program that starts its queries at
 `db/schemainit` itself; until it does, an entity whose schema has defaults,
 validators, hooks or a policy returns an error from every query and mutation.
 
+## Code written once for several entities
+
+The generated code has no generic types. A function that builds predicates
+for whichever entity it is used with is generic over the predicate type,
+under the constraint `orm.Predicate`, and sees a column as an interface of
+the methods the column types share: `orm.Column[T, P]`,
+`orm.OrderedColumn[T, P]`, `orm.TextColumn[P]`, `orm.NullableColumn[P]`.
+
+```go
+func recent[P orm.Predicate](created orm.OrderedColumn[time.Time, P], since time.Time, more ...P) P {
+    return orm.And(append(more, created.GTE(since))...)
+}
+
+posts, err := db.Post.Query(conn).Where(recent(&post.CreatedAt, since)).All(ctx)
+```
+
+A column is passed by its address (the methods of a column type have
+pointer receivers), and the predicate type is inferred from it, so the
+result is a `predicate.Post` that a query of users does not accept.
+`orm.And`, `orm.Or` and `orm.Not` are the entity packages' own, for any
+entity; under the constraint a predicate converts to `orm.P` and back, which
+is how such a function wraps a condition on the SQL builder
+(`P(orm.Raw(f))`) or returns none (`*new(P)`).
+
 ## Moving an application from velox
 
 `cmd/vxmigrate` rewrites an application written against velox's generated
@@ -435,10 +459,11 @@ go run github.com/syssam/velox/vx/cmd/vxmigrate -generated example.com/app/velox
 ```
 
 It does not compile anything, so a large application is read in seconds. On
-one of 455 entities and 9,400 files it rewrote 88,500 references and left
+one of 455 entities and 9,400 files it rewrote 88,600 references and left
 some 250 for a person, each a line of the report with the reason: queries
-changed through `Modify`, code generic over predicates as functions or over
-velox's column types, and how the application opens its database. An edge
+changed through `Modify`, the application's own plumbing around the client
+(a client in a context, its runtime configuration), cursors built by hand,
+and how the application opens its database. An edge
 query from an entity that was handed to a function is given the handle of
 the context, and reported, since only a person knows whether every caller's
 context carries one.

@@ -55,6 +55,11 @@ func TestStore(t *testing.T) {
 		t.Fatal(ps, err)
 	}
 
+	nu, np, err := s.CountByID(ctx, ann.ID)
+	eq(t, "generic over entities, with an id", show(nu, np, err), "1 1 <nil>")
+	nu, np, err = s.CountByID(ctx)
+	eq(t, "generic over entities, with nothing to add", show(nu, np, err), "3 2 <nil>")
+
 	adults, err := s.Adults(ctx, 0)
 	eq(t, "adults", show(names(adults), err), "[cat ann] <nil>")
 	adults, err = s.Adults(ctx, 40)

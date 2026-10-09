@@ -219,6 +219,48 @@ func (s *Store) Titles(ctx context.Context, id int) ([]string, error) {
 	return out, nil
 }
 
+// What follows is written once for several entities.
+
+// idIn matches the rows with one of the ids, of whichever entity the column
+// belongs to; with no ids it has nothing to add.
+func idIn[P sql.PredicateFunc](id sql.IntField[P], ids ...int) P {
+	if len(ids) == 0 {
+		return nil
+	}
+	return id.In(ids...)
+}
+
+// both is the conjunction of predicates of any one entity.
+func both[P ~func(*sql.Selector)](ps ...P) P {
+	return P(sql.AndPredicates(ps...))
+}
+
+// titled holds the column a text search goes to.
+type titled[P sql.PredicateFunc] struct {
+	Text sql.StringField[P]
+}
+
+func (t titled[P]) starting(prefix string) P { return t.Text.HasPrefix(prefix) }
+
+// CountByID counts the users and the posts with the given ids.
+func (s *Store) CountByID(ctx context.Context, ids ...int) (users, posts int, err error) {
+	ofUsers := []predicate.User{user.AgeField.GT(0)}
+	if p := idIn(user.IDField, ids...); p != nil {
+		ofUsers = append(ofUsers, p)
+	}
+	users, err = s.User.Query().Where(both(ofUsers...)).Count(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	search := titled[predicate.Post]{Text: post.TitleField}
+	ofPosts := []predicate.Post{search.starting("a")}
+	if p := idIn(post.IDField, ids...); p != nil {
+		ofPosts = append(ofPosts, p)
+	}
+	posts, err = s.Post.Query().Where(ofPosts...).Count(ctx)
+	return users, posts, err
+}
+
 // PostCount counts the posts of a user it is handed.
 func PostCount(ctx context.Context, u *entity.User) (int, error) {
 	return u.QueryPosts().Count(ctx)

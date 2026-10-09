@@ -47,9 +47,15 @@
 // (orm.ExecutorFrom(ctx)) and reported: whether every caller's context
 // carries one is not something the tool can see.
 //
-// What it leaves to a person: a query changed through Modify, code generic
-// over predicates as functions or over velox's column types, and how the
-// application opens its database.
+// Code generic over entities is rewritten with it: the constraint
+// sql.PredicateFunc (or ~func(*sql.Selector)) becomes orm.Predicate, a
+// parameter of type sql.Int64Field[P] becomes orm.OrderedColumn[int64, P], a
+// column passed to one is passed by its address, and sql.AndPredicates
+// becomes orm.And.
+//
+// What it leaves to a person: a query changed through Modify, the
+// application's own plumbing around the client, cursors built by hand, and
+// how the application opens its database.
 //
 // It assumes the names vx gives: a column is called like the field, an enum
 // type like the field with Enum. A schema where one of those is taken (vx

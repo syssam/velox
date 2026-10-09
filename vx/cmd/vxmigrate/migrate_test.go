@@ -136,6 +136,13 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value
 		"return upd.Set(user.Nickname.Clear())",
 		"func(v user.RoleEnum) *entity.UserUpdate {",
+		"func idIn[P orm.Predicate](id orm.OrderedColumn[int, P], ids ...int) P {", // generic over entities
+		"return *new(P)",
+		"func both[P orm.Predicate](ps ...P) P {",
+		"return P(orm.And(ps...))",
+		"Text orm.TextColumn[P]",
+		"if p := idIn(&user.ID, ids...); !orm.P(p).IsZero() {", // a column passed as a value
+		"titled[predicate.Post]{Text: &post.Title}",
 		"var rename = func(b *entity.UserUpdate, v string) *entity.UserUpdate {", // a method expression
 		"return u.QueryPosts(orm.ExecutorFrom(ctx)).Count(ctx)",                  // an entity handed over: the context's handle
 		".OrderBy(user.Name.Asc()).Columns(user.ColumnName).All(ctx)",            // entities with some columns

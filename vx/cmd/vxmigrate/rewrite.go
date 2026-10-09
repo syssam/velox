@@ -22,6 +22,9 @@ type rewriter struct {
 	// sets are the calls rewritten to Set(...), so that the setter that
 	// follows one in a chain joins it: Set(a, b), not Set(a).Set(b).
 	sets map[*ast.CallExpr]bool
+	// made are the calls that were functions on a selector and are
+	// predicates now (the library's AndPredicates): not to be wrapped.
+	made map[*ast.CallExpr]bool
 }
 
 // What the old API's packages are, seen from a reference into one.
@@ -137,6 +140,12 @@ func (r *rewriter) run() {
 				r.arguments(top)
 			case *ast.SelectorExpr:
 				r.selector(top, stack)
+			case *ast.IndexExpr:
+				r.columnType(top, top.X, []ast.Expr{top.Index})
+			case *ast.IndexListExpr:
+				r.columnType(top, top.X, top.Indices)
+			case *ast.UnaryExpr:
+				r.funcConstraint(top)
 			case *ast.BinaryExpr:
 				r.compareNil(top)
 			case *ast.ReturnStmt:
@@ -346,6 +355,11 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 		r.replace(sel.X.Pos(), sel.X.End(), r.ref(r.lib+"/privacy", "privacy", sel.Pos()))
 		r.count("privacy")
 	default:
+		if obj.Pkg().Path() == r.lib+"/dialect/sql" && name == "PredicateFunc" {
+			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".Predicate")
+			r.count("predicate constraint")
+			return
+		}
 		if obj.Pkg().Path() == r.lib+"/contrib/graphql/gqlrelay" {
 			switch name {
 			case "Cursor", "PageInfo", "OrderDirection", "OrderDirectionAsc", "OrderDirectionDesc":
@@ -369,6 +383,11 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 	case *types.Var:
 		if f, ok := strings.CutSuffix(name, "Field"); ok && e.fields[f] {
 			rename(f, "column")
+			// Passed on as a value rather than asked for a predicate: the
+			// methods of a column have pointer receivers.
+			if up, ok := parent(stack, 1).(*ast.SelectorExpr); !ok || up.X != ast.Expr(sel) {
+				r.open(sel.Pos(), "&")
+			}
 			return
 		}
 		switch name {
@@ -441,6 +460,9 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 
 // call handles a call of something of the old API.
 func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
+	if r.combinator(call) {
+		return
+	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return
@@ -1402,6 +1424,29 @@ func (r *rewriter) repeated(sel *ast.SelectorExpr, obj types.Object) bool {
 	return true
 }
 
+// predicateText spells the predicate type t is, a named one
+// (predicate.User) or a type parameter that stands for one, or returns "".
+func (r *rewriter) predicateText(t types.Type, pos token.Pos) string {
+	if t == nil {
+		return ""
+	}
+	if name := r.predicateOf(t); name != "" {
+		return r.predicate(pos) + "." + name
+	}
+	if tp, ok := types.Unalias(t).(*types.TypeParam); ok && r.predicateConstraint(tp.Constraint()) {
+		return tp.Obj().Name()
+	}
+	return ""
+}
+
+// predicateConstraint reports whether a constraint admitted the predicate
+// types when they were functions: sql.PredicateFunc, or ~func(*sql.Selector)
+// written out.
+func (r *rewriter) predicateConstraint(c types.Type) bool {
+	text := types.TypeString(c, nil)
+	return strings.Contains(text, r.lib+"/dialect/sql.PredicateFunc") || strings.Contains(text, "*"+r.lib+"/dialect/sql.Selector)")
+}
+
 // predicateOf names the entity whose predicate type t is, or "".
 func (r *rewriter) predicateOf(t types.Type) string {
 	named, ok := types.Unalias(t).(*types.Named)
@@ -1424,8 +1469,8 @@ func (r *rewriter) into(e ast.Expr, target types.Type) {
 	if target == nil {
 		return
 	}
-	name := r.predicateOf(target)
-	if name == "" {
+	pred := r.predicateText(target, e.Pos())
+	if pred == "" {
 		return
 	}
 	tv, ok := r.info.Types[e]
@@ -1433,15 +1478,21 @@ func (r *rewriter) into(e ast.Expr, target types.Type) {
 		return
 	}
 	if id, isIdent := e.(*ast.Ident); isIdent && id.Name == "nil" && tv.IsNil() {
-		r.replace(e.Pos(), e.End(), r.predicate(e.Pos())+"."+name+"{}")
+		zero := pred + "{}"
+		if _, generic := types.Unalias(target).(*types.TypeParam); generic {
+			zero = "*new(" + pred + ")"
+		}
+		r.replace(e.Pos(), e.End(), zero)
 		r.count("zero predicate")
 		return
 	}
 	if _, isFunc := types.Unalias(tv.Type).(*types.Signature); !isFunc {
 		return
 	}
-	pred := r.predicate(e.Pos())
-	r.open(e.Pos(), pred+"."+name+"("+r.orm(e.Pos())+".Raw(")
+	if c, isCall := e.(*ast.CallExpr); isCall && r.made[c] {
+		return
+	}
+	r.open(e.Pos(), pred+"("+r.orm(e.Pos())+".Raw(")
 	r.insert(e.End(), "))")
 	r.count("Raw predicate")
 }
@@ -1454,7 +1505,10 @@ func (r *rewriter) arguments(call *ast.CallExpr) {
 	}
 	if tv.IsType() {
 		// A conversion, predicate.User(f).
-		if len(call.Args) == 1 && r.predicateOf(tv.Type) != "" {
+		if len(call.Args) == 1 && r.predicateText(tv.Type, call.Pos()) != "" {
+			if c, isCall := call.Args[0].(*ast.CallExpr); isCall && r.made[c] {
+				return
+			}
 			if at, known := r.info.Types[call.Args[0]]; known && !at.IsNil() {
 				if _, isFunc := types.Unalias(at.Type).(*types.Signature); isFunc {
 					r.open(call.Args[0].Pos(), r.orm(call.Pos())+".Raw(")
@@ -1504,6 +1558,102 @@ func (r *rewriter) results(ret *ast.ReturnStmt, stack []ast.Node) {
 	}
 }
 
+// combinator rewrites the library's predicate combinators, which took and
+// returned functions on a selector: sql.AndPredicates[P](ps...) is
+// orm.And(ps...), of the predicates' own type.
+func (r *rewriter) combinator(call *ast.CallExpr) bool {
+	fun := call.Fun
+	switch f := fun.(type) {
+	case *ast.IndexExpr:
+		fun = f.X
+	case *ast.IndexListExpr:
+		fun = f.X
+	}
+	sel, ok := fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	obj := r.info.Uses[sel.Sel]
+	if obj == nil || obj.Pkg() == nil || obj.Pkg().Path() != r.lib+"/dialect/sql" {
+		return false
+	}
+	var to string
+	switch obj.Name() {
+	case "AndPredicates", "PredicateAnd":
+		to = "And"
+	case "OrPredicates", "PredicateOr":
+		to = "Or"
+	case "NotPredicates", "PredicateNot":
+		to = "Not"
+	default:
+		return false
+	}
+	r.replace(call.Fun.Pos(), call.Fun.End(), r.orm(call.Pos())+"."+to)
+	r.made[call] = true
+	r.count("generic " + to)
+	return true
+}
+
+// columnType rewrites the library's generic column types where code generic
+// over entities names them: sql.Int64Field[P] is orm.OrderedColumn[int64, P].
+func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
+	sel, ok := x.(*ast.SelectorExpr)
+	if !ok {
+		return
+	}
+	obj, isType := r.info.Uses[sel.Sel].(*types.TypeName)
+	if !isType || obj.Pkg() == nil || obj.Pkg().Path() != r.lib+"/dialect/sql" || !strings.HasSuffix(obj.Name(), "Field") || len(args) == 0 {
+		return
+	}
+	orm := r.orm(n.Pos())
+	p := r.render(args[0])
+	// The second type argument, of the column types that have one.
+	value := ""
+	if len(args) == 2 {
+		value = r.render(args[len(args)-1])
+	}
+	var text string
+	switch base := strings.TrimSuffix(obj.Name(), "Field"); {
+	case base == "String":
+		text = orm + ".TextColumn[" + p + "]"
+	case base == "Bool":
+		text = orm + ".Column[bool, " + p + "]"
+	case base == "Enum" && value != "":
+		text = orm + ".Column[" + value + ", " + p + "]"
+	case (base == "Time" || base == "Other" || base == "UUID") && value != "":
+		text = orm + ".OrderedColumn[" + value + ", " + p + "]"
+	case strings.HasPrefix(base, "Int") || strings.HasPrefix(base, "Uint") || strings.HasPrefix(base, "Float"):
+		text = orm + ".OrderedColumn[" + strings.ToLower(base) + ", " + p + "]"
+	default:
+		r.note(n.Pos(), "the column type sql.%s: declare what the code needs of a column with orm.Column or orm.OrderedColumn", obj.Name())
+		return
+	}
+	r.replace(n.Pos(), n.End(), text)
+	r.count("generic column")
+}
+
+// funcConstraint rewrites ~func(*sql.Selector) in a constraint: what
+// admitted every predicate type is orm.Predicate.
+func (r *rewriter) funcConstraint(u *ast.UnaryExpr) {
+	if u.Op != token.TILDE {
+		return
+	}
+	sig, ok := r.info.TypeOf(u.X).(*types.Signature)
+	if !ok || sig.Params().Len() != 1 || sig.Results().Len() != 0 {
+		return
+	}
+	ptr, ok := sig.Params().At(0).Type().(*types.Pointer)
+	if !ok {
+		return
+	}
+	named, ok := ptr.Elem().(*types.Named)
+	if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != r.lib+"/dialect/sql" || named.Obj().Name() != "Selector" {
+		return
+	}
+	r.replace(u.Pos(), u.End(), r.orm(u.Pos())+".Predicate")
+	r.count("predicate constraint")
+}
+
 // compareNil rewrites p == nil and p != nil of a predicate.
 func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 	if bin.Op != token.EQL && bin.Op != token.NEQ {
@@ -1521,7 +1671,7 @@ func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 	default:
 		return
 	}
-	if r.predicateOf(r.info.TypeOf(other)) == "" {
+	if r.predicateText(r.info.TypeOf(other), bin.Pos()) == "" {
 		return
 	}
 	text := r.orm(bin.Pos()) + ".P(" + r.render(other) + ").IsZero()"

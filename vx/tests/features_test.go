@@ -659,3 +659,60 @@ func TestQuery_Columns(t *testing.T) {
 	_, err = client.User.Query(db).WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle)).All(ctx)
 	require.ErrorContains(t, err, "Columns is not supported on an eager load")
 }
+
+// Code written once for several entities: orm.Predicate as the constraint,
+// a column as an interface, passed by its address.
+func between[T, P any](col orm.OrderedColumn[T, P], lo, hi T) []P {
+	return []P{col.GTE(lo), col.LTE(hi)}
+}
+
+func named[P orm.Predicate](col orm.TextColumn[P], prefix string, raw func(*sql.Selector)) P {
+	parts := []P{col.HasPrefix(prefix)}
+	if raw != nil {
+		parts = append(parts, P(orm.Raw(raw)))
+	}
+	return orm.And(parts...)
+}
+
+func TestGenericOverEntities(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, bob := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40)
+	newPost(t, db, ann, "a1")
+	newPost(t, db, bob, "b1")
+
+	// The predicate type is inferred from the column: these are a
+	// predicate.User and a predicate.Post, and do not mix.
+	us, err := client.User.Query(db).Where(between(&user.Age, 35, 45)...).All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"bob"}, names(us))
+	ps, err := client.Post.Query(db).Where(named(&post.Title, "a", nil)).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, ps, 1)
+	assert.Equal(t, "a1", ps[0].Title)
+	us, err = client.User.Query(db).Where(named(&user.Name, "", sql.FieldGT("age", 35))).All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"bob"}, names(us))
+
+	// And, Or and Not are the entity packages' own.
+	for name, c := range map[string]struct{ generic, own predicate.User }{
+		"and":           {orm.And(user.Age.GT(35), user.Name.EQ("bob")), user.And(user.Age.GT(35), user.Name.EQ("bob"))},
+		"or":            {orm.Or(user.Age.GT(35), user.Name.EQ("ann")), user.Or(user.Age.GT(35), user.Name.EQ("ann"))},
+		"not":           {orm.Not(user.Age.GT(35)), user.Not(user.Age.GT(35))},
+		"or of nothing": {orm.Or[predicate.User](), user.Or()},
+	} {
+		assert.Equal(t, c.own, c.generic, name)
+		a, err := client.User.Query(db).Where(c.generic).Count(ctx)
+		require.NoError(t, err, name)
+		b, err := client.User.Query(db).Where(c.own).Count(ctx)
+		require.NoError(t, err, name)
+		assert.Equal(t, b, a, name)
+	}
+
+	// A nullable column, and an enum's.
+	var _ orm.NullableColumn[predicate.User] = &user.Nickname
+	var role orm.Column[user.RoleEnum, predicate.User] = &user.Role
+	n, err := client.User.Query(db).Where(role.In(user.RoleUser, user.RoleAdmin)).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+}
