@@ -28,6 +28,11 @@ const (
 	KindC KindEnum = "c"
 )
 
+// KindValues returns the values of the kind field, in the order of the schema.
+func KindValues() []KindEnum {
+	return []KindEnum{KindA, KindB, KindC}
+}
+
 // Kind2Enum is the type of the kind2 field.
 type Kind2Enum string
 
@@ -36,6 +41,11 @@ const (
 	Kind2X Kind2Enum = "x"
 	Kind2Y Kind2Enum = "y"
 )
+
+// Kind2Values returns the values of the kind2 field, in the order of the schema.
+func Kind2Values() []Kind2Enum {
+	return []Kind2Enum{Kind2X, Kind2Y}
+}
 
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so

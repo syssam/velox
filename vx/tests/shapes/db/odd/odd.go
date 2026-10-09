@@ -25,6 +25,11 @@ const (
 	RoleUser       RoleEnum = "user"
 )
 
+// RoleValues returns the values of the role field, in the order of the schema.
+func RoleValues() []RoleEnum {
+	return []RoleEnum{RoleAdminValue, RoleUser}
+}
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

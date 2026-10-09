@@ -184,6 +184,8 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 				}
 			}
 			edges = append(edges, s)
+		case SetKeep:
+			return nil, nil, fmt.Errorf("orm: creating %s: column %q is kept, which only an update can do: a new row has nothing to keep", m.Name, s.Col)
 		default:
 			return nil, nil, fmt.Errorf("orm: creating %s: setter kind %d is not valid on create", m.Name, s.Kind)
 		}
@@ -512,6 +514,11 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 	}
 	for _, s := range sets {
 		switch s.Kind {
+		case SetKeep:
+			if meta.Field(s.Col) == nil {
+				return nil, fmt.Errorf("orm: updating %s: unknown column %q", meta.Name, s.Col)
+			}
+			touched[s.Col] = true
 		case SetValue, SetNull, SetAdd:
 			f := meta.Field(s.Col)
 			if f == nil {

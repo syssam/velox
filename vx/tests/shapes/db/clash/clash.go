@@ -25,6 +25,11 @@ const (
 	OrderDesc OrderEnum = "desc"
 )
 
+// OrderValues returns the values of the order field, in the order of the schema.
+func OrderValues() []OrderEnum {
+	return []OrderEnum{OrderAsc, OrderDesc}
+}
+
 // SetEnum is the type of the set field.
 type SetEnum string
 
@@ -33,6 +38,11 @@ const (
 	SetA SetEnum = "a"
 	SetB SetEnum = "b"
 )
+
+// SetValues returns the values of the set field, in the order of the schema.
+func SetValues() []SetEnum {
+	return []SetEnum{SetA, SetB}
+}
 
 // QueryEnum is the type of the query field.
 type QueryEnum string
@@ -43,6 +53,11 @@ const (
 	QueryB QueryEnum = "b"
 )
 
+// QueryValues returns the values of the query field, in the order of the schema.
+func QueryValues() []QueryEnum {
+	return []QueryEnum{QueryA, QueryB}
+}
+
 // CreateEnum is the type of the create field.
 type CreateEnum string
 
@@ -51,6 +66,11 @@ const (
 	CreateBulk   CreateEnum = "bulk"
 	CreateSingle CreateEnum = "single"
 )
+
+// CreateValues returns the values of the create field, in the order of the schema.
+func CreateValues() []CreateEnum {
+	return []CreateEnum{CreateBulk, CreateSingle}
+}
 
 // UpdateEnum is the type of the update field.
 type UpdateEnum string
@@ -61,6 +81,11 @@ const (
 	UpdateB UpdateEnum = "b"
 )
 
+// UpdateValues returns the values of the update field, in the order of the schema.
+func UpdateValues() []UpdateEnum {
+	return []UpdateEnum{UpdateA, UpdateB}
+}
+
 // LoadEnum is the type of the load field.
 type LoadEnum string
 
@@ -69,6 +94,11 @@ const (
 	LoadLow  LoadEnum = "low"
 	LoadHigh LoadEnum = "high"
 )
+
+// LoadValues returns the values of the load field, in the order of the schema.
+func LoadValues() []LoadEnum {
+	return []LoadEnum{LoadLow, LoadHigh}
+}
 
 // EdgeEnum is the type of the edge field.
 type EdgeEnum string
@@ -79,6 +109,11 @@ const (
 	EdgeB EdgeEnum = "b"
 )
 
+// EdgeValues returns the values of the edge field, in the order of the schema.
+func EdgeValues() []EdgeEnum {
+	return []EdgeEnum{EdgeA, EdgeB}
+}
+
 // MetaEnum is the type of the meta field.
 type MetaEnum string
 
@@ -87,6 +122,11 @@ const (
 	MetaA MetaEnum = "a"
 	MetaB MetaEnum = "b"
 )
+
+// MetaValues returns the values of the meta field, in the order of the schema.
+func MetaValues() []MetaEnum {
+	return []MetaEnum{MetaA, MetaB}
+}
 
 // PredEnum is the type of the pred field.
 type PredEnum string
@@ -97,6 +137,11 @@ const (
 	PredB PredEnum = "b"
 )
 
+// PredValues returns the values of the pred field, in the order of the schema.
+func PredValues() []PredEnum {
+	return []PredEnum{PredA, PredB}
+}
+
 // KindEnum is the type of the kind field.
 type KindEnum string
 
@@ -105,6 +150,11 @@ const (
 	KindType  KindEnum = "type"
 	KindOther KindEnum = "other"
 )
+
+// KindValues returns the values of the kind field, in the order of the schema.
+func KindValues() []KindEnum {
+	return []KindEnum{KindType, KindOther}
+}
 
 // AEnum is the type of the a field.
 type AEnum string
@@ -115,6 +165,11 @@ const (
 	AX  AEnum = "x"
 )
 
+// AValues returns the values of the a field, in the order of the schema.
+func AValues() []AEnum {
+	return []AEnum{ABC, AX}
+}
+
 // ABEnum is the type of the a_b field.
 type ABEnum string
 
@@ -123,6 +178,11 @@ const (
 	ABCValue ABEnum = "c"
 	ABY      ABEnum = "y"
 )
+
+// ABValues returns the values of the a_b field, in the order of the schema.
+func ABValues() []ABEnum {
+	return []ABEnum{ABCValue, ABY}
+}
 
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so

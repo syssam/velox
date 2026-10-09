@@ -26,6 +26,11 @@ const (
 	StatusArchived  StatusEnum = "archived"
 )
 
+// StatusValues returns the values of the status field, in the order of the schema.
+func StatusValues() []StatusEnum {
+	return []StatusEnum{StatusDraft, StatusPublished, StatusArchived}
+}
+
 // OrderField is a field a list of Post can be ordered by, as the GraphQL schema
 // names it: the Field of an entity.PostOrder.
 type OrderField string
@@ -191,6 +196,88 @@ func (f *TimeColumn) Asc() predicate.PostOrder { return predicate.PostOrder{Col:
 
 // Desc orders by the column, greatest first.
 func (f *TimeColumn) Desc() predicate.PostOrder {
+	return predicate.PostOrder{Col: string(*f), Desc: true}
+}
+
+// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// assignments and order terms of that column. They have pointer receivers so
+// that the compiler emits each once.
+type TimeColumn2 string
+
+// EQ matches the rows whose column equals v.
+func (f *TimeColumn2) EQ(v time.Time) predicate.Post {
+	return predicate.Post{Op: orm.OpEQ, Col: string(*f), Val: v}
+}
+
+// NEQ matches the rows whose column differs from v.
+func (f *TimeColumn2) NEQ(v time.Time) predicate.Post {
+	return predicate.Post{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// In matches the rows whose column is one of vs; without any, none.
+func (f *TimeColumn2) In(vs ...time.Time) predicate.Post {
+	a := make([]any, len(vs))
+	for i, v := range vs {
+		a[i] = v
+	}
+	return predicate.Post{Op: orm.OpIn, Col: string(*f), Val: a}
+}
+
+// NotIn matches the rows whose column is none of vs.
+func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.Post {
+	a := make([]any, len(vs))
+	for i, v := range vs {
+		a[i] = v
+	}
+	return predicate.Post{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// GT matches the rows whose column is greater than v.
+func (f *TimeColumn2) GT(v time.Time) predicate.Post {
+	return predicate.Post{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *TimeColumn2) GTE(v time.Time) predicate.Post {
+	return predicate.Post{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *TimeColumn2) LT(v time.Time) predicate.Post {
+	return predicate.Post{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *TimeColumn2) LTE(v time.Time) predicate.Post {
+	return predicate.Post{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// Set assigns v to the column.
+func (f *TimeColumn2) Set(v time.Time) predicate.PostSet {
+	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+}
+
+// SetNillable assigns *v to the column, or nothing when v is nil: the setter
+// for an input field the caller may have left out.
+func (f *TimeColumn2) SetNillable(v *time.Time) predicate.PostSet {
+	if v == nil {
+		return predicate.PostSet{}
+	}
+	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+}
+
+// Keep leaves the column as it is in an update: its update default (for an
+// updated_at, the time of the update) is not applied. For a change that is
+// not the user's, such as a recomputed total.
+func (f *TimeColumn2) Keep() predicate.PostSet {
+	return predicate.PostSet{Kind: orm.SetKeep, Col: string(*f)}
+}
+
+// Asc orders by the column, smallest first.
+func (f *TimeColumn2) Asc() predicate.PostOrder { return predicate.PostOrder{Col: string(*f)} }
+
+// Desc orders by the column, greatest first.
+func (f *TimeColumn2) Desc() predicate.PostOrder {
 	return predicate.PostOrder{Col: string(*f), Desc: true}
 }
 
@@ -399,7 +486,7 @@ const (
 var (
 	ID        = IntColumn(ColumnID)
 	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = TimeColumn(ColumnUpdatedAt)
+	UpdatedAt = TimeColumn2(ColumnUpdatedAt)
 	Title     = StringColumn(ColumnTitle)
 	Content   = StringColumn(ColumnContent)
 	Status    = StatusEnumColumn(ColumnStatus)

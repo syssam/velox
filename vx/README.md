@@ -97,7 +97,8 @@ err = db.User.DeleteByID(ctx, conn, id)
   string `"name"` for the places that take a name. An edge is `user.Posts`
   (`.Has()`, `.HasWith(...)`, `.Add(ids...)`, `.Remove(ids...)`, `.Clear()`;
   `.Set(id)` on a to-one edge). The type of an enum field is the field's name
-  with `Enum`, its values as in velox: `post.StatusEnum`, `post.StatusDraft`.
+  with `Enum`, its values as in velox: `post.StatusEnum`, `post.StatusDraft`;
+  `post.StatusValues()` lists them.
   The columns get their names first, so a name that would be taken twice
   goes to the column and the other takes a suffix: an edge called like a
   column is `user.OwnerEdge`, an enum value `user.RoleAdminValue`. Six names
@@ -122,6 +123,13 @@ err = db.User.DeleteByID(ctx, conn, id)
   id = ? AND version = ?`, and a row that no longer matches is `ErrNotFound`,
   not written.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
+- `Keep()`, on a column with an update default, leaves it as it is:
+  `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
+  the user's and does not move `updated_at`.
+- There is no `SaveX`, `GetX` or `ExecX`. In a test, `orm.Must(q.Save(ctx))`
+  and `orm.Check(q.Exec(ctx))` panic on an error. As methods they would be on
+  every builder, and a package pays for the methods of every type it can
+  reach.
 - `And()` of nothing holds for every row, `Or()` and `Not()` of nothing for
   none: a condition built from a list of filters means the same when the
   list is empty, and a delete of "any of these" over no filter removes

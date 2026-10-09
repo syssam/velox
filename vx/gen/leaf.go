@@ -206,6 +206,7 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		clear    bool
 		add      bool
 		order    bool
+		keep     bool
 	}
 	shapes := map[string]*shape{}
 	var order []*shape
@@ -248,8 +249,8 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		// three also name its type. Add on the id is refused when it runs.
 		isKey := f.F.IsEdgeField()
 		add := !isKey && (f.F.Type != nil && f.F.Type.Numeric() || f.F.IsOther())
-		s := &shape{gotype: gt, ops: ops, nullable: nullable, clear: nullable && f.F.Optional, add: add, order: sortable}
-		key := fmt.Sprintf("%s|%s|%t|%t|%t|%t", gt, strings.Join(names, ","), s.nullable, s.clear, s.add, s.order)
+		s := &shape{gotype: gt, ops: ops, nullable: nullable, clear: nullable && f.F.Optional, add: add, order: sortable, keep: f.F.UpdateDefault}
+		key := fmt.Sprintf("%s|%s|%t|%t|%t|%t|%t", gt, strings.Join(names, ","), s.nullable, s.clear, s.add, s.order, s.keep)
 		if have, ok := shapes[key]; ok {
 			desc[f] = have
 			continue
@@ -272,6 +273,8 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 			w("\t%s %s = %q\n", enumConsts[f][i], enumType[f], en.Value)
 		}
 		w(")\n\n")
+		values := unique(f.F.StructField()+"Values", "List")
+		w("// %s returns the values of the %s field, in the order of the schema.\nfunc %s() []%s {\n\treturn []%s{%s}\n}\n\n", values, f.F.Name, values, enumType[f], enumType[f], strings.Join(enumConsts[f], ", "))
 	}
 	if q := g.gql[e]; q != nil && q.HasOrder {
 		w("// %[1]s is a field a list of %[2]s can be ordered by, as the GraphQL schema\n// names it: the Field of an entity.%[2]sOrder.\ntype %[1]s string\n\n// The fields a list of %[2]s can be ordered by.\nconst (\n", names.orderType, e.Name)
@@ -301,6 +304,9 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		w("// SetNillable assigns *v to the column, or nothing when v is nil: the setter\n// for an input field the caller may have left out.\nfunc (f *%s) SetNillable(v *%s) %s {\n\tif v == nil {\n\t\treturn %s{}\n\t}\n\treturn %s{Kind: orm.SetValue, Col: string(*f), Val: *v}\n}\n\n", s.name, s.gotype, set, set, set)
 		if s.clear {
 			w("// Clear sets the column to NULL.\nfunc (f *%s) Clear() %s { return %s{Kind: orm.SetNull, Col: string(*f)} }\n\n", s.name, set, set)
+		}
+		if s.keep {
+			w("// Keep leaves the column as it is in an update: its update default (for an\n// updated_at, the time of the update) is not applied. For a change that is\n// not the user's, such as a recomputed total.\nfunc (f *%s) Keep() %s { return %s{Kind: orm.SetKeep, Col: string(*f)} }\n\n", s.name, set, set)
 		}
 		if s.add {
 			w("// Add increments the column by v.\nfunc (f *%s) Add(v %s) %s { return %s{Kind: orm.SetAdd, Col: string(*f), Val: v} }\n\n", s.name, s.gotype, set, set)

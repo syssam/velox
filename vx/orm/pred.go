@@ -57,6 +57,9 @@ const (
 	EdgeAdd
 	EdgeRemove
 	EdgeClear
+	// SetKeep leaves a column as it is in an update: nothing is written to
+	// it, and its update default is not applied.
+	SetKeep
 	// setInvalid is a setter that could not be built (Fill of something that
 	// is not a struct, or with a field that goes nowhere); Val is the error
 	// the mutation reports.

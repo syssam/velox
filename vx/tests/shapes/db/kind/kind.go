@@ -24,6 +24,11 @@ const (
 	ShapeFlat  ShapeEnum = "flat"
 )
 
+// ShapeValues returns the values of the shape field, in the order of the schema.
+func ShapeValues() []ShapeEnum {
+	return []ShapeEnum{ShapeRound, ShapeFlat}
+}
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

@@ -5,6 +5,7 @@ import (
 	stdsql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox/vx/tests/db/predicate"
 
@@ -533,4 +534,55 @@ func TestTxOptions(t *testing.T) {
 	_, err = client.User.UpdateByID(tx, 1).Set(user.Age.Set(31)).SaveOne(ctx)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
+}
+
+// Keep leaves a column out of an update, and its update default with it:
+// for a change that is not the user's, which must not move updated_at.
+func TestUpdate_KeepSkipsTheUpdateDefault(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	past := ann.UpdatedAt.Add(-48 * time.Hour).Truncate(time.Second)
+	_, err := client.User.UpdateByID(db, ann.ID).Set(user.UpdatedAt.Set(past)).SaveOne(ctx)
+	require.NoError(t, err)
+
+	// An ordinary update moves it.
+	moved, err := client.User.UpdateByID(db, ann.ID).Set(user.Age.Set(31)).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.True(t, moved.UpdatedAt.After(past), "the update default did not apply")
+
+	_, err = client.User.UpdateByID(db, ann.ID).Set(user.UpdatedAt.Set(past)).SaveOne(ctx)
+	require.NoError(t, err)
+	kept, err := client.User.UpdateByID(db, ann.ID).Set(user.Age.Set(32), user.UpdatedAt.Keep()).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 32, kept.Age)
+	assert.True(t, kept.UpdatedAt.Equal(past), "updated_at moved from %v to %v", past, kept.UpdatedAt)
+
+	// A hook does not see a kept column as set, and a bulk update keeps too.
+	var fields []string
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			fields = m.Fields()
+			return next.Mutate(ctx, m)
+		})
+	})
+	n, err := client.User.Update(db).Where(user.ID.EQ(ann.ID)).Set(user.Age.Add(1), user.UpdatedAt.Keep()).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	assert.NotContains(t, fields, "updated_at")
+	again, err := client.User.Get(ctx, db, ann.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 33, again.Age)
+	assert.True(t, again.UpdatedAt.Equal(past))
+
+	// Set after Keep wins; a new row has nothing to keep.
+	set, err := client.User.UpdateByID(db, ann.ID).Set(user.UpdatedAt.Keep(), user.UpdatedAt.Set(past.Add(time.Hour))).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.True(t, set.UpdatedAt.Equal(past.Add(time.Hour)))
+	_, err = client.User.Create(db).Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.UpdatedAt.Keep()).Save(ctx)
+	require.ErrorContains(t, err, "only an update can do")
+}
+
+func TestEnumValues(t *testing.T) {
+	assert.Equal(t, []user.RoleEnum{user.RoleAdmin, user.RoleUser, user.RoleGuest}, user.RoleValues())
 }

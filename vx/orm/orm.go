@@ -404,6 +404,29 @@ func NotFound(entity string) error { return fmt.Errorf("%w: %s", ErrNotFound, en
 // IsNotFound reports whether err is ErrNotFound.
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
 
+// Must returns v, and panics when err is not nil: for a test, and for the
+// start of a program, where an error ends things either way.
+//
+//	u := orm.Must(db.User.Create(conn).Set(user.Name.Set("a")).Save(ctx))
+//
+// The builders have no SaveX, GetX or ExecX of their own: each would be a
+// method of every builder, and a package pays for the methods of every type
+// it can reach.
+func Must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+// Check panics when err is not nil: Must for a call that returns only an
+// error.
+func Check(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
 // IsConstraintError reports whether err is a constraint violation.
 func IsConstraintError(err error) bool {
 	var c *ConstraintError

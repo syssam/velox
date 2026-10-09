@@ -25,6 +25,11 @@ const (
 	StatusDropped StatusEnum = "dropped"
 )
 
+// StatusValues returns the values of the status field, in the order of the schema.
+func StatusValues() []StatusEnum {
+	return []StatusEnum{StatusActive, StatusDropped}
+}
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

@@ -26,6 +26,11 @@ const (
 	StateGone  StateEnum = "gone"
 )
 
+// StateValues returns the values of the state field, in the order of the schema.
+func StateValues() []StateEnum {
+	return []StateEnum{StateDraft, StateLive, StateGone}
+}
+
 // MoodEnum is the type of the mood field.
 type MoodEnum string
 
@@ -34,6 +39,11 @@ const (
 	MoodCalm  MoodEnum = "calm"
 	MoodAngry MoodEnum = "angry"
 )
+
+// MoodValues returns the values of the mood field, in the order of the schema.
+func MoodValues() []MoodEnum {
+	return []MoodEnum{MoodCalm, MoodAngry}
+}
 
 // PhaseEnum is the type of the phase field.
 type PhaseEnum string
@@ -45,6 +55,11 @@ const (
 	PhaseOnHold     PhaseEnum = "on_hold"
 )
 
+// PhaseValues returns the values of the phase field, in the order of the schema.
+func PhaseValues() []PhaseEnum {
+	return []PhaseEnum{PhaseDraft, PhaseInProgress, PhaseOnHold}
+}
+
 // SizeEnum is the type of the size field.
 type SizeEnum string
 
@@ -53,6 +68,11 @@ const (
 	SizeSmall SizeEnum = "S"
 	SizeLarge SizeEnum = "L"
 )
+
+// SizeValues returns the values of the size field, in the order of the schema.
+func SizeValues() []SizeEnum {
+	return []SizeEnum{SizeSmall, SizeLarge}
+}
 
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so

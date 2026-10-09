@@ -27,6 +27,11 @@ const (
 	RoleGuest RoleEnum = "guest"
 )
 
+// RoleValues returns the values of the role field, in the order of the schema.
+func RoleValues() []RoleEnum {
+	return []RoleEnum{RoleAdmin, RoleUser, RoleGuest}
+}
+
 // OrderField is a field a list of User can be ordered by, as the GraphQL schema
 // names it: the Field of an entity.UserOrder.
 type OrderField string
@@ -194,6 +199,88 @@ func (f *TimeColumn) Asc() predicate.UserOrder { return predicate.UserOrder{Col:
 
 // Desc orders by the column, greatest first.
 func (f *TimeColumn) Desc() predicate.UserOrder {
+	return predicate.UserOrder{Col: string(*f), Desc: true}
+}
+
+// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// assignments and order terms of that column. They have pointer receivers so
+// that the compiler emits each once.
+type TimeColumn2 string
+
+// EQ matches the rows whose column equals v.
+func (f *TimeColumn2) EQ(v time.Time) predicate.User {
+	return predicate.User{Op: orm.OpEQ, Col: string(*f), Val: v}
+}
+
+// NEQ matches the rows whose column differs from v.
+func (f *TimeColumn2) NEQ(v time.Time) predicate.User {
+	return predicate.User{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// In matches the rows whose column is one of vs; without any, none.
+func (f *TimeColumn2) In(vs ...time.Time) predicate.User {
+	a := make([]any, len(vs))
+	for i, v := range vs {
+		a[i] = v
+	}
+	return predicate.User{Op: orm.OpIn, Col: string(*f), Val: a}
+}
+
+// NotIn matches the rows whose column is none of vs.
+func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.User {
+	a := make([]any, len(vs))
+	for i, v := range vs {
+		a[i] = v
+	}
+	return predicate.User{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// GT matches the rows whose column is greater than v.
+func (f *TimeColumn2) GT(v time.Time) predicate.User {
+	return predicate.User{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *TimeColumn2) GTE(v time.Time) predicate.User {
+	return predicate.User{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *TimeColumn2) LT(v time.Time) predicate.User {
+	return predicate.User{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *TimeColumn2) LTE(v time.Time) predicate.User {
+	return predicate.User{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// Set assigns v to the column.
+func (f *TimeColumn2) Set(v time.Time) predicate.UserSet {
+	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+}
+
+// SetNillable assigns *v to the column, or nothing when v is nil: the setter
+// for an input field the caller may have left out.
+func (f *TimeColumn2) SetNillable(v *time.Time) predicate.UserSet {
+	if v == nil {
+		return predicate.UserSet{}
+	}
+	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+}
+
+// Keep leaves the column as it is in an update: its update default (for an
+// updated_at, the time of the update) is not applied. For a change that is
+// not the user's, such as a recomputed total.
+func (f *TimeColumn2) Keep() predicate.UserSet {
+	return predicate.UserSet{Kind: orm.SetKeep, Col: string(*f)}
+}
+
+// Asc orders by the column, smallest first.
+func (f *TimeColumn2) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+
+// Desc orders by the column, greatest first.
+func (f *TimeColumn2) Desc() predicate.UserOrder {
 	return predicate.UserOrder{Col: string(*f), Desc: true}
 }
 
@@ -483,7 +570,7 @@ const (
 var (
 	ID        = IntColumn(ColumnID)
 	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = TimeColumn(ColumnUpdatedAt)
+	UpdatedAt = TimeColumn2(ColumnUpdatedAt)
 	Name      = StringColumn(ColumnName)
 	Email     = StringColumn(ColumnEmail)
 	Age       = IntColumn(ColumnAge)

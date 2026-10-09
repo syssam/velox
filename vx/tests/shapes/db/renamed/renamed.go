@@ -25,6 +25,11 @@ const (
 	KindB KindEnum = "b"
 )
 
+// KindValues returns the values of the kind field, in the order of the schema.
+func KindValues() []KindEnum {
+	return []KindEnum{KindA, KindB}
+}
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
@@ -367,6 +372,13 @@ func (f *TimeColumn) SetNillable(v *time.Time) predicate.RenamedSet {
 		return predicate.RenamedSet{}
 	}
 	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+}
+
+// Keep leaves the column as it is in an update: its update default (for an
+// updated_at, the time of the update) is not applied. For a change that is
+// not the user's, such as a recomputed total.
+func (f *TimeColumn) Keep() predicate.RenamedSet {
+	return predicate.RenamedSet{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
