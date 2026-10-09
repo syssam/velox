@@ -383,10 +383,18 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
   an `int` id). Ask each in turn and take the first that is not
   `orm.ErrNotFound`. That is a query per type, so an application with many
   types keeps what it learns.
+- A where input's nesting is limited (`orm.MaxWhereDepth`), counted through
+  `has...With` as well as `not`, `and` and `or`.
 - Not there yet, and refused at generation with a message that says so: an
   entity whose GraphQL type is renamed (`graphql.Type` on the entity),
   ordering by the number of neighbors on an edge, filters on the elements of
-  a JSON array. Mutation inputs are the application's own types: move them to
+  a JSON array, and whatever else the schema would bind to Go this generator
+  does not write (the interface of `graphql.InterfaceField`, the scalar of a
+  typed JSON field, nillable bytes). Every `@goModel` and `@goField(name:)`
+  of the schema that points into the generated tree is checked against what
+  was generated. An entity with no field a list could be ordered by is
+  refused by the schema generator itself (an order enum without values):
+  give it one, or leave it out of the schema. Mutation inputs are the application's own types: move them to
   a builder with `Set` or `Fill`. Loading edges by what a request selects is
   not done: each edge is a query when it is asked for.
 
@@ -409,6 +417,15 @@ the packages of its module it uses, and names each assertion on a
 `velox.Mutation`, `velox.Query` or `privacy.Filter` that can never hold.
 Rewrite it with `Field`/`SetField`, which work with velox's generated code
 too, so it can be done before moving.
+
+The check follows an assertion through another name for the same value
+(`any(m)`, an interface that embeds `velox.Mutation`) and through a generic
+helper (`as[T](m)`, judged where `T` is given). A case of several types is
+fine when one of them can hold. Code that tries the typed accessors first and
+goes by name when the assertion fails is correct under both generators, and
+only its author knows that it is that: mark the assertion with `//vx:nocheck`
+on its line or the line above. A schema package that does not type-check is
+an error, not a pass.
 
 A filter rule shared by many entities asks the filter whether the table has
 the column it filters on: `f.(interface{ HasColumn(string) bool })`, on

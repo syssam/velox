@@ -58,6 +58,10 @@ var userWhere = []orm.WhereField{
 	{Op: orm.OpHasEdge, Edge: userEdges[0], With: true}, // hasPostsWith
 }
 
+func init() {
+	userWhere[15].Neighbor = postWhere // hasPostsWith
+}
+
 // P returns the condition the input describes: none for a nil or an empty
 // input, and one that fails the query for an input that cannot be a condition
 // (an empty input nested in not, and, or; nesting deeper than orm.MaxWhereDepth).

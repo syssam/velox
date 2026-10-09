@@ -112,8 +112,8 @@ func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex orm.Executor, id %[15]s) error
 		if q := g.gql[e]; q != nil && q.Node {
 			nodes = append(nodes, e)
 			w(`// node is Get for an id of any type: see NodeTypes.
-func (c *%[1]s) node(ctx %[2]s.Context, ex orm.Executor, id any) (Noder, error) {
-	v, ok := orm.IDAs[%[3]s](id)
+func (c *%[1]s) node(ctx %[2]s.Context, ex orm.Executor, key any) (Noder, error) {
+	v, ok := orm.IDAs[%[3]s](key)
 	if !ok {
 		return nil, orm.NotFound(%[4]q)
 	}

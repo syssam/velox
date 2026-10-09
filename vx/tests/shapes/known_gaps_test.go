@@ -59,6 +59,12 @@ type gapCase struct {
 	// behavior pinned for reference (false). It only changes the message of
 	// a failing case.
 	gap bool
+	// graphql generates the GraphQL layer too (vxgen -graphql).
+	graphql bool
+	// generated is text that files of the output must contain, by path
+	// under db/: for a case that builds either way and is right only when
+	// the generator wrote this.
+	generated map[string][]string
 }
 
 const gapSchemaHeader = `package schema
@@ -67,6 +73,7 @@ import (
 	"net/url"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -79,6 +86,7 @@ var (
 	_ schema.Annotation
 	_ = edge.To
 	_ types.Label
+	_ = graphql.WhereInput
 )
 `
 
@@ -188,6 +196,215 @@ func stamp(m velox.Mutation) {
 var _ = stamp
 `,
 		want: builds},
+	// The same, where an independent review found the check looking away:
+	// under another name, through any, and through a generic helper.
+	{name: "hook asserts through an interface that embeds the mutation",
+		schema: labelEntities("Thing") + `
+type mut interface{ velox.Mutation }
+
+func stamp(m velox.Mutation) {
+	var w mut = m
+	if s, ok := w.(interface{ SetLabel(string) }); ok {
+		s.SetLabel("x")
+	}
+}
+
+var _ = stamp
+`,
+		want: generateFails, wantSubstr: "a velox.Mutation is asserted to an interface with SetLabel"},
+	{name: "hook asserts through any",
+		schema: labelEntities("Thing") + `
+func stamp(m velox.Mutation) {
+	if s, ok := any(m).(interface{ SetLabel(string) }); ok {
+		s.SetLabel("x")
+	}
+}
+
+var _ = stamp
+`,
+		want: generateFails, wantSubstr: "a velox.Mutation is asserted to an interface with SetLabel"},
+	{name: "hook asserts through a generic helper",
+		schema: labelEntities("Thing") + `
+func as[T any](m velox.Mutation) (T, bool) {
+	t, ok := m.(T)
+	return t, ok
+}
+
+func stamp(m velox.Mutation) {
+	if s, ok := as[interface{ SetLabel(string) }](m); ok {
+		s.SetLabel("x")
+	}
+}
+
+var _ = stamp
+`,
+		want: generateFails, wantSubstr: "through as, a velox.Mutation is asserted to an interface with SetLabel"},
+	// And where it cried wolf: the typed way first and the way by name
+	// after it is correct under both generators, once its author says so;
+	// a case of several types holds when one of them does.
+	{name: "hook tries the typed setter and goes by name, and says so",
+		schema: labelEntities("Thing") + `
+func stamp(m velox.Mutation) {
+	//vx:nocheck velox's mutations have the setter; here the name is used
+	if s, ok := m.(interface{ SetLabel(string) }); ok {
+		s.SetLabel("x")
+		return
+	}
+	_ = m.SetField("label", "x")
+}
+
+func kind(m velox.Mutation) int {
+	switch m.(type) {
+	case interface{ SetLabel(string) }, interface{ SetField(string, velox.Value) error }:
+		return 1
+	}
+	return 0
+}
+
+var _, _ = stamp, kind
+`,
+		want: builds},
+	// An entity whose package is named like a variable of the generated
+	// methods (conn, in Paginate): its import must not capture the variable
+	// in the other entities' files.
+	{name: "entities Conn and Where", schema: labelEntities("Conn", "Where", "Pool") + `
+func (Conn) Edges() []velox.Edge { return []velox.Edge{edge.To("pools", Pool.Type), edge.To("wheres", Where.Type)} }
+`,
+		want: builds},
+	// --- The GraphQL layer, as an independent review probed it.
+
+	// A where input's field is what the schema generator says it is, not
+	// what its name can be read as: logIn is log with In although there is
+	// a field login, titleContains is title with Contains although there is
+	// a field title_contains, hasOthers is the edge although there is a
+	// boolean field has_others.
+	{name: "where input fields whose names read two ways", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{
+		field.String("log").Annotations(graphql.WhereInput()),
+		field.String("login"),
+		field.String("title").Annotations(graphql.WhereInput()),
+		field.String("title_contains"),
+		field.Bool("has_others"),
+	}
+}
+
+func (Thing) Edges() []velox.Edge {
+	return []velox.Edge{edge.To("others", Other.Type).Annotations(graphql.WhereInput())}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+
+type Other struct{ velox.Schema }
+
+func (Other) Fields() []velox.Field {
+	return []velox.Field{field.String("label").Annotations(graphql.WhereInput())}
+}
+
+func (Other) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: builds,
+		generated: map[string][]string{"filter/thing.go": {
+			`{Col: "log", Op: orm.OpIn}, // logIn`,
+			`{Col: "title", Op: orm.OpContains}, // titleContains`,
+			`{Op: orm.OpHasEdge, Edge: thingEdges[0]}, // hasOthers`,
+			`thingWhere[`, // the neighbor's plan, for the depth limit across the edge
+		}}},
+	// An entity whose package is named like the package of a field's type:
+	// in package filter the type's package keeps the name.
+	{name: "entity Types with a field of package types", graphql: true,
+		schema: `
+type Types struct{ velox.Schema }
+
+func (Types) Fields() []velox.Field {
+	return []velox.Field{
+		field.Enum("kind").Values("a", "b").Default("a").Annotations(graphql.WhereInput()),
+		field.String("label").GoType(types.Label("")).Annotations(graphql.WhereInput()),
+	}
+}
+
+func (Types) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: builds},
+	// An entity with the name of something the schema always has: the
+	// schema would define it twice, which used to pass with one of the two
+	// silently dropped.
+	{name: "entity Time, the name of a scalar", graphql: true,
+		schema: `
+type Time struct{ velox.Schema }
+
+func (Time) Fields() []velox.Field { return []velox.Field{field.Time("at")} }
+
+func (Time) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "Time is defined twice"},
+	// What the schema would name and this generator does not write is said
+	// at generation, not found by an engine's build.
+	{name: "the schema binds an accessor that is not generated", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.Bytes("blob").Optional().Nillable()}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "which this generator"},
+	{name: "an enum field called order_field", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.Enum("order_field").Values("a", "b").Default("a")}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "ThingOrderField is defined twice"},
+	{name: "a node with a field is_node", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field { return []velox.Field{field.String("label"), field.Bool("is_node")} }
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "a method IsNode"},
+	{name: "entity Node, the name of the interface", graphql: true,
+		schema: `
+type Node struct{ velox.Schema }
+
+func (Node) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Node) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "Node is defined twice"},
+	{name: "entity NodeType in a schema with nodes", graphql: true,
+		schema: `
+type NodeType struct{ velox.Schema }
+
+func (NodeType) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (NodeType) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "has the name of what the root package declares"},
+	// An entity nothing can be ordered by: velox's schema generator writes
+	// an order enum without values, and refuses its own schema. Said at
+	// generation; the entity needs a field to order by, or to be left out
+	// of the schema.
+	{name: "an entity with no field to order by, in a GraphQL schema", graphql: true,
+		schema: `
+type Bare struct{ velox.Schema }
+
+func (Bare) Fields() []velox.Field { return []velox.Field{field.Bytes("blob")} }
+
+func (Bare) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "is invalid", gap: true},
 	// Names velox's schema loader rejects before the vx generator runs.
 	{name: "entity named Query", schema: labelEntities("Query"),
 		want: loadFails, wantSubstr: `schema name conflicts with ent predeclared identifier \"Query\"`},
@@ -317,7 +534,11 @@ func runGapCase(t *testing.T, c gapCase) (got outcome, output string) {
 
 	// vxgen runs from the scratch directory: the schema loader keeps its
 	// cache in the working directory.
-	out, err := run(t, dir, bin, "-schema", "./schema", "-target", "./db", "-package", importPath+"/db")
+	gen := []string{"-schema", "./schema", "-target", "./db", "-package", importPath + "/db"}
+	if c.graphql {
+		gen = append(gen, "-graphql", "./gql/velox.graphql")
+	}
+	out, err := run(t, dir, bin, gen...)
 	if err != nil {
 		switch {
 		case strings.Contains(out, "panic:") && strings.Contains(out, "goroutine "):
@@ -328,15 +549,30 @@ func runGapCase(t *testing.T, c gapCase) (got outcome, output string) {
 			return generateFails, out
 		}
 	}
-	// Every generated package, named one by one (./... skips _work).
-	entries, err := os.ReadDir(filepath.Join(dir, "db"))
-	require.NoError(t, err)
-	args := []string{"build"}
-	for _, e := range entries {
-		if e.IsDir() {
-			args = append(args, importPath+"/db/"+e.Name())
+	for file, texts := range c.generated {
+		src, err := os.ReadFile(filepath.Join(dir, "db", file))
+		require.NoError(t, err)
+		// gofmt aligns the comments of a table: compare without the layout.
+		flat := strings.Join(strings.Fields(string(src)), " ")
+		for _, text := range texts {
+			if !strings.Contains(flat, strings.Join(strings.Fields(text), " ")) {
+				return buildFails, fmt.Sprintf("db/%s does not contain %q:\n%s", file, text, src)
+			}
 		}
 	}
+	// Every generated package, named one by one (./... skips _work).
+	args := []string{"build"}
+	base := filepath.Join(dir, "db")
+	require.NoError(t, filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
+		if err != nil || !d.IsDir() || path == base {
+			return err
+		}
+		if files, _ := filepath.Glob(filepath.Join(path, "*.go")); len(files) > 0 {
+			rel, _ := filepath.Rel(base, path)
+			args = append(args, importPath+"/db/"+filepath.ToSlash(rel))
+		}
+		return nil
+	}))
 	if out, err := run(t, root, "go", args...); err != nil {
 		return buildFails, out
 	}

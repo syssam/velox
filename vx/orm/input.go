@@ -96,6 +96,11 @@ type WhereField struct {
 	Op   Op
 	Edge *EdgeMeta
 	With bool
+	// Neighbor is the plan of the where input a has...With field holds:
+	// the edge's target's. The generated package sets it once every plan
+	// exists, so that the nesting of an input is counted through its
+	// edges and not from zero again on the other side of each.
+	Neighbor []WhereField
 }
 
 // whereFixed is the number of fields every where input starts with.
@@ -168,7 +173,14 @@ func where(v reflect.Value, plan []WhereField, depth int) P {
 			}
 			subs := make([]P, f.Len())
 			for j := range subs {
-				subs[j] = neighborWhere(f.Index(j), depth+1)
+				if w.Neighbor == nil {
+					subs[j] = neighborWhere(f.Index(j), depth+1)
+					continue
+				}
+				subs[j] = where(f.Index(j), w.Neighbor, depth+1)
+				if subs[j].Op == 0 {
+					subs[j] = Invalid(fmt.Errorf("orm: empty %s inside a where input", f.Type().Elem().Elem().Name()))
+				}
 			}
 			ps = append(ps, P{Op: OpHasEdge, Edge: w.Edge, Subs: subs})
 		case w.Edge != nil:

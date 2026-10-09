@@ -66,7 +66,7 @@ func (g *generator) model() (map[string][]byte, error) {
 	// enum types of the fields live there), under names that no variable of the
 	// generated functions can shadow.
 	locals := map[string]bool{}
-	for _, s := range strings.Fields("e q b v i d s c r l p o ps os ls ss bs vs es id ids ctx ex err out rows subs dst context schemafield orm slices predicate entity iter slots filter") {
+	for _, s := range strings.Fields("e q b v i d s c r l p o ps os ls ss bs vs es id ids ctx ex err out rows subs dst conn where after first before last orderBy context schemafield orm slices predicate entity iter slots filter") {
 		locals[s] = true
 	}
 	for _, e := range g.ents {

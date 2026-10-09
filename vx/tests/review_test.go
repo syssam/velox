@@ -219,3 +219,36 @@ func TestWhereInput_ByValue(t *testing.T) {
 	_, err := client.User.Query(db).Where(predicate.User(p)).Count(context.Background())
 	require.ErrorContains(t, err, "given by its address")
 }
+
+// The depth limit of a where input is counted through its edges: it used to
+// start again at zero on the other side of each has...With, so that inputs
+// which filter through each other nested without bound.
+func TestWhereInput_DepthThroughAnEdge(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	nestedPosts := func(n int) *filter.PostWhereInput {
+		w := &filter.PostWhereInput{Title: ptr("x")}
+		for i := 0; i < n; i++ {
+			w = &filter.PostWhereInput{Not: w}
+		}
+		return w
+	}
+	nestedUsers := func(n int, inner *filter.UserWhereInput) *filter.UserWhereInput {
+		for i := 0; i < n; i++ {
+			inner = &filter.UserWhereInput{Not: inner}
+		}
+		return inner
+	}
+	// Within the limit, across the edge.
+	ok := nestedUsers(2, &filter.UserWhereInput{HasPostsWith: []*filter.PostWhereInput{nestedPosts(2)}})
+	_, err := client.User.Query(db).Where(ok.P()).Count(ctx)
+	require.NoError(t, err)
+	// Four levels, the edge, and five more: each side alone is allowed.
+	deep := nestedUsers(4, &filter.UserWhereInput{HasPostsWith: []*filter.PostWhereInput{nestedPosts(5)}})
+	_, err = client.User.Query(db).Where(deep.P()).Count(ctx)
+	require.ErrorIs(t, err, orm.ErrWhereDepth)
+	// An empty input on the other side is still refused.
+	empty := &filter.UserWhereInput{HasPostsWith: []*filter.PostWhereInput{{}}}
+	_, err = client.User.Query(db).Where(empty.P()).Count(ctx)
+	require.ErrorContains(t, err, "empty PostWhereInput")
+}

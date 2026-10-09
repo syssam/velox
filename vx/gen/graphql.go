@@ -59,12 +59,20 @@ type gqlEdge struct {
 
 type gqlOrder struct{ Value, Const, Column string }
 
+// gqlNeighbor is a has...With field of a where input: its place in the plan,
+// and the entity whose where input its elements are.
+type gqlNeighbor struct {
+	At     int
+	Target *ent
+}
+
 // gqlEnt is what the schema says of one entity.
 type gqlEnt struct {
-	Node     bool
-	HasWhere bool
-	Where    []gqlWhere
-	HasOrder bool
+	Neighbors []gqlNeighbor
+	Node      bool
+	HasWhere  bool
+	Where     []gqlWhere
+	HasOrder  bool
 	// OrderType and the Const of each Order are names of the entity's own
 	// package.
 	OrderType string
@@ -74,19 +82,7 @@ type gqlEnt struct {
 
 func normalized(s string) string { return strings.ToLower(strings.ReplaceAll(s, "_", "")) }
 
-// The operators a where input names by a suffix of the field, longest first
-// so that NotIn is not read as In.
-var whereSuffixes = []struct {
-	suffix, op string
-	shape      byte // '1' one value, 'n' a list, 'b' a flag
-}{
-	{"ContainsFold", "orm.OpContainsFold", '1'}, {"EqualFold", "orm.OpEqualFold", '1'},
-	{"HasPrefix", "orm.OpHasPrefix", '1'}, {"HasSuffix", "orm.OpHasSuffix", '1'}, {"Contains", "orm.OpContains", '1'},
-	{"NotNil", "orm.OpNotNull", 'b'}, {"IsNil", "orm.OpIsNull", 'b'},
-	{"NotIn", "orm.OpNotIn", 'n'}, {"NEQ", "orm.OpNEQ", '1'},
-	{"GTE", "orm.OpGTE", '1'}, {"LTE", "orm.OpLTE", '1'}, {"GT", "orm.OpGT", '1'}, {"LT", "orm.OpLT", '1'},
-	{"In", "orm.OpIn", 'n'},
-}
+var veloxRuntimeRx = regexp.MustCompile(`@goModel\(model: "(github\.com/syssam/velox/contrib/graphql/[^"]+)"\)`)
 
 var goModelRx = regexp.MustCompile(`@goModel\(model: "([^"]+)"\)`)
 
@@ -148,8 +144,8 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			return `@goModel(model: "` + model + `")`
 		})
 		src = strings.Replace(src, "enum OrderDirection {", `enum OrderDirection @goModel(model: "`+ormPath+`.OrderDirection") {`, 1)
-		if strings.Contains(src, relay) {
-			return nil, fmt.Errorf("vx: graphql schema: %s still binds a type of velox's GraphQL runtime", name)
+		if m := veloxRuntimeRx.FindStringSubmatch(src); m != nil {
+			return nil, fmt.Errorf("vx: graphql schema: %s binds a type of velox's GraphQL runtime, %s, which this generator has no counterpart of yet", name, m[1])
 		}
 		files[name] = src
 	}
@@ -167,6 +163,12 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			return nil, fmt.Errorf("vx: graphql schema: %s: %w", name, perr)
 		}
 		for _, d := range doc.Definitions {
+			if defs[d.Name] != nil {
+				// The schema is invalid for any engine: two things of the
+				// schema got one name (an enum field called order_field
+				// and the entity's OrderField enum).
+				return nil, fmt.Errorf("vx: graphql schema: %s is defined twice (the second time in %s)", d.Name, name)
+			}
 			defs[d.Name] = d
 		}
 	}
@@ -181,13 +183,44 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			typeOf[d.Name] = g.by[name]
 		}
 	}
+	// The packages of the fields' Go types get their names in package
+	// filter before any entity's package does: an entity called Time must
+	// not take "time" from time.Time.
 	for _, e := range g.ents {
-		d := defs[e.Name]
-		if typeOf[e.Name] != e || d == nil {
+		for _, f := range e.Fields {
+			if ref, err := goTypeOf(f.F); err == nil && ref.PkgPath != "" && f.Enum == "" {
+				if got := g.filterIm.use(ref.PkgPath, ref.PkgName); got != ref.PkgName && ref.PkgName != "" {
+					return nil, fmt.Errorf("vx: graphql: %s.%s: two packages named %q are used as field types", e.Name, f.F.Name, ref.PkgName)
+				}
+			}
+		}
+	}
+	for _, e := range g.ents {
+		// An entity may have a where input without a type of its own: it
+		// is hidden from the schema and still filtered through.
+		d, wd := defs[e.Name], defs[e.Name+"WhereInput"]
+		if typeOf[e.Name] != e {
+			d = nil
+		}
+		if wd != nil && wd.Kind != ast.InputObject {
+			wd = nil
+		}
+		if d == nil && wd == nil {
 			continue
 		}
-		q := &gqlEnt{Node: len(d.Interfaces) > 0 && contains(d.Interfaces, "Node")}
+		q := &gqlEnt{HasWhere: wd != nil}
 		g.gql[e] = q
+		if d == nil {
+			continue
+		}
+		q.Node = contains(d.Interfaces, "Node")
+		if q.Node {
+			for _, f := range e.Fields {
+				if f.GoName == "IsNode" {
+					return nil, fmt.Errorf("vx: graphql: %s has a field %q, and as a node of the schema a method IsNode", e.Name, f.F.Name)
+				}
+			}
+		}
 		if err := g.gqlEdges(e, q, d, typeOf); err != nil {
 			return nil, err
 		}
@@ -196,20 +229,99 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 				return nil, err
 			}
 		}
-		if wd := defs[e.Name+"WhereInput"]; wd != nil && wd.Kind == ast.InputObject {
-			q.HasWhere = true
-		}
 	}
 	// Where inputs after every entity is known to have one or not: a
 	// has...With field names its target's.
 	for _, e := range g.ents {
 		if q := g.gql[e]; q != nil && q.HasWhere {
-			if err := g.gqlWhere(e, q, defs[e.Name+"WhereInput"]); err != nil {
+			if err := g.gqlWhere(e, q, defs[e.Name+"WhereInput"], sdlGen); err != nil {
 				return nil, err
 			}
 		}
 	}
+	if err := g.gqlBindings(defs, typeOf); err != nil {
+		return nil, err
+	}
 	return files, nil
+}
+
+// gqlBindings checks that the schema binds nothing of this tree that the
+// generator does not write. The schema text is velox's, and velox generates
+// Go this generator does not have (an interface for graphql.InterfaceField,
+// a scalar type for a typed JSON field, an OrNil accessor for nillable
+// bytes): left alone, the schema would name them, and the first to find out
+// would be an engine's build.
+func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[string]*ent) error {
+	pkg := g.cfg.Package
+	known := map[string]bool{}
+	nodes := false
+	for _, e := range g.ents {
+		known[pkg+"/entity."+e.Name] = true
+		known[pkg+"/entity."+e.Name+"Connection"] = true
+		known[pkg+"/entity."+e.Name+"Edge"] = true
+		n, types, _, _ := g.enumNames(e)
+		for _, t := range types {
+			known[pkg+"/"+e.Pkg+"."+t] = true
+		}
+		if q := g.gql[e]; q != nil {
+			nodes = nodes || q.Node
+			if q.HasOrder {
+				known[pkg+"/entity."+e.Name+"Order"] = true
+				known[pkg+"/"+e.Pkg+"."+n.orderType] = true
+			}
+			if q.HasWhere {
+				known[pkg+"/filter."+e.Name+"WhereInput"] = true
+			}
+		}
+	}
+	if nodes {
+		known[pkg+".Noder"] = true
+		for _, name := range []string{"Noder", "NodeType", "NodeTypes"} {
+			if g.by[name] != nil {
+				return fmt.Errorf("vx: graphql: the entity %s has the name of what the root package declares for the nodes of the schema", name)
+			}
+		}
+	}
+	names := make([]string, 0, len(defs))
+	for name := range defs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		d := defs[name]
+		if path, typ := goModel(d); path == pkg || strings.HasPrefix(path, pkg+"/") {
+			if !known[path+"."+typ] {
+				return fmt.Errorf("vx: graphql: the schema binds %s to %s.%s, which this generator does not write: what it comes from in the schema package is not supported yet", d.Name, path, typ)
+			}
+		}
+		e := typeOf[d.Name]
+		if d.Kind != ast.Object || e == nil {
+			continue
+		}
+		// A field bound to another name is a struct field or an edge's
+		// method of that name.
+		members := map[string]bool{"ID": true}
+		for _, f := range e.Fields {
+			if !f.Hidden {
+				members[f.GoName] = true
+			}
+		}
+		if q := g.gql[e]; q != nil {
+			for _, x := range q.Edges {
+				members[x.Method] = true
+			}
+		}
+		for _, f := range d.Fields {
+			dir := f.Directives.ForName("goField")
+			if dir == nil {
+				continue
+			}
+			if arg := dir.Arguments.ForName("name"); arg != nil && arg.Value != nil && !members[arg.Value.Raw] {
+				return fmt.Errorf("vx: graphql: the schema binds %s.%s to %s.%s, which this generator does not write: not supported yet", d.Name, f.Name, e.Name, arg.Value.Raw)
+			}
+		}
+	}
+	return nil
 }
 
 func contains(list []string, s string) bool {
@@ -227,7 +339,7 @@ func (g *generator) gqlEdges(e *ent, q *gqlEnt, d *ast.Definition, typeOf map[st
 	for _, x := range e.Edges {
 		edges[normalized(x.E.Name)] = x
 	}
-	members := map[string]bool{"Edges": true, "IsNode": true}
+	members := map[string]bool{"Edges": true, "IsNode": true, "String": true}
 	for _, f := range e.Fields {
 		members[f.GoName] = true
 	}
@@ -323,17 +435,42 @@ func (g *generator) gqlOrder(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 	return nil
 }
 
+// whereOps maps the operators velox's schema generator names to the
+// runtime's, with the shape of the Go field each takes: '1' one value, 'n' a
+// list, 'b' a flag.
+var whereOps = map[string]struct {
+	op    string
+	shape byte
+}{
+	"EQ": {"orm.OpEQ", '1'}, "NEQ": {"orm.OpNEQ", '1'}, "In": {"orm.OpIn", 'n'}, "NotIn": {"orm.OpNotIn", 'n'},
+	"GT": {"orm.OpGT", '1'}, "GTE": {"orm.OpGTE", '1'}, "LT": {"orm.OpLT", '1'}, "LTE": {"orm.OpLTE", '1'},
+	"Contains": {"orm.OpContains", '1'}, "HasPrefix": {"orm.OpHasPrefix", '1'}, "HasSuffix": {"orm.OpHasSuffix", '1'},
+	"EqualFold": {"orm.OpEqualFold", '1'}, "ContainsFold": {"orm.OpContainsFold", '1'},
+	"IsNil": {"orm.OpIsNull", 'b'}, "NotNil": {"orm.OpNotNull", 'b'},
+}
+
 // gqlWhere reads the fields of e's where input.
-func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition) error {
-	fields := map[string]*fld{}
+//
+// What a field of the input filters on comes from the schema generator
+// (WhereFields), which knows; the name alone does not say. nameIn is name
+// with In, or a field called name_in; hasPosts is the edge, or a boolean
+// field. Read back from names, the input of one real shape filtered a
+// column the schema had not made filterable.
+func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlgen.Generator) error {
+	fields := map[*vgen.Field]*fld{}
 	for _, f := range e.Fields {
-		if !f.Hidden {
-			fields[normalized(f.F.Name)] = f
-		}
+		fields[f.F] = f
 	}
-	edges := map[string]*edg{}
+	if e.ID != nil {
+		fields[e.ID.F] = e.ID
+	}
+	edges := map[*vgen.Edge]*edg{}
 	for _, x := range e.Edges {
-		edges[normalized(x.E.Name)] = x
+		edges[x.E] = x
+	}
+	described := map[string]graphqlgen.WhereField{}
+	for _, w := range sdl.WhereFields(e.T) {
+		described[w.Name] = w
 	}
 	members := map[string]bool{"Predicates": true, "Not": true, "Or": true, "And": true}
 	for i, f := range d.Fields {
@@ -343,46 +480,50 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition) error {
 			}
 			continue
 		}
+		src, ok := described[f.Name]
+		if !ok {
+			return fmt.Errorf("vx: graphql: %sWhereInput.%s: the schema has this field and its generator does not say what it filters on", e.Name, f.Name)
+		}
 		w := gqlWhere{Name: f.Name}
-		key := normalized(f.Name)
 		switch {
-		case fields[key] != nil:
-			c := fields[key]
-			w.GoName, w.GoType = c.GoName, "*"+g.filterType(c)
-			w.Plan = fmt.Sprintf("{Col: %q, Op: orm.OpEQ}", c.Col)
-		case strings.HasPrefix(f.Name, "has") && strings.HasSuffix(f.Name, "With") && edges[normalized(f.Name[3:len(f.Name)-4])] != nil:
-			x := edges[normalized(f.Name[3:len(f.Name)-4])]
+		case src.Edge != nil:
+			x := edges[src.Edge]
+			if x == nil {
+				return fmt.Errorf("vx: graphql: %sWhereInput.%s filters on the edge %q, which %s does not have here", e.Name, f.Name, src.Edge.Name, e.Name)
+			}
+			if !src.With {
+				w.GoName, w.GoType = "Has"+x.GoName, "*bool"
+				w.Plan = fmt.Sprintf("{Op: orm.OpHasEdge, Edge: %sEdges[%d]}", lowerFirst(e.Name), x.Index)
+				break
+			}
 			if t := g.gql[x.Target]; t == nil || !t.HasWhere {
 				return fmt.Errorf("vx: graphql: %sWhereInput.%s filters %s, which has no where input", e.Name, f.Name, x.Target.Name)
 			}
 			w.GoName, w.GoType = "Has"+x.GoName+"With", "[]*"+x.Target.Name+"WhereInput"
 			w.Plan = fmt.Sprintf("{Op: orm.OpHasEdge, Edge: %sEdges[%d], With: true}", lowerFirst(e.Name), x.Index)
-		case strings.HasPrefix(f.Name, "has") && edges[normalized(f.Name[3:])] != nil:
-			x := edges[normalized(f.Name[3:])]
-			w.GoName, w.GoType = "Has"+x.GoName, "*bool"
-			w.Plan = fmt.Sprintf("{Op: orm.OpHasEdge, Edge: %sEdges[%d]}", lowerFirst(e.Name), x.Index)
+			q.Neighbors = append(q.Neighbors, gqlNeighbor{At: len(q.Where), Target: x.Target})
 		default:
-			for _, s := range whereSuffixes {
-				base, ok := strings.CutSuffix(f.Name, s.suffix)
-				c := fields[normalized(base)]
-				if !ok || c == nil {
-					continue
-				}
-				w.GoName = c.GoName + s.suffix
-				switch s.shape {
-				case '1':
-					w.GoType = "*" + g.filterType(c)
-				case 'n':
-					w.GoType = "[]" + g.filterType(c)
-				default:
-					w.GoType = "bool"
-				}
-				w.Plan = fmt.Sprintf("{Col: %q, Op: %s}", c.Col, s.op)
-				break
+			c := fields[src.Field]
+			op, known := whereOps[src.Op]
+			if c == nil || c.Hidden {
+				return fmt.Errorf("vx: graphql: %sWhereInput.%s filters on the field %q, which has no column of its own here", e.Name, f.Name, src.Field.Name)
 			}
-		}
-		if w.GoName == "" {
-			return fmt.Errorf("vx: graphql: %sWhereInput.%s: this kind of filter is not supported yet (it is neither a field of %s with a comparison, nor one of its edges)", e.Name, f.Name, e.Name)
+			if !known {
+				return fmt.Errorf("vx: graphql: %sWhereInput.%s: this kind of filter (%s) is not supported yet", e.Name, f.Name, src.Op)
+			}
+			w.GoName = c.GoName
+			if src.Op != "EQ" {
+				w.GoName += src.Op
+			}
+			switch op.shape {
+			case '1':
+				w.GoType = "*" + g.filterType(c)
+			case 'n':
+				w.GoType = "[]" + g.filterType(c)
+			default:
+				w.GoType = "bool"
+			}
+			w.Plan = fmt.Sprintf("{Col: %q, Op: %s}", c.Col, op.op)
 		}
 		if members[w.GoName] {
 			return fmt.Errorf("vx: graphql: %sWhereInput: two fields would be called %s", e.Name, w.GoName)
@@ -467,6 +608,15 @@ func (g *generator) filters() (map[string][]byte, error) {
 			w("\t%s, // %s\n", f.Plan, f.Name)
 		}
 		w("}\n\n")
+		if len(q.Neighbors) > 0 {
+			// After every plan exists: two inputs may filter through each
+			// other, which an initializer could not say.
+			w("func init() {\n")
+			for _, n := range q.Neighbors {
+				w("\t%sWhere[%d].Neighbor = %sWhere // %s\n", lowerFirst(e.Name), n.At, lowerFirst(n.Target.Name), q.Where[n.At].Name)
+			}
+			w("}\n\n")
+		}
 		w("// P returns the condition the input describes: none for a nil or an empty\n// input, and one that fails the query for an input that cannot be a condition\n// (an empty input nested in not, and, or; nesting deeper than orm.MaxWhereDepth).\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) P() %[2]s { return %[2]s(orm.Where(i, %[3]sWhere)) }\n\n", e.Name, e.pred(), lowerFirst(e.Name))
 	}
 	if inputs == 0 {

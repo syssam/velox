@@ -54,8 +54,8 @@ func (c *UserClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) er
 }
 
 // node is Get for an id of any type: see NodeTypes.
-func (c *UserClient) node(ctx context.Context, ex orm.Executor, id any) (Noder, error) {
-	v, ok := orm.IDAs[int](id)
+func (c *UserClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
+	v, ok := orm.IDAs[int](key)
 	if !ok {
 		return nil, orm.NotFound("User")
 	}
