@@ -65,6 +65,11 @@ type gapCase struct {
 	// under db/: for a case that builds either way and is right only when
 	// the generator wrote this.
 	generated map[string][]string
+	// extra are files written before generation, by path under the case's
+	// directory, with IMPORTPATH standing for its import path: a package of
+	// the application's own next to the schema, or inside the generated
+	// tree.
+	extra map[string]string
 }
 
 const gapSchemaHeader = `package schema
@@ -74,6 +79,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -82,6 +88,7 @@ import (
 )
 
 var (
+	_ *sql.Selector
 	_ = url.Parse
 	_ schema.Annotation
 	_ = edge.To
@@ -239,6 +246,61 @@ func stamp(m velox.Mutation) {
 var _ = stamp
 `,
 		want: generateFails, wantSubstr: "through as, a velox.Mutation is asserted to an interface with SetLabel"},
+	{name: "hook asserts through a generic helper that takes any",
+		schema: labelEntities("Thing") + `
+func as[T any](v any) (T, bool) {
+	t, ok := v.(T)
+	return t, ok
+}
+
+func stamp(m velox.Mutation) {
+	if s, ok := as[interface{ SetLabel(string) }](m); ok {
+		s.SetLabel("x")
+	}
+	if n, ok := as[int](41); ok { // nothing of a mutation
+		_ = n
+	}
+}
+
+var _ = stamp
+`,
+		want: generateFails, wantSubstr: "through as, a velox.Mutation is asserted to an interface with SetLabel"},
+	// The exemption is for the line it is on, or the next when it stands
+	// alone: at the end of a line it does not cover the line below.
+	{name: "an exemption at the end of a line is for that line",
+		schema: labelEntities("Thing") + `
+func stamp(m velox.Mutation) {
+	_, _ = m.(interface{ SetLabel(string) }) //vx:nocheck
+	_, _ = m.(interface{ SetOther(string) })
+}
+
+func other(m velox.Mutation) {
+	//vx:nocheckers is not the comment
+	_, _ = m.(interface{ SetThird(string) })
+}
+
+var _, _ = stamp, other
+`,
+		want: generateFails, wantSubstr: "SetOther"},
+	// An interface of the application's own that has a method of one of
+	// the subjects is not that subject.
+	{name: "an interface that only looks like a filter",
+		schema: labelEntities("Thing") + `
+type scoper interface{ WhereP(...func(*sql.Selector)) }
+
+type custom interface {
+	scoper
+	Extra()
+}
+
+func narrow(s scoper) bool {
+	_, ok := s.(custom)
+	return ok
+}
+
+var _ = narrow
+`,
+		want: builds},
 	// And where it cried wolf: the typed way first and the way by name
 	// after it is correct under both generators, once its author says so;
 	// a case of several types holds when one of them does.
@@ -353,7 +415,66 @@ func (Thing) Fields() []velox.Field {
 
 func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
-		want: generateFails, wantSubstr: "which this generator"},
+		want: generateFails, wantSubstr: "binds Thing.blob to Thing.BlobOrNil"},
+	// A bytes field that is not nillable: the schema has the scalar Bytes,
+	// which velox binds to a type of its gqlgen runtime and this generator
+	// leaves for the engine to bind. (Refusing every binding into velox's
+	// GraphQL packages, as a first fix did, refused every schema with a
+	// bytes field.)
+	{name: "a bytes field in a GraphQL schema", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field { return []velox.Field{field.String("label"), field.Bytes("blob")} }
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: builds, generated: map[string][]string{"../gql/velox.graphql": {"scalar Bytes\n"}}},
+	// The Go type of an enum field in a package of the application's own
+	// that lies under the generated tree: not this generator's to vouch for.
+	{name: "an enum whose Go type is in a package under the generated tree", graphql: true,
+		extra: map[string]string{
+			"db/kinds/kinds.go": "package kinds\n\ntype Kind string\n\nfunc (Kind) Values() []string { return []string{\"a\", \"b\"} }\n",
+			"schema/thing.go": `package schema
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+
+	"IMPORTPATH/db/kinds"
+)
+
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.Enum("kind").GoType(kinds.Kind("")).Default("a")}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`},
+		schema: labelEntities("Other"),
+		want:   builds},
+	// An edge called string on an entity that has no String method (it has
+	// one only with a sensitive field).
+	{name: "an edge called string", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Thing) Edges() []velox.Edge { return []velox.Edge{edge.To("string", Other.Type).Unique()} }
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+
+type Other struct{ velox.Schema }
+
+func (Other) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Other) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: builds},
 	{name: "an enum field called order_field", graphql: true,
 		schema: `
 type Thing struct{ velox.Schema }
@@ -534,6 +655,11 @@ func runGapCase(t *testing.T, c gapCase) (got outcome, output string) {
 
 	// vxgen runs from the scratch directory: the schema loader keeps its
 	// cache in the working directory.
+	for name, src := range c.extra {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(src, "IMPORTPATH", importPath)), 0o644))
+	}
 	gen := []string{"-schema", "./schema", "-target", "./db", "-package", importPath + "/db"}
 	if c.graphql {
 		gen = append(gen, "-graphql", "./gql/velox.graphql")

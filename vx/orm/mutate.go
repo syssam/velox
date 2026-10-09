@@ -699,8 +699,8 @@ func (m *MutCore) update(ctx context.Context, c *conn) (int, error) {
 	}
 	if len(spec.Fields.Set)+len(spec.Fields.Add)+len(spec.Fields.Clear)+len(spec.Edges.Add)+len(spec.Edges.Clear) == 0 {
 		// Nothing to write (an empty patch, a Keep and no more): no
-		// statement runs, and the count is of the rows the conditions
-		// match, as an UPDATE of them would have reported. Zero would say
+		// UPDATE runs, and the count is of the rows the conditions match
+		// (a SELECT COUNT), as an UPDATE of them would have reported. Zero would say
 		// that no row matched, which orm.One turns into ErrNotFound.
 		matched, cerr := (&QueryCore{M: m.M, Preds: m.Preds}).count(ctx, c)
 		return matched, wrapErr(cerr)

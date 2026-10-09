@@ -49,6 +49,10 @@ type fileEdits struct {
 	names map[string]string // import path -> the name the file already imports it under
 	// declared holds every name the file declares that is not a package.
 	declared map[string]bool
+	// reserved holds the names declared at package level by the package
+	// and by its tests in the same package: a _test.go file sees an import
+	// name of this file as a clash with its own declaration.
+	reserved map[string]bool
 	// rename maps the import paths of the old generated tree the file has
 	// to where the same package is in the new one, and moved says whether
 	// any differs.
@@ -207,7 +211,7 @@ func (f *fileEdits) ref(path, name string, pos token.Pos) string {
 			return true
 		}
 		// A name another file of the package declares at package level.
-		if f.pkg != nil && f.pkg.Scope().Lookup(local) != nil {
+		if f.reserved[local] || (f.pkg != nil && f.pkg.Scope().Lookup(local) != nil) {
 			return true
 		}
 		for p, n := range f.names {

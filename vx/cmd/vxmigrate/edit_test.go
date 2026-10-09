@@ -77,9 +77,11 @@ func TestReplaceKeepsWhatBelongsToTheNeighbors(t *testing.T) {
 }
 
 func TestEdgeOfSingular(t *testing.T) {
-	edges := map[string]bool{"Likes": true, "LikedPosts": true, "Tags": true, "Categories": true, "Children": true, "Owner": true}
+	edges := map[string]bool{"Likes": true, "LikedPosts": true, "Tags": true, "Categories": true, "CategoryTags": true, "Children": true, "Owner": true,
+		"Companies": true, "CompanyMembers": true, "Replies": true, "ReplyLikes": true, "Men": true, "Managers": true}
 	for singular, want := range map[string]string{
-		"Like": "Likes", "LikedPost": "LikedPosts", "Tag": "Tags", "Category": "Categories", "Child": "Children", "Zebra": "",
+		"Like": "Likes", "LikedPost": "LikedPosts", "Tag": "Tags", "Category": "Categories", "CategoryTag": "CategoryTags", "Child": "Children", "Zebra": "",
+		"Company": "Companies", "CompanyMember": "CompanyMembers", "Reply": "Replies", "ReplyLike": "ReplyLikes", "Man": "Men", "Manager": "Managers",
 	} {
 		if got := edgeOfSingular(singular, edges); got != want {
 			t.Errorf("%s: got %q, want %q", singular, got, want)

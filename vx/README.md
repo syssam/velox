@@ -135,8 +135,8 @@ err = db.User.DeleteByID(ctx, conn, id)
 - `orm.One(q.Exec(ctx))` is for an update that must reach its row and has
   no use for the row: `orm.ErrNotFound` when no row matched, without the
   read `SaveOne` makes. An update with nothing to write (a patch that
-  changed nothing) runs no statement and counts the rows its conditions
-  match, so the row that is there is still found.
+  changed nothing) runs no `UPDATE`: it counts the rows its conditions match
+  (one `SELECT COUNT`), so the row that is there is still found.
 - A time is stored without its monotonic clock reading and to the
   microsecond, and the entity a create returns holds it that way: a guard
   such as `Where(x.UpdatedAt.EQ(u.UpdatedAt))` matches the row it was read
@@ -385,14 +385,18 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
   types keeps what it learns.
 - A where input's nesting is limited (`orm.MaxWhereDepth`), counted through
   `has...With` as well as `not`, `and` and `or`.
+- `scalar Bytes`, which the schema has when an entity has a bytes field, is
+  left for the engine to bind, as `Time` is (velox binds it to a type of its
+  gqlgen runtime).
 - Not there yet, and refused at generation with a message that says so: an
   entity whose GraphQL type is renamed (`graphql.Type` on the entity),
   ordering by the number of neighbors on an edge, filters on the elements of
   a JSON array, and whatever else the schema would bind to Go this generator
   does not write (the interface of `graphql.InterfaceField`, the scalar of a
-  typed JSON field, nillable bytes). Every `@goModel` and `@goField(name:)`
-  of the schema that points into the generated tree is checked against what
-  was generated. An entity with no field a list could be ordered by is
+  typed JSON field, the accessor of a nillable bytes field). Every `@goModel`
+  that names a package this generator writes, and every `@goField(name:)` of
+  an entity's type, is checked against what was generated; a package of the
+  application's own under the same directory is not this check's business. An entity with no field a list could be ordered by is
   refused by the schema generator itself (an order enum without values):
   give it one, or leave it out of the schema. Mutation inputs are the application's own types: move them to
   a builder with `Set` or `Fill`. Loading edges by what a request selects is
@@ -420,12 +424,15 @@ too, so it can be done before moving.
 
 The check follows an assertion through another name for the same value
 (`any(m)`, an interface that embeds `velox.Mutation`) and through a generic
-helper (`as[T](m)`, judged where `T` is given). A case of several types is
-fine when one of them can hold. Code that tries the typed accessors first and
-goes by name when the assertion fails is correct under both generators, and
-only its author knows that it is that: mark the assertion with `//vx:nocheck`
-on its line or the line above. A schema package that does not type-check is
-an error, not a pass.
+helper (`as[T](m)`, whether its parameter is a `velox.Mutation` or `any`,
+judged where `T` is given). It reads these spellings; it is not a proof. A
+mutation put in a variable of type `any` first, or handed through two
+helpers, is not followed, and such an assertion still fails silently. A case
+of several types is fine when one of them can hold. Code that tries the typed
+accessors first and goes by name when the assertion fails is correct under
+both generators, and only its author knows that it is that: mark the
+assertion with `//vx:nocheck` at the end of its line, or alone on the line
+above. A schema package that does not type-check is an error, not a pass.
 
 A filter rule shared by many entities asks the filter whether the table has
 the column it filters on: `f.(interface{ HasColumn(string) bool })`, on
@@ -482,8 +489,9 @@ go run github.com/syssam/velox/vx/cmd/vxmigrate -generated example.com/app/velox
 ```
 
 It does not compile anything, so a large application is read in seconds. On
-one of 455 entities and 9,400 files it rewrote 88,600 references and left
-some 250 for a person, each a line of the report with the reason: queries
+one of 455 entities and 9,400 files it rewrote 90,400 references and left
+some 425 lines for a person, each with the reason (170 of them the warnings
+in the table below; the rest what it cannot rewrite): queries
 changed through `Modify`, the application's own plumbing around the client
 (a client in a context, its runtime configuration), cursors built by hand,
 and how the application opens its database. An edge
@@ -499,7 +507,7 @@ first:
 | Reported | Why |
 |---|---|
 | a value asserted to the query or mutation type of one entity | every entity's is `*orm.Query` and `*orm.Mutation` now: the assertion holds for all of them, or for none; test `Type()` |
-| `Or` of a list that may be empty | velox's matched every row, `orm.Or()` matches none |
+| `Or` or `Not` of a list that may be empty, or taken as a value | velox's matched every row, `orm.Or()` matches none |
 | `p, err := where.P()` | an input with no condition was an error and is no condition now |
 | `Limit` in the option of an eager load | it was over all neighbors read, and is for each parent now |
 | a method value (`b.SetName`, `c.User.Get`) whose receiver is not a variable assigned once, unless it is handed straight to a call from a variable | the function in its place evaluates the receiver when called |
@@ -511,11 +519,19 @@ first:
 | a deferred call that came to be wrapped (`defer q.ExecX(ctx)`) | it is put in a function so that it still runs later; its arguments are evaluated then |
 
 What it keeps without a word: `IsNotFound`, `IsNotSingular`,
-`IsConstraintError`, `IsValidationError` and `IsNotLoaded`, of the generated
-package or of the library, become the runtime's (velox's never hold for an
-error of the new code); an edge query is given the handle its entity was
-read on only when the entity's variable has one assignment and the handle's
-is not reassigned.
+`IsConstraintError`, `IsValidationError` and `IsNotLoaded`, and the values
+`ErrNotFound` and `ErrNotSingular`, of the generated package or of the
+library, become the runtime's (velox's never hold for an error of the new
+code). An edge query is given the handle its entity was read on only when
+the text settles it: the entity's variable is given its value in one place,
+before the query, nothing is written through it and `Unwrap` is not called
+on it, and the handle's variable is not given another value. Otherwise it
+gets the context's handle and a line in the report.
+
+What it does not see, and a person must: a query or mutation type of one
+entity given to a generic function as a type argument (`as[*UserMutation](m)`
+holds for every entity afterwards), and a method value whose receiver a
+function it was handed to keeps for later.
 
 Before moving, rewrite the hooks that assert a mutation to typed setters
 (see above); `vxgen` refuses them, and the rewritten form works with velox.

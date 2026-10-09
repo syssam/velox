@@ -339,9 +339,11 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 			return nil, fmt.Errorf("%w: it was made for another ordering", ErrBadCursor)
 		}
 		if string(c.V[i]) == "null" {
-			// The row's value was NULL, which a column that cannot be NULL
-			// never has: such a cursor was not made here.
-			if f := m.Field(k.Col); f != nil && (f.NotNull || f == m.id()) {
+			// The row's value was NULL. An id never is. Any other column
+			// may be, whatever the schema says of it: a table made by
+			// something else can hold NULL where this schema would have
+			// written a zero value, and its rows are paged through too.
+			if m.Field(k.Col) == m.id() {
 				return nil, ErrBadCursor
 			}
 			continue

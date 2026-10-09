@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+
 	"go/ast"
 	"go/types"
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/go-openapi/inflect"
 )
 
 // schema is what the generated code says of the entities: read from its
@@ -94,11 +97,29 @@ func singulars(p *program, root string, e *entityInfo) map[string]string {
 	return out
 }
 
-// edgeOfSingular returns the edge whose name in AddTagIDs is singular: the
-// one that shares the longest start with it (Tag and Tags, Category and
-// Categories, Child and Children), and of several that share as much, the
-// one with the least after it (Like is Likes, not LikedPosts).
+// singularRules are the rules velox's generator makes Tag of Tags with (the
+// default set of go-openapi/inflect).
+var singularRules = inflect.NewDefaultRuleset()
+
+// edgeOfSingular returns the edge whose name in AddTagIDs is singular.
+//
+// By the rule that made the name, first: Category is the singular of
+// Categories and not of CategoryTags, although it shares more letters with
+// the second. For a name the rule does not give back, the edge that shares
+// the longest start with it (Child and Children), and of several that share
+// as much, the one with the least after it.
 func edgeOfSingular(singular string, edges map[string]bool) string {
+	exact := ""
+	for edge := range edges {
+		// In lower case: the rules for irregular words (men, children)
+		// are written that way.
+		if strings.EqualFold(singularRules.Singularize(strings.ToLower(edge)), singular) && (exact == "" || edge < exact) {
+			exact = edge
+		}
+	}
+	if exact != "" {
+		return exact
+	}
 	best, shared := "", 0
 	for edge := range edges {
 		n := 0

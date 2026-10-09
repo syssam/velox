@@ -105,7 +105,7 @@ func run(args []string, stderr io.Writer) error {
 	done := map[string]int{}
 	var notes []string
 	changed, failed := 0, 0
-	rewrite := func(files []*ast.File, info *types.Info, pkg *types.Package) error {
+	rewrite := func(files []*ast.File, info *types.Info, pkg *types.Package, reserved map[string]bool) error {
 		for _, file := range files {
 			if ast.IsGenerated(file) {
 				continue
@@ -114,6 +114,7 @@ func run(args []string, stderr io.Writer) error {
 			if err != nil {
 				return err
 			}
+			fe.reserved = reserved
 			r := &rewriter{fileEdits: fe, s: s, lib: *lib, done: done, sets: map[*ast.CallExpr]bool{}, made: map[*ast.CallExpr]bool{}, wrapped: map[*ast.CallExpr]bool{}}
 			if k := p.pkgs[*lib]; k != nil && k.types != nil {
 				r.libScope = k.types.Scope()
@@ -139,11 +140,27 @@ func run(args []string, stderr io.Writer) error {
 		return nil
 	}
 	for _, k := range p.own {
-		if err := rewrite(k.files, k.info, k.types); err != nil {
+		// The package-level names of the package and of its tests in the
+		// same package.
+		reserved := map[string]bool{}
+		scopes := []*types.Package{k.types}
+		for _, t := range k.tests {
+			if t.types != nil && k.types != nil && t.types.Name() == k.types.Name() {
+				scopes = append(scopes, t.types)
+			}
+		}
+		for _, tp := range scopes {
+			if tp != nil {
+				for _, name := range tp.Scope().Names() {
+					reserved[name] = true
+				}
+			}
+		}
+		if err := rewrite(k.files, k.info, k.types, reserved); err != nil {
 			return err
 		}
 		for _, t := range k.tests {
-			if err := rewrite(t.files, t.info, t.types); err != nil {
+			if err := rewrite(t.files, t.info, t.types, reserved); err != nil {
 				return err
 			}
 		}

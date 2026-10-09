@@ -181,7 +181,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 	}
 	want := map[string]string{} // "file:line" -> text
 	sources, err := filepath.Glob("testdata/notes/*.go")
-	if err != nil || len(sources) != 2 {
+	if err != nil || len(sources) != 3 {
 		t.Fatal(sources, err)
 	}
 	for _, src := range sources {
@@ -268,7 +268,19 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"cond: predicate.User(orm.Raw(func(s *sql.Selector) {",
 		`"none": predicate.User{}`,
 		// The id of an entity given by its address.
-		"Set(post.Title.Set(title), post.Author.Set(author.ID)).Save(ctx)",
+		"Set(postpkg.Title.Set(title), postpkg.Author.Set(author.ID)).Save(ctx)",
+		// (postpkg: the package's tests declare a name post.)
+		// The values of the errors.
+		"return errors.Is(err, orm.ErrNotFound) || errors.Is(err, orm.ErrNotSingular)",
+		// A last order that is nil is no order; an order written out.
+		"return db.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) // note: more than one order",
+		"OrderBy((&entity.PostOrder{Field: f}).Term()).Paginate(",
+		// Unwrap as a statement.
+		"_ = u if err := tx.Commit(); err != nil {",
+		// The two results of P, returned.
+		"return where.P(), error(nil) //",
+		// Predicates in a literal behind a pointer.
+		`return []*rule{{name: "raw", cond: predicate.User(orm.Raw(func(s *sql.Selector) { s.Where(sql.EQ("name", "y")) }))}, {name: "none", cond: predicate.User{}}}`,
 		// A column's name where no rule rewrites the call around it.
 		"s.OrderBy(sql.Asc(user.ColumnName))",
 		// Likes, not LikedPosts.
@@ -281,13 +293,14 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		}
 	}
 	// An entity whose handle the text does not settle is not given one.
-	for _, text := range []string{"u.QueryPosts(tx)", "u.QueryPosts(c)", "v.QueryPosts(tx)", "u.QueryPosts(a)", "u.QueryPosts(b)"} {
+	for _, text := range []string{"u.QueryPosts(tx)", "u.QueryPosts(c)", "v.QueryPosts(tx)", "u.QueryPosts(a)", "u.QueryPosts(b)",
+		"prev.QueryPosts(c)", "us[0].QueryPosts(c)", "us[0].QueryPosts(other)", "u.QueryPosts(other)"} {
 		if strings.Contains(flat, text) {
 			t.Errorf("the migrated file contains %q: a handle the text does not settle", text)
 		}
 	}
-	if n := strings.Count(flat, ".QueryPosts(orm.ExecutorFrom(ctx))"); n != 3 {
-		t.Errorf("%d edge queries were given the context's handle, want 3", n)
+	if n := strings.Count(flat, ".QueryPosts(orm.ExecutorFrom(ctx))"); n != 8 {
+		t.Errorf("%d edge queries were given the context's handle, want 8", n)
 	}
 	if t.Failed() {
 		t.Logf("migrated notes.go:\n%s", migrated)

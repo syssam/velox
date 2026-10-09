@@ -154,7 +154,6 @@ func (r *rewriter) run() {
 			case *ast.ReturnStmt:
 				r.results(top, stack)
 			case *ast.AssignStmt:
-				r.whereInput(top)
 				if len(top.Lhs) == len(top.Rhs) {
 					for i, rhs := range top.Rhs {
 						r.into(rhs, r.info.TypeOf(top.Lhs[i]))
@@ -168,6 +167,18 @@ func (r *rewriter) run() {
 				}
 			case *ast.CompositeLit:
 				r.elements(top)
+			case *ast.TypeAssertExpr:
+				if top.Type != nil {
+					r.assertion(top.Type)
+				}
+			case *ast.TypeSwitchStmt:
+				for _, c := range top.Body.List {
+					if clause, ok := c.(*ast.CaseClause); ok {
+						for _, e := range clause.List {
+							r.assertion(e)
+						}
+					}
+				}
 			case *ast.SwitchStmt:
 				if top.Tag != nil && r.predicateOf(r.info.TypeOf(top.Tag)) != "" {
 					r.note(top.Pos(), "a switch on a predicate: it is data now and is not compared; orm.P(p).IsZero() says whether it is no condition")
@@ -294,14 +305,6 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			r.note(sel.Pos(), "the type %s has no counterpart", name)
 			return
 		}
-		if asserted(sel, stack) {
-			switch kind {
-			case "Mutation":
-				r.note(sel.Pos(), "a value is asserted to the mutation type of %s: every entity's mutation is *orm.Mutation now, so this holds for all of them; test m.Type() == %q as well", ent.name, ent.name)
-			case "Query":
-				r.note(sel.Pos(), "a value is asserted to the query type of %s: an interceptor or a rule is handed *orm.Query whatever the entity, so this never holds there; test q.Type() == %q", ent.name, ent.name)
-			}
-		}
 		switch kind {
 		case "Create", "CreateBulk", "Update", "Delete", "Query":
 			r.replace(sel.Pos(), sel.End(), r.entity(sel.Pos())+"."+ent.name+kind)
@@ -325,9 +328,6 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 	case "entity":
 		if _, ok := obj.(*types.TypeName); ok {
 			if ent, kind := r.s.kindOf(name); ent != nil && kind == "Querier" {
-				if asserted(sel, stack) {
-					r.note(sel.Pos(), "a value is asserted to the query type of %s: an interceptor or a rule is handed *orm.Query whatever the entity, so this never holds there; test q.Type() == %q", ent.name, ent.name)
-				}
 				r.replace(sel.Pos(), sel.End(), "*"+r.entity(sel.Pos())+"."+ent.name+"Query")
 				r.count("type Querier")
 			} else if ent != nil && kind == "PaginateOption" {
@@ -442,7 +442,9 @@ func (r *rewriter) failure(sel *ast.SelectorExpr, obj types.Object) bool {
 	name := obj.Name()
 	_, isType := obj.(*types.TypeName)
 	switch {
-	case !isType && (name == "IsNotFound" || name == "IsConstraintError" || name == "IsNotLoaded" || name == "IsNotSingular" || name == "IsValidationError"):
+	case !isType && (name == "IsNotFound" || name == "IsConstraintError" || name == "IsNotLoaded" || name == "IsNotSingular" || name == "IsValidationError" ||
+		name == "ErrNotFound" || name == "ErrNotSingular"):
+		// The values too: errors.Is(err, velox.ErrNotFound).
 		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
 		r.count(name)
 	case isType && (name == "ValidationError" || name == "ConstraintError" || name == "NotLoadedError"):
@@ -490,21 +492,35 @@ func (r *rewriter) validationName(obj types.Object) bool {
 	return false
 }
 
-// asserted reports whether the type n names, or a pointer to it, is what a
-// type assertion or a case of a type switch asserts.
-func asserted(n ast.Expr, stack []ast.Node) bool {
-	e, up := ast.Node(n), 1
-	if star, ok := parent(stack, 1).(*ast.StarExpr); ok {
-		e, up = star, 2
+// assertion reports a type assertion, or a case of a type switch, to the
+// query or mutation type of one entity. It goes by the type asserted, not
+// by how it is written: through an alias it is the same assertion.
+func (r *rewriter) assertion(e ast.Expr) {
+	t := r.info.TypeOf(e)
+	if t == nil {
+		return
 	}
-	switch p := parent(stack, up).(type) {
-	case *ast.TypeAssertExpr:
-		return ast.Node(p.Type) == e
-	case *ast.CaseClause:
-		_, ok := parent(stack, up+2).(*ast.TypeSwitchStmt)
-		return ok
+	if ptr, ok := types.Unalias(t).(*types.Pointer); ok {
+		t = ptr.Elem()
 	}
-	return false
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil {
+		return
+	}
+	path := named.Obj().Pkg().Path()
+	if path != r.s.root && !strings.HasPrefix(path, r.s.root+"/") {
+		return
+	}
+	ent, kind := r.s.kindOf(named.Obj().Name())
+	if ent == nil {
+		return
+	}
+	switch where := r.s.where(path); {
+	case where == "client/<entity>" && kind == "Mutation":
+		r.note(e.Pos(), "a value is asserted to the mutation type of %s: every entity's mutation is *orm.Mutation now, so this holds for all of them; test m.Type() == %q as well", ent.name, ent.name)
+	case (where == "query" && kind == "Query") || (where == "entity" && kind == "Querier"):
+		r.note(e.Pos(), "a value is asserted to the query type of %s: an interceptor or a rule is handed *orm.Query whatever the entity, so this never holds there; test q.Type() == %q", ent.name, ent.name)
+	}
 }
 
 // emptyList reports an Or (or a Not) of a list that may be empty: velox's
@@ -534,7 +550,11 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 			return
 		}
 		switch name {
-		case "And", "Or", "Not":
+		case "Or", "Not":
+			// As a value: whoever calls it may do so with nothing.
+			r.note(sel.Pos(), "%s as a value: called with no predicate velox's matched every row, this one matches none", name)
+			return
+		case "And":
 			return
 		}
 		r.note(sel.Pos(), "%s.%s: rewrite by hand", strings.ToLower(e.name), name)
@@ -709,7 +729,11 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 	case t.where == "entity" && t.kind == "Entity":
 		switch {
 		case name == "Unwrap":
-			r.replace(call.Pos(), call.End(), r.render(sel.X))
+			text := r.render(sel.X)
+			if _, alone := parent(stack, 1).(*ast.ExprStmt); alone {
+				text = "_ = " + text // a statement of its own: nothing is left to do
+			}
+			r.replace(call.Pos(), call.End(), text)
 			r.count("Unwrap")
 		case strings.HasPrefix(name, "Query") && t.ent.edges[strings.TrimPrefix(name, "Query")]:
 			// An entity remembered what it was read on; it is told now.
@@ -752,6 +776,8 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 				r.note(call.Pos(), "IsValid of %s: rewrite by hand", recv)
 			}
 		}
+	case t.where == "filter" && name == "P":
+		r.whereInput(call, stack)
 	case t.where == "filter" && name == "Filter":
 		r.note(call.Pos(), "a where input is turned into a predicate with P(): q.Where(w.P())")
 	case obj.Pkg().Path() == r.lib+"/dialect/sql" && strings.HasSuffix(t.kind, "Field"):
@@ -807,10 +833,10 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			return
 		}
 		switch name {
-		case "Or":
+		case "Or", "Not":
 			r.emptyList(call, name)
 			return
-		case "And", "Not":
+		case "And":
 			return
 		}
 		if f, ok := strings.CutSuffix(name, "Values"); ok && e.fields[f] {
@@ -849,7 +875,7 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 		if strings.HasPrefix(name, "With") && (strings.HasSuffix(name, "Order") || strings.HasSuffix(name, "Filter")) {
 			if c, ok := parent(stack, 1).(*ast.CallExpr); ok {
 				if s, ok := c.Fun.(*ast.SelectorExpr); ok && s.Sel.Name == "Paginate" {
-					if _, inline := r.inlineOption(call, false); inline {
+					if _, _, inline := r.inlineOption(call, false); inline {
 						return // Paginate puts it on the query
 					}
 				}
@@ -1121,10 +1147,64 @@ func (r *rewriter) writes(obj types.Object, stack []ast.Node) (n int, from ast.E
 		id, ok := e.(*ast.Ident)
 		return ok && (r.info.Defs[id] == obj || r.info.Uses[id] == obj)
 	}
+	// reached reports whether e is reached through the variable: u.Edges.X,
+	// us[0], *u.
+	reached := func(e ast.Expr) bool {
+		for depth := 0; ; depth++ {
+			switch x := e.(type) {
+			case *ast.ParenExpr:
+				e = x.X
+			case *ast.SelectorExpr:
+				e = x.X
+			case *ast.IndexExpr:
+				e = x.X
+			case *ast.StarExpr:
+				e = x.X
+			case *ast.SliceExpr:
+				e = x.X
+			default:
+				return depth > 0 && is(e)
+			}
+		}
+	}
+	// A parameter has the value its caller gave it: that is one.
+	for _, node := range stack {
+		var ft *ast.FuncType
+		var recv *ast.FieldList
+		switch fn := node.(type) {
+		case *ast.FuncDecl:
+			ft, recv = fn.Type, fn.Recv
+		case *ast.FuncLit:
+			ft = fn.Type
+		default:
+			continue
+		}
+		for _, list := range []*ast.FieldList{recv, ft.Params, ft.Results} {
+			if list == nil {
+				continue
+			}
+			for _, f := range list.List {
+				for _, name := range f.Names {
+					if r.info.Defs[name] == obj {
+						n++
+					}
+				}
+			}
+		}
+	}
 	ast.Inspect(body, func(node ast.Node) bool {
 		switch st := node.(type) {
+		case *ast.CallExpr:
+			// An entity's Unwrap changes the entity it is called on.
+			if m, ok := st.Fun.(*ast.SelectorExpr); ok && m.Sel.Name == "Unwrap" && (is(m.X) || reached(m.X)) {
+				n += 2
+			}
 		case *ast.AssignStmt:
 			for j, lhs := range st.Lhs {
+				if reached(lhs) {
+					n += 2 // an element or a field of it: no longer what it was read as
+					continue
+				}
 				if !is(lhs) {
 					continue
 				}
@@ -1174,8 +1254,9 @@ func (r *rewriter) writes(obj types.Object, stack []ast.Node) (n int, from ast.E
 	return n, from
 }
 
-// unchanged reports whether the variable e starts with is given a value at
-// most once in the function around (a parameter never, a local once). What
+// unchanged reports whether the variable e starts with is given a value
+// once in the function around: a parameter by its caller, a local where it
+// is declared or first assigned. What
 // is not a variable of the function (a field of the receiver, a variable of
 // the package) is taken to hold what it held.
 func (r *rewriter) unchanged(e ast.Expr, stack []ast.Node) bool {
@@ -1253,8 +1334,11 @@ func (r *rewriter) handleOf(e ast.Expr, at token.Pos, stack []ast.Node, depth in
 		if !ok || obj.IsField() || obj.Parent() == r.pkg.Scope() {
 			return "", false
 		}
+		// ... and that place is before this one: an assignment further
+		// down reaches here only around a loop, after the value that was
+		// used the first time.
 		n, from := r.writes(obj, stack)
-		if n != 1 || from == nil {
+		if n != 1 || from == nil || from.End() > at {
 			return "", false
 		}
 		return r.handleOf(from, at, stack, depth+1)
@@ -1691,14 +1775,16 @@ func (r *rewriter) paginate(call *ast.CallExpr, sel *ast.SelectorExpr) {
 	inline, repeated := 0, false
 	for i, opt := range call.Args[5:] {
 		if c, ok := opt.(*ast.CallExpr); ok {
-			if text, ok := r.inlineOption(c, true); ok {
+			if text, kind, ok := r.inlineOption(c, true); ok {
 				inline++
-				switch {
-				case strings.HasPrefix(text, ".OrderBy("):
-					repeated = repeated || order != ""
+				switch kind {
+				case "order":
+					// The last one is the one used, also when it is nil:
+					// no order then, whatever came before.
+					repeated = repeated || orderAt >= 0
 					order, orderAt = text, i
-				case text != "":
-					repeated = repeated || filter != ""
+				case "filter":
+					repeated = repeated || filterAt >= 0
 					filter, filterAt = text, i
 				}
 				continue
@@ -1738,14 +1824,14 @@ func (r *rewriter) paginate(call *ast.CallExpr, sel *ast.SelectorExpr) {
 // inlineOption says whether c is an option Paginate can put on the query
 // itself, entity.WithUserOrder(o) or entity.WithUserFilter(w.Filter), and
 // returns the calls that do (taking the arguments' text when take is set).
-func (r *rewriter) inlineOption(c *ast.CallExpr, take bool) (string, bool) {
-	fn, ok := c.Fun.(*ast.SelectorExpr)
-	if !ok || len(c.Args) != 1 || !strings.HasPrefix(fn.Sel.Name, "With") {
-		return "", false
+func (r *rewriter) inlineOption(c *ast.CallExpr, take bool) (text, kind string, ok bool) {
+	fn, isSel := c.Fun.(*ast.SelectorExpr)
+	if !isSel || len(c.Args) != 1 || !strings.HasPrefix(fn.Sel.Name, "With") {
+		return "", "", false
 	}
 	t, known := r.targetOf(r.info.Uses[fn.Sel], "")
 	if !known || t.where != "entity" {
-		return "", false
+		return "", "", false
 	}
 	sig, _ := r.info.TypeOf(c.Fun).(*types.Signature)
 	switch {
@@ -1753,26 +1839,38 @@ func (r *rewriter) inlineOption(c *ast.CallExpr, take bool) (string, bool) {
 		// The form that takes a list of orders returns an error too, and
 		// is not an argument of Paginate.
 		if sig == nil || sig.Results().Len() != 1 {
-			return "", false
+			return "", "", false
 		}
 		if id, isNil := c.Args[0].(*ast.Ident); isNil && id.Name == "nil" && r.info.Types[c.Args[0]].IsNil() {
-			return "", true // no order: the default
+			return "", "order", true // no order: the default
 		}
 		if !take {
-			return "", true
+			return "", "order", true
 		}
-		return ".OrderBy(" + r.render(c.Args[0]) + ".Term())", true
+		return ".OrderBy(" + r.operand(c.Args[0]) + ".Term())", "order", true
 	case strings.HasSuffix(fn.Sel.Name, "Filter"):
-		w, ok := c.Args[0].(*ast.SelectorExpr)
-		if !ok || w.Sel.Name != "Filter" {
-			return "", false
+		w, isMethod := c.Args[0].(*ast.SelectorExpr)
+		if !isMethod || w.Sel.Name != "Filter" {
+			return "", "", false
 		}
 		if !take {
-			return "", true
+			return "", "filter", true
 		}
-		return ".Where(" + r.render(w.X) + ".P())", true
+		return ".Where(" + r.operand(w.X) + ".P())", "filter", true
 	}
-	return "", false
+	return "", "", false
+}
+
+// operand returns the text of e where a method is called on it: in
+// parentheses unless it is a name, a selection, a call or an index, so that
+// &entity.PostOrder{...} is (&entity.PostOrder{...}).Term().
+func (r *rewriter) operand(e ast.Expr) string {
+	text := r.render(e)
+	switch e.(type) {
+	case *ast.Ident, *ast.SelectorExpr, *ast.CallExpr, *ast.IndexExpr, *ast.ParenExpr:
+		return text
+	}
+	return "(" + text + ")"
 }
 
 // option rewrites entity.WithUserOrder(o) and entity.WithUserFilter(f) where
@@ -1792,9 +1890,9 @@ func (r *rewriter) option(call *ast.CallExpr, name string, obj types.Object, sta
 	}
 	// The argument is written inside the function: its parameter and its
 	// variables take names the argument does not use.
-	arg := r.render(call.Args[0])
+	arg := r.operand(call.Args[0])
 	if w, ok := call.Args[0].(*ast.SelectorExpr); ok && w.Sel.Name == "Filter" && !strings.HasSuffix(name, "Order") {
-		arg = strings.TrimSuffix(arg, ".Filter")
+		arg = r.operand(w.X)
 	}
 	q, o, p, e := fresh("q", arg), fresh("o", arg), fresh("p", arg), fresh("err", arg)
 	head := "func(" + q + " *" + r.entity(call.Pos()) + "." + ent.name + "Query) {"
@@ -2120,23 +2218,13 @@ func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 	r.count("zero predicate")
 }
 
-// whereInput keeps `p, err := where.P()` compiling: P returned an error for
-// an input that cannot be a condition, and returns a predicate that fails
-// the query now.
-func (r *rewriter) whereInput(as *ast.AssignStmt) {
-	if len(as.Lhs) != 2 || len(as.Rhs) != 1 {
-		return
-	}
-	call, ok := as.Rhs[0].(*ast.CallExpr)
-	if !ok {
-		return
-	}
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	selection := r.info.Selections[sel]
-	if !ok || selection == nil || sel.Sel.Name != "P" {
-		return
-	}
-	if t, ok := r.targetOf(selection.Obj(), declaring(selection)); !ok || t.where != "filter" {
+// whereInput keeps a call of P compiling where its two results went: P
+// returned an error for an input that cannot be a condition, and returns a
+// predicate that fails the query now. A call with two results stands in an
+// assignment, a declaration, a return or as the only argument of a call,
+// and in each of them "w.P(), error(nil)" takes its place.
+func (r *rewriter) whereInput(call *ast.CallExpr, stack []ast.Node) {
+	if _, alone := parent(stack, 1).(*ast.ExprStmt); alone {
 		return
 	}
 	r.insert(call.End(), ", error(nil)")
@@ -2153,7 +2241,15 @@ func (r *rewriter) elements(lit *ast.CompositeLit) {
 		}
 		return e
 	}
-	switch t := types.Unalias(r.info.TypeOf(lit)).Underlying().(type) {
+	lt := r.info.TypeOf(lit)
+	if lt == nil {
+		return
+	}
+	// []*rule{{cond: f}}: the literal with its type left out is a *rule.
+	if ptr, ok := types.Unalias(lt).Underlying().(*types.Pointer); ok {
+		lt = ptr.Elem()
+	}
+	switch t := types.Unalias(lt).Underlying().(type) {
 	case *types.Slice:
 		for _, e := range lit.Elts {
 			r.into(value(e), t.Elem())

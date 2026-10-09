@@ -130,6 +130,7 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 		enumModel[g.cfg.Package+"/entity."+e.Name+"OrderField"] = g.cfg.Package + "/" + e.Pkg + "." + n.orderType
 	}
 	const relay = "github.com/syssam/velox/contrib/graphql/gqlrelay."
+	const bytesScalar = "github.com/syssam/velox/contrib/graphql/gqlgenrelay.Bytes"
 	for name, src := range files {
 		src = goModelRx.ReplaceAllStringFunc(src, func(m string) string {
 			model := goModelRx.FindStringSubmatch(m)[1]
@@ -138,11 +139,18 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 				model = ormPath + ".Cursor"
 			case model == relay+"PageInfo":
 				model = ormPath + ".PageInfo"
+			case model == bytesScalar:
+				// velox binds the scalar of a bytes field to a type of its
+				// gqlgen runtime. Which type marshals []byte is the
+				// engine's business here: the scalar is left unbound, as
+				// Time is.
+				return ""
 			case enumModel[model] != "":
 				model = enumModel[model]
 			}
 			return `@goModel(model: "` + model + `")`
 		})
+		src = strings.Replace(src, "scalar Bytes \n", "scalar Bytes\n", 1)
 		src = strings.Replace(src, "enum OrderDirection {", `enum OrderDirection @goModel(model: "`+ormPath+`.OrderDirection") {`, 1)
 		if m := veloxRuntimeRx.FindStringSubmatch(src); m != nil {
 			return nil, fmt.Errorf("vx: graphql schema: %s binds a type of velox's GraphQL runtime, %s, which this generator has no counterpart of yet", name, m[1])
@@ -282,6 +290,13 @@ func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[stri
 			}
 		}
 	}
+	// The packages this generator writes. A package of the application's
+	// own under the same directory (the Go type of an enum field) is none
+	// of its business.
+	written := map[string]bool{pkg: true, pkg + "/entity": true, pkg + "/filter": true, pkg + "/predicate": true}
+	for _, e := range g.ents {
+		written[pkg+"/"+e.Pkg] = true
+	}
 	names := make([]string, 0, len(defs))
 	for name := range defs {
 		names = append(names, name)
@@ -289,7 +304,7 @@ func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[stri
 	sort.Strings(names)
 	for _, name := range names {
 		d := defs[name]
-		if path, typ := goModel(d); path == pkg || strings.HasPrefix(path, pkg+"/") {
+		if path, typ := goModel(d); written[path] {
 			if !known[path+"."+typ] {
 				return fmt.Errorf("vx: graphql: the schema binds %s to %s.%s, which this generator does not write: what it comes from in the schema package is not supported yet", d.Name, path, typ)
 			}
@@ -339,7 +354,12 @@ func (g *generator) gqlEdges(e *ent, q *gqlEnt, d *ast.Definition, typeOf map[st
 	for _, x := range e.Edges {
 		edges[normalized(x.E.Name)] = x
 	}
-	members := map[string]bool{"Edges": true, "IsNode": true, "String": true}
+	members := map[string]bool{"Edges": true, "IsNode": true}
+	for _, f := range e.Fields {
+		if f.F.Sensitive() {
+			members["String"] = true // the entity has the method then
+		}
+	}
 	for _, f := range e.Fields {
 		members[f.GoName] = true
 	}

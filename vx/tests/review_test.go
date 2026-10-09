@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -71,16 +72,46 @@ func TestTimesAreComparedAsStored(t *testing.T) {
 	_, err = client.User.UpdateByID(db, u.ID).Where(user.UpdatedAt.EQ(u.UpdatedAt)).Set(user.Age.Add(1)).SaveOne(ctx)
 	require.NoError(t, err)
 
-	now := time.Now() // carries a monotonic reading
-	p, err := client.Post.Create(db).Set(post.Title.Set("t"), post.Author.Set(u.ID), post.CreatedAt.Set(now)).Save(ctx)
-	require.NoError(t, err)
-	for name, cond := range map[string]predicate.Post{
-		"EQ": post.CreatedAt.EQ(now), "GTE": post.CreatedAt.GTE(now), "LTE": post.CreatedAt.LTE(now), "In": post.CreatedAt.In(now),
-	} {
-		n, err := client.Post.Query(db).Where(post.ID.EQ(p.ID), cond).Count(ctx)
-		require.NoError(t, err, name)
-		assert.Equal(t, 1, n, name)
+	// With a monotonic reading, and with digits below the microsecond
+	// (which a clock may or may not give: darwin's does not, linux's does).
+	// The first version of this test used time.Now() alone, passed on the
+	// machine it was written on, and the row was not found by its own time
+	// wherever the clock had nanoseconds.
+	for i, at := range []time.Time{time.Now(), time.Now().Add(789 * time.Nanosecond), time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)} {
+		p, err := client.Post.Create(db).Set(post.Title.Set("t"), post.Author.Set(u.ID), post.CreatedAt.Set(at)).Save(ctx)
+		require.NoError(t, err)
+		for name, cond := range map[string]predicate.Post{
+			"EQ": post.CreatedAt.EQ(at), "GTE": post.CreatedAt.GTE(at), "LTE": post.CreatedAt.LTE(at), "In": post.CreatedAt.In(at),
+		} {
+			n, err := client.Post.Query(db).Where(post.ID.EQ(p.ID), cond).Count(ctx)
+			require.NoError(t, err, name)
+			assert.Equal(t, 1, n, "time %d, %s", i, name)
+		}
+		for name, cond := range map[string]predicate.Post{"NEQ": post.CreatedAt.NEQ(at), "GT": post.CreatedAt.GT(at), "LT": post.CreatedAt.LT(at)} {
+			n, err := client.Post.Query(db).Where(post.ID.EQ(p.ID), cond).Count(ctx)
+			require.NoError(t, err, name)
+			assert.Equal(t, 0, n, "time %d, %s", i, name)
+		}
+		// The guard of an optimistic lock, with the time that was given.
+		_, err = client.Post.UpdateByID(db, p.ID).Where(post.CreatedAt.EQ(at)).Set(post.Title.Set("u")).SaveOne(ctx)
+		require.NoError(t, err, "time %d", i)
 	}
+}
+
+// An interceptor that returns nothing: no rows, and a count of none.
+func TestInterceptorReturningNil(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	newUser(t, db, "ann", 30)
+	db.Intercept(velox.InterceptFunc(func(velox.Querier) velox.Querier {
+		return velox.QuerierFunc(func(context.Context, velox.Query) (velox.Value, error) { return nil, nil })
+	}))
+	users, err := client.User.Query(db).All(ctx)
+	require.NoError(t, err)
+	require.Empty(t, users)
+	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n)
 }
 
 // An order input that names something the entity is not ordered by is an
@@ -270,4 +301,17 @@ func TestCreateBulk_BuildersCompletedAfterwards(t *testing.T) {
 	require.Len(t, users, 2)
 	require.Equal(t, 41, users[0].Age)
 	require.Equal(t, 42, users[1].Age)
+}
+
+// A page of a locking query locks its rows: the page is read by a query
+// built from the caller's, which used to leave the lock behind.
+func TestPaginate_KeepsTheLock(t *testing.T) {
+	mdb, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mdb.Close() })
+	db := orm.OpenDB("postgres", mdb)
+	mock.ExpectQuery(`FROM "users".*FOR UPDATE`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	_, err = client.User.Query(db).ForUpdate().Paginate(orm.WithoutTotal(context.Background()), nil, intp(2), nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
 }

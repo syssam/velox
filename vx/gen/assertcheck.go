@@ -109,34 +109,6 @@ func checkAssertions(schemaPkg string) error {
 			return fmt.Errorf("vx: reading the schema's source: %s", e)
 		}
 	}
-	// The interfaces themselves, to recognize an operand that is one of
-	// them under another name (an interface that embeds velox.Mutation).
-	subjects := map[string]*types.Interface{}
-	visited := map[*types.Package]bool{}
-	var visit func(tp *types.Package)
-	visit = func(tp *types.Package) {
-		if tp == nil || visited[tp] {
-			return
-		}
-		visited[tp] = true
-		for name := range assertSubjects {
-			k := strings.LastIndex(name, ".")
-			if tp.Path() == name[:k] {
-				if obj := tp.Scope().Lookup(name[k+1:]); obj != nil {
-					if iface, ok := obj.Type().Underlying().(*types.Interface); ok {
-						subjects[name] = iface
-					}
-				}
-			}
-		}
-		for _, dep := range tp.Imports() {
-			visit(dep)
-		}
-	}
-	for _, p := range pkgs {
-		visit(p.Types)
-	}
-
 	var found []string
 	// holds reports whether a value this generator passes for the subject
 	// can be asserted to t, and what t wants that it lacks.
@@ -153,10 +125,14 @@ func checkAssertions(schemaPkg string) error {
 	}
 	// Assertions to a type parameter are judged where the function is
 	// instantiated: as[interface{ SetName(string) }](m).
+	// With arg >= 0 the operand is the function's parameter of that index,
+	// of a type that says nothing (any): what is passed for it at each call
+	// says whether a mutation is being asserted.
 	type generic struct {
 		fn      *types.Func
 		param   int
 		subject string
+		arg     int
 	}
 	var generics []generic
 	for _, p := range pkgs {
@@ -164,37 +140,7 @@ func checkAssertions(schemaPkg string) error {
 			continue
 		}
 		info := p.TypesInfo
-		// subjectOf names the interface an operand is, looking through a
-		// conversion to an interface (any(m)) and at interfaces that embed
-		// one of the subjects.
-		var subjectOf func(e ast.Expr) string
-		subjectOf = func(e ast.Expr) string {
-			e = ast.Unparen(e)
-			if call, ok := e.(*ast.CallExpr); ok && len(call.Args) == 1 {
-				if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
-					return subjectOf(call.Args[0])
-				}
-			}
-			t := info.TypeOf(e)
-			if t == nil {
-				return ""
-			}
-			if named, ok := types.Unalias(t).(*types.Named); ok && named.Obj().Pkg() != nil {
-				if name := named.Obj().Pkg().Path() + "." + named.Obj().Name(); assertSubjects[name] != nil {
-					return name
-				}
-			}
-			if _, isInterface := t.Underlying().(*types.Interface); isInterface {
-				// The narrowest first: a Mutation is also a Filter's
-				// superset in methods only by accident of the three.
-				for _, name := range []string{"github.com/syssam/velox.Mutation", "github.com/syssam/velox.Query", "github.com/syssam/velox/privacy.Filter"} {
-					if iface := subjects[name]; iface != nil && iface.NumMethods() > 0 && types.Implements(t, iface) {
-						return name
-					}
-				}
-			}
-			return ""
-		}
+		subjectOf := func(e ast.Expr) string { return subjectOf(info, e) }
 		skip := func(pos token.Pos) bool { return nocheck(p.Fset, p.Syntax, pos) }
 		say := func(pos token.Pos, subject string, t types.Type, missing []string) {
 			what := "to " + types.TypeString(t, types.RelativeTo(p.Types))
@@ -224,6 +170,20 @@ func checkAssertions(schemaPkg string) error {
 				// it is fine when any of them can hold.
 				check := func(pos token.Pos, operand ast.Expr, targets []ast.Expr) {
 					subject := subjectOf(operand)
+					if subject == "" && len(targets) == 1 && len(funcs) > 0 && funcs[len(funcs)-1] != nil {
+						// as[T any](v any) (T, bool) { t, ok := v.(T); ... }
+						tp, isParam := types.Unalias(info.TypeOf(targets[0])).(*types.TypeParam)
+						id, isIdent := ast.Unparen(operand).(*ast.Ident)
+						if isParam && isIdent && tp != nil {
+							fn := funcs[len(funcs)-1]
+							params := fn.Signature().Params()
+							for k := range params.Len() {
+								if params.At(k) == info.Uses[id] {
+									generics = append(generics, generic{fn, tp.Index(), "", k})
+								}
+							}
+						}
+					}
 					if subject == "" || skip(pos) {
 						return
 					}
@@ -239,7 +199,7 @@ func checkAssertions(schemaPkg string) error {
 						}
 						if tp, isParam := types.Unalias(t).(*types.TypeParam); isParam {
 							if len(funcs) > 0 && funcs[len(funcs)-1] != nil {
-								generics = append(generics, generic{funcs[len(funcs)-1], tp.Index(), subject})
+								generics = append(generics, generic{funcs[len(funcs)-1], tp.Index(), subject, -1})
 							}
 							return
 						}
@@ -277,22 +237,67 @@ func checkAssertions(schemaPkg string) error {
 		if p.PkgPath == ormPath || p.TypesInfo == nil {
 			continue
 		}
+		report := func(pos token.Pos, fn *types.Func, subject string, t types.Type) {
+			if nocheck(p.Fset, p.Syntax, pos) {
+				return
+			}
+			if ok, missing := holds(subject, t); !ok {
+				what := "to " + types.TypeString(t, types.RelativeTo(p.Types))
+				if len(missing) > 0 {
+					what = "to an interface with " + strings.Join(missing, ", ")
+				}
+				found = append(found, fmt.Sprintf("%s: through %s, a %s is asserted %s, which nothing this generator passes has: the assertion never holds",
+					p.Fset.Position(pos), fn.Name(), subject[strings.LastIndex(subject, "/")+1:], what))
+			}
+		}
 		for id, inst := range p.TypesInfo.Instances {
 			fn, _ := p.TypesInfo.Uses[id].(*types.Func)
 			for _, g := range generics {
-				if fn == nil || fn.Origin() != g.fn || g.param >= inst.TypeArgs.Len() || nocheck(p.Fset, p.Syntax, id.Pos()) {
-					continue
-				}
-				t := inst.TypeArgs.At(g.param)
-				if ok, missing := holds(g.subject, t); !ok {
-					what := "to " + types.TypeString(t, types.RelativeTo(p.Types))
-					if len(missing) > 0 {
-						what = "to an interface with " + strings.Join(missing, ", ")
-					}
-					found = append(found, fmt.Sprintf("%s: through %s, a %s is asserted %s, which nothing this generator passes has: the assertion never holds",
-						p.Fset.Position(id.Pos()), fn.Name(), g.subject[strings.LastIndex(g.subject, "/")+1:], what))
+				if fn != nil && fn.Origin() == g.fn && g.arg < 0 && g.param < inst.TypeArgs.Len() {
+					report(id.Pos(), fn, g.subject, inst.TypeArgs.At(g.param))
 				}
 			}
+		}
+		// The helpers whose operand is a parameter: at each call, by what
+		// is passed.
+		for _, f := range p.Syntax {
+			ast.Inspect(f, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				fun := ast.Unparen(call.Fun)
+				switch x := fun.(type) {
+				case *ast.IndexExpr:
+					fun = x.X
+				case *ast.IndexListExpr:
+					fun = x.X
+				}
+				var id *ast.Ident
+				switch x := fun.(type) {
+				case *ast.Ident:
+					id = x
+				case *ast.SelectorExpr:
+					id = x.Sel
+				}
+				if id == nil {
+					return true
+				}
+				fn, _ := p.TypesInfo.Uses[id].(*types.Func)
+				inst, instantiated := p.TypesInfo.Instances[id]
+				if fn == nil || !instantiated {
+					return true
+				}
+				for _, g := range generics {
+					if fn.Origin() != g.fn || g.arg < 0 || g.arg >= len(call.Args) || g.param >= inst.TypeArgs.Len() {
+						continue
+					}
+					if subject := subjectOf(p.TypesInfo, call.Args[g.arg]); subject != "" {
+						report(call.Pos(), fn, subject, inst.TypeArgs.At(g.param))
+					}
+				}
+				return true
+			})
 		}
 	}
 	if len(found) == 0 {
@@ -306,10 +311,59 @@ func checkAssertions(schemaPkg string) error {
 		"An assertion that is meant to fail here (the typed way first, the way by name after it) is marked with a comment on its line or the line above: //vx:nocheck\n\t%s", strings.Join(found, "\n\t"))
 }
 
-// nocheck reports whether the line of pos, or the one above, carries the
-// comment that exempts an assertion: code that tries the typed accessors of
-// velox's mutations first and goes by name when the assertion fails is
-// correct under both generators, and only its author knows that it is that.
+// subjectOf names the interface an operand is, looking through a
+// conversion to an interface (any(m)) and at interfaces that embed
+// one of the subjects.
+func subjectOf(info *types.Info, e ast.Expr) string {
+	e = ast.Unparen(e)
+	if call, ok := e.(*ast.CallExpr); ok && len(call.Args) == 1 {
+		if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
+			return subjectOf(info, call.Args[0])
+		}
+	}
+	t := info.TypeOf(e)
+	if t == nil {
+		return ""
+	}
+	if named, ok := types.Unalias(t).(*types.Named); ok && named.Obj().Pkg() != nil {
+		if name := named.Obj().Pkg().Path() + "." + named.Obj().Name(); assertSubjects[name] != nil {
+			return name
+		}
+	}
+	// Under another name: an interface that embeds one of them.
+	// (Not one that merely has the same methods: an interface of
+	// the application's own with WhereP is not a privacy.Filter
+	// because it looks like one.)
+	return embedded(t, 0)
+}
+
+// embedded names the subject an interface embeds, directly or through the
+// interfaces it embeds, or returns "".
+func embedded(t types.Type, depth int) string {
+	iface, ok := t.Underlying().(*types.Interface)
+	if !ok || depth > 8 {
+		return ""
+	}
+	for i := range iface.NumEmbeddeds() {
+		et := iface.EmbeddedType(i)
+		if named, ok := types.Unalias(et).(*types.Named); ok && named.Obj().Pkg() != nil {
+			if name := named.Obj().Pkg().Path() + "." + named.Obj().Name(); assertSubjects[name] != nil {
+				return name
+			}
+		}
+		if name := embedded(et, depth+1); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// nocheck reports whether an assertion is exempted by the comment
+// //vx:nocheck: at the end of its own line, or alone on the line above (a
+// comment at the end of a line is about that line, not the next). Code that
+// tries the typed accessors of velox's mutations first and goes by name
+// when the assertion fails is correct under both generators, and only its
+// author knows that it is that.
 func nocheck(fset *token.FileSet, files []*ast.File, pos token.Pos) bool {
 	at := fset.Position(pos)
 	for _, f := range files {
@@ -318,13 +372,48 @@ func nocheck(fset *token.FileSet, files []*ast.File, pos token.Pos) bool {
 		}
 		for _, group := range f.Comments {
 			for _, c := range group.List {
-				if line := fset.Position(c.Pos()).Line; (line == at.Line || line == at.Line-1) && strings.HasPrefix(c.Text, "//vx:nocheck") {
+				if c.Text != "//vx:nocheck" && !strings.HasPrefix(c.Text, "//vx:nocheck ") {
+					continue
+				}
+				switch cp := fset.Position(c.Pos()); cp.Line {
+				case at.Line:
 					return true
+				case at.Line - 1:
+					if alone(f, fset, c) {
+						return true
+					}
 				}
 			}
 		}
 	}
 	return false
+}
+
+// alone reports whether nothing of the program precedes the comment on its
+// line.
+func alone(f *ast.File, fset *token.FileSet, c *ast.Comment) bool {
+	line := fset.Position(c.Pos()).Line
+	found := false
+	ast.Inspect(f, func(n ast.Node) bool {
+		if n == nil || found {
+			return false
+		}
+		if _, isComment := n.(*ast.Comment); isComment {
+			return false
+		}
+		if _, isGroup := n.(*ast.CommentGroup); isGroup {
+			return false
+		}
+		// A token of a node on that line, before the comment: the node
+		// starts or ends there.
+		if n.Pos() < c.Pos() && (fset.Position(n.Pos()).Line == line || fset.Position(n.End()-1).Line == line) {
+			if _, isFile := n.(*ast.File); !isFile {
+				found = true
+			}
+		}
+		return !found
+	})
+	return !found
 }
 
 // switchOperand returns x of `switch v := x.(type)` or `switch x.(type)`.

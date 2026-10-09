@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	schemafield "github.com/syssam/velox/schema/field"
+
 	"github.com/google/uuid"
 
 	"github.com/syssam/velox"
@@ -377,6 +379,9 @@ func (q *QueryCore) Count(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if v == nil {
+		return 0, nil // as All returns no rows for an interceptor's nil
+	}
 	n, ok := v.(int)
 	if !ok {
 		return 0, fmt.Errorf("orm: an interceptor returned %T for the count of %s", v, q.M.Name)
@@ -575,7 +580,11 @@ func (q *QueryCore) all(ctx context.Context, c *conn) ([]any, error) {
 			if at >= 0 {
 				dest[i] = q.M.dest(e, at, &slots[i])
 				if k := slices.Index(q.nullsOf(), at); k >= 0 {
-					if sc, ok := dest[i].(stdsql.Scanner); ok {
+					// Not for bytes that cannot be NULL: a driver hands an
+					// empty value over as nil too (SQLite), and there nil
+					// is the empty value, as it is when written.
+					f := q.M.Field(cols[i])
+					if sc, ok := dest[i].(stdsql.Scanner); ok && (f == nil || f.Type != schemafield.TypeBytes || !f.NotNull) {
 						dest[i] = nullSeen{to: sc, null: &seen[k]}
 					}
 				}
@@ -805,12 +814,18 @@ func targetPolicy(ctx context.Context, m *Meta, t *sql.Selector) error {
 }
 
 // anys and str read the operand of a predicate the generated code built.
-// operand is a value as it is compared with a column: a time without its
-// monotonic clock reading, which a driver that writes times as text would
-// otherwise put into the statement.
+// operand is a value as it is compared with a column: a time as it would be
+// stored (see stored). A row written with a time is found by that time,
+// whatever digits it had below the microsecond.
 func operand(v any) any {
-	if t, ok := v.(time.Time); ok {
-		return t.Round(0)
+	switch t := v.(type) {
+	case time.Time:
+		return stored(t)
+	case *time.Time:
+		if t != nil {
+			at := stored(*t)
+			return &at
+		}
 	}
 	return v
 }

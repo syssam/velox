@@ -113,6 +113,80 @@ func handleReused(ctx context.Context, a, b *integration.Client) (int, error) {
 	return u.QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
 }
 
+// An assignment after the use does not say what the entity was read on.
+func later(ctx context.Context, c *integration.Client, u *entity.User) (int, error) {
+	n, err := u.QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
+	if err != nil {
+		return 0, err
+	}
+	u, err = c.User.Query().First(ctx)
+	_ = u
+	return n, err
+}
+
+func around(ctx context.Context, cs []*integration.Client) (int, error) {
+	total := 0
+	var prev *entity.User
+	for _, c := range cs {
+		if prev != nil {
+			n, err := prev.QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
+			if err != nil {
+				return 0, err
+			}
+			total += n
+		}
+		var err error
+		prev, err = c.User.Query().First(ctx)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return total, nil
+}
+
+// A handle that is a parameter, given another value.
+func handleParam(ctx context.Context, c, other *integration.Client) (int, error) {
+	u, err := c.User.Query().First(ctx)
+	if err != nil {
+		return 0, err
+	}
+	c = other
+	_ = c
+	return u.QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
+}
+
+// An element written after the slice was read.
+func element(ctx context.Context, c, other *integration.Client) (int, error) {
+	us, err := c.User.Query().All(ctx)
+	if err != nil || len(us) == 0 {
+		return 0, err
+	}
+	us[0], err = other.User.Query().First(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return us[0].QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
+}
+
+// Unwrap changes the entity it is called on.
+func unwrappedInPlace(ctx context.Context, tx *integration.Tx) (int, error) {
+	u, err := tx.User.Query().First(ctx)
+	if err != nil {
+		return 0, err
+	}
+	u.Unwrap()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return u.QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
+}
+
+// The values of velox's errors, next to the functions.
+func missing(ctx context.Context, c *integration.Client) bool {
+	_, err := c.User.Get(ctx, 9999)
+	return errors.Is(err, velox.ErrNotFound) || errors.Is(err, velox.ErrNotSingular)
+}
+
 // Of several orders velox used the last.
 func twoOrders(ctx context.Context, c *integration.Client, a, b *entity.PostOrder) (*entity.PostConnection, error) {
 	return c.Post.Query().Paginate(ctx, nil, nil, nil, nil, entity.WithPostOrder(a), entity.WithPostOrder(b)) // note: more than one order
@@ -120,6 +194,24 @@ func twoOrders(ctx context.Context, c *integration.Client, a, b *entity.PostOrde
 
 func defaultOrder(ctx context.Context, c *integration.Client) (*entity.PostConnection, error) {
 	return c.Post.Query().Paginate(ctx, nil, nil, nil, nil, entity.WithPostOrder(nil))
+}
+
+// The last order is no order: the default, whatever came before.
+func noOrder(ctx context.Context, c *integration.Client, a *entity.PostOrder) (*entity.PostConnection, error) {
+	return c.Post.Query().Paginate(ctx, nil, nil, nil, nil, entity.WithPostOrder(a), entity.WithPostOrder(nil)) // note: more than one order
+}
+
+// An order written out where it is given.
+func literalOrder(ctx context.Context, c *integration.Client, f *entity.PostOrderField) (*entity.PostConnection, error) {
+	return c.Post.Query().Paginate(ctx, nil, nil, nil, nil, entity.WithPostOrder(&entity.PostOrder{Field: f}))
+}
+
+func none(ps ...predicate.User) predicate.User {
+	return user.Not(ps...) // note: Not of a list that may be empty
+}
+
+func either() func(...predicate.User) predicate.User {
+	return user.Or // note: Or as a value
 }
 
 // Or and Not of nothing.
@@ -143,6 +235,11 @@ func matching(ctx context.Context, c *integration.Client, where *filter.PostWher
 	return c.Post.Query().Where(p).Count(ctx)
 }
 
+// The two results of P, returned as they are.
+func asPredicate(where *filter.PostWhereInput) (predicate.Post, error) {
+	return where.P() // note: P of an input with no condition was an error
+}
+
 // A limit in the option of an eager load.
 func threeEach(ctx context.Context, c *integration.Client) ([]*entity.User, error) {
 	return c.User.Query().WithPosts(func(q entity.PostQuerier) { q.Limit(3) }).All(ctx) // note: Limit in the option of an eager load
@@ -159,6 +256,14 @@ func lateBuilder(c *integration.Client, names []string) {
 	for _, n := range names {
 		set(n)
 	}
+}
+
+// A method value of a parameter that is given another value afterwards.
+func lateParam(b, other *userclient.UserUpdate) {
+	set := b.SetName // note: the builder of SetName was taken when the method value was made
+	b = other
+	_ = b
+	set("x")
 }
 
 // A builder in a variable called like the parameter the tool writes.
@@ -186,6 +291,18 @@ type rule struct {
 
 func rules() []rule {
 	return []rule{{name: "raw", cond: func(s *sql.Selector) { s.Where(sql.EQ("name", "x")) }}}
+}
+
+func pointed() []*rule {
+	return []*rule{{name: "raw", cond: func(s *sql.Selector) { s.Where(sql.EQ("name", "y")) }}, {name: "none", cond: nil}}
+}
+
+// The mutation type of one entity, under another name.
+type userMutation = userclient.UserMutation
+
+func aliased(m velox.Mutation) bool {
+	_, ok := m.(*userMutation) // note: asserted to the mutation type of User
+	return ok
 }
 
 func byName() map[string]predicate.User {
@@ -227,5 +344,6 @@ func like(ctx context.Context, c *integration.Client, userID int, likeIDs ...int
 
 func valid(r user.Role) bool { return r.IsValid() }
 
-var _ = []any{scope, capped, stamp, classify, fieldOf, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
+var _ = []any{scope, capped, stamp, classify, fieldOf, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
+	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
 	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}

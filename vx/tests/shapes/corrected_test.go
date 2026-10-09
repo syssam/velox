@@ -847,3 +847,36 @@ func TestPaginate_NullInAFieldThatIsNotAPointer(t *testing.T) {
 		assert.ElementsMatch(t, want, got, "backward, descending=%v", term.Desc)
 	}
 }
+
+// A cursor of a row whose key is NULL in a column this schema would have
+// filled with a zero value: a table made by something else. The first fix
+// for NULL keys refused such a cursor as "not made here" for every column
+// the schema calls NOT NULL, which made the second page of this walk an
+// error; before that fix the walk dropped rows.
+func TestPaginate_NullWhereTheSchemaHasNone(t *testing.T) {
+	ctx := context.Background()
+	db := openDDL(t, ddlNullableOptional)
+	var want []int
+	for n := 1; n <= 4; n++ {
+		want = append(want, must(client.Scalar.Create(db).Set(scalarRequired(n)...).Set(scalarFull(n)...).Save(ctx)).ID)
+	}
+	nullOptionals(t, db, 1)
+	nullOptionals(t, db, 2)
+	one := 1
+	for _, term := range []predicate.ScalarOrder{scalar.IntOpt.Asc(), scalar.IntOpt.Desc(), scalar.StringOpt.Asc(), scalar.TimeOpt.Desc()} {
+		var got []int
+		var after *orm.Cursor
+		for page := 0; page < 10; page++ {
+			conn, err := client.Scalar.Query(db).OrderBy(term).Paginate(ctx, after, &one, nil, nil)
+			require.NoError(t, err, "page %d of %+v", page, term)
+			for _, e := range conn.Edges {
+				got = append(got, e.Node.ID)
+			}
+			if !conn.PageInfo.HasNextPage {
+				break
+			}
+			after = conn.PageInfo.EndCursor
+		}
+		assert.ElementsMatch(t, want, got, "%+v: the walk must serve every row once", term)
+	}
+}
