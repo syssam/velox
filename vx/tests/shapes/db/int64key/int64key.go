@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Int64Key, and ModelName the name of its entity.
+// Table is the table of Int64Key, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "int64keys"
 	ModelName = "Int64Key"
@@ -69,30 +70,32 @@ func (f *Int64Column) LTE(v int64) predicate.Int64Key {
 }
 
 // Set assigns v to the column.
-func (f *Int64Column) Set(v int64) predicate.Int64KeySet {
-	return predicate.Int64KeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int64Column) Set(v int64) predicate.Int64KeySetter {
+	return predicate.Int64KeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int64Column) SetNillable(v *int64) predicate.Int64KeySet {
+func (f *Int64Column) SetNillable(v *int64) predicate.Int64KeySetter {
 	if v == nil {
-		return predicate.Int64KeySet{}
+		return predicate.Int64KeySetter{}
 	}
-	return predicate.Int64KeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.Int64KeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int64Column) Add(v int64) predicate.Int64KeySet {
-	return predicate.Int64KeySet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int64Column) Add(v int64) predicate.Int64KeySetter {
+	return predicate.Int64KeySetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int64Column) Asc() predicate.Int64KeyOrder { return predicate.Int64KeyOrder{Col: string(*f)} }
+func (f *Int64Column) Asc() predicate.Int64KeyOrderTerm {
+	return predicate.Int64KeyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Int64Column) Desc() predicate.Int64KeyOrder {
-	return predicate.Int64KeyOrder{Col: string(*f), Desc: true}
+func (f *Int64Column) Desc() predicate.Int64KeyOrderTerm {
+	return predicate.Int64KeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Int64Key {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.Int64KeySet {
-	return predicate.Int64KeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.Int64KeySetter {
+	return predicate.Int64KeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.Int64KeySet {
+func (f *StringColumn) SetNillable(v *string) predicate.Int64KeySetter {
 	if v == nil {
-		return predicate.Int64KeySet{}
+		return predicate.Int64KeySetter{}
 	}
-	return predicate.Int64KeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.Int64KeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.Int64KeyOrder { return predicate.Int64KeyOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.Int64KeyOrderTerm {
+	return predicate.Int64KeyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.Int64KeyOrder {
-	return predicate.Int64KeyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.Int64KeyOrderTerm {
+	return predicate.Int64KeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Int64Key.

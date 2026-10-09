@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Locker, and ModelName the name of its entity.
+// Table is the table of Locker, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "lockers"
 	ModelName = "Locker"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Locker {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.LockerSet {
+func (f *IntColumn) SetNillable(v *int) predicate.LockerSetter {
 	if v == nil {
-		return predicate.LockerSet{}
+		return predicate.LockerSetter{}
 	}
-	return predicate.LockerSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.LockerOrder { return predicate.LockerOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.LockerOrderTerm {
+	return predicate.LockerOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.LockerOrder {
-	return predicate.LockerOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.LockerOrderTerm {
+	return predicate.LockerOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Locker {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.LockerSet {
+func (f *StringColumn) SetNillable(v *string) predicate.LockerSetter {
 	if v == nil {
-		return predicate.LockerSet{}
+		return predicate.LockerSetter{}
 	}
-	return predicate.LockerSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.LockerOrder { return predicate.LockerOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.LockerOrderTerm {
+	return predicate.LockerOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.LockerOrder {
-	return predicate.LockerOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.LockerOrderTerm {
+	return predicate.LockerOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIntKeyColumn is a column of Go type int: its methods build the predicates,
@@ -230,41 +235,41 @@ func (f *NullableIntKeyColumn) NotIn(vs ...int) predicate.Locker {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntKeyColumn) IsNil() predicate.Locker {
-	return predicate.Locker{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Locker{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntKeyColumn) NotNil() predicate.Locker {
-	return predicate.Locker{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Locker{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntKeyColumn) Set(v int) predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntKeyColumn) Set(v int) predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntKeyColumn) SetNillable(v *int) predicate.LockerSet {
+func (f *NullableIntKeyColumn) SetNillable(v *int) predicate.LockerSetter {
 	if v == nil {
-		return predicate.LockerSet{}
+		return predicate.LockerSetter{}
 	}
-	return predicate.LockerSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntKeyColumn) Clear() predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntKeyColumn) Clear() predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntKeyColumn) Asc() predicate.LockerOrder {
-	return predicate.LockerOrder{Col: string(*f)}
+func (f *NullableIntKeyColumn) Asc() predicate.LockerOrderTerm {
+	return predicate.LockerOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntKeyColumn) Desc() predicate.LockerOrder {
-	return predicate.LockerOrder{Col: string(*f), Desc: true}
+func (f *NullableIntKeyColumn) Desc() predicate.LockerOrderTerm {
+	return predicate.LockerOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Locker.
@@ -303,13 +308,13 @@ func (e *EdgeHolder) HasWith(ps ...predicate.Author) predicate.Locker {
 }
 
 // Set connects the Locker to the Author with the given id.
-func (e *EdgeHolder) Set(id int) predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeHolder) Set(id int) predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Locker from every "holder" neighbor.
-func (e *EdgeHolder) Clear() predicate.LockerSet {
-	return predicate.LockerSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeHolder) Clear() predicate.LockerSetter {
+	return predicate.LockerSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 // EdgeMetas returns the descriptions of the edges of Locker, in order. The generated

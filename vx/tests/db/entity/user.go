@@ -224,7 +224,7 @@ func (q *UserQuery) Where(ps ...predicate.User) *UserQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *UserQuery) OrderBy(os ...predicate.UserOrder) *UserQuery {
+func (q *UserQuery) OrderBy(os ...predicate.UserOrderTerm) *UserQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -234,12 +234,12 @@ func (q *UserQuery) OrderBy(os ...predicate.UserOrder) *UserQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *UserQuery) Limit(n int) *UserQuery { q.c.Lim = n; return q }
+func (q *UserQuery) Limit(n int) *UserQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *UserQuery) Offset(n int) *UserQuery { q.c.Off = n; return q }
+func (q *UserQuery) Offset(n int) *UserQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -399,7 +399,7 @@ func NewUserCreate(ex orm.Executor) *UserCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *UserCreate) Set(ss ...predicate.UserSet) *UserCreate {
+func (b *UserCreate) Set(ss ...predicate.UserSetter) *UserCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -494,7 +494,7 @@ func NewUserUpdate(ex orm.Executor) *UserUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *UserUpdate) Set(ss ...predicate.UserSet) *UserUpdate {
+func (b *UserUpdate) Set(ss ...predicate.UserSetter) *UserUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -523,11 +523,18 @@ func (b *UserUpdate) Fill(in any, skip ...string) *UserUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *UserUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *UserUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several
@@ -732,11 +739,11 @@ type UserOrder struct {
 // input orders by nothing.
 //
 //go:noinline
-func (o *UserOrder) Term() predicate.UserOrder {
+func (o *UserOrder) Term() predicate.UserOrderTerm {
 	if o == nil {
-		return predicate.UserOrder{}
+		return predicate.UserOrderTerm{}
 	}
-	return predicate.UserOrder(orm.OrderTerm(&UserMeta, userOrderColumns, string(o.Field), o.Direction))
+	return predicate.UserOrderTerm(orm.OrderTerm(&UserMeta, userOrderColumns, string(o.Field), o.Direction))
 }
 
 // Posts resolves the "posts" edge for a GraphQL engine: one page of the

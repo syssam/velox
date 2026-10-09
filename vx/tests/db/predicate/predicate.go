@@ -11,74 +11,74 @@ import "github.com/syssam/velox/vx/orm"
 // compile in a query or mutation of this one.
 type Comment orm.P
 
-// CommentSet is an assignment of a mutation of Comment.
-type CommentSet orm.S
+// CommentSetter is an assignment of a mutation of Comment.
+type CommentSetter orm.S
 
-// CommentOrder is an order term of a query of Comment.
-type CommentOrder orm.O
+// CommentOrderTerm is an order term of a query of Comment.
+type CommentOrderTerm orm.O
 
 // Like is a predicate of Like. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Like orm.P
 
-// LikeSet is an assignment of a mutation of Like.
-type LikeSet orm.S
+// LikeSetter is an assignment of a mutation of Like.
+type LikeSetter orm.S
 
-// LikeOrder is an order term of a query of Like.
-type LikeOrder orm.O
+// LikeOrderTerm is an order term of a query of Like.
+type LikeOrderTerm orm.O
 
 // Pet is a predicate of Pet. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Pet orm.P
 
-// PetSet is an assignment of a mutation of Pet.
-type PetSet orm.S
+// PetSetter is an assignment of a mutation of Pet.
+type PetSetter orm.S
 
-// PetOrder is an order term of a query of Pet.
-type PetOrder orm.O
+// PetOrderTerm is an order term of a query of Pet.
+type PetOrderTerm orm.O
 
 // Post is a predicate of Post. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Post orm.P
 
-// PostSet is an assignment of a mutation of Post.
-type PostSet orm.S
+// PostSetter is an assignment of a mutation of Post.
+type PostSetter orm.S
 
-// PostOrder is an order term of a query of Post.
-type PostOrder orm.O
+// PostOrderTerm is an order term of a query of Post.
+type PostOrderTerm orm.O
 
 // Tag is a predicate of Tag. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Tag orm.P
 
-// TagSet is an assignment of a mutation of Tag.
-type TagSet orm.S
+// TagSetter is an assignment of a mutation of Tag.
+type TagSetter orm.S
 
-// TagOrder is an order term of a query of Tag.
-type TagOrder orm.O
+// TagOrderTerm is an order term of a query of Tag.
+type TagOrderTerm orm.O
 
 // Token is a predicate of Token. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Token orm.P
 
-// TokenSet is an assignment of a mutation of Token.
-type TokenSet orm.S
+// TokenSetter is an assignment of a mutation of Token.
+type TokenSetter orm.S
 
-// TokenOrder is an order term of a query of Token.
-type TokenOrder orm.O
+// TokenOrderTerm is an order term of a query of Token.
+type TokenOrderTerm orm.O
 
 // User is a predicate of User. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type User orm.P
 
-// UserSet is an assignment of a mutation of User.
-type UserSet orm.S
+// UserSetter is an assignment of a mutation of User.
+type UserSetter orm.S
 
-// UserOrder is an order term of a query of User.
-type UserOrder orm.O
+// UserOrderTerm is an order term of a query of User.
+type UserOrderTerm orm.O

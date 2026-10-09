@@ -54,6 +54,12 @@ func Or[T Predicate](ps ...T) T { return group(OpOr, ps) }
 // Not matches the rows that do not match all of ps; without any, none.
 func Not[T Predicate](ps ...T) T { return group(OpNot, ps) }
 
+// IsZero reports whether p is the zero predicate: no condition, what a
+// function returns when it has nothing to add.
+//
+//	if p := olderThan(age); !orm.IsZero(p) { q.Where(p) }
+func IsZero[T Predicate](p T) bool { return P(p).IsZero() }
+
 // Column is a column of values of type T, of an entity whose predicate type
 // is P, as code generic over entities sees it: &user.Role is a
 // Column[user.RoleEnum, predicate.User]. Every column type has these.

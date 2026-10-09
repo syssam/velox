@@ -26,7 +26,7 @@ type rewriter struct {
 	// predicates now (the library's AndPredicates): not to be wrapped.
 	made map[*ast.CallExpr]bool
 	// wrapped are the calls that became the argument of another call
-	// (orm.Must, orm.One, orm.Check) or a call with other arguments.
+	// (orm.Must, orm.Check) or a call with other arguments.
 	wrapped map[*ast.CallExpr]bool
 }
 
@@ -181,7 +181,7 @@ func (r *rewriter) run() {
 				}
 			case *ast.SwitchStmt:
 				if top.Tag != nil && r.predicateOf(r.info.TypeOf(top.Tag)) != "" {
-					r.note(top.Pos(), "a switch on a predicate: it is data now and is not compared; orm.P(p).IsZero() says whether it is no condition")
+					r.note(top.Pos(), "a switch on a predicate: it is data now and is not compared; orm.IsZero(p) says whether it is no condition")
 				}
 			}
 			return true
@@ -1487,9 +1487,8 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 			r.deleteOne(call, sel, t, name)
 			return
 		case "UpdateOne":
-			// It reported a missing row and returned no count.
-			rename("Exec")
-			wrap("One")
+			// It reported a missing row and returned no count: ExecOne.
+			rename("ExecOne")
 			if name == "ExecX" {
 				wrap("Check")
 			}
@@ -2210,7 +2209,7 @@ func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 	if r.predicateText(r.info.TypeOf(other), bin.Pos()) == "" {
 		return
 	}
-	text := r.orm(bin.Pos()) + ".P(" + r.render(other) + ").IsZero()"
+	text := r.orm(bin.Pos()) + ".IsZero(" + r.render(other) + ")"
 	if bin.Op == token.NEQ {
 		text = "!" + text
 	}

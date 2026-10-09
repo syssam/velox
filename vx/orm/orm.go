@@ -428,20 +428,6 @@ func Must[T any](v T, err error) T {
 	return v
 }
 
-// One is for an update that must reach its row and has no use for the row:
-// it turns the count Exec returns into an error, ErrNotFound when no row
-// matched.
-//
-//	err := orm.One(db.User.UpdateByID(tx, id).Set(user.Age.Add(1)).Exec(ctx))
-//
-// SaveOne says the same and reads the row back.
-func One(n int, err error) error {
-	if err == nil && n == 0 {
-		return ErrNotFound
-	}
-	return err
-}
-
 // Apply calls each function on q and returns q: for the parts of a query
 // that were collected before the query was built.
 //

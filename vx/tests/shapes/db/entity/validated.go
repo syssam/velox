@@ -165,7 +165,7 @@ func (q *ValidatedQuery) Where(ps ...predicate.Validated) *ValidatedQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *ValidatedQuery) OrderBy(os ...predicate.ValidatedOrder) *ValidatedQuery {
+func (q *ValidatedQuery) OrderBy(os ...predicate.ValidatedOrderTerm) *ValidatedQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -175,12 +175,12 @@ func (q *ValidatedQuery) OrderBy(os ...predicate.ValidatedOrder) *ValidatedQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *ValidatedQuery) Limit(n int) *ValidatedQuery { q.c.Lim = n; return q }
+func (q *ValidatedQuery) Limit(n int) *ValidatedQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *ValidatedQuery) Offset(n int) *ValidatedQuery { q.c.Off = n; return q }
+func (q *ValidatedQuery) Offset(n int) *ValidatedQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -343,7 +343,7 @@ func NewValidatedCreate(ex orm.Executor) *ValidatedCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *ValidatedCreate) Set(ss ...predicate.ValidatedSet) *ValidatedCreate {
+func (b *ValidatedCreate) Set(ss ...predicate.ValidatedSetter) *ValidatedCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -438,7 +438,7 @@ func NewValidatedUpdate(ex orm.Executor) *ValidatedUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *ValidatedUpdate) Set(ss ...predicate.ValidatedSet) *ValidatedUpdate {
+func (b *ValidatedUpdate) Set(ss ...predicate.ValidatedSetter) *ValidatedUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -467,11 +467,18 @@ func (b *ValidatedUpdate) Fill(in any, skip ...string) *ValidatedUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *ValidatedUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *ValidatedUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

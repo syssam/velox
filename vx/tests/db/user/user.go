@@ -11,7 +11,8 @@ import (
 	time "time"
 )
 
-// Table is the table of User, and ModelName the name of its entity.
+// Table is the table of User, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "users"
 	ModelName = "User"
@@ -101,30 +102,30 @@ func (f *IntColumn) LTE(v int) predicate.User {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.UserSet {
+func (f *IntColumn) SetNillable(v *int) predicate.UserSetter {
 	if v == nil {
-		return predicate.UserSet{}
+		return predicate.UserSetter{}
 	}
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.UserOrderTerm { return predicate.UserOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.UserOrder {
-	return predicate.UserOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -181,44 +182,44 @@ func (f *TimeColumn) LTE(v time.Time) predicate.User {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.UserSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.UserSetter {
 	if v == nil {
-		return predicate.UserSet{}
+		return predicate.UserSetter{}
 	}
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+func (f *TimeColumn) Asc() predicate.UserOrderTerm { return predicate.UserOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.UserOrder {
-	return predicate.UserOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type TimeColumn2 string
+type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *TimeColumn2) EQ(v time.Time) predicate.User {
+func (f *AutoTimeColumn) EQ(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *TimeColumn2) NEQ(v time.Time) predicate.User {
+func (f *AutoTimeColumn) NEQ(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *TimeColumn2) In(vs ...time.Time) predicate.User {
+func (f *AutoTimeColumn) In(vs ...time.Time) predicate.User {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -227,7 +228,7 @@ func (f *TimeColumn2) In(vs ...time.Time) predicate.User {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.User {
+func (f *AutoTimeColumn) NotIn(vs ...time.Time) predicate.User {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -236,52 +237,54 @@ func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.User {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *TimeColumn2) GT(v time.Time) predicate.User {
+func (f *AutoTimeColumn) GT(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *TimeColumn2) GTE(v time.Time) predicate.User {
+func (f *AutoTimeColumn) GTE(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *TimeColumn2) LT(v time.Time) predicate.User {
+func (f *AutoTimeColumn) LT(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *TimeColumn2) LTE(v time.Time) predicate.User {
+func (f *AutoTimeColumn) LTE(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn2) Set(v time.Time) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoTimeColumn) Set(v time.Time) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn2) SetNillable(v *time.Time) predicate.UserSet {
+func (f *AutoTimeColumn) SetNillable(v *time.Time) predicate.UserSetter {
 	if v == nil {
-		return predicate.UserSet{}
+		return predicate.UserSetter{}
 	}
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *TimeColumn2) Keep() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoTimeColumn) Keep() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn2) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+func (f *AutoTimeColumn) Asc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn2) Desc() predicate.UserOrder {
-	return predicate.UserOrder{Col: string(*f), Desc: true}
+func (f *AutoTimeColumn) Desc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -363,25 +366,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.User {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.UserSet {
+func (f *StringColumn) SetNillable(v *string) predicate.UserSetter {
 	if v == nil {
-		return predicate.UserSet{}
+		return predicate.UserSetter{}
 	}
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.UserOrderTerm { return predicate.UserOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.UserOrder {
-	return predicate.UserOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -464,39 +467,41 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.User {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.User {
-	return predicate.User{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.User{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.User {
-	return predicate.User{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.User{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.UserSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.UserSetter {
 	if v == nil {
-		return predicate.UserSet{}
+		return predicate.UserSetter{}
 	}
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+func (f *NullableStringColumn) Asc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.UserOrder {
-	return predicate.UserOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // RoleEnumColumn is a column of Go type RoleEnum: its methods build the predicates,
@@ -533,25 +538,27 @@ func (f *RoleEnumColumn) NotIn(vs ...RoleEnum) predicate.User {
 }
 
 // Set assigns v to the column.
-func (f *RoleEnumColumn) Set(v RoleEnum) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RoleEnumColumn) Set(v RoleEnum) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *RoleEnumColumn) SetNillable(v *RoleEnum) predicate.UserSet {
+func (f *RoleEnumColumn) SetNillable(v *RoleEnum) predicate.UserSetter {
 	if v == nil {
-		return predicate.UserSet{}
+		return predicate.UserSetter{}
 	}
-	return predicate.UserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *RoleEnumColumn) Asc() predicate.UserOrder { return predicate.UserOrder{Col: string(*f)} }
+func (f *RoleEnumColumn) Asc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *RoleEnumColumn) Desc() predicate.UserOrder {
-	return predicate.UserOrder{Col: string(*f), Desc: true}
+func (f *RoleEnumColumn) Desc() predicate.UserOrderTerm {
+	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of User.
@@ -570,7 +577,7 @@ const (
 var (
 	ID        = IntColumn(ColumnID)
 	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = TimeColumn2(ColumnUpdatedAt)
+	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
 	Name      = StringColumn(ColumnName)
 	Email     = StringColumn(ColumnEmail)
 	Age       = IntColumn(ColumnAge)
@@ -600,26 +607,26 @@ func (e *EdgePosts) HasWith(ps ...predicate.Post) predicate.User {
 }
 
 // Add connects the User to the Post rows with the given ids.
-func (e *EdgePosts) Add(ids ...int) predicate.UserSet {
+func (e *EdgePosts) Add(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the User from the Post rows with the given ids.
-func (e *EdgePosts) Remove(ids ...int) predicate.UserSet {
+func (e *EdgePosts) Remove(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the User from every "posts" neighbor.
-func (e *EdgePosts) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgePosts) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "pets", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "pets", Columns: []string{"owner_id"}}
@@ -644,26 +651,26 @@ func (e *EdgePets) HasWith(ps ...predicate.Pet) predicate.User {
 }
 
 // Add connects the User to the Pet rows with the given ids.
-func (e *EdgePets) Add(ids ...int) predicate.UserSet {
+func (e *EdgePets) Add(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the User from the Pet rows with the given ids.
-func (e *EdgePets) Remove(ids ...int) predicate.UserSet {
+func (e *EdgePets) Remove(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the User from every "pets" neighbor.
-func (e *EdgePets) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgePets) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "comments", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "comments", Columns: []string{"user_comments"}}
@@ -688,26 +695,26 @@ func (e *EdgeComments) HasWith(ps ...predicate.Comment) predicate.User {
 }
 
 // Add connects the User to the Comment rows with the given ids.
-func (e *EdgeComments) Add(ids ...int) predicate.UserSet {
+func (e *EdgeComments) Add(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the User from the Comment rows with the given ids.
-func (e *EdgeComments) Remove(ids ...int) predicate.UserSet {
+func (e *EdgeComments) Remove(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the User from every "comments" neighbor.
-func (e *EdgeComments) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeComments) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "token", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
@@ -732,13 +739,13 @@ func (e *EdgeToken) HasWith(ps ...predicate.Token) predicate.User {
 }
 
 // Set connects the User to the Token with the given id.
-func (e *EdgeToken) Set(id uuid.UUID) predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
+func (e *EdgeToken) Set(id uuid.UUID) predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
 }
 
 // Clear disconnects the User from every "token" neighbor.
-func (e *EdgeToken) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeToken) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 var meta4 = orm.EdgeMeta{Name: "liked_posts", Index: 4, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id", "post_id"}}
@@ -763,26 +770,26 @@ func (e *EdgeLikedPosts) HasWith(ps ...predicate.Post) predicate.User {
 }
 
 // Add connects the User to the Post rows with the given ids.
-func (e *EdgeLikedPosts) Add(ids ...int) predicate.UserSet {
+func (e *EdgeLikedPosts) Add(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
 }
 
 // Remove disconnects the User from the Post rows with the given ids.
-func (e *EdgeLikedPosts) Remove(ids ...int) predicate.UserSet {
+func (e *EdgeLikedPosts) Remove(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
 }
 
 // Clear disconnects the User from every "liked_posts" neighbor.
-func (e *EdgeLikedPosts) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeClear, Edge: &meta4}
+func (e *EdgeLikedPosts) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
 var meta5 = orm.EdgeMeta{Name: "likes", Index: 5, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "likes", Columns: []string{"user_id"}}
@@ -807,26 +814,26 @@ func (e *EdgeLikes) HasWith(ps ...predicate.Like) predicate.User {
 }
 
 // Add connects the User to the Like rows with the given ids.
-func (e *EdgeLikes) Add(ids ...int) predicate.UserSet {
+func (e *EdgeLikes) Add(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeAdd, Edge: &meta5, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta5, IDs: vs}
 }
 
 // Remove disconnects the User from the Like rows with the given ids.
-func (e *EdgeLikes) Remove(ids ...int) predicate.UserSet {
+func (e *EdgeLikes) Remove(ids ...int) predicate.UserSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.UserSet{Kind: orm.EdgeRemove, Edge: &meta5, IDs: vs}
+	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta5, IDs: vs}
 }
 
 // Clear disconnects the User from every "likes" neighbor.
-func (e *EdgeLikes) Clear() predicate.UserSet {
-	return predicate.UserSet{Kind: orm.EdgeClear, Edge: &meta5}
+func (e *EdgeLikes) Clear() predicate.UserSetter {
+	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta5}
 }
 
 // EdgeMetas returns the descriptions of the edges of User, in order. The generated

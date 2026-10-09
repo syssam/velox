@@ -291,7 +291,7 @@ func TestOrderInput(t *testing.T) {
 	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Field: user.OrderFieldName, Direction: orm.OrderDirectionDesc}))
 	assert.Equal(t, []string{"ann", "bob", "cat"}, list(&entity.UserOrder{Field: user.OrderFieldName}), "no direction is ascending")
 	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Direction: orm.OrderDirectionDesc}), "no field is the id")
-	assert.Equal(t, predicate.UserOrder{}, (*entity.UserOrder)(nil).Term())
+	assert.Equal(t, predicate.UserOrderTerm{}, (*entity.UserOrder)(nil).Term())
 	assert.Len(t, list(nil), 3, "no input orders by nothing")
 
 	// A value the schema does not have cannot come from a request; one a

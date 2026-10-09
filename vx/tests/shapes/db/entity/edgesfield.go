@@ -113,7 +113,7 @@ func (q *EdgesFieldQuery) Where(ps ...predicate.EdgesField) *EdgesFieldQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *EdgesFieldQuery) OrderBy(os ...predicate.EdgesFieldOrder) *EdgesFieldQuery {
+func (q *EdgesFieldQuery) OrderBy(os ...predicate.EdgesFieldOrderTerm) *EdgesFieldQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -123,12 +123,12 @@ func (q *EdgesFieldQuery) OrderBy(os ...predicate.EdgesFieldOrder) *EdgesFieldQu
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *EdgesFieldQuery) Limit(n int) *EdgesFieldQuery { q.c.Lim = n; return q }
+func (q *EdgesFieldQuery) Limit(n int) *EdgesFieldQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *EdgesFieldQuery) Offset(n int) *EdgesFieldQuery { q.c.Off = n; return q }
+func (q *EdgesFieldQuery) Offset(n int) *EdgesFieldQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -291,7 +291,7 @@ func NewEdgesFieldCreate(ex orm.Executor) *EdgesFieldCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *EdgesFieldCreate) Set(ss ...predicate.EdgesFieldSet) *EdgesFieldCreate {
+func (b *EdgesFieldCreate) Set(ss ...predicate.EdgesFieldSetter) *EdgesFieldCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -386,7 +386,7 @@ func NewEdgesFieldUpdate(ex orm.Executor) *EdgesFieldUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *EdgesFieldUpdate) Set(ss ...predicate.EdgesFieldSet) *EdgesFieldUpdate {
+func (b *EdgesFieldUpdate) Set(ss ...predicate.EdgesFieldSetter) *EdgesFieldUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -415,11 +415,18 @@ func (b *EdgesFieldUpdate) Fill(in any, skip ...string) *EdgesFieldUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *EdgesFieldUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *EdgesFieldUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

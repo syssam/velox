@@ -84,7 +84,7 @@ func (q *DbQuery) Where(ps ...predicate.Db) *DbQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *DbQuery) OrderBy(os ...predicate.DbOrder) *DbQuery {
+func (q *DbQuery) OrderBy(os ...predicate.DbOrderTerm) *DbQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -94,12 +94,12 @@ func (q *DbQuery) OrderBy(os ...predicate.DbOrder) *DbQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *DbQuery) Limit(n int) *DbQuery { q.c.Lim = n; return q }
+func (q *DbQuery) Limit(n int) *DbQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *DbQuery) Offset(n int) *DbQuery { q.c.Off = n; return q }
+func (q *DbQuery) Offset(n int) *DbQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -257,7 +257,7 @@ func NewDbCreate(ex orm.Executor) *DbCreate { return &DbCreate{c: orm.MutCore{M:
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *DbCreate) Set(ss ...predicate.DbSet) *DbCreate {
+func (b *DbCreate) Set(ss ...predicate.DbSetter) *DbCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -350,7 +350,7 @@ func NewDbUpdate(ex orm.Executor) *DbUpdate { return &DbUpdate{c: orm.MutCore{M:
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *DbUpdate) Set(ss ...predicate.DbSet) *DbUpdate {
+func (b *DbUpdate) Set(ss ...predicate.DbSetter) *DbUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -379,11 +379,18 @@ func (b *DbUpdate) Fill(in any, skip ...string) *DbUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *DbUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *DbUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

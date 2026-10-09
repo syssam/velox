@@ -13,7 +13,7 @@ import (
 
 var opConst = map[vgen.Op]string{
 	vgen.EQ: "orm.OpEQ", vgen.NEQ: "orm.OpNEQ", vgen.GT: "orm.OpGT", vgen.GTE: "orm.OpGTE",
-	vgen.LT: "orm.OpLT", vgen.LTE: "orm.OpLTE", vgen.IsNil: "orm.OpIsNull", vgen.NotNil: "orm.OpNotNull",
+	vgen.LT: "orm.OpLT", vgen.LTE: "orm.OpLTE", vgen.IsNil: "orm.OpIsNil", vgen.NotNil: "orm.OpNotNil",
 	vgen.In: "orm.OpIn", vgen.NotIn: "orm.OpNotIn", vgen.EqualFold: "orm.OpEqualFold",
 	vgen.Contains: "orm.OpContains", vgen.ContainsFold: "orm.OpContainsFold",
 	vgen.HasPrefix: "orm.OpHasPrefix", vgen.HasSuffix: "orm.OpHasSuffix",
@@ -87,6 +87,10 @@ var opDoc = map[string]string{
 }
 
 // leafReserved are the identifiers every entity package declares itself.
+// ModelName, not TypeName or EntityName: a schema has fields called
+// type_name and entity_name (one and two of them in a real schema of 455
+// entities, none called model_name), and the field would then lose its
+// plain name to the constant.
 var leafReserved = []string{"And", "Or", "Not", "Table", "ModelName", "EdgeMetas"}
 
 // namer hands out the identifiers of one entity package: the first to ask for
@@ -255,8 +259,27 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 			desc[f] = have
 			continue
 		}
+		// The name says what sets the type apart from the plain column of
+		// its Go type, so that two of them in one package are not Column
+		// and Column2: Auto for a column with an update default (it has
+		// Keep), Required for one that can hold NULL and cannot be cleared
+		// (Nillable without Optional), ID for an id that is not compared
+		// like other columns of its type (a string id has no Contains).
 		base := columnTypeName(gt, s.nullable, isKey)
+		qualifier := ""
+		if s.keep {
+			qualifier += "Auto"
+		}
+		if s.nullable && !s.clear {
+			qualifier += "Required"
+		}
+		if f.IsID && !isKey && gt == "string" {
+			base = strings.TrimSuffix(base, "Column") + "IDColumn"
+		}
+		base = qualifier + base
 		s.name = base
+		// A number only for what the above cannot tell apart: two Go types
+		// with one name (map[string]int and map[string]any).
 		for i := 2; taken[s.name]; i++ {
 			s.name = fmt.Sprintf("%s%d", base, i)
 		}
@@ -266,7 +289,7 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		desc[f] = s
 	}
 
-	w("// Table is the table of %s, and ModelName the name of its entity.\nconst (\n\tTable = %q\n\tModelName = %q\n)\n\n", e.Name, e.T.Table(), e.Name)
+	w("// Table is the table of %s, and ModelName the name of the entity: what the\n// Type method of a query or a mutation of it returns.\nconst (\n\tTable = %q\n\tModelName = %q\n)\n\n", e.Name, e.T.Table(), e.Name)
 	for _, f := range enums {
 		w("// %[1]s is the type of the %[2]s field.\ntype %[1]s string\n\n// Values of the %[2]s field.\nconst (\n", enumType[f], f.F.Name)
 		for i, en := range f.F.Enums {

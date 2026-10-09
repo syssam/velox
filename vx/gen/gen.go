@@ -76,7 +76,7 @@ type ent struct {
 	Edges  []*edg
 	linked bool      // some edge targets the entity
 	alias  string    // name package entity imports the entity package under
-	pnames [2]string // its Set and Order types in the predicate package
+	pnames [2]string // its Setter and OrderTerm types in the predicate package
 }
 
 // The types of the predicate package that belong to the entity. They are in a
@@ -113,7 +113,10 @@ func (g *generator) predicateNames() {
 		taken[e.Name] = true
 	}
 	for _, e := range g.ents {
-		for i, suffix := range [...]string{"Set", "Order"} {
+		// UserSetter, not UserSet: a set of users is what that would read
+		// as. UserOrderTerm, not UserOrder: entity.UserOrder is the order a
+		// request asks for, and its Term method returns this.
+		for i, suffix := range [...]string{"Setter", "OrderTerm"} {
 			name := e.Name + suffix
 			for taken[name] {
 				name += "Type"

@@ -135,7 +135,7 @@ func (q *LockerQuery) Where(ps ...predicate.Locker) *LockerQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *LockerQuery) OrderBy(os ...predicate.LockerOrder) *LockerQuery {
+func (q *LockerQuery) OrderBy(os ...predicate.LockerOrderTerm) *LockerQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -145,12 +145,12 @@ func (q *LockerQuery) OrderBy(os ...predicate.LockerOrder) *LockerQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *LockerQuery) Limit(n int) *LockerQuery { q.c.Lim = n; return q }
+func (q *LockerQuery) Limit(n int) *LockerQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *LockerQuery) Offset(n int) *LockerQuery { q.c.Off = n; return q }
+func (q *LockerQuery) Offset(n int) *LockerQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -310,7 +310,7 @@ func NewLockerCreate(ex orm.Executor) *LockerCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *LockerCreate) Set(ss ...predicate.LockerSet) *LockerCreate {
+func (b *LockerCreate) Set(ss ...predicate.LockerSetter) *LockerCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -405,7 +405,7 @@ func NewLockerUpdate(ex orm.Executor) *LockerUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *LockerUpdate) Set(ss ...predicate.LockerSet) *LockerUpdate {
+func (b *LockerUpdate) Set(ss ...predicate.LockerSetter) *LockerUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -434,11 +434,18 @@ func (b *LockerUpdate) Fill(in any, skip ...string) *LockerUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *LockerUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *LockerUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

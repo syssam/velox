@@ -60,8 +60,8 @@ import (
 	mupdate "github.com/syssam/velox/vx/tests/shapes/db/update"
 	muser "github.com/syssam/velox/vx/tests/shapes/db/user"
 	nuserclient "github.com/syssam/velox/vx/tests/shapes/db/userclient"
-	nuserorder "github.com/syssam/velox/vx/tests/shapes/db/userorder"
-	nuserset "github.com/syssam/velox/vx/tests/shapes/db/userset"
+	nuserorder "github.com/syssam/velox/vx/tests/shapes/db/userorderterm"
+	nuserset "github.com/syssam/velox/vx/tests/shapes/db/usersetter"
 	nuuid "github.com/syssam/velox/vx/tests/shapes/db/uuid"
 	"github.com/syssam/velox/vx/tests/shapes/types"
 )
@@ -801,24 +801,24 @@ func TestNames_ClashesAreRenamed(t *testing.T) {
 	// Enum fields named like the per-entity types of the model: the enum types
 	// are in the entity package and no longer collide with anything there.
 	var (
-		_ nclash.OrderEnum       = nclash.OrderDesc
-		_ nclash.SetEnum         = nclash.SetB
-		_ nclash.QueryEnum       = nclash.QueryB
-		_ nclash.CreateEnum      = nclash.CreateSingle
-		_ nclash.UpdateEnum      = nclash.UpdateB
-		_ nclash.LoadEnum        = nclash.LoadHigh
-		_ nclash.EdgeEnum        = nclash.EdgeB
-		_ nclash.MetaEnum        = nclash.MetaB
-		_ nclash.PredEnum        = nclash.PredB
-		_ *entity.ClashQuery     = client.Clash.Query(nil)
-		_ *entity.ClashCreate    = client.Clash.Create(nil)
-		_ *entity.ClashUpdate    = client.Clash.Update(nil)
-		_ []predicate.ClashOrder = []predicate.ClashOrder{nclash.Order.Asc()}
-		_ []predicate.ClashSet   = []predicate.ClashSet{nclash.Set.Set(nclash.SetA)}
-		_ []predicate.Clash      = []predicate.Clash{nclash.Pred.EQ(nclash.PredA)}
-		_ nclash.KindEnum        = nclash.KindType // the value "type" of kind keeps its name; the alias gives way
-		_ nclash.AEnum           = nclash.ABC      // a = "b_c"
-		_ nclash.ABEnum          = nclash.ABCValue // a_b = "c"
+		_ nclash.OrderEnum           = nclash.OrderDesc
+		_ nclash.SetEnum             = nclash.SetB
+		_ nclash.QueryEnum           = nclash.QueryB
+		_ nclash.CreateEnum          = nclash.CreateSingle
+		_ nclash.UpdateEnum          = nclash.UpdateB
+		_ nclash.LoadEnum            = nclash.LoadHigh
+		_ nclash.EdgeEnum            = nclash.EdgeB
+		_ nclash.MetaEnum            = nclash.MetaB
+		_ nclash.PredEnum            = nclash.PredB
+		_ *entity.ClashQuery         = client.Clash.Query(nil)
+		_ *entity.ClashCreate        = client.Clash.Create(nil)
+		_ *entity.ClashUpdate        = client.Clash.Update(nil)
+		_ []predicate.ClashOrderTerm = []predicate.ClashOrderTerm{nclash.Order.Asc()}
+		_ []predicate.ClashSetter    = []predicate.ClashSetter{nclash.Set.Set(nclash.SetA)}
+		_ []predicate.Clash          = []predicate.Clash{nclash.Pred.EQ(nclash.PredA)}
+		_ nclash.KindEnum            = nclash.KindType // the value "type" of kind keeps its name; the alias gives way
+		_ nclash.AEnum               = nclash.ABC      // a = "b_c"
+		_ nclash.ABEnum              = nclash.ABCValue // a_b = "c"
 	)
 	assert.Equal(t, "bulk", string(nclash.CreateBulk), "the value bulk of create is not the CreateBulk constructor")
 	assert.Equal(t, "type", string(nclash.KindType))
@@ -904,17 +904,17 @@ func TestNames_ClashesAreRenamed(t *testing.T) {
 	assert.Equal(t, "u", must(client.User.Query(db).Only(ctx)).Label)
 
 	// Entities named like the setter and order types of another: the entity
-	// keeps its name as its predicate type (predicate.UserSet is a predicate
-	// of UserSet), and User's own setters and order terms still work.
+	// keeps its name as its predicate type (predicate.UserSetter is a predicate
+	// of UserSetter), and User's own setters and order terms still work.
 	var (
-		_ predicate.UserSet   = nuserset.Label.EQ("x")
-		_ predicate.UserOrder = nuserorder.Label.EQ("x")
-		_ predicate.User      = muser.Label.EQ("x")
+		_ predicate.UserSetter    = nuserset.Label.EQ("x")
+		_ predicate.UserOrderTerm = nuserorder.Label.EQ("x")
+		_ predicate.User          = muser.Label.EQ("x")
 	)
-	must(client.UserSet.Create(db).Set(nuserset.Label.Set("us")).Save(ctx))
-	must(client.UserOrder.Create(db).Set(nuserorder.Label.Set("uo")).Save(ctx))
-	assert.Equal(t, "us", must(client.UserSet.Query(db).Where(nuserset.Label.EQ("us")).OrderBy(nuserset.Label.Asc()).Only(ctx)).Label)
-	assert.Equal(t, "uo", must(client.UserOrder.Query(db).OrderBy(nuserorder.Label.Desc()).Only(ctx)).Label)
+	must(client.UserSetter.Create(db).Set(nuserset.Label.Set("us")).Save(ctx))
+	must(client.UserOrderTerm.Create(db).Set(nuserorder.Label.Set("uo")).Save(ctx))
+	assert.Equal(t, "us", must(client.UserSetter.Query(db).Where(nuserset.Label.EQ("us")).OrderBy(nuserset.Label.Asc()).Only(ctx)).Label)
+	assert.Equal(t, "uo", must(client.UserOrderTerm.Query(db).OrderBy(nuserorder.Label.Desc()).Only(ctx)).Label)
 	assert.Equal(t, 1, must(client.User.Update(db).Set(muser.Label.Set("u2")).Where(muser.Label.EQ("u")).Exec(ctx)))
 	assert.Equal(t, "u2", must(client.User.Query(db).OrderBy(muser.Label.Asc()).Only(ctx)).Label)
 }

@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Validated, and ModelName the name of its entity.
+// Table is the table of Validated, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "validateds"
 	ModelName = "Validated"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.ValidatedSet {
+func (f *IntColumn) SetNillable(v *int) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.ValidatedOrder { return predicate.ValidatedOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,27 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.ValidatedSet {
+func (f *StringColumn) SetNillable(v *string) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float64Column is a column of Go type float64: its methods build the predicates,
@@ -251,32 +254,32 @@ func (f *Float64Column) LTE(v float64) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Float64Column) Set(v float64) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float64Column) Set(v float64) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float64Column) SetNillable(v *float64) predicate.ValidatedSet {
+func (f *Float64Column) SetNillable(v *float64) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float64Column) Add(v float64) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float64Column) Add(v float64) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float64Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Float64Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Float64Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Float64Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int8Column is a column of Go type int8: its methods build the predicates,
@@ -333,30 +336,32 @@ func (f *Int8Column) LTE(v int8) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Int8Column) Set(v int8) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int8Column) Set(v int8) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int8Column) SetNillable(v *int8) predicate.ValidatedSet {
+func (f *Int8Column) SetNillable(v *int8) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int8Column) Add(v int8) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int8Column) Add(v int8) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int8Column) Asc() predicate.ValidatedOrder { return predicate.ValidatedOrder{Col: string(*f)} }
+func (f *Int8Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Int8Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Int8Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int16Column is a column of Go type int16: its methods build the predicates,
@@ -413,32 +418,32 @@ func (f *Int16Column) LTE(v int16) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Int16Column) Set(v int16) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int16Column) Set(v int16) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int16Column) SetNillable(v *int16) predicate.ValidatedSet {
+func (f *Int16Column) SetNillable(v *int16) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int16Column) Add(v int16) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int16Column) Add(v int16) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int16Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Int16Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Int16Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Int16Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int32Column is a column of Go type int32: its methods build the predicates,
@@ -495,32 +500,32 @@ func (f *Int32Column) LTE(v int32) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Int32Column) Set(v int32) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int32Column) Set(v int32) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int32Column) SetNillable(v *int32) predicate.ValidatedSet {
+func (f *Int32Column) SetNillable(v *int32) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int32Column) Add(v int32) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int32Column) Add(v int32) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int32Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Int32Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Int32Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Int32Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int64Column is a column of Go type int64: its methods build the predicates,
@@ -577,32 +582,32 @@ func (f *Int64Column) LTE(v int64) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Int64Column) Set(v int64) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int64Column) Set(v int64) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int64Column) SetNillable(v *int64) predicate.ValidatedSet {
+func (f *Int64Column) SetNillable(v *int64) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int64Column) Add(v int64) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int64Column) Add(v int64) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int64Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Int64Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Int64Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Int64Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UintColumn is a column of Go type uint: its methods build the predicates,
@@ -659,30 +664,32 @@ func (f *UintColumn) LTE(v uint) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *UintColumn) Set(v uint) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UintColumn) Set(v uint) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UintColumn) SetNillable(v *uint) predicate.ValidatedSet {
+func (f *UintColumn) SetNillable(v *uint) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *UintColumn) Add(v uint) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *UintColumn) Add(v uint) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UintColumn) Asc() predicate.ValidatedOrder { return predicate.ValidatedOrder{Col: string(*f)} }
+func (f *UintColumn) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *UintColumn) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *UintColumn) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint8Column is a column of Go type uint8: its methods build the predicates,
@@ -739,32 +746,32 @@ func (f *Uint8Column) LTE(v uint8) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Uint8Column) Set(v uint8) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint8Column) Set(v uint8) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint8Column) SetNillable(v *uint8) predicate.ValidatedSet {
+func (f *Uint8Column) SetNillable(v *uint8) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint8Column) Add(v uint8) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint8Column) Add(v uint8) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint8Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Uint8Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Uint8Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Uint8Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint64Column is a column of Go type uint64: its methods build the predicates,
@@ -821,32 +828,32 @@ func (f *Uint64Column) LTE(v uint64) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Uint64Column) Set(v uint64) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint64Column) Set(v uint64) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint64Column) SetNillable(v *uint64) predicate.ValidatedSet {
+func (f *Uint64Column) SetNillable(v *uint64) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint64Column) Add(v uint64) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint64Column) Add(v uint64) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint64Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Uint64Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Uint64Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Uint64Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float32Column is a column of Go type float32: its methods build the predicates,
@@ -903,32 +910,32 @@ func (f *Float32Column) LTE(v float32) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *Float32Column) Set(v float32) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float32Column) Set(v float32) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float32Column) SetNillable(v *float32) predicate.ValidatedSet {
+func (f *Float32Column) SetNillable(v *float32) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float32Column) Add(v float32) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float32Column) Add(v float32) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float32Column) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *Float32Column) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Float32Column) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *Float32Column) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -985,27 +992,27 @@ func (f *BytesColumn) LTE(v []byte) predicate.Validated {
 }
 
 // Set assigns v to the column.
-func (f *BytesColumn) Set(v []byte) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BytesColumn) Set(v []byte) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BytesColumn) SetNillable(v *[]byte) predicate.ValidatedSet {
+func (f *BytesColumn) SetNillable(v *[]byte) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BytesColumn) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *BytesColumn) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *BytesColumn) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *BytesColumn) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -1088,41 +1095,41 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.Validated {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.Validated {
-	return predicate.Validated{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.Validated {
-	return predicate.Validated{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.ValidatedSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.ValidatedSetter {
 	if v == nil {
-		return predicate.ValidatedSet{}
+		return predicate.ValidatedSetter{}
 	}
-	return predicate.ValidatedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.ValidatedSet {
-	return predicate.ValidatedSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.ValidatedSetter {
+	return predicate.ValidatedSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f)}
+func (f *NullableStringColumn) Asc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.ValidatedOrder {
-	return predicate.ValidatedOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.ValidatedOrderTerm {
+	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Validated.

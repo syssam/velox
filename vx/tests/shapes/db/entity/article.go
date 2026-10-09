@@ -205,7 +205,7 @@ func (q *ArticleQuery) Where(ps ...predicate.Article) *ArticleQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *ArticleQuery) OrderBy(os ...predicate.ArticleOrder) *ArticleQuery {
+func (q *ArticleQuery) OrderBy(os ...predicate.ArticleOrderTerm) *ArticleQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -215,12 +215,12 @@ func (q *ArticleQuery) OrderBy(os ...predicate.ArticleOrder) *ArticleQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *ArticleQuery) Limit(n int) *ArticleQuery { q.c.Lim = n; return q }
+func (q *ArticleQuery) Limit(n int) *ArticleQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *ArticleQuery) Offset(n int) *ArticleQuery { q.c.Off = n; return q }
+func (q *ArticleQuery) Offset(n int) *ArticleQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -380,7 +380,7 @@ func NewArticleCreate(ex orm.Executor) *ArticleCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *ArticleCreate) Set(ss ...predicate.ArticleSet) *ArticleCreate {
+func (b *ArticleCreate) Set(ss ...predicate.ArticleSetter) *ArticleCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -475,7 +475,7 @@ func NewArticleUpdate(ex orm.Executor) *ArticleUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *ArticleUpdate) Set(ss ...predicate.ArticleSet) *ArticleUpdate {
+func (b *ArticleUpdate) Set(ss ...predicate.ArticleSetter) *ArticleUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -504,11 +504,18 @@ func (b *ArticleUpdate) Fill(in any, skip ...string) *ArticleUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *ArticleUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *ArticleUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

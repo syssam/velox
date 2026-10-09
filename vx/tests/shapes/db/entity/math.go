@@ -86,7 +86,7 @@ func (q *MathQuery) Where(ps ...predicate.Math) *MathQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *MathQuery) OrderBy(os ...predicate.MathOrder) *MathQuery {
+func (q *MathQuery) OrderBy(os ...predicate.MathOrderTerm) *MathQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -96,12 +96,12 @@ func (q *MathQuery) OrderBy(os ...predicate.MathOrder) *MathQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *MathQuery) Limit(n int) *MathQuery { q.c.Lim = n; return q }
+func (q *MathQuery) Limit(n int) *MathQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *MathQuery) Offset(n int) *MathQuery { q.c.Off = n; return q }
+func (q *MathQuery) Offset(n int) *MathQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -261,7 +261,7 @@ func NewMathCreate(ex orm.Executor) *MathCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *MathCreate) Set(ss ...predicate.MathSet) *MathCreate {
+func (b *MathCreate) Set(ss ...predicate.MathSetter) *MathCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -356,7 +356,7 @@ func NewMathUpdate(ex orm.Executor) *MathUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *MathUpdate) Set(ss ...predicate.MathSet) *MathUpdate {
+func (b *MathUpdate) Set(ss ...predicate.MathSetter) *MathUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -385,11 +385,18 @@ func (b *MathUpdate) Fill(in any, skip ...string) *MathUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *MathUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *MathUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

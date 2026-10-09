@@ -134,7 +134,7 @@ func (q *KindShapeQuery) Where(ps ...predicate.KindShape) *KindShapeQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *KindShapeQuery) OrderBy(os ...predicate.KindShapeOrder) *KindShapeQuery {
+func (q *KindShapeQuery) OrderBy(os ...predicate.KindShapeOrderTerm) *KindShapeQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -144,12 +144,12 @@ func (q *KindShapeQuery) OrderBy(os ...predicate.KindShapeOrder) *KindShapeQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *KindShapeQuery) Limit(n int) *KindShapeQuery { q.c.Lim = n; return q }
+func (q *KindShapeQuery) Limit(n int) *KindShapeQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *KindShapeQuery) Offset(n int) *KindShapeQuery { q.c.Off = n; return q }
+func (q *KindShapeQuery) Offset(n int) *KindShapeQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -312,7 +312,7 @@ func NewKindShapeCreate(ex orm.Executor) *KindShapeCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *KindShapeCreate) Set(ss ...predicate.KindShapeSet) *KindShapeCreate {
+func (b *KindShapeCreate) Set(ss ...predicate.KindShapeSetter) *KindShapeCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -407,7 +407,7 @@ func NewKindShapeUpdate(ex orm.Executor) *KindShapeUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *KindShapeUpdate) Set(ss ...predicate.KindShapeSet) *KindShapeUpdate {
+func (b *KindShapeUpdate) Set(ss ...predicate.KindShapeSetter) *KindShapeUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -436,11 +436,18 @@ func (b *KindShapeUpdate) Fill(in any, skip ...string) *KindShapeUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *KindShapeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *KindShapeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

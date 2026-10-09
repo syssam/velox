@@ -86,7 +86,7 @@ func (q *Int64KeyQuery) Where(ps ...predicate.Int64Key) *Int64KeyQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *Int64KeyQuery) OrderBy(os ...predicate.Int64KeyOrder) *Int64KeyQuery {
+func (q *Int64KeyQuery) OrderBy(os ...predicate.Int64KeyOrderTerm) *Int64KeyQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -96,12 +96,12 @@ func (q *Int64KeyQuery) OrderBy(os ...predicate.Int64KeyOrder) *Int64KeyQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *Int64KeyQuery) Limit(n int) *Int64KeyQuery { q.c.Lim = n; return q }
+func (q *Int64KeyQuery) Limit(n int) *Int64KeyQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *Int64KeyQuery) Offset(n int) *Int64KeyQuery { q.c.Off = n; return q }
+func (q *Int64KeyQuery) Offset(n int) *Int64KeyQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -261,7 +261,7 @@ func NewInt64KeyCreate(ex orm.Executor) *Int64KeyCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *Int64KeyCreate) Set(ss ...predicate.Int64KeySet) *Int64KeyCreate {
+func (b *Int64KeyCreate) Set(ss ...predicate.Int64KeySetter) *Int64KeyCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -356,7 +356,7 @@ func NewInt64KeyUpdate(ex orm.Executor) *Int64KeyUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *Int64KeyUpdate) Set(ss ...predicate.Int64KeySet) *Int64KeyUpdate {
+func (b *Int64KeyUpdate) Set(ss ...predicate.Int64KeySetter) *Int64KeyUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -385,11 +385,18 @@ func (b *Int64KeyUpdate) Fill(in any, skip ...string) *Int64KeyUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *Int64KeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *Int64KeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

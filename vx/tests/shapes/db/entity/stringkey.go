@@ -89,7 +89,7 @@ func (q *StringKeyQuery) Where(ps ...predicate.StringKey) *StringKeyQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *StringKeyQuery) OrderBy(os ...predicate.StringKeyOrder) *StringKeyQuery {
+func (q *StringKeyQuery) OrderBy(os ...predicate.StringKeyOrderTerm) *StringKeyQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -99,12 +99,12 @@ func (q *StringKeyQuery) OrderBy(os ...predicate.StringKeyOrder) *StringKeyQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *StringKeyQuery) Limit(n int) *StringKeyQuery { q.c.Lim = n; return q }
+func (q *StringKeyQuery) Limit(n int) *StringKeyQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *StringKeyQuery) Offset(n int) *StringKeyQuery { q.c.Off = n; return q }
+func (q *StringKeyQuery) Offset(n int) *StringKeyQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -267,7 +267,7 @@ func NewStringKeyCreate(ex orm.Executor) *StringKeyCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *StringKeyCreate) Set(ss ...predicate.StringKeySet) *StringKeyCreate {
+func (b *StringKeyCreate) Set(ss ...predicate.StringKeySetter) *StringKeyCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -362,7 +362,7 @@ func NewStringKeyUpdate(ex orm.Executor) *StringKeyUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *StringKeyUpdate) Set(ss ...predicate.StringKeySet) *StringKeyUpdate {
+func (b *StringKeyUpdate) Set(ss ...predicate.StringKeySetter) *StringKeyUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -391,11 +391,18 @@ func (b *StringKeyUpdate) Fill(in any, skip ...string) *StringKeyUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *StringKeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *StringKeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of EnumShape, and ModelName the name of its entity.
+// Table is the table of EnumShape, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "enum_shapes"
 	ModelName = "EnumShape"
@@ -128,30 +129,32 @@ func (f *IntColumn) LTE(v int) predicate.EnumShape {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.EnumShapeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.EnumShapeOrder { return predicate.EnumShapeOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StateEnumColumn is a column of Go type StateEnum: its methods build the predicates,
@@ -188,27 +191,27 @@ func (f *StateEnumColumn) NotIn(vs ...StateEnum) predicate.EnumShape {
 }
 
 // Set assigns v to the column.
-func (f *StateEnumColumn) Set(v StateEnum) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StateEnumColumn) Set(v StateEnum) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StateEnumColumn) SetNillable(v *StateEnum) predicate.EnumShapeSet {
+func (f *StateEnumColumn) SetNillable(v *StateEnum) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StateEnumColumn) Asc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f)}
+func (f *StateEnumColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StateEnumColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *StateEnumColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableMoodEnumColumn is a column of Go type MoodEnum: its methods build the predicates,
@@ -246,41 +249,41 @@ func (f *NullableMoodEnumColumn) NotIn(vs ...MoodEnum) predicate.EnumShape {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableMoodEnumColumn) IsNil() predicate.EnumShape {
-	return predicate.EnumShape{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableMoodEnumColumn) NotNil() predicate.EnumShape {
-	return predicate.EnumShape{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableMoodEnumColumn) Set(v MoodEnum) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableMoodEnumColumn) Set(v MoodEnum) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableMoodEnumColumn) SetNillable(v *MoodEnum) predicate.EnumShapeSet {
+func (f *NullableMoodEnumColumn) SetNillable(v *MoodEnum) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableMoodEnumColumn) Clear() predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableMoodEnumColumn) Clear() predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableMoodEnumColumn) Asc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f)}
+func (f *NullableMoodEnumColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableMoodEnumColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *NullableMoodEnumColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // PhaseEnumColumn is a column of Go type PhaseEnum: its methods build the predicates,
@@ -317,27 +320,27 @@ func (f *PhaseEnumColumn) NotIn(vs ...PhaseEnum) predicate.EnumShape {
 }
 
 // Set assigns v to the column.
-func (f *PhaseEnumColumn) Set(v PhaseEnum) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *PhaseEnumColumn) Set(v PhaseEnum) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *PhaseEnumColumn) SetNillable(v *PhaseEnum) predicate.EnumShapeSet {
+func (f *PhaseEnumColumn) SetNillable(v *PhaseEnum) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *PhaseEnumColumn) Asc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f)}
+func (f *PhaseEnumColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *PhaseEnumColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *PhaseEnumColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // SizeEnumColumn is a column of Go type SizeEnum: its methods build the predicates,
@@ -374,27 +377,27 @@ func (f *SizeEnumColumn) NotIn(vs ...SizeEnum) predicate.EnumShape {
 }
 
 // Set assigns v to the column.
-func (f *SizeEnumColumn) Set(v SizeEnum) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *SizeEnumColumn) Set(v SizeEnum) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *SizeEnumColumn) SetNillable(v *SizeEnum) predicate.EnumShapeSet {
+func (f *SizeEnumColumn) SetNillable(v *SizeEnum) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *SizeEnumColumn) Asc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f)}
+func (f *SizeEnumColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *SizeEnumColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *SizeEnumColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TierColumn is a column of Go type types.Tier: its methods build the predicates,
@@ -431,25 +434,27 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.EnumShape {
 }
 
 // Set assigns v to the column.
-func (f *TierColumn) Set(v types.Tier) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TierColumn) Set(v types.Tier) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TierColumn) SetNillable(v *types.Tier) predicate.EnumShapeSet {
+func (f *TierColumn) SetNillable(v *types.Tier) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TierColumn) Asc() predicate.EnumShapeOrder { return predicate.EnumShapeOrder{Col: string(*f)} }
+func (f *TierColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TierColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *TierColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableTierColumn is a column of Go type types.Tier: its methods build the predicates,
@@ -487,41 +492,41 @@ func (f *NullableTierColumn) NotIn(vs ...types.Tier) predicate.EnumShape {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableTierColumn) IsNil() predicate.EnumShape {
-	return predicate.EnumShape{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableTierColumn) NotNil() predicate.EnumShape {
-	return predicate.EnumShape{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTierColumn) Set(v types.Tier) predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableTierColumn) Set(v types.Tier) predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTierColumn) SetNillable(v *types.Tier) predicate.EnumShapeSet {
+func (f *NullableTierColumn) SetNillable(v *types.Tier) predicate.EnumShapeSetter {
 	if v == nil {
-		return predicate.EnumShapeSet{}
+		return predicate.EnumShapeSetter{}
 	}
-	return predicate.EnumShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableTierColumn) Clear() predicate.EnumShapeSet {
-	return predicate.EnumShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableTierColumn) Clear() predicate.EnumShapeSetter {
+	return predicate.EnumShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTierColumn) Asc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f)}
+func (f *NullableTierColumn) Asc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableTierColumn) Desc() predicate.EnumShapeOrder {
-	return predicate.EnumShapeOrder{Col: string(*f), Desc: true}
+func (f *NullableTierColumn) Desc() predicate.EnumShapeOrderTerm {
+	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of EnumShape.

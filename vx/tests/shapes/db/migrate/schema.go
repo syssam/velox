@@ -2436,8 +2436,8 @@ var UserClientTable = &schema.Table{
 	PrimaryKey: []*schema.Column{UserClientColumns[0]},
 }
 
-// UserOrderColumns holds the columns for the "user_orders" table.
-var UserOrderColumns = []*schema.Column{{
+// UserOrderTermColumns holds the columns for the "user_order_terms" table.
+var UserOrderTermColumns = []*schema.Column{{
 	Increment: true,
 	Name:      "id",
 	Type:      field.TypeInt,
@@ -2446,15 +2446,15 @@ var UserOrderColumns = []*schema.Column{{
 	Type: field.TypeString,
 }}
 
-// UserOrderTable holds the schema information for the "user_orders" table.
-var UserOrderTable = &schema.Table{
-	Columns:    UserOrderColumns,
-	Name:       "user_orders",
-	PrimaryKey: []*schema.Column{UserOrderColumns[0]},
+// UserOrderTermTable holds the schema information for the "user_order_terms" table.
+var UserOrderTermTable = &schema.Table{
+	Columns:    UserOrderTermColumns,
+	Name:       "user_order_terms",
+	PrimaryKey: []*schema.Column{UserOrderTermColumns[0]},
 }
 
-// UserSetColumns holds the columns for the "user_sets" table.
-var UserSetColumns = []*schema.Column{{
+// UserSetterColumns holds the columns for the "user_setters" table.
+var UserSetterColumns = []*schema.Column{{
 	Increment: true,
 	Name:      "id",
 	Type:      field.TypeInt,
@@ -2463,11 +2463,11 @@ var UserSetColumns = []*schema.Column{{
 	Type: field.TypeString,
 }}
 
-// UserSetTable holds the schema information for the "user_sets" table.
-var UserSetTable = &schema.Table{
-	Columns:    UserSetColumns,
-	Name:       "user_sets",
-	PrimaryKey: []*schema.Column{UserSetColumns[0]},
+// UserSetterTable holds the schema information for the "user_setters" table.
+var UserSetterTable = &schema.Table{
+	Columns:    UserSetterColumns,
+	Name:       "user_setters",
+	PrimaryKey: []*schema.Column{UserSetterColumns[0]},
 }
 
 // ValidatedColumns holds the columns for the "validateds" table.
@@ -2979,7 +2979,7 @@ var WeightKeyPeersTable = &schema.Table{
 }
 
 // Tables holds all the tables in the schema.
-var Tables = []*schema.Table{AndTable, ArticleTable, AuthorTable, BadgeTable, BareTable, BlobTable, BulkTable, ClashTable, ContextTable, CourseTable, CreateTable, DbTable, DefaultShapeTable, EdgeTable, EdgesTable, EdgesEnumTable, EdgesFieldTable, EnrollmentTable, EntityTable, EntityxTable, EnumShapeTable, ErrFieldTable, ErrorsTable, FieldTable, GadgetTable, GoTypeShapeTable, HttpTable, IdTable, Int64KeyTable, IntKeyTable, InternalTable, JsonTable, KeywordsTable, KindTable, KindShapeTable, LabelKeyTable, LoadTable, LockerTable, ManualKeyTable, MathTable, MetaTable, MigrateTable, MixedInTable, MixinOnlyTable, NamedBoolTable, NamedBoolNilTable, NamedBytesTable, NodeTable, NotTable, NoteTable, OddTable, OrTable, OrderTable, OrmTable, PassportTable, PersonTable, PlayerTable, PredTable, PredicateTable, QueryUserTable, RenamedTable, RuntimeTable, ScalarTable, SchemainitTable, SetTable, SqlTable, StringKeyTable, StringsTable, StudentTable, TableTable, TeamTable, TimeTable, TopicTable, TxTable, UUIDTable, UUIDKeyTable, Uint16KeyTable, UpdateTable, UserTable, UserClientTable, UserOrderTable, UserSetTable, ValidatedTable, WeightKeyTable, WideTable, ArticleTopicsTable, ArticleBansTable, LabelWeightsTable, PersonFriendsTable, PersonFollowingTable, TeamFansTable, TeamRivalsTable, TeamBadgesTable, WeightKeyPeersTable}
+var Tables = []*schema.Table{AndTable, ArticleTable, AuthorTable, BadgeTable, BareTable, BlobTable, BulkTable, ClashTable, ContextTable, CourseTable, CreateTable, DbTable, DefaultShapeTable, EdgeTable, EdgesTable, EdgesEnumTable, EdgesFieldTable, EnrollmentTable, EntityTable, EntityxTable, EnumShapeTable, ErrFieldTable, ErrorsTable, FieldTable, GadgetTable, GoTypeShapeTable, HttpTable, IdTable, Int64KeyTable, IntKeyTable, InternalTable, JsonTable, KeywordsTable, KindTable, KindShapeTable, LabelKeyTable, LoadTable, LockerTable, ManualKeyTable, MathTable, MetaTable, MigrateTable, MixedInTable, MixinOnlyTable, NamedBoolTable, NamedBoolNilTable, NamedBytesTable, NodeTable, NotTable, NoteTable, OddTable, OrTable, OrderTable, OrmTable, PassportTable, PersonTable, PlayerTable, PredTable, PredicateTable, QueryUserTable, RenamedTable, RuntimeTable, ScalarTable, SchemainitTable, SetTable, SqlTable, StringKeyTable, StringsTable, StudentTable, TableTable, TeamTable, TimeTable, TopicTable, TxTable, UUIDTable, UUIDKeyTable, Uint16KeyTable, UpdateTable, UserTable, UserClientTable, UserOrderTermTable, UserSetterTable, ValidatedTable, WeightKeyTable, WideTable, ArticleTopicsTable, ArticleBansTable, LabelWeightsTable, PersonFriendsTable, PersonFollowingTable, TeamFansTable, TeamRivalsTable, TeamBadgesTable, WeightKeyPeersTable}
 
 func init() {
 	ArticleTable.ForeignKeys[0].RefTable = AuthorTable

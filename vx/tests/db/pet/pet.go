@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/db/predicate"
 )
 
-// Table is the table of Pet, and ModelName the name of its entity.
+// Table is the table of Pet, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "pets"
 	ModelName = "Pet"
@@ -79,29 +80,31 @@ func (f *IntColumn) LTE(v int) predicate.Pet {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.PetSet {
-	return predicate.PetSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.PetSet {
+func (f *IntColumn) SetNillable(v *int) predicate.PetSetter {
 	if v == nil {
-		return predicate.PetSet{}
+		return predicate.PetSetter{}
 	}
-	return predicate.PetSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PetSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.PetSet {
-	return predicate.PetSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.PetOrder { return predicate.PetOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.PetOrderTerm { return predicate.PetOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.PetOrder { return predicate.PetOrder{Col: string(*f), Desc: true} }
+func (f *IntColumn) Desc() predicate.PetOrderTerm {
+	return predicate.PetOrderTerm{Col: string(*f), Desc: true}
+}
 
 // StringColumn is a column of Go type string: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
@@ -182,25 +185,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Pet {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.PetSet {
-	return predicate.PetSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.PetSet {
+func (f *StringColumn) SetNillable(v *string) predicate.PetSetter {
 	if v == nil {
-		return predicate.PetSet{}
+		return predicate.PetSetter{}
 	}
-	return predicate.PetSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PetSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.PetOrder { return predicate.PetOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.PetOrderTerm { return predicate.PetOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.PetOrder {
-	return predicate.PetOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.PetOrderTerm {
+	return predicate.PetOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIntKeyColumn is a column of Go type int: its methods build the predicates,
@@ -238,39 +241,41 @@ func (f *NullableIntKeyColumn) NotIn(vs ...int) predicate.Pet {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntKeyColumn) IsNil() predicate.Pet {
-	return predicate.Pet{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Pet{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntKeyColumn) NotNil() predicate.Pet {
-	return predicate.Pet{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Pet{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntKeyColumn) Set(v int) predicate.PetSet {
-	return predicate.PetSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntKeyColumn) Set(v int) predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntKeyColumn) SetNillable(v *int) predicate.PetSet {
+func (f *NullableIntKeyColumn) SetNillable(v *int) predicate.PetSetter {
 	if v == nil {
-		return predicate.PetSet{}
+		return predicate.PetSetter{}
 	}
-	return predicate.PetSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PetSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntKeyColumn) Clear() predicate.PetSet {
-	return predicate.PetSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntKeyColumn) Clear() predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntKeyColumn) Asc() predicate.PetOrder { return predicate.PetOrder{Col: string(*f)} }
+func (f *NullableIntKeyColumn) Asc() predicate.PetOrderTerm {
+	return predicate.PetOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntKeyColumn) Desc() predicate.PetOrder {
-	return predicate.PetOrder{Col: string(*f), Desc: true}
+func (f *NullableIntKeyColumn) Desc() predicate.PetOrderTerm {
+	return predicate.PetOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Pet.
@@ -309,13 +314,13 @@ func (e *EdgeOwner) HasWith(ps ...predicate.User) predicate.Pet {
 }
 
 // Set connects the Pet to the User with the given id.
-func (e *EdgeOwner) Set(id int) predicate.PetSet {
-	return predicate.PetSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeOwner) Set(id int) predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Pet from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.PetSet {
-	return predicate.PetSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeOwner) Clear() predicate.PetSetter {
+	return predicate.PetSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 // EdgeMetas returns the descriptions of the edges of Pet, in order. The generated

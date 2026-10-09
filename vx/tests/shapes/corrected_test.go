@@ -151,7 +151,7 @@ func TestEdges_ImmutableAndRequiredOnUpdate(t *testing.T) {
 	n1 := must(client.Note.Create(db).Set(note.Text.Set("n1")).Save(ctx))
 	n2 := must(client.Note.Create(db).Set(note.Text.Set("n2")).Save(ctx))
 	r := must(client.Renamed.Create(db).Set(renamed.Frozen.Add(n1.ID), renamed.FrozenTopics.Add(l.tgo.ID, l.sql.ID)).Save(ctx))
-	for name, set := range map[string]predicate.RenamedSet{
+	for name, set := range map[string]predicate.RenamedSetter{
 		"o2m add": renamed.Frozen.Add(n2.ID), "o2m remove": renamed.Frozen.Remove(n1.ID), "o2m clear": renamed.Frozen.Clear(),
 		"m2m add": renamed.FrozenTopics.Add(l.rust.ID), "m2m remove": renamed.FrozenTopics.Remove(l.tgo.ID), "m2m clear": renamed.FrozenTopics.Clear(),
 	} {
@@ -194,14 +194,14 @@ func TestEdges_LastSetterOfAKeyWins(t *testing.T) {
 	}
 	cases := []struct {
 		name string
-		sets []predicate.ArticleSet
+		sets []predicate.ArticleSetter
 		want int
 	}{
-		{"field then edge", []predicate.ArticleSet{article.AuthorID.Set(bob.ID), article.Author.Set(ann.ID)}, ann.ID},
-		{"edge then field", []predicate.ArticleSet{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID)}, bob.ID},
-		{"edge twice", []predicate.ArticleSet{article.Author.Set(ann.ID), article.Author.Set(bob.ID)}, bob.ID},
-		{"field twice", []predicate.ArticleSet{article.AuthorID.Set(ann.ID), article.AuthorID.Set(bob.ID)}, bob.ID},
-		{"three", []predicate.ArticleSet{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID), article.Author.Set(cid.ID)}, cid.ID},
+		{"field then edge", []predicate.ArticleSetter{article.AuthorID.Set(bob.ID), article.Author.Set(ann.ID)}, ann.ID},
+		{"edge then field", []predicate.ArticleSetter{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID)}, bob.ID},
+		{"edge twice", []predicate.ArticleSetter{article.Author.Set(ann.ID), article.Author.Set(bob.ID)}, bob.ID},
+		{"field twice", []predicate.ArticleSetter{article.AuthorID.Set(ann.ID), article.AuthorID.Set(bob.ID)}, bob.ID},
+		{"three", []predicate.ArticleSetter{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID), article.Author.Set(cid.ID)}, cid.ID},
 	}
 	var bulk []*entity.ArticleCreate
 	for _, c := range cases {
@@ -543,7 +543,7 @@ func TestNull_OnlyInNullableColumns(t *testing.T) {
 	db := open(t)
 	s := must(client.Scalar.Create(db).Set(scalarRequired(1)...).Set(scalarFull(1)...).Save(ctx))
 	for _, col := range []string{"string_opt", "int_opt", "bytes_opt", "time_opt", "seq", "string_ptr"} {
-		null := predicate.ScalarSet{Kind: orm.SetNull, Col: col}
+		null := predicate.ScalarSetter{Kind: orm.SetNull, Col: col}
 		_, err := client.Scalar.Create(db).Set(scalarRequired(2)...).Set(null).Save(ctx)
 		invalid(t, err, col, "create")
 		_, err = client.Scalar.Update(db).Set(scalar.IntNil.Set(77), null).Where(scalar.ID.EQ(s.ID)).Exec(ctx)
@@ -589,13 +589,13 @@ func TestUpdate_SettersApplyInOrder(t *testing.T) {
 	}
 	for _, c := range []struct {
 		name string
-		sets []predicate.ArticleSet
+		sets []predicate.ArticleSetter
 		want int
 	}{
-		{"field then edge", []predicate.ArticleSet{article.AuthorID.Set(bob.ID), article.Author.Set(ann.ID)}, ann.ID},
-		{"edge then field", []predicate.ArticleSet{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID)}, bob.ID},
-		{"edge twice", []predicate.ArticleSet{article.Author.Set(ann.ID), article.Author.Set(cid.ID)}, cid.ID},
-		{"three", []predicate.ArticleSet{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID), article.Author.Set(ann.ID)}, ann.ID},
+		{"field then edge", []predicate.ArticleSetter{article.AuthorID.Set(bob.ID), article.Author.Set(ann.ID)}, ann.ID},
+		{"edge then field", []predicate.ArticleSetter{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID)}, bob.ID},
+		{"edge twice", []predicate.ArticleSetter{article.Author.Set(ann.ID), article.Author.Set(cid.ID)}, cid.ID},
+		{"three", []predicate.ArticleSetter{article.Author.Set(ann.ID), article.AuthorID.Set(bob.ID), article.Author.Set(ann.ID)}, ann.ID},
 	} {
 		got := must(client.Article.Update(db).Set(c.sets...).Where(article.ID.EQ(a.ID)).SaveOne(ctx))
 		assert.Equal(t, c.want, got.AuthorID, c.name)
@@ -618,7 +618,7 @@ func TestUpdate_SettersApplyInOrder(t *testing.T) {
 	assert.Nil(t, ed)
 
 	// To and Add of one column compose in order.
-	age := func(sets ...predicate.AuthorSet) int {
+	age := func(sets ...predicate.AuthorSetter) int {
 		return must(client.Author.Update(db).Set(sets...).Where(author.ID.EQ(ann.ID)).SaveOne(ctx)).Age
 	}
 	assert.Equal(t, 6, age(author.Age.Set(5), author.Age.Add(1)))
@@ -818,7 +818,7 @@ func TestPaginate_NullInAFieldThatIsNotAPointer(t *testing.T) {
 	}
 	require.Equal(t, 5, rawValue[int](t, db, "SELECT COUNT(*) FROM gadgets WHERE owner_id IS NULL"))
 	two := 2
-	for _, term := range []predicate.GadgetOrder{gadget.OwnerID.Asc(), gadget.OwnerID.Desc()} {
+	for _, term := range []predicate.GadgetOrderTerm{gadget.OwnerID.Asc(), gadget.OwnerID.Desc()} {
 		var got []int
 		var after *orm.Cursor
 		for page := 0; page < 10; page++ {
@@ -863,7 +863,7 @@ func TestPaginate_NullWhereTheSchemaHasNone(t *testing.T) {
 	nullOptionals(t, db, 1)
 	nullOptionals(t, db, 2)
 	one := 1
-	for _, term := range []predicate.ScalarOrder{scalar.IntOpt.Asc(), scalar.IntOpt.Desc(), scalar.StringOpt.Asc(), scalar.TimeOpt.Desc()} {
+	for _, term := range []predicate.ScalarOrderTerm{scalar.IntOpt.Asc(), scalar.IntOpt.Desc(), scalar.StringOpt.Asc(), scalar.TimeOpt.Desc()} {
 		var got []int
 		var after *orm.Cursor
 		for page := 0; page < 10; page++ {

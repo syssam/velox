@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of GoTypeShape, and ModelName the name of its entity.
+// Table is the table of GoTypeShape, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "go_type_shapes"
 	ModelName = "GoTypeShape"
@@ -70,32 +71,32 @@ func (f *IntColumn) LTE(v int) predicate.GoTypeShape {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.GoTypeShapeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *IntColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // LabelColumn is a column of Go type types.Label: its methods build the predicates,
@@ -177,27 +178,27 @@ func (f *LabelColumn) ContainsFold(v string) predicate.GoTypeShape {
 }
 
 // Set assigns v to the column.
-func (f *LabelColumn) Set(v types.Label) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *LabelColumn) Set(v types.Label) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *LabelColumn) SetNillable(v *types.Label) predicate.GoTypeShapeSet {
+func (f *LabelColumn) SetNillable(v *types.Label) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *LabelColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *LabelColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *LabelColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *LabelColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableLabelColumn is a column of Go type types.Label: its methods build the predicates,
@@ -280,41 +281,41 @@ func (f *NullableLabelColumn) ContainsFold(v string) predicate.GoTypeShape {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableLabelColumn) IsNil() predicate.GoTypeShape {
-	return predicate.GoTypeShape{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableLabelColumn) NotNil() predicate.GoTypeShape {
-	return predicate.GoTypeShape{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableLabelColumn) Set(v types.Label) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableLabelColumn) Set(v types.Label) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableLabelColumn) SetNillable(v *types.Label) predicate.GoTypeShapeSet {
+func (f *NullableLabelColumn) SetNillable(v *types.Label) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableLabelColumn) Clear() predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableLabelColumn) Clear() predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableLabelColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *NullableLabelColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableLabelColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *NullableLabelColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // WeightColumn is a column of Go type types.Weight: its methods build the predicates,
@@ -371,32 +372,32 @@ func (f *WeightColumn) LTE(v types.Weight) predicate.GoTypeShape {
 }
 
 // Set assigns v to the column.
-func (f *WeightColumn) Set(v types.Weight) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *WeightColumn) Set(v types.Weight) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *WeightColumn) SetNillable(v *types.Weight) predicate.GoTypeShapeSet {
+func (f *WeightColumn) SetNillable(v *types.Weight) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *WeightColumn) Add(v types.Weight) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *WeightColumn) Add(v types.Weight) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *WeightColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *WeightColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *WeightColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *WeightColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // RatioColumn is a column of Go type types.Ratio: its methods build the predicates,
@@ -453,32 +454,32 @@ func (f *RatioColumn) LTE(v types.Ratio) predicate.GoTypeShape {
 }
 
 // Set assigns v to the column.
-func (f *RatioColumn) Set(v types.Ratio) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RatioColumn) Set(v types.Ratio) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *RatioColumn) SetNillable(v *types.Ratio) predicate.GoTypeShapeSet {
+func (f *RatioColumn) SetNillable(v *types.Ratio) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *RatioColumn) Add(v types.Ratio) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *RatioColumn) Add(v types.Ratio) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *RatioColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *RatioColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *RatioColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *RatioColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // DecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
@@ -560,27 +561,27 @@ func (f *DecimalColumn) ContainsFold(v string) predicate.GoTypeShape {
 }
 
 // Set assigns v to the column.
-func (f *DecimalColumn) Set(v types.Decimal) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *DecimalColumn) Set(v types.Decimal) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *DecimalColumn) SetNillable(v *types.Decimal) predicate.GoTypeShapeSet {
+func (f *DecimalColumn) SetNillable(v *types.Decimal) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *DecimalColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *DecimalColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *DecimalColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *DecimalColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableDecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
@@ -663,41 +664,41 @@ func (f *NullableDecimalColumn) ContainsFold(v string) predicate.GoTypeShape {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableDecimalColumn) IsNil() predicate.GoTypeShape {
-	return predicate.GoTypeShape{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableDecimalColumn) NotNil() predicate.GoTypeShape {
-	return predicate.GoTypeShape{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableDecimalColumn) Set(v types.Decimal) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableDecimalColumn) Set(v types.Decimal) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableDecimalColumn) SetNillable(v *types.Decimal) predicate.GoTypeShapeSet {
+func (f *NullableDecimalColumn) SetNillable(v *types.Decimal) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableDecimalColumn) Clear() predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableDecimalColumn) Clear() predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableDecimalColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *NullableDecimalColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableDecimalColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *NullableDecimalColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // PairColumn is a column of Go type types.Pair: its methods build the predicates,
@@ -754,32 +755,32 @@ func (f *PairColumn) LTE(v types.Pair) predicate.GoTypeShape {
 }
 
 // Set assigns v to the column.
-func (f *PairColumn) Set(v types.Pair) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *PairColumn) Set(v types.Pair) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *PairColumn) SetNillable(v *types.Pair) predicate.GoTypeShapeSet {
+func (f *PairColumn) SetNillable(v *types.Pair) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *PairColumn) Add(v types.Pair) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *PairColumn) Add(v types.Pair) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *PairColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *PairColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *PairColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *PairColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullablePairColumn is a column of Go type types.Pair: its methods build the predicates,
@@ -837,46 +838,46 @@ func (f *NullablePairColumn) LTE(v types.Pair) predicate.GoTypeShape {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullablePairColumn) IsNil() predicate.GoTypeShape {
-	return predicate.GoTypeShape{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullablePairColumn) NotNil() predicate.GoTypeShape {
-	return predicate.GoTypeShape{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullablePairColumn) Set(v types.Pair) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullablePairColumn) Set(v types.Pair) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullablePairColumn) SetNillable(v *types.Pair) predicate.GoTypeShapeSet {
+func (f *NullablePairColumn) SetNillable(v *types.Pair) predicate.GoTypeShapeSetter {
 	if v == nil {
-		return predicate.GoTypeShapeSet{}
+		return predicate.GoTypeShapeSetter{}
 	}
-	return predicate.GoTypeShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullablePairColumn) Clear() predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullablePairColumn) Clear() predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullablePairColumn) Add(v types.Pair) predicate.GoTypeShapeSet {
-	return predicate.GoTypeShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullablePairColumn) Add(v types.Pair) predicate.GoTypeShapeSetter {
+	return predicate.GoTypeShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullablePairColumn) Asc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f)}
+func (f *NullablePairColumn) Asc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullablePairColumn) Desc() predicate.GoTypeShapeOrder {
-	return predicate.GoTypeShapeOrder{Col: string(*f), Desc: true}
+func (f *NullablePairColumn) Desc() predicate.GoTypeShapeOrderTerm {
+	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of GoTypeShape.

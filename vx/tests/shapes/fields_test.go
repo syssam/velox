@@ -197,8 +197,8 @@ func TestGoType_RoundTripValidatorsAndPredicates(t *testing.T) {
 	assert.Equal(t, "1.50", rawValue[string](t, db, "SELECT tax FROM go_type_shapes WHERE id = ?", a.ID))
 
 	// Validators see the basic value of a custom type, on create and update.
-	base := []predicate.GoTypeShapeSet{gotypeshape.Price.Set(price), gotypeshape.Pair.Set(types.Pair{})}
-	for field, bad := range map[string]predicate.GoTypeShapeSet{
+	base := []predicate.GoTypeShapeSetter{gotypeshape.Price.Set(price), gotypeshape.Pair.Set(types.Pair{})}
+	for field, bad := range map[string]predicate.GoTypeShapeSetter{
 		"label":  gotypeshape.Label.Set(""),
 		"alias":  gotypeshape.Alias.Set(""),
 		"weight": gotypeshape.Weight.Set(0),
@@ -403,8 +403,8 @@ func TestDefaults_UpdateDefaultAndImmutable(t *testing.T) {
 func TestValidators_CreateAndUpdate(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
-	valid := func() []predicate.ValidatedSet {
-		return []predicate.ValidatedSet{
+	valid := func() []predicate.ValidatedSetter {
+		return []predicate.ValidatedSetter{
 			validated.One.Set("1"), validated.Two.Set("22"), validated.Three.Set("abc"),
 			validated.Score.Set(50), validated.Rank.Set(5), validated.Even.Set(2),
 		}
@@ -423,7 +423,7 @@ func TestValidators_CreateAndUpdate(t *testing.T) {
 
 	cases := []struct {
 		field string
-		set   predicate.ValidatedSet
+		set   predicate.ValidatedSetter
 	}{
 		{"one", validated.One.Set("")},
 		{"two", validated.Two.Set("")},       // first validator
@@ -481,7 +481,7 @@ func TestValidators_CreateAndUpdate(t *testing.T) {
 	require.ErrorIs(t, err, schema.ErrOdd)
 
 	// The boundary values pass, on create and on update.
-	edge := []predicate.ValidatedSet{
+	edge := []predicate.ValidatedSetter{
 		validated.Two.Set("12345"), validated.Three.Set("ab"), validated.Score.Set(0), validated.Rank.Set(10),
 		validated.Ratio.Set(1), validated.I8.Set(1), validated.I16.Set(-5), validated.I32.Set(0), validated.I64.Set(1000),
 		validated.U.Set(9), validated.U8.Set(1), validated.U64.Set(5), validated.F32.Set(0.5),
@@ -523,7 +523,7 @@ func TestValidators_FieldsNamedLikeGeneratedLocals(t *testing.T) {
 	assert.Equal(t, "v", a.V)
 	assert.Equal(t, "fs", a.Fields)
 	assert.Equal(t, "mx", a.Mixin)
-	for field, bad := range map[string]predicate.ErrFieldSet{
+	for field, bad := range map[string]predicate.ErrFieldSetter{
 		"err": errfield.Err.Set("toolong"), "errs": errfield.Errs.Set(10), "fn": errfield.Fn.Set(""), "fns": errfield.Fns.Set("123456"),
 		"def": errfield.Def.Set(""), "checks": errfield.Checks.Set(""), "m": errfield.M.Set(""), "d": errfield.D.Set(""),
 		"f": errfield.F.Set(""), "v": errfield.V.Set(""), "fields": errfield.Fields.Set(""), "mixin": errfield.Mixin.Set(""),
@@ -557,7 +557,7 @@ func TestMixins_DefaultsValidatorsAndUpdateDefaults(t *testing.T) {
 
 	// Each validator is the one of its own descriptor: a mixin's field at
 	// index 0 and the schema's own field at index 0 are different fields.
-	for field, bad := range map[string]predicate.MixedInSet{
+	for field, bad := range map[string]predicate.MixedInSetter{
 		"name":       mixedin.Name.Set(""),
 		"created_by": mixedin.CreatedBy.Set(""),
 		"reason":     mixedin.Reason.Set("12345"),

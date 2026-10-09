@@ -27,8 +27,8 @@ var (
 )
 
 // scalarRequired are the setters of the fields Scalar requires.
-func scalarRequired(seq int) []predicate.ScalarSet {
-	return []predicate.ScalarSet{
+func scalarRequired(seq int) []predicate.ScalarSetter {
+	return []predicate.ScalarSetter{
 		scalar.Seq.Set(seq),
 		scalar.StringPtr.Set("p"),
 		scalar.IntPtr.Set(seq),
@@ -42,9 +42,9 @@ func scalarRequired(seq int) []predicate.ScalarSet {
 
 // scalarFull sets every optional field of Scalar to a value derived from n,
 // every one different from the zero value.
-func scalarFull(n int) []predicate.ScalarSet {
+func scalarFull(n int) []predicate.ScalarSetter {
 	s := string(rune('a' + n))
-	return []predicate.ScalarSet{
+	return []predicate.ScalarSetter{
 		scalar.StringOpt.Set("so" + s), scalar.StringNil.Set("sn" + s),
 		scalar.TextOpt.Set("to" + s), scalar.TextNil.Set("tn" + s),
 		scalar.IntOpt.Set(n), scalar.IntNil.Set(-n),
@@ -379,7 +379,7 @@ func TestScalar_RequiredNillableMustBeSet(t *testing.T) {
 	db := open(t)
 	all := scalarRequired(1)
 	for skip := 1; skip < len(all); skip++ {
-		sets := append(append([]predicate.ScalarSet(nil), all[:skip]...), all[skip+1:]...)
+		sets := append(append([]predicate.ScalarSetter(nil), all[:skip]...), all[skip+1:]...)
 		_, err := client.Scalar.Create(db).Set(sets...).Save(ctx)
 		var verr *orm.ValidationError
 		require.ErrorAs(t, err, &verr, "setter %d left out", skip)

@@ -111,7 +111,7 @@ func (q *EnumShapeQuery) Where(ps ...predicate.EnumShape) *EnumShapeQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *EnumShapeQuery) OrderBy(os ...predicate.EnumShapeOrder) *EnumShapeQuery {
+func (q *EnumShapeQuery) OrderBy(os ...predicate.EnumShapeOrderTerm) *EnumShapeQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -121,12 +121,12 @@ func (q *EnumShapeQuery) OrderBy(os ...predicate.EnumShapeOrder) *EnumShapeQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *EnumShapeQuery) Limit(n int) *EnumShapeQuery { q.c.Lim = n; return q }
+func (q *EnumShapeQuery) Limit(n int) *EnumShapeQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *EnumShapeQuery) Offset(n int) *EnumShapeQuery { q.c.Off = n; return q }
+func (q *EnumShapeQuery) Offset(n int) *EnumShapeQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -289,7 +289,7 @@ func NewEnumShapeCreate(ex orm.Executor) *EnumShapeCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *EnumShapeCreate) Set(ss ...predicate.EnumShapeSet) *EnumShapeCreate {
+func (b *EnumShapeCreate) Set(ss ...predicate.EnumShapeSetter) *EnumShapeCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -384,7 +384,7 @@ func NewEnumShapeUpdate(ex orm.Executor) *EnumShapeUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *EnumShapeUpdate) Set(ss ...predicate.EnumShapeSet) *EnumShapeUpdate {
+func (b *EnumShapeUpdate) Set(ss ...predicate.EnumShapeSetter) *EnumShapeUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -413,11 +413,18 @@ func (b *EnumShapeUpdate) Fill(in any, skip ...string) *EnumShapeUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *EnumShapeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *EnumShapeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

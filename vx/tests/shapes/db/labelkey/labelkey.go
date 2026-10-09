@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of LabelKey, and ModelName the name of its entity.
+// Table is the table of LabelKey, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "label_keys"
 	ModelName = "LabelKey"
@@ -70,25 +71,27 @@ func (f *LabelColumn) LTE(v types.Label) predicate.LabelKey {
 }
 
 // Set assigns v to the column.
-func (f *LabelColumn) Set(v types.Label) predicate.LabelKeySet {
-	return predicate.LabelKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *LabelColumn) Set(v types.Label) predicate.LabelKeySetter {
+	return predicate.LabelKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *LabelColumn) SetNillable(v *types.Label) predicate.LabelKeySet {
+func (f *LabelColumn) SetNillable(v *types.Label) predicate.LabelKeySetter {
 	if v == nil {
-		return predicate.LabelKeySet{}
+		return predicate.LabelKeySetter{}
 	}
-	return predicate.LabelKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LabelKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *LabelColumn) Asc() predicate.LabelKeyOrder { return predicate.LabelKeyOrder{Col: string(*f)} }
+func (f *LabelColumn) Asc() predicate.LabelKeyOrderTerm {
+	return predicate.LabelKeyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *LabelColumn) Desc() predicate.LabelKeyOrder {
-	return predicate.LabelKeyOrder{Col: string(*f), Desc: true}
+func (f *LabelColumn) Desc() predicate.LabelKeyOrderTerm {
+	return predicate.LabelKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -170,25 +173,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.LabelKey {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.LabelKeySet {
-	return predicate.LabelKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.LabelKeySetter {
+	return predicate.LabelKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.LabelKeySet {
+func (f *StringColumn) SetNillable(v *string) predicate.LabelKeySetter {
 	if v == nil {
-		return predicate.LabelKeySet{}
+		return predicate.LabelKeySetter{}
 	}
-	return predicate.LabelKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LabelKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.LabelKeyOrder { return predicate.LabelKeyOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.LabelKeyOrderTerm {
+	return predicate.LabelKeyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.LabelKeyOrder {
-	return predicate.LabelKeyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.LabelKeyOrderTerm {
+	return predicate.LabelKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of LabelKey.
@@ -227,26 +232,26 @@ func (e *EdgeItems) HasWith(ps ...predicate.WeightKey) predicate.LabelKey {
 }
 
 // Add connects the LabelKey to the WeightKey rows with the given ids.
-func (e *EdgeItems) Add(ids ...types.Weight) predicate.LabelKeySet {
+func (e *EdgeItems) Add(ids ...types.Weight) predicate.LabelKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.LabelKeySet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.LabelKeySetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the LabelKey from the WeightKey rows with the given ids.
-func (e *EdgeItems) Remove(ids ...types.Weight) predicate.LabelKeySet {
+func (e *EdgeItems) Remove(ids ...types.Weight) predicate.LabelKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.LabelKeySet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.LabelKeySetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the LabelKey from every "items" neighbor.
-func (e *EdgeItems) Clear() predicate.LabelKeySet {
-	return predicate.LabelKeySet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeItems) Clear() predicate.LabelKeySetter {
+	return predicate.LabelKeySetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "weights", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "label_weights", Columns: []string{"label_key_id", "weight_key_id"}}
@@ -273,26 +278,26 @@ func (e *EdgeWeights) HasWith(ps ...predicate.WeightKey) predicate.LabelKey {
 }
 
 // Add connects the LabelKey to the WeightKey rows with the given ids.
-func (e *EdgeWeights) Add(ids ...types.Weight) predicate.LabelKeySet {
+func (e *EdgeWeights) Add(ids ...types.Weight) predicate.LabelKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.LabelKeySet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.LabelKeySetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the LabelKey from the WeightKey rows with the given ids.
-func (e *EdgeWeights) Remove(ids ...types.Weight) predicate.LabelKeySet {
+func (e *EdgeWeights) Remove(ids ...types.Weight) predicate.LabelKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.LabelKeySet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.LabelKeySetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the LabelKey from every "weights" neighbor.
-func (e *EdgeWeights) Clear() predicate.LabelKeySet {
-	return predicate.LabelKeySet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeWeights) Clear() predicate.LabelKeySetter {
+	return predicate.LabelKeySetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of LabelKey, in order. The generated

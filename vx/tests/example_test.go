@@ -227,7 +227,7 @@ func Example_iter() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = orm.Compile(orm.P(user.Age.GT(18)))
+	_ = orm.Compile(user.Age.GT(18))
 	exists, err := db.User.Query(conn).Where(user.Name.EQ("u0")).Exists(ctx)
 	if err != nil {
 		log.Fatal(err)

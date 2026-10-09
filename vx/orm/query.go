@@ -32,8 +32,8 @@ type QueryCore struct {
 	Preds    []P
 	Orders   []O
 	With     []*EdgeLoad
-	Lim      int
-	Off      int
+	Limit    int
+	Offset   int
 	Distinct bool
 	Lock     Lock
 	LockOpt  LockOption
@@ -129,7 +129,7 @@ func (q *Query) Filter() privacy.Filter { return q }
 func (q *Query) HasColumn(column string) bool { return q.c.M.col(column) >= 0 }
 
 // Limit caps the number of rows.
-func (q *Query) Limit(n int) { q.c.Lim = n }
+func (q *Query) Limit(n int) { q.c.Limit = n }
 
 // TraverseFunc is a function as a traverser: it is handed the query of every
 // read before it runs, of any entity, to narrow it. Register it with
@@ -178,7 +178,7 @@ func (f InterceptFunc) Intercept(next velox.Querier) velox.Querier {
 }
 
 // Offset skips rows.
-func (q *Query) Offset(n int) { q.c.Off = n }
+func (q *Query) Offset(n int) { q.c.Offset = n }
 
 // guarded runs exec for the query inside the policy of the entity and the
 // interceptors of the database handle. They work on a copy of the query, so
@@ -274,7 +274,7 @@ func rowsOf(m *Meta, v any, err error) ([]any, error) {
 //go:noinline
 func (q *QueryCore) First(ctx context.Context) (any, error) {
 	c := *q
-	c.Lim = 1
+	c.Limit = 1
 	rows, err := c.All(ctx)
 	if err != nil {
 		return nil, err
@@ -291,7 +291,7 @@ func (q *QueryCore) First(ctx context.Context) (any, error) {
 //go:noinline
 func (q *QueryCore) Only(ctx context.Context) (any, error) {
 	c := *q
-	c.Lim = 2
+	c.Limit = 2
 	rows, err := c.All(ctx)
 	if err != nil {
 		return nil, err
@@ -391,7 +391,7 @@ func (q *QueryCore) Count(ctx context.Context) (int, error) {
 
 func (q *QueryCore) count(ctx context.Context, c *conn) (int, error) {
 	all := *q
-	all.Lim, all.Off, all.Orders, all.Lock = 0, 0, nil, LockNone
+	all.Limit, all.Offset, all.Orders, all.Lock = 0, 0, nil, LockNone
 	s := all.selector(ctx, c, nil)
 	s.Count()
 	query, args := s.Query()
@@ -417,7 +417,7 @@ func (q *QueryCore) count(ctx context.Context, c *conn) (int, error) {
 //go:noinline
 func (q *QueryCore) Exists(ctx context.Context) (bool, error) {
 	c := *q
-	c.Lim = 1
+	c.Limit = 1
 	c.With = nil
 	c.Orders = nil // the order cannot change whether a row exists
 	ids, err := c.IDs(ctx)
@@ -514,15 +514,15 @@ func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.S
 			s.OrderBy(sql.Asc(s.C(o.Col)))
 		}
 	}
-	if q.Lim > 0 {
-		s.Limit(q.Lim)
+	if q.Limit > 0 {
+		s.Limit(q.Limit)
 	}
-	if q.Off > 0 {
+	if q.Offset > 0 {
 		// SQLite and MySQL accept OFFSET only after LIMIT.
-		if q.Lim <= 0 {
+		if q.Limit <= 0 {
 			s.Limit(math.MaxInt32)
 		}
-		s.Offset(q.Off)
+		s.Offset(q.Offset)
 	}
 	// Postgres rejects a row lock on SELECT DISTINCT; the lock wins.
 	if q.Distinct && (q.Lock == LockNone || dialect.GetCapabilities(c.drv.Dialect()).Has(dialect.CapLockWithDistinct)) {
@@ -715,9 +715,9 @@ func compile(p *P) func(*sql.Selector) {
 			return sql.FieldInValues(p.Col, vals...)
 		}
 		return sql.FieldNotInValues(p.Col, vals...)
-	case OpIsNull:
+	case OpIsNil:
 		return sql.FieldIsNull(p.Col)
-	case OpNotNull:
+	case OpNotNil:
 		return sql.FieldNotNull(p.Col)
 	case OpContains, OpHasPrefix, OpHasSuffix, OpEqualFold, OpContainsFold:
 		text, ok := str(p.Val)

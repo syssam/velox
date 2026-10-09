@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Student, and ModelName the name of its entity.
+// Table is the table of Student, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "students"
 	ModelName = "Student"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Student {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.StudentSet {
-	return predicate.StudentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.StudentSetter {
+	return predicate.StudentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.StudentSet {
+func (f *IntColumn) SetNillable(v *int) predicate.StudentSetter {
 	if v == nil {
-		return predicate.StudentSet{}
+		return predicate.StudentSetter{}
 	}
-	return predicate.StudentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.StudentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.StudentSet {
-	return predicate.StudentSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.StudentSetter {
+	return predicate.StudentSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.StudentOrder { return predicate.StudentOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.StudentOrderTerm {
+	return predicate.StudentOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.StudentOrder {
-	return predicate.StudentOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.StudentOrderTerm {
+	return predicate.StudentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Student {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.StudentSet {
-	return predicate.StudentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.StudentSetter {
+	return predicate.StudentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.StudentSet {
+func (f *StringColumn) SetNillable(v *string) predicate.StudentSetter {
 	if v == nil {
-		return predicate.StudentSet{}
+		return predicate.StudentSetter{}
 	}
-	return predicate.StudentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.StudentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.StudentOrder { return predicate.StudentOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.StudentOrderTerm {
+	return predicate.StudentOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.StudentOrder {
-	return predicate.StudentOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.StudentOrderTerm {
+	return predicate.StudentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Student.
@@ -231,26 +236,26 @@ func (e *EdgeCourses) HasWith(ps ...predicate.Course) predicate.Student {
 }
 
 // Add connects the Student to the Course rows with the given ids.
-func (e *EdgeCourses) Add(ids ...int) predicate.StudentSet {
+func (e *EdgeCourses) Add(ids ...int) predicate.StudentSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.StudentSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.StudentSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Student from the Course rows with the given ids.
-func (e *EdgeCourses) Remove(ids ...int) predicate.StudentSet {
+func (e *EdgeCourses) Remove(ids ...int) predicate.StudentSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.StudentSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.StudentSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Student from every "courses" neighbor.
-func (e *EdgeCourses) Clear() predicate.StudentSet {
-	return predicate.StudentSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeCourses) Clear() predicate.StudentSetter {
+	return predicate.StudentSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "enrollments", Index: 1, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "enrollments", Columns: []string{"student_id"}}
@@ -277,26 +282,26 @@ func (e *EdgeEnrollments) HasWith(ps ...predicate.Enrollment) predicate.Student 
 }
 
 // Add connects the Student to the Enrollment rows with the given ids.
-func (e *EdgeEnrollments) Add(ids ...int) predicate.StudentSet {
+func (e *EdgeEnrollments) Add(ids ...int) predicate.StudentSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.StudentSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.StudentSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Student from the Enrollment rows with the given ids.
-func (e *EdgeEnrollments) Remove(ids ...int) predicate.StudentSet {
+func (e *EdgeEnrollments) Remove(ids ...int) predicate.StudentSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.StudentSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.StudentSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Student from every "enrollments" neighbor.
-func (e *EdgeEnrollments) Clear() predicate.StudentSet {
-	return predicate.StudentSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeEnrollments) Clear() predicate.StudentSetter {
+	return predicate.StudentSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Student, in order. The generated

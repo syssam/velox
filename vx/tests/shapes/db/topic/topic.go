@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Topic, and ModelName the name of its entity.
+// Table is the table of Topic, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "topics"
 	ModelName = "Topic"
@@ -69,30 +70,30 @@ func (f *IntColumn) LTE(v int) predicate.Topic {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.TopicSet {
-	return predicate.TopicSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.TopicSetter {
+	return predicate.TopicSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.TopicSet {
+func (f *IntColumn) SetNillable(v *int) predicate.TopicSetter {
 	if v == nil {
-		return predicate.TopicSet{}
+		return predicate.TopicSetter{}
 	}
-	return predicate.TopicSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TopicSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.TopicSet {
-	return predicate.TopicSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.TopicSetter {
+	return predicate.TopicSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.TopicOrder { return predicate.TopicOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.TopicOrderTerm { return predicate.TopicOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.TopicOrder {
-	return predicate.TopicOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.TopicOrderTerm {
+	return predicate.TopicOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +175,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Topic {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.TopicSet {
-	return predicate.TopicSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.TopicSetter {
+	return predicate.TopicSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.TopicSet {
+func (f *StringColumn) SetNillable(v *string) predicate.TopicSetter {
 	if v == nil {
-		return predicate.TopicSet{}
+		return predicate.TopicSetter{}
 	}
-	return predicate.TopicSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TopicSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.TopicOrder { return predicate.TopicOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.TopicOrderTerm {
+	return predicate.TopicOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.TopicOrder {
-	return predicate.TopicOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.TopicOrderTerm {
+	return predicate.TopicOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Topic.
@@ -229,26 +232,26 @@ func (e *EdgeArticles) HasWith(ps ...predicate.Article) predicate.Topic {
 }
 
 // Add connects the Topic to the Article rows with the given ids.
-func (e *EdgeArticles) Add(ids ...int) predicate.TopicSet {
+func (e *EdgeArticles) Add(ids ...int) predicate.TopicSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TopicSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.TopicSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Topic from the Article rows with the given ids.
-func (e *EdgeArticles) Remove(ids ...int) predicate.TopicSet {
+func (e *EdgeArticles) Remove(ids ...int) predicate.TopicSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TopicSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.TopicSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Topic from every "articles" neighbor.
-func (e *EdgeArticles) Clear() predicate.TopicSet {
-	return predicate.TopicSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeArticles) Clear() predicate.TopicSetter {
+	return predicate.TopicSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "banned_in", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
@@ -273,26 +276,26 @@ func (e *EdgeBannedIn) HasWith(ps ...predicate.Article) predicate.Topic {
 }
 
 // Add connects the Topic to the Article rows with the given ids.
-func (e *EdgeBannedIn) Add(ids ...int) predicate.TopicSet {
+func (e *EdgeBannedIn) Add(ids ...int) predicate.TopicSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TopicSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.TopicSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Topic from the Article rows with the given ids.
-func (e *EdgeBannedIn) Remove(ids ...int) predicate.TopicSet {
+func (e *EdgeBannedIn) Remove(ids ...int) predicate.TopicSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TopicSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.TopicSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Topic from every "banned_in" neighbor.
-func (e *EdgeBannedIn) Clear() predicate.TopicSet {
-	return predicate.TopicSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeBannedIn) Clear() predicate.TopicSetter {
+	return predicate.TopicSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Topic, in order. The generated

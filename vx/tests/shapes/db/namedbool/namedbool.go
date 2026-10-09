@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of NamedBool, and ModelName the name of its entity.
+// Table is the table of NamedBool, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "named_bools"
 	ModelName = "NamedBool"
@@ -70,30 +71,32 @@ func (f *IntColumn) LTE(v int) predicate.NamedBool {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.NamedBoolSet {
-	return predicate.NamedBoolSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.NamedBoolSetter {
+	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.NamedBoolSet {
+func (f *IntColumn) SetNillable(v *int) predicate.NamedBoolSetter {
 	if v == nil {
-		return predicate.NamedBoolSet{}
+		return predicate.NamedBoolSetter{}
 	}
-	return predicate.NamedBoolSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.NamedBoolSet {
-	return predicate.NamedBoolSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.NamedBoolSetter {
+	return predicate.NamedBoolSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.NamedBoolOrder { return predicate.NamedBoolOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.NamedBoolOrderTerm {
+	return predicate.NamedBoolOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.NamedBoolOrder {
-	return predicate.NamedBoolOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.NamedBoolOrderTerm {
+	return predicate.NamedBoolOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -175,27 +178,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.NamedBool {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.NamedBoolSet {
-	return predicate.NamedBoolSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.NamedBoolSetter {
+	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.NamedBoolSet {
+func (f *StringColumn) SetNillable(v *string) predicate.NamedBoolSetter {
 	if v == nil {
-		return predicate.NamedBoolSet{}
+		return predicate.NamedBoolSetter{}
 	}
-	return predicate.NamedBoolSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.NamedBoolOrder {
-	return predicate.NamedBoolOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.NamedBoolOrderTerm {
+	return predicate.NamedBoolOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.NamedBoolOrder {
-	return predicate.NamedBoolOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.NamedBoolOrderTerm {
+	return predicate.NamedBoolOrderTerm{Col: string(*f), Desc: true}
 }
 
 // FlagColumn is a column of Go type types.Flag: its methods build the predicates,
@@ -214,25 +217,27 @@ func (f *FlagColumn) NEQ(v types.Flag) predicate.NamedBool {
 }
 
 // Set assigns v to the column.
-func (f *FlagColumn) Set(v types.Flag) predicate.NamedBoolSet {
-	return predicate.NamedBoolSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *FlagColumn) Set(v types.Flag) predicate.NamedBoolSetter {
+	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *FlagColumn) SetNillable(v *types.Flag) predicate.NamedBoolSet {
+func (f *FlagColumn) SetNillable(v *types.Flag) predicate.NamedBoolSetter {
 	if v == nil {
-		return predicate.NamedBoolSet{}
+		return predicate.NamedBoolSetter{}
 	}
-	return predicate.NamedBoolSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *FlagColumn) Asc() predicate.NamedBoolOrder { return predicate.NamedBoolOrder{Col: string(*f)} }
+func (f *FlagColumn) Asc() predicate.NamedBoolOrderTerm {
+	return predicate.NamedBoolOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *FlagColumn) Desc() predicate.NamedBoolOrder {
-	return predicate.NamedBoolOrder{Col: string(*f), Desc: true}
+func (f *FlagColumn) Desc() predicate.NamedBoolOrderTerm {
+	return predicate.NamedBoolOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of NamedBool.

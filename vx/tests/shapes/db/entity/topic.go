@@ -144,7 +144,7 @@ func (q *TopicQuery) Where(ps ...predicate.Topic) *TopicQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *TopicQuery) OrderBy(os ...predicate.TopicOrder) *TopicQuery {
+func (q *TopicQuery) OrderBy(os ...predicate.TopicOrderTerm) *TopicQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -154,12 +154,12 @@ func (q *TopicQuery) OrderBy(os ...predicate.TopicOrder) *TopicQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *TopicQuery) Limit(n int) *TopicQuery { q.c.Lim = n; return q }
+func (q *TopicQuery) Limit(n int) *TopicQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *TopicQuery) Offset(n int) *TopicQuery { q.c.Off = n; return q }
+func (q *TopicQuery) Offset(n int) *TopicQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -319,7 +319,7 @@ func NewTopicCreate(ex orm.Executor) *TopicCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *TopicCreate) Set(ss ...predicate.TopicSet) *TopicCreate {
+func (b *TopicCreate) Set(ss ...predicate.TopicSetter) *TopicCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -414,7 +414,7 @@ func NewTopicUpdate(ex orm.Executor) *TopicUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *TopicUpdate) Set(ss ...predicate.TopicSet) *TopicUpdate {
+func (b *TopicUpdate) Set(ss ...predicate.TopicSetter) *TopicUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -443,11 +443,18 @@ func (b *TopicUpdate) Fill(in any, skip ...string) *TopicUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *TopicUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *TopicUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

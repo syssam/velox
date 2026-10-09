@@ -349,7 +349,7 @@ func (q *KeywordsQuery) Where(ps ...predicate.Keywords) *KeywordsQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *KeywordsQuery) OrderBy(os ...predicate.KeywordsOrder) *KeywordsQuery {
+func (q *KeywordsQuery) OrderBy(os ...predicate.KeywordsOrderTerm) *KeywordsQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -359,12 +359,12 @@ func (q *KeywordsQuery) OrderBy(os ...predicate.KeywordsOrder) *KeywordsQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *KeywordsQuery) Limit(n int) *KeywordsQuery { q.c.Lim = n; return q }
+func (q *KeywordsQuery) Limit(n int) *KeywordsQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *KeywordsQuery) Offset(n int) *KeywordsQuery { q.c.Off = n; return q }
+func (q *KeywordsQuery) Offset(n int) *KeywordsQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -524,7 +524,7 @@ func NewKeywordsCreate(ex orm.Executor) *KeywordsCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *KeywordsCreate) Set(ss ...predicate.KeywordsSet) *KeywordsCreate {
+func (b *KeywordsCreate) Set(ss ...predicate.KeywordsSetter) *KeywordsCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -619,7 +619,7 @@ func NewKeywordsUpdate(ex orm.Executor) *KeywordsUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *KeywordsUpdate) Set(ss ...predicate.KeywordsSet) *KeywordsUpdate {
+func (b *KeywordsUpdate) Set(ss ...predicate.KeywordsSetter) *KeywordsUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -648,11 +648,18 @@ func (b *KeywordsUpdate) Fill(in any, skip ...string) *KeywordsUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *KeywordsUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *KeywordsUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

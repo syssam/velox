@@ -133,7 +133,7 @@ func (q *ErrFieldQuery) Where(ps ...predicate.ErrField) *ErrFieldQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *ErrFieldQuery) OrderBy(os ...predicate.ErrFieldOrder) *ErrFieldQuery {
+func (q *ErrFieldQuery) OrderBy(os ...predicate.ErrFieldOrderTerm) *ErrFieldQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -143,12 +143,12 @@ func (q *ErrFieldQuery) OrderBy(os ...predicate.ErrFieldOrder) *ErrFieldQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *ErrFieldQuery) Limit(n int) *ErrFieldQuery { q.c.Lim = n; return q }
+func (q *ErrFieldQuery) Limit(n int) *ErrFieldQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *ErrFieldQuery) Offset(n int) *ErrFieldQuery { q.c.Off = n; return q }
+func (q *ErrFieldQuery) Offset(n int) *ErrFieldQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -308,7 +308,7 @@ func NewErrFieldCreate(ex orm.Executor) *ErrFieldCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *ErrFieldCreate) Set(ss ...predicate.ErrFieldSet) *ErrFieldCreate {
+func (b *ErrFieldCreate) Set(ss ...predicate.ErrFieldSetter) *ErrFieldCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -403,7 +403,7 @@ func NewErrFieldUpdate(ex orm.Executor) *ErrFieldUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *ErrFieldUpdate) Set(ss ...predicate.ErrFieldSet) *ErrFieldUpdate {
+func (b *ErrFieldUpdate) Set(ss ...predicate.ErrFieldSetter) *ErrFieldUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -432,11 +432,18 @@ func (b *ErrFieldUpdate) Fill(in any, skip ...string) *ErrFieldUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *ErrFieldUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *ErrFieldUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

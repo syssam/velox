@@ -182,7 +182,7 @@ func (q *NodeQuery) Where(ps ...predicate.Node) *NodeQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *NodeQuery) OrderBy(os ...predicate.NodeOrder) *NodeQuery {
+func (q *NodeQuery) OrderBy(os ...predicate.NodeOrderTerm) *NodeQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -192,12 +192,12 @@ func (q *NodeQuery) OrderBy(os ...predicate.NodeOrder) *NodeQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *NodeQuery) Limit(n int) *NodeQuery { q.c.Lim = n; return q }
+func (q *NodeQuery) Limit(n int) *NodeQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *NodeQuery) Offset(n int) *NodeQuery { q.c.Off = n; return q }
+func (q *NodeQuery) Offset(n int) *NodeQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -357,7 +357,7 @@ func NewNodeCreate(ex orm.Executor) *NodeCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *NodeCreate) Set(ss ...predicate.NodeSet) *NodeCreate {
+func (b *NodeCreate) Set(ss ...predicate.NodeSetter) *NodeCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -452,7 +452,7 @@ func NewNodeUpdate(ex orm.Executor) *NodeUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *NodeUpdate) Set(ss ...predicate.NodeSet) *NodeUpdate {
+func (b *NodeUpdate) Set(ss ...predicate.NodeSetter) *NodeUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -481,11 +481,18 @@ func (b *NodeUpdate) Fill(in any, skip ...string) *NodeUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *NodeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *NodeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

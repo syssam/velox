@@ -10,7 +10,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Team, and ModelName the name of its entity.
+// Table is the table of Team, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "teams"
 	ModelName = "Team"
@@ -70,25 +71,25 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Team {
 }
 
 // Set assigns v to the column.
-func (f *UUIDColumn) Set(v uuid.UUID) predicate.TeamSet {
-	return predicate.TeamSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UUIDColumn) Set(v uuid.UUID) predicate.TeamSetter {
+	return predicate.TeamSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.TeamSet {
+func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.TeamSetter {
 	if v == nil {
-		return predicate.TeamSet{}
+		return predicate.TeamSetter{}
 	}
-	return predicate.TeamSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TeamSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UUIDColumn) Asc() predicate.TeamOrder { return predicate.TeamOrder{Col: string(*f)} }
+func (f *UUIDColumn) Asc() predicate.TeamOrderTerm { return predicate.TeamOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *UUIDColumn) Desc() predicate.TeamOrder {
-	return predicate.TeamOrder{Col: string(*f), Desc: true}
+func (f *UUIDColumn) Desc() predicate.TeamOrderTerm {
+	return predicate.TeamOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -170,25 +171,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Team {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.TeamSet {
-	return predicate.TeamSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.TeamSetter {
+	return predicate.TeamSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.TeamSet {
+func (f *StringColumn) SetNillable(v *string) predicate.TeamSetter {
 	if v == nil {
-		return predicate.TeamSet{}
+		return predicate.TeamSetter{}
 	}
-	return predicate.TeamSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TeamSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.TeamOrder { return predicate.TeamOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.TeamOrderTerm { return predicate.TeamOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.TeamOrder {
-	return predicate.TeamOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.TeamOrderTerm {
+	return predicate.TeamOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Team.
@@ -225,26 +226,26 @@ func (e *EdgePlayers) HasWith(ps ...predicate.Player) predicate.Team {
 }
 
 // Add connects the Team to the Player rows with the given ids.
-func (e *EdgePlayers) Add(ids ...string) predicate.TeamSet {
+func (e *EdgePlayers) Add(ids ...string) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Team from the Player rows with the given ids.
-func (e *EdgePlayers) Remove(ids ...string) predicate.TeamSet {
+func (e *EdgePlayers) Remove(ids ...string) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Team from every "players" neighbor.
-func (e *EdgePlayers) Clear() predicate.TeamSet {
-	return predicate.TeamSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgePlayers) Clear() predicate.TeamSetter {
+	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "fans", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_fans", Columns: []string{"team_id", "player_id"}}
@@ -269,26 +270,26 @@ func (e *EdgeFans) HasWith(ps ...predicate.Player) predicate.Team {
 }
 
 // Add connects the Team to the Player rows with the given ids.
-func (e *EdgeFans) Add(ids ...string) predicate.TeamSet {
+func (e *EdgeFans) Add(ids ...string) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Team from the Player rows with the given ids.
-func (e *EdgeFans) Remove(ids ...string) predicate.TeamSet {
+func (e *EdgeFans) Remove(ids ...string) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Team from every "fans" neighbor.
-func (e *EdgeFans) Clear() predicate.TeamSet {
-	return predicate.TeamSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeFans) Clear() predicate.TeamSetter {
+	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "rivals", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "team_rivals", Columns: []string{"team_id", "rival_id"}}
@@ -313,26 +314,26 @@ func (e *EdgeRivals) HasWith(ps ...predicate.Team) predicate.Team {
 }
 
 // Add connects the Team to the Team rows with the given ids.
-func (e *EdgeRivals) Add(ids ...uuid.UUID) predicate.TeamSet {
+func (e *EdgeRivals) Add(ids ...uuid.UUID) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Team from the Team rows with the given ids.
-func (e *EdgeRivals) Remove(ids ...uuid.UUID) predicate.TeamSet {
+func (e *EdgeRivals) Remove(ids ...uuid.UUID) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Team from every "rivals" neighbor.
-func (e *EdgeRivals) Clear() predicate.TeamSet {
-	return predicate.TeamSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeRivals) Clear() predicate.TeamSetter {
+	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "badges", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_badges", Columns: []string{"team_id", "badge_id"}}
@@ -357,26 +358,26 @@ func (e *EdgeBadges) HasWith(ps ...predicate.Badge) predicate.Team {
 }
 
 // Add connects the Team to the Badge rows with the given ids.
-func (e *EdgeBadges) Add(ids ...uint16) predicate.TeamSet {
+func (e *EdgeBadges) Add(ids ...uint16) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
 }
 
 // Remove disconnects the Team from the Badge rows with the given ids.
-func (e *EdgeBadges) Remove(ids ...uint16) predicate.TeamSet {
+func (e *EdgeBadges) Remove(ids ...uint16) predicate.TeamSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TeamSet{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
+	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
 }
 
 // Clear disconnects the Team from every "badges" neighbor.
-func (e *EdgeBadges) Clear() predicate.TeamSet {
-	return predicate.TeamSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeBadges) Clear() predicate.TeamSetter {
+	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 // EdgeMetas returns the descriptions of the edges of Team, in order. The generated

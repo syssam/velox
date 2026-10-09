@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Renamed, and ModelName the name of its entity.
+// Table is the table of Renamed, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "renameds"
 	ModelName = "Renamed"
@@ -84,30 +85,32 @@ func (f *IntColumn) LTE(v int) predicate.Renamed {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.RenamedSet {
+func (f *IntColumn) SetNillable(v *int) predicate.RenamedSetter {
 	if v == nil {
-		return predicate.RenamedSet{}
+		return predicate.RenamedSetter{}
 	}
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.RenamedOrder { return predicate.RenamedOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.RenamedOrder {
-	return predicate.RenamedOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -189,25 +192,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Renamed {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.RenamedSet {
+func (f *StringColumn) SetNillable(v *string) predicate.RenamedSetter {
 	if v == nil {
-		return predicate.RenamedSet{}
+		return predicate.RenamedSetter{}
 	}
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.RenamedOrder { return predicate.RenamedOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.RenamedOrder {
-	return predicate.RenamedOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIntColumn is a column of Go type int: its methods build the predicates,
@@ -265,65 +270,65 @@ func (f *NullableIntColumn) LTE(v int) predicate.Renamed {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntColumn) IsNil() predicate.Renamed {
-	return predicate.Renamed{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Renamed{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntColumn) NotNil() predicate.Renamed {
-	return predicate.Renamed{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Renamed{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntColumn) Set(v int) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntColumn) Set(v int) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntColumn) SetNillable(v *int) predicate.RenamedSet {
+func (f *NullableIntColumn) SetNillable(v *int) predicate.RenamedSetter {
 	if v == nil {
-		return predicate.RenamedSet{}
+		return predicate.RenamedSetter{}
 	}
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntColumn) Clear() predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntColumn) Clear() predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableIntColumn) Add(v int) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableIntColumn) Add(v int) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntColumn) Asc() predicate.RenamedOrder {
-	return predicate.RenamedOrder{Col: string(*f)}
+func (f *NullableIntColumn) Asc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntColumn) Desc() predicate.RenamedOrder {
-	return predicate.RenamedOrder{Col: string(*f), Desc: true}
+func (f *NullableIntColumn) Desc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn is a column of Go type time.Time: its methods build the predicates,
+// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type TimeColumn string
+type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *TimeColumn) EQ(v time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) EQ(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *TimeColumn) NEQ(v time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) NEQ(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *TimeColumn) In(vs ...time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) In(vs ...time.Time) predicate.Renamed {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -332,7 +337,7 @@ func (f *TimeColumn) In(vs ...time.Time) predicate.Renamed {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *TimeColumn) NotIn(vs ...time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) NotIn(vs ...time.Time) predicate.Renamed {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -341,52 +346,54 @@ func (f *TimeColumn) NotIn(vs ...time.Time) predicate.Renamed {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *TimeColumn) GT(v time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) GT(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *TimeColumn) GTE(v time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) GTE(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *TimeColumn) LT(v time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) LT(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *TimeColumn) LTE(v time.Time) predicate.Renamed {
+func (f *AutoTimeColumn) LTE(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoTimeColumn) Set(v time.Time) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.RenamedSet {
+func (f *AutoTimeColumn) SetNillable(v *time.Time) predicate.RenamedSetter {
 	if v == nil {
-		return predicate.RenamedSet{}
+		return predicate.RenamedSetter{}
 	}
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *TimeColumn) Keep() predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoTimeColumn) Keep() predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.RenamedOrder { return predicate.RenamedOrder{Col: string(*f)} }
+func (f *AutoTimeColumn) Asc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.RenamedOrder {
-	return predicate.RenamedOrder{Col: string(*f), Desc: true}
+func (f *AutoTimeColumn) Desc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // KindEnumColumn is a column of Go type KindEnum: its methods build the predicates,
@@ -423,25 +430,27 @@ func (f *KindEnumColumn) NotIn(vs ...KindEnum) predicate.Renamed {
 }
 
 // Set assigns v to the column.
-func (f *KindEnumColumn) Set(v KindEnum) predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *KindEnumColumn) Set(v KindEnum) predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *KindEnumColumn) SetNillable(v *KindEnum) predicate.RenamedSet {
+func (f *KindEnumColumn) SetNillable(v *KindEnum) predicate.RenamedSetter {
 	if v == nil {
-		return predicate.RenamedSet{}
+		return predicate.RenamedSetter{}
 	}
-	return predicate.RenamedSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *KindEnumColumn) Asc() predicate.RenamedOrder { return predicate.RenamedOrder{Col: string(*f)} }
+func (f *KindEnumColumn) Asc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *KindEnumColumn) Desc() predicate.RenamedOrder {
-	return predicate.RenamedOrder{Col: string(*f), Desc: true}
+func (f *KindEnumColumn) Desc() predicate.RenamedOrderTerm {
+	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Renamed.
@@ -460,7 +469,7 @@ var (
 	ID     = IntColumn(ColumnID)
 	Title  = StringColumn(ColumnTitle)
 	Count  = NullableIntColumn(ColumnCount)
-	SeenAt = TimeColumn(ColumnSeenAt)
+	SeenAt = AutoTimeColumn(ColumnSeenAt)
 	Kind   = KindEnumColumn(ColumnKind)
 	Secret = StringColumn(ColumnSecret)
 	Alias  = StringColumn(ColumnAlias)
@@ -490,26 +499,26 @@ func (e *EdgeFrozen) HasWith(ps ...predicate.Note) predicate.Renamed {
 }
 
 // Add connects the Renamed to the Note rows with the given ids.
-func (e *EdgeFrozen) Add(ids ...int) predicate.RenamedSet {
+func (e *EdgeFrozen) Add(ids ...int) predicate.RenamedSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.RenamedSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.RenamedSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Renamed from the Note rows with the given ids.
-func (e *EdgeFrozen) Remove(ids ...int) predicate.RenamedSet {
+func (e *EdgeFrozen) Remove(ids ...int) predicate.RenamedSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.RenamedSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.RenamedSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Renamed from every "frozen" neighbor.
-func (e *EdgeFrozen) Clear() predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeFrozen) Clear() predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "frozen_topics", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "topics", Columns: []string{"renamed_frozen_topics"}, Immutable: true}
@@ -536,26 +545,26 @@ func (e *EdgeFrozenTopics) HasWith(ps ...predicate.Topic) predicate.Renamed {
 }
 
 // Add connects the Renamed to the Topic rows with the given ids.
-func (e *EdgeFrozenTopics) Add(ids ...int) predicate.RenamedSet {
+func (e *EdgeFrozenTopics) Add(ids ...int) predicate.RenamedSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.RenamedSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.RenamedSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Renamed from the Topic rows with the given ids.
-func (e *EdgeFrozenTopics) Remove(ids ...int) predicate.RenamedSet {
+func (e *EdgeFrozenTopics) Remove(ids ...int) predicate.RenamedSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.RenamedSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.RenamedSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Renamed from every "frozen_topics" neighbor.
-func (e *EdgeFrozenTopics) Clear() predicate.RenamedSet {
-	return predicate.RenamedSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeFrozenTopics) Clear() predicate.RenamedSetter {
+	return predicate.RenamedSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Renamed, in order. The generated

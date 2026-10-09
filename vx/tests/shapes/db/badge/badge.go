@@ -10,7 +10,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Badge, and ModelName the name of its entity.
+// Table is the table of Badge, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "badges"
 	ModelName = "Badge"
@@ -70,30 +71,32 @@ func (f *Uint16Column) LTE(v uint16) predicate.Badge {
 }
 
 // Set assigns v to the column.
-func (f *Uint16Column) Set(v uint16) predicate.BadgeSet {
-	return predicate.BadgeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint16Column) Set(v uint16) predicate.BadgeSetter {
+	return predicate.BadgeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint16Column) SetNillable(v *uint16) predicate.BadgeSet {
+func (f *Uint16Column) SetNillable(v *uint16) predicate.BadgeSetter {
 	if v == nil {
-		return predicate.BadgeSet{}
+		return predicate.BadgeSetter{}
 	}
-	return predicate.BadgeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BadgeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint16Column) Add(v uint16) predicate.BadgeSet {
-	return predicate.BadgeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint16Column) Add(v uint16) predicate.BadgeSetter {
+	return predicate.BadgeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint16Column) Asc() predicate.BadgeOrder { return predicate.BadgeOrder{Col: string(*f)} }
+func (f *Uint16Column) Asc() predicate.BadgeOrderTerm {
+	return predicate.BadgeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Uint16Column) Desc() predicate.BadgeOrder {
-	return predicate.BadgeOrder{Col: string(*f), Desc: true}
+func (f *Uint16Column) Desc() predicate.BadgeOrderTerm {
+	return predicate.BadgeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -175,25 +178,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Badge {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.BadgeSet {
-	return predicate.BadgeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.BadgeSetter {
+	return predicate.BadgeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.BadgeSet {
+func (f *StringColumn) SetNillable(v *string) predicate.BadgeSetter {
 	if v == nil {
-		return predicate.BadgeSet{}
+		return predicate.BadgeSetter{}
 	}
-	return predicate.BadgeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BadgeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.BadgeOrder { return predicate.BadgeOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.BadgeOrderTerm {
+	return predicate.BadgeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.BadgeOrder {
-	return predicate.BadgeOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.BadgeOrderTerm {
+	return predicate.BadgeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Badge.
@@ -230,26 +235,26 @@ func (e *EdgeTeams) HasWith(ps ...predicate.Team) predicate.Badge {
 }
 
 // Add connects the Badge to the Team rows with the given ids.
-func (e *EdgeTeams) Add(ids ...uuid.UUID) predicate.BadgeSet {
+func (e *EdgeTeams) Add(ids ...uuid.UUID) predicate.BadgeSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.BadgeSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.BadgeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Badge from the Team rows with the given ids.
-func (e *EdgeTeams) Remove(ids ...uuid.UUID) predicate.BadgeSet {
+func (e *EdgeTeams) Remove(ids ...uuid.UUID) predicate.BadgeSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.BadgeSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.BadgeSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Badge from every "teams" neighbor.
-func (e *EdgeTeams) Clear() predicate.BadgeSet {
-	return predicate.BadgeSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeTeams) Clear() predicate.BadgeSetter {
+	return predicate.BadgeSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "holders", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "persons", Columns: []string{"badge_holders"}}
@@ -274,26 +279,26 @@ func (e *EdgeHolders) HasWith(ps ...predicate.Person) predicate.Badge {
 }
 
 // Add connects the Badge to the Person rows with the given ids.
-func (e *EdgeHolders) Add(ids ...int) predicate.BadgeSet {
+func (e *EdgeHolders) Add(ids ...int) predicate.BadgeSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.BadgeSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.BadgeSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Badge from the Person rows with the given ids.
-func (e *EdgeHolders) Remove(ids ...int) predicate.BadgeSet {
+func (e *EdgeHolders) Remove(ids ...int) predicate.BadgeSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.BadgeSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.BadgeSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Badge from every "holders" neighbor.
-func (e *EdgeHolders) Clear() predicate.BadgeSet {
-	return predicate.BadgeSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeHolders) Clear() predicate.BadgeSetter {
+	return predicate.BadgeSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Badge, in order. The generated

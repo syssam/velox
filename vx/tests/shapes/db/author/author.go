@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Author, and ModelName the name of its entity.
+// Table is the table of Author, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "authors"
 	ModelName = "Author"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Author {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.AuthorSet {
+func (f *IntColumn) SetNillable(v *int) predicate.AuthorSetter {
 	if v == nil {
-		return predicate.AuthorSet{}
+		return predicate.AuthorSetter{}
 	}
-	return predicate.AuthorSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.AuthorSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.AuthorOrder { return predicate.AuthorOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.AuthorOrderTerm {
+	return predicate.AuthorOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.AuthorOrder {
-	return predicate.AuthorOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.AuthorOrderTerm {
+	return predicate.AuthorOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Author {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.AuthorSet {
+func (f *StringColumn) SetNillable(v *string) predicate.AuthorSetter {
 	if v == nil {
-		return predicate.AuthorSet{}
+		return predicate.AuthorSetter{}
 	}
-	return predicate.AuthorSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.AuthorSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.AuthorOrder { return predicate.AuthorOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.AuthorOrderTerm {
+	return predicate.AuthorOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.AuthorOrder {
-	return predicate.AuthorOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.AuthorOrderTerm {
+	return predicate.AuthorOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Author.
@@ -233,26 +238,26 @@ func (e *EdgeArticles) HasWith(ps ...predicate.Article) predicate.Author {
 }
 
 // Add connects the Author to the Article rows with the given ids.
-func (e *EdgeArticles) Add(ids ...int) predicate.AuthorSet {
+func (e *EdgeArticles) Add(ids ...int) predicate.AuthorSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.AuthorSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.AuthorSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Author from the Article rows with the given ids.
-func (e *EdgeArticles) Remove(ids ...int) predicate.AuthorSet {
+func (e *EdgeArticles) Remove(ids ...int) predicate.AuthorSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.AuthorSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.AuthorSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Author from every "articles" neighbor.
-func (e *EdgeArticles) Clear() predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeArticles) Clear() predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "edited", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "articles", Columns: []string{"editor_id"}}
@@ -277,26 +282,26 @@ func (e *EdgeEdited) HasWith(ps ...predicate.Article) predicate.Author {
 }
 
 // Add connects the Author to the Article rows with the given ids.
-func (e *EdgeEdited) Add(ids ...int) predicate.AuthorSet {
+func (e *EdgeEdited) Add(ids ...int) predicate.AuthorSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.AuthorSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.AuthorSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Author from the Article rows with the given ids.
-func (e *EdgeEdited) Remove(ids ...int) predicate.AuthorSet {
+func (e *EdgeEdited) Remove(ids ...int) predicate.AuthorSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.AuthorSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.AuthorSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Author from every "edited" neighbor.
-func (e *EdgeEdited) Clear() predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeEdited) Clear() predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "passport", Index: 2, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "passports", Columns: []string{"author_passport"}}
@@ -323,13 +328,13 @@ func (e *EdgePassport) HasWith(ps ...predicate.Passport) predicate.Author {
 }
 
 // Set connects the Author to the Passport with the given id.
-func (e *EdgePassport) Set(id int) predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: []any{id}}
+func (e *EdgePassport) Set(id int) predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: []any{id}}
 }
 
 // Clear disconnects the Author from every "passport" neighbor.
-func (e *EdgePassport) Clear() predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgePassport) Clear() predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "locker", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "lockers", Columns: []string{"holder_id"}}
@@ -354,13 +359,13 @@ func (e *EdgeLocker) HasWith(ps ...predicate.Locker) predicate.Author {
 }
 
 // Set connects the Author to the Locker with the given id.
-func (e *EdgeLocker) Set(id int) predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
+func (e *EdgeLocker) Set(id int) predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
 }
 
 // Clear disconnects the Author from every "locker" neighbor.
-func (e *EdgeLocker) Clear() predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeLocker) Clear() predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 var meta4 = orm.EdgeMeta{Name: "gadgets", Index: 4, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "gadgets", Columns: []string{"owner_id"}}
@@ -387,26 +392,26 @@ func (e *EdgeGadgets) HasWith(ps ...predicate.Gadget) predicate.Author {
 }
 
 // Add connects the Author to the Gadget rows with the given ids.
-func (e *EdgeGadgets) Add(ids ...int) predicate.AuthorSet {
+func (e *EdgeGadgets) Add(ids ...int) predicate.AuthorSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.AuthorSet{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
+	return predicate.AuthorSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
 }
 
 // Remove disconnects the Author from the Gadget rows with the given ids.
-func (e *EdgeGadgets) Remove(ids ...int) predicate.AuthorSet {
+func (e *EdgeGadgets) Remove(ids ...int) predicate.AuthorSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.AuthorSet{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
+	return predicate.AuthorSetter{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
 }
 
 // Clear disconnects the Author from every "gadgets" neighbor.
-func (e *EdgeGadgets) Clear() predicate.AuthorSet {
-	return predicate.AuthorSet{Kind: orm.EdgeClear, Edge: &meta4}
+func (e *EdgeGadgets) Clear() predicate.AuthorSetter {
+	return predicate.AuthorSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
 // EdgeMetas returns the descriptions of the edges of Author, in order. The generated

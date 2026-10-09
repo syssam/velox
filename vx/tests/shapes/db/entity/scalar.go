@@ -260,7 +260,7 @@ func (q *ScalarQuery) Where(ps ...predicate.Scalar) *ScalarQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *ScalarQuery) OrderBy(os ...predicate.ScalarOrder) *ScalarQuery {
+func (q *ScalarQuery) OrderBy(os ...predicate.ScalarOrderTerm) *ScalarQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -270,12 +270,12 @@ func (q *ScalarQuery) OrderBy(os ...predicate.ScalarOrder) *ScalarQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *ScalarQuery) Limit(n int) *ScalarQuery { q.c.Lim = n; return q }
+func (q *ScalarQuery) Limit(n int) *ScalarQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *ScalarQuery) Offset(n int) *ScalarQuery { q.c.Off = n; return q }
+func (q *ScalarQuery) Offset(n int) *ScalarQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -435,7 +435,7 @@ func NewScalarCreate(ex orm.Executor) *ScalarCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *ScalarCreate) Set(ss ...predicate.ScalarSet) *ScalarCreate {
+func (b *ScalarCreate) Set(ss ...predicate.ScalarSetter) *ScalarCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -530,7 +530,7 @@ func NewScalarUpdate(ex orm.Executor) *ScalarUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *ScalarUpdate) Set(ss ...predicate.ScalarSet) *ScalarUpdate {
+func (b *ScalarUpdate) Set(ss ...predicate.ScalarSetter) *ScalarUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -559,11 +559,18 @@ func (b *ScalarUpdate) Fill(in any, skip ...string) *ScalarUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *ScalarUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *ScalarUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

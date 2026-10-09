@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Entity, and ModelName the name of its entity.
+// Table is the table of Entity, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "entities"
 	ModelName = "Entity"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Entity {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.EntitySet {
-	return predicate.EntitySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.EntitySetter {
+	return predicate.EntitySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.EntitySet {
+func (f *IntColumn) SetNillable(v *int) predicate.EntitySetter {
 	if v == nil {
-		return predicate.EntitySet{}
+		return predicate.EntitySetter{}
 	}
-	return predicate.EntitySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EntitySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.EntitySet {
-	return predicate.EntitySet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.EntitySetter {
+	return predicate.EntitySetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.EntityOrder { return predicate.EntityOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.EntityOrderTerm {
+	return predicate.EntityOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.EntityOrder {
-	return predicate.EntityOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.EntityOrderTerm {
+	return predicate.EntityOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Entity {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.EntitySet {
-	return predicate.EntitySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.EntitySetter {
+	return predicate.EntitySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.EntitySet {
+func (f *StringColumn) SetNillable(v *string) predicate.EntitySetter {
 	if v == nil {
-		return predicate.EntitySet{}
+		return predicate.EntitySetter{}
 	}
-	return predicate.EntitySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EntitySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.EntityOrder { return predicate.EntityOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.EntityOrderTerm {
+	return predicate.EntityOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.EntityOrder {
-	return predicate.EntityOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.EntityOrderTerm {
+	return predicate.EntityOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Entity.

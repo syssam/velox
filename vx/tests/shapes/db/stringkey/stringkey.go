@@ -9,11 +9,89 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of StringKey, and ModelName the name of its entity.
+// Table is the table of StringKey, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "string_keys"
 	ModelName = "StringKey"
 )
+
+// StringIDColumn is a column of Go type string: its methods build the predicates,
+// assignments and order terms of that column. They have pointer receivers so
+// that the compiler emits each once.
+type StringIDColumn string
+
+// EQ matches the rows whose column equals v.
+func (f *StringIDColumn) EQ(v string) predicate.StringKey {
+	return predicate.StringKey{Op: orm.OpEQ, Col: string(*f), Val: v}
+}
+
+// NEQ matches the rows whose column differs from v.
+func (f *StringIDColumn) NEQ(v string) predicate.StringKey {
+	return predicate.StringKey{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// In matches the rows whose column is one of vs; without any, none.
+func (f *StringIDColumn) In(vs ...string) predicate.StringKey {
+	a := make([]any, len(vs))
+	for i, v := range vs {
+		a[i] = v
+	}
+	return predicate.StringKey{Op: orm.OpIn, Col: string(*f), Val: a}
+}
+
+// NotIn matches the rows whose column is none of vs.
+func (f *StringIDColumn) NotIn(vs ...string) predicate.StringKey {
+	a := make([]any, len(vs))
+	for i, v := range vs {
+		a[i] = v
+	}
+	return predicate.StringKey{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// GT matches the rows whose column is greater than v.
+func (f *StringIDColumn) GT(v string) predicate.StringKey {
+	return predicate.StringKey{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *StringIDColumn) GTE(v string) predicate.StringKey {
+	return predicate.StringKey{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *StringIDColumn) LT(v string) predicate.StringKey {
+	return predicate.StringKey{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *StringIDColumn) LTE(v string) predicate.StringKey {
+	return predicate.StringKey{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// Set assigns v to the column.
+func (f *StringIDColumn) Set(v string) predicate.StringKeySetter {
+	return predicate.StringKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
+}
+
+// SetNillable assigns *v to the column, or nothing when v is nil: the setter
+// for an input field the caller may have left out.
+func (f *StringIDColumn) SetNillable(v *string) predicate.StringKeySetter {
+	if v == nil {
+		return predicate.StringKeySetter{}
+	}
+	return predicate.StringKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
+}
+
+// Asc orders by the column, smallest first.
+func (f *StringIDColumn) Asc() predicate.StringKeyOrderTerm {
+	return predicate.StringKeyOrderTerm{Col: string(*f)}
+}
+
+// Desc orders by the column, greatest first.
+func (f *StringIDColumn) Desc() predicate.StringKeyOrderTerm {
+	return predicate.StringKeyOrderTerm{Col: string(*f), Desc: true}
+}
 
 // StringColumn is a column of Go type string: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
@@ -68,130 +146,53 @@ func (f *StringColumn) LTE(v string) predicate.StringKey {
 	return predicate.StringKey{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
-// Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.StringKeySet {
-	return predicate.StringKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
-}
-
-// SetNillable assigns *v to the column, or nothing when v is nil: the setter
-// for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.StringKeySet {
-	if v == nil {
-		return predicate.StringKeySet{}
-	}
-	return predicate.StringKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
-}
-
-// Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.StringKeyOrder {
-	return predicate.StringKeyOrder{Col: string(*f)}
-}
-
-// Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.StringKeyOrder {
-	return predicate.StringKeyOrder{Col: string(*f), Desc: true}
-}
-
-// StringColumn2 is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
-type StringColumn2 string
-
-// EQ matches the rows whose column equals v.
-func (f *StringColumn2) EQ(v string) predicate.StringKey {
-	return predicate.StringKey{Op: orm.OpEQ, Col: string(*f), Val: v}
-}
-
-// NEQ matches the rows whose column differs from v.
-func (f *StringColumn2) NEQ(v string) predicate.StringKey {
-	return predicate.StringKey{Op: orm.OpNEQ, Col: string(*f), Val: v}
-}
-
-// In matches the rows whose column is one of vs; without any, none.
-func (f *StringColumn2) In(vs ...string) predicate.StringKey {
-	a := make([]any, len(vs))
-	for i, v := range vs {
-		a[i] = v
-	}
-	return predicate.StringKey{Op: orm.OpIn, Col: string(*f), Val: a}
-}
-
-// NotIn matches the rows whose column is none of vs.
-func (f *StringColumn2) NotIn(vs ...string) predicate.StringKey {
-	a := make([]any, len(vs))
-	for i, v := range vs {
-		a[i] = v
-	}
-	return predicate.StringKey{Op: orm.OpNotIn, Col: string(*f), Val: a}
-}
-
-// GT matches the rows whose column is greater than v.
-func (f *StringColumn2) GT(v string) predicate.StringKey {
-	return predicate.StringKey{Op: orm.OpGT, Col: string(*f), Val: v}
-}
-
-// GTE matches the rows whose column is v or greater.
-func (f *StringColumn2) GTE(v string) predicate.StringKey {
-	return predicate.StringKey{Op: orm.OpGTE, Col: string(*f), Val: v}
-}
-
-// LT matches the rows whose column is less than v.
-func (f *StringColumn2) LT(v string) predicate.StringKey {
-	return predicate.StringKey{Op: orm.OpLT, Col: string(*f), Val: v}
-}
-
-// LTE matches the rows whose column is v or less.
-func (f *StringColumn2) LTE(v string) predicate.StringKey {
-	return predicate.StringKey{Op: orm.OpLTE, Col: string(*f), Val: v}
-}
-
 // Contains matches the rows whose column contains v.
-func (f *StringColumn2) Contains(v string) predicate.StringKey {
+func (f *StringColumn) Contains(v string) predicate.StringKey {
 	return predicate.StringKey{Op: orm.OpContains, Col: string(*f), Val: v}
 }
 
 // HasPrefix matches the rows whose column starts with v.
-func (f *StringColumn2) HasPrefix(v string) predicate.StringKey {
+func (f *StringColumn) HasPrefix(v string) predicate.StringKey {
 	return predicate.StringKey{Op: orm.OpHasPrefix, Col: string(*f), Val: v}
 }
 
 // HasSuffix matches the rows whose column ends with v.
-func (f *StringColumn2) HasSuffix(v string) predicate.StringKey {
+func (f *StringColumn) HasSuffix(v string) predicate.StringKey {
 	return predicate.StringKey{Op: orm.OpHasSuffix, Col: string(*f), Val: v}
 }
 
 // EqualFold matches the rows whose column equals v, whatever the case.
-func (f *StringColumn2) EqualFold(v string) predicate.StringKey {
+func (f *StringColumn) EqualFold(v string) predicate.StringKey {
 	return predicate.StringKey{Op: orm.OpEqualFold, Col: string(*f), Val: v}
 }
 
 // ContainsFold matches the rows whose column contains v, whatever the case.
-func (f *StringColumn2) ContainsFold(v string) predicate.StringKey {
+func (f *StringColumn) ContainsFold(v string) predicate.StringKey {
 	return predicate.StringKey{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *StringColumn2) Set(v string) predicate.StringKeySet {
-	return predicate.StringKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.StringKeySetter {
+	return predicate.StringKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn2) SetNillable(v *string) predicate.StringKeySet {
+func (f *StringColumn) SetNillable(v *string) predicate.StringKeySetter {
 	if v == nil {
-		return predicate.StringKeySet{}
+		return predicate.StringKeySetter{}
 	}
-	return predicate.StringKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.StringKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn2) Asc() predicate.StringKeyOrder {
-	return predicate.StringKeyOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.StringKeyOrderTerm {
+	return predicate.StringKeyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn2) Desc() predicate.StringKeyOrder {
-	return predicate.StringKeyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.StringKeyOrderTerm {
+	return predicate.StringKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of StringKey.
@@ -202,8 +203,8 @@ const (
 
 // The columns of StringKey.
 var (
-	ID   = StringColumn(ColumnID)
-	Name = StringColumn2(ColumnName)
+	ID   = StringIDColumn(ColumnID)
+	Name = StringColumn(ColumnName)
 )
 
 // And matches the rows every one of ps matches.

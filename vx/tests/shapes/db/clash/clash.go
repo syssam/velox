@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of Clash, and ModelName the name of its entity.
+// Table is the table of Clash, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "clashes"
 	ModelName = "Clash"
@@ -238,30 +239,30 @@ func (f *IntColumn) LTE(v int) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.ClashSet {
+func (f *IntColumn) SetNillable(v *int) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.ClashOrderTerm { return predicate.ClashOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -343,25 +344,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.ClashSet {
+func (f *StringColumn) SetNillable(v *string) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // OrderEnumColumn is a column of Go type OrderEnum: its methods build the predicates,
@@ -398,25 +401,27 @@ func (f *OrderEnumColumn) NotIn(vs ...OrderEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *OrderEnumColumn) Set(v OrderEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *OrderEnumColumn) Set(v OrderEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *OrderEnumColumn) SetNillable(v *OrderEnum) predicate.ClashSet {
+func (f *OrderEnumColumn) SetNillable(v *OrderEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *OrderEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *OrderEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *OrderEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *OrderEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // SetEnumColumn is a column of Go type SetEnum: its methods build the predicates,
@@ -453,25 +458,27 @@ func (f *SetEnumColumn) NotIn(vs ...SetEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *SetEnumColumn) Set(v SetEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *SetEnumColumn) Set(v SetEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *SetEnumColumn) SetNillable(v *SetEnum) predicate.ClashSet {
+func (f *SetEnumColumn) SetNillable(v *SetEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *SetEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *SetEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *SetEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *SetEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // QueryEnumColumn is a column of Go type QueryEnum: its methods build the predicates,
@@ -508,25 +515,27 @@ func (f *QueryEnumColumn) NotIn(vs ...QueryEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *QueryEnumColumn) Set(v QueryEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *QueryEnumColumn) Set(v QueryEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *QueryEnumColumn) SetNillable(v *QueryEnum) predicate.ClashSet {
+func (f *QueryEnumColumn) SetNillable(v *QueryEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *QueryEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *QueryEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *QueryEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *QueryEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // CreateEnumColumn is a column of Go type CreateEnum: its methods build the predicates,
@@ -563,25 +572,27 @@ func (f *CreateEnumColumn) NotIn(vs ...CreateEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *CreateEnumColumn) Set(v CreateEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *CreateEnumColumn) Set(v CreateEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *CreateEnumColumn) SetNillable(v *CreateEnum) predicate.ClashSet {
+func (f *CreateEnumColumn) SetNillable(v *CreateEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *CreateEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *CreateEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *CreateEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *CreateEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UpdateEnumColumn is a column of Go type UpdateEnum: its methods build the predicates,
@@ -618,25 +629,27 @@ func (f *UpdateEnumColumn) NotIn(vs ...UpdateEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *UpdateEnumColumn) Set(v UpdateEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UpdateEnumColumn) Set(v UpdateEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UpdateEnumColumn) SetNillable(v *UpdateEnum) predicate.ClashSet {
+func (f *UpdateEnumColumn) SetNillable(v *UpdateEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UpdateEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *UpdateEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *UpdateEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *UpdateEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // LoadEnumColumn is a column of Go type LoadEnum: its methods build the predicates,
@@ -673,25 +686,27 @@ func (f *LoadEnumColumn) NotIn(vs ...LoadEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *LoadEnumColumn) Set(v LoadEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *LoadEnumColumn) Set(v LoadEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *LoadEnumColumn) SetNillable(v *LoadEnum) predicate.ClashSet {
+func (f *LoadEnumColumn) SetNillable(v *LoadEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *LoadEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *LoadEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *LoadEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *LoadEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // EdgeEnumColumn is a column of Go type EdgeEnum: its methods build the predicates,
@@ -728,25 +743,27 @@ func (f *EdgeEnumColumn) NotIn(vs ...EdgeEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *EdgeEnumColumn) Set(v EdgeEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *EdgeEnumColumn) Set(v EdgeEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *EdgeEnumColumn) SetNillable(v *EdgeEnum) predicate.ClashSet {
+func (f *EdgeEnumColumn) SetNillable(v *EdgeEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *EdgeEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *EdgeEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *EdgeEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *EdgeEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // MetaEnumColumn is a column of Go type MetaEnum: its methods build the predicates,
@@ -783,25 +800,27 @@ func (f *MetaEnumColumn) NotIn(vs ...MetaEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *MetaEnumColumn) Set(v MetaEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *MetaEnumColumn) Set(v MetaEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *MetaEnumColumn) SetNillable(v *MetaEnum) predicate.ClashSet {
+func (f *MetaEnumColumn) SetNillable(v *MetaEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *MetaEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *MetaEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *MetaEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *MetaEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // PredEnumColumn is a column of Go type PredEnum: its methods build the predicates,
@@ -838,25 +857,27 @@ func (f *PredEnumColumn) NotIn(vs ...PredEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *PredEnumColumn) Set(v PredEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *PredEnumColumn) Set(v PredEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *PredEnumColumn) SetNillable(v *PredEnum) predicate.ClashSet {
+func (f *PredEnumColumn) SetNillable(v *PredEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *PredEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *PredEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *PredEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *PredEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // KindEnumColumn is a column of Go type KindEnum: its methods build the predicates,
@@ -893,25 +914,27 @@ func (f *KindEnumColumn) NotIn(vs ...KindEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *KindEnumColumn) Set(v KindEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *KindEnumColumn) Set(v KindEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *KindEnumColumn) SetNillable(v *KindEnum) predicate.ClashSet {
+func (f *KindEnumColumn) SetNillable(v *KindEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *KindEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *KindEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *KindEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *KindEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // AEnumColumn is a column of Go type AEnum: its methods build the predicates,
@@ -948,25 +971,27 @@ func (f *AEnumColumn) NotIn(vs ...AEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *AEnumColumn) Set(v AEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AEnumColumn) Set(v AEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *AEnumColumn) SetNillable(v *AEnum) predicate.ClashSet {
+func (f *AEnumColumn) SetNillable(v *AEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *AEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *AEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *AEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *AEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // ABEnumColumn is a column of Go type ABEnum: its methods build the predicates,
@@ -1003,25 +1028,27 @@ func (f *ABEnumColumn) NotIn(vs ...ABEnum) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *ABEnumColumn) Set(v ABEnum) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *ABEnumColumn) Set(v ABEnum) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *ABEnumColumn) SetNillable(v *ABEnum) predicate.ClashSet {
+func (f *ABEnumColumn) SetNillable(v *ABEnum) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *ABEnumColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *ABEnumColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *ABEnumColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *ABEnumColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // DecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
@@ -1103,25 +1130,27 @@ func (f *DecimalColumn) ContainsFold(v string) predicate.Clash {
 }
 
 // Set assigns v to the column.
-func (f *DecimalColumn) Set(v types.Decimal) predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *DecimalColumn) Set(v types.Decimal) predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *DecimalColumn) SetNillable(v *types.Decimal) predicate.ClashSet {
+func (f *DecimalColumn) SetNillable(v *types.Decimal) predicate.ClashSetter {
 	if v == nil {
-		return predicate.ClashSet{}
+		return predicate.ClashSetter{}
 	}
-	return predicate.ClashSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *DecimalColumn) Asc() predicate.ClashOrder { return predicate.ClashOrder{Col: string(*f)} }
+func (f *DecimalColumn) Asc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *DecimalColumn) Desc() predicate.ClashOrder {
-	return predicate.ClashOrder{Col: string(*f), Desc: true}
+func (f *DecimalColumn) Desc() predicate.ClashOrderTerm {
+	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Clash.
@@ -1188,26 +1217,26 @@ func (e *EdgeOthers) HasWith(ps ...predicate.Field) predicate.Clash {
 }
 
 // Add connects the Clash to the Field rows with the given ids.
-func (e *EdgeOthers) Add(ids ...int) predicate.ClashSet {
+func (e *EdgeOthers) Add(ids ...int) predicate.ClashSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ClashSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.ClashSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Clash from the Field rows with the given ids.
-func (e *EdgeOthers) Remove(ids ...int) predicate.ClashSet {
+func (e *EdgeOthers) Remove(ids ...int) predicate.ClashSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ClashSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.ClashSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Clash from every "others" neighbor.
-func (e *EdgeOthers) Clear() predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeOthers) Clear() predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "others_or_err", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others_or_err"}}
@@ -1234,26 +1263,26 @@ func (e *EdgeOthersOrErrEdge) HasWith(ps ...predicate.Field) predicate.Clash {
 }
 
 // Add connects the Clash to the Field rows with the given ids.
-func (e *EdgeOthersOrErrEdge) Add(ids ...int) predicate.ClashSet {
+func (e *EdgeOthersOrErrEdge) Add(ids ...int) predicate.ClashSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ClashSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.ClashSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Clash from the Field rows with the given ids.
-func (e *EdgeOthersOrErrEdge) Remove(ids ...int) predicate.ClashSet {
+func (e *EdgeOthersOrErrEdge) Remove(ids ...int) predicate.ClashSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ClashSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.ClashSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Clash from every "others_or_err" neighbor.
-func (e *EdgeOthersOrErrEdge) Clear() predicate.ClashSet {
-	return predicate.ClashSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeOthersOrErrEdge) Clear() predicate.ClashSetter {
+	return predicate.ClashSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Clash, in order. The generated

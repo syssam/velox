@@ -11,7 +11,8 @@ import (
 	time "time"
 )
 
-// Table is the table of DefaultShape, and ModelName the name of its entity.
+// Table is the table of DefaultShape, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "default_shapes"
 	ModelName = "DefaultShape"
@@ -71,32 +72,32 @@ func (f *IntColumn) LTE(v int) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.DefaultShapeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *IntColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -178,27 +179,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.DefaultShapeSet {
+func (f *StringColumn) SetNillable(v *string) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -255,46 +256,46 @@ func (f *TimeColumn) LTE(v time.Time) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.DefaultShapeSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *TimeColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type TimeColumn2 string
+type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *TimeColumn2) EQ(v time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) EQ(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *TimeColumn2) NEQ(v time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) NEQ(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *TimeColumn2) In(vs ...time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) In(vs ...time.Time) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -303,7 +304,7 @@ func (f *TimeColumn2) In(vs ...time.Time) predicate.DefaultShape {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) NotIn(vs ...time.Time) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -312,73 +313,73 @@ func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.DefaultShape {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *TimeColumn2) GT(v time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) GT(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *TimeColumn2) GTE(v time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) GTE(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *TimeColumn2) LT(v time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) LT(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *TimeColumn2) LTE(v time.Time) predicate.DefaultShape {
+func (f *AutoTimeColumn) LTE(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn2) Set(v time.Time) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoTimeColumn) Set(v time.Time) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn2) SetNillable(v *time.Time) predicate.DefaultShapeSet {
+func (f *AutoTimeColumn) SetNillable(v *time.Time) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *TimeColumn2) Keep() predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoTimeColumn) Keep() predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn2) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *AutoTimeColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn2) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *AutoTimeColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// IntColumn2 is a column of Go type int: its methods build the predicates,
+// AutoIntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type IntColumn2 string
+type AutoIntColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *IntColumn2) EQ(v int) predicate.DefaultShape {
+func (f *AutoIntColumn) EQ(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *IntColumn2) NEQ(v int) predicate.DefaultShape {
+func (f *AutoIntColumn) NEQ(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *IntColumn2) In(vs ...int) predicate.DefaultShape {
+func (f *AutoIntColumn) In(vs ...int) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -387,7 +388,7 @@ func (f *IntColumn2) In(vs ...int) predicate.DefaultShape {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *IntColumn2) NotIn(vs ...int) predicate.DefaultShape {
+func (f *AutoIntColumn) NotIn(vs ...int) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -396,59 +397,59 @@ func (f *IntColumn2) NotIn(vs ...int) predicate.DefaultShape {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *IntColumn2) GT(v int) predicate.DefaultShape {
+func (f *AutoIntColumn) GT(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *IntColumn2) GTE(v int) predicate.DefaultShape {
+func (f *AutoIntColumn) GTE(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *IntColumn2) LT(v int) predicate.DefaultShape {
+func (f *AutoIntColumn) LT(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *IntColumn2) LTE(v int) predicate.DefaultShape {
+func (f *AutoIntColumn) LTE(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *IntColumn2) Set(v int) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoIntColumn) Set(v int) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn2) SetNillable(v *int) predicate.DefaultShapeSet {
+func (f *AutoIntColumn) SetNillable(v *int) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *IntColumn2) Keep() predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoIntColumn) Keep() predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *IntColumn2) Add(v int) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *AutoIntColumn) Add(v int) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn2) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *AutoIntColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn2) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *AutoIntColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -531,41 +532,41 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.DefaultShape {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.DefaultShape {
-	return predicate.DefaultShape{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.DefaultShape {
-	return predicate.DefaultShape{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.DefaultShapeSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *NullableStringColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BoolColumn is a column of Go type bool: its methods build the predicates,
@@ -584,27 +585,27 @@ func (f *BoolColumn) NEQ(v bool) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *BoolColumn) Set(v bool) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BoolColumn) Set(v bool) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BoolColumn) SetNillable(v *bool) predicate.DefaultShapeSet {
+func (f *BoolColumn) SetNillable(v *bool) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BoolColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *BoolColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *BoolColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *BoolColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float64Column is a column of Go type float64: its methods build the predicates,
@@ -661,32 +662,32 @@ func (f *Float64Column) LTE(v float64) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *Float64Column) Set(v float64) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float64Column) Set(v float64) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float64Column) SetNillable(v *float64) predicate.DefaultShapeSet {
+func (f *Float64Column) SetNillable(v *float64) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float64Column) Add(v float64) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float64Column) Add(v float64) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float64Column) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *Float64Column) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Float64Column) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *Float64Column) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float32Column is a column of Go type float32: its methods build the predicates,
@@ -743,32 +744,32 @@ func (f *Float32Column) LTE(v float32) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *Float32Column) Set(v float32) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float32Column) Set(v float32) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float32Column) SetNillable(v *float32) predicate.DefaultShapeSet {
+func (f *Float32Column) SetNillable(v *float32) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float32Column) Add(v float32) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float32Column) Add(v float32) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float32Column) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *Float32Column) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Float32Column) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *Float32Column) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int8Column is a column of Go type int8: its methods build the predicates,
@@ -825,32 +826,32 @@ func (f *Int8Column) LTE(v int8) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *Int8Column) Set(v int8) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int8Column) Set(v int8) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int8Column) SetNillable(v *int8) predicate.DefaultShapeSet {
+func (f *Int8Column) SetNillable(v *int8) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int8Column) Add(v int8) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int8Column) Add(v int8) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int8Column) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *Int8Column) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Int8Column) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *Int8Column) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int64Column is a column of Go type int64: its methods build the predicates,
@@ -907,32 +908,32 @@ func (f *Int64Column) LTE(v int64) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *Int64Column) Set(v int64) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int64Column) Set(v int64) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int64Column) SetNillable(v *int64) predicate.DefaultShapeSet {
+func (f *Int64Column) SetNillable(v *int64) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int64Column) Add(v int64) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int64Column) Add(v int64) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int64Column) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *Int64Column) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Int64Column) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *Int64Column) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint32Column is a column of Go type uint32: its methods build the predicates,
@@ -989,32 +990,32 @@ func (f *Uint32Column) LTE(v uint32) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *Uint32Column) Set(v uint32) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint32Column) Set(v uint32) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint32Column) SetNillable(v *uint32) predicate.DefaultShapeSet {
+func (f *Uint32Column) SetNillable(v *uint32) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint32Column) Add(v uint32) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint32Column) Add(v uint32) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint32Column) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *Uint32Column) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Uint32Column) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *Uint32Column) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -1071,27 +1072,27 @@ func (f *BytesColumn) LTE(v []byte) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *BytesColumn) Set(v []byte) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BytesColumn) Set(v []byte) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BytesColumn) SetNillable(v *[]byte) predicate.DefaultShapeSet {
+func (f *BytesColumn) SetNillable(v *[]byte) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BytesColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *BytesColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *BytesColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *BytesColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
@@ -1148,27 +1149,27 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.DefaultShape {
 }
 
 // Set assigns v to the column.
-func (f *UUIDColumn) Set(v uuid.UUID) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UUIDColumn) Set(v uuid.UUID) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.DefaultShapeSet {
+func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UUIDColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *UUIDColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *UUIDColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *UUIDColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringListColumn is a column of Go type []string: its methods build the predicates,
@@ -1177,36 +1178,36 @@ func (f *UUIDColumn) Desc() predicate.DefaultShapeOrder {
 type StringListColumn string
 
 // Set assigns v to the column.
-func (f *StringListColumn) Set(v []string) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringListColumn) Set(v []string) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringListColumn) SetNillable(v *[]string) predicate.DefaultShapeSet {
+func (f *StringListColumn) SetNillable(v *[]string) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
-// Int64Column2 is a column of Go type int64: its methods build the predicates,
+// AutoInt64Column is a column of Go type int64: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type Int64Column2 string
+type AutoInt64Column string
 
 // EQ matches the rows whose column equals v.
-func (f *Int64Column2) EQ(v int64) predicate.DefaultShape {
+func (f *AutoInt64Column) EQ(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *Int64Column2) NEQ(v int64) predicate.DefaultShape {
+func (f *AutoInt64Column) NEQ(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *Int64Column2) In(vs ...int64) predicate.DefaultShape {
+func (f *AutoInt64Column) In(vs ...int64) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -1215,7 +1216,7 @@ func (f *Int64Column2) In(vs ...int64) predicate.DefaultShape {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *Int64Column2) NotIn(vs ...int64) predicate.DefaultShape {
+func (f *AutoInt64Column) NotIn(vs ...int64) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -1224,78 +1225,78 @@ func (f *Int64Column2) NotIn(vs ...int64) predicate.DefaultShape {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *Int64Column2) GT(v int64) predicate.DefaultShape {
+func (f *AutoInt64Column) GT(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *Int64Column2) GTE(v int64) predicate.DefaultShape {
+func (f *AutoInt64Column) GTE(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *Int64Column2) LT(v int64) predicate.DefaultShape {
+func (f *AutoInt64Column) LT(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *Int64Column2) LTE(v int64) predicate.DefaultShape {
+func (f *AutoInt64Column) LTE(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *Int64Column2) Set(v int64) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoInt64Column) Set(v int64) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int64Column2) SetNillable(v *int64) predicate.DefaultShapeSet {
+func (f *AutoInt64Column) SetNillable(v *int64) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *Int64Column2) Keep() predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoInt64Column) Keep() predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *Int64Column2) Add(v int64) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *AutoInt64Column) Add(v int64) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int64Column2) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *AutoInt64Column) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Int64Column2) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *AutoInt64Column) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
+// AutoNullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableTimeColumn string
+type AutoNullableTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableTimeColumn) EQ(v time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) EQ(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableTimeColumn) NEQ(v time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) NEQ(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableTimeColumn) In(vs ...time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) In(vs ...time.Time) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -1304,7 +1305,7 @@ func (f *NullableTimeColumn) In(vs ...time.Time) predicate.DefaultShape {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableTimeColumn) NotIn(vs ...time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) NotIn(vs ...time.Time) predicate.DefaultShape {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -1313,69 +1314,69 @@ func (f *NullableTimeColumn) NotIn(vs ...time.Time) predicate.DefaultShape {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableTimeColumn) GT(v time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) GT(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableTimeColumn) GTE(v time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) GTE(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableTimeColumn) LT(v time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) LT(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableTimeColumn) LTE(v time.Time) predicate.DefaultShape {
+func (f *AutoNullableTimeColumn) LTE(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableTimeColumn) IsNil() predicate.DefaultShape {
-	return predicate.DefaultShape{Op: orm.OpIsNull, Col: string(*f)}
+func (f *AutoNullableTimeColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableTimeColumn) NotNil() predicate.DefaultShape {
-	return predicate.DefaultShape{Op: orm.OpNotNull, Col: string(*f)}
+func (f *AutoNullableTimeColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTimeColumn) Set(v time.Time) predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoNullableTimeColumn) Set(v time.Time) predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.DefaultShapeSet {
+func (f *AutoNullableTimeColumn) SetNillable(v *time.Time) predicate.DefaultShapeSetter {
 	if v == nil {
-		return predicate.DefaultShapeSet{}
+		return predicate.DefaultShapeSetter{}
 	}
-	return predicate.DefaultShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableTimeColumn) Clear() predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *AutoNullableTimeColumn) Clear() predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *NullableTimeColumn) Keep() predicate.DefaultShapeSet {
-	return predicate.DefaultShapeSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoNullableTimeColumn) Keep() predicate.DefaultShapeSetter {
+	return predicate.DefaultShapeSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTimeColumn) Asc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f)}
+func (f *AutoNullableTimeColumn) Asc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableTimeColumn) Desc() predicate.DefaultShapeOrder {
-	return predicate.DefaultShapeOrder{Col: string(*f), Desc: true}
+func (f *AutoNullableTimeColumn) Desc() predicate.DefaultShapeOrderTerm {
+	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of DefaultShape.
@@ -1409,8 +1410,8 @@ var (
 	ID        = IntColumn(ColumnID)
 	Name      = StringColumn(ColumnName)
 	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = TimeColumn2(ColumnUpdatedAt)
-	Revision  = IntColumn2(ColumnRevision)
+	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
+	Revision  = AutoIntColumn(ColumnRevision)
 	Note      = StringColumn(ColumnNote)
 	OptNote   = StringColumn(ColumnOptNote)
 	NilNote   = NullableStringColumn(ColumnNilNote)
@@ -1426,8 +1427,8 @@ var (
 	Counter   = IntColumn(ColumnCounter)
 	Tags      = StringListColumn(ColumnTags)
 	Code      = StringColumn(ColumnCode)
-	Touched   = Int64Column2(ColumnTouched)
-	Seen      = NullableTimeColumn(ColumnSeen)
+	Touched   = AutoInt64Column(ColumnTouched)
+	Seen      = AutoNullableTimeColumn(ColumnSeen)
 )
 
 // And matches the rows every one of ps matches.

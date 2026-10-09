@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Note, and ModelName the name of its entity.
+// Table is the table of Note, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "notes"
 	ModelName = "Note"
@@ -69,30 +70,30 @@ func (f *IntColumn) LTE(v int) predicate.Note {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.NoteSet {
-	return predicate.NoteSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.NoteSetter {
+	return predicate.NoteSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.NoteSet {
+func (f *IntColumn) SetNillable(v *int) predicate.NoteSetter {
 	if v == nil {
-		return predicate.NoteSet{}
+		return predicate.NoteSetter{}
 	}
-	return predicate.NoteSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NoteSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.NoteSet {
-	return predicate.NoteSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.NoteSetter {
+	return predicate.NoteSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.NoteOrder { return predicate.NoteOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.NoteOrderTerm { return predicate.NoteOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.NoteOrder {
-	return predicate.NoteOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.NoteOrderTerm {
+	return predicate.NoteOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +175,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Note {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.NoteSet {
-	return predicate.NoteSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.NoteSetter {
+	return predicate.NoteSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.NoteSet {
+func (f *StringColumn) SetNillable(v *string) predicate.NoteSetter {
 	if v == nil {
-		return predicate.NoteSet{}
+		return predicate.NoteSetter{}
 	}
-	return predicate.NoteSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NoteSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.NoteOrder { return predicate.NoteOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.NoteOrderTerm { return predicate.NoteOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.NoteOrder {
-	return predicate.NoteOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.NoteOrderTerm {
+	return predicate.NoteOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Note.

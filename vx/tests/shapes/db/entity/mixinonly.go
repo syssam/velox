@@ -93,7 +93,7 @@ func (q *MixinOnlyQuery) Where(ps ...predicate.MixinOnly) *MixinOnlyQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *MixinOnlyQuery) OrderBy(os ...predicate.MixinOnlyOrder) *MixinOnlyQuery {
+func (q *MixinOnlyQuery) OrderBy(os ...predicate.MixinOnlyOrderTerm) *MixinOnlyQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -103,12 +103,12 @@ func (q *MixinOnlyQuery) OrderBy(os ...predicate.MixinOnlyOrder) *MixinOnlyQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *MixinOnlyQuery) Limit(n int) *MixinOnlyQuery { q.c.Lim = n; return q }
+func (q *MixinOnlyQuery) Limit(n int) *MixinOnlyQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *MixinOnlyQuery) Offset(n int) *MixinOnlyQuery { q.c.Off = n; return q }
+func (q *MixinOnlyQuery) Offset(n int) *MixinOnlyQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -271,7 +271,7 @@ func NewMixinOnlyCreate(ex orm.Executor) *MixinOnlyCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *MixinOnlyCreate) Set(ss ...predicate.MixinOnlySet) *MixinOnlyCreate {
+func (b *MixinOnlyCreate) Set(ss ...predicate.MixinOnlySetter) *MixinOnlyCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -366,7 +366,7 @@ func NewMixinOnlyUpdate(ex orm.Executor) *MixinOnlyUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *MixinOnlyUpdate) Set(ss ...predicate.MixinOnlySet) *MixinOnlyUpdate {
+func (b *MixinOnlyUpdate) Set(ss ...predicate.MixinOnlySetter) *MixinOnlyUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -395,11 +395,18 @@ func (b *MixinOnlyUpdate) Fill(in any, skip ...string) *MixinOnlyUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *MixinOnlyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *MixinOnlyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

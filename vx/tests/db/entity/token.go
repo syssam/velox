@@ -159,7 +159,7 @@ func (q *TokenQuery) Where(ps ...predicate.Token) *TokenQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *TokenQuery) OrderBy(os ...predicate.TokenOrder) *TokenQuery {
+func (q *TokenQuery) OrderBy(os ...predicate.TokenOrderTerm) *TokenQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -169,12 +169,12 @@ func (q *TokenQuery) OrderBy(os ...predicate.TokenOrder) *TokenQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *TokenQuery) Limit(n int) *TokenQuery { q.c.Lim = n; return q }
+func (q *TokenQuery) Limit(n int) *TokenQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *TokenQuery) Offset(n int) *TokenQuery { q.c.Off = n; return q }
+func (q *TokenQuery) Offset(n int) *TokenQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -334,7 +334,7 @@ func NewTokenCreate(ex orm.Executor) *TokenCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *TokenCreate) Set(ss ...predicate.TokenSet) *TokenCreate {
+func (b *TokenCreate) Set(ss ...predicate.TokenSetter) *TokenCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -429,7 +429,7 @@ func NewTokenUpdate(ex orm.Executor) *TokenUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *TokenUpdate) Set(ss ...predicate.TokenSet) *TokenUpdate {
+func (b *TokenUpdate) Set(ss ...predicate.TokenSetter) *TokenUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -458,11 +458,18 @@ func (b *TokenUpdate) Fill(in any, skip ...string) *TokenUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *TokenUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *TokenUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several
@@ -551,11 +558,11 @@ type TokenOrder struct {
 // input orders by nothing.
 //
 //go:noinline
-func (o *TokenOrder) Term() predicate.TokenOrder {
+func (o *TokenOrder) Term() predicate.TokenOrderTerm {
 	if o == nil {
-		return predicate.TokenOrder{}
+		return predicate.TokenOrderTerm{}
 	}
-	return predicate.TokenOrder(orm.OrderTerm(&TokenMeta, tokenOrderColumns, string(o.Field), o.Direction))
+	return predicate.TokenOrderTerm(orm.OrderTerm(&TokenMeta, tokenOrderColumns, string(o.Field), o.Direction))
 }
 
 // Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query

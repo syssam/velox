@@ -150,7 +150,7 @@ func (q *BlobQuery) Where(ps ...predicate.Blob) *BlobQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *BlobQuery) OrderBy(os ...predicate.BlobOrder) *BlobQuery {
+func (q *BlobQuery) OrderBy(os ...predicate.BlobOrderTerm) *BlobQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -160,12 +160,12 @@ func (q *BlobQuery) OrderBy(os ...predicate.BlobOrder) *BlobQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *BlobQuery) Limit(n int) *BlobQuery { q.c.Lim = n; return q }
+func (q *BlobQuery) Limit(n int) *BlobQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *BlobQuery) Offset(n int) *BlobQuery { q.c.Off = n; return q }
+func (q *BlobQuery) Offset(n int) *BlobQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -325,7 +325,7 @@ func NewBlobCreate(ex orm.Executor) *BlobCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *BlobCreate) Set(ss ...predicate.BlobSet) *BlobCreate {
+func (b *BlobCreate) Set(ss ...predicate.BlobSetter) *BlobCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -420,7 +420,7 @@ func NewBlobUpdate(ex orm.Executor) *BlobUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *BlobUpdate) Set(ss ...predicate.BlobSet) *BlobUpdate {
+func (b *BlobUpdate) Set(ss ...predicate.BlobSetter) *BlobUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -449,11 +449,18 @@ func (b *BlobUpdate) Fill(in any, skip ...string) *BlobUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *BlobUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *BlobUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

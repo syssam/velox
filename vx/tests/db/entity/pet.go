@@ -133,7 +133,7 @@ func (q *PetQuery) Where(ps ...predicate.Pet) *PetQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *PetQuery) OrderBy(os ...predicate.PetOrder) *PetQuery {
+func (q *PetQuery) OrderBy(os ...predicate.PetOrderTerm) *PetQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -143,12 +143,12 @@ func (q *PetQuery) OrderBy(os ...predicate.PetOrder) *PetQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *PetQuery) Limit(n int) *PetQuery { q.c.Lim = n; return q }
+func (q *PetQuery) Limit(n int) *PetQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *PetQuery) Offset(n int) *PetQuery { q.c.Off = n; return q }
+func (q *PetQuery) Offset(n int) *PetQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -306,7 +306,7 @@ func NewPetCreate(ex orm.Executor) *PetCreate { return &PetCreate{c: orm.MutCore
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *PetCreate) Set(ss ...predicate.PetSet) *PetCreate {
+func (b *PetCreate) Set(ss ...predicate.PetSetter) *PetCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -399,7 +399,7 @@ func NewPetUpdate(ex orm.Executor) *PetUpdate { return &PetUpdate{c: orm.MutCore
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *PetUpdate) Set(ss ...predicate.PetSet) *PetUpdate {
+func (b *PetUpdate) Set(ss ...predicate.PetSetter) *PetUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -428,11 +428,18 @@ func (b *PetUpdate) Fill(in any, skip ...string) *PetUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *PetUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *PetUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several
@@ -515,11 +522,11 @@ type PetOrder struct {
 // input orders by nothing.
 //
 //go:noinline
-func (o *PetOrder) Term() predicate.PetOrder {
+func (o *PetOrder) Term() predicate.PetOrderTerm {
 	if o == nil {
-		return predicate.PetOrder{}
+		return predicate.PetOrderTerm{}
 	}
-	return predicate.PetOrder(orm.OrderTerm(&PetMeta, petOrderColumns, string(o.Field), o.Direction))
+	return predicate.PetOrderTerm(orm.OrderTerm(&PetMeta, petOrderColumns, string(o.Field), o.Direction))
 }
 
 // Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query

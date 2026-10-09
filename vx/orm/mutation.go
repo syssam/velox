@@ -289,7 +289,7 @@ func (m *Mutation) OldField(ctx context.Context, name string) (velox.Value, erro
 	if !m.oldLoaded {
 		// The row as the mutation's own conditions select it, without the
 		// policy or interceptors of a user-facing read.
-		q := &QueryCore{M: m.c.M, Preds: m.c.Preds, Lim: 2}
+		q := &QueryCore{M: m.c.M, Preds: m.c.Preds, Limit: 2}
 		rows, err := q.all(ctx, m.ex.conn())
 		if err != nil {
 			return nil, err

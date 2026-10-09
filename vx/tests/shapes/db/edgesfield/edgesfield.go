@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of EdgesField, and ModelName the name of its entity.
+// Table is the table of EdgesField, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "edges_fields"
 	ModelName = "EdgesField"
@@ -69,32 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.EdgesField {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.EdgesFieldSet {
-	return predicate.EdgesFieldSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.EdgesFieldSetter {
+	return predicate.EdgesFieldSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.EdgesFieldSet {
+func (f *IntColumn) SetNillable(v *int) predicate.EdgesFieldSetter {
 	if v == nil {
-		return predicate.EdgesFieldSet{}
+		return predicate.EdgesFieldSetter{}
 	}
-	return predicate.EdgesFieldSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EdgesFieldSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.EdgesFieldSet {
-	return predicate.EdgesFieldSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.EdgesFieldSetter {
+	return predicate.EdgesFieldSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.EdgesFieldOrder {
-	return predicate.EdgesFieldOrder{Col: string(*f)}
+func (f *IntColumn) Asc() predicate.EdgesFieldOrderTerm {
+	return predicate.EdgesFieldOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.EdgesFieldOrder {
-	return predicate.EdgesFieldOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.EdgesFieldOrderTerm {
+	return predicate.EdgesFieldOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -176,27 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.EdgesField {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.EdgesFieldSet {
-	return predicate.EdgesFieldSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.EdgesFieldSetter {
+	return predicate.EdgesFieldSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.EdgesFieldSet {
+func (f *StringColumn) SetNillable(v *string) predicate.EdgesFieldSetter {
 	if v == nil {
-		return predicate.EdgesFieldSet{}
+		return predicate.EdgesFieldSetter{}
 	}
-	return predicate.EdgesFieldSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EdgesFieldSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.EdgesFieldOrder {
-	return predicate.EdgesFieldOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.EdgesFieldOrderTerm {
+	return predicate.EdgesFieldOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.EdgesFieldOrder {
-	return predicate.EdgesFieldOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.EdgesFieldOrderTerm {
+	return predicate.EdgesFieldOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of EdgesField.
@@ -235,26 +236,26 @@ func (e *EdgeFields) HasWith(ps ...predicate.Field) predicate.EdgesField {
 }
 
 // Add connects the EdgesField to the Field rows with the given ids.
-func (e *EdgeFields) Add(ids ...int) predicate.EdgesFieldSet {
+func (e *EdgeFields) Add(ids ...int) predicate.EdgesFieldSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.EdgesFieldSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.EdgesFieldSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the EdgesField from the Field rows with the given ids.
-func (e *EdgeFields) Remove(ids ...int) predicate.EdgesFieldSet {
+func (e *EdgeFields) Remove(ids ...int) predicate.EdgesFieldSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.EdgesFieldSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.EdgesFieldSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the EdgesField from every "fields" neighbor.
-func (e *EdgeFields) Clear() predicate.EdgesFieldSet {
-	return predicate.EdgesFieldSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeFields) Clear() predicate.EdgesFieldSetter {
+	return predicate.EdgesFieldSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 // EdgeMetas returns the descriptions of the edges of EdgesField, in order. The generated

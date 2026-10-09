@@ -86,7 +86,7 @@ func (q *MetaQuery) Where(ps ...predicate.Meta) *MetaQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *MetaQuery) OrderBy(os ...predicate.MetaOrder) *MetaQuery {
+func (q *MetaQuery) OrderBy(os ...predicate.MetaOrderTerm) *MetaQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -96,12 +96,12 @@ func (q *MetaQuery) OrderBy(os ...predicate.MetaOrder) *MetaQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *MetaQuery) Limit(n int) *MetaQuery { q.c.Lim = n; return q }
+func (q *MetaQuery) Limit(n int) *MetaQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *MetaQuery) Offset(n int) *MetaQuery { q.c.Off = n; return q }
+func (q *MetaQuery) Offset(n int) *MetaQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -261,7 +261,7 @@ func NewMetaCreate(ex orm.Executor) *MetaCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *MetaCreate) Set(ss ...predicate.MetaSet) *MetaCreate {
+func (b *MetaCreate) Set(ss ...predicate.MetaSetter) *MetaCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -356,7 +356,7 @@ func NewMetaUpdate(ex orm.Executor) *MetaUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *MetaUpdate) Set(ss ...predicate.MetaSet) *MetaUpdate {
+func (b *MetaUpdate) Set(ss ...predicate.MetaSetter) *MetaUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -385,11 +385,18 @@ func (b *MetaUpdate) Fill(in any, skip ...string) *MetaUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *MetaUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *MetaUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

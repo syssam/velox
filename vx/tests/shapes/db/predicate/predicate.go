@@ -11,932 +11,932 @@ import "github.com/syssam/velox/vx/orm"
 // compile in a query or mutation of this one.
 type And orm.P
 
-// AndSet is an assignment of a mutation of And.
-type AndSet orm.S
+// AndSetter is an assignment of a mutation of And.
+type AndSetter orm.S
 
-// AndOrder is an order term of a query of And.
-type AndOrder orm.O
+// AndOrderTerm is an order term of a query of And.
+type AndOrderTerm orm.O
 
 // Article is a predicate of Article. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Article orm.P
 
-// ArticleSet is an assignment of a mutation of Article.
-type ArticleSet orm.S
+// ArticleSetter is an assignment of a mutation of Article.
+type ArticleSetter orm.S
 
-// ArticleOrder is an order term of a query of Article.
-type ArticleOrder orm.O
+// ArticleOrderTerm is an order term of a query of Article.
+type ArticleOrderTerm orm.O
 
 // Author is a predicate of Author. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Author orm.P
 
-// AuthorSet is an assignment of a mutation of Author.
-type AuthorSet orm.S
+// AuthorSetter is an assignment of a mutation of Author.
+type AuthorSetter orm.S
 
-// AuthorOrder is an order term of a query of Author.
-type AuthorOrder orm.O
+// AuthorOrderTerm is an order term of a query of Author.
+type AuthorOrderTerm orm.O
 
 // Badge is a predicate of Badge. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Badge orm.P
 
-// BadgeSet is an assignment of a mutation of Badge.
-type BadgeSet orm.S
+// BadgeSetter is an assignment of a mutation of Badge.
+type BadgeSetter orm.S
 
-// BadgeOrder is an order term of a query of Badge.
-type BadgeOrder orm.O
+// BadgeOrderTerm is an order term of a query of Badge.
+type BadgeOrderTerm orm.O
 
 // Bare is a predicate of Bare. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Bare orm.P
 
-// BareSet is an assignment of a mutation of Bare.
-type BareSet orm.S
+// BareSetter is an assignment of a mutation of Bare.
+type BareSetter orm.S
 
-// BareOrder is an order term of a query of Bare.
-type BareOrder orm.O
+// BareOrderTerm is an order term of a query of Bare.
+type BareOrderTerm orm.O
 
 // Blob is a predicate of Blob. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Blob orm.P
 
-// BlobSet is an assignment of a mutation of Blob.
-type BlobSet orm.S
+// BlobSetter is an assignment of a mutation of Blob.
+type BlobSetter orm.S
 
-// BlobOrder is an order term of a query of Blob.
-type BlobOrder orm.O
+// BlobOrderTerm is an order term of a query of Blob.
+type BlobOrderTerm orm.O
 
 // Bulk is a predicate of Bulk. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Bulk orm.P
 
-// BulkSet is an assignment of a mutation of Bulk.
-type BulkSet orm.S
+// BulkSetter is an assignment of a mutation of Bulk.
+type BulkSetter orm.S
 
-// BulkOrder is an order term of a query of Bulk.
-type BulkOrder orm.O
+// BulkOrderTerm is an order term of a query of Bulk.
+type BulkOrderTerm orm.O
 
 // Clash is a predicate of Clash. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Clash orm.P
 
-// ClashSet is an assignment of a mutation of Clash.
-type ClashSet orm.S
+// ClashSetter is an assignment of a mutation of Clash.
+type ClashSetter orm.S
 
-// ClashOrder is an order term of a query of Clash.
-type ClashOrder orm.O
+// ClashOrderTerm is an order term of a query of Clash.
+type ClashOrderTerm orm.O
 
 // Context is a predicate of Context. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Context orm.P
 
-// ContextSet is an assignment of a mutation of Context.
-type ContextSet orm.S
+// ContextSetter is an assignment of a mutation of Context.
+type ContextSetter orm.S
 
-// ContextOrder is an order term of a query of Context.
-type ContextOrder orm.O
+// ContextOrderTerm is an order term of a query of Context.
+type ContextOrderTerm orm.O
 
 // Course is a predicate of Course. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Course orm.P
 
-// CourseSet is an assignment of a mutation of Course.
-type CourseSet orm.S
+// CourseSetter is an assignment of a mutation of Course.
+type CourseSetter orm.S
 
-// CourseOrder is an order term of a query of Course.
-type CourseOrder orm.O
+// CourseOrderTerm is an order term of a query of Course.
+type CourseOrderTerm orm.O
 
 // Create is a predicate of Create. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Create orm.P
 
-// CreateSet is an assignment of a mutation of Create.
-type CreateSet orm.S
+// CreateSetter is an assignment of a mutation of Create.
+type CreateSetter orm.S
 
-// CreateOrder is an order term of a query of Create.
-type CreateOrder orm.O
+// CreateOrderTerm is an order term of a query of Create.
+type CreateOrderTerm orm.O
 
 // Db is a predicate of Db. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Db orm.P
 
-// DbSet is an assignment of a mutation of Db.
-type DbSet orm.S
+// DbSetter is an assignment of a mutation of Db.
+type DbSetter orm.S
 
-// DbOrder is an order term of a query of Db.
-type DbOrder orm.O
+// DbOrderTerm is an order term of a query of Db.
+type DbOrderTerm orm.O
 
 // DefaultShape is a predicate of DefaultShape. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type DefaultShape orm.P
 
-// DefaultShapeSet is an assignment of a mutation of DefaultShape.
-type DefaultShapeSet orm.S
+// DefaultShapeSetter is an assignment of a mutation of DefaultShape.
+type DefaultShapeSetter orm.S
 
-// DefaultShapeOrder is an order term of a query of DefaultShape.
-type DefaultShapeOrder orm.O
+// DefaultShapeOrderTerm is an order term of a query of DefaultShape.
+type DefaultShapeOrderTerm orm.O
 
 // Edge is a predicate of Edge. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Edge orm.P
 
-// EdgeSet is an assignment of a mutation of Edge.
-type EdgeSet orm.S
+// EdgeSetter is an assignment of a mutation of Edge.
+type EdgeSetter orm.S
 
-// EdgeOrder is an order term of a query of Edge.
-type EdgeOrder orm.O
+// EdgeOrderTerm is an order term of a query of Edge.
+type EdgeOrderTerm orm.O
 
 // Edges is a predicate of Edges. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Edges orm.P
 
-// EdgesSet is an assignment of a mutation of Edges.
-type EdgesSet orm.S
+// EdgesSetter is an assignment of a mutation of Edges.
+type EdgesSetter orm.S
 
-// EdgesOrder is an order term of a query of Edges.
-type EdgesOrder orm.O
+// EdgesOrderTerm is an order term of a query of Edges.
+type EdgesOrderTerm orm.O
 
 // EdgesEnum is a predicate of EdgesEnum. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type EdgesEnum orm.P
 
-// EdgesEnumSet is an assignment of a mutation of EdgesEnum.
-type EdgesEnumSet orm.S
+// EdgesEnumSetter is an assignment of a mutation of EdgesEnum.
+type EdgesEnumSetter orm.S
 
-// EdgesEnumOrder is an order term of a query of EdgesEnum.
-type EdgesEnumOrder orm.O
+// EdgesEnumOrderTerm is an order term of a query of EdgesEnum.
+type EdgesEnumOrderTerm orm.O
 
 // EdgesField is a predicate of EdgesField. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type EdgesField orm.P
 
-// EdgesFieldSet is an assignment of a mutation of EdgesField.
-type EdgesFieldSet orm.S
+// EdgesFieldSetter is an assignment of a mutation of EdgesField.
+type EdgesFieldSetter orm.S
 
-// EdgesFieldOrder is an order term of a query of EdgesField.
-type EdgesFieldOrder orm.O
+// EdgesFieldOrderTerm is an order term of a query of EdgesField.
+type EdgesFieldOrderTerm orm.O
 
 // Enrollment is a predicate of Enrollment. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Enrollment orm.P
 
-// EnrollmentSet is an assignment of a mutation of Enrollment.
-type EnrollmentSet orm.S
+// EnrollmentSetter is an assignment of a mutation of Enrollment.
+type EnrollmentSetter orm.S
 
-// EnrollmentOrder is an order term of a query of Enrollment.
-type EnrollmentOrder orm.O
+// EnrollmentOrderTerm is an order term of a query of Enrollment.
+type EnrollmentOrderTerm orm.O
 
 // Entity is a predicate of Entity. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Entity orm.P
 
-// EntitySet is an assignment of a mutation of Entity.
-type EntitySet orm.S
+// EntitySetter is an assignment of a mutation of Entity.
+type EntitySetter orm.S
 
-// EntityOrder is an order term of a query of Entity.
-type EntityOrder orm.O
+// EntityOrderTerm is an order term of a query of Entity.
+type EntityOrderTerm orm.O
 
 // Entityx is a predicate of Entityx. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Entityx orm.P
 
-// EntityxSet is an assignment of a mutation of Entityx.
-type EntityxSet orm.S
+// EntityxSetter is an assignment of a mutation of Entityx.
+type EntityxSetter orm.S
 
-// EntityxOrder is an order term of a query of Entityx.
-type EntityxOrder orm.O
+// EntityxOrderTerm is an order term of a query of Entityx.
+type EntityxOrderTerm orm.O
 
 // EnumShape is a predicate of EnumShape. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type EnumShape orm.P
 
-// EnumShapeSet is an assignment of a mutation of EnumShape.
-type EnumShapeSet orm.S
+// EnumShapeSetter is an assignment of a mutation of EnumShape.
+type EnumShapeSetter orm.S
 
-// EnumShapeOrder is an order term of a query of EnumShape.
-type EnumShapeOrder orm.O
+// EnumShapeOrderTerm is an order term of a query of EnumShape.
+type EnumShapeOrderTerm orm.O
 
 // ErrField is a predicate of ErrField. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type ErrField orm.P
 
-// ErrFieldSet is an assignment of a mutation of ErrField.
-type ErrFieldSet orm.S
+// ErrFieldSetter is an assignment of a mutation of ErrField.
+type ErrFieldSetter orm.S
 
-// ErrFieldOrder is an order term of a query of ErrField.
-type ErrFieldOrder orm.O
+// ErrFieldOrderTerm is an order term of a query of ErrField.
+type ErrFieldOrderTerm orm.O
 
 // Errors is a predicate of Errors. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Errors orm.P
 
-// ErrorsSet is an assignment of a mutation of Errors.
-type ErrorsSet orm.S
+// ErrorsSetter is an assignment of a mutation of Errors.
+type ErrorsSetter orm.S
 
-// ErrorsOrder is an order term of a query of Errors.
-type ErrorsOrder orm.O
+// ErrorsOrderTerm is an order term of a query of Errors.
+type ErrorsOrderTerm orm.O
 
 // Field is a predicate of Field. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Field orm.P
 
-// FieldSet is an assignment of a mutation of Field.
-type FieldSet orm.S
+// FieldSetter is an assignment of a mutation of Field.
+type FieldSetter orm.S
 
-// FieldOrder is an order term of a query of Field.
-type FieldOrder orm.O
+// FieldOrderTerm is an order term of a query of Field.
+type FieldOrderTerm orm.O
 
 // Gadget is a predicate of Gadget. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Gadget orm.P
 
-// GadgetSet is an assignment of a mutation of Gadget.
-type GadgetSet orm.S
+// GadgetSetter is an assignment of a mutation of Gadget.
+type GadgetSetter orm.S
 
-// GadgetOrder is an order term of a query of Gadget.
-type GadgetOrder orm.O
+// GadgetOrderTerm is an order term of a query of Gadget.
+type GadgetOrderTerm orm.O
 
 // GoTypeShape is a predicate of GoTypeShape. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type GoTypeShape orm.P
 
-// GoTypeShapeSet is an assignment of a mutation of GoTypeShape.
-type GoTypeShapeSet orm.S
+// GoTypeShapeSetter is an assignment of a mutation of GoTypeShape.
+type GoTypeShapeSetter orm.S
 
-// GoTypeShapeOrder is an order term of a query of GoTypeShape.
-type GoTypeShapeOrder orm.O
+// GoTypeShapeOrderTerm is an order term of a query of GoTypeShape.
+type GoTypeShapeOrderTerm orm.O
 
 // Http is a predicate of Http. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Http orm.P
 
-// HttpSet is an assignment of a mutation of Http.
-type HttpSet orm.S
+// HttpSetter is an assignment of a mutation of Http.
+type HttpSetter orm.S
 
-// HttpOrder is an order term of a query of Http.
-type HttpOrder orm.O
+// HttpOrderTerm is an order term of a query of Http.
+type HttpOrderTerm orm.O
 
 // Id is a predicate of Id. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Id orm.P
 
-// IdSet is an assignment of a mutation of Id.
-type IdSet orm.S
+// IdSetter is an assignment of a mutation of Id.
+type IdSetter orm.S
 
-// IdOrder is an order term of a query of Id.
-type IdOrder orm.O
+// IdOrderTerm is an order term of a query of Id.
+type IdOrderTerm orm.O
 
 // Int64Key is a predicate of Int64Key. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Int64Key orm.P
 
-// Int64KeySet is an assignment of a mutation of Int64Key.
-type Int64KeySet orm.S
+// Int64KeySetter is an assignment of a mutation of Int64Key.
+type Int64KeySetter orm.S
 
-// Int64KeyOrder is an order term of a query of Int64Key.
-type Int64KeyOrder orm.O
+// Int64KeyOrderTerm is an order term of a query of Int64Key.
+type Int64KeyOrderTerm orm.O
 
 // IntKey is a predicate of IntKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type IntKey orm.P
 
-// IntKeySet is an assignment of a mutation of IntKey.
-type IntKeySet orm.S
+// IntKeySetter is an assignment of a mutation of IntKey.
+type IntKeySetter orm.S
 
-// IntKeyOrder is an order term of a query of IntKey.
-type IntKeyOrder orm.O
+// IntKeyOrderTerm is an order term of a query of IntKey.
+type IntKeyOrderTerm orm.O
 
 // Internal is a predicate of Internal. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Internal orm.P
 
-// InternalSet is an assignment of a mutation of Internal.
-type InternalSet orm.S
+// InternalSetter is an assignment of a mutation of Internal.
+type InternalSetter orm.S
 
-// InternalOrder is an order term of a query of Internal.
-type InternalOrder orm.O
+// InternalOrderTerm is an order term of a query of Internal.
+type InternalOrderTerm orm.O
 
 // Json is a predicate of Json. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Json orm.P
 
-// JsonSet is an assignment of a mutation of Json.
-type JsonSet orm.S
+// JsonSetter is an assignment of a mutation of Json.
+type JsonSetter orm.S
 
-// JsonOrder is an order term of a query of Json.
-type JsonOrder orm.O
+// JsonOrderTerm is an order term of a query of Json.
+type JsonOrderTerm orm.O
 
 // Keywords is a predicate of Keywords. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Keywords orm.P
 
-// KeywordsSet is an assignment of a mutation of Keywords.
-type KeywordsSet orm.S
+// KeywordsSetter is an assignment of a mutation of Keywords.
+type KeywordsSetter orm.S
 
-// KeywordsOrder is an order term of a query of Keywords.
-type KeywordsOrder orm.O
+// KeywordsOrderTerm is an order term of a query of Keywords.
+type KeywordsOrderTerm orm.O
 
 // Kind is a predicate of Kind. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Kind orm.P
 
-// KindSet is an assignment of a mutation of Kind.
-type KindSet orm.S
+// KindSetter is an assignment of a mutation of Kind.
+type KindSetter orm.S
 
-// KindOrder is an order term of a query of Kind.
-type KindOrder orm.O
+// KindOrderTerm is an order term of a query of Kind.
+type KindOrderTerm orm.O
 
 // KindShape is a predicate of KindShape. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type KindShape orm.P
 
-// KindShapeSet is an assignment of a mutation of KindShape.
-type KindShapeSet orm.S
+// KindShapeSetter is an assignment of a mutation of KindShape.
+type KindShapeSetter orm.S
 
-// KindShapeOrder is an order term of a query of KindShape.
-type KindShapeOrder orm.O
+// KindShapeOrderTerm is an order term of a query of KindShape.
+type KindShapeOrderTerm orm.O
 
 // LabelKey is a predicate of LabelKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type LabelKey orm.P
 
-// LabelKeySet is an assignment of a mutation of LabelKey.
-type LabelKeySet orm.S
+// LabelKeySetter is an assignment of a mutation of LabelKey.
+type LabelKeySetter orm.S
 
-// LabelKeyOrder is an order term of a query of LabelKey.
-type LabelKeyOrder orm.O
+// LabelKeyOrderTerm is an order term of a query of LabelKey.
+type LabelKeyOrderTerm orm.O
 
 // Load is a predicate of Load. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Load orm.P
 
-// LoadSet is an assignment of a mutation of Load.
-type LoadSet orm.S
+// LoadSetter is an assignment of a mutation of Load.
+type LoadSetter orm.S
 
-// LoadOrder is an order term of a query of Load.
-type LoadOrder orm.O
+// LoadOrderTerm is an order term of a query of Load.
+type LoadOrderTerm orm.O
 
 // Locker is a predicate of Locker. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Locker orm.P
 
-// LockerSet is an assignment of a mutation of Locker.
-type LockerSet orm.S
+// LockerSetter is an assignment of a mutation of Locker.
+type LockerSetter orm.S
 
-// LockerOrder is an order term of a query of Locker.
-type LockerOrder orm.O
+// LockerOrderTerm is an order term of a query of Locker.
+type LockerOrderTerm orm.O
 
 // ManualKey is a predicate of ManualKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type ManualKey orm.P
 
-// ManualKeySet is an assignment of a mutation of ManualKey.
-type ManualKeySet orm.S
+// ManualKeySetter is an assignment of a mutation of ManualKey.
+type ManualKeySetter orm.S
 
-// ManualKeyOrder is an order term of a query of ManualKey.
-type ManualKeyOrder orm.O
+// ManualKeyOrderTerm is an order term of a query of ManualKey.
+type ManualKeyOrderTerm orm.O
 
 // Math is a predicate of Math. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Math orm.P
 
-// MathSet is an assignment of a mutation of Math.
-type MathSet orm.S
+// MathSetter is an assignment of a mutation of Math.
+type MathSetter orm.S
 
-// MathOrder is an order term of a query of Math.
-type MathOrder orm.O
+// MathOrderTerm is an order term of a query of Math.
+type MathOrderTerm orm.O
 
 // Meta is a predicate of Meta. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Meta orm.P
 
-// MetaSet is an assignment of a mutation of Meta.
-type MetaSet orm.S
+// MetaSetter is an assignment of a mutation of Meta.
+type MetaSetter orm.S
 
-// MetaOrder is an order term of a query of Meta.
-type MetaOrder orm.O
+// MetaOrderTerm is an order term of a query of Meta.
+type MetaOrderTerm orm.O
 
 // Migrate is a predicate of Migrate. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Migrate orm.P
 
-// MigrateSet is an assignment of a mutation of Migrate.
-type MigrateSet orm.S
+// MigrateSetter is an assignment of a mutation of Migrate.
+type MigrateSetter orm.S
 
-// MigrateOrder is an order term of a query of Migrate.
-type MigrateOrder orm.O
+// MigrateOrderTerm is an order term of a query of Migrate.
+type MigrateOrderTerm orm.O
 
 // MixedIn is a predicate of MixedIn. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type MixedIn orm.P
 
-// MixedInSet is an assignment of a mutation of MixedIn.
-type MixedInSet orm.S
+// MixedInSetter is an assignment of a mutation of MixedIn.
+type MixedInSetter orm.S
 
-// MixedInOrder is an order term of a query of MixedIn.
-type MixedInOrder orm.O
+// MixedInOrderTerm is an order term of a query of MixedIn.
+type MixedInOrderTerm orm.O
 
 // MixinOnly is a predicate of MixinOnly. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type MixinOnly orm.P
 
-// MixinOnlySet is an assignment of a mutation of MixinOnly.
-type MixinOnlySet orm.S
+// MixinOnlySetter is an assignment of a mutation of MixinOnly.
+type MixinOnlySetter orm.S
 
-// MixinOnlyOrder is an order term of a query of MixinOnly.
-type MixinOnlyOrder orm.O
+// MixinOnlyOrderTerm is an order term of a query of MixinOnly.
+type MixinOnlyOrderTerm orm.O
 
 // NamedBool is a predicate of NamedBool. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type NamedBool orm.P
 
-// NamedBoolSet is an assignment of a mutation of NamedBool.
-type NamedBoolSet orm.S
+// NamedBoolSetter is an assignment of a mutation of NamedBool.
+type NamedBoolSetter orm.S
 
-// NamedBoolOrder is an order term of a query of NamedBool.
-type NamedBoolOrder orm.O
+// NamedBoolOrderTerm is an order term of a query of NamedBool.
+type NamedBoolOrderTerm orm.O
 
 // NamedBoolNil is a predicate of NamedBoolNil. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type NamedBoolNil orm.P
 
-// NamedBoolNilSet is an assignment of a mutation of NamedBoolNil.
-type NamedBoolNilSet orm.S
+// NamedBoolNilSetter is an assignment of a mutation of NamedBoolNil.
+type NamedBoolNilSetter orm.S
 
-// NamedBoolNilOrder is an order term of a query of NamedBoolNil.
-type NamedBoolNilOrder orm.O
+// NamedBoolNilOrderTerm is an order term of a query of NamedBoolNil.
+type NamedBoolNilOrderTerm orm.O
 
 // NamedBytes is a predicate of NamedBytes. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type NamedBytes orm.P
 
-// NamedBytesSet is an assignment of a mutation of NamedBytes.
-type NamedBytesSet orm.S
+// NamedBytesSetter is an assignment of a mutation of NamedBytes.
+type NamedBytesSetter orm.S
 
-// NamedBytesOrder is an order term of a query of NamedBytes.
-type NamedBytesOrder orm.O
+// NamedBytesOrderTerm is an order term of a query of NamedBytes.
+type NamedBytesOrderTerm orm.O
 
 // Node is a predicate of Node. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Node orm.P
 
-// NodeSet is an assignment of a mutation of Node.
-type NodeSet orm.S
+// NodeSetter is an assignment of a mutation of Node.
+type NodeSetter orm.S
 
-// NodeOrder is an order term of a query of Node.
-type NodeOrder orm.O
+// NodeOrderTerm is an order term of a query of Node.
+type NodeOrderTerm orm.O
 
 // Not is a predicate of Not. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Not orm.P
 
-// NotSet is an assignment of a mutation of Not.
-type NotSet orm.S
+// NotSetter is an assignment of a mutation of Not.
+type NotSetter orm.S
 
-// NotOrder is an order term of a query of Not.
-type NotOrder orm.O
+// NotOrderTerm is an order term of a query of Not.
+type NotOrderTerm orm.O
 
 // Note is a predicate of Note. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Note orm.P
 
-// NoteSet is an assignment of a mutation of Note.
-type NoteSet orm.S
+// NoteSetter is an assignment of a mutation of Note.
+type NoteSetter orm.S
 
-// NoteOrder is an order term of a query of Note.
-type NoteOrder orm.O
+// NoteOrderTerm is an order term of a query of Note.
+type NoteOrderTerm orm.O
 
 // Odd is a predicate of Odd. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Odd orm.P
 
-// OddSet is an assignment of a mutation of Odd.
-type OddSet orm.S
+// OddSetter is an assignment of a mutation of Odd.
+type OddSetter orm.S
 
-// OddOrder is an order term of a query of Odd.
-type OddOrder orm.O
+// OddOrderTerm is an order term of a query of Odd.
+type OddOrderTerm orm.O
 
 // Or is a predicate of Or. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Or orm.P
 
-// OrSet is an assignment of a mutation of Or.
-type OrSet orm.S
+// OrSetter is an assignment of a mutation of Or.
+type OrSetter orm.S
 
-// OrOrder is an order term of a query of Or.
-type OrOrder orm.O
+// OrOrderTerm is an order term of a query of Or.
+type OrOrderTerm orm.O
 
 // Order is a predicate of Order. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Order orm.P
 
-// OrderSet is an assignment of a mutation of Order.
-type OrderSet orm.S
+// OrderSetter is an assignment of a mutation of Order.
+type OrderSetter orm.S
 
-// OrderOrder is an order term of a query of Order.
-type OrderOrder orm.O
+// OrderOrderTerm is an order term of a query of Order.
+type OrderOrderTerm orm.O
 
 // Orm is a predicate of Orm. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Orm orm.P
 
-// OrmSet is an assignment of a mutation of Orm.
-type OrmSet orm.S
+// OrmSetter is an assignment of a mutation of Orm.
+type OrmSetter orm.S
 
-// OrmOrder is an order term of a query of Orm.
-type OrmOrder orm.O
+// OrmOrderTerm is an order term of a query of Orm.
+type OrmOrderTerm orm.O
 
 // Passport is a predicate of Passport. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Passport orm.P
 
-// PassportSet is an assignment of a mutation of Passport.
-type PassportSet orm.S
+// PassportSetter is an assignment of a mutation of Passport.
+type PassportSetter orm.S
 
-// PassportOrder is an order term of a query of Passport.
-type PassportOrder orm.O
+// PassportOrderTerm is an order term of a query of Passport.
+type PassportOrderTerm orm.O
 
 // Person is a predicate of Person. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Person orm.P
 
-// PersonSet is an assignment of a mutation of Person.
-type PersonSet orm.S
+// PersonSetter is an assignment of a mutation of Person.
+type PersonSetter orm.S
 
-// PersonOrder is an order term of a query of Person.
-type PersonOrder orm.O
+// PersonOrderTerm is an order term of a query of Person.
+type PersonOrderTerm orm.O
 
 // Player is a predicate of Player. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Player orm.P
 
-// PlayerSet is an assignment of a mutation of Player.
-type PlayerSet orm.S
+// PlayerSetter is an assignment of a mutation of Player.
+type PlayerSetter orm.S
 
-// PlayerOrder is an order term of a query of Player.
-type PlayerOrder orm.O
+// PlayerOrderTerm is an order term of a query of Player.
+type PlayerOrderTerm orm.O
 
 // Pred is a predicate of Pred. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Pred orm.P
 
-// PredSet is an assignment of a mutation of Pred.
-type PredSet orm.S
+// PredSetter is an assignment of a mutation of Pred.
+type PredSetter orm.S
 
-// PredOrder is an order term of a query of Pred.
-type PredOrder orm.O
+// PredOrderTerm is an order term of a query of Pred.
+type PredOrderTerm orm.O
 
 // Predicate is a predicate of Predicate. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Predicate orm.P
 
-// PredicateSet is an assignment of a mutation of Predicate.
-type PredicateSet orm.S
+// PredicateSetter is an assignment of a mutation of Predicate.
+type PredicateSetter orm.S
 
-// PredicateOrder is an order term of a query of Predicate.
-type PredicateOrder orm.O
+// PredicateOrderTerm is an order term of a query of Predicate.
+type PredicateOrderTerm orm.O
 
 // QueryUser is a predicate of QueryUser. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type QueryUser orm.P
 
-// QueryUserSet is an assignment of a mutation of QueryUser.
-type QueryUserSet orm.S
+// QueryUserSetter is an assignment of a mutation of QueryUser.
+type QueryUserSetter orm.S
 
-// QueryUserOrder is an order term of a query of QueryUser.
-type QueryUserOrder orm.O
+// QueryUserOrderTerm is an order term of a query of QueryUser.
+type QueryUserOrderTerm orm.O
 
 // Renamed is a predicate of Renamed. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Renamed orm.P
 
-// RenamedSet is an assignment of a mutation of Renamed.
-type RenamedSet orm.S
+// RenamedSetter is an assignment of a mutation of Renamed.
+type RenamedSetter orm.S
 
-// RenamedOrder is an order term of a query of Renamed.
-type RenamedOrder orm.O
+// RenamedOrderTerm is an order term of a query of Renamed.
+type RenamedOrderTerm orm.O
 
 // Runtime is a predicate of Runtime. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Runtime orm.P
 
-// RuntimeSet is an assignment of a mutation of Runtime.
-type RuntimeSet orm.S
+// RuntimeSetter is an assignment of a mutation of Runtime.
+type RuntimeSetter orm.S
 
-// RuntimeOrder is an order term of a query of Runtime.
-type RuntimeOrder orm.O
+// RuntimeOrderTerm is an order term of a query of Runtime.
+type RuntimeOrderTerm orm.O
 
 // Scalar is a predicate of Scalar. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Scalar orm.P
 
-// ScalarSet is an assignment of a mutation of Scalar.
-type ScalarSet orm.S
+// ScalarSetter is an assignment of a mutation of Scalar.
+type ScalarSetter orm.S
 
-// ScalarOrder is an order term of a query of Scalar.
-type ScalarOrder orm.O
+// ScalarOrderTerm is an order term of a query of Scalar.
+type ScalarOrderTerm orm.O
 
 // Schemainit is a predicate of Schemainit. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Schemainit orm.P
 
-// SchemainitSet is an assignment of a mutation of Schemainit.
-type SchemainitSet orm.S
+// SchemainitSetter is an assignment of a mutation of Schemainit.
+type SchemainitSetter orm.S
 
-// SchemainitOrder is an order term of a query of Schemainit.
-type SchemainitOrder orm.O
+// SchemainitOrderTerm is an order term of a query of Schemainit.
+type SchemainitOrderTerm orm.O
 
 // Set is a predicate of Set. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Set orm.P
 
-// SetSet is an assignment of a mutation of Set.
-type SetSet orm.S
+// SetSetter is an assignment of a mutation of Set.
+type SetSetter orm.S
 
-// SetOrder is an order term of a query of Set.
-type SetOrder orm.O
+// SetOrderTerm is an order term of a query of Set.
+type SetOrderTerm orm.O
 
 // Sql is a predicate of Sql. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Sql orm.P
 
-// SqlSet is an assignment of a mutation of Sql.
-type SqlSet orm.S
+// SqlSetter is an assignment of a mutation of Sql.
+type SqlSetter orm.S
 
-// SqlOrder is an order term of a query of Sql.
-type SqlOrder orm.O
+// SqlOrderTerm is an order term of a query of Sql.
+type SqlOrderTerm orm.O
 
 // StringKey is a predicate of StringKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type StringKey orm.P
 
-// StringKeySet is an assignment of a mutation of StringKey.
-type StringKeySet orm.S
+// StringKeySetter is an assignment of a mutation of StringKey.
+type StringKeySetter orm.S
 
-// StringKeyOrder is an order term of a query of StringKey.
-type StringKeyOrder orm.O
+// StringKeyOrderTerm is an order term of a query of StringKey.
+type StringKeyOrderTerm orm.O
 
 // Strings is a predicate of Strings. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Strings orm.P
 
-// StringsSet is an assignment of a mutation of Strings.
-type StringsSet orm.S
+// StringsSetter is an assignment of a mutation of Strings.
+type StringsSetter orm.S
 
-// StringsOrder is an order term of a query of Strings.
-type StringsOrder orm.O
+// StringsOrderTerm is an order term of a query of Strings.
+type StringsOrderTerm orm.O
 
 // Student is a predicate of Student. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Student orm.P
 
-// StudentSet is an assignment of a mutation of Student.
-type StudentSet orm.S
+// StudentSetter is an assignment of a mutation of Student.
+type StudentSetter orm.S
 
-// StudentOrder is an order term of a query of Student.
-type StudentOrder orm.O
+// StudentOrderTerm is an order term of a query of Student.
+type StudentOrderTerm orm.O
 
 // Table is a predicate of Table. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Table orm.P
 
-// TableSet is an assignment of a mutation of Table.
-type TableSet orm.S
+// TableSetter is an assignment of a mutation of Table.
+type TableSetter orm.S
 
-// TableOrder is an order term of a query of Table.
-type TableOrder orm.O
+// TableOrderTerm is an order term of a query of Table.
+type TableOrderTerm orm.O
 
 // Team is a predicate of Team. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Team orm.P
 
-// TeamSet is an assignment of a mutation of Team.
-type TeamSet orm.S
+// TeamSetter is an assignment of a mutation of Team.
+type TeamSetter orm.S
 
-// TeamOrder is an order term of a query of Team.
-type TeamOrder orm.O
+// TeamOrderTerm is an order term of a query of Team.
+type TeamOrderTerm orm.O
 
 // Time is a predicate of Time. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Time orm.P
 
-// TimeSet is an assignment of a mutation of Time.
-type TimeSet orm.S
+// TimeSetter is an assignment of a mutation of Time.
+type TimeSetter orm.S
 
-// TimeOrder is an order term of a query of Time.
-type TimeOrder orm.O
+// TimeOrderTerm is an order term of a query of Time.
+type TimeOrderTerm orm.O
 
 // Topic is a predicate of Topic. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Topic orm.P
 
-// TopicSet is an assignment of a mutation of Topic.
-type TopicSet orm.S
+// TopicSetter is an assignment of a mutation of Topic.
+type TopicSetter orm.S
 
-// TopicOrder is an order term of a query of Topic.
-type TopicOrder orm.O
+// TopicOrderTerm is an order term of a query of Topic.
+type TopicOrderTerm orm.O
 
 // Tx is a predicate of Tx. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Tx orm.P
 
-// TxSet is an assignment of a mutation of Tx.
-type TxSet orm.S
+// TxSetter is an assignment of a mutation of Tx.
+type TxSetter orm.S
 
-// TxOrder is an order term of a query of Tx.
-type TxOrder orm.O
+// TxOrderTerm is an order term of a query of Tx.
+type TxOrderTerm orm.O
 
 // UUID is a predicate of UUID. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type UUID orm.P
 
-// UUIDSet is an assignment of a mutation of UUID.
-type UUIDSet orm.S
+// UUIDSetter is an assignment of a mutation of UUID.
+type UUIDSetter orm.S
 
-// UUIDOrder is an order term of a query of UUID.
-type UUIDOrder orm.O
+// UUIDOrderTerm is an order term of a query of UUID.
+type UUIDOrderTerm orm.O
 
 // UUIDKey is a predicate of UUIDKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type UUIDKey orm.P
 
-// UUIDKeySet is an assignment of a mutation of UUIDKey.
-type UUIDKeySet orm.S
+// UUIDKeySetter is an assignment of a mutation of UUIDKey.
+type UUIDKeySetter orm.S
 
-// UUIDKeyOrder is an order term of a query of UUIDKey.
-type UUIDKeyOrder orm.O
+// UUIDKeyOrderTerm is an order term of a query of UUIDKey.
+type UUIDKeyOrderTerm orm.O
 
 // Uint16Key is a predicate of Uint16Key. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Uint16Key orm.P
 
-// Uint16KeySet is an assignment of a mutation of Uint16Key.
-type Uint16KeySet orm.S
+// Uint16KeySetter is an assignment of a mutation of Uint16Key.
+type Uint16KeySetter orm.S
 
-// Uint16KeyOrder is an order term of a query of Uint16Key.
-type Uint16KeyOrder orm.O
+// Uint16KeyOrderTerm is an order term of a query of Uint16Key.
+type Uint16KeyOrderTerm orm.O
 
 // Update is a predicate of Update. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Update orm.P
 
-// UpdateSet is an assignment of a mutation of Update.
-type UpdateSet orm.S
+// UpdateSetter is an assignment of a mutation of Update.
+type UpdateSetter orm.S
 
-// UpdateOrder is an order term of a query of Update.
-type UpdateOrder orm.O
+// UpdateOrderTerm is an order term of a query of Update.
+type UpdateOrderTerm orm.O
 
 // User is a predicate of User. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type User orm.P
 
-// UserSetType is an assignment of a mutation of User.
-type UserSetType orm.S
+// UserSetterType is an assignment of a mutation of User.
+type UserSetterType orm.S
 
-// UserOrderType is an order term of a query of User.
-type UserOrderType orm.O
+// UserOrderTermType is an order term of a query of User.
+type UserOrderTermType orm.O
 
 // UserClient is a predicate of UserClient. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type UserClient orm.P
 
-// UserClientSet is an assignment of a mutation of UserClient.
-type UserClientSet orm.S
+// UserClientSetter is an assignment of a mutation of UserClient.
+type UserClientSetter orm.S
 
-// UserClientOrder is an order term of a query of UserClient.
-type UserClientOrder orm.O
+// UserClientOrderTerm is an order term of a query of UserClient.
+type UserClientOrderTerm orm.O
 
-// UserOrder is a predicate of UserOrder. It is a type of its own, as are the
+// UserOrderTerm is a predicate of UserOrderTerm. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
-type UserOrder orm.P
+type UserOrderTerm orm.P
 
-// UserOrderSet is an assignment of a mutation of UserOrder.
-type UserOrderSet orm.S
+// UserOrderTermSetter is an assignment of a mutation of UserOrderTerm.
+type UserOrderTermSetter orm.S
 
-// UserOrderOrder is an order term of a query of UserOrder.
-type UserOrderOrder orm.O
+// UserOrderTermOrderTerm is an order term of a query of UserOrderTerm.
+type UserOrderTermOrderTerm orm.O
 
-// UserSet is a predicate of UserSet. It is a type of its own, as are the
+// UserSetter is a predicate of UserSetter. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
-type UserSet orm.P
+type UserSetter orm.P
 
-// UserSetSet is an assignment of a mutation of UserSet.
-type UserSetSet orm.S
+// UserSetterSetter is an assignment of a mutation of UserSetter.
+type UserSetterSetter orm.S
 
-// UserSetOrder is an order term of a query of UserSet.
-type UserSetOrder orm.O
+// UserSetterOrderTerm is an order term of a query of UserSetter.
+type UserSetterOrderTerm orm.O
 
 // Validated is a predicate of Validated. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Validated orm.P
 
-// ValidatedSet is an assignment of a mutation of Validated.
-type ValidatedSet orm.S
+// ValidatedSetter is an assignment of a mutation of Validated.
+type ValidatedSetter orm.S
 
-// ValidatedOrder is an order term of a query of Validated.
-type ValidatedOrder orm.O
+// ValidatedOrderTerm is an order term of a query of Validated.
+type ValidatedOrderTerm orm.O
 
 // WeightKey is a predicate of WeightKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type WeightKey orm.P
 
-// WeightKeySet is an assignment of a mutation of WeightKey.
-type WeightKeySet orm.S
+// WeightKeySetter is an assignment of a mutation of WeightKey.
+type WeightKeySetter orm.S
 
-// WeightKeyOrder is an order term of a query of WeightKey.
-type WeightKeyOrder orm.O
+// WeightKeyOrderTerm is an order term of a query of WeightKey.
+type WeightKeyOrderTerm orm.O
 
 // Wide is a predicate of Wide. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.
 type Wide orm.P
 
-// WideSet is an assignment of a mutation of Wide.
-type WideSet orm.S
+// WideSetter is an assignment of a mutation of Wide.
+type WideSetter orm.S
 
-// WideOrder is an order term of a query of Wide.
-type WideOrder orm.O
+// WideOrderTerm is an order term of a query of Wide.
+type WideOrderTerm orm.O

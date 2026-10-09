@@ -40,7 +40,7 @@ func personNames(ps []*entity.Person) []string {
 func TestSelfRef_Tree(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
-	mk := func(name string, sets ...predicate.NodeSet) *entity.Node {
+	mk := func(name string, sets ...predicate.NodeSetter) *entity.Node {
 		return must(client.Node.Create(db).Set(node.Name.Set(name)).Set(sets...).Save(ctx))
 	}
 	root := mk("root")
@@ -132,7 +132,7 @@ func TestSelfRef_Tree(t *testing.T) {
 func TestSelfRef_List(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
-	mk := func(name string, sets ...predicate.NodeSet) *entity.Node {
+	mk := func(name string, sets ...predicate.NodeSetter) *entity.Node {
 		return must(client.Node.Create(db).Set(node.Name.Set(name)).Set(sets...).Save(ctx))
 	}
 	n1 := mk("n1")
@@ -194,7 +194,7 @@ func TestSelfRef_List(t *testing.T) {
 func TestSelfRef_Person(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
-	mk := func(name string, sets ...predicate.PersonSet) *entity.Person {
+	mk := func(name string, sets ...predicate.PersonSetter) *entity.Person {
 		return must(client.Person.Create(db).Set(person.Name.Set(name)).Set(sets...).Save(ctx))
 	}
 	ann, bob, cid, dee := mk("ann"), mk("bob"), mk("cid"), mk("dee")
@@ -310,7 +310,7 @@ func TestThrough_EdgeSchema(t *testing.T) {
 	s3 := must(client.Student.Create(db).Set(student.Name.Set("s3")).Save(ctx))
 	c1 := must(client.Course.Create(db).Set(course.Title.Set("c1")).Save(ctx))
 	c2 := must(client.Course.Create(db).Set(course.Title.Set("c2")).Save(ctx))
-	enroll := func(s *entity.Student, c *entity.Course, sets ...predicate.EnrollmentSet) *entity.Enrollment {
+	enroll := func(s *entity.Student, c *entity.Course, sets ...predicate.EnrollmentSetter) *entity.Enrollment {
 		return must(client.Enrollment.Create(db).Set(enrollment.StudentID.Set(s.ID), enrollment.CourseID.Set(c.ID)).Set(sets...).Save(ctx))
 	}
 	e11 := enroll(s1, c1)

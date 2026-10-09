@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Course, and ModelName the name of its entity.
+// Table is the table of Course, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "courses"
 	ModelName = "Course"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Course {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.CourseSet {
-	return predicate.CourseSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.CourseSetter {
+	return predicate.CourseSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.CourseSet {
+func (f *IntColumn) SetNillable(v *int) predicate.CourseSetter {
 	if v == nil {
-		return predicate.CourseSet{}
+		return predicate.CourseSetter{}
 	}
-	return predicate.CourseSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.CourseSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.CourseSet {
-	return predicate.CourseSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.CourseSetter {
+	return predicate.CourseSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.CourseOrder { return predicate.CourseOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.CourseOrderTerm {
+	return predicate.CourseOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.CourseOrder {
-	return predicate.CourseOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.CourseOrderTerm {
+	return predicate.CourseOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Course {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.CourseSet {
-	return predicate.CourseSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.CourseSetter {
+	return predicate.CourseSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.CourseSet {
+func (f *StringColumn) SetNillable(v *string) predicate.CourseSetter {
 	if v == nil {
-		return predicate.CourseSet{}
+		return predicate.CourseSetter{}
 	}
-	return predicate.CourseSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.CourseSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.CourseOrder { return predicate.CourseOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.CourseOrderTerm {
+	return predicate.CourseOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.CourseOrder {
-	return predicate.CourseOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.CourseOrderTerm {
+	return predicate.CourseOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Course.
@@ -231,26 +236,26 @@ func (e *EdgeStudents) HasWith(ps ...predicate.Student) predicate.Course {
 }
 
 // Add connects the Course to the Student rows with the given ids.
-func (e *EdgeStudents) Add(ids ...int) predicate.CourseSet {
+func (e *EdgeStudents) Add(ids ...int) predicate.CourseSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.CourseSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.CourseSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Course from the Student rows with the given ids.
-func (e *EdgeStudents) Remove(ids ...int) predicate.CourseSet {
+func (e *EdgeStudents) Remove(ids ...int) predicate.CourseSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.CourseSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.CourseSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Course from every "students" neighbor.
-func (e *EdgeStudents) Clear() predicate.CourseSet {
-	return predicate.CourseSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeStudents) Clear() predicate.CourseSetter {
+	return predicate.CourseSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "enrollments", Index: 1, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "enrollments", Columns: []string{"course_id"}}
@@ -277,26 +282,26 @@ func (e *EdgeEnrollments) HasWith(ps ...predicate.Enrollment) predicate.Course {
 }
 
 // Add connects the Course to the Enrollment rows with the given ids.
-func (e *EdgeEnrollments) Add(ids ...int) predicate.CourseSet {
+func (e *EdgeEnrollments) Add(ids ...int) predicate.CourseSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.CourseSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.CourseSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Course from the Enrollment rows with the given ids.
-func (e *EdgeEnrollments) Remove(ids ...int) predicate.CourseSet {
+func (e *EdgeEnrollments) Remove(ids ...int) predicate.CourseSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.CourseSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.CourseSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Course from every "enrollments" neighbor.
-func (e *EdgeEnrollments) Clear() predicate.CourseSet {
-	return predicate.CourseSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeEnrollments) Clear() predicate.CourseSetter {
+	return predicate.CourseSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Course, in order. The generated

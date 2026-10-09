@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/db/predicate"
 )
 
-// Table is the table of Tag, and ModelName the name of its entity.
+// Table is the table of Tag, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "tags"
 	ModelName = "Tag"
@@ -78,29 +79,31 @@ func (f *IntColumn) LTE(v int) predicate.Tag {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.TagSet {
-	return predicate.TagSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.TagSet {
+func (f *IntColumn) SetNillable(v *int) predicate.TagSetter {
 	if v == nil {
-		return predicate.TagSet{}
+		return predicate.TagSetter{}
 	}
-	return predicate.TagSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TagSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.TagSet {
-	return predicate.TagSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.TagOrder { return predicate.TagOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.TagOrderTerm { return predicate.TagOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.TagOrder { return predicate.TagOrder{Col: string(*f), Desc: true} }
+func (f *IntColumn) Desc() predicate.TagOrderTerm {
+	return predicate.TagOrderTerm{Col: string(*f), Desc: true}
+}
 
 // StringColumn is a column of Go type string: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
@@ -181,25 +184,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Tag {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.TagSet {
-	return predicate.TagSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.TagSet {
+func (f *StringColumn) SetNillable(v *string) predicate.TagSetter {
 	if v == nil {
-		return predicate.TagSet{}
+		return predicate.TagSetter{}
 	}
-	return predicate.TagSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TagSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.TagOrder { return predicate.TagOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.TagOrderTerm { return predicate.TagOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.TagOrder {
-	return predicate.TagOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.TagOrderTerm {
+	return predicate.TagOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Tag.
@@ -236,26 +239,26 @@ func (e *EdgePosts) HasWith(ps ...predicate.Post) predicate.Tag {
 }
 
 // Add connects the Tag to the Post rows with the given ids.
-func (e *EdgePosts) Add(ids ...int) predicate.TagSet {
+func (e *EdgePosts) Add(ids ...int) predicate.TagSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TagSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.TagSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Tag from the Post rows with the given ids.
-func (e *EdgePosts) Remove(ids ...int) predicate.TagSet {
+func (e *EdgePosts) Remove(ids ...int) predicate.TagSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TagSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.TagSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Tag from every "posts" neighbor.
-func (e *EdgePosts) Clear() predicate.TagSet {
-	return predicate.TagSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgePosts) Clear() predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "parent", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "tags", Columns: []string{"tag_children"}}
@@ -280,13 +283,13 @@ func (e *EdgeParent) HasWith(ps ...predicate.Tag) predicate.Tag {
 }
 
 // Set connects the Tag to the Tag with the given id.
-func (e *EdgeParent) Set(id int) predicate.TagSet {
-	return predicate.TagSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
+func (e *EdgeParent) Set(id int) predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
 }
 
 // Clear disconnects the Tag from every "parent" neighbor.
-func (e *EdgeParent) Clear() predicate.TagSet {
-	return predicate.TagSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeParent) Clear() predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "children", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "tags", Columns: []string{"tag_children"}}
@@ -311,26 +314,26 @@ func (e *EdgeChildren) HasWith(ps ...predicate.Tag) predicate.Tag {
 }
 
 // Add connects the Tag to the Tag rows with the given ids.
-func (e *EdgeChildren) Add(ids ...int) predicate.TagSet {
+func (e *EdgeChildren) Add(ids ...int) predicate.TagSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TagSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.TagSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Tag from the Tag rows with the given ids.
-func (e *EdgeChildren) Remove(ids ...int) predicate.TagSet {
+func (e *EdgeChildren) Remove(ids ...int) predicate.TagSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.TagSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.TagSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Tag from every "children" neighbor.
-func (e *EdgeChildren) Clear() predicate.TagSet {
-	return predicate.TagSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeChildren) Clear() predicate.TagSetter {
+	return predicate.TagSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 // EdgeMetas returns the descriptions of the edges of Tag, in order. The generated

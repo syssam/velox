@@ -422,7 +422,7 @@ func TestUpdate_EdgeChangesApplyInOrder(t *testing.T) {
 		require.NoError(t, err)
 		return ids
 	}
-	upd := func(ss ...predicate.PostSet) {
+	upd := func(ss ...predicate.PostSetter) {
 		_, err := client.Post.Update(db).Set(ss...).Where(post.ID.EQ(p.ID)).Exec(ctx)
 		require.NoError(t, err)
 	}
@@ -583,8 +583,8 @@ func TestZeroPredicate_IsZero(t *testing.T) {
 	db, _ := open(t)
 	newUser(t, db, "ann", 30)
 	var none predicate.User
-	assert.True(t, orm.P(none).IsZero())
-	assert.False(t, orm.P(user.Age.GT(1)).IsZero())
+	assert.True(t, orm.IsZero(none))
+	assert.False(t, orm.IsZero(user.Age.GT(1)))
 	// It is no condition, alone and among others.
 	n, err := client.User.Query(db).Where(none).Count(ctx)
 	require.NoError(t, err)

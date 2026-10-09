@@ -466,7 +466,7 @@ var whereOps = map[string]struct {
 	"GT": {"orm.OpGT", '1'}, "GTE": {"orm.OpGTE", '1'}, "LT": {"orm.OpLT", '1'}, "LTE": {"orm.OpLTE", '1'},
 	"Contains": {"orm.OpContains", '1'}, "HasPrefix": {"orm.OpHasPrefix", '1'}, "HasSuffix": {"orm.OpHasSuffix", '1'},
 	"EqualFold": {"orm.OpEqualFold", '1'}, "ContainsFold": {"orm.OpContainsFold", '1'},
-	"IsNil": {"orm.OpIsNull", 'b'}, "NotNil": {"orm.OpNotNull", 'b'},
+	"IsNil": {"orm.OpIsNil", 'b'}, "NotNil": {"orm.OpNotNil", 'b'},
 }
 
 // gqlWhere reads the fields of e's where input.

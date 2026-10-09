@@ -10,7 +10,8 @@ import (
 	net "net"
 )
 
-// Table is the table of NamedBytes, and ModelName the name of its entity.
+// Table is the table of NamedBytes, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "named_bytes"
 	ModelName = "NamedBytes"
@@ -70,32 +71,32 @@ func (f *IntColumn) LTE(v int) predicate.NamedBytes {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.NamedBytesSet {
-	return predicate.NamedBytesSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.NamedBytesSetter {
+	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.NamedBytesSet {
+func (f *IntColumn) SetNillable(v *int) predicate.NamedBytesSetter {
 	if v == nil {
-		return predicate.NamedBytesSet{}
+		return predicate.NamedBytesSetter{}
 	}
-	return predicate.NamedBytesSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.NamedBytesSet {
-	return predicate.NamedBytesSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.NamedBytesSetter {
+	return predicate.NamedBytesSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.NamedBytesOrder {
-	return predicate.NamedBytesOrder{Col: string(*f)}
+func (f *IntColumn) Asc() predicate.NamedBytesOrderTerm {
+	return predicate.NamedBytesOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.NamedBytesOrder {
-	return predicate.NamedBytesOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.NamedBytesOrderTerm {
+	return predicate.NamedBytesOrderTerm{Col: string(*f), Desc: true}
 }
 
 // IPColumn is a column of Go type net.IP: its methods build the predicates,
@@ -152,25 +153,27 @@ func (f *IPColumn) LTE(v net.IP) predicate.NamedBytes {
 }
 
 // Set assigns v to the column.
-func (f *IPColumn) Set(v net.IP) predicate.NamedBytesSet {
-	return predicate.NamedBytesSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IPColumn) Set(v net.IP) predicate.NamedBytesSetter {
+	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IPColumn) SetNillable(v *net.IP) predicate.NamedBytesSet {
+func (f *IPColumn) SetNillable(v *net.IP) predicate.NamedBytesSetter {
 	if v == nil {
-		return predicate.NamedBytesSet{}
+		return predicate.NamedBytesSetter{}
 	}
-	return predicate.NamedBytesSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IPColumn) Asc() predicate.NamedBytesOrder { return predicate.NamedBytesOrder{Col: string(*f)} }
+func (f *IPColumn) Asc() predicate.NamedBytesOrderTerm {
+	return predicate.NamedBytesOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IPColumn) Desc() predicate.NamedBytesOrder {
-	return predicate.NamedBytesOrder{Col: string(*f), Desc: true}
+func (f *IPColumn) Desc() predicate.NamedBytesOrderTerm {
+	return predicate.NamedBytesOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIPColumn is a column of Go type net.IP: its methods build the predicates,
@@ -228,41 +231,41 @@ func (f *NullableIPColumn) LTE(v net.IP) predicate.NamedBytes {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIPColumn) IsNil() predicate.NamedBytes {
-	return predicate.NamedBytes{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.NamedBytes{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIPColumn) NotNil() predicate.NamedBytes {
-	return predicate.NamedBytes{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.NamedBytes{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIPColumn) Set(v net.IP) predicate.NamedBytesSet {
-	return predicate.NamedBytesSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIPColumn) Set(v net.IP) predicate.NamedBytesSetter {
+	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIPColumn) SetNillable(v *net.IP) predicate.NamedBytesSet {
+func (f *NullableIPColumn) SetNillable(v *net.IP) predicate.NamedBytesSetter {
 	if v == nil {
-		return predicate.NamedBytesSet{}
+		return predicate.NamedBytesSetter{}
 	}
-	return predicate.NamedBytesSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIPColumn) Clear() predicate.NamedBytesSet {
-	return predicate.NamedBytesSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIPColumn) Clear() predicate.NamedBytesSetter {
+	return predicate.NamedBytesSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIPColumn) Asc() predicate.NamedBytesOrder {
-	return predicate.NamedBytesOrder{Col: string(*f)}
+func (f *NullableIPColumn) Asc() predicate.NamedBytesOrderTerm {
+	return predicate.NamedBytesOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableIPColumn) Desc() predicate.NamedBytesOrder {
-	return predicate.NamedBytesOrder{Col: string(*f), Desc: true}
+func (f *NullableIPColumn) Desc() predicate.NamedBytesOrderTerm {
+	return predicate.NamedBytesOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of NamedBytes.

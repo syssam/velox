@@ -86,7 +86,7 @@ func (q *PredicateQuery) Where(ps ...predicate.Predicate) *PredicateQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *PredicateQuery) OrderBy(os ...predicate.PredicateOrder) *PredicateQuery {
+func (q *PredicateQuery) OrderBy(os ...predicate.PredicateOrderTerm) *PredicateQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -96,12 +96,12 @@ func (q *PredicateQuery) OrderBy(os ...predicate.PredicateOrder) *PredicateQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *PredicateQuery) Limit(n int) *PredicateQuery { q.c.Lim = n; return q }
+func (q *PredicateQuery) Limit(n int) *PredicateQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *PredicateQuery) Offset(n int) *PredicateQuery { q.c.Off = n; return q }
+func (q *PredicateQuery) Offset(n int) *PredicateQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -264,7 +264,7 @@ func NewPredicateCreate(ex orm.Executor) *PredicateCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *PredicateCreate) Set(ss ...predicate.PredicateSet) *PredicateCreate {
+func (b *PredicateCreate) Set(ss ...predicate.PredicateSetter) *PredicateCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -359,7 +359,7 @@ func NewPredicateUpdate(ex orm.Executor) *PredicateUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *PredicateUpdate) Set(ss ...predicate.PredicateSet) *PredicateUpdate {
+func (b *PredicateUpdate) Set(ss ...predicate.PredicateSetter) *PredicateUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -388,11 +388,18 @@ func (b *PredicateUpdate) Fill(in any, skip ...string) *PredicateUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *PredicateUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *PredicateUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

@@ -84,7 +84,7 @@ func (q *TxQuery) Where(ps ...predicate.Tx) *TxQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *TxQuery) OrderBy(os ...predicate.TxOrder) *TxQuery {
+func (q *TxQuery) OrderBy(os ...predicate.TxOrderTerm) *TxQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -94,12 +94,12 @@ func (q *TxQuery) OrderBy(os ...predicate.TxOrder) *TxQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *TxQuery) Limit(n int) *TxQuery { q.c.Lim = n; return q }
+func (q *TxQuery) Limit(n int) *TxQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *TxQuery) Offset(n int) *TxQuery { q.c.Off = n; return q }
+func (q *TxQuery) Offset(n int) *TxQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -257,7 +257,7 @@ func NewTxCreate(ex orm.Executor) *TxCreate { return &TxCreate{c: orm.MutCore{M:
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *TxCreate) Set(ss ...predicate.TxSet) *TxCreate {
+func (b *TxCreate) Set(ss ...predicate.TxSetter) *TxCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -350,7 +350,7 @@ func NewTxUpdate(ex orm.Executor) *TxUpdate { return &TxUpdate{c: orm.MutCore{M:
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *TxUpdate) Set(ss ...predicate.TxSet) *TxUpdate {
+func (b *TxUpdate) Set(ss ...predicate.TxSetter) *TxUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -379,11 +379,18 @@ func (b *TxUpdate) Fill(in any, skip ...string) *TxUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *TxUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *TxUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

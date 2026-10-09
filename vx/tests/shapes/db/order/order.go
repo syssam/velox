@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Order, and ModelName the name of its entity.
+// Table is the table of Order, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "orders"
 	ModelName = "Order"
@@ -69,30 +70,30 @@ func (f *IntColumn) LTE(v int) predicate.Order {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.OrderSet {
-	return predicate.OrderSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.OrderSetter {
+	return predicate.OrderSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.OrderSet {
+func (f *IntColumn) SetNillable(v *int) predicate.OrderSetter {
 	if v == nil {
-		return predicate.OrderSet{}
+		return predicate.OrderSetter{}
 	}
-	return predicate.OrderSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OrderSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.OrderSet {
-	return predicate.OrderSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.OrderSetter {
+	return predicate.OrderSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.OrderOrder { return predicate.OrderOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.OrderOrderTerm { return predicate.OrderOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.OrderOrder {
-	return predicate.OrderOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.OrderOrderTerm {
+	return predicate.OrderOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +175,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Order {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.OrderSet {
-	return predicate.OrderSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.OrderSetter {
+	return predicate.OrderSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.OrderSet {
+func (f *StringColumn) SetNillable(v *string) predicate.OrderSetter {
 	if v == nil {
-		return predicate.OrderSet{}
+		return predicate.OrderSetter{}
 	}
-	return predicate.OrderSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OrderSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.OrderOrder { return predicate.OrderOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.OrderOrderTerm {
+	return predicate.OrderOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.OrderOrder {
-	return predicate.OrderOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.OrderOrderTerm {
+	return predicate.OrderOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Order.

@@ -202,7 +202,7 @@ func TestRawAndCompile(t *testing.T) {
 	// A typed predicate handed to code that takes selector functions.
 	db.Intercept(velox.TraverseFunc(func(_ context.Context, q velox.Query) error {
 		if oq, ok := q.(*orm.Query); ok && oq.Type() == "User" {
-			oq.WhereP(orm.Compile(orm.P(user.Or(user.Age.GT(35), user.Name.EQ("nobody")))))
+			oq.WhereP(orm.Compile(user.Or(user.Age.GT(35), user.Name.EQ("nobody"))))
 		}
 		return nil
 	}))

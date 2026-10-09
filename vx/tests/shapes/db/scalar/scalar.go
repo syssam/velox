@@ -11,7 +11,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Scalar, and ModelName the name of its entity.
+// Table is the table of Scalar, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "scalars"
 	ModelName = "Scalar"
@@ -71,30 +72,32 @@ func (f *IntColumn) LTE(v int) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.ScalarSet {
+func (f *IntColumn) SetNillable(v *int) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -176,25 +179,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.ScalarSet {
+func (f *StringColumn) SetNillable(v *string) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -277,60 +282,60 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.ScalarSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableStringColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn2 is a column of Go type string: its methods build the predicates,
+// RequiredNullableStringColumn is a column of Go type string: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableStringColumn2 string
+type RequiredNullableStringColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableStringColumn2) EQ(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) EQ(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableStringColumn2) NEQ(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) NEQ(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableStringColumn2) In(vs ...string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) In(vs ...string) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -339,7 +344,7 @@ func (f *NullableStringColumn2) In(vs ...string) predicate.Scalar {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableStringColumn2) NotIn(vs ...string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) NotIn(vs ...string) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -348,82 +353,82 @@ func (f *NullableStringColumn2) NotIn(vs ...string) predicate.Scalar {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableStringColumn2) GT(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) GT(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableStringColumn2) GTE(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) GTE(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableStringColumn2) LT(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) LT(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableStringColumn2) LTE(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) LTE(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Contains matches the rows whose column contains v.
-func (f *NullableStringColumn2) Contains(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) Contains(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpContains, Col: string(*f), Val: v}
 }
 
 // HasPrefix matches the rows whose column starts with v.
-func (f *NullableStringColumn2) HasPrefix(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) HasPrefix(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpHasPrefix, Col: string(*f), Val: v}
 }
 
 // HasSuffix matches the rows whose column ends with v.
-func (f *NullableStringColumn2) HasSuffix(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) HasSuffix(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpHasSuffix, Col: string(*f), Val: v}
 }
 
 // EqualFold matches the rows whose column equals v, whatever the case.
-func (f *NullableStringColumn2) EqualFold(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) EqualFold(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEqualFold, Col: string(*f), Val: v}
 }
 
 // ContainsFold matches the rows whose column contains v, whatever the case.
-func (f *NullableStringColumn2) ContainsFold(v string) predicate.Scalar {
+func (f *RequiredNullableStringColumn) ContainsFold(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableStringColumn2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableStringColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableStringColumn2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableStringColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn2) Set(v string) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableStringColumn) Set(v string) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn2) SetNillable(v *string) predicate.ScalarSet {
+func (f *RequiredNullableStringColumn) SetNillable(v *string) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableStringColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableStringColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIntColumn is a column of Go type int: its methods build the predicates,
@@ -481,65 +486,65 @@ func (f *NullableIntColumn) LTE(v int) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntColumn) Set(v int) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntColumn) Set(v int) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntColumn) SetNillable(v *int) predicate.ScalarSet {
+func (f *NullableIntColumn) SetNillable(v *int) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableIntColumn) Add(v int) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableIntColumn) Add(v int) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableIntColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableIntColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableIntColumn2 is a column of Go type int: its methods build the predicates,
+// RequiredNullableIntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableIntColumn2 string
+type RequiredNullableIntColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableIntColumn2) EQ(v int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) EQ(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableIntColumn2) NEQ(v int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) NEQ(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableIntColumn2) In(vs ...int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) In(vs ...int) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -548,7 +553,7 @@ func (f *NullableIntColumn2) In(vs ...int) predicate.Scalar {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableIntColumn2) NotIn(vs ...int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) NotIn(vs ...int) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -557,62 +562,62 @@ func (f *NullableIntColumn2) NotIn(vs ...int) predicate.Scalar {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableIntColumn2) GT(v int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) GT(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableIntColumn2) GTE(v int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) GTE(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableIntColumn2) LT(v int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) LT(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableIntColumn2) LTE(v int) predicate.Scalar {
+func (f *RequiredNullableIntColumn) LTE(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableIntColumn2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableIntColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableIntColumn2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableIntColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntColumn2) Set(v int) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableIntColumn) Set(v int) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntColumn2) SetNillable(v *int) predicate.ScalarSet {
+func (f *RequiredNullableIntColumn) SetNillable(v *int) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *NullableIntColumn2) Add(v int) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *RequiredNullableIntColumn) Add(v int) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntColumn2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableIntColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntColumn2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableIntColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int8Column is a column of Go type int8: its methods build the predicates,
@@ -669,30 +674,32 @@ func (f *Int8Column) LTE(v int8) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Int8Column) Set(v int8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int8Column) Set(v int8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int8Column) SetNillable(v *int8) predicate.ScalarSet {
+func (f *Int8Column) SetNillable(v *int8) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int8Column) Add(v int8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int8Column) Add(v int8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int8Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Int8Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Int8Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Int8Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableInt8Column is a column of Go type int8: its methods build the predicates,
@@ -750,46 +757,46 @@ func (f *NullableInt8Column) LTE(v int8) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableInt8Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableInt8Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableInt8Column) Set(v int8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableInt8Column) Set(v int8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableInt8Column) SetNillable(v *int8) predicate.ScalarSet {
+func (f *NullableInt8Column) SetNillable(v *int8) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableInt8Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableInt8Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableInt8Column) Add(v int8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableInt8Column) Add(v int8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableInt8Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableInt8Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableInt8Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableInt8Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int16Column is a column of Go type int16: its methods build the predicates,
@@ -846,30 +853,32 @@ func (f *Int16Column) LTE(v int16) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Int16Column) Set(v int16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int16Column) Set(v int16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int16Column) SetNillable(v *int16) predicate.ScalarSet {
+func (f *Int16Column) SetNillable(v *int16) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int16Column) Add(v int16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int16Column) Add(v int16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int16Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Int16Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Int16Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Int16Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableInt16Column is a column of Go type int16: its methods build the predicates,
@@ -927,46 +936,46 @@ func (f *NullableInt16Column) LTE(v int16) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableInt16Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableInt16Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableInt16Column) Set(v int16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableInt16Column) Set(v int16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableInt16Column) SetNillable(v *int16) predicate.ScalarSet {
+func (f *NullableInt16Column) SetNillable(v *int16) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableInt16Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableInt16Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableInt16Column) Add(v int16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableInt16Column) Add(v int16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableInt16Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableInt16Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableInt16Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableInt16Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int32Column is a column of Go type int32: its methods build the predicates,
@@ -1023,30 +1032,32 @@ func (f *Int32Column) LTE(v int32) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Int32Column) Set(v int32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int32Column) Set(v int32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int32Column) SetNillable(v *int32) predicate.ScalarSet {
+func (f *Int32Column) SetNillable(v *int32) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int32Column) Add(v int32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int32Column) Add(v int32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int32Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Int32Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Int32Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Int32Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableInt32Column is a column of Go type int32: its methods build the predicates,
@@ -1104,46 +1115,46 @@ func (f *NullableInt32Column) LTE(v int32) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableInt32Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableInt32Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableInt32Column) Set(v int32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableInt32Column) Set(v int32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableInt32Column) SetNillable(v *int32) predicate.ScalarSet {
+func (f *NullableInt32Column) SetNillable(v *int32) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableInt32Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableInt32Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableInt32Column) Add(v int32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableInt32Column) Add(v int32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableInt32Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableInt32Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableInt32Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableInt32Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int64Column is a column of Go type int64: its methods build the predicates,
@@ -1200,30 +1211,32 @@ func (f *Int64Column) LTE(v int64) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Int64Column) Set(v int64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int64Column) Set(v int64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int64Column) SetNillable(v *int64) predicate.ScalarSet {
+func (f *Int64Column) SetNillable(v *int64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int64Column) Add(v int64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int64Column) Add(v int64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int64Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Int64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Int64Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Int64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableInt64Column is a column of Go type int64: its methods build the predicates,
@@ -1281,46 +1294,46 @@ func (f *NullableInt64Column) LTE(v int64) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableInt64Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableInt64Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableInt64Column) Set(v int64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableInt64Column) Set(v int64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableInt64Column) SetNillable(v *int64) predicate.ScalarSet {
+func (f *NullableInt64Column) SetNillable(v *int64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableInt64Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableInt64Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableInt64Column) Add(v int64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableInt64Column) Add(v int64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableInt64Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableInt64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableInt64Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableInt64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UintColumn is a column of Go type uint: its methods build the predicates,
@@ -1377,30 +1390,32 @@ func (f *UintColumn) LTE(v uint) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *UintColumn) Set(v uint) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UintColumn) Set(v uint) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UintColumn) SetNillable(v *uint) predicate.ScalarSet {
+func (f *UintColumn) SetNillable(v *uint) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *UintColumn) Add(v uint) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *UintColumn) Add(v uint) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UintColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *UintColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *UintColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *UintColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUintColumn is a column of Go type uint: its methods build the predicates,
@@ -1458,46 +1473,46 @@ func (f *NullableUintColumn) LTE(v uint) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUintColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUintColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUintColumn) Set(v uint) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUintColumn) Set(v uint) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUintColumn) SetNillable(v *uint) predicate.ScalarSet {
+func (f *NullableUintColumn) SetNillable(v *uint) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUintColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUintColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableUintColumn) Add(v uint) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableUintColumn) Add(v uint) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUintColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableUintColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUintColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableUintColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint8Column is a column of Go type uint8: its methods build the predicates,
@@ -1554,30 +1569,32 @@ func (f *Uint8Column) LTE(v uint8) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Uint8Column) Set(v uint8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint8Column) Set(v uint8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint8Column) SetNillable(v *uint8) predicate.ScalarSet {
+func (f *Uint8Column) SetNillable(v *uint8) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint8Column) Add(v uint8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint8Column) Add(v uint8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint8Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Uint8Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Uint8Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Uint8Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUint8Column is a column of Go type uint8: its methods build the predicates,
@@ -1635,46 +1652,46 @@ func (f *NullableUint8Column) LTE(v uint8) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUint8Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUint8Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUint8Column) Set(v uint8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUint8Column) Set(v uint8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUint8Column) SetNillable(v *uint8) predicate.ScalarSet {
+func (f *NullableUint8Column) SetNillable(v *uint8) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUint8Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUint8Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableUint8Column) Add(v uint8) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableUint8Column) Add(v uint8) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUint8Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableUint8Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUint8Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableUint8Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint16Column is a column of Go type uint16: its methods build the predicates,
@@ -1731,30 +1748,32 @@ func (f *Uint16Column) LTE(v uint16) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Uint16Column) Set(v uint16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint16Column) Set(v uint16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint16Column) SetNillable(v *uint16) predicate.ScalarSet {
+func (f *Uint16Column) SetNillable(v *uint16) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint16Column) Add(v uint16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint16Column) Add(v uint16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint16Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Uint16Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Uint16Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Uint16Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUint16Column is a column of Go type uint16: its methods build the predicates,
@@ -1812,46 +1831,46 @@ func (f *NullableUint16Column) LTE(v uint16) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUint16Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUint16Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUint16Column) Set(v uint16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUint16Column) Set(v uint16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUint16Column) SetNillable(v *uint16) predicate.ScalarSet {
+func (f *NullableUint16Column) SetNillable(v *uint16) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUint16Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUint16Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableUint16Column) Add(v uint16) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableUint16Column) Add(v uint16) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUint16Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableUint16Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUint16Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableUint16Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint32Column is a column of Go type uint32: its methods build the predicates,
@@ -1908,30 +1927,32 @@ func (f *Uint32Column) LTE(v uint32) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Uint32Column) Set(v uint32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint32Column) Set(v uint32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint32Column) SetNillable(v *uint32) predicate.ScalarSet {
+func (f *Uint32Column) SetNillable(v *uint32) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint32Column) Add(v uint32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint32Column) Add(v uint32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint32Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Uint32Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Uint32Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Uint32Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUint32Column is a column of Go type uint32: its methods build the predicates,
@@ -1989,46 +2010,46 @@ func (f *NullableUint32Column) LTE(v uint32) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUint32Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUint32Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUint32Column) Set(v uint32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUint32Column) Set(v uint32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUint32Column) SetNillable(v *uint32) predicate.ScalarSet {
+func (f *NullableUint32Column) SetNillable(v *uint32) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUint32Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUint32Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableUint32Column) Add(v uint32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableUint32Column) Add(v uint32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUint32Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableUint32Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUint32Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableUint32Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint64Column is a column of Go type uint64: its methods build the predicates,
@@ -2085,30 +2106,32 @@ func (f *Uint64Column) LTE(v uint64) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Uint64Column) Set(v uint64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint64Column) Set(v uint64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint64Column) SetNillable(v *uint64) predicate.ScalarSet {
+func (f *Uint64Column) SetNillable(v *uint64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint64Column) Add(v uint64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint64Column) Add(v uint64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint64Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Uint64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Uint64Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Uint64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUint64Column is a column of Go type uint64: its methods build the predicates,
@@ -2166,46 +2189,46 @@ func (f *NullableUint64Column) LTE(v uint64) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUint64Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUint64Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUint64Column) Set(v uint64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUint64Column) Set(v uint64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUint64Column) SetNillable(v *uint64) predicate.ScalarSet {
+func (f *NullableUint64Column) SetNillable(v *uint64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUint64Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUint64Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableUint64Column) Add(v uint64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableUint64Column) Add(v uint64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUint64Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableUint64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUint64Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableUint64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float64Column is a column of Go type float64: its methods build the predicates,
@@ -2262,30 +2285,32 @@ func (f *Float64Column) LTE(v float64) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Float64Column) Set(v float64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float64Column) Set(v float64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float64Column) SetNillable(v *float64) predicate.ScalarSet {
+func (f *Float64Column) SetNillable(v *float64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float64Column) Add(v float64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float64Column) Add(v float64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float64Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Float64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Float64Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Float64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableFloat64Column is a column of Go type float64: its methods build the predicates,
@@ -2343,65 +2368,65 @@ func (f *NullableFloat64Column) LTE(v float64) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableFloat64Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableFloat64Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableFloat64Column) Set(v float64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableFloat64Column) Set(v float64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableFloat64Column) SetNillable(v *float64) predicate.ScalarSet {
+func (f *NullableFloat64Column) SetNillable(v *float64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableFloat64Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableFloat64Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableFloat64Column) Add(v float64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableFloat64Column) Add(v float64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableFloat64Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableFloat64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableFloat64Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableFloat64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableFloat64Column2 is a column of Go type float64: its methods build the predicates,
+// RequiredNullableFloat64Column is a column of Go type float64: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableFloat64Column2 string
+type RequiredNullableFloat64Column string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableFloat64Column2) EQ(v float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) EQ(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableFloat64Column2) NEQ(v float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) NEQ(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableFloat64Column2) In(vs ...float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) In(vs ...float64) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -2410,7 +2435,7 @@ func (f *NullableFloat64Column2) In(vs ...float64) predicate.Scalar {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableFloat64Column2) NotIn(vs ...float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) NotIn(vs ...float64) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -2419,62 +2444,62 @@ func (f *NullableFloat64Column2) NotIn(vs ...float64) predicate.Scalar {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableFloat64Column2) GT(v float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) GT(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableFloat64Column2) GTE(v float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) GTE(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableFloat64Column2) LT(v float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) LT(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableFloat64Column2) LTE(v float64) predicate.Scalar {
+func (f *RequiredNullableFloat64Column) LTE(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableFloat64Column2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableFloat64Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableFloat64Column2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableFloat64Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableFloat64Column2) Set(v float64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableFloat64Column) Set(v float64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableFloat64Column2) SetNillable(v *float64) predicate.ScalarSet {
+func (f *RequiredNullableFloat64Column) SetNillable(v *float64) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *NullableFloat64Column2) Add(v float64) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *RequiredNullableFloat64Column) Add(v float64) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableFloat64Column2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableFloat64Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableFloat64Column2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableFloat64Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float32Column is a column of Go type float32: its methods build the predicates,
@@ -2531,30 +2556,32 @@ func (f *Float32Column) LTE(v float32) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *Float32Column) Set(v float32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float32Column) Set(v float32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float32Column) SetNillable(v *float32) predicate.ScalarSet {
+func (f *Float32Column) SetNillable(v *float32) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float32Column) Add(v float32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float32Column) Add(v float32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float32Column) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *Float32Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Float32Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *Float32Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableFloat32Column is a column of Go type float32: its methods build the predicates,
@@ -2612,46 +2639,46 @@ func (f *NullableFloat32Column) LTE(v float32) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableFloat32Column) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableFloat32Column) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableFloat32Column) Set(v float32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableFloat32Column) Set(v float32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableFloat32Column) SetNillable(v *float32) predicate.ScalarSet {
+func (f *NullableFloat32Column) SetNillable(v *float32) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableFloat32Column) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableFloat32Column) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableFloat32Column) Add(v float32) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableFloat32Column) Add(v float32) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableFloat32Column) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableFloat32Column) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableFloat32Column) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableFloat32Column) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BoolColumn is a column of Go type bool: its methods build the predicates,
@@ -2670,25 +2697,27 @@ func (f *BoolColumn) NEQ(v bool) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *BoolColumn) Set(v bool) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BoolColumn) Set(v bool) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BoolColumn) SetNillable(v *bool) predicate.ScalarSet {
+func (f *BoolColumn) SetNillable(v *bool) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BoolColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *BoolColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *BoolColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *BoolColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableBoolColumn is a column of Go type bool: its methods build the predicates,
@@ -2708,90 +2737,90 @@ func (f *NullableBoolColumn) NEQ(v bool) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableBoolColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableBoolColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBoolColumn) Set(v bool) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableBoolColumn) Set(v bool) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBoolColumn) SetNillable(v *bool) predicate.ScalarSet {
+func (f *NullableBoolColumn) SetNillable(v *bool) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableBoolColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableBoolColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBoolColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableBoolColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableBoolColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableBoolColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBoolColumn2 is a column of Go type bool: its methods build the predicates,
+// RequiredNullableBoolColumn is a column of Go type bool: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableBoolColumn2 string
+type RequiredNullableBoolColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableBoolColumn2) EQ(v bool) predicate.Scalar {
+func (f *RequiredNullableBoolColumn) EQ(v bool) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableBoolColumn2) NEQ(v bool) predicate.Scalar {
+func (f *RequiredNullableBoolColumn) NEQ(v bool) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableBoolColumn2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableBoolColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableBoolColumn2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableBoolColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBoolColumn2) Set(v bool) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableBoolColumn) Set(v bool) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBoolColumn2) SetNillable(v *bool) predicate.ScalarSet {
+func (f *RequiredNullableBoolColumn) SetNillable(v *bool) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBoolColumn2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableBoolColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableBoolColumn2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableBoolColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -2848,25 +2877,27 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.ScalarSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *TimeColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -2924,60 +2955,60 @@ func (f *NullableTimeColumn) LTE(v time.Time) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableTimeColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableTimeColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTimeColumn) Set(v time.Time) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableTimeColumn) Set(v time.Time) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.ScalarSet {
+func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableTimeColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableTimeColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTimeColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableTimeColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableTimeColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableTimeColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableTimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// RequiredNullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableTimeColumn2 string
+type RequiredNullableTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableTimeColumn2) EQ(v time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) EQ(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableTimeColumn2) NEQ(v time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) NEQ(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableTimeColumn2) In(vs ...time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) In(vs ...time.Time) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -2986,7 +3017,7 @@ func (f *NullableTimeColumn2) In(vs ...time.Time) predicate.Scalar {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableTimeColumn2) NotIn(vs ...time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) NotIn(vs ...time.Time) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -2995,57 +3026,57 @@ func (f *NullableTimeColumn2) NotIn(vs ...time.Time) predicate.Scalar {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableTimeColumn2) GT(v time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) GT(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableTimeColumn2) GTE(v time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) GTE(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableTimeColumn2) LT(v time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) LT(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableTimeColumn2) LTE(v time.Time) predicate.Scalar {
+func (f *RequiredNullableTimeColumn) LTE(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableTimeColumn2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableTimeColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableTimeColumn2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableTimeColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTimeColumn2) Set(v time.Time) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableTimeColumn) Set(v time.Time) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTimeColumn2) SetNillable(v *time.Time) predicate.ScalarSet {
+func (f *RequiredNullableTimeColumn) SetNillable(v *time.Time) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTimeColumn2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableTimeColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableTimeColumn2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableTimeColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
@@ -3102,25 +3133,27 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *UUIDColumn) Set(v uuid.UUID) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UUIDColumn) Set(v uuid.UUID) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.ScalarSet {
+func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UUIDColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *UUIDColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *UUIDColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *UUIDColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
@@ -3178,60 +3211,60 @@ func (f *NullableUUIDColumn) LTE(v uuid.UUID) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUUIDColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUUIDColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUUIDColumn) Set(v uuid.UUID) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUUIDColumn) Set(v uuid.UUID) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUUIDColumn) SetNillable(v *uuid.UUID) predicate.ScalarSet {
+func (f *NullableUUIDColumn) SetNillable(v *uuid.UUID) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUUIDColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUUIDColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUUIDColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableUUIDColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUUIDColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableUUIDColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUUIDColumn2 is a column of Go type uuid.UUID: its methods build the predicates,
+// RequiredNullableUUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableUUIDColumn2 string
+type RequiredNullableUUIDColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableUUIDColumn2) EQ(v uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) EQ(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableUUIDColumn2) NEQ(v uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) NEQ(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableUUIDColumn2) In(vs ...uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) In(vs ...uuid.UUID) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -3240,7 +3273,7 @@ func (f *NullableUUIDColumn2) In(vs ...uuid.UUID) predicate.Scalar {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableUUIDColumn2) NotIn(vs ...uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) NotIn(vs ...uuid.UUID) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -3249,57 +3282,57 @@ func (f *NullableUUIDColumn2) NotIn(vs ...uuid.UUID) predicate.Scalar {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableUUIDColumn2) GT(v uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) GT(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableUUIDColumn2) GTE(v uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) GTE(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableUUIDColumn2) LT(v uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) LT(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableUUIDColumn2) LTE(v uuid.UUID) predicate.Scalar {
+func (f *RequiredNullableUUIDColumn) LTE(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableUUIDColumn2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableUUIDColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableUUIDColumn2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableUUIDColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUUIDColumn2) Set(v uuid.UUID) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableUUIDColumn) Set(v uuid.UUID) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUUIDColumn2) SetNillable(v *uuid.UUID) predicate.ScalarSet {
+func (f *RequiredNullableUUIDColumn) SetNillable(v *uuid.UUID) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUUIDColumn2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableUUIDColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableUUIDColumn2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableUUIDColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -3356,25 +3389,27 @@ func (f *BytesColumn) LTE(v []byte) predicate.Scalar {
 }
 
 // Set assigns v to the column.
-func (f *BytesColumn) Set(v []byte) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BytesColumn) Set(v []byte) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BytesColumn) SetNillable(v *[]byte) predicate.ScalarSet {
+func (f *BytesColumn) SetNillable(v *[]byte) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BytesColumn) Asc() predicate.ScalarOrder { return predicate.ScalarOrder{Col: string(*f)} }
+func (f *BytesColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *BytesColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *BytesColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -3432,60 +3467,60 @@ func (f *NullableBytesColumn) LTE(v []byte) predicate.Scalar {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableBytesColumn) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableBytesColumn) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBytesColumn) Set(v []byte) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableBytesColumn) Set(v []byte) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBytesColumn) SetNillable(v *[]byte) predicate.ScalarSet {
+func (f *NullableBytesColumn) SetNillable(v *[]byte) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableBytesColumn) Clear() predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableBytesColumn) Clear() predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBytesColumn) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *NullableBytesColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableBytesColumn) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *NullableBytesColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBytesColumn2 is a column of Go type []byte: its methods build the predicates,
+// RequiredNullableBytesColumn is a column of Go type []byte: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type NullableBytesColumn2 string
+type RequiredNullableBytesColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *NullableBytesColumn2) EQ(v []byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) EQ(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *NullableBytesColumn2) NEQ(v []byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) NEQ(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *NullableBytesColumn2) In(vs ...[]byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) In(vs ...[]byte) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -3494,7 +3529,7 @@ func (f *NullableBytesColumn2) In(vs ...[]byte) predicate.Scalar {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *NullableBytesColumn2) NotIn(vs ...[]byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) NotIn(vs ...[]byte) predicate.Scalar {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -3503,57 +3538,57 @@ func (f *NullableBytesColumn2) NotIn(vs ...[]byte) predicate.Scalar {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *NullableBytesColumn2) GT(v []byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) GT(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *NullableBytesColumn2) GTE(v []byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) GTE(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *NullableBytesColumn2) LT(v []byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) LT(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *NullableBytesColumn2) LTE(v []byte) predicate.Scalar {
+func (f *RequiredNullableBytesColumn) LTE(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.
-func (f *NullableBytesColumn2) IsNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpIsNull, Col: string(*f)}
+func (f *RequiredNullableBytesColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
-func (f *NullableBytesColumn2) NotNil() predicate.Scalar {
-	return predicate.Scalar{Op: orm.OpNotNull, Col: string(*f)}
+func (f *RequiredNullableBytesColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBytesColumn2) Set(v []byte) predicate.ScalarSet {
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RequiredNullableBytesColumn) Set(v []byte) predicate.ScalarSetter {
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBytesColumn2) SetNillable(v *[]byte) predicate.ScalarSet {
+func (f *RequiredNullableBytesColumn) SetNillable(v *[]byte) predicate.ScalarSetter {
 	if v == nil {
-		return predicate.ScalarSet{}
+		return predicate.ScalarSetter{}
 	}
-	return predicate.ScalarSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBytesColumn2) Asc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f)}
+func (f *RequiredNullableBytesColumn) Asc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableBytesColumn2) Desc() predicate.ScalarOrder {
-	return predicate.ScalarOrder{Col: string(*f), Desc: true}
+func (f *RequiredNullableBytesColumn) Desc() predicate.ScalarOrderTerm {
+	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Scalar.
@@ -3611,12 +3646,12 @@ var (
 	Seq        = IntColumn(ColumnSeq)
 	StringOpt  = StringColumn(ColumnStringOpt)
 	StringNil  = NullableStringColumn(ColumnStringNil)
-	StringPtr  = NullableStringColumn2(ColumnStringPtr)
+	StringPtr  = RequiredNullableStringColumn(ColumnStringPtr)
 	TextOpt    = StringColumn(ColumnTextOpt)
 	TextNil    = NullableStringColumn(ColumnTextNil)
 	IntOpt     = IntColumn(ColumnIntOpt)
 	IntNil     = NullableIntColumn(ColumnIntNil)
-	IntPtr     = NullableIntColumn2(ColumnIntPtr)
+	IntPtr     = RequiredNullableIntColumn(ColumnIntPtr)
 	Int8Opt    = Int8Column(ColumnInt8Opt)
 	Int8Nil    = NullableInt8Column(ColumnInt8Nil)
 	Int16Opt   = Int16Column(ColumnInt16Opt)
@@ -3637,21 +3672,21 @@ var (
 	Uint64Nil  = NullableUint64Column(ColumnUint64Nil)
 	FloatOpt   = Float64Column(ColumnFloatOpt)
 	FloatNil   = NullableFloat64Column(ColumnFloatNil)
-	FloatPtr   = NullableFloat64Column2(ColumnFloatPtr)
+	FloatPtr   = RequiredNullableFloat64Column(ColumnFloatPtr)
 	Float32Opt = Float32Column(ColumnFloat32Opt)
 	Float32Nil = NullableFloat32Column(ColumnFloat32Nil)
 	BoolOpt    = BoolColumn(ColumnBoolOpt)
 	BoolNil    = NullableBoolColumn(ColumnBoolNil)
-	BoolPtr    = NullableBoolColumn2(ColumnBoolPtr)
+	BoolPtr    = RequiredNullableBoolColumn(ColumnBoolPtr)
 	TimeOpt    = TimeColumn(ColumnTimeOpt)
 	TimeNil    = NullableTimeColumn(ColumnTimeNil)
-	TimePtr    = NullableTimeColumn2(ColumnTimePtr)
+	TimePtr    = RequiredNullableTimeColumn(ColumnTimePtr)
 	UUIDOpt    = UUIDColumn(ColumnUUIDOpt)
 	UUIDNil    = NullableUUIDColumn(ColumnUUIDNil)
-	UUIDPtr    = NullableUUIDColumn2(ColumnUUIDPtr)
+	UUIDPtr    = RequiredNullableUUIDColumn(ColumnUUIDPtr)
 	BytesOpt   = BytesColumn(ColumnBytesOpt)
 	BytesNil   = NullableBytesColumn(ColumnBytesNil)
-	BytesPtr   = NullableBytesColumn2(ColumnBytesPtr)
+	BytesPtr   = RequiredNullableBytesColumn(ColumnBytesPtr)
 )
 
 // And matches the rows every one of ps matches.

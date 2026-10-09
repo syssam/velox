@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of WeightKey, and ModelName the name of its entity.
+// Table is the table of WeightKey, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "weight_keys"
 	ModelName = "WeightKey"
@@ -70,32 +71,32 @@ func (f *WeightColumn) LTE(v types.Weight) predicate.WeightKey {
 }
 
 // Set assigns v to the column.
-func (f *WeightColumn) Set(v types.Weight) predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *WeightColumn) Set(v types.Weight) predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *WeightColumn) SetNillable(v *types.Weight) predicate.WeightKeySet {
+func (f *WeightColumn) SetNillable(v *types.Weight) predicate.WeightKeySetter {
 	if v == nil {
-		return predicate.WeightKeySet{}
+		return predicate.WeightKeySetter{}
 	}
-	return predicate.WeightKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WeightKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *WeightColumn) Add(v types.Weight) predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *WeightColumn) Add(v types.Weight) predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *WeightColumn) Asc() predicate.WeightKeyOrder {
-	return predicate.WeightKeyOrder{Col: string(*f)}
+func (f *WeightColumn) Asc() predicate.WeightKeyOrderTerm {
+	return predicate.WeightKeyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *WeightColumn) Desc() predicate.WeightKeyOrder {
-	return predicate.WeightKeyOrder{Col: string(*f), Desc: true}
+func (f *WeightColumn) Desc() predicate.WeightKeyOrderTerm {
+	return predicate.WeightKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -177,27 +178,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.WeightKey {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.WeightKeySet {
+func (f *StringColumn) SetNillable(v *string) predicate.WeightKeySetter {
 	if v == nil {
-		return predicate.WeightKeySet{}
+		return predicate.WeightKeySetter{}
 	}
-	return predicate.WeightKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WeightKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.WeightKeyOrder {
-	return predicate.WeightKeyOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.WeightKeyOrderTerm {
+	return predicate.WeightKeyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.WeightKeyOrder {
-	return predicate.WeightKeyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.WeightKeyOrderTerm {
+	return predicate.WeightKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of WeightKey.
@@ -236,13 +237,13 @@ func (e *EdgeOwner) HasWith(ps ...predicate.LabelKey) predicate.WeightKey {
 }
 
 // Set connects the WeightKey to the LabelKey with the given id.
-func (e *EdgeOwner) Set(id types.Label) predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeOwner) Set(id types.Label) predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the WeightKey from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeOwner) Clear() predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "labels", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "label_weights", Columns: []string{"label_key_id", "weight_key_id"}}
@@ -269,26 +270,26 @@ func (e *EdgeLabels) HasWith(ps ...predicate.LabelKey) predicate.WeightKey {
 }
 
 // Add connects the WeightKey to the LabelKey rows with the given ids.
-func (e *EdgeLabels) Add(ids ...types.Label) predicate.WeightKeySet {
+func (e *EdgeLabels) Add(ids ...types.Label) predicate.WeightKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.WeightKeySet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.WeightKeySetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the WeightKey from the LabelKey rows with the given ids.
-func (e *EdgeLabels) Remove(ids ...types.Label) predicate.WeightKeySet {
+func (e *EdgeLabels) Remove(ids ...types.Label) predicate.WeightKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.WeightKeySet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.WeightKeySetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the WeightKey from every "labels" neighbor.
-func (e *EdgeLabels) Clear() predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeLabels) Clear() predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "peers", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "weight_key_peers", Columns: []string{"weight_key_id", "peer_id"}}
@@ -315,26 +316,26 @@ func (e *EdgePeers) HasWith(ps ...predicate.WeightKey) predicate.WeightKey {
 }
 
 // Add connects the WeightKey to the WeightKey rows with the given ids.
-func (e *EdgePeers) Add(ids ...types.Weight) predicate.WeightKeySet {
+func (e *EdgePeers) Add(ids ...types.Weight) predicate.WeightKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.WeightKeySet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.WeightKeySetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the WeightKey from the WeightKey rows with the given ids.
-func (e *EdgePeers) Remove(ids ...types.Weight) predicate.WeightKeySet {
+func (e *EdgePeers) Remove(ids ...types.Weight) predicate.WeightKeySetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.WeightKeySet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.WeightKeySetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the WeightKey from every "peers" neighbor.
-func (e *EdgePeers) Clear() predicate.WeightKeySet {
-	return predicate.WeightKeySet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgePeers) Clear() predicate.WeightKeySetter {
+	return predicate.WeightKeySetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 // EdgeMetas returns the descriptions of the edges of WeightKey, in order. The generated

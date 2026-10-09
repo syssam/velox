@@ -141,7 +141,7 @@ func (q *CourseQuery) Where(ps ...predicate.Course) *CourseQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *CourseQuery) OrderBy(os ...predicate.CourseOrder) *CourseQuery {
+func (q *CourseQuery) OrderBy(os ...predicate.CourseOrderTerm) *CourseQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -151,12 +151,12 @@ func (q *CourseQuery) OrderBy(os ...predicate.CourseOrder) *CourseQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *CourseQuery) Limit(n int) *CourseQuery { q.c.Lim = n; return q }
+func (q *CourseQuery) Limit(n int) *CourseQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *CourseQuery) Offset(n int) *CourseQuery { q.c.Off = n; return q }
+func (q *CourseQuery) Offset(n int) *CourseQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -316,7 +316,7 @@ func NewCourseCreate(ex orm.Executor) *CourseCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *CourseCreate) Set(ss ...predicate.CourseSet) *CourseCreate {
+func (b *CourseCreate) Set(ss ...predicate.CourseSetter) *CourseCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -411,7 +411,7 @@ func NewCourseUpdate(ex orm.Executor) *CourseUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *CourseUpdate) Set(ss ...predicate.CourseSet) *CourseUpdate {
+func (b *CourseUpdate) Set(ss ...predicate.CourseSetter) *CourseUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -440,11 +440,18 @@ func (b *CourseUpdate) Fill(in any, skip ...string) *CourseUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *CourseUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *CourseUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

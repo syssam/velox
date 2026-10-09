@@ -39,7 +39,7 @@ func TestPaginate_WalkEqualsQuery(t *testing.T) {
 	for i := range 23 {
 		newUser(t, db, fmt.Sprintf("u%02d", i), 20+i%4) // ages tie in groups
 	}
-	orders := map[string][]predicate.UserOrder{
+	orders := map[string][]predicate.UserOrderTerm{
 		"id only":            nil,
 		"age asc":            {user.Age.Asc()},
 		"age desc, name asc": {user.Age.Desc(), user.Name.Asc()},
@@ -133,7 +133,7 @@ func TestPaginate_NullableOrderColumn(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-	for name, order := range map[string]predicate.UserOrder{"asc": user.Nickname.Asc(), "desc": user.Nickname.Desc()} {
+	for name, order := range map[string]predicate.UserOrderTerm{"asc": user.Nickname.Asc(), "desc": user.Nickname.Desc()} {
 		t.Run(name, func(t *testing.T) {
 			q := func() *entity.UserQuery { return client.User.Query(db).OrderBy(order) }
 			want, err := q().OrderBy(user.ID.Asc()).IDs(ctx)
@@ -253,7 +253,7 @@ func TestFieldPredicateAndOrder(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		us, err := q.OrderBy(predicate.UserOrder(o)).All(ctx)
+		us, err := q.OrderBy(predicate.UserOrderTerm(o)).All(ctx)
 		return names(us), err
 	}
 
@@ -269,7 +269,7 @@ func TestFieldPredicateAndOrder(t *testing.T) {
 	got, err = list([][3]any{{"name", orm.OpIn, []any{"ann", "cat"}}, {"name", orm.OpHasPrefix, "c"}}, "id", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"cat"}, got)
-	got, err = list([][3]any{{"nickname", orm.OpIsNull, nil}}, "id", false)
+	got, err = list([][3]any{{"nickname", orm.OpIsNil, nil}}, "id", false)
 	require.NoError(t, err)
 	assert.Len(t, got, 3)
 

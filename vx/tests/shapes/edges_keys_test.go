@@ -174,7 +174,7 @@ func TestEdges_RequiredAndSetterKinds(t *testing.T) {
 
 	// An Add of nothing is nothing. With nothing to write no statement runs,
 	// and Exec reports the rows its conditions match, as an UPDATE of them
-	// would: 0 would say the row is not there, which orm.One turns into
+	// would: 0 would say the row is not there, which ExecOne turns into
 	// ErrNotFound for a patch that happened to change nothing.
 	n := must(client.Article.Update(db).Set(article.Topics.Add()).Where(article.ID.EQ(l.a1.ID)).Exec(ctx))
 	assert.Equal(t, 1, n)

@@ -94,7 +94,7 @@ func (q *NamedBoolQuery) Where(ps ...predicate.NamedBool) *NamedBoolQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *NamedBoolQuery) OrderBy(os ...predicate.NamedBoolOrder) *NamedBoolQuery {
+func (q *NamedBoolQuery) OrderBy(os ...predicate.NamedBoolOrderTerm) *NamedBoolQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -104,12 +104,12 @@ func (q *NamedBoolQuery) OrderBy(os ...predicate.NamedBoolOrder) *NamedBoolQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *NamedBoolQuery) Limit(n int) *NamedBoolQuery { q.c.Lim = n; return q }
+func (q *NamedBoolQuery) Limit(n int) *NamedBoolQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *NamedBoolQuery) Offset(n int) *NamedBoolQuery { q.c.Off = n; return q }
+func (q *NamedBoolQuery) Offset(n int) *NamedBoolQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -272,7 +272,7 @@ func NewNamedBoolCreate(ex orm.Executor) *NamedBoolCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *NamedBoolCreate) Set(ss ...predicate.NamedBoolSet) *NamedBoolCreate {
+func (b *NamedBoolCreate) Set(ss ...predicate.NamedBoolSetter) *NamedBoolCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -367,7 +367,7 @@ func NewNamedBoolUpdate(ex orm.Executor) *NamedBoolUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *NamedBoolUpdate) Set(ss ...predicate.NamedBoolSet) *NamedBoolUpdate {
+func (b *NamedBoolUpdate) Set(ss ...predicate.NamedBoolSetter) *NamedBoolUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -396,11 +396,18 @@ func (b *NamedBoolUpdate) Fill(in any, skip ...string) *NamedBoolUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *NamedBoolUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *NamedBoolUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

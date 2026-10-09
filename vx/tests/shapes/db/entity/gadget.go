@@ -135,7 +135,7 @@ func (q *GadgetQuery) Where(ps ...predicate.Gadget) *GadgetQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *GadgetQuery) OrderBy(os ...predicate.GadgetOrder) *GadgetQuery {
+func (q *GadgetQuery) OrderBy(os ...predicate.GadgetOrderTerm) *GadgetQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -145,12 +145,12 @@ func (q *GadgetQuery) OrderBy(os ...predicate.GadgetOrder) *GadgetQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *GadgetQuery) Limit(n int) *GadgetQuery { q.c.Lim = n; return q }
+func (q *GadgetQuery) Limit(n int) *GadgetQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *GadgetQuery) Offset(n int) *GadgetQuery { q.c.Off = n; return q }
+func (q *GadgetQuery) Offset(n int) *GadgetQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -310,7 +310,7 @@ func NewGadgetCreate(ex orm.Executor) *GadgetCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *GadgetCreate) Set(ss ...predicate.GadgetSet) *GadgetCreate {
+func (b *GadgetCreate) Set(ss ...predicate.GadgetSetter) *GadgetCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -405,7 +405,7 @@ func NewGadgetUpdate(ex orm.Executor) *GadgetUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *GadgetUpdate) Set(ss ...predicate.GadgetSet) *GadgetUpdate {
+func (b *GadgetUpdate) Set(ss ...predicate.GadgetSetter) *GadgetUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -434,11 +434,18 @@ func (b *GadgetUpdate) Fill(in any, skip ...string) *GadgetUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *GadgetUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *GadgetUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

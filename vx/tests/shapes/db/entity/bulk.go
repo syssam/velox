@@ -86,7 +86,7 @@ func (q *BulkQuery) Where(ps ...predicate.Bulk) *BulkQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *BulkQuery) OrderBy(os ...predicate.BulkOrder) *BulkQuery {
+func (q *BulkQuery) OrderBy(os ...predicate.BulkOrderTerm) *BulkQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -96,12 +96,12 @@ func (q *BulkQuery) OrderBy(os ...predicate.BulkOrder) *BulkQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *BulkQuery) Limit(n int) *BulkQuery { q.c.Lim = n; return q }
+func (q *BulkQuery) Limit(n int) *BulkQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *BulkQuery) Offset(n int) *BulkQuery { q.c.Off = n; return q }
+func (q *BulkQuery) Offset(n int) *BulkQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -261,7 +261,7 @@ func NewBulkCreate(ex orm.Executor) *BulkCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *BulkCreate) Set(ss ...predicate.BulkSet) *BulkCreate {
+func (b *BulkCreate) Set(ss ...predicate.BulkSetter) *BulkCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -356,7 +356,7 @@ func NewBulkUpdate(ex orm.Executor) *BulkUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *BulkUpdate) Set(ss ...predicate.BulkSet) *BulkUpdate {
+func (b *BulkUpdate) Set(ss ...predicate.BulkSetter) *BulkUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -385,11 +385,18 @@ func (b *BulkUpdate) Fill(in any, skip ...string) *BulkUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *BulkUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *BulkUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

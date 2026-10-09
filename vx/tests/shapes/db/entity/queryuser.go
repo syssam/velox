@@ -86,7 +86,7 @@ func (q *QueryUserQuery) Where(ps ...predicate.QueryUser) *QueryUserQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *QueryUserQuery) OrderBy(os ...predicate.QueryUserOrder) *QueryUserQuery {
+func (q *QueryUserQuery) OrderBy(os ...predicate.QueryUserOrderTerm) *QueryUserQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -96,12 +96,12 @@ func (q *QueryUserQuery) OrderBy(os ...predicate.QueryUserOrder) *QueryUserQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *QueryUserQuery) Limit(n int) *QueryUserQuery { q.c.Lim = n; return q }
+func (q *QueryUserQuery) Limit(n int) *QueryUserQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *QueryUserQuery) Offset(n int) *QueryUserQuery { q.c.Off = n; return q }
+func (q *QueryUserQuery) Offset(n int) *QueryUserQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -264,7 +264,7 @@ func NewQueryUserCreate(ex orm.Executor) *QueryUserCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *QueryUserCreate) Set(ss ...predicate.QueryUserSet) *QueryUserCreate {
+func (b *QueryUserCreate) Set(ss ...predicate.QueryUserSetter) *QueryUserCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -359,7 +359,7 @@ func NewQueryUserUpdate(ex orm.Executor) *QueryUserUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *QueryUserUpdate) Set(ss ...predicate.QueryUserSet) *QueryUserUpdate {
+func (b *QueryUserUpdate) Set(ss ...predicate.QueryUserSetter) *QueryUserUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -388,11 +388,18 @@ func (b *QueryUserUpdate) Fill(in any, skip ...string) *QueryUserUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *QueryUserUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *QueryUserUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

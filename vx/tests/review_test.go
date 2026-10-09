@@ -157,15 +157,15 @@ func TestConditionOperands(t *testing.T) {
 }
 
 // An update with nothing to write still says how many rows it is of, so
-// that orm.One tells a row that is there from one that is not.
+// that ExecOne tells a row that is there from one that is not.
 func TestUpdateWithNothingToWrite(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
 	u := newUser(t, db, "ann", 30)
 	newUser(t, db, "bob", 40)
-	require.NoError(t, orm.One(client.User.UpdateByID(db, u.ID).Set(user.UpdatedAt.Keep()).Exec(ctx)))
-	require.NoError(t, orm.One(client.User.UpdateByID(db, u.ID).Fill(struct{}{}).Exec(ctx)))
-	require.ErrorIs(t, orm.One(client.User.UpdateByID(db, 9999).Set(user.UpdatedAt.Keep()).Exec(ctx)), orm.ErrNotFound)
+	require.NoError(t, client.User.UpdateByID(db, u.ID).Set(user.UpdatedAt.Keep()).ExecOne(ctx))
+	require.NoError(t, client.User.UpdateByID(db, u.ID).Fill(struct{}{}).ExecOne(ctx))
+	require.ErrorIs(t, client.User.UpdateByID(db, 9999).Set(user.UpdatedAt.Keep()).ExecOne(ctx), orm.ErrNotFound)
 	n, err := client.User.Update(db).Where(user.Age.GT(35)).Set(user.UpdatedAt.Keep()).Exec(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n, "the rows the conditions match")
@@ -314,4 +314,51 @@ func TestPaginate_KeepsTheLock(t *testing.T) {
 	_, err = client.User.Query(db).ForUpdate().Paginate(orm.WithoutTotal(context.Background()), nil, intp(2), nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// ExecOne is SaveOne without the row: an update of one row, to hooks too
+// (an application moved from velox has hooks that ask for OpUpdateOne), not
+// found when nothing matches, and refused before anything is written when
+// several rows do.
+func TestExecOne(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	bob := newUser(t, db, "bob", 30)
+	age := func(id int) int {
+		u, err := client.User.Get(ctx, db, id)
+		require.NoError(t, err)
+		return u.Age
+	}
+	require.NoError(t, client.User.UpdateByID(db, ann.ID).Set(user.Age.Add(1)).ExecOne(ctx))
+	require.Equal(t, 31, age(ann.ID))
+	require.ErrorIs(t, client.User.UpdateByID(db, 9999).Set(user.Age.Add(1)).ExecOne(ctx), orm.ErrNotFound)
+	// A row that is there and fails a further condition is not found either.
+	require.ErrorIs(t, client.User.UpdateByID(db, ann.ID).Where(user.Age.EQ(99)).Set(user.Age.Add(1)).ExecOne(ctx), orm.ErrNotFound)
+	require.Equal(t, 31, age(ann.ID))
+	// Named by a condition instead of the id.
+	require.NoError(t, client.User.Update(db).Where(user.Name.EQ("bob")).Set(user.Age.Set(40)).ExecOne(ctx))
+	require.Equal(t, 40, age(bob.ID))
+	require.ErrorIs(t, client.User.Update(db).Where(user.Name.EQ("nobody")).Set(user.Age.Set(1)).ExecOne(ctx), orm.ErrNotFound)
+	// Several rows: refused, and none written.
+	err := client.User.Update(db).Where(user.Age.GT(0)).Set(user.Age.Set(1)).ExecOne(ctx)
+	require.ErrorIs(t, err, orm.ErrNotSingular)
+	require.Equal(t, 31, age(ann.ID))
+	require.Equal(t, 40, age(bob.ID))
+
+	var op velox.Op
+	var saved velox.Value
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			op = m.Op()
+			v, err := next.Mutate(ctx, m)
+			saved = v
+			return v, err
+		})
+	})
+	require.NoError(t, client.User.UpdateByID(db, ann.ID).Set(user.Age.Add(1)).ExecOne(ctx))
+	require.True(t, op.Is(velox.OpUpdateOne), "the hook was told %v", op)
+	u, ok := saved.(*entity.User)
+	require.True(t, ok, "the hook was handed %T", saved)
+	require.Equal(t, 32, u.Age)
 }

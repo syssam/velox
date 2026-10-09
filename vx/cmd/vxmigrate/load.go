@@ -21,7 +21,7 @@
 //	c.User.Create().SetName(n).SetNillableAge(a).Save(ctx)
 //	    db.User.Create(c).Set(user.Name.Set(n), user.Age.SetNillable(a)).Save(ctx)
 //	c.User.UpdateOneID(id).AddAge(1).Exec(ctx)
-//	    orm.One(db.User.UpdateByID(c, id).Set(user.Age.Add(1)).Exec(ctx))
+//	    db.User.UpdateByID(c, id).Set(user.Age.Add(1)).ExecOne(ctx)
 //	c.User.Query().Where(user.NameField.EQ(n)).Order(user.ByName()).Exist(ctx)
 //	    db.User.Query(c).Where(user.Name.EQ(n)).OrderBy(user.Name.Asc()).Exists(ctx)
 //	q.Paginate(ctx, after, first, before, last, entity.WithUserOrder(o), entity.WithUserFilter(w.Filter))

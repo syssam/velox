@@ -18,8 +18,11 @@ func Raw(f func(*sql.Selector)) P { return P{Op: opRaw, raw: f} }
 
 // Compile returns the predicate as a function on a selector of its entity's
 // table, for code that builds SQL itself or registers the same condition as a
-// privacy filter or interceptor (q.WhereP(orm.Compile(orm.P(pred)))).
-func Compile(p P) func(*sql.Selector) { return compile(&p) }
+// privacy filter or interceptor: q.WhereP(orm.Compile(user.Age.GT(18))).
+func Compile[T Predicate](p T) func(*sql.Selector) {
+	c := P(p)
+	return compile(&c)
+}
 
 // ExecSQL runs a statement that returns no rows on the executor: on the
 // transaction when ex is one, which is what a lock statement such as

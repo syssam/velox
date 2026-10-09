@@ -111,18 +111,18 @@ type Db struct{ velox.Schema }
 // Fields of the Db.
 func (Db) Fields() []velox.Field { return labelOnly() }
 
-// UserSet and UserOrder are named like the setter and order types the
+// UserSetter and UserOrderTerm are named like the setter and order types the
 // predicate package gives User.
-type UserSet struct{ velox.Schema }
+type UserSetter struct{ velox.Schema }
 
-// Fields of the UserSet.
-func (UserSet) Fields() []velox.Field { return labelOnly() }
+// Fields of the UserSetter.
+func (UserSetter) Fields() []velox.Field { return labelOnly() }
 
-// UserOrder is named like the order type of User.
-type UserOrder struct{ velox.Schema }
+// UserOrderTerm is named like the order type of User.
+type UserOrderTerm struct{ velox.Schema }
 
-// Fields of the UserOrder.
-func (UserOrder) Fields() []velox.Field { return labelOnly() }
+// Fields of the UserOrderTerm.
+func (UserOrderTerm) Fields() []velox.Field { return labelOnly() }
 
 // UserClient is the name the root package would give the client of User (an
 // entity cannot be called Client: the schema loader reserves that name).

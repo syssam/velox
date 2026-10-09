@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Node, and ModelName the name of its entity.
+// Table is the table of Node, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "nodes"
 	ModelName = "Node"
@@ -69,30 +70,30 @@ func (f *IntColumn) LTE(v int) predicate.Node {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.NodeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.NodeSetter {
 	if v == nil {
-		return predicate.NodeSet{}
+		return predicate.NodeSetter{}
 	}
-	return predicate.NodeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NodeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.NodeOrder { return predicate.NodeOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.NodeOrderTerm { return predicate.NodeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.NodeOrder {
-	return predicate.NodeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.NodeOrderTerm {
+	return predicate.NodeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +175,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Node {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.NodeSet {
+func (f *StringColumn) SetNillable(v *string) predicate.NodeSetter {
 	if v == nil {
-		return predicate.NodeSet{}
+		return predicate.NodeSetter{}
 	}
-	return predicate.NodeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NodeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.NodeOrder { return predicate.NodeOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.NodeOrderTerm { return predicate.NodeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.NodeOrder {
-	return predicate.NodeOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.NodeOrderTerm {
+	return predicate.NodeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Node.
@@ -229,13 +230,13 @@ func (e *EdgeParent) HasWith(ps ...predicate.Node) predicate.Node {
 }
 
 // Set connects the Node to the Node with the given id.
-func (e *EdgeParent) Set(id int) predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeParent) Set(id int) predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Node from every "parent" neighbor.
-func (e *EdgeParent) Clear() predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeParent) Clear() predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "children", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
@@ -260,26 +261,26 @@ func (e *EdgeChildren) HasWith(ps ...predicate.Node) predicate.Node {
 }
 
 // Add connects the Node to the Node rows with the given ids.
-func (e *EdgeChildren) Add(ids ...int) predicate.NodeSet {
+func (e *EdgeChildren) Add(ids ...int) predicate.NodeSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.NodeSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Node from the Node rows with the given ids.
-func (e *EdgeChildren) Remove(ids ...int) predicate.NodeSet {
+func (e *EdgeChildren) Remove(ids ...int) predicate.NodeSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.NodeSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.NodeSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Node from every "children" neighbor.
-func (e *EdgeChildren) Clear() predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeChildren) Clear() predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "prev", Index: 2, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
@@ -304,13 +305,13 @@ func (e *EdgePrev) HasWith(ps ...predicate.Node) predicate.Node {
 }
 
 // Set connects the Node to the Node with the given id.
-func (e *EdgePrev) Set(id int) predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: []any{id}}
+func (e *EdgePrev) Set(id int) predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: []any{id}}
 }
 
 // Clear disconnects the Node from every "prev" neighbor.
-func (e *EdgePrev) Clear() predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgePrev) Clear() predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "next", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
@@ -335,13 +336,13 @@ func (e *EdgeNext) HasWith(ps ...predicate.Node) predicate.Node {
 }
 
 // Set connects the Node to the Node with the given id.
-func (e *EdgeNext) Set(id int) predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
+func (e *EdgeNext) Set(id int) predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
 }
 
 // Clear disconnects the Node from every "next" neighbor.
-func (e *EdgeNext) Clear() predicate.NodeSet {
-	return predicate.NodeSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeNext) Clear() predicate.NodeSetter {
+	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 // EdgeMetas returns the descriptions of the edges of Node, in order. The generated

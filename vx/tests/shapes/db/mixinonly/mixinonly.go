@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of MixinOnly, and ModelName the name of its entity.
+// Table is the table of MixinOnly, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "mixin_onlies"
 	ModelName = "MixinOnly"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.MixinOnly {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.MixinOnlySet {
-	return predicate.MixinOnlySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.MixinOnlySetter {
+	return predicate.MixinOnlySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.MixinOnlySet {
+func (f *IntColumn) SetNillable(v *int) predicate.MixinOnlySetter {
 	if v == nil {
-		return predicate.MixinOnlySet{}
+		return predicate.MixinOnlySetter{}
 	}
-	return predicate.MixinOnlySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixinOnlySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.MixinOnlySet {
-	return predicate.MixinOnlySet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.MixinOnlySetter {
+	return predicate.MixinOnlySetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.MixinOnlyOrder { return predicate.MixinOnlyOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.MixinOnlyOrderTerm {
+	return predicate.MixinOnlyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.MixinOnlyOrder {
-	return predicate.MixinOnlyOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.MixinOnlyOrderTerm {
+	return predicate.MixinOnlyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,46 +177,46 @@ func (f *StringColumn) ContainsFold(v string) predicate.MixinOnly {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.MixinOnlySet {
-	return predicate.MixinOnlySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.MixinOnlySetter {
+	return predicate.MixinOnlySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.MixinOnlySet {
+func (f *StringColumn) SetNillable(v *string) predicate.MixinOnlySetter {
 	if v == nil {
-		return predicate.MixinOnlySet{}
+		return predicate.MixinOnlySetter{}
 	}
-	return predicate.MixinOnlySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixinOnlySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.MixinOnlyOrder {
-	return predicate.MixinOnlyOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.MixinOnlyOrderTerm {
+	return predicate.MixinOnlyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.MixinOnlyOrder {
-	return predicate.MixinOnlyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.MixinOnlyOrderTerm {
+	return predicate.MixinOnlyOrderTerm{Col: string(*f), Desc: true}
 }
 
-// IntColumn2 is a column of Go type int: its methods build the predicates,
+// AutoIntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type IntColumn2 string
+type AutoIntColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *IntColumn2) EQ(v int) predicate.MixinOnly {
+func (f *AutoIntColumn) EQ(v int) predicate.MixinOnly {
 	return predicate.MixinOnly{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *IntColumn2) NEQ(v int) predicate.MixinOnly {
+func (f *AutoIntColumn) NEQ(v int) predicate.MixinOnly {
 	return predicate.MixinOnly{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *IntColumn2) In(vs ...int) predicate.MixinOnly {
+func (f *AutoIntColumn) In(vs ...int) predicate.MixinOnly {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -222,7 +225,7 @@ func (f *IntColumn2) In(vs ...int) predicate.MixinOnly {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *IntColumn2) NotIn(vs ...int) predicate.MixinOnly {
+func (f *AutoIntColumn) NotIn(vs ...int) predicate.MixinOnly {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -231,57 +234,59 @@ func (f *IntColumn2) NotIn(vs ...int) predicate.MixinOnly {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *IntColumn2) GT(v int) predicate.MixinOnly {
+func (f *AutoIntColumn) GT(v int) predicate.MixinOnly {
 	return predicate.MixinOnly{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *IntColumn2) GTE(v int) predicate.MixinOnly {
+func (f *AutoIntColumn) GTE(v int) predicate.MixinOnly {
 	return predicate.MixinOnly{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *IntColumn2) LT(v int) predicate.MixinOnly {
+func (f *AutoIntColumn) LT(v int) predicate.MixinOnly {
 	return predicate.MixinOnly{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *IntColumn2) LTE(v int) predicate.MixinOnly {
+func (f *AutoIntColumn) LTE(v int) predicate.MixinOnly {
 	return predicate.MixinOnly{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *IntColumn2) Set(v int) predicate.MixinOnlySet {
-	return predicate.MixinOnlySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoIntColumn) Set(v int) predicate.MixinOnlySetter {
+	return predicate.MixinOnlySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn2) SetNillable(v *int) predicate.MixinOnlySet {
+func (f *AutoIntColumn) SetNillable(v *int) predicate.MixinOnlySetter {
 	if v == nil {
-		return predicate.MixinOnlySet{}
+		return predicate.MixinOnlySetter{}
 	}
-	return predicate.MixinOnlySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixinOnlySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *IntColumn2) Keep() predicate.MixinOnlySet {
-	return predicate.MixinOnlySet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoIntColumn) Keep() predicate.MixinOnlySetter {
+	return predicate.MixinOnlySetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *IntColumn2) Add(v int) predicate.MixinOnlySet {
-	return predicate.MixinOnlySet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *AutoIntColumn) Add(v int) predicate.MixinOnlySetter {
+	return predicate.MixinOnlySetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn2) Asc() predicate.MixinOnlyOrder { return predicate.MixinOnlyOrder{Col: string(*f)} }
+func (f *AutoIntColumn) Asc() predicate.MixinOnlyOrderTerm {
+	return predicate.MixinOnlyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn2) Desc() predicate.MixinOnlyOrder {
-	return predicate.MixinOnlyOrder{Col: string(*f), Desc: true}
+func (f *AutoIntColumn) Desc() predicate.MixinOnlyOrderTerm {
+	return predicate.MixinOnlyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of MixinOnly.
@@ -295,7 +300,7 @@ const (
 var (
 	ID        = IntColumn(ColumnID)
 	CreatedBy = StringColumn(ColumnCreatedBy)
-	Version   = IntColumn2(ColumnVersion)
+	Version   = AutoIntColumn(ColumnVersion)
 )
 
 // And matches the rows every one of ps matches.

@@ -15,8 +15,8 @@ const (
 	OpLTE
 	OpIn
 	OpNotIn
-	OpIsNull
-	OpNotNull
+	OpIsNil
+	OpNotNil
 	OpContains
 	OpHasPrefix
 	OpHasSuffix
@@ -113,9 +113,9 @@ func (q *QueryCore) Load(e *EdgeMeta, opts *QueryCore, given int) {
 	if opts != nil {
 		l.Preds = append([]P(nil), opts.Preds...)
 		l.Orders = append([]O(nil), opts.Orders...)
-		l.Limit = opts.Lim
+		l.Limit = opts.Limit
 		l.With = append([]*EdgeLoad(nil), opts.With...)
-		if opts.Off != 0 || opts.Distinct {
+		if opts.Offset != 0 || opts.Distinct {
 			l.Err = fmt.Errorf("orm: loading edge %q of %s: Offset and Distinct are not supported on an eager load", e.Name, e.Owner.Name)
 		}
 		if len(opts.Cols) > 0 {

@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of EdgesEnum, and ModelName the name of its entity.
+// Table is the table of EdgesEnum, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "edges_enums"
 	ModelName = "EdgesEnum"
@@ -83,30 +84,32 @@ func (f *IntColumn) LTE(v int) predicate.EdgesEnum {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.EdgesEnumSet {
-	return predicate.EdgesEnumSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.EdgesEnumSetter {
+	return predicate.EdgesEnumSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.EdgesEnumSet {
+func (f *IntColumn) SetNillable(v *int) predicate.EdgesEnumSetter {
 	if v == nil {
-		return predicate.EdgesEnumSet{}
+		return predicate.EdgesEnumSetter{}
 	}
-	return predicate.EdgesEnumSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EdgesEnumSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.EdgesEnumSet {
-	return predicate.EdgesEnumSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.EdgesEnumSetter {
+	return predicate.EdgesEnumSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.EdgesEnumOrder { return predicate.EdgesEnumOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.EdgesEnumOrderTerm {
+	return predicate.EdgesEnumOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.EdgesEnumOrder {
-	return predicate.EdgesEnumOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.EdgesEnumOrderTerm {
+	return predicate.EdgesEnumOrderTerm{Col: string(*f), Desc: true}
 }
 
 // EdgesEnumColumn is a column of Go type EdgesEnum: its methods build the predicates,
@@ -143,27 +146,27 @@ func (f *EdgesEnumColumn) NotIn(vs ...EdgesEnum) predicate.EdgesEnum {
 }
 
 // Set assigns v to the column.
-func (f *EdgesEnumColumn) Set(v EdgesEnum) predicate.EdgesEnumSet {
-	return predicate.EdgesEnumSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *EdgesEnumColumn) Set(v EdgesEnum) predicate.EdgesEnumSetter {
+	return predicate.EdgesEnumSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *EdgesEnumColumn) SetNillable(v *EdgesEnum) predicate.EdgesEnumSet {
+func (f *EdgesEnumColumn) SetNillable(v *EdgesEnum) predicate.EdgesEnumSetter {
 	if v == nil {
-		return predicate.EdgesEnumSet{}
+		return predicate.EdgesEnumSetter{}
 	}
-	return predicate.EdgesEnumSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EdgesEnumSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *EdgesEnumColumn) Asc() predicate.EdgesEnumOrder {
-	return predicate.EdgesEnumOrder{Col: string(*f)}
+func (f *EdgesEnumColumn) Asc() predicate.EdgesEnumOrderTerm {
+	return predicate.EdgesEnumOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *EdgesEnumColumn) Desc() predicate.EdgesEnumOrder {
-	return predicate.EdgesEnumOrder{Col: string(*f), Desc: true}
+func (f *EdgesEnumColumn) Desc() predicate.EdgesEnumOrderTerm {
+	return predicate.EdgesEnumOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of EdgesEnum.

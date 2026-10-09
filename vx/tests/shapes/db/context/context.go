@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Context, and ModelName the name of its entity.
+// Table is the table of Context, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "contexts"
 	ModelName = "Context"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Context {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.ContextSet {
-	return predicate.ContextSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.ContextSetter {
+	return predicate.ContextSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.ContextSet {
+func (f *IntColumn) SetNillable(v *int) predicate.ContextSetter {
 	if v == nil {
-		return predicate.ContextSet{}
+		return predicate.ContextSetter{}
 	}
-	return predicate.ContextSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ContextSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.ContextSet {
-	return predicate.ContextSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.ContextSetter {
+	return predicate.ContextSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.ContextOrder { return predicate.ContextOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.ContextOrderTerm {
+	return predicate.ContextOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.ContextOrder {
-	return predicate.ContextOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.ContextOrderTerm {
+	return predicate.ContextOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Context {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.ContextSet {
-	return predicate.ContextSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.ContextSetter {
+	return predicate.ContextSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.ContextSet {
+func (f *StringColumn) SetNillable(v *string) predicate.ContextSetter {
 	if v == nil {
-		return predicate.ContextSet{}
+		return predicate.ContextSetter{}
 	}
-	return predicate.ContextSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ContextSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.ContextOrder { return predicate.ContextOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.ContextOrderTerm {
+	return predicate.ContextOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.ContextOrder {
-	return predicate.ContextOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.ContextOrderTerm {
+	return predicate.ContextOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Context.

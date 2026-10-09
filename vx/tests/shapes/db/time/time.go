@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Time, and ModelName the name of its entity.
+// Table is the table of Time, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "times"
 	ModelName = "Time"
@@ -70,30 +71,30 @@ func (f *IntColumn) LTE(v int) predicate.Time {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.TimeSet {
-	return predicate.TimeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.TimeSetter {
+	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.TimeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.TimeSetter {
 	if v == nil {
-		return predicate.TimeSet{}
+		return predicate.TimeSetter{}
 	}
-	return predicate.TimeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.TimeSet {
-	return predicate.TimeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.TimeSetter {
+	return predicate.TimeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.TimeOrder { return predicate.TimeOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.TimeOrderTerm { return predicate.TimeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.TimeOrder {
-	return predicate.TimeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.TimeOrderTerm {
+	return predicate.TimeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -175,25 +176,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Time {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.TimeSet {
-	return predicate.TimeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.TimeSetter {
+	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.TimeSet {
+func (f *StringColumn) SetNillable(v *string) predicate.TimeSetter {
 	if v == nil {
-		return predicate.TimeSet{}
+		return predicate.TimeSetter{}
 	}
-	return predicate.TimeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.TimeOrder { return predicate.TimeOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.TimeOrderTerm { return predicate.TimeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.TimeOrder {
-	return predicate.TimeOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.TimeOrderTerm {
+	return predicate.TimeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -250,25 +251,25 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Time {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.TimeSet {
-	return predicate.TimeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.TimeSetter {
+	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.TimeSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.TimeSetter {
 	if v == nil {
-		return predicate.TimeSet{}
+		return predicate.TimeSetter{}
 	}
-	return predicate.TimeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.TimeOrder { return predicate.TimeOrder{Col: string(*f)} }
+func (f *TimeColumn) Asc() predicate.TimeOrderTerm { return predicate.TimeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.TimeOrder {
-	return predicate.TimeOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.TimeOrderTerm {
+	return predicate.TimeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Time.

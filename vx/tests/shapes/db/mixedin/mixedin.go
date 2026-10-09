@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of MixedIn, and ModelName the name of its entity.
+// Table is the table of MixedIn, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "mixed_ins"
 	ModelName = "MixedIn"
@@ -70,30 +71,32 @@ func (f *IntColumn) LTE(v int) predicate.MixedIn {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.MixedInSet {
+func (f *IntColumn) SetNillable(v *int) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.MixedInOrder { return predicate.MixedInOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -150,44 +153,46 @@ func (f *TimeColumn) LTE(v time.Time) predicate.MixedIn {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.MixedInSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.MixedInOrder { return predicate.MixedInOrder{Col: string(*f)} }
-
-// Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
 }
 
-// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// Desc orders by the column, greatest first.
+func (f *TimeColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
+}
+
+// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type TimeColumn2 string
+type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *TimeColumn2) EQ(v time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) EQ(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *TimeColumn2) NEQ(v time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) NEQ(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *TimeColumn2) In(vs ...time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) In(vs ...time.Time) predicate.MixedIn {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -196,7 +201,7 @@ func (f *TimeColumn2) In(vs ...time.Time) predicate.MixedIn {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) NotIn(vs ...time.Time) predicate.MixedIn {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -205,52 +210,54 @@ func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.MixedIn {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *TimeColumn2) GT(v time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) GT(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *TimeColumn2) GTE(v time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) GTE(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *TimeColumn2) LT(v time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) LT(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *TimeColumn2) LTE(v time.Time) predicate.MixedIn {
+func (f *AutoTimeColumn) LTE(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn2) Set(v time.Time) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoTimeColumn) Set(v time.Time) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn2) SetNillable(v *time.Time) predicate.MixedInSet {
+func (f *AutoTimeColumn) SetNillable(v *time.Time) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *TimeColumn2) Keep() predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoTimeColumn) Keep() predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn2) Asc() predicate.MixedInOrder { return predicate.MixedInOrder{Col: string(*f)} }
+func (f *AutoTimeColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn2) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *AutoTimeColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -332,44 +339,46 @@ func (f *StringColumn) ContainsFold(v string) predicate.MixedIn {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.MixedInSet {
+func (f *StringColumn) SetNillable(v *string) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.MixedInOrder { return predicate.MixedInOrder{Col: string(*f)} }
-
-// Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
 }
 
-// IntColumn2 is a column of Go type int: its methods build the predicates,
+// Desc orders by the column, greatest first.
+func (f *StringColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
+}
+
+// AutoIntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type IntColumn2 string
+type AutoIntColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *IntColumn2) EQ(v int) predicate.MixedIn {
+func (f *AutoIntColumn) EQ(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *IntColumn2) NEQ(v int) predicate.MixedIn {
+func (f *AutoIntColumn) NEQ(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *IntColumn2) In(vs ...int) predicate.MixedIn {
+func (f *AutoIntColumn) In(vs ...int) predicate.MixedIn {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -378,7 +387,7 @@ func (f *IntColumn2) In(vs ...int) predicate.MixedIn {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *IntColumn2) NotIn(vs ...int) predicate.MixedIn {
+func (f *AutoIntColumn) NotIn(vs ...int) predicate.MixedIn {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -387,57 +396,59 @@ func (f *IntColumn2) NotIn(vs ...int) predicate.MixedIn {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *IntColumn2) GT(v int) predicate.MixedIn {
+func (f *AutoIntColumn) GT(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *IntColumn2) GTE(v int) predicate.MixedIn {
+func (f *AutoIntColumn) GTE(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *IntColumn2) LT(v int) predicate.MixedIn {
+func (f *AutoIntColumn) LT(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *IntColumn2) LTE(v int) predicate.MixedIn {
+func (f *AutoIntColumn) LTE(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *IntColumn2) Set(v int) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoIntColumn) Set(v int) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn2) SetNillable(v *int) predicate.MixedInSet {
+func (f *AutoIntColumn) SetNillable(v *int) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *IntColumn2) Keep() predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoIntColumn) Keep() predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *IntColumn2) Add(v int) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *AutoIntColumn) Add(v int) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn2) Asc() predicate.MixedInOrder { return predicate.MixedInOrder{Col: string(*f)} }
+func (f *AutoIntColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn2) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *AutoIntColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BoolColumn is a column of Go type bool: its methods build the predicates,
@@ -456,25 +467,27 @@ func (f *BoolColumn) NEQ(v bool) predicate.MixedIn {
 }
 
 // Set assigns v to the column.
-func (f *BoolColumn) Set(v bool) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BoolColumn) Set(v bool) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BoolColumn) SetNillable(v *bool) predicate.MixedInSet {
+func (f *BoolColumn) SetNillable(v *bool) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BoolColumn) Asc() predicate.MixedInOrder { return predicate.MixedInOrder{Col: string(*f)} }
+func (f *BoolColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *BoolColumn) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *BoolColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -532,41 +545,41 @@ func (f *NullableTimeColumn) LTE(v time.Time) predicate.MixedIn {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableTimeColumn) IsNil() predicate.MixedIn {
-	return predicate.MixedIn{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableTimeColumn) NotNil() predicate.MixedIn {
-	return predicate.MixedIn{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTimeColumn) Set(v time.Time) predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableTimeColumn) Set(v time.Time) predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.MixedInSet {
+func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.MixedInSetter {
 	if v == nil {
-		return predicate.MixedInSet{}
+		return predicate.MixedInSetter{}
 	}
-	return predicate.MixedInSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableTimeColumn) Clear() predicate.MixedInSet {
-	return predicate.MixedInSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableTimeColumn) Clear() predicate.MixedInSetter {
+	return predicate.MixedInSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTimeColumn) Asc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f)}
+func (f *NullableTimeColumn) Asc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableTimeColumn) Desc() predicate.MixedInOrder {
-	return predicate.MixedInOrder{Col: string(*f), Desc: true}
+func (f *NullableTimeColumn) Desc() predicate.MixedInOrderTerm {
+	return predicate.MixedInOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of MixedIn.
@@ -588,9 +601,9 @@ const (
 var (
 	ID         = IntColumn(ColumnID)
 	CreatedAt  = TimeColumn(ColumnCreatedAt)
-	UpdatedAt  = TimeColumn2(ColumnUpdatedAt)
+	UpdatedAt  = AutoTimeColumn(ColumnUpdatedAt)
 	CreatedBy  = StringColumn(ColumnCreatedBy)
-	Version    = IntColumn2(ColumnVersion)
+	Version    = AutoIntColumn(ColumnVersion)
 	Archived   = BoolColumn(ColumnArchived)
 	ArchivedAt = NullableTimeColumn(ColumnArchivedAt)
 	Reason     = StringColumn(ColumnReason)

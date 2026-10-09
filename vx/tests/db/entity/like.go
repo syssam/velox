@@ -159,7 +159,7 @@ func (q *LikeQuery) Where(ps ...predicate.Like) *LikeQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *LikeQuery) OrderBy(os ...predicate.LikeOrder) *LikeQuery {
+func (q *LikeQuery) OrderBy(os ...predicate.LikeOrderTerm) *LikeQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -169,12 +169,12 @@ func (q *LikeQuery) OrderBy(os ...predicate.LikeOrder) *LikeQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *LikeQuery) Limit(n int) *LikeQuery { q.c.Lim = n; return q }
+func (q *LikeQuery) Limit(n int) *LikeQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *LikeQuery) Offset(n int) *LikeQuery { q.c.Off = n; return q }
+func (q *LikeQuery) Offset(n int) *LikeQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -334,7 +334,7 @@ func NewLikeCreate(ex orm.Executor) *LikeCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *LikeCreate) Set(ss ...predicate.LikeSet) *LikeCreate {
+func (b *LikeCreate) Set(ss ...predicate.LikeSetter) *LikeCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -429,7 +429,7 @@ func NewLikeUpdate(ex orm.Executor) *LikeUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *LikeUpdate) Set(ss ...predicate.LikeSet) *LikeUpdate {
+func (b *LikeUpdate) Set(ss ...predicate.LikeSetter) *LikeUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -458,11 +458,18 @@ func (b *LikeUpdate) Fill(in any, skip ...string) *LikeUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *LikeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *LikeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several
@@ -571,11 +578,11 @@ type LikeOrder struct {
 // input orders by nothing.
 //
 //go:noinline
-func (o *LikeOrder) Term() predicate.LikeOrder {
+func (o *LikeOrder) Term() predicate.LikeOrderTerm {
 	if o == nil {
-		return predicate.LikeOrder{}
+		return predicate.LikeOrderTerm{}
 	}
-	return predicate.LikeOrder(orm.OrderTerm(&LikeMeta, likeOrderColumns, string(o.Field), o.Direction))
+	return predicate.LikeOrderTerm(orm.OrderTerm(&LikeMeta, likeOrderColumns, string(o.Field), o.Direction))
 }
 
 // User resolves the "user" edge for a GraphQL engine: the neighbor the query

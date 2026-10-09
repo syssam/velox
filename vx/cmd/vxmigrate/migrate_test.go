@@ -111,11 +111,11 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		"db.User.Create(s.Client).",
 		"user.Nickname.SetNillable(nick),", // setters joined into one Set
 		"return predicate.User{}",          // a nil predicate
-		"!orm.P(p).IsZero()",
+		"!orm.IsZero(p)",
 		"predicate.User(orm.Raw(func(s *sql.Selector) {",
 		"user.Posts.HasWith(post.Status.EQ(post.StatusDraft))",
 		".Set(user.Role.Set(user.RoleAdmin), user.Nickname.Clear(), user.Age.Add(1)).SaveOne(ctx)",
-		"orm.One(db.User.UpdateByID(s.Client, id).Set(user.Name.Set(name)).Exec(ctx))",
+		"db.User.UpdateByID(s.Client, id).Set(user.Name.Set(name)).ExecOne(ctx)",
 		"db.User.DeleteByID(ctx, s.Client, id)",
 		".OrderBy(orderBy.Term()).Where(where.P()).Paginate(ctx, after, first, nil, nil)",
 		"s.Client.Begin(ctx)",
@@ -144,7 +144,7 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		"func both[P orm.Predicate](ps ...P) P {",
 		"return P(orm.And(ps...))",
 		"Text orm.TextColumn[P]",
-		"if p := idIn(&user.ID, ids...); !orm.P(p).IsZero() {", // a column passed as a value
+		"if p := idIn(&user.ID, ids...); !orm.IsZero(p) {", // a column passed as a value
 		"titled[predicate.Post]{Text: &post.Title}",
 		"var rename = func(b *entity.UserUpdate, v string) *entity.UserUpdate {", // a method expression
 		"return u.QueryPosts(orm.ExecutorFrom(ctx)).Count(ctx)",                  // an entity handed over: the context's handle
@@ -284,7 +284,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// A column's name where no rule rewrites the call around it.
 		"s.OrderBy(sql.Asc(user.ColumnName))",
 		// Likes, not LikedPosts.
-		"orm.One(db.User.UpdateByID(c, userID).Set(user.Likes.Add(likeIDs...)).Exec(ctx))",
+		"db.User.UpdateByID(c, userID).Set(user.Likes.Add(likeIDs...)).ExecOne(ctx)",
 		// A package name the application has taken, in another file.
 		"return slicespkg.Contains(user.RoleValues(), r)",
 	} {

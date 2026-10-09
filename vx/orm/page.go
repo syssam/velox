@@ -147,7 +147,7 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 			page.Total = n
 		}
 		win := *q
-		win.Off, win.Lim = 0, 0
+		win.Offset, win.Limit = 0, 0
 		win.Preds = slices.Clone(q.Preds)
 		for _, cur := range []struct {
 			s     string
@@ -179,7 +179,7 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 			return page, nil
 		}
 		if limit > 0 {
-			win.Lim = limit + 1 // one more row tells whether a further page exists
+			win.Limit = limit + 1 // one more row tells whether a further page exists
 		}
 		// A key whose Go field cannot hold NULL (an optional column in a
 		// field that is not a pointer) reads NULL as zero. The cursor has
@@ -256,18 +256,18 @@ func beyond(keys []O, vals []any, after, nullsFirstAsc bool) P {
 		var next P
 		switch {
 		case vals[i] == nil && nullsFirst:
-			next = P{Op: OpNotNull, Col: k.Col}
+			next = P{Op: OpNotNil, Col: k.Col}
 		case vals[i] == nil:
 			continue // NULLs sort last here: nothing follows one on this column
 		case nullsFirst:
 			next = P{Op: op, Col: k.Col, Val: vals[i]}
 		default:
-			next = P{Op: OpOr, Subs: []P{{Op: op, Col: k.Col, Val: vals[i]}, {Op: OpIsNull, Col: k.Col}}}
+			next = P{Op: OpOr, Subs: []P{{Op: op, Col: k.Col, Val: vals[i]}, {Op: OpIsNil, Col: k.Col}}}
 		}
 		and := make([]P, 0, i+1)
 		for j := range i {
 			if vals[j] == nil {
-				and = append(and, P{Op: OpIsNull, Col: keys[j].Col})
+				and = append(and, P{Op: OpIsNil, Col: keys[j].Col})
 			} else {
 				and = append(and, P{Op: OpEQ, Col: keys[j].Col, Val: vals[j]})
 			}
@@ -401,7 +401,7 @@ func (m *Meta) convert(f *FieldMeta, v any) (any, error) {
 // value that arrive at run time, as the filter of a list endpoint does. The
 // field must exist, the operator must suit it, and the value must be of the
 // field's type or convert to it without loss; value is a slice for OpIn and
-// OpNotIn and ignored for OpIsNull and OpNotNull.
+// OpNotIn and ignored for OpIsNil and OpNotNil.
 //
 // Convert the result to the entity's predicate type: predicate.User(p).
 func FieldPredicate(m *Meta, field string, op Op, value any) (P, error) {
@@ -414,7 +414,7 @@ func FieldPredicate(m *Meta, field string, op Op, value any) (P, error) {
 		return P{}, fmt.Errorf("orm: %s.%s cannot be filtered by: it is sensitive", m.Name, field)
 	}
 	switch op {
-	case OpIsNull, OpNotNull:
+	case OpIsNil, OpNotNil:
 		return P{Op: op, Col: f.Column}, nil
 	case OpEQ, OpNEQ, OpGT, OpGTE, OpLT, OpLTE:
 		v, err := m.convert(f, value)
@@ -447,7 +447,7 @@ func FieldPredicate(m *Meta, field string, op Op, value any) (P, error) {
 }
 
 // FieldOrder builds an order term from a field name that arrives at run time.
-// Convert the result to the entity's order type: predicate.UserOrder(o).
+// Convert the result to the entity's order type: predicate.UserOrderTerm(o).
 func FieldOrder(m *Meta, field string, desc bool) (O, error) {
 	m.prepare()
 	f := m.byName[field]

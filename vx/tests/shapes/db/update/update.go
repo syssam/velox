@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Update, and ModelName the name of its entity.
+// Table is the table of Update, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "updates"
 	ModelName = "Update"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Update {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.UpdateSet {
-	return predicate.UpdateSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.UpdateSetter {
+	return predicate.UpdateSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.UpdateSet {
+func (f *IntColumn) SetNillable(v *int) predicate.UpdateSetter {
 	if v == nil {
-		return predicate.UpdateSet{}
+		return predicate.UpdateSetter{}
 	}
-	return predicate.UpdateSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UpdateSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.UpdateSet {
-	return predicate.UpdateSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.UpdateSetter {
+	return predicate.UpdateSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.UpdateOrder { return predicate.UpdateOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.UpdateOrderTerm {
+	return predicate.UpdateOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.UpdateOrder {
-	return predicate.UpdateOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.UpdateOrderTerm {
+	return predicate.UpdateOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Update {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.UpdateSet {
-	return predicate.UpdateSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.UpdateSetter {
+	return predicate.UpdateSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.UpdateSet {
+func (f *StringColumn) SetNillable(v *string) predicate.UpdateSetter {
 	if v == nil {
-		return predicate.UpdateSet{}
+		return predicate.UpdateSetter{}
 	}
-	return predicate.UpdateSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UpdateSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.UpdateOrder { return predicate.UpdateOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.UpdateOrderTerm {
+	return predicate.UpdateOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.UpdateOrder {
-	return predicate.UpdateOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.UpdateOrderTerm {
+	return predicate.UpdateOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Update.

@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of KindShape, and ModelName the name of its entity.
+// Table is the table of KindShape, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "kind_shapes"
 	ModelName = "KindShape"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.KindShape {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.KindShapeSet {
-	return predicate.KindShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.KindShapeSetter {
+	return predicate.KindShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.KindShapeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.KindShapeSetter {
 	if v == nil {
-		return predicate.KindShapeSet{}
+		return predicate.KindShapeSetter{}
 	}
-	return predicate.KindShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.KindShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.KindShapeSet {
-	return predicate.KindShapeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.KindShapeSetter {
+	return predicate.KindShapeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.KindShapeOrder { return predicate.KindShapeOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.KindShapeOrderTerm {
+	return predicate.KindShapeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.KindShapeOrder {
-	return predicate.KindShapeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.KindShapeOrderTerm {
+	return predicate.KindShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,27 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.KindShape {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.KindShapeSet {
-	return predicate.KindShapeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.KindShapeSetter {
+	return predicate.KindShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.KindShapeSet {
+func (f *StringColumn) SetNillable(v *string) predicate.KindShapeSetter {
 	if v == nil {
-		return predicate.KindShapeSet{}
+		return predicate.KindShapeSetter{}
 	}
-	return predicate.KindShapeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.KindShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.KindShapeOrder {
-	return predicate.KindShapeOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.KindShapeOrderTerm {
+	return predicate.KindShapeOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.KindShapeOrder {
-	return predicate.KindShapeOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.KindShapeOrderTerm {
+	return predicate.KindShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of KindShape.
@@ -233,13 +236,13 @@ func (e *EdgeKind) HasWith(ps ...predicate.Kind) predicate.KindShape {
 }
 
 // Set connects the KindShape to the Kind with the given id.
-func (e *EdgeKind) Set(id int) predicate.KindShapeSet {
-	return predicate.KindShapeSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeKind) Set(id int) predicate.KindShapeSetter {
+	return predicate.KindShapeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the KindShape from every "kind" neighbor.
-func (e *EdgeKind) Clear() predicate.KindShapeSet {
-	return predicate.KindShapeSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeKind) Clear() predicate.KindShapeSetter {
+	return predicate.KindShapeSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 // EdgeMetas returns the descriptions of the edges of KindShape, in order. The generated

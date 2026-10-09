@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Article, and ModelName the name of its entity.
+// Table is the table of Article, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "articles"
 	ModelName = "Article"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Article {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.ArticleSet {
+func (f *IntColumn) SetNillable(v *int) predicate.ArticleSetter {
 	if v == nil {
-		return predicate.ArticleSet{}
+		return predicate.ArticleSetter{}
 	}
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.ArticleOrder { return predicate.ArticleOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.ArticleOrder {
-	return predicate.ArticleOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Article {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.ArticleSet {
+func (f *StringColumn) SetNillable(v *string) predicate.ArticleSetter {
 	if v == nil {
-		return predicate.ArticleSet{}
+		return predicate.ArticleSetter{}
 	}
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.ArticleOrder { return predicate.ArticleOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.ArticleOrder {
-	return predicate.ArticleOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f), Desc: true}
 }
 
 // IntKeyColumn is a column of Go type int: its methods build the predicates,
@@ -229,25 +234,27 @@ func (f *IntKeyColumn) NotIn(vs ...int) predicate.Article {
 }
 
 // Set assigns v to the column.
-func (f *IntKeyColumn) Set(v int) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntKeyColumn) Set(v int) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntKeyColumn) SetNillable(v *int) predicate.ArticleSet {
+func (f *IntKeyColumn) SetNillable(v *int) predicate.ArticleSetter {
 	if v == nil {
-		return predicate.ArticleSet{}
+		return predicate.ArticleSetter{}
 	}
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntKeyColumn) Asc() predicate.ArticleOrder { return predicate.ArticleOrder{Col: string(*f)} }
+func (f *IntKeyColumn) Asc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntKeyColumn) Desc() predicate.ArticleOrder {
-	return predicate.ArticleOrder{Col: string(*f), Desc: true}
+func (f *IntKeyColumn) Desc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIntKeyColumn is a column of Go type int: its methods build the predicates,
@@ -285,41 +292,41 @@ func (f *NullableIntKeyColumn) NotIn(vs ...int) predicate.Article {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntKeyColumn) IsNil() predicate.Article {
-	return predicate.Article{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Article{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntKeyColumn) NotNil() predicate.Article {
-	return predicate.Article{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Article{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntKeyColumn) Set(v int) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntKeyColumn) Set(v int) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntKeyColumn) SetNillable(v *int) predicate.ArticleSet {
+func (f *NullableIntKeyColumn) SetNillable(v *int) predicate.ArticleSetter {
 	if v == nil {
-		return predicate.ArticleSet{}
+		return predicate.ArticleSetter{}
 	}
-	return predicate.ArticleSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntKeyColumn) Clear() predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntKeyColumn) Clear() predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntKeyColumn) Asc() predicate.ArticleOrder {
-	return predicate.ArticleOrder{Col: string(*f)}
+func (f *NullableIntKeyColumn) Asc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntKeyColumn) Desc() predicate.ArticleOrder {
-	return predicate.ArticleOrder{Col: string(*f), Desc: true}
+func (f *NullableIntKeyColumn) Desc() predicate.ArticleOrderTerm {
+	return predicate.ArticleOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Article.
@@ -366,13 +373,13 @@ func (e *EdgeAuthor) HasWith(ps ...predicate.Author) predicate.Article {
 }
 
 // Set connects the Article to the Author with the given id.
-func (e *EdgeAuthor) Set(id int) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeAuthor) Set(id int) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Article from every "author" neighbor.
-func (e *EdgeAuthor) Clear() predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeAuthor) Clear() predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "editor", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "articles", Columns: []string{"editor_id"}}
@@ -399,13 +406,13 @@ func (e *EdgeEditor) HasWith(ps ...predicate.Author) predicate.Article {
 }
 
 // Set connects the Article to the Author with the given id.
-func (e *EdgeEditor) Set(id int) predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
+func (e *EdgeEditor) Set(id int) predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
 }
 
 // Clear disconnects the Article from every "editor" neighbor.
-func (e *EdgeEditor) Clear() predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeEditor) Clear() predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "topics", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_topics", Columns: []string{"article_id", "topic_id"}}
@@ -432,26 +439,26 @@ func (e *EdgeTopics) HasWith(ps ...predicate.Topic) predicate.Article {
 }
 
 // Add connects the Article to the Topic rows with the given ids.
-func (e *EdgeTopics) Add(ids ...int) predicate.ArticleSet {
+func (e *EdgeTopics) Add(ids ...int) predicate.ArticleSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ArticleSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Article from the Topic rows with the given ids.
-func (e *EdgeTopics) Remove(ids ...int) predicate.ArticleSet {
+func (e *EdgeTopics) Remove(ids ...int) predicate.ArticleSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ArticleSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.ArticleSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Article from every "topics" neighbor.
-func (e *EdgeTopics) Clear() predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeTopics) Clear() predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "banned_topics", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
@@ -478,26 +485,26 @@ func (e *EdgeBannedTopics) HasWith(ps ...predicate.Topic) predicate.Article {
 }
 
 // Add connects the Article to the Topic rows with the given ids.
-func (e *EdgeBannedTopics) Add(ids ...int) predicate.ArticleSet {
+func (e *EdgeBannedTopics) Add(ids ...int) predicate.ArticleSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ArticleSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
+	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
 }
 
 // Remove disconnects the Article from the Topic rows with the given ids.
-func (e *EdgeBannedTopics) Remove(ids ...int) predicate.ArticleSet {
+func (e *EdgeBannedTopics) Remove(ids ...int) predicate.ArticleSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ArticleSet{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
+	return predicate.ArticleSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
 }
 
 // Clear disconnects the Article from every "banned_topics" neighbor.
-func (e *EdgeBannedTopics) Clear() predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeBannedTopics) Clear() predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 var meta4 = orm.EdgeMeta{Name: "notes", Index: 4, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "notes", Columns: []string{"article_ref"}}
@@ -524,26 +531,26 @@ func (e *EdgeNotes) HasWith(ps ...predicate.Note) predicate.Article {
 }
 
 // Add connects the Article to the Note rows with the given ids.
-func (e *EdgeNotes) Add(ids ...int) predicate.ArticleSet {
+func (e *EdgeNotes) Add(ids ...int) predicate.ArticleSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ArticleSet{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
+	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
 }
 
 // Remove disconnects the Article from the Note rows with the given ids.
-func (e *EdgeNotes) Remove(ids ...int) predicate.ArticleSet {
+func (e *EdgeNotes) Remove(ids ...int) predicate.ArticleSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.ArticleSet{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
+	return predicate.ArticleSetter{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
 }
 
 // Clear disconnects the Article from every "notes" neighbor.
-func (e *EdgeNotes) Clear() predicate.ArticleSet {
-	return predicate.ArticleSet{Kind: orm.EdgeClear, Edge: &meta4}
+func (e *EdgeNotes) Clear() predicate.ArticleSetter {
+	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
 // EdgeMetas returns the descriptions of the edges of Article, in order. The generated

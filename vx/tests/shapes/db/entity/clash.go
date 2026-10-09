@@ -187,7 +187,7 @@ func (q *ClashQuery) Where(ps ...predicate.Clash) *ClashQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *ClashQuery) OrderBy(os ...predicate.ClashOrder) *ClashQuery {
+func (q *ClashQuery) OrderBy(os ...predicate.ClashOrderTerm) *ClashQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -197,12 +197,12 @@ func (q *ClashQuery) OrderBy(os ...predicate.ClashOrder) *ClashQuery {
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *ClashQuery) Limit(n int) *ClashQuery { q.c.Lim = n; return q }
+func (q *ClashQuery) Limit(n int) *ClashQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *ClashQuery) Offset(n int) *ClashQuery { q.c.Off = n; return q }
+func (q *ClashQuery) Offset(n int) *ClashQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -362,7 +362,7 @@ func NewClashCreate(ex orm.Executor) *ClashCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *ClashCreate) Set(ss ...predicate.ClashSet) *ClashCreate {
+func (b *ClashCreate) Set(ss ...predicate.ClashSetter) *ClashCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -457,7 +457,7 @@ func NewClashUpdate(ex orm.Executor) *ClashUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *ClashUpdate) Set(ss ...predicate.ClashSet) *ClashUpdate {
+func (b *ClashUpdate) Set(ss ...predicate.ClashSetter) *ClashUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -486,11 +486,18 @@ func (b *ClashUpdate) Fill(in any, skip ...string) *ClashUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *ClashUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *ClashUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

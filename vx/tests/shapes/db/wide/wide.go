@@ -12,7 +12,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Wide, and ModelName the name of its entity.
+// Table is the table of Wide, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "wides"
 	ModelName = "Wide"
@@ -101,30 +102,30 @@ func (f *IntColumn) LTE(v int) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.WideSet {
+func (f *IntColumn) SetNillable(v *int) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -206,25 +207,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.WideSet {
+func (f *StringColumn) SetNillable(v *string) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -307,39 +308,41 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.WideSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *NullableStringColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BoolColumn is a column of Go type bool: its methods build the predicates,
@@ -358,25 +361,25 @@ func (f *BoolColumn) NEQ(v bool) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *BoolColumn) Set(v bool) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BoolColumn) Set(v bool) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BoolColumn) SetNillable(v *bool) predicate.WideSet {
+func (f *BoolColumn) SetNillable(v *bool) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BoolColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *BoolColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *BoolColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *BoolColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableBoolColumn is a column of Go type bool: its methods build the predicates,
@@ -396,39 +399,41 @@ func (f *NullableBoolColumn) NEQ(v bool) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableBoolColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableBoolColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBoolColumn) Set(v bool) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableBoolColumn) Set(v bool) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBoolColumn) SetNillable(v *bool) predicate.WideSet {
+func (f *NullableBoolColumn) SetNillable(v *bool) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableBoolColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableBoolColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBoolColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *NullableBoolColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableBoolColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableBoolColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableIntColumn is a column of Go type int: its methods build the predicates,
@@ -486,44 +491,46 @@ func (f *NullableIntColumn) LTE(v int) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntColumn) Set(v int) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntColumn) Set(v int) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntColumn) SetNillable(v *int) predicate.WideSet {
+func (f *NullableIntColumn) SetNillable(v *int) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableIntColumn) Add(v int) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableIntColumn) Add(v int) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableIntColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *NullableIntColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableIntColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableIntColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int8Column is a column of Go type int8: its methods build the predicates,
@@ -580,30 +587,30 @@ func (f *Int8Column) LTE(v int8) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Int8Column) Set(v int8) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int8Column) Set(v int8) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int8Column) SetNillable(v *int8) predicate.WideSet {
+func (f *Int8Column) SetNillable(v *int8) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int8Column) Add(v int8) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int8Column) Add(v int8) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int8Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Int8Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Int8Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Int8Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int16Column is a column of Go type int16: its methods build the predicates,
@@ -660,30 +667,30 @@ func (f *Int16Column) LTE(v int16) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Int16Column) Set(v int16) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int16Column) Set(v int16) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int16Column) SetNillable(v *int16) predicate.WideSet {
+func (f *Int16Column) SetNillable(v *int16) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int16Column) Add(v int16) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int16Column) Add(v int16) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int16Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Int16Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Int16Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Int16Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int32Column is a column of Go type int32: its methods build the predicates,
@@ -740,30 +747,30 @@ func (f *Int32Column) LTE(v int32) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Int32Column) Set(v int32) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int32Column) Set(v int32) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int32Column) SetNillable(v *int32) predicate.WideSet {
+func (f *Int32Column) SetNillable(v *int32) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int32Column) Add(v int32) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int32Column) Add(v int32) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int32Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Int32Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Int32Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Int32Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Int64Column is a column of Go type int64: its methods build the predicates,
@@ -820,30 +827,30 @@ func (f *Int64Column) LTE(v int64) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Int64Column) Set(v int64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Int64Column) Set(v int64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Int64Column) SetNillable(v *int64) predicate.WideSet {
+func (f *Int64Column) SetNillable(v *int64) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Int64Column) Add(v int64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Int64Column) Add(v int64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Int64Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Int64Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Int64Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Int64Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UintColumn is a column of Go type uint: its methods build the predicates,
@@ -900,30 +907,30 @@ func (f *UintColumn) LTE(v uint) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *UintColumn) Set(v uint) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UintColumn) Set(v uint) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UintColumn) SetNillable(v *uint) predicate.WideSet {
+func (f *UintColumn) SetNillable(v *uint) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *UintColumn) Add(v uint) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *UintColumn) Add(v uint) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UintColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *UintColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *UintColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *UintColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint8Column is a column of Go type uint8: its methods build the predicates,
@@ -980,30 +987,30 @@ func (f *Uint8Column) LTE(v uint8) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Uint8Column) Set(v uint8) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint8Column) Set(v uint8) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint8Column) SetNillable(v *uint8) predicate.WideSet {
+func (f *Uint8Column) SetNillable(v *uint8) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint8Column) Add(v uint8) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint8Column) Add(v uint8) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint8Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Uint8Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Uint8Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Uint8Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint16Column is a column of Go type uint16: its methods build the predicates,
@@ -1060,30 +1067,30 @@ func (f *Uint16Column) LTE(v uint16) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Uint16Column) Set(v uint16) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint16Column) Set(v uint16) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint16Column) SetNillable(v *uint16) predicate.WideSet {
+func (f *Uint16Column) SetNillable(v *uint16) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint16Column) Add(v uint16) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint16Column) Add(v uint16) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint16Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Uint16Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Uint16Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Uint16Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint32Column is a column of Go type uint32: its methods build the predicates,
@@ -1140,30 +1147,30 @@ func (f *Uint32Column) LTE(v uint32) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Uint32Column) Set(v uint32) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint32Column) Set(v uint32) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint32Column) SetNillable(v *uint32) predicate.WideSet {
+func (f *Uint32Column) SetNillable(v *uint32) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint32Column) Add(v uint32) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint32Column) Add(v uint32) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint32Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Uint32Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Uint32Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Uint32Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Uint64Column is a column of Go type uint64: its methods build the predicates,
@@ -1220,30 +1227,30 @@ func (f *Uint64Column) LTE(v uint64) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Uint64Column) Set(v uint64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint64Column) Set(v uint64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint64Column) SetNillable(v *uint64) predicate.WideSet {
+func (f *Uint64Column) SetNillable(v *uint64) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint64Column) Add(v uint64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint64Column) Add(v uint64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint64Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Uint64Column) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *Uint64Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Uint64Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float64Column is a column of Go type float64: its methods build the predicates,
@@ -1300,30 +1307,32 @@ func (f *Float64Column) LTE(v float64) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Float64Column) Set(v float64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float64Column) Set(v float64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float64Column) SetNillable(v *float64) predicate.WideSet {
+func (f *Float64Column) SetNillable(v *float64) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float64Column) Add(v float64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float64Column) Add(v float64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float64Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Float64Column) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Float64Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Float64Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // Float32Column is a column of Go type float32: its methods build the predicates,
@@ -1380,30 +1389,32 @@ func (f *Float32Column) LTE(v float32) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *Float32Column) Set(v float32) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Float32Column) Set(v float32) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Float32Column) SetNillable(v *float32) predicate.WideSet {
+func (f *Float32Column) SetNillable(v *float32) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Float32Column) Add(v float32) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Float32Column) Add(v float32) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Float32Column) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *Float32Column) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *Float32Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *Float32Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableFloat64Column is a column of Go type float64: its methods build the predicates,
@@ -1461,46 +1472,46 @@ func (f *NullableFloat64Column) LTE(v float64) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableFloat64Column) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableFloat64Column) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableFloat64Column) Set(v float64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableFloat64Column) Set(v float64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableFloat64Column) SetNillable(v *float64) predicate.WideSet {
+func (f *NullableFloat64Column) SetNillable(v *float64) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableFloat64Column) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableFloat64Column) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Add increments the column by v.
-func (f *NullableFloat64Column) Add(v float64) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *NullableFloat64Column) Add(v float64) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableFloat64Column) Asc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f)}
+func (f *NullableFloat64Column) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableFloat64Column) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableFloat64Column) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -1557,25 +1568,25 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.WideSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *TimeColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -1633,39 +1644,41 @@ func (f *NullableTimeColumn) LTE(v time.Time) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableTimeColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableTimeColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTimeColumn) Set(v time.Time) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableTimeColumn) Set(v time.Time) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.WideSet {
+func (f *NullableTimeColumn) SetNillable(v *time.Time) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableTimeColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableTimeColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTimeColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *NullableTimeColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableTimeColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableTimeColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
@@ -1722,25 +1735,25 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *UUIDColumn) Set(v uuid.UUID) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UUIDColumn) Set(v uuid.UUID) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.WideSet {
+func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UUIDColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *UUIDColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *UUIDColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *UUIDColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableUUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
@@ -1798,39 +1811,41 @@ func (f *NullableUUIDColumn) LTE(v uuid.UUID) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableUUIDColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableUUIDColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableUUIDColumn) Set(v uuid.UUID) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableUUIDColumn) Set(v uuid.UUID) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableUUIDColumn) SetNillable(v *uuid.UUID) predicate.WideSet {
+func (f *NullableUUIDColumn) SetNillable(v *uuid.UUID) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableUUIDColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableUUIDColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableUUIDColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *NullableUUIDColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableUUIDColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableUUIDColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -1887,25 +1902,25 @@ func (f *BytesColumn) LTE(v []byte) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *BytesColumn) Set(v []byte) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BytesColumn) Set(v []byte) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BytesColumn) SetNillable(v *[]byte) predicate.WideSet {
+func (f *BytesColumn) SetNillable(v *[]byte) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BytesColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *BytesColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *BytesColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *BytesColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -1963,39 +1978,41 @@ func (f *NullableBytesColumn) LTE(v []byte) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableBytesColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableBytesColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBytesColumn) Set(v []byte) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableBytesColumn) Set(v []byte) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBytesColumn) SetNillable(v *[]byte) predicate.WideSet {
+func (f *NullableBytesColumn) SetNillable(v *[]byte) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableBytesColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableBytesColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBytesColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *NullableBytesColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableBytesColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableBytesColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // KindEnumColumn is a column of Go type KindEnum: its methods build the predicates,
@@ -2032,25 +2049,27 @@ func (f *KindEnumColumn) NotIn(vs ...KindEnum) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *KindEnumColumn) Set(v KindEnum) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *KindEnumColumn) Set(v KindEnum) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *KindEnumColumn) SetNillable(v *KindEnum) predicate.WideSet {
+func (f *KindEnumColumn) SetNillable(v *KindEnum) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *KindEnumColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *KindEnumColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *KindEnumColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *KindEnumColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableKind2EnumColumn is a column of Go type Kind2Enum: its methods build the predicates,
@@ -2088,41 +2107,41 @@ func (f *NullableKind2EnumColumn) NotIn(vs ...Kind2Enum) predicate.Wide {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableKind2EnumColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableKind2EnumColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableKind2EnumColumn) Set(v Kind2Enum) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableKind2EnumColumn) Set(v Kind2Enum) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableKind2EnumColumn) SetNillable(v *Kind2Enum) predicate.WideSet {
+func (f *NullableKind2EnumColumn) SetNillable(v *Kind2Enum) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableKind2EnumColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableKind2EnumColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableKind2EnumColumn) Asc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f)}
+func (f *NullableKind2EnumColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableKind2EnumColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *NullableKind2EnumColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // IntListColumn is a column of Go type []int: its methods build the predicates,
@@ -2131,17 +2150,17 @@ func (f *NullableKind2EnumColumn) Desc() predicate.WideOrder {
 type IntListColumn string
 
 // Set assigns v to the column.
-func (f *IntListColumn) Set(v []int) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntListColumn) Set(v []int) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntListColumn) SetNillable(v *[]int) predicate.WideSet {
+func (f *IntListColumn) SetNillable(v *[]int) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // NullableMapColumn is a column of Go type map[string]string: its methods build the predicates,
@@ -2151,31 +2170,31 @@ type NullableMapColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableMapColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableMapColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableMapColumn) Set(v map[string]string) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableMapColumn) Set(v map[string]string) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableMapColumn) SetNillable(v *map[string]string) predicate.WideSet {
+func (f *NullableMapColumn) SetNillable(v *map[string]string) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableMapColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableMapColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableAddressColumn is a column of Go type types.Address: its methods build the predicates,
@@ -2185,31 +2204,31 @@ type NullableAddressColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableAddressColumn) IsNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableAddressColumn) NotNil() predicate.Wide {
-	return predicate.Wide{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableAddressColumn) Set(v types.Address) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableAddressColumn) Set(v types.Address) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableAddressColumn) SetNillable(v *types.Address) predicate.WideSet {
+func (f *NullableAddressColumn) SetNillable(v *types.Address) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableAddressColumn) Clear() predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableAddressColumn) Clear() predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // LabelColumn is a column of Go type types.Label: its methods build the predicates,
@@ -2291,25 +2310,25 @@ func (f *LabelColumn) ContainsFold(v string) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *LabelColumn) Set(v types.Label) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *LabelColumn) Set(v types.Label) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *LabelColumn) SetNillable(v *types.Label) predicate.WideSet {
+func (f *LabelColumn) SetNillable(v *types.Label) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *LabelColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *LabelColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *LabelColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *LabelColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // WeightColumn is a column of Go type types.Weight: its methods build the predicates,
@@ -2366,30 +2385,30 @@ func (f *WeightColumn) LTE(v types.Weight) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *WeightColumn) Set(v types.Weight) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *WeightColumn) Set(v types.Weight) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *WeightColumn) SetNillable(v *types.Weight) predicate.WideSet {
+func (f *WeightColumn) SetNillable(v *types.Weight) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *WeightColumn) Add(v types.Weight) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *WeightColumn) Add(v types.Weight) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *WeightColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *WeightColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *WeightColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *WeightColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // DecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
@@ -2471,25 +2490,27 @@ func (f *DecimalColumn) ContainsFold(v string) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *DecimalColumn) Set(v types.Decimal) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *DecimalColumn) Set(v types.Decimal) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *DecimalColumn) SetNillable(v *types.Decimal) predicate.WideSet {
+func (f *DecimalColumn) SetNillable(v *types.Decimal) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *DecimalColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *DecimalColumn) Asc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *DecimalColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *DecimalColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TierColumn is a column of Go type types.Tier: its methods build the predicates,
@@ -2526,25 +2547,25 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.Wide {
 }
 
 // Set assigns v to the column.
-func (f *TierColumn) Set(v types.Tier) predicate.WideSet {
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TierColumn) Set(v types.Tier) predicate.WideSetter {
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TierColumn) SetNillable(v *types.Tier) predicate.WideSet {
+func (f *TierColumn) SetNillable(v *types.Tier) predicate.WideSetter {
 	if v == nil {
-		return predicate.WideSet{}
+		return predicate.WideSetter{}
 	}
-	return predicate.WideSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TierColumn) Asc() predicate.WideOrder { return predicate.WideOrder{Col: string(*f)} }
+func (f *TierColumn) Asc() predicate.WideOrderTerm { return predicate.WideOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TierColumn) Desc() predicate.WideOrder {
-	return predicate.WideOrder{Col: string(*f), Desc: true}
+func (f *TierColumn) Desc() predicate.WideOrderTerm {
+	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Wide.

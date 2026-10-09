@@ -106,6 +106,18 @@ err = db.User.DeleteByID(ctx, conn, id)
   `EdgeMetas`): a field called `table` is the column `x.TableField`. On a
   real schema of 454 entities, 15,010 columns and 1,245 edges, none of these
   happens once.
+- What the methods of a column return has three types per entity, named for
+  what takes them: `predicate.User` is a condition (`Where`),
+  `predicate.UserSetter` an assignment or a change to an edge (`Set`),
+  `predicate.UserOrderTerm` an order term (`OrderBy`). `entity.UserOrder` is
+  another thing, the order a GraphQL request asks for; its `Term()` makes
+  the order term.
+- A column's own type is named for what it holds and what it offers, so that
+  an error message or an editor's hover says it: `StringColumn`,
+  `NullableStringColumn` (it has `IsNil` and `Clear`), `AutoTimeColumn` (an
+  update default: it has `Keep`), `IntKeyColumn` (the key of an edge: no
+  `GT`), `StringIDColumn`. Application code has no reason to write these
+  names.
 - A predicate, setter or order term of one entity does not compile in a query
   or mutation of another, nor does `WithPosts` on a query of an entity without
   that edge.
@@ -132,17 +144,20 @@ err = db.User.DeleteByID(ctx, conn, id)
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
   the user's and does not move `updated_at`.
-- `orm.One(q.Exec(ctx))` is for an update that must reach its row and has
-  no use for the row: `orm.ErrNotFound` when no row matched, without the
-  read `SaveOne` makes. An update with nothing to write (a patch that
-  changed nothing) runs no `UPDATE`: it counts the rows its conditions match
-  (one `SELECT COUNT`), so the row that is there is still found.
+- An update ends in one of three: `Exec(ctx)` updates every matching row
+  and returns how many; `SaveOne(ctx)` updates the one matching row and
+  returns it; `ExecOne(ctx)` is `SaveOne` for a caller with no use for the
+  row, without the read `SaveOne` makes. The last two return
+  `orm.ErrNotFound` when no row matches and `orm.ErrNotSingular`, with
+  nothing written, when several do. An update with nothing to write (a patch
+  that changed nothing) runs no `UPDATE`: it counts the rows its conditions
+  match (one `SELECT COUNT`), so the row that is there is still found.
 - A time is stored without its monotonic clock reading and to the
   microsecond, and the entity a create returns holds it that way: a guard
   such as `Where(x.UpdatedAt.EQ(u.UpdatedAt))` matches the row it was read
   from on every database.
 - The zero predicate, `predicate.User{}`, is no condition: what a function
-  returns when it has nothing to add (`orm.P(p).IsZero()` tells). An update
+  returns when it has nothing to add (`orm.IsZero(p)` tells). An update
   or a delete refuses it, so that a forgotten condition is not a statement
   over every row.
 - There is no `SaveX`, `GetX` or `ExecX`. In a test, `orm.Must(q.Save(ctx))`
@@ -279,7 +294,7 @@ query, args, err := db.User.Query(conn).Where(user.Age.GT(18)).Select().SQL(ctx)
 p := predicate.User(orm.Raw(func(s *sql.Selector) { ... }))
 q, err := orm.FieldPredicate(&entity.UserMeta, "age", orm.OpGT, 18)
 // A typed predicate as a selector function (for a privacy filter or interceptor).
-fn := orm.Compile(orm.P(user.Age.GT(18)))
+fn := orm.Compile(user.Age.GT(18))
 // Plain statements, on the transaction when given one.
 _, err = orm.ExecSQL(ctx, tx, "SELECT pg_advisory_xact_lock($1)", key)
 ```

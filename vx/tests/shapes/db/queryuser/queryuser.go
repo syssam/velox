@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of QueryUser, and ModelName the name of its entity.
+// Table is the table of QueryUser, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "query_users"
 	ModelName = "QueryUser"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.QueryUser {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.QueryUserSet {
-	return predicate.QueryUserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.QueryUserSetter {
+	return predicate.QueryUserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.QueryUserSet {
+func (f *IntColumn) SetNillable(v *int) predicate.QueryUserSetter {
 	if v == nil {
-		return predicate.QueryUserSet{}
+		return predicate.QueryUserSetter{}
 	}
-	return predicate.QueryUserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.QueryUserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.QueryUserSet {
-	return predicate.QueryUserSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.QueryUserSetter {
+	return predicate.QueryUserSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.QueryUserOrder { return predicate.QueryUserOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.QueryUserOrderTerm {
+	return predicate.QueryUserOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.QueryUserOrder {
-	return predicate.QueryUserOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.QueryUserOrderTerm {
+	return predicate.QueryUserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,27 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.QueryUser {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.QueryUserSet {
-	return predicate.QueryUserSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.QueryUserSetter {
+	return predicate.QueryUserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.QueryUserSet {
+func (f *StringColumn) SetNillable(v *string) predicate.QueryUserSetter {
 	if v == nil {
-		return predicate.QueryUserSet{}
+		return predicate.QueryUserSetter{}
 	}
-	return predicate.QueryUserSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.QueryUserSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.QueryUserOrder {
-	return predicate.QueryUserOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.QueryUserOrderTerm {
+	return predicate.QueryUserOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.QueryUserOrder {
-	return predicate.QueryUserOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.QueryUserOrderTerm {
+	return predicate.QueryUserOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of QueryUser.

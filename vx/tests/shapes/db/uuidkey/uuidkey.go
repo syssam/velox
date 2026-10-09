@@ -10,7 +10,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of UUIDKey, and ModelName the name of its entity.
+// Table is the table of UUIDKey, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "uuid_keys"
 	ModelName = "UUIDKey"
@@ -70,25 +71,27 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.UUIDKey {
 }
 
 // Set assigns v to the column.
-func (f *UUIDColumn) Set(v uuid.UUID) predicate.UUIDKeySet {
-	return predicate.UUIDKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UUIDColumn) Set(v uuid.UUID) predicate.UUIDKeySetter {
+	return predicate.UUIDKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.UUIDKeySet {
+func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.UUIDKeySetter {
 	if v == nil {
-		return predicate.UUIDKeySet{}
+		return predicate.UUIDKeySetter{}
 	}
-	return predicate.UUIDKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UUIDKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UUIDColumn) Asc() predicate.UUIDKeyOrder { return predicate.UUIDKeyOrder{Col: string(*f)} }
+func (f *UUIDColumn) Asc() predicate.UUIDKeyOrderTerm {
+	return predicate.UUIDKeyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *UUIDColumn) Desc() predicate.UUIDKeyOrder {
-	return predicate.UUIDKeyOrder{Col: string(*f), Desc: true}
+func (f *UUIDColumn) Desc() predicate.UUIDKeyOrderTerm {
+	return predicate.UUIDKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -170,25 +173,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.UUIDKey {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.UUIDKeySet {
-	return predicate.UUIDKeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.UUIDKeySetter {
+	return predicate.UUIDKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.UUIDKeySet {
+func (f *StringColumn) SetNillable(v *string) predicate.UUIDKeySetter {
 	if v == nil {
-		return predicate.UUIDKeySet{}
+		return predicate.UUIDKeySetter{}
 	}
-	return predicate.UUIDKeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.UUIDKeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.UUIDKeyOrder { return predicate.UUIDKeyOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.UUIDKeyOrderTerm {
+	return predicate.UUIDKeyOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.UUIDKeyOrder {
-	return predicate.UUIDKeyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.UUIDKeyOrderTerm {
+	return predicate.UUIDKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of UUIDKey.

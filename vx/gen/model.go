@@ -269,10 +269,10 @@ func (q *%[1]s) OrderBy(os ...%[6]s) *%[1]s {
 }
 
 // Limit caps the number of rows.
-func (q *%[1]s) Limit(n int) *%[1]s { q.c.Lim = n; return q }
+func (q *%[1]s) Limit(n int) *%[1]s { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
-func (q *%[1]s) Offset(n int) *%[1]s { q.c.Off = n; return q }
+func (q *%[1]s) Offset(n int) *%[1]s { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 func (q *%[1]s) Distinct() *%[1]s { q.c.Distinct = true; return q }
@@ -502,9 +502,14 @@ func (b *%[8]s) Fill(in any, skip ...string) *%[8]s {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 func (b *%[8]s) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+func (b *%[8]s) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several

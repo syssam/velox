@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Keywords, and ModelName the name of its entity.
+// Table is the table of Keywords, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "select"
 	ModelName = "Keywords"
@@ -69,30 +70,32 @@ func (f *IntColumn2) LTE(v int) predicate.Keywords {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn2) Set(v int) predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn2) Set(v int) predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn2) SetNillable(v *int) predicate.KeywordsSet {
+func (f *IntColumn2) SetNillable(v *int) predicate.KeywordsSetter {
 	if v == nil {
-		return predicate.KeywordsSet{}
+		return predicate.KeywordsSetter{}
 	}
-	return predicate.KeywordsSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn2) Add(v int) predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn2) Add(v int) predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn2) Asc() predicate.KeywordsOrder { return predicate.KeywordsOrder{Col: string(*f)} }
+func (f *IntColumn2) Asc() predicate.KeywordsOrderTerm {
+	return predicate.KeywordsOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn2) Desc() predicate.KeywordsOrder {
-	return predicate.KeywordsOrder{Col: string(*f), Desc: true}
+func (f *IntColumn2) Desc() predicate.KeywordsOrderTerm {
+	return predicate.KeywordsOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn2 is a column of Go type string: its methods build the predicates,
@@ -174,27 +177,27 @@ func (f *StringColumn2) ContainsFold(v string) predicate.Keywords {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn2) Set(v string) predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn2) Set(v string) predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn2) SetNillable(v *string) predicate.KeywordsSet {
+func (f *StringColumn2) SetNillable(v *string) predicate.KeywordsSetter {
 	if v == nil {
-		return predicate.KeywordsSet{}
+		return predicate.KeywordsSetter{}
 	}
-	return predicate.KeywordsSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn2) Asc() predicate.KeywordsOrder {
-	return predicate.KeywordsOrder{Col: string(*f)}
+func (f *StringColumn2) Asc() predicate.KeywordsOrderTerm {
+	return predicate.KeywordsOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn2) Desc() predicate.KeywordsOrder {
-	return predicate.KeywordsOrder{Col: string(*f), Desc: true}
+func (f *StringColumn2) Desc() predicate.KeywordsOrderTerm {
+	return predicate.KeywordsOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -277,41 +280,41 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.Keywords {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Keywords{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Keywords{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.KeywordsSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.KeywordsSetter {
 	if v == nil {
-		return predicate.KeywordsSet{}
+		return predicate.KeywordsSetter{}
 	}
-	return predicate.KeywordsSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.KeywordsOrder {
-	return predicate.KeywordsOrder{Col: string(*f)}
+func (f *NullableStringColumn) Asc() predicate.KeywordsOrderTerm {
+	return predicate.KeywordsOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.KeywordsOrder {
-	return predicate.KeywordsOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.KeywordsOrderTerm {
+	return predicate.KeywordsOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Keywords.
@@ -436,26 +439,26 @@ func (e *EdgeFields) HasWith(ps ...predicate.Field) predicate.Keywords {
 }
 
 // Add connects the Keywords to the Field rows with the given ids.
-func (e *EdgeFields) Add(ids ...int) predicate.KeywordsSet {
+func (e *EdgeFields) Add(ids ...int) predicate.KeywordsSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.KeywordsSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Keywords from the Field rows with the given ids.
-func (e *EdgeFields) Remove(ids ...int) predicate.KeywordsSet {
+func (e *EdgeFields) Remove(ids ...int) predicate.KeywordsSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.KeywordsSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.KeywordsSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Keywords from every "fields" neighbor.
-func (e *EdgeFields) Clear() predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeFields) Clear() predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "columns", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_columns"}}
@@ -482,13 +485,13 @@ func (e *EdgeColumns) HasWith(ps ...predicate.Field) predicate.Keywords {
 }
 
 // Set connects the Keywords to the Field with the given id.
-func (e *EdgeColumns) Set(id int) predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
+func (e *EdgeColumns) Set(id int) predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
 }
 
 // Clear disconnects the Keywords from every "columns" neighbor.
-func (e *EdgeColumns) Clear() predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeColumns) Clear() predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "loaded", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_loaded"}}
@@ -515,26 +518,26 @@ func (e *EdgeLoaded) HasWith(ps ...predicate.Field) predicate.Keywords {
 }
 
 // Add connects the Keywords to the Field rows with the given ids.
-func (e *EdgeLoaded) Add(ids ...int) predicate.KeywordsSet {
+func (e *EdgeLoaded) Add(ids ...int) predicate.KeywordsSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.KeywordsSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Keywords from the Field rows with the given ids.
-func (e *EdgeLoaded) Remove(ids ...int) predicate.KeywordsSet {
+func (e *EdgeLoaded) Remove(ids ...int) predicate.KeywordsSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.KeywordsSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.KeywordsSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Keywords from every "loaded" neighbor.
-func (e *EdgeLoaded) Clear() predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeLoaded) Clear() predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "with", Index: 3, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_with"}}
@@ -561,26 +564,26 @@ func (e *EdgeWith) HasWith(ps ...predicate.Field) predicate.Keywords {
 }
 
 // Add connects the Keywords to the Field rows with the given ids.
-func (e *EdgeWith) Add(ids ...int) predicate.KeywordsSet {
+func (e *EdgeWith) Add(ids ...int) predicate.KeywordsSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.KeywordsSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
+	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
 }
 
 // Remove disconnects the Keywords from the Field rows with the given ids.
-func (e *EdgeWith) Remove(ids ...int) predicate.KeywordsSet {
+func (e *EdgeWith) Remove(ids ...int) predicate.KeywordsSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.KeywordsSet{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
+	return predicate.KeywordsSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
 }
 
 // Clear disconnects the Keywords from every "with" neighbor.
-func (e *EdgeWith) Clear() predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeWith) Clear() predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 var meta4 = orm.EdgeMeta{Name: "all", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_all"}}
@@ -607,13 +610,13 @@ func (e *EdgeAll) HasWith(ps ...predicate.Field) predicate.Keywords {
 }
 
 // Set connects the Keywords to the Field with the given id.
-func (e *EdgeAll) Set(id int) predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeAdd, Edge: &meta4, IDs: []any{id}}
+func (e *EdgeAll) Set(id int) predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: []any{id}}
 }
 
 // Clear disconnects the Keywords from every "all" neighbor.
-func (e *EdgeAll) Clear() predicate.KeywordsSet {
-	return predicate.KeywordsSet{Kind: orm.EdgeClear, Edge: &meta4}
+func (e *EdgeAll) Clear() predicate.KeywordsSetter {
+	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
 // EdgeMetas returns the descriptions of the edges of Keywords, in order. The generated

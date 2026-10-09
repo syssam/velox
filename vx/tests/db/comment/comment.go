@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Comment, and ModelName the name of its entity.
+// Table is the table of Comment, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "comments"
 	ModelName = "Comment"
@@ -80,30 +81,32 @@ func (f *IntColumn) LTE(v int) predicate.Comment {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.CommentSet {
+func (f *IntColumn) SetNillable(v *int) predicate.CommentSetter {
 	if v == nil {
-		return predicate.CommentSet{}
+		return predicate.CommentSetter{}
 	}
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.CommentOrder { return predicate.CommentOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.CommentOrder {
-	return predicate.CommentOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -160,44 +163,46 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Comment {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.CommentSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.CommentSetter {
 	if v == nil {
-		return predicate.CommentSet{}
+		return predicate.CommentSetter{}
 	}
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.CommentOrder { return predicate.CommentOrder{Col: string(*f)} }
-
-// Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.CommentOrder {
-	return predicate.CommentOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Asc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f)}
 }
 
-// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// Desc orders by the column, greatest first.
+func (f *TimeColumn) Desc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f), Desc: true}
+}
+
+// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type TimeColumn2 string
+type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *TimeColumn2) EQ(v time.Time) predicate.Comment {
+func (f *AutoTimeColumn) EQ(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *TimeColumn2) NEQ(v time.Time) predicate.Comment {
+func (f *AutoTimeColumn) NEQ(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *TimeColumn2) In(vs ...time.Time) predicate.Comment {
+func (f *AutoTimeColumn) In(vs ...time.Time) predicate.Comment {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -206,7 +211,7 @@ func (f *TimeColumn2) In(vs ...time.Time) predicate.Comment {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.Comment {
+func (f *AutoTimeColumn) NotIn(vs ...time.Time) predicate.Comment {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -215,52 +220,54 @@ func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.Comment {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *TimeColumn2) GT(v time.Time) predicate.Comment {
+func (f *AutoTimeColumn) GT(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *TimeColumn2) GTE(v time.Time) predicate.Comment {
+func (f *AutoTimeColumn) GTE(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *TimeColumn2) LT(v time.Time) predicate.Comment {
+func (f *AutoTimeColumn) LT(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *TimeColumn2) LTE(v time.Time) predicate.Comment {
+func (f *AutoTimeColumn) LTE(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn2) Set(v time.Time) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoTimeColumn) Set(v time.Time) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn2) SetNillable(v *time.Time) predicate.CommentSet {
+func (f *AutoTimeColumn) SetNillable(v *time.Time) predicate.CommentSetter {
 	if v == nil {
-		return predicate.CommentSet{}
+		return predicate.CommentSetter{}
 	}
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *TimeColumn2) Keep() predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoTimeColumn) Keep() predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn2) Asc() predicate.CommentOrder { return predicate.CommentOrder{Col: string(*f)} }
+func (f *AutoTimeColumn) Asc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn2) Desc() predicate.CommentOrder {
-	return predicate.CommentOrder{Col: string(*f), Desc: true}
+func (f *AutoTimeColumn) Desc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -342,25 +349,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Comment {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.CommentSet {
+func (f *StringColumn) SetNillable(v *string) predicate.CommentSetter {
 	if v == nil {
-		return predicate.CommentSet{}
+		return predicate.CommentSetter{}
 	}
-	return predicate.CommentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.CommentOrder { return predicate.CommentOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.CommentOrder {
-	return predicate.CommentOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.CommentOrderTerm {
+	return predicate.CommentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Comment.
@@ -375,7 +384,7 @@ const (
 var (
 	ID        = IntColumn(ColumnID)
 	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = TimeColumn2(ColumnUpdatedAt)
+	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
 	Content   = StringColumn(ColumnContent)
 )
 
@@ -401,13 +410,13 @@ func (e *EdgePost) HasWith(ps ...predicate.Post) predicate.Comment {
 }
 
 // Set connects the Comment to the Post with the given id.
-func (e *EdgePost) Set(id int) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgePost) Set(id int) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Comment from every "post" neighbor.
-func (e *EdgePost) Clear() predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgePost) Clear() predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "author", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"user_comments"}, Required: true}
@@ -434,13 +443,13 @@ func (e *EdgeAuthor) HasWith(ps ...predicate.User) predicate.Comment {
 }
 
 // Set connects the Comment to the User with the given id.
-func (e *EdgeAuthor) Set(id int) predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
+func (e *EdgeAuthor) Set(id int) predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
 }
 
 // Clear disconnects the Comment from every "author" neighbor.
-func (e *EdgeAuthor) Clear() predicate.CommentSet {
-	return predicate.CommentSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeAuthor) Clear() predicate.CommentSetter {
+	return predicate.CommentSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Comment, in order. The generated

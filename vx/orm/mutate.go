@@ -701,7 +701,7 @@ func (m *MutCore) update(ctx context.Context, c *conn) (int, error) {
 		// Nothing to write (an empty patch, a Keep and no more): no
 		// UPDATE runs, and the count is of the rows the conditions match
 		// (a SELECT COUNT), as an UPDATE of them would have reported. Zero would say
-		// that no row matched, which orm.One turns into ErrNotFound.
+		// that no row matched, which ExecOne would report as not found.
 		matched, cerr := (&QueryCore{M: m.M, Preds: m.Preds}).count(ctx, c)
 		return matched, wrapErr(cerr)
 	}
@@ -725,6 +725,60 @@ func (m *MutCore) UpdateOne(ctx context.Context) (any, error) {
 	return m.M.entity(v, err)
 }
 
+// ExecOne updates the single matching row: ErrNotFound when no row matches,
+// ErrNotSingular (and nothing written) when several do. It is SaveOne
+// without the row: the row is read back only when a hook is there to be
+// handed it.
+func (m *MutCore) ExecOne(ctx context.Context) error {
+	c, err := connOf(m.Ex, m.M)
+	if err != nil {
+		return err
+	}
+	hooked := len(c.hooks())+len(m.M.Hooks) > 0
+	_, err = m.mutate(ctx, c, velox.OpUpdateOne, func(ctx context.Context, m *MutCore) (any, error) {
+		if hooked {
+			return m.updateOne(ctx, c)
+		}
+		return nil, m.execOne(ctx, c)
+	})
+	return err
+}
+
+// execOne is updateOne without the read of the row afterwards.
+func (m *MutCore) execOne(ctx context.Context, c *conn) error {
+	meta := m.M
+	if meta.id() == nil {
+		return fmt.Errorf("orm: %s has no single-column id", meta.Name)
+	}
+	preds := m.Preds
+	byID := false
+	for i := range preds {
+		byID = byID || (preds[i].Op == OpEQ && preds[i].Col == meta.id().Column)
+	}
+	if !byID {
+		// Not named by its id: look first, so that several rows are
+		// refused before any is written, and update the one found under
+		// the same conditions.
+		ids, err := (&QueryCore{M: meta, Preds: preds, Limit: 2}).ids(ctx, c)
+		if err != nil {
+			return err
+		}
+		switch len(ids) {
+		case 0:
+			return NotFound(meta.Name)
+		case 1:
+		default:
+			return fmt.Errorf("%w: %s", ErrNotSingular, meta.Name)
+		}
+		preds = append(slices.Clone(preds), P{Op: OpEQ, Col: meta.id().Column, Val: ids[0]})
+	}
+	n, err := (&MutCore{M: meta, Sets: m.Sets, Preds: preds}).update(ctx, c)
+	if err == nil && n == 0 {
+		return NotFound(meta.Name)
+	}
+	return err
+}
+
 // updateOne finds, updates and reads back the row. Its reads are the
 // mutation's own, under the mutation's conditions: no query policy or
 // interceptor applies to them.
@@ -744,7 +798,7 @@ func (m *MutCore) updateOne(ctx context.Context, c *conn) (any, error) {
 			return (&MutCore{M: meta, Sets: m.Sets, Preds: rest}).updateByID(ctx, c, p.Val)
 		}
 	}
-	probe := &QueryCore{M: meta, Preds: m.Preds, Lim: 2}
+	probe := &QueryCore{M: meta, Preds: m.Preds, Limit: 2}
 	ids, err := probe.ids(ctx, c)
 	if err != nil {
 		return nil, err

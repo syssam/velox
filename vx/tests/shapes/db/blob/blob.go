@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of Blob, and ModelName the name of its entity.
+// Table is the table of Blob, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "blobs"
 	ModelName = "Blob"
@@ -70,30 +71,30 @@ func (f *IntColumn) LTE(v int) predicate.Blob {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.BlobSet {
+func (f *IntColumn) SetNillable(v *int) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.BlobOrder { return predicate.BlobOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.BlobOrderTerm { return predicate.BlobOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.BlobOrder {
-	return predicate.BlobOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.BlobOrderTerm {
+	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
 // BytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -150,25 +151,25 @@ func (f *BytesColumn) LTE(v []byte) predicate.Blob {
 }
 
 // Set assigns v to the column.
-func (f *BytesColumn) Set(v []byte) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *BytesColumn) Set(v []byte) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *BytesColumn) SetNillable(v *[]byte) predicate.BlobSet {
+func (f *BytesColumn) SetNillable(v *[]byte) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *BytesColumn) Asc() predicate.BlobOrder { return predicate.BlobOrder{Col: string(*f)} }
+func (f *BytesColumn) Asc() predicate.BlobOrderTerm { return predicate.BlobOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *BytesColumn) Desc() predicate.BlobOrder {
-	return predicate.BlobOrder{Col: string(*f), Desc: true}
+func (f *BytesColumn) Desc() predicate.BlobOrderTerm {
+	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
@@ -226,39 +227,41 @@ func (f *NullableBytesColumn) LTE(v []byte) predicate.Blob {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableBytesColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableBytesColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableBytesColumn) Set(v []byte) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableBytesColumn) Set(v []byte) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableBytesColumn) SetNillable(v *[]byte) predicate.BlobSet {
+func (f *NullableBytesColumn) SetNillable(v *[]byte) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableBytesColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableBytesColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableBytesColumn) Asc() predicate.BlobOrder { return predicate.BlobOrder{Col: string(*f)} }
+func (f *NullableBytesColumn) Asc() predicate.BlobOrderTerm {
+	return predicate.BlobOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableBytesColumn) Desc() predicate.BlobOrder {
-	return predicate.BlobOrder{Col: string(*f), Desc: true}
+func (f *NullableBytesColumn) Desc() predicate.BlobOrderTerm {
+	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringColumn is a column of Go type string: its methods build the predicates,
@@ -341,39 +344,41 @@ func (f *NullableStringColumn) ContainsFold(v string) predicate.Blob {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringColumn) Set(v string) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringColumn) Set(v string) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringColumn) SetNillable(v *string) predicate.BlobSet {
+func (f *NullableStringColumn) SetNillable(v *string) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableStringColumn) Asc() predicate.BlobOrder { return predicate.BlobOrder{Col: string(*f)} }
+func (f *NullableStringColumn) Asc() predicate.BlobOrderTerm {
+	return predicate.BlobOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableStringColumn) Desc() predicate.BlobOrder {
-	return predicate.BlobOrder{Col: string(*f), Desc: true}
+func (f *NullableStringColumn) Desc() predicate.BlobOrderTerm {
+	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableAddressColumn is a column of Go type types.Address: its methods build the predicates,
@@ -383,31 +388,31 @@ type NullableAddressColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableAddressColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableAddressColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableAddressColumn) Set(v types.Address) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableAddressColumn) Set(v types.Address) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableAddressColumn) SetNillable(v *types.Address) predicate.BlobSet {
+func (f *NullableAddressColumn) SetNillable(v *types.Address) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableAddressColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableAddressColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableStringListColumn is a column of Go type []string: its methods build the predicates,
@@ -417,31 +422,31 @@ type NullableStringListColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringListColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringListColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringListColumn) Set(v []string) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringListColumn) Set(v []string) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringListColumn) SetNillable(v *[]string) predicate.BlobSet {
+func (f *NullableStringListColumn) SetNillable(v *[]string) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringListColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringListColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableMapColumn is a column of Go type map[string]int: its methods build the predicates,
@@ -451,31 +456,31 @@ type NullableMapColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableMapColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableMapColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableMapColumn) Set(v map[string]int) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableMapColumn) Set(v map[string]int) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableMapColumn) SetNillable(v *map[string]int) predicate.BlobSet {
+func (f *NullableMapColumn) SetNillable(v *map[string]int) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableMapColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableMapColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // AddressColumn is a column of Go type types.Address: its methods build the predicates,
@@ -484,17 +489,17 @@ func (f *NullableMapColumn) Clear() predicate.BlobSet {
 type AddressColumn string
 
 // Set assigns v to the column.
-func (f *AddressColumn) Set(v types.Address) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AddressColumn) Set(v types.Address) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *AddressColumn) SetNillable(v *types.Address) predicate.BlobSet {
+func (f *AddressColumn) SetNillable(v *types.Address) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // NullableIntListColumn is a column of Go type []int: its methods build the predicates,
@@ -504,31 +509,31 @@ type NullableIntListColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntListColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableIntListColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableIntListColumn) Set(v []int) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableIntListColumn) Set(v []int) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableIntListColumn) SetNillable(v *[]int) predicate.BlobSet {
+func (f *NullableIntListColumn) SetNillable(v *[]int) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableIntListColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableIntListColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableFloat64ListColumn is a column of Go type []float64: its methods build the predicates,
@@ -538,31 +543,31 @@ type NullableFloat64ListColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableFloat64ListColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableFloat64ListColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableFloat64ListColumn) Set(v []float64) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableFloat64ListColumn) Set(v []float64) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableFloat64ListColumn) SetNillable(v *[]float64) predicate.BlobSet {
+func (f *NullableFloat64ListColumn) SetNillable(v *[]float64) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableFloat64ListColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableFloat64ListColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableAnyColumn is a column of Go type any: its methods build the predicates,
@@ -572,31 +577,31 @@ type NullableAnyColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableAnyColumn) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableAnyColumn) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableAnyColumn) Set(v any) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableAnyColumn) Set(v any) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableAnyColumn) SetNillable(v *any) predicate.BlobSet {
+func (f *NullableAnyColumn) SetNillable(v *any) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableAnyColumn) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableAnyColumn) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableMapColumn2 is a column of Go type map[string]any: its methods build the predicates,
@@ -606,31 +611,31 @@ type NullableMapColumn2 string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableMapColumn2) IsNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableMapColumn2) NotNil() predicate.Blob {
-	return predicate.Blob{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableMapColumn2) Set(v map[string]any) predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableMapColumn2) Set(v map[string]any) predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableMapColumn2) SetNillable(v *map[string]any) predicate.BlobSet {
+func (f *NullableMapColumn2) SetNillable(v *map[string]any) predicate.BlobSetter {
 	if v == nil {
-		return predicate.BlobSet{}
+		return predicate.BlobSetter{}
 	}
-	return predicate.BlobSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableMapColumn2) Clear() predicate.BlobSet {
-	return predicate.BlobSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableMapColumn2) Clear() predicate.BlobSetter {
+	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // The column names of Blob.

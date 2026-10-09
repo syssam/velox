@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Person, and ModelName the name of its entity.
+// Table is the table of Person, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "persons"
 	ModelName = "Person"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Person {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.PersonSet {
+func (f *IntColumn) SetNillable(v *int) predicate.PersonSetter {
 	if v == nil {
-		return predicate.PersonSet{}
+		return predicate.PersonSetter{}
 	}
-	return predicate.PersonSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PersonSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.PersonOrder { return predicate.PersonOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.PersonOrderTerm {
+	return predicate.PersonOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.PersonOrder {
-	return predicate.PersonOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.PersonOrderTerm {
+	return predicate.PersonOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Person {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.PersonSet {
+func (f *StringColumn) SetNillable(v *string) predicate.PersonSetter {
 	if v == nil {
-		return predicate.PersonSet{}
+		return predicate.PersonSetter{}
 	}
-	return predicate.PersonSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PersonSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.PersonOrder { return predicate.PersonOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.PersonOrderTerm {
+	return predicate.PersonOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.PersonOrder {
-	return predicate.PersonOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.PersonOrderTerm {
+	return predicate.PersonOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Person.
@@ -229,13 +234,13 @@ func (e *EdgeSpouse) HasWith(ps ...predicate.Person) predicate.Person {
 }
 
 // Set connects the Person to the Person with the given id.
-func (e *EdgeSpouse) Set(id int) predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeSpouse) Set(id int) predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Person from every "spouse" neighbor.
-func (e *EdgeSpouse) Clear() predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeSpouse) Clear() predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "friends", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "person_friends", Columns: []string{"person_id", "friend_id"}}
@@ -262,26 +267,26 @@ func (e *EdgeFriends) HasWith(ps ...predicate.Person) predicate.Person {
 }
 
 // Add connects the Person to the Person rows with the given ids.
-func (e *EdgeFriends) Add(ids ...int) predicate.PersonSet {
+func (e *EdgeFriends) Add(ids ...int) predicate.PersonSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PersonSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Person from the Person rows with the given ids.
-func (e *EdgeFriends) Remove(ids ...int) predicate.PersonSet {
+func (e *EdgeFriends) Remove(ids ...int) predicate.PersonSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PersonSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.PersonSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Person from every "friends" neighbor.
-func (e *EdgeFriends) Clear() predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeFriends) Clear() predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "followers", Index: 2, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
@@ -308,26 +313,26 @@ func (e *EdgeFollowers) HasWith(ps ...predicate.Person) predicate.Person {
 }
 
 // Add connects the Person to the Person rows with the given ids.
-func (e *EdgeFollowers) Add(ids ...int) predicate.PersonSet {
+func (e *EdgeFollowers) Add(ids ...int) predicate.PersonSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PersonSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Person from the Person rows with the given ids.
-func (e *EdgeFollowers) Remove(ids ...int) predicate.PersonSet {
+func (e *EdgeFollowers) Remove(ids ...int) predicate.PersonSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PersonSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.PersonSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Person from every "followers" neighbor.
-func (e *EdgeFollowers) Clear() predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeFollowers) Clear() predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "following", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
@@ -354,26 +359,26 @@ func (e *EdgeFollowing) HasWith(ps ...predicate.Person) predicate.Person {
 }
 
 // Add connects the Person to the Person rows with the given ids.
-func (e *EdgeFollowing) Add(ids ...int) predicate.PersonSet {
+func (e *EdgeFollowing) Add(ids ...int) predicate.PersonSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PersonSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
+	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
 }
 
 // Remove disconnects the Person from the Person rows with the given ids.
-func (e *EdgeFollowing) Remove(ids ...int) predicate.PersonSet {
+func (e *EdgeFollowing) Remove(ids ...int) predicate.PersonSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PersonSet{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
+	return predicate.PersonSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
 }
 
 // Clear disconnects the Person from every "following" neighbor.
-func (e *EdgeFollowing) Clear() predicate.PersonSet {
-	return predicate.PersonSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeFollowing) Clear() predicate.PersonSetter {
+	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 // EdgeMetas returns the descriptions of the edges of Person, in order. The generated

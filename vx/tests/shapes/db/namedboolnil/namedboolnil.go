@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of NamedBoolNil, and ModelName the name of its entity.
+// Table is the table of NamedBoolNil, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "named_bool_nils"
 	ModelName = "NamedBoolNil"
@@ -70,32 +71,32 @@ func (f *IntColumn) LTE(v int) predicate.NamedBoolNil {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.NamedBoolNilSet {
-	return predicate.NamedBoolNilSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.NamedBoolNilSetter {
+	return predicate.NamedBoolNilSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.NamedBoolNilSet {
+func (f *IntColumn) SetNillable(v *int) predicate.NamedBoolNilSetter {
 	if v == nil {
-		return predicate.NamedBoolNilSet{}
+		return predicate.NamedBoolNilSetter{}
 	}
-	return predicate.NamedBoolNilSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBoolNilSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.NamedBoolNilSet {
-	return predicate.NamedBoolNilSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.NamedBoolNilSetter {
+	return predicate.NamedBoolNilSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.NamedBoolNilOrder {
-	return predicate.NamedBoolNilOrder{Col: string(*f)}
+func (f *IntColumn) Asc() predicate.NamedBoolNilOrderTerm {
+	return predicate.NamedBoolNilOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.NamedBoolNilOrder {
-	return predicate.NamedBoolNilOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.NamedBoolNilOrderTerm {
+	return predicate.NamedBoolNilOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -177,27 +178,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.NamedBoolNil {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.NamedBoolNilSet {
-	return predicate.NamedBoolNilSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.NamedBoolNilSetter {
+	return predicate.NamedBoolNilSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.NamedBoolNilSet {
+func (f *StringColumn) SetNillable(v *string) predicate.NamedBoolNilSetter {
 	if v == nil {
-		return predicate.NamedBoolNilSet{}
+		return predicate.NamedBoolNilSetter{}
 	}
-	return predicate.NamedBoolNilSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBoolNilSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.NamedBoolNilOrder {
-	return predicate.NamedBoolNilOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.NamedBoolNilOrderTerm {
+	return predicate.NamedBoolNilOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.NamedBoolNilOrder {
-	return predicate.NamedBoolNilOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.NamedBoolNilOrderTerm {
+	return predicate.NamedBoolNilOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableFlagColumn is a column of Go type types.Flag: its methods build the predicates,
@@ -217,41 +218,41 @@ func (f *NullableFlagColumn) NEQ(v types.Flag) predicate.NamedBoolNil {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableFlagColumn) IsNil() predicate.NamedBoolNil {
-	return predicate.NamedBoolNil{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.NamedBoolNil{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableFlagColumn) NotNil() predicate.NamedBoolNil {
-	return predicate.NamedBoolNil{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.NamedBoolNil{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableFlagColumn) Set(v types.Flag) predicate.NamedBoolNilSet {
-	return predicate.NamedBoolNilSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableFlagColumn) Set(v types.Flag) predicate.NamedBoolNilSetter {
+	return predicate.NamedBoolNilSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableFlagColumn) SetNillable(v *types.Flag) predicate.NamedBoolNilSet {
+func (f *NullableFlagColumn) SetNillable(v *types.Flag) predicate.NamedBoolNilSetter {
 	if v == nil {
-		return predicate.NamedBoolNilSet{}
+		return predicate.NamedBoolNilSetter{}
 	}
-	return predicate.NamedBoolNilSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.NamedBoolNilSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableFlagColumn) Clear() predicate.NamedBoolNilSet {
-	return predicate.NamedBoolNilSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableFlagColumn) Clear() predicate.NamedBoolNilSetter {
+	return predicate.NamedBoolNilSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableFlagColumn) Asc() predicate.NamedBoolNilOrder {
-	return predicate.NamedBoolNilOrder{Col: string(*f)}
+func (f *NullableFlagColumn) Asc() predicate.NamedBoolNilOrderTerm {
+	return predicate.NamedBoolNilOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableFlagColumn) Desc() predicate.NamedBoolNilOrder {
-	return predicate.NamedBoolNilOrder{Col: string(*f), Desc: true}
+func (f *NullableFlagColumn) Desc() predicate.NamedBoolNilOrderTerm {
+	return predicate.NamedBoolNilOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of NamedBoolNil.

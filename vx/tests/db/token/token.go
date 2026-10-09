@@ -11,7 +11,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/db/predicate"
 )
 
-// Table is the table of Token, and ModelName the name of its entity.
+// Table is the table of Token, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "tokens"
 	ModelName = "Token"
@@ -85,25 +86,25 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Token {
 }
 
 // Set assigns v to the column.
-func (f *UUIDColumn) Set(v uuid.UUID) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *UUIDColumn) Set(v uuid.UUID) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.TokenSet {
+func (f *UUIDColumn) SetNillable(v *uuid.UUID) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *UUIDColumn) Asc() predicate.TokenOrder { return predicate.TokenOrder{Col: string(*f)} }
+func (f *UUIDColumn) Asc() predicate.TokenOrderTerm { return predicate.TokenOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *UUIDColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *UUIDColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -185,25 +186,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Token {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.TokenSet {
+func (f *StringColumn) SetNillable(v *string) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.TokenOrder { return predicate.TokenOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TierColumn is a column of Go type types.Tier: its methods build the predicates,
@@ -240,25 +243,25 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.Token {
 }
 
 // Set assigns v to the column.
-func (f *TierColumn) Set(v types.Tier) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TierColumn) Set(v types.Tier) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TierColumn) SetNillable(v *types.Tier) predicate.TokenSet {
+func (f *TierColumn) SetNillable(v *types.Tier) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TierColumn) Asc() predicate.TokenOrder { return predicate.TokenOrder{Col: string(*f)} }
+func (f *TierColumn) Asc() predicate.TokenOrderTerm { return predicate.TokenOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TierColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *TierColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableTierColumn is a column of Go type types.Tier: its methods build the predicates,
@@ -296,39 +299,41 @@ func (f *NullableTierColumn) NotIn(vs ...types.Tier) predicate.Token {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableTierColumn) IsNil() predicate.Token {
-	return predicate.Token{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableTierColumn) NotNil() predicate.Token {
-	return predicate.Token{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableTierColumn) Set(v types.Tier) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableTierColumn) Set(v types.Tier) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableTierColumn) SetNillable(v *types.Tier) predicate.TokenSet {
+func (f *NullableTierColumn) SetNillable(v *types.Tier) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableTierColumn) Clear() predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableTierColumn) Clear() predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableTierColumn) Asc() predicate.TokenOrder { return predicate.TokenOrder{Col: string(*f)} }
+func (f *NullableTierColumn) Asc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *NullableTierColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *NullableTierColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // LabelColumn is a column of Go type types.Label: its methods build the predicates,
@@ -410,25 +415,27 @@ func (f *LabelColumn) ContainsFold(v string) predicate.Token {
 }
 
 // Set assigns v to the column.
-func (f *LabelColumn) Set(v types.Label) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *LabelColumn) Set(v types.Label) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *LabelColumn) SetNillable(v *types.Label) predicate.TokenSet {
+func (f *LabelColumn) SetNillable(v *types.Label) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *LabelColumn) Asc() predicate.TokenOrder { return predicate.TokenOrder{Col: string(*f)} }
+func (f *LabelColumn) Asc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *LabelColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *LabelColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableLabelColumn is a column of Go type types.Label: its methods build the predicates,
@@ -511,41 +518,41 @@ func (f *NullableLabelColumn) ContainsFold(v string) predicate.Token {
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableLabelColumn) IsNil() predicate.Token {
-	return predicate.Token{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableLabelColumn) NotNil() predicate.Token {
-	return predicate.Token{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableLabelColumn) Set(v types.Label) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableLabelColumn) Set(v types.Label) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableLabelColumn) SetNillable(v *types.Label) predicate.TokenSet {
+func (f *NullableLabelColumn) SetNillable(v *types.Label) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableLabelColumn) Clear() predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableLabelColumn) Clear() predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *NullableLabelColumn) Asc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f)}
+func (f *NullableLabelColumn) Asc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *NullableLabelColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *NullableLabelColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // WeightColumn is a column of Go type types.Weight: its methods build the predicates,
@@ -602,30 +609,32 @@ func (f *WeightColumn) LTE(v types.Weight) predicate.Token {
 }
 
 // Set assigns v to the column.
-func (f *WeightColumn) Set(v types.Weight) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *WeightColumn) Set(v types.Weight) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *WeightColumn) SetNillable(v *types.Weight) predicate.TokenSet {
+func (f *WeightColumn) SetNillable(v *types.Weight) predicate.TokenSetter {
 	if v == nil {
-		return predicate.TokenSet{}
+		return predicate.TokenSetter{}
 	}
-	return predicate.TokenSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *WeightColumn) Add(v types.Weight) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *WeightColumn) Add(v types.Weight) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *WeightColumn) Asc() predicate.TokenOrder { return predicate.TokenOrder{Col: string(*f)} }
+func (f *WeightColumn) Asc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *WeightColumn) Desc() predicate.TokenOrder {
-	return predicate.TokenOrder{Col: string(*f), Desc: true}
+func (f *WeightColumn) Desc() predicate.TokenOrderTerm {
+	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Token.
@@ -672,13 +681,13 @@ func (e *EdgeOwner) HasWith(ps ...predicate.User) predicate.Token {
 }
 
 // Set connects the Token to the User with the given id.
-func (e *EdgeOwner) Set(id int) predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeOwner) Set(id int) predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Token from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.TokenSet {
-	return predicate.TokenSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeOwner) Clear() predicate.TokenSetter {
+	return predicate.TokenSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 // EdgeMetas returns the descriptions of the edges of Token, in order. The generated

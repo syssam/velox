@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Meta, and ModelName the name of its entity.
+// Table is the table of Meta, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "meta"
 	ModelName = "Meta"
@@ -69,30 +70,30 @@ func (f *IntColumn) LTE(v int) predicate.Meta {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.MetaSet {
-	return predicate.MetaSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.MetaSetter {
+	return predicate.MetaSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.MetaSet {
+func (f *IntColumn) SetNillable(v *int) predicate.MetaSetter {
 	if v == nil {
-		return predicate.MetaSet{}
+		return predicate.MetaSetter{}
 	}
-	return predicate.MetaSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MetaSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.MetaSet {
-	return predicate.MetaSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.MetaSetter {
+	return predicate.MetaSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.MetaOrder { return predicate.MetaOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.MetaOrderTerm { return predicate.MetaOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.MetaOrder {
-	return predicate.MetaOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.MetaOrderTerm {
+	return predicate.MetaOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +175,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Meta {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.MetaSet {
-	return predicate.MetaSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.MetaSetter {
+	return predicate.MetaSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.MetaSet {
+func (f *StringColumn) SetNillable(v *string) predicate.MetaSetter {
 	if v == nil {
-		return predicate.MetaSet{}
+		return predicate.MetaSetter{}
 	}
-	return predicate.MetaSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.MetaSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.MetaOrder { return predicate.MetaOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.MetaOrderTerm { return predicate.MetaOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.MetaOrder {
-	return predicate.MetaOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.MetaOrderTerm {
+	return predicate.MetaOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Meta.

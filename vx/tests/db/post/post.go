@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Post, and ModelName the name of its entity.
+// Table is the table of Post, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "posts"
 	ModelName = "Post"
@@ -98,30 +99,30 @@ func (f *IntColumn) LTE(v int) predicate.Post {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.PostSet {
+func (f *IntColumn) SetNillable(v *int) predicate.PostSetter {
 	if v == nil {
-		return predicate.PostSet{}
+		return predicate.PostSetter{}
 	}
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.PostOrder { return predicate.PostOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.PostOrderTerm { return predicate.PostOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.PostOrder {
-	return predicate.PostOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -178,44 +179,44 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Post {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.PostSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.PostSetter {
 	if v == nil {
-		return predicate.PostSet{}
+		return predicate.PostSetter{}
 	}
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.PostOrder { return predicate.PostOrder{Col: string(*f)} }
+func (f *TimeColumn) Asc() predicate.PostOrderTerm { return predicate.PostOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.PostOrder {
-	return predicate.PostOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn2 is a column of Go type time.Time: its methods build the predicates,
+// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type TimeColumn2 string
+type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *TimeColumn2) EQ(v time.Time) predicate.Post {
+func (f *AutoTimeColumn) EQ(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *TimeColumn2) NEQ(v time.Time) predicate.Post {
+func (f *AutoTimeColumn) NEQ(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *TimeColumn2) In(vs ...time.Time) predicate.Post {
+func (f *AutoTimeColumn) In(vs ...time.Time) predicate.Post {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -224,7 +225,7 @@ func (f *TimeColumn2) In(vs ...time.Time) predicate.Post {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.Post {
+func (f *AutoTimeColumn) NotIn(vs ...time.Time) predicate.Post {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -233,52 +234,54 @@ func (f *TimeColumn2) NotIn(vs ...time.Time) predicate.Post {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *TimeColumn2) GT(v time.Time) predicate.Post {
+func (f *AutoTimeColumn) GT(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *TimeColumn2) GTE(v time.Time) predicate.Post {
+func (f *AutoTimeColumn) GTE(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *TimeColumn2) LT(v time.Time) predicate.Post {
+func (f *AutoTimeColumn) LT(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *TimeColumn2) LTE(v time.Time) predicate.Post {
+func (f *AutoTimeColumn) LTE(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn2) Set(v time.Time) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *AutoTimeColumn) Set(v time.Time) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn2) SetNillable(v *time.Time) predicate.PostSet {
+func (f *AutoTimeColumn) SetNillable(v *time.Time) predicate.PostSetter {
 	if v == nil {
-		return predicate.PostSet{}
+		return predicate.PostSetter{}
 	}
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Keep leaves the column as it is in an update: its update default (for an
 // updated_at, the time of the update) is not applied. For a change that is
 // not the user's, such as a recomputed total.
-func (f *TimeColumn2) Keep() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetKeep, Col: string(*f)}
+func (f *AutoTimeColumn) Keep() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetKeep, Col: string(*f)}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn2) Asc() predicate.PostOrder { return predicate.PostOrder{Col: string(*f)} }
+func (f *AutoTimeColumn) Asc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn2) Desc() predicate.PostOrder {
-	return predicate.PostOrder{Col: string(*f), Desc: true}
+func (f *AutoTimeColumn) Desc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -360,25 +363,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Post {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.PostSet {
+func (f *StringColumn) SetNillable(v *string) predicate.PostSetter {
 	if v == nil {
-		return predicate.PostSet{}
+		return predicate.PostSetter{}
 	}
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.PostOrder { return predicate.PostOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.PostOrderTerm { return predicate.PostOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.PostOrder {
-	return predicate.PostOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StatusEnumColumn is a column of Go type StatusEnum: its methods build the predicates,
@@ -415,25 +418,27 @@ func (f *StatusEnumColumn) NotIn(vs ...StatusEnum) predicate.Post {
 }
 
 // Set assigns v to the column.
-func (f *StatusEnumColumn) Set(v StatusEnum) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StatusEnumColumn) Set(v StatusEnum) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StatusEnumColumn) SetNillable(v *StatusEnum) predicate.PostSet {
+func (f *StatusEnumColumn) SetNillable(v *StatusEnum) predicate.PostSetter {
 	if v == nil {
-		return predicate.PostSet{}
+		return predicate.PostSetter{}
 	}
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StatusEnumColumn) Asc() predicate.PostOrder { return predicate.PostOrder{Col: string(*f)} }
+func (f *StatusEnumColumn) Asc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StatusEnumColumn) Desc() predicate.PostOrder {
-	return predicate.PostOrder{Col: string(*f), Desc: true}
+func (f *StatusEnumColumn) Desc() predicate.PostOrderTerm {
+	return predicate.PostOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableStringListColumn is a column of Go type []string: its methods build the predicates,
@@ -443,31 +448,31 @@ type NullableStringListColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableStringListColumn) IsNil() predicate.Post {
-	return predicate.Post{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Post{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableStringListColumn) NotNil() predicate.Post {
-	return predicate.Post{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Post{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableStringListColumn) Set(v []string) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableStringListColumn) Set(v []string) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableStringListColumn) SetNillable(v *[]string) predicate.PostSet {
+func (f *NullableStringListColumn) SetNillable(v *[]string) predicate.PostSetter {
 	if v == nil {
-		return predicate.PostSet{}
+		return predicate.PostSetter{}
 	}
-	return predicate.PostSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableStringListColumn) Clear() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableStringListColumn) Clear() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // The column names of Post.
@@ -486,7 +491,7 @@ const (
 var (
 	ID        = IntColumn(ColumnID)
 	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = TimeColumn2(ColumnUpdatedAt)
+	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
 	Title     = StringColumn(ColumnTitle)
 	Content   = StringColumn(ColumnContent)
 	Status    = StatusEnumColumn(ColumnStatus)
@@ -516,13 +521,13 @@ func (e *EdgeAuthor) HasWith(ps ...predicate.User) predicate.Post {
 }
 
 // Set connects the Post to the User with the given id.
-func (e *EdgeAuthor) Set(id int) predicate.PostSet {
-	return predicate.PostSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeAuthor) Set(id int) predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Post from every "author" neighbor.
-func (e *EdgeAuthor) Clear() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeAuthor) Clear() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "comments", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "comments", Columns: []string{"post_comments"}}
@@ -547,26 +552,26 @@ func (e *EdgeComments) HasWith(ps ...predicate.Comment) predicate.Post {
 }
 
 // Add connects the Post to the Comment rows with the given ids.
-func (e *EdgeComments) Add(ids ...int) predicate.PostSet {
+func (e *EdgeComments) Add(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Post from the Comment rows with the given ids.
-func (e *EdgeComments) Remove(ids ...int) predicate.PostSet {
+func (e *EdgeComments) Remove(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Post from every "comments" neighbor.
-func (e *EdgeComments) Clear() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeComments) Clear() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "tags", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "post_tags", Columns: []string{"post_id", "tag_id"}}
@@ -591,26 +596,26 @@ func (e *EdgeTags) HasWith(ps ...predicate.Tag) predicate.Post {
 }
 
 // Add connects the Post to the Tag rows with the given ids.
-func (e *EdgeTags) Add(ids ...int) predicate.PostSet {
+func (e *EdgeTags) Add(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Post from the Tag rows with the given ids.
-func (e *EdgeTags) Remove(ids ...int) predicate.PostSet {
+func (e *EdgeTags) Remove(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Post from every "tags" neighbor.
-func (e *EdgeTags) Clear() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeTags) Clear() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "likers", Index: 3, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "likes", Columns: []string{"user_id", "post_id"}}
@@ -635,26 +640,26 @@ func (e *EdgeLikers) HasWith(ps ...predicate.User) predicate.Post {
 }
 
 // Add connects the Post to the User rows with the given ids.
-func (e *EdgeLikers) Add(ids ...int) predicate.PostSet {
+func (e *EdgeLikers) Add(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
 }
 
 // Remove disconnects the Post from the User rows with the given ids.
-func (e *EdgeLikers) Remove(ids ...int) predicate.PostSet {
+func (e *EdgeLikers) Remove(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
 }
 
 // Clear disconnects the Post from every "likers" neighbor.
-func (e *EdgeLikers) Clear() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeLikers) Clear() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 var meta4 = orm.EdgeMeta{Name: "likes", Index: 4, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "likes", Columns: []string{"post_id"}}
@@ -679,26 +684,26 @@ func (e *EdgeLikes) HasWith(ps ...predicate.Like) predicate.Post {
 }
 
 // Add connects the Post to the Like rows with the given ids.
-func (e *EdgeLikes) Add(ids ...int) predicate.PostSet {
+func (e *EdgeLikes) Add(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
 }
 
 // Remove disconnects the Post from the Like rows with the given ids.
-func (e *EdgeLikes) Remove(ids ...int) predicate.PostSet {
+func (e *EdgeLikes) Remove(ids ...int) predicate.PostSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.PostSet{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
+	return predicate.PostSetter{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
 }
 
 // Clear disconnects the Post from every "likes" neighbor.
-func (e *EdgeLikes) Clear() predicate.PostSet {
-	return predicate.PostSet{Kind: orm.EdgeClear, Edge: &meta4}
+func (e *EdgeLikes) Clear() predicate.PostSetter {
+	return predicate.PostSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
 // EdgeMetas returns the descriptions of the edges of Post, in order. The generated

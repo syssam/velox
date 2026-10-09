@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Runtime, and ModelName the name of its entity.
+// Table is the table of Runtime, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "runtimes"
 	ModelName = "Runtime"
@@ -69,30 +70,32 @@ func (f *IntColumn) LTE(v int) predicate.Runtime {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.RuntimeSet {
-	return predicate.RuntimeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.RuntimeSetter {
+	return predicate.RuntimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.RuntimeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.RuntimeSetter {
 	if v == nil {
-		return predicate.RuntimeSet{}
+		return predicate.RuntimeSetter{}
 	}
-	return predicate.RuntimeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RuntimeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.RuntimeSet {
-	return predicate.RuntimeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.RuntimeSetter {
+	return predicate.RuntimeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.RuntimeOrder { return predicate.RuntimeOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.RuntimeOrderTerm {
+	return predicate.RuntimeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.RuntimeOrder {
-	return predicate.RuntimeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.RuntimeOrderTerm {
+	return predicate.RuntimeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -174,25 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Runtime {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.RuntimeSet {
-	return predicate.RuntimeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.RuntimeSetter {
+	return predicate.RuntimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.RuntimeSet {
+func (f *StringColumn) SetNillable(v *string) predicate.RuntimeSetter {
 	if v == nil {
-		return predicate.RuntimeSet{}
+		return predicate.RuntimeSetter{}
 	}
-	return predicate.RuntimeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.RuntimeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.RuntimeOrder { return predicate.RuntimeOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.RuntimeOrderTerm {
+	return predicate.RuntimeOrderTerm{Col: string(*f)}
+}
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.RuntimeOrder {
-	return predicate.RuntimeOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.RuntimeOrderTerm {
+	return predicate.RuntimeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Runtime.

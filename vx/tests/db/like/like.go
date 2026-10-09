@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Like, and ModelName the name of its entity.
+// Table is the table of Like, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "likes"
 	ModelName = "Like"
@@ -81,30 +82,30 @@ func (f *IntColumn) LTE(v int) predicate.Like {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.LikeSet {
+func (f *IntColumn) SetNillable(v *int) predicate.LikeSetter {
 	if v == nil {
-		return predicate.LikeSet{}
+		return predicate.LikeSetter{}
 	}
-	return predicate.LikeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.LikeOrder { return predicate.LikeOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.LikeOrderTerm { return predicate.LikeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.LikeOrder {
-	return predicate.LikeOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.LikeOrderTerm {
+	return predicate.LikeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -161,25 +162,25 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Like {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.LikeSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.LikeSetter {
 	if v == nil {
-		return predicate.LikeSet{}
+		return predicate.LikeSetter{}
 	}
-	return predicate.LikeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.LikeOrder { return predicate.LikeOrder{Col: string(*f)} }
+func (f *TimeColumn) Asc() predicate.LikeOrderTerm { return predicate.LikeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.LikeOrder {
-	return predicate.LikeOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.LikeOrderTerm {
+	return predicate.LikeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // IntKeyColumn is a column of Go type int: its methods build the predicates,
@@ -216,25 +217,25 @@ func (f *IntKeyColumn) NotIn(vs ...int) predicate.Like {
 }
 
 // Set assigns v to the column.
-func (f *IntKeyColumn) Set(v int) predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntKeyColumn) Set(v int) predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntKeyColumn) SetNillable(v *int) predicate.LikeSet {
+func (f *IntKeyColumn) SetNillable(v *int) predicate.LikeSetter {
 	if v == nil {
-		return predicate.LikeSet{}
+		return predicate.LikeSetter{}
 	}
-	return predicate.LikeSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntKeyColumn) Asc() predicate.LikeOrder { return predicate.LikeOrder{Col: string(*f)} }
+func (f *IntKeyColumn) Asc() predicate.LikeOrderTerm { return predicate.LikeOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntKeyColumn) Desc() predicate.LikeOrder {
-	return predicate.LikeOrder{Col: string(*f), Desc: true}
+func (f *IntKeyColumn) Desc() predicate.LikeOrderTerm {
+	return predicate.LikeOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Like.
@@ -275,13 +276,13 @@ func (e *EdgeUser) HasWith(ps ...predicate.User) predicate.Like {
 }
 
 // Set connects the Like to the User with the given id.
-func (e *EdgeUser) Set(id int) predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeUser) Set(id int) predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Like from every "user" neighbor.
-func (e *EdgeUser) Clear() predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeUser) Clear() predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "post", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"post_id"}, Immutable: true, Required: true}
@@ -306,13 +307,13 @@ func (e *EdgePost) HasWith(ps ...predicate.Post) predicate.Like {
 }
 
 // Set connects the Like to the Post with the given id.
-func (e *EdgePost) Set(id int) predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
+func (e *EdgePost) Set(id int) predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
 }
 
 // Clear disconnects the Like from every "post" neighbor.
-func (e *EdgePost) Clear() predicate.LikeSet {
-	return predicate.LikeSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgePost) Clear() predicate.LikeSetter {
+	return predicate.LikeSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Like, in order. The generated

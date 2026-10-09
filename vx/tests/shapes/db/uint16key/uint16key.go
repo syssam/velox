@@ -9,7 +9,8 @@ import (
 	predicate "github.com/syssam/velox/vx/tests/shapes/db/predicate"
 )
 
-// Table is the table of Uint16Key, and ModelName the name of its entity.
+// Table is the table of Uint16Key, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "uint16keys"
 	ModelName = "Uint16Key"
@@ -69,32 +70,32 @@ func (f *Uint16Column) LTE(v uint16) predicate.Uint16Key {
 }
 
 // Set assigns v to the column.
-func (f *Uint16Column) Set(v uint16) predicate.Uint16KeySet {
-	return predicate.Uint16KeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *Uint16Column) Set(v uint16) predicate.Uint16KeySetter {
+	return predicate.Uint16KeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *Uint16Column) SetNillable(v *uint16) predicate.Uint16KeySet {
+func (f *Uint16Column) SetNillable(v *uint16) predicate.Uint16KeySetter {
 	if v == nil {
-		return predicate.Uint16KeySet{}
+		return predicate.Uint16KeySetter{}
 	}
-	return predicate.Uint16KeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.Uint16KeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *Uint16Column) Add(v uint16) predicate.Uint16KeySet {
-	return predicate.Uint16KeySet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *Uint16Column) Add(v uint16) predicate.Uint16KeySetter {
+	return predicate.Uint16KeySetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *Uint16Column) Asc() predicate.Uint16KeyOrder {
-	return predicate.Uint16KeyOrder{Col: string(*f)}
+func (f *Uint16Column) Asc() predicate.Uint16KeyOrderTerm {
+	return predicate.Uint16KeyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *Uint16Column) Desc() predicate.Uint16KeyOrder {
-	return predicate.Uint16KeyOrder{Col: string(*f), Desc: true}
+func (f *Uint16Column) Desc() predicate.Uint16KeyOrderTerm {
+	return predicate.Uint16KeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StringColumn is a column of Go type string: its methods build the predicates,
@@ -176,27 +177,27 @@ func (f *StringColumn) ContainsFold(v string) predicate.Uint16Key {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.Uint16KeySet {
-	return predicate.Uint16KeySet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.Uint16KeySetter {
+	return predicate.Uint16KeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.Uint16KeySet {
+func (f *StringColumn) SetNillable(v *string) predicate.Uint16KeySetter {
 	if v == nil {
-		return predicate.Uint16KeySet{}
+		return predicate.Uint16KeySetter{}
 	}
-	return predicate.Uint16KeySet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.Uint16KeySetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.Uint16KeyOrder {
-	return predicate.Uint16KeyOrder{Col: string(*f)}
+func (f *StringColumn) Asc() predicate.Uint16KeyOrderTerm {
+	return predicate.Uint16KeyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.Uint16KeyOrder {
-	return predicate.Uint16KeyOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.Uint16KeyOrderTerm {
+	return predicate.Uint16KeyOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Uint16Key.

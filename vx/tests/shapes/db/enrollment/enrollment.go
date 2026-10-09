@@ -10,7 +10,8 @@ import (
 	time "time"
 )
 
-// Table is the table of Enrollment, and ModelName the name of its entity.
+// Table is the table of Enrollment, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "enrollments"
 	ModelName = "Enrollment"
@@ -84,32 +85,32 @@ func (f *IntColumn) LTE(v int) predicate.Enrollment {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.EnrollmentSet {
+func (f *IntColumn) SetNillable(v *int) predicate.EnrollmentSetter {
 	if v == nil {
-		return predicate.EnrollmentSet{}
+		return predicate.EnrollmentSetter{}
 	}
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f)}
+func (f *IntColumn) Asc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f), Desc: true}
+func (f *IntColumn) Desc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TimeColumn is a column of Go type time.Time: its methods build the predicates,
@@ -166,27 +167,27 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Enrollment {
 }
 
 // Set assigns v to the column.
-func (f *TimeColumn) Set(v time.Time) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TimeColumn) Set(v time.Time) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TimeColumn) SetNillable(v *time.Time) predicate.EnrollmentSet {
+func (f *TimeColumn) SetNillable(v *time.Time) predicate.EnrollmentSetter {
 	if v == nil {
-		return predicate.EnrollmentSet{}
+		return predicate.EnrollmentSetter{}
 	}
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TimeColumn) Asc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f)}
+func (f *TimeColumn) Asc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *TimeColumn) Desc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f), Desc: true}
+func (f *TimeColumn) Desc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // StatusEnumColumn is a column of Go type StatusEnum: its methods build the predicates,
@@ -223,27 +224,27 @@ func (f *StatusEnumColumn) NotIn(vs ...StatusEnum) predicate.Enrollment {
 }
 
 // Set assigns v to the column.
-func (f *StatusEnumColumn) Set(v StatusEnum) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StatusEnumColumn) Set(v StatusEnum) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StatusEnumColumn) SetNillable(v *StatusEnum) predicate.EnrollmentSet {
+func (f *StatusEnumColumn) SetNillable(v *StatusEnum) predicate.EnrollmentSetter {
 	if v == nil {
-		return predicate.EnrollmentSet{}
+		return predicate.EnrollmentSetter{}
 	}
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StatusEnumColumn) Asc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f)}
+func (f *StatusEnumColumn) Asc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *StatusEnumColumn) Desc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f), Desc: true}
+func (f *StatusEnumColumn) Desc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // IntKeyColumn is a column of Go type int: its methods build the predicates,
@@ -280,27 +281,27 @@ func (f *IntKeyColumn) NotIn(vs ...int) predicate.Enrollment {
 }
 
 // Set assigns v to the column.
-func (f *IntKeyColumn) Set(v int) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntKeyColumn) Set(v int) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntKeyColumn) SetNillable(v *int) predicate.EnrollmentSet {
+func (f *IntKeyColumn) SetNillable(v *int) predicate.EnrollmentSetter {
 	if v == nil {
-		return predicate.EnrollmentSet{}
+		return predicate.EnrollmentSetter{}
 	}
-	return predicate.EnrollmentSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntKeyColumn) Asc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f)}
+func (f *IntKeyColumn) Asc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *IntKeyColumn) Desc() predicate.EnrollmentOrder {
-	return predicate.EnrollmentOrder{Col: string(*f), Desc: true}
+func (f *IntKeyColumn) Desc() predicate.EnrollmentOrderTerm {
+	return predicate.EnrollmentOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Enrollment.
@@ -347,13 +348,13 @@ func (e *EdgeStudent) HasWith(ps ...predicate.Student) predicate.Enrollment {
 }
 
 // Set connects the Enrollment to the Student with the given id.
-func (e *EdgeStudent) Set(id int) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
+func (e *EdgeStudent) Set(id int) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
 }
 
 // Clear disconnects the Enrollment from every "student" neighbor.
-func (e *EdgeStudent) Clear() predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.EdgeClear, Edge: &meta0}
+func (e *EdgeStudent) Clear() predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
 var meta1 = orm.EdgeMeta{Name: "course", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "enrollments", Columns: []string{"course_id"}, Immutable: true, Required: true}
@@ -380,13 +381,13 @@ func (e *EdgeCourse) HasWith(ps ...predicate.Course) predicate.Enrollment {
 }
 
 // Set connects the Enrollment to the Course with the given id.
-func (e *EdgeCourse) Set(id int) predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
+func (e *EdgeCourse) Set(id int) predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
 }
 
 // Clear disconnects the Enrollment from every "course" neighbor.
-func (e *EdgeCourse) Clear() predicate.EnrollmentSet {
-	return predicate.EnrollmentSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeCourse) Clear() predicate.EnrollmentSetter {
+	return predicate.EnrollmentSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 // EdgeMetas returns the descriptions of the edges of Enrollment, in order. The generated

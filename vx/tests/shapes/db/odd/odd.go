@@ -10,7 +10,8 @@ import (
 	types "github.com/syssam/velox/vx/tests/shapes/types"
 )
 
-// Table is the table of Odd, and ModelName the name of its entity.
+// Table is the table of Odd, and ModelName the name of the entity: what the
+// Type method of a query or a mutation of it returns.
 const (
 	Table     = "odds"
 	ModelName = "Odd"
@@ -84,29 +85,31 @@ func (f *IntColumn) LTE(v int) predicate.Odd {
 }
 
 // Set assigns v to the column.
-func (f *IntColumn) Set(v int) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *IntColumn) Set(v int) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *IntColumn) SetNillable(v *int) predicate.OddSet {
+func (f *IntColumn) SetNillable(v *int) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Add increments the column by v.
-func (f *IntColumn) Add(v int) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetAdd, Col: string(*f), Val: v}
+func (f *IntColumn) Add(v int) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetAdd, Col: string(*f), Val: v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *IntColumn) Asc() predicate.OddOrder { return predicate.OddOrder{Col: string(*f)} }
+func (f *IntColumn) Asc() predicate.OddOrderTerm { return predicate.OddOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *IntColumn) Desc() predicate.OddOrder { return predicate.OddOrder{Col: string(*f), Desc: true} }
+func (f *IntColumn) Desc() predicate.OddOrderTerm {
+	return predicate.OddOrderTerm{Col: string(*f), Desc: true}
+}
 
 // StringColumn is a column of Go type string: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
@@ -187,25 +190,25 @@ func (f *StringColumn) ContainsFold(v string) predicate.Odd {
 }
 
 // Set assigns v to the column.
-func (f *StringColumn) Set(v string) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *StringColumn) Set(v string) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *StringColumn) SetNillable(v *string) predicate.OddSet {
+func (f *StringColumn) SetNillable(v *string) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *StringColumn) Asc() predicate.OddOrder { return predicate.OddOrder{Col: string(*f)} }
+func (f *StringColumn) Asc() predicate.OddOrderTerm { return predicate.OddOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *StringColumn) Desc() predicate.OddOrder {
-	return predicate.OddOrder{Col: string(*f), Desc: true}
+func (f *StringColumn) Desc() predicate.OddOrderTerm {
+	return predicate.OddOrderTerm{Col: string(*f), Desc: true}
 }
 
 // NullableMapColumn is a column of Go type map[string]types.Address: its methods build the predicates,
@@ -215,31 +218,31 @@ type NullableMapColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableMapColumn) IsNil() predicate.Odd {
-	return predicate.Odd{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableMapColumn) NotNil() predicate.Odd {
-	return predicate.Odd{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableMapColumn) Set(v map[string]types.Address) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableMapColumn) Set(v map[string]types.Address) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableMapColumn) SetNillable(v *map[string]types.Address) predicate.OddSet {
+func (f *NullableMapColumn) SetNillable(v *map[string]types.Address) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableMapColumn) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableMapColumn) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableAddressListColumn is a column of Go type []types.Address: its methods build the predicates,
@@ -249,31 +252,31 @@ type NullableAddressListColumn string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableAddressListColumn) IsNil() predicate.Odd {
-	return predicate.Odd{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableAddressListColumn) NotNil() predicate.Odd {
-	return predicate.Odd{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableAddressListColumn) Set(v []types.Address) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableAddressListColumn) Set(v []types.Address) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableAddressListColumn) SetNillable(v *[]types.Address) predicate.OddSet {
+func (f *NullableAddressListColumn) SetNillable(v *[]types.Address) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableAddressListColumn) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableAddressListColumn) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // NullableAddressListColumn2 is a column of Go type []*types.Address: its methods build the predicates,
@@ -283,31 +286,31 @@ type NullableAddressListColumn2 string
 
 // IsNil matches the rows whose column is NULL.
 func (f *NullableAddressListColumn2) IsNil() predicate.Odd {
-	return predicate.Odd{Op: orm.OpIsNull, Col: string(*f)}
+	return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)}
 }
 
 // NotNil matches the rows whose column is not NULL.
 func (f *NullableAddressListColumn2) NotNil() predicate.Odd {
-	return predicate.Odd{Op: orm.OpNotNull, Col: string(*f)}
+	return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
-func (f *NullableAddressListColumn2) Set(v []*types.Address) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *NullableAddressListColumn2) Set(v []*types.Address) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *NullableAddressListColumn2) SetNillable(v *[]*types.Address) predicate.OddSet {
+func (f *NullableAddressListColumn2) SetNillable(v *[]*types.Address) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Clear sets the column to NULL.
-func (f *NullableAddressListColumn2) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetNull, Col: string(*f)}
+func (f *NullableAddressListColumn2) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
 // RoleEnumColumn is a column of Go type RoleEnum: its methods build the predicates,
@@ -344,25 +347,25 @@ func (f *RoleEnumColumn) NotIn(vs ...RoleEnum) predicate.Odd {
 }
 
 // Set assigns v to the column.
-func (f *RoleEnumColumn) Set(v RoleEnum) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *RoleEnumColumn) Set(v RoleEnum) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *RoleEnumColumn) SetNillable(v *RoleEnum) predicate.OddSet {
+func (f *RoleEnumColumn) SetNillable(v *RoleEnum) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *RoleEnumColumn) Asc() predicate.OddOrder { return predicate.OddOrder{Col: string(*f)} }
+func (f *RoleEnumColumn) Asc() predicate.OddOrderTerm { return predicate.OddOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *RoleEnumColumn) Desc() predicate.OddOrder {
-	return predicate.OddOrder{Col: string(*f), Desc: true}
+func (f *RoleEnumColumn) Desc() predicate.OddOrderTerm {
+	return predicate.OddOrderTerm{Col: string(*f), Desc: true}
 }
 
 // TierColumn is a column of Go type types.Tier: its methods build the predicates,
@@ -399,25 +402,25 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.Odd {
 }
 
 // Set assigns v to the column.
-func (f *TierColumn) Set(v types.Tier) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: v}
+func (f *TierColumn) Set(v types.Tier) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *TierColumn) SetNillable(v *types.Tier) predicate.OddSet {
+func (f *TierColumn) SetNillable(v *types.Tier) predicate.OddSetter {
 	if v == nil {
-		return predicate.OddSet{}
+		return predicate.OddSetter{}
 	}
-	return predicate.OddSet{Kind: orm.SetValue, Col: string(*f), Val: *v}
+	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
 // Asc orders by the column, smallest first.
-func (f *TierColumn) Asc() predicate.OddOrder { return predicate.OddOrder{Col: string(*f)} }
+func (f *TierColumn) Asc() predicate.OddOrderTerm { return predicate.OddOrderTerm{Col: string(*f)} }
 
 // Desc orders by the column, greatest first.
-func (f *TierColumn) Desc() predicate.OddOrder {
-	return predicate.OddOrder{Col: string(*f), Desc: true}
+func (f *TierColumn) Desc() predicate.OddOrderTerm {
+	return predicate.OddOrderTerm{Col: string(*f), Desc: true}
 }
 
 // The column names of Odd.
@@ -468,25 +471,27 @@ func (e *EdgeID) HasWith(ps ...predicate.Field) predicate.Odd {
 }
 
 // Add connects the Odd to the Field rows with the given ids.
-func (e *EdgeID) Add(ids ...int) predicate.OddSet {
+func (e *EdgeID) Add(ids ...int) predicate.OddSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.OddSet{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
+	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
 }
 
 // Remove disconnects the Odd from the Field rows with the given ids.
-func (e *EdgeID) Remove(ids ...int) predicate.OddSet {
+func (e *EdgeID) Remove(ids ...int) predicate.OddSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.OddSet{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
+	return predicate.OddSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
 }
 
 // Clear disconnects the Odd from every "id" neighbor.
-func (e *EdgeID) Clear() predicate.OddSet { return predicate.OddSet{Kind: orm.EdgeClear, Edge: &meta0} }
+func (e *EdgeID) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta0}
+}
 
 var meta1 = orm.EdgeMeta{Name: "query", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_query"}}
 
@@ -510,26 +515,26 @@ func (e *EdgeQuery) HasWith(ps ...predicate.Field) predicate.Odd {
 }
 
 // Add connects the Odd to the Field rows with the given ids.
-func (e *EdgeQuery) Add(ids ...int) predicate.OddSet {
+func (e *EdgeQuery) Add(ids ...int) predicate.OddSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.OddSet{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
+	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
 }
 
 // Remove disconnects the Odd from the Field rows with the given ids.
-func (e *EdgeQuery) Remove(ids ...int) predicate.OddSet {
+func (e *EdgeQuery) Remove(ids ...int) predicate.OddSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.OddSet{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
+	return predicate.OddSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
 }
 
 // Clear disconnects the Odd from every "query" neighbor.
-func (e *EdgeQuery) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.EdgeClear, Edge: &meta1}
+func (e *EdgeQuery) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
 var meta2 = orm.EdgeMeta{Name: "edges", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_edges"}}
@@ -554,26 +559,26 @@ func (e *EdgeEdges) HasWith(ps ...predicate.Field) predicate.Odd {
 }
 
 // Add connects the Odd to the Field rows with the given ids.
-func (e *EdgeEdges) Add(ids ...int) predicate.OddSet {
+func (e *EdgeEdges) Add(ids ...int) predicate.OddSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.OddSet{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
+	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
 }
 
 // Remove disconnects the Odd from the Field rows with the given ids.
-func (e *EdgeEdges) Remove(ids ...int) predicate.OddSet {
+func (e *EdgeEdges) Remove(ids ...int) predicate.OddSetter {
 	vs := make([]any, len(ids))
 	for i, id := range ids {
 		vs[i] = id
 	}
-	return predicate.OddSet{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
+	return predicate.OddSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
 }
 
 // Clear disconnects the Odd from every "edges" neighbor.
-func (e *EdgeEdges) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.EdgeClear, Edge: &meta2}
+func (e *EdgeEdges) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
 var meta3 = orm.EdgeMeta{Name: "table", Index: 3, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_table"}}
@@ -598,13 +603,13 @@ func (e *EdgeTable) HasWith(ps ...predicate.Field) predicate.Odd {
 }
 
 // Set connects the Odd to the Field with the given id.
-func (e *EdgeTable) Set(id int) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
+func (e *EdgeTable) Set(id int) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
 }
 
 // Clear disconnects the Odd from every "table" neighbor.
-func (e *EdgeTable) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.EdgeClear, Edge: &meta3}
+func (e *EdgeTable) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
 var meta4 = orm.EdgeMeta{Name: "model", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_model"}}
@@ -629,13 +634,13 @@ func (e *EdgeModel) HasWith(ps ...predicate.Field) predicate.Odd {
 }
 
 // Set connects the Odd to the Field with the given id.
-func (e *EdgeModel) Set(id int) predicate.OddSet {
-	return predicate.OddSet{Kind: orm.EdgeAdd, Edge: &meta4, IDs: []any{id}}
+func (e *EdgeModel) Set(id int) predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: []any{id}}
 }
 
 // Clear disconnects the Odd from every "model" neighbor.
-func (e *EdgeModel) Clear() predicate.OddSet {
-	return predicate.OddSet{Kind: orm.EdgeClear, Edge: &meta4}
+func (e *EdgeModel) Clear() predicate.OddSetter {
+	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
 // EdgeMetas returns the descriptions of the edges of Odd, in order. The generated

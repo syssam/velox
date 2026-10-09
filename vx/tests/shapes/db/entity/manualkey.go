@@ -89,7 +89,7 @@ func (q *ManualKeyQuery) Where(ps ...predicate.ManualKey) *ManualKeyQuery {
 // OrderBy adds order terms.
 //
 //go:noinline
-func (q *ManualKeyQuery) OrderBy(os ...predicate.ManualKeyOrder) *ManualKeyQuery {
+func (q *ManualKeyQuery) OrderBy(os ...predicate.ManualKeyOrderTerm) *ManualKeyQuery {
 	for _, o := range os {
 		q.c.Orders = append(q.c.Orders, orm.O(o))
 	}
@@ -99,12 +99,12 @@ func (q *ManualKeyQuery) OrderBy(os ...predicate.ManualKeyOrder) *ManualKeyQuery
 // Limit caps the number of rows.
 //
 //go:noinline
-func (q *ManualKeyQuery) Limit(n int) *ManualKeyQuery { q.c.Lim = n; return q }
+func (q *ManualKeyQuery) Limit(n int) *ManualKeyQuery { q.c.Limit = n; return q }
 
 // Offset skips the first n rows.
 //
 //go:noinline
-func (q *ManualKeyQuery) Offset(n int) *ManualKeyQuery { q.c.Off = n; return q }
+func (q *ManualKeyQuery) Offset(n int) *ManualKeyQuery { q.c.Offset = n; return q }
 
 // Distinct removes duplicate rows.
 //
@@ -267,7 +267,7 @@ func NewManualKeyCreate(ex orm.Executor) *ManualKeyCreate {
 // Set adds field values and edges of the new row.
 //
 //go:noinline
-func (b *ManualKeyCreate) Set(ss ...predicate.ManualKeySet) *ManualKeyCreate {
+func (b *ManualKeyCreate) Set(ss ...predicate.ManualKeySetter) *ManualKeyCreate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -362,7 +362,7 @@ func NewManualKeyUpdate(ex orm.Executor) *ManualKeyUpdate {
 // Set adds assignments and edge changes.
 //
 //go:noinline
-func (b *ManualKeyUpdate) Set(ss ...predicate.ManualKeySet) *ManualKeyUpdate {
+func (b *ManualKeyUpdate) Set(ss ...predicate.ManualKeySetter) *ManualKeyUpdate {
 	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
 	for _, s := range ss {
 		b.c.Sets = append(b.c.Sets, orm.S(s))
@@ -391,11 +391,18 @@ func (b *ManualKeyUpdate) Fill(in any, skip ...string) *ManualKeyUpdate {
 	return b
 }
 
-// Exec updates the matching rows and returns how many it updated: 0 when
-// there is nothing to set.
+// Exec updates the matching rows and returns how many: with nothing to set,
+// how many match.
 //
 //go:noinline
 func (b *ManualKeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
+
+// ExecOne updates the single matching row: orm.ErrNotFound when no row
+// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// SaveOne for a caller that has no use for the row.
+//
+//go:noinline
+func (b *ManualKeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
 // SaveOne updates the single matching row and returns it: orm.ErrNotFound
 // when no row matches, orm.ErrNotSingular (and nothing written) when several
