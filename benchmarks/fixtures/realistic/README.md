@@ -407,3 +407,63 @@ For comparison, on the same machine in the same state earlier that day: with
 no builder in reach of an entity, cold 98-102 and services 108; before that
 work, cold 75-91 and services 172-211. On a quiet machine the same builds take
 about a third less CPU.
+
+## The GraphQL layer (2026-10-09, load 30-60)
+
+vx now writes velox's GraphQL schema and the Go an engine binds it to
+(`vxgen -graphql`). `REALISTIC_LIST=1` gives each mock service a list endpoint
+per entity it uses: Relay's four arguments, an order input, a where input, a
+connection back.
+
+| `compile-bench.sh vx cold app`, two runs | cold | the 312 services | median service |
+|---|---|---|---|
+| without the GraphQL layer (above) | 99.9 / 88.0 CPU-s | 138.6 / 138.2 | 0.42 s, 104-121 MB |
+| with it as first written, and the list endpoints | 103.7 / 116.4 | 217.2 / 214.3 | 0.70 s, 131-139 MB |
+| with it as generated now (the two changes below), and the list endpoints | 91.2 / 93.0 | 150.2 / 158.2 | 0.48-0.50 s, 124-125 MB |
+| without, in the same session as the last row | 83.5 | 134.7 | 0.42 s, 108 MB |
+
+What is left over the plain tree is the list endpoints themselves: more
+code per service, and the where inputs a service names (in this fixture one
+where input leads to most others through its `has...With` fields; the real
+schema offers those on 14 entities).
+
+### What the layer costs a package that never uses it
+
+Measured on the real 454-entity schema this fixture models (its where inputs
+have 66,495 fields; the fixture's have 21,074, so the table above understates
+them): a package that does nothing but return one entity, CPU time of its
+compile (`go build -toolexec`, the least of seven), and its export data.
+
+| | CPU | export data |
+|---|---|---|
+| no GraphQL layer | 0.22 s | 1,547 KB |
+| the layer as first written | 0.38 s | 3,336 KB |
+| the order-field constants in the entities' own packages | 0.31 s | 3,335 KB |
+| and the edge methods taking the where input as an interface (as generated now) | 0.23 s | 1,741 KB |
+
+Two separate costs, about 0.07 s each, found with a profile of the compiler
+(`-gcflags=<pkg>=-cpuprofile=`, twelve runs merged, `pprof -diff_base`):
+
+- **Exported names of an imported package.** For each package a file imports,
+  the compiler walks every object the package exports (`noder.readPackage`,
+  `pkgbits.PeekObj`), used or not. The fields a list can be ordered by were
+  12,079 constants in package `entity`, which nearly every package imports.
+  They are in the entity's own package now (`user.OrderFieldCreatedAt`),
+  where only the code that works with that entity pays for them.
+- **Types in the signatures of an entity's methods.** Reading a type reads
+  its methods, and their parameters' types in full (`noder.(*reader).param`).
+  `(*User).Posts(ctx, ..., where *filter.PostWhereInput)` puts every where
+  input in reach of every entity. Making them smaller does not help: without
+  struct tags (-15% export data) and with the fields entities have in common
+  declared once and embedded (-28%) the CPU time was the same within 0.01 s.
+  Taking the parameter as `interface{ P() predicate.Post }` does, and that
+  is what is generated. An engine that matches a method's parameter types
+  exactly then no longer binds the method: gqlc learned to accept an
+  interface the argument's type implements (graphql-go, branch
+  `gqlc-interface-params`).
+
+An earlier version of this section compared the front end's wall time
+(`-gcflags=-bench`, best of three) under a load that changed between runs:
+165 / 372 / 180 ms for none / on the entities / off the entities. The order
+was right and the sizes were not; off the entities is 0.30 s here, not the
+same as no layer. Compare CPU time, and repeat the baseline in every round.

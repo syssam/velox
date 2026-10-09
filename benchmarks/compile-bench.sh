@@ -17,7 +17,9 @@
 # Only the generated packages are timed; the Go packages they import (the
 # runtime, the SQL builder) are built first and are not part of the numbers.
 # Set GOGC=200 (or GOMAXPROCS, -p via BENCH_P) to see their effect; VX_FLAGS
-# is passed to vxgen. Output
+# is passed to vxgen. With REALISTIC_LIST=1 the services also have a GraphQL
+# list endpoint per entity; vx then needs VX_FLAGS="-graphql ./gqlschema_vx/velox.graphql".
+# Output
 # is a line per scenario: wall seconds, packages compiled, CPU seconds, and
 # the largest compile's memory.
 #
