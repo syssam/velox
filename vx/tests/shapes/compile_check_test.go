@@ -1,0 +1,155 @@
+package shapes
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// The promise of the per-entity predicate, setter, order and edge types is
+// that mixing entities does not compile. Each snippet below is written into
+// a scratch package of this module and built: the control must build, every
+// other must fail with a type error on the marked line.
+
+const compileHeader = `package main
+
+import (
+	"context"
+
+	"github.com/syssam/velox/vx/orm"
+	"github.com/syssam/velox/vx/tests/shapes/db/article"
+	"github.com/syssam/velox/vx/tests/shapes/db/author"
+	client "github.com/syssam/velox/vx/tests/shapes/db"
+	"github.com/syssam/velox/vx/tests/shapes/db/entity"
+	"github.com/syssam/velox/vx/tests/shapes/db/scalar"
+	"github.com/syssam/velox/vx/tests/shapes/db/topic"
+)
+
+var (
+	ctx = context.Background()
+	db  *orm.DB
+	_   = article.Table
+	_   = author.Table
+	_   = topic.Table
+	_   = scalar.Table
+	_   entity.Author
+)
+
+func main() {
+`
+
+type compileCase struct {
+	name string
+	body string
+	// want is a substring of the compiler's error; "" means it must build.
+	want string
+}
+
+var compileCases = []compileCase{
+	{name: "control", body: `
+	_, _ = client.Author.Query(db).
+		Where(author.Name.EQ("x"), author.Articles.HasWith(article.Title.EQ("y"), article.Topics.HasWith(topic.Name.EQ("z")))).
+		OrderBy(author.Age.Desc()).
+		WithArticles(client.Article.Query(db).Where(article.Words.GT(1)).OrderBy(article.Title.Asc()).WithTopics()).WithPassport().
+		All(ctx)
+	_, _ = client.Author.Create(db).Set(author.Name.Set("x"), author.Age.Set(1), author.Edited.Add(1, 2)).Save(ctx)
+	_, _ = client.Author.CreateBulk(db, client.Author.Create(db), client.Author.Create(db)).Save(ctx)
+	_, _ = client.Article.Update(db).Set(article.Words.Add(1), article.Author.Set(1), article.Topics.Remove(2)).Where(article.Author.Has()).Exec(ctx)
+	_, _ = client.Article.Delete(db).Where(article.Or(article.Title.EQ("x"), article.Not(article.Editor.Has()))).Exec(ctx)
+	_ = db.RunTx(ctx, func(tx *orm.Tx) error { _, err := client.Author.Query(tx).Count(ctx); return err })
+	_, _ = client.Scalar.Update(db).Set(scalar.StringNil.Clear(), scalar.BytesNil.Clear()).Where(scalar.StringNil.IsNil(), scalar.StringPtr.NotNil()).Exec(ctx)
+`},
+	// One way to give a value: Set with the column's own assignment. The
+	// per-field methods of velox and Ent are not generated.
+	{name: "a Set<Field> method", want: "SetAge undefined",
+		body: `	_, _ = client.Author.Create(db).SetAge(1).Save(ctx)`},
+	{name: "predicate of another entity in Where", want: "cannot use article.Title.EQ",
+		body: `	_, _ = client.Author.Query(db).Where(article.Title.EQ("x")).All(ctx)`},
+	{name: "predicate of another entity in And", want: "cannot use article.Title.EQ",
+		body: `	_, _ = client.Author.Query(db).Where(author.And(author.Name.EQ("x"), article.Title.EQ("x"))).All(ctx)`},
+	{name: "predicate of another entity in Update.Where", want: "cannot use article.Title.EQ",
+		body: `	_, _ = client.Author.Update(db).Set(author.Age.Set(1)).Where(article.Title.EQ("x")).Exec(ctx)`},
+	{name: "predicate of another entity in Delete.Where", want: "cannot use article.Title.EQ",
+		body: `	_, _ = client.Author.Delete(db).Where(article.Title.EQ("x")).Exec(ctx)`},
+	{name: "edge predicate of another entity in Where", want: "cannot use article.Topics.Has",
+		body: `	_, _ = client.Author.Query(db).Where(article.Topics.Has()).All(ctx)`},
+	{name: "predicate of the owner inside HasWith", want: "cannot use author.Name.EQ",
+		body: `	_, _ = client.Author.Query(db).Where(author.Articles.HasWith(author.Name.EQ("x"))).All(ctx)`},
+	{name: "setter of another entity in Create", want: "cannot use article.Title.Set",
+		body: `	_, _ = client.Author.Create(db).Set(article.Title.Set("x")).Save(ctx)`},
+	{name: "setter of another entity in Update", want: "cannot use article.Title.Set",
+		body: `	_, _ = client.Author.Update(db).Set(article.Title.Set("x")).Exec(ctx)`},
+	{name: "edge setter of another entity", want: "cannot use article.Topics.Add",
+		body: `	_, _ = client.Author.Update(db).Set(article.Topics.Add(1)).Exec(ctx)`},
+	{name: "eager load of an edge of another entity", want: "WithTopics undefined",
+		body: `	_, _ = client.Author.Query(db).WithTopics().All(ctx)`},
+	{name: "query of another entity as the description of a load", want: "cannot use client.Topic.Query(db)",
+		body: `	_, _ = client.Author.Query(db).WithArticles(client.Topic.Query(db)).All(ctx)`},
+	{name: "order of another entity", want: "cannot use article.Title.Asc",
+		body: `	_, _ = client.Author.Query(db).OrderBy(article.Title.Asc()).All(ctx)`},
+	{name: "builder of another entity in CreateBulk", want: "cannot use client.Article.Create(db)",
+		body: `	_, _ = client.Author.CreateBulk(db, client.Article.Create(db)).Save(ctx)`},
+	{name: "value of the wrong type in a predicate", want: "cannot use",
+		body: `	_, _ = client.Author.Query(db).Where(author.Age.EQ("x")).All(ctx)`},
+	{name: "value of the wrong type in a setter", want: "cannot use",
+		body: `	_, _ = client.Author.Create(db).Set(author.Name.Set(1)).Save(ctx)`},
+	{name: "id of the wrong type in an edge setter", want: "cannot use",
+		body: `	_, _ = client.Article.Create(db).Set(article.Author.Set("x")).Save(ctx)`},
+	{name: "Add on a to-one edge", want: "article.Author.Add undefined",
+		body: `	_, _ = client.Article.Update(db).Set(article.Author.Add(1)).Exec(ctx)`},
+	{name: "Set on a to-many edge", want: "author.Articles.Set undefined",
+		body: `	_, _ = client.Author.Update(db).Set(author.Articles.Set(1)).Exec(ctx)`},
+	{name: "Clear on a required field", want: "article.Title.Clear undefined",
+		body: `	_, _ = client.Article.Update(db).Set(article.Title.Clear()).Exec(ctx)`},
+	{name: "Add on a string field", want: "article.Title.Add undefined",
+		body: `	_, _ = client.Article.Update(db).Set(article.Title.Add("x")).Exec(ctx)`},
+	{name: "substring predicate on an int field", want: "article.Words.Contains undefined",
+		body: `	_, _ = client.Article.Query(db).Where(article.Words.Contains("1")).All(ctx)`},
+	// Clear and IsNil exist only where the column can hold NULL.
+	{name: "Clear on an Optional field whose column is NOT NULL", want: "scalar.StringOpt.Clear undefined",
+		body: `	_, _ = client.Scalar.Update(db).Set(scalar.StringOpt.Clear()).Exec(ctx)`},
+	{name: "Clear on a required Nillable field", want: "scalar.StringPtr.Clear undefined",
+		body: `	_, _ = client.Scalar.Update(db).Set(scalar.StringPtr.Clear()).Exec(ctx)`},
+	{name: "Clear on an Optional bytes field", want: "scalar.BytesOpt.Clear undefined",
+		body: `	_, _ = client.Scalar.Create(db).Set(scalar.BytesOpt.Clear()).Save(ctx)`},
+	{name: "IsNil on a column that is NOT NULL", want: "scalar.IntOpt.IsNil undefined",
+		body: `	_, _ = client.Scalar.Query(db).Where(scalar.IntOpt.IsNil()).All(ctx)`},
+	{name: "NotNil on a required column", want: "article.Title.NotNil undefined",
+		body: `	_, _ = client.Article.Query(db).Where(article.Title.NotNil()).All(ctx)`},
+	{name: "a raw database/sql handle as the executor", want: "does not implement orm.Executor",
+		body: `	_, _ = client.Author.Query(db.SQL()).All(ctx)`},
+	{name: "an untyped runtime predicate", want: "cannot use",
+		body: `	_, _ = client.Author.Query(db).Where(orm.P{Op: orm.OpEQ, Col: "name", Val: "x"}).All(ctx)`},
+}
+
+func TestCompileTimeChecks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a scratch package per case; skipped under -short")
+	}
+	root := vxRoot(t)
+	for _, c := range compileCases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			dir, importPath := scratch(t, "compile_"+c.name)
+			src := compileHeader + c.body + "\n}\n"
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0o644))
+			for _, tool := range []string{"build", "vet"} {
+				args := []string{tool}
+				if tool == "build" {
+					args = append(args, "-o", os.DevNull)
+				}
+				out, err := run(t, root, "go", append(args, importPath)...)
+				if c.want == "" {
+					require.NoError(t, err, "the control must %s:\n%s", tool, out)
+					continue
+				}
+				require.Error(t, err, "go %s accepted:\n%s", tool, c.body)
+				require.Contains(t, out, c.want, "go %s failed for another reason", tool)
+				require.Equal(t, 1, strings.Count(out, "main.go:"), "exactly one error, on the line under test:\n%s", out)
+			}
+		})
+	}
+}

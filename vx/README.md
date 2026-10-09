@@ -1,0 +1,369 @@
+# vx
+
+A code-generated ORM for large schemas. It reads velox schemas unchanged and
+generates far less code for the Go compiler to chew on: on a 450-entity schema
+the generated packages compile in about a tenth of the CPU time and a quarter
+of the memory velox's do. The measurements behind each decision are in
+`benchmarks/fixtures/realistic/README.md`.
+
+Status: experimental. Query, create, update, delete, bulk create,
+transactions, every edge kind with eager loading, defaults, validators, hooks,
+policies, interceptors, pagination and table migration work on SQLite and
+Postgres. Not there yet: GraphQL, upsert, MySQL, composite ids, external
+`ValueScanner`; the generator refuses the last two with an error that says so.
+
+## Generate
+
+```sh
+go run github.com/syssam/velox/vx/cmd/vxgen \
+    -schema ./schema -target ./db -package example.com/app/db
+```
+
+This writes, under `db`:
+
+| package | what is in it |
+|---|---|
+| `db` | where every query and mutation starts: `db.User.Query(conn)` |
+| `db/entity` | the entities and their typed builders |
+| `db/user`, ... | one small package per entity: its columns, enum values and edges |
+| `db/migrate` | the tables, and `migrate.Create(ctx, conn)` |
+| `db/predicate` | the types that keep one entity's conditions out of another's query |
+| `db/schemainit` | the schema's defaults, validators, hooks and policies; `db` links it |
+
+The root package is named after the directory, so the application picks the
+name (`db`, `store`, `data`) by picking the directory. A generation removes the
+generated files of an entity that left the schema.
+
+`db`, `db/entity` and `db/schemainit` have **one file per entity**
+(`db/entity/user.go`): the definition an editor jumps to is in a file of a
+thousand lines, not one of 285,000. The compiler takes the same time either
+way; the language server does not (the outline of the single 8 MB file: 3-5 s,
+43,000 symbols, 1.3 GB, and no semantic highlighting at that size; of one
+entity's file: 1.4-2 s, 0.3 GB). `db/internal/slots` is what lets `entity` and
+`schemainit` compile at the same time after a schema edit instead of one after
+the other.
+
+## Use
+
+The snippets of this section are `tests/example_test.go`, which `go test`
+runs: they compile and print what is shown.
+
+```go
+conn, err := orm.Open("postgres", dsn)
+err = migrate.Create(ctx, conn) // create or update the tables
+
+// Create, with setters.
+alice, err := db.User.Create(conn).
+    Set(user.Name.Set("alice"), user.Email.Set("alice@example.com"), user.Age.Set(30)).
+    Save(ctx)
+
+// Query: conditions, order, an eager-loaded edge with conditions of its own.
+users, err := db.User.Query(conn).
+    Where(user.Name.EQ("alice"), user.Age.GT(18)).
+    OrderBy(user.CreatedAt.Desc()).
+    WithPosts(db.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10)).
+    Limit(20).
+    All(ctx)
+
+// The neighbors of a row, as a query: conditions, order, a count.
+count, err := alice.QueryPosts(conn).Where(post.Title.EQ("first")).Count(ctx)
+
+// Update one row and get it back; update many and get the count.
+alice, err = db.User.UpdateByID(conn, alice.ID).Set(user.Age.Add(1)).SaveOne(ctx)
+n, err := db.Post.Update(conn).Set(post.ViewCount.Add(1)).Where(post.Author.HasWith(user.ID.EQ(alice.ID))).Exec(ctx)
+
+// By id; a missing row is orm.ErrNotFound.
+u, err := db.User.Get(ctx, conn, id)
+err = db.User.DeleteByID(ctx, conn, id)
+```
+
+- **What a query or mutation runs on is given where it starts and travels
+  with the builder**: a database handle or a transaction. A function can build
+  a query and another run it. A builder made from `nil` or from a nil
+  `*orm.Tx` returns `orm.ErrNoExecutor` when run; the zero value of a builder
+  returns `orm.ErrNoEntity`.
+- **An entity holds no connection.** `u.QueryPosts(tx)` queries its
+  neighbors on what it is given, `WithPosts(...)` loads them with the query
+  into `u.Edges.Posts`.
+- `db.User` is a package-level variable, not a field of a client struct. A
+  struct with a field per entity makes every package that names it read every
+  builder of every entity: when it was tried on the 450-entity fixture, the
+  312 services that named one took about two and a half times the CPU (556
+  CPU-s against 210-234; `benchmarks/fixtures/realistic/README.md`).
+- **A column is named like the field of the struct**: `u.Name` is the value,
+  `user.Name` the column (`.EQ`, `.Set`, `.Asc`), and `user.ColumnName` the
+  string `"name"` for the places that take a name. An edge is `user.Posts`
+  (`.Has()`, `.HasWith(...)`, `.Add(ids...)`, `.Remove(ids...)`, `.Clear()`;
+  `.Set(id)` on a to-one edge). The type of an enum field is the field's name
+  with `Enum`, its values as in velox: `post.StatusEnum`, `post.StatusDraft`.
+  The columns get their names first, so a name that would be taken twice
+  goes to the column and the other takes a suffix: an edge called like a
+  column is `user.OwnerEdge`, an enum value `user.RoleAdminValue`. Six names
+  belong to the package itself (`And`, `Or`, `Not`, `Table`, `ModelName`,
+  `EdgeMetas`): a field called `table` is the column `x.TableField`. On a
+  real schema of 454 entities, 15,010 columns and 1,245 edges, none of these
+  happens once.
+- A predicate, setter or order term of one entity does not compile in a query
+  or mutation of another, nor does `WithPosts` on a query of an entity without
+  that edge.
+- **Eager loading is `With<Edge>`**: one more query per edge, whatever the
+  number of rows. A query of the target describes the load: its conditions,
+  order, nested `With<Edge>` and its limit, which applies per parent. That
+  query is not run, so it needs no handle (`db.Post.Query(nil)`).
+- **`Exec` on an update or delete touches every matching row and returns the
+  count; it is not an error when that is zero.** `SaveOne` is for exactly one
+  row (`orm.ErrNotFound`, `orm.ErrNotSingular`); `DeleteByID` reports a
+  missing row. There is no `Update().Save`: in velox and Ent that spelling is
+  the bulk update.
+- `SaveOne` with further conditions is the optimistic lock:
+  `UpdateByID(tx, id).Where(x.Version.EQ(v))` is one `UPDATE ... WHERE
+  id = ? AND version = ?`, and a row that no longer matches is `ErrNotFound`,
+  not written.
+- `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
+- `And()` of nothing holds for every row, `Or()` and `Not()` of nothing for
+  none: a condition built from a list of filters means the same when the
+  list is empty, and a delete of "any of these" over no filter removes
+  nothing.
+- A create that leaves out a required field, a required edge or an id the
+  caller must supply is an `*orm.ValidationError` naming it, before any SQL.
+  What the database refuses is an `*orm.ConstraintError` that says which kind
+  (`errors.Is(err, orm.ErrUnique)`, `ErrForeignKey`, `ErrCheck`) and what the
+  database named as violated. `orm.IsRetryable(err)` is true for a
+  serialization failure or a deadlock: the errors for which the transaction,
+  as a whole, may be run again.
+- The zero predicate (`var p predicate.User`) is no condition in a query,
+  which is what a filter built only under some circumstance wants. In an
+  update or a delete it is an error: a forgotten assignment must not become a
+  statement over every row. To change every row, leave `Where` out.
+- Terminals of a query: `All`, `First`, `Only`, `Count`, `Exists`, `IDs`,
+  `Iter`, `Paginate`, and `Select(...)` for columns and aggregates.
+
+### Transactions
+
+```go
+err := conn.RunTx(ctx, func(tx *orm.Tx) error {
+    u, err := db.User.Create(tx).
+        Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40)).
+        Save(ctx)
+    if err != nil {
+        return err
+    }
+    locked, err := db.User.Query(tx).Where(user.ID.EQ(u.ID)).ForUpdate().Only(ctx)
+    if err != nil {
+        return err
+    }
+    _, err = db.User.UpdateByID(tx, locked.ID).Set(user.Age.Set(locked.Age + 1)).SaveOne(ctx)
+    return err
+})
+```
+
+`RunTx` commits when the function returns nil and rolls back when it returns
+an error or panics. A mutation of several statements (a row and its join
+rows) is wrapped in a savepoint inside a transaction: when it fails, all of
+it is undone and the transaction goes on, so an error may be handled and the
+rest committed. A query built from
+`conn` inside the function runs outside the transaction, as a `*sql.DB` method
+would. `RunTxOptions` and `BeginTx` take `*sql.TxOptions` (isolation level,
+read-only); with `Begin`, `defer tx.Rollback()` is safe after `Commit`.
+
+### Writing from a struct: `Fill`
+
+A create or an update can take its values from a struct whose fields are named
+like the entity's: the request type of an endpoint, a GraphQL input, a row of
+an import. Each field says by its type whether it was given:
+
+```go
+type createUser struct {
+    Name     string
+    Email    string
+    Age      *int            // nil: not given
+    Nickname orm.Opt[string] // absent, null, or a value
+    Source   string          `orm:"-"` // not for the row
+}
+type updateUser struct {
+    Name     orm.Opt[string] `json:"name"`
+    Age      orm.Opt[int]    `json:"age"`
+    Nickname orm.Opt[string] `json:"nickname"`
+}
+
+u, err := db.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: orm.Some("caz")}).Save(ctx)
+
+// A PATCH body: a missing key leaves the column alone, null clears it.
+var patch updateUser
+err = json.Unmarshal([]byte(`{"age": 31, "nickname": null}`), &patch)
+u, err = db.User.UpdateByID(conn, u.ID).Fill(patch).SaveOne(ctx)
+```
+
+- A nil pointer, slice or map gives nothing. Anything else is a value and is
+  written, zero included.
+- An optional gives nothing when absent. Present and null, it sets a column
+  that can be NULL to NULL on an update, and gives nothing otherwise. An
+  optional is any type with a method `ValueOK() (T, bool)`: `orm.Opt[T]`
+  (`orm.Some(v)`, `orm.Null[T]()`; it decodes from JSON), or the one an API
+  layer already has.
+- A bool field `Clear<Name>` that is true sets the column to NULL.
+- **Every field of the struct must name a field of the entity.** A field that
+  silently went nowhere would be a write that silently did not happen; this
+  way it is an error the first time the code runs. A field that is not meant
+  for the row says so in the struct (`orm:"-"`), or is listed after the struct
+  by a caller who does not own it: `Fill(in, "Source")`. `orm:"column_name"`
+  gives a field named otherwise its column. A value that does not fit the
+  field's type, and a field an update may not write, are errors too.
+- A later `Set` wins, so a field with a rule of its own (trimmed, normalized,
+  "not zero") is skipped in `Fill` and set after it.
+- Validators, defaults, hooks and the policy see these writes as they see
+  setters.
+
+**An entity is not an input**, and `Fill` refuses one. Its fields cannot say
+"not given": `Active: false` is both "store false" and "I did not set it,
+store the schema's default". Tried on a real schema, a row created from an
+entity stored `is_active = true` where `false` was asked for.
+
+Measured on a create of four fields: 76 allocations with setters, 84 with a
+struct of pointers, 86 with a struct of optionals; the time is the statement's
+in all three. `Fill` adds two one-line methods per entity to the generated
+code and nothing measurable to its compile.
+
+### Large results, pages, aggregates, raw SQL
+
+```go
+// One row at a time, without holding the result. Every loop runs the query.
+for u, err := range db.User.Query(conn).Where(user.Age.GTE(22)).OrderBy(user.Age.Asc()).Iter(ctx) {
+    ...
+}
+
+// A page at a time, with a cursor per row: keyset pagination.
+page, err := db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, orm.PageArgs{First: &size}) // page.EndCursor is the After of the next page
+
+// Columns and aggregates instead of entities; a column that does not exist is an error.
+total, err := db.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+var rows []struct{ Role string `json:"role"`; N int `json:"n"` }
+err = db.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)
+
+// The statement a query would run, and its arguments, without running it.
+query, args, err := db.User.Query(conn).Where(user.Age.GT(18)).Select().SQL(ctx)
+
+// A condition written against the SQL builder, and one that arrives at run time.
+p := predicate.User(orm.Raw(func(s *sql.Selector) { ... }))
+q, err := orm.FieldPredicate(&entity.UserMeta, "age", orm.OpGT, 18)
+// A typed predicate as a selector function (for a privacy filter or interceptor).
+fn := orm.Compile(orm.P(user.Age.GT(18)))
+// Plain statements, on the transaction when given one.
+_, err = orm.ExecSQL(ctx, tx, "SELECT pg_advisory_xact_lock($1)", key)
+```
+
+### One way to say each thing
+
+A column is one value that does everything: `user.Name.EQ("a")` is a
+condition, `user.Name.Set("a")` a setter, `user.Name.Asc()` an order.
+Its methods are generated once per column *type* of an entity (about ten per
+entity), not once per column and builder. There is no `SetName(v)`: the
+per-field methods of velox and Ent were an option here once, and one spelling
+was preferred to two. They also cost: with `Set<Field>` alone the `entity`
+package of the 450-entity fixture went from 18,958 functions, 14-18 CPU-s and
+1.6 GB to 46,348 functions, 26-31 CPU-s and 2.6 GB, on every schema change.
+
+An edge is queried from the row, `u.QueryPosts(tx)`, and only there. That
+spelling has a price too, and it was chosen knowing it. A Go package compiles
+against everything the types it names expose, method results included:
+`(*User).QueryPosts` returns a `*PostQuery`, `User.Edges` names every entity
+`User` is connected to, each with such methods, so a package that names one
+entity reads the query builder of every entity. With the neighbors queried
+from the root package instead (`db.User.QueryPosts(tx, u)`), the 312 services
+of the fixture compiled in 106-116 CPU-s; as generated, 141-147. What is paid
+is in proportion to the methods of a query type, so that type is kept small.
+
+## Hooks, policies, interceptors
+
+The schema's `Hooks()` and `Policy()` (and its mixins') are used as they are.
+A hook receives `*orm.Mutation`, one type for every entity, through the
+`velox.Mutation` interface: `m.Field("workspace_id")`,
+`m.SetField("workspace_id", id)`, `m.OldField(ctx, "status")`.
+
+**A hook that type-asserts the mutation to an interface of typed setters
+(`SetWorkspaceID(int64)`) never matches and silently does nothing.** Rewrite
+it with `Field`/`SetField`.
+
+`conn.Use(hooks...)` and `conn.Intercept(interceptors...)` register on the
+handle, at start-up. A policy covers every read (terminals, eager loads,
+traversals, edge predicates) and every create, update and delete of its own
+entity; an interceptor covers reads only, so rules about which rows a caller
+may touch belong in the policy. As in Ent, changing an edge writes the other
+side's key or a join row without asking the other entity's policy or hooks:
+`user.Pets.Add(id)` rewrites `pets.owner_id` under User's policy only.
+
+The root package links `schemainit`, so a program that starts its queries at
+`db.<Entity>` has all of this. One that uses `db/entity` alone must import
+`db/schemainit` itself; until it does, an entity whose schema has defaults,
+validators, hooks or a policy returns an error from every query and mutation.
+
+## Go conventions
+
+The API was checked against the Go team's guidance (Code Review Comments,
+Effective Go, the blog posts on package names, contexts in structs, when to
+use generics and module compatibility, the `iter` and `database/sql`
+documentation), and the generated code passes `revive`'s `exported`,
+`package-comments`, `receiver-naming`, `error-strings`, `context-as-argument`
+and `var-naming` rules, the last one for every name the generator chooses: an
+entity the schema calls `Http` stays `Http`. Where it departs, on purpose:
+
+- `All(ctx)` returns a slice, as in Ent and velox; the iterator, which Go's
+  convention for collections would call `All`, is `Iter`.
+- A column descriptor is a named string type whose methods have pointer
+  receivers: a method with a value receiver is compiled twice (measured: 1.7
+  times the compile of the descriptor packages).
+- Conditions are methods of the column (`user.Name.EQ("a")`), although
+  functions (`orm.EQ(user.Name, "a")`) would compile ten times faster and
+  keep the same checks: the descriptor packages are about 40 CPU-s of a cold
+  build (4 as functions) and none of an incremental one. The methods read
+  better, are found by typing a period, and give shorter errors. Ten designs
+  are compared in `benchmarks/fixtures/realistic/README.md`.
+- The package of an entity is named after it (`user`, `order`, `time`), which
+  takes a name the caller may want for a variable or already has for a
+  standard package. Import it under another name where that happens. One
+  package per entity is what keeps a change to one entity from recompiling
+  the others.
+- `entity.<Entity>Meta`, the `New<Entity>...` constructors, a per-entity
+  package's `EdgeMetas` and the fields of `orm.QueryCore`, `orm.MutCore` and
+  `orm.Meta` are exported for the generated packages, which are separate
+  packages; they are not for application code.
+- `Fill` takes `any` and uses reflection, as `encoding/json` does: its inputs
+  are types this module has never seen.
+- The schema's hooks and policies reach the entities through package-level
+  variables filled by an `init`, linked by a blank import: the
+  `database/sql` driver pattern. They are not changed after start-up.
+- `orm.Opt` has value and pointer receivers, as `time.Time` has: decoding
+  needs the pointer.
+
+## Building
+
+On the 450-entity fixture, with four compiles at a time on a busy machine
+(`benchmarks/compile-bench.sh vx cold app`): the generated packages compile in
+88-100 CPU-s, the largest (`entity`) in 1.3-1.5 GB; 312 services on top of
+them in 138 CPU-s, 0.42 s and 104-121 MB for the median one. velox on the same
+schema: 1,098 and 1,151 CPU-s. The language server checks one service in 3.0
+GB (velox: 12.2 GB).
+
+The Go compiler runs with its default GC setting. Measured on an earlier
+version of the generator and a 454-entity schema, `GOGC=200 go build ./...`
+took a sixth off the CPU time of the ORM packages and a third off the wall
+time, `GOGC=400` a quarter and 40%, at the price of memory: the largest
+package went from 1.7 GB to 2.0 GB and 2.5 GB. The compile of `entity` spends
+a quarter of its CPU in the garbage collector (`go tool compile` takes
+`-cpuprofile` and `-traceprofile`; pass them with `-gcflags=<pkg>=...`). Set
+`GOGC` in the build environment, not in the program.
+
+## Tests
+
+```sh
+go test -race ./...                                  # SQLite
+VX_TEST_POSTGRES='postgres://...' go test ./tests/   # Postgres
+```
+
+`tests/` compares against velox on the same schema (a randomized
+differential test, and the JSON of the same rows) and runs the examples above;
+`tests/shapes/` runs 85 schema shapes, what must not compile, and the schemas
+the generator refuses; `gen` regenerates both trees in-process and fails when
+the checked-in code is not what the generator writes; `tests/bench_test.go`
+compares allocations with velox. The suites cover 94% of the statements of
+`orm` and 92% of `gen`.

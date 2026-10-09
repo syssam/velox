@@ -1,0 +1,862 @@
+package orm
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"reflect"
+	"slices"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sql"
+	"github.com/syssam/velox/dialect/sql/sqlgraph"
+	"github.com/syssam/velox/privacy"
+)
+
+// QueryCore is the query of any entity. Generated per-entity query types
+// embed one and convert their typed arguments into its fields.
+type QueryCore struct {
+	M *Meta
+	// Ex is what the query runs on: the database handle or transaction it
+	// was built from. A query without one (the description of an eager load)
+	// cannot be run.
+	Ex       Executor
+	Preds    []P
+	Orders   []O
+	With     []*EdgeLoad
+	Lim      int
+	Off      int
+	Distinct bool
+	Lock     Lock
+	LockOpt  LockOption
+}
+
+// Query is what query policies and interceptors receive: the pending query
+// of any entity. Rules written against privacy.Filter narrow it with WhereP.
+type Query struct{ c *QueryCore }
+
+var _ privacy.Filterable = (*Query)(nil)
+
+// Type returns the name of the entity queried.
+func (q *Query) Type() string { return q.c.M.Name }
+
+// WhereP adds conditions every returned row must satisfy.
+func (q *Query) WhereP(ps ...func(*sql.Selector)) {
+	for _, p := range ps {
+		q.c.Preds = append(q.c.Preds, P{Op: opRaw, raw: p})
+	}
+}
+
+// Filter returns the query as the target of privacy filter rules.
+func (q *Query) Filter() privacy.Filter { return q }
+
+// Limit caps the number of rows.
+func (q *Query) Limit(n int) { q.c.Lim = n }
+
+// Offset skips rows.
+func (q *Query) Offset(n int) { q.c.Off = n }
+
+// guarded runs exec for the query inside the policy of the entity and the
+// interceptors of the database handle. They work on a copy of the query, so
+// what they add belongs to this execution and not to the builder.
+func (q *QueryCore) guarded(ctx context.Context, c *conn, exec func(context.Context, *QueryCore) (any, error)) (any, error) {
+	if err := q.M.ready(); err != nil {
+		return nil, err
+	}
+	inters := c.inters()
+	if q.M.Policy == nil && len(inters) == 0 {
+		return exec(ctx, q)
+	}
+	own := *q
+	own.Preds = slices.Clone(q.Preds)
+	qw := &Query{c: &own}
+	if q.M.Policy != nil {
+		if err := q.M.Policy.EvalQuery(ctx, qw); err != nil {
+			return nil, err
+		}
+	}
+	for _, in := range inters {
+		if t, ok := in.(velox.Traverser); ok {
+			if err := t.Traverse(ctx, qw); err != nil {
+				return nil, err
+			}
+		}
+	}
+	var qr velox.Querier = velox.QuerierFunc(func(ctx context.Context, vq velox.Query) (velox.Value, error) {
+		qq, ok := vq.(*Query)
+		if !ok {
+			return nil, fmt.Errorf("orm: an interceptor passed on a %T instead of the query it received", vq)
+		}
+		return exec(ctx, qq.c)
+	})
+	for i := len(inters) - 1; i >= 0; i-- {
+		qr = inters[i].Intercept(qr)
+	}
+	return qr.Query(ctx, qw)
+}
+
+// conn returns the connection the query runs on.
+func (q *QueryCore) conn() (*conn, error) { return connOf(q.Ex, q.M) }
+
+// connOf returns the connection of ex, or the error of running something of
+// entity m that was not built from a handle.
+func connOf(ex Executor, m *Meta) (*conn, error) {
+	if m == nil {
+		return nil, ErrNoEntity
+	}
+	if ex != nil {
+		if c := ex.conn(); c != nil {
+			return c, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: %s", ErrNoExecutor, m.Name)
+}
+
+// All runs the query and returns the entities, each a *Entity of q.M.
+//
+//go:noinline
+func (q *QueryCore) All(ctx context.Context) ([]any, error) {
+	c, err := q.conn()
+	if err != nil {
+		return nil, err
+	}
+	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.all(ctx, c) })
+	rows, _ := v.([]any)
+	return rows, err
+}
+
+// First returns the first entity, or ErrNotFound.
+//
+//go:noinline
+func (q *QueryCore) First(ctx context.Context) (any, error) {
+	c := *q
+	c.Lim = 1
+	rows, err := c.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, q.M.Name)
+	}
+	return rows[0], nil
+}
+
+// Only returns the single entity the query matches: ErrNotFound for none,
+// ErrNotSingular for more than one.
+//
+//go:noinline
+func (q *QueryCore) Only(ctx context.Context) (any, error) {
+	c := *q
+	c.Lim = 2
+	rows, err := c.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, q.M.Name)
+	case 1:
+		return rows[0], nil
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrNotSingular, q.M.Name)
+	}
+}
+
+// Each runs the query and calls fn with one entity at a time, without holding
+// them all: for results too large to load. fn returns false to stop. The rows
+// stay open while fn runs, so on a transaction no other statement can run
+// until Each returns; eager loads need all the rows and are refused.
+//
+//go:noinline
+func (q *QueryCore) Each(ctx context.Context, fn func(any) bool) error {
+	if len(q.With) > 0 {
+		return fmt.Errorf("orm: iterating %s row by row cannot eager-load edges; use All or Paginate", q.M.Name)
+	}
+	c, cerr := q.conn()
+	if cerr != nil {
+		return cerr
+	}
+	_, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) {
+		sel := q.selector(ctx, c, nil)
+		query, args := sel.Query()
+		if err := sel.Err(); err != nil {
+			return nil, err
+		}
+		rows := &sql.Rows{}
+		if err := c.drv.Query(ctx, query, args, rows); err != nil {
+			return nil, err
+		}
+		defer func() { _ = rows.Close() }()
+		cols, err := rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+		idx := make([]int, len(cols))
+		for i, col := range cols {
+			idx[i] = q.M.col(col)
+		}
+		dest := make([]any, len(cols))
+		slots := make([]slot, len(cols))
+		for rows.Next() {
+			e := q.M.New()
+			for i, at := range idx {
+				if at >= 0 {
+					dest[i] = q.M.dest(e, at, &slots[i])
+				} else {
+					dest[i] = discard{}
+				}
+			}
+			if err := rows.Scan(dest...); err != nil {
+				return nil, fmt.Errorf("orm: scanning %s: %w", q.M.Name, err)
+			}
+			if !fn(e) {
+				return nil, nil
+			}
+		}
+		return nil, rows.Err()
+	})
+	return err
+}
+
+// Count returns the number of rows the query matches, whatever window
+// (Limit, Offset) it asks for.
+//
+//go:noinline
+func (q *QueryCore) Count(ctx context.Context) (int, error) {
+	c, err := q.conn()
+	if err != nil {
+		return 0, err
+	}
+	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.count(ctx, c) })
+	n, _ := v.(int)
+	return n, err
+}
+
+func (q *QueryCore) count(ctx context.Context, c *conn) (int, error) {
+	all := *q
+	all.Lim, all.Off, all.Orders, all.Lock = 0, 0, nil, LockNone
+	s := all.selector(ctx, c, nil)
+	s.Count()
+	query, args := s.Query()
+	if err := s.Err(); err != nil {
+		return 0, err
+	}
+	rows := &sql.Rows{}
+	if err := c.drv.Query(ctx, query, args, rows); err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	n := 0
+	if rows.Next() {
+		if err := rows.Scan(&n); err != nil {
+			return 0, err
+		}
+	}
+	return n, rows.Err()
+}
+
+// Exists reports whether the query matches a row.
+//
+//go:noinline
+func (q *QueryCore) Exists(ctx context.Context) (bool, error) {
+	c := *q
+	c.Lim = 1
+	c.With = nil
+	c.Orders = nil // the order cannot change whether a row exists
+	ids, err := c.IDs(ctx)
+	return len(ids) > 0, err
+}
+
+// IDs returns the ids of the rows the query matches.
+//
+//go:noinline
+func (q *QueryCore) IDs(ctx context.Context) ([]any, error) {
+	c, err := q.conn()
+	if err != nil {
+		return nil, err
+	}
+	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.ids(ctx, c) })
+	ids, _ := v.([]any)
+	return ids, err
+}
+
+func (q *QueryCore) ids(ctx context.Context, c *conn) ([]any, error) {
+	if q.M.id() == nil {
+		return nil, fmt.Errorf("orm: %s has no single-column id", q.M.Name)
+	}
+	id := q.M.id().Column
+	idx := q.M.col(id)
+	// Ids are unique already, and SELECT DISTINCT id ORDER BY another column
+	// is an error on Postgres.
+	plain := *q
+	plain.Distinct = false
+	s := plain.selector(ctx, c, []string{id})
+	query, args := s.Query()
+	if err := s.Err(); err != nil {
+		return nil, err
+	}
+	rows := &sql.Rows{}
+	if err := c.drv.Query(ctx, query, args, rows); err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []any
+	for rows.Next() {
+		e := q.M.New()
+		var s slot
+		if err := rows.Scan(q.M.dest(e, idx, &s)); err != nil {
+			return nil, err
+		}
+		ids = append(ids, q.M.get(e, id))
+	}
+	return ids, rows.Err()
+}
+
+// loadErr returns the first error among the loads and their nested loads, so
+// that an unsupported one is reported whether or not any row reaches it.
+func loadErr(ls []*EdgeLoad) error {
+	for _, l := range ls {
+		if l.Err != nil {
+			return l.Err
+		}
+		if err := loadErr(l.With); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// selector renders the query without its eager loads. cols nil selects every
+// column of the entity.
+func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.Selector {
+	if cols == nil {
+		cols = q.M.Columns
+	}
+	b := sql.Dialect(c.drv.Dialect())
+	t := b.Table(q.M.Table)
+	// Predicates read the request context from the selector (the policy of
+	// an edge predicate's target is evaluated with it).
+	s := b.Select(t.Columns(cols...)...).From(t).WithContext(ctx)
+	for i := range q.Preds {
+		compile(&q.Preds[i])(s)
+	}
+	for _, o := range q.Orders {
+		if o.Desc {
+			s.OrderBy(sql.Desc(s.C(o.Col)))
+		} else {
+			s.OrderBy(sql.Asc(s.C(o.Col)))
+		}
+	}
+	if q.Lim > 0 {
+		s.Limit(q.Lim)
+	}
+	if q.Off > 0 {
+		// SQLite and MySQL accept OFFSET only after LIMIT.
+		if q.Lim <= 0 {
+			s.Limit(math.MaxInt32)
+		}
+		s.Offset(q.Off)
+	}
+	// Postgres rejects a row lock on SELECT DISTINCT; the lock wins.
+	if q.Distinct && (q.Lock == LockNone || dialect.GetCapabilities(c.drv.Dialect()).Has(dialect.CapLockWithDistinct)) {
+		s.Distinct()
+	}
+	q.lock(s)
+	return s
+}
+
+// discard receives a column the entity has no field for.
+type discard struct{}
+
+func (discard) Scan(any) error { return nil }
+
+// all runs the query, scans every row into a new entity and loads the
+// requested edges.
+func (q *QueryCore) all(ctx context.Context, c *conn) ([]any, error) {
+	if err := loadErr(q.With); err != nil {
+		return nil, err
+	}
+	sel := q.selector(ctx, c, nil)
+	query, args := sel.Query()
+	if err := sel.Err(); err != nil {
+		return nil, err
+	}
+	rows := &sql.Rows{}
+	if err := c.drv.Query(ctx, query, args, rows); err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	// The position of each result column among the entity's, found once.
+	idx := make([]int, len(cols))
+	for i, col := range cols {
+		idx[i] = q.M.col(col)
+	}
+	dest := make([]any, len(cols))
+	slots := make([]slot, len(cols))
+	var out []any
+	for rows.Next() {
+		e := q.M.New()
+		for i, at := range idx {
+			if at >= 0 {
+				dest[i] = q.M.dest(e, at, &slots[i])
+			} else {
+				dest[i] = discard{}
+			}
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("orm: scanning %s: %w", q.M.Name, err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Close before loading edges: a transaction has one connection, and it
+	// cannot run the edge queries while these rows are open.
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for _, l := range q.With {
+		if err := loadEdge(ctx, c, l, out); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// compile turns a predicate into the selector function the SQL layer takes.
+// truth is what is known of a predicate before any row is seen.
+type truth uint8
+
+const (
+	depends truth = iota // on the row
+	holds                // for every row: the zero predicate, an empty And
+	fails                // for no row: an empty Or
+)
+
+// combine compiles And, Or and Not over their operands, folding the ones
+// whose truth is known. The SQL layer renders a combinator without operands
+// as no condition at all; here And of nothing holds, Or of nothing fails and
+// Not negates the conjunction of its operands, so that a condition built
+// from a list of filters means the same thing when the list is empty: a
+// delete of "any of these" over no filter removes nothing.
+func combine(p *P) (func(*sql.Selector), truth) {
+	fns := make([]func(*sql.Selector), 0, len(p.Subs))
+	known := holds // of the operands seen so far, as a conjunction (And, Not)
+	if p.Op == OpOr {
+		known = fails // as a disjunction
+	}
+	for i := range p.Subs {
+		sub := &p.Subs[i]
+		var fn func(*sql.Selector)
+		k := depends
+		switch sub.Op {
+		case 0:
+			k = holds // the zero predicate is no condition
+		case OpAnd, OpOr, OpNot:
+			fn, k = combine(sub)
+		default:
+			fn = compile(sub)
+		}
+		switch {
+		case k == depends:
+			fns = append(fns, fn)
+			continue
+		case p.Op == OpOr && k == holds:
+			return nil, holds
+		case p.Op != OpOr && k == fails:
+			known = fails
+		}
+	}
+	switch p.Op {
+	case OpOr:
+		if len(fns) == 0 {
+			return nil, fails
+		}
+		return sql.OrFuncs(fns...), depends
+	case OpAnd:
+		switch {
+		case known == fails:
+			return nil, fails
+		case len(fns) == 0:
+			return nil, holds
+		}
+		return sql.AndFuncs(fns...), depends
+	}
+	// Not: the negation of the conjunction.
+	switch {
+	case known == fails:
+		return nil, holds
+	case len(fns) == 0:
+		return nil, fails
+	}
+	return sql.NotFuncs(fns...), depends
+}
+
+func compile(p *P) func(*sql.Selector) {
+	switch p.Op {
+	case 0:
+		// The zero predicate is no condition: code that builds a predicate
+		// only under some circumstance can pass the variable either way.
+		return func(*sql.Selector) {}
+	case opRaw:
+		fn, _ := p.raw.(func(*sql.Selector))
+		return fn
+	case OpEQ:
+		return sql.FieldEQ(p.Col, p.Val)
+	case OpNEQ:
+		return sql.FieldNEQ(p.Col, p.Val)
+	case OpGT:
+		return sql.FieldGT(p.Col, p.Val)
+	case OpGTE:
+		return sql.FieldGTE(p.Col, p.Val)
+	case OpLT:
+		return sql.FieldLT(p.Col, p.Val)
+	case OpLTE:
+		return sql.FieldLTE(p.Col, p.Val)
+	case OpIn:
+		return sql.FieldInValues(p.Col, anys(p.Val)...)
+	case OpNotIn:
+		return sql.FieldNotInValues(p.Col, anys(p.Val)...)
+	case OpIsNull:
+		return sql.FieldIsNull(p.Col)
+	case OpNotNull:
+		return sql.FieldNotNull(p.Col)
+	case OpContains:
+		return sql.FieldContains(p.Col, str(p.Val))
+	case OpHasPrefix:
+		return sql.FieldHasPrefix(p.Col, str(p.Val))
+	case OpHasSuffix:
+		return sql.FieldHasSuffix(p.Col, str(p.Val))
+	case OpEqualFold:
+		return sql.FieldEqualFold(p.Col, str(p.Val))
+	case OpContainsFold:
+		return sql.FieldContainsFold(p.Col, str(p.Val))
+	case OpAnd, OpOr, OpNot:
+		fn, k := combine(p)
+		switch k {
+		case holds:
+			return func(*sql.Selector) {}
+		case fails:
+			return func(s *sql.Selector) { s.Where(sql.False()) }
+		}
+		return fn
+	case opNeighborOf:
+		e, id := p.Edge, p.Val
+		if e.fkOnOwner() {
+			// The owner row holds the key of its neighbor. It is read from the
+			// database, not from the entity in memory, which may be stale.
+			return func(s *sql.Selector) {
+				b := sql.Dialect(s.Dialect())
+				ot := b.Table(e.Owner.Table)
+				s.Where(sql.In(s.C(e.Target.id().Column),
+					b.Select(ot.C(e.Columns[0])).From(ot).Where(sql.EQ(ot.C(e.Owner.id().Column), id))))
+			}
+		}
+		// Target rows joined to one owner row through an M2M table.
+		ownerCol, targetCol := e.Columns[0], e.Columns[1]
+		if e.Inverse {
+			ownerCol, targetCol = targetCol, ownerCol
+		}
+		return func(s *sql.Selector) {
+			b := sql.Dialect(s.Dialect())
+			jt := b.Table(e.Table)
+			s.Where(sql.In(s.C(e.Target.id().Column),
+				b.Select(jt.C(targetCol)).From(jt).Where(sql.EQ(jt.C(ownerCol), id))))
+		}
+	case OpHasEdge:
+		e := p.Edge
+		step := edgeStep(e)
+		fns := make([]func(*sql.Selector), len(p.Subs))
+		for i := range p.Subs {
+			fns[i] = compile(&p.Subs[i])
+		}
+		if len(fns) == 0 && e.Target.Policy == nil {
+			return func(s *sql.Selector) { sqlgraph.HasNeighbors(s, step) }
+		}
+		return func(s *sql.Selector) {
+			sqlgraph.HasNeighborsWith(s, step, func(t *sql.Selector) {
+				// The neighbors are rows of the target: its policy decides
+				// which of them count, as it does for a query of the target.
+				if err := targetPolicy(s.Context(), e.Target, t); err != nil {
+					s.AddError(err)
+					return
+				}
+				for _, fn := range fns {
+					fn(t)
+				}
+			})
+		}
+	}
+	return func(s *sql.Selector) { s.AddError(fmt.Errorf("orm: unknown predicate operator %d", p.Op)) }
+}
+
+// targetPolicy applies the query policy of m to t, the subquery of an edge
+// predicate whose target is m.
+func targetPolicy(ctx context.Context, m *Meta, t *sql.Selector) error {
+	if m.Policy == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	q := &Query{c: &QueryCore{M: m}}
+	if err := m.Policy.EvalQuery(ctx, q); err != nil {
+		return err
+	}
+	for i := range q.c.Preds {
+		compile(&q.c.Preds[i])(t)
+	}
+	return nil
+}
+
+// anys and str read the operand of a predicate the generated code built.
+func anys(v any) []any {
+	a, _ := v.([]any)
+	return a
+}
+
+func str(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func sqlgraphRel(r Rel) sqlgraph.Rel {
+	switch r {
+	case O2O:
+		return sqlgraph.O2O
+	case O2M:
+		return sqlgraph.O2M
+	case M2O:
+		return sqlgraph.M2O
+	default:
+		return sqlgraph.M2M
+	}
+}
+
+// edgeStep describes the traversal of e from its owner to its target.
+func edgeStep(e *EdgeMeta) *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(e.Owner.Table, e.Owner.id().Column),
+		sqlgraph.To(e.Target.Table, e.Target.id().Column),
+		sqlgraph.Edge(sqlgraphRel(e.Rel), e.Inverse, e.Table, e.Columns...),
+	)
+}
+
+// key normalizes a key so that the same key read from two places lands in
+// one map bucket whatever its Go type: an id read as int and a foreign key
+// read as int64, a uuid.UUID field and the text a join table returned for it,
+// a named string and a plain one.
+func key(v any) any {
+	switch k := v.(type) {
+	case int64, string:
+		return k
+	case int:
+		return int64(k)
+	case int32:
+		return int64(k)
+	case int16:
+		return int64(k)
+	case int8:
+		return int64(k)
+	case uint32:
+		return int64(k)
+	case uint:
+		return unsignedKey(uint64(k))
+	case uint64:
+		return unsignedKey(k)
+	case []byte:
+		// Sixteen bytes that are not text are a UUID in binary form.
+		if len(k) == 16 && !utf8.Valid(k) {
+			if u, err := uuid.FromBytes(k); err == nil {
+				return u.String()
+			}
+		}
+		return string(k)
+	case uuid.UUID:
+		return k.String()
+	}
+	// A named type is keyed by its underlying value.
+	switch rv := reflect.ValueOf(v); rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return unsignedKey(rv.Uint())
+	case reflect.String:
+		return rv.String()
+	}
+	return v
+}
+
+// unsignedKey is the int64 a driver returns for an unsigned column, or v
+// itself when it does not fit.
+func unsignedKey(v uint64) any {
+	if v > math.MaxInt64 {
+		return v
+	}
+	return int64(v)
+}
+
+func has(m map[any]struct{}, k any) bool {
+	_, ok := m[k]
+	return ok
+}
+
+// load runs the query of an eager load: the neighbors are read as a query of
+// their entity would read them, under its policy and the interceptors.
+func (q *QueryCore) load(ctx context.Context, c *conn) ([]any, error) {
+	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.all(ctx, c) })
+	rows, _ := v.([]any)
+	return rows, err
+}
+
+// loadEdge loads one edge for all parents with one query (two for M2M) and
+// assigns the neighbors through the edge's generated setter.
+func loadEdge(ctx context.Context, c *conn, l *EdgeLoad, parents []any) error {
+	if l.Err != nil {
+		return l.Err
+	}
+	if len(parents) == 0 {
+		return nil
+	}
+	e := l.Edge
+	// A target the caller may not read fails the load whether or not any
+	// neighbor exists; otherwise the error would tell the caller which.
+	if e.Target.Policy != nil {
+		if err := e.Target.Policy.EvalQuery(ctx, &Query{c: &QueryCore{M: e.Target}}); err != nil {
+			return err
+		}
+	}
+	sub := &QueryCore{M: e.Target, Preds: append([]P(nil), l.Preds...), Orders: l.Orders, With: l.With}
+	byParent := make(map[any][]any, len(parents))
+
+	switch {
+	case e.Rel == M2M:
+		ownerCol, targetCol := e.Columns[0], e.Columns[1]
+		if e.Inverse {
+			ownerCol, targetCol = targetCol, ownerCol
+		}
+		ids := make([]any, len(parents))
+		for i, p := range parents {
+			ids[i] = e.Owner.get(p, e.Owner.id().Column)
+		}
+		b := sql.Dialect(c.drv.Dialect())
+		jt := b.Table(e.Table)
+		js := b.Select(jt.C(ownerCol), jt.C(targetCol)).From(jt)
+		sql.FieldInValues(ownerCol, ids...)(js)
+		query, args := js.Query()
+		rows := &sql.Rows{}
+		if err := c.drv.Query(ctx, query, args, rows); err != nil {
+			return err
+		}
+		// owners lists, per target, the parents it is joined to, in join order.
+		owners := make(map[any][]any)
+		var targetIDs []any
+		for rows.Next() {
+			var o, t any
+			if err := rows.Scan(&o, &t); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			o, t = key(o), key(t)
+			if _, ok := owners[t]; !ok {
+				targetIDs = append(targetIDs, t)
+			}
+			owners[t] = append(owners[t], o)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if len(targetIDs) > 0 {
+			sub.Preds = append(sub.Preds, P{Op: OpIn, Col: e.Target.id().Column, Val: targetIDs})
+			targets, err := sub.load(ctx, c)
+			if err != nil {
+				return err
+			}
+			// Appending in the target query's order keeps that order within
+			// each parent.
+			for _, t := range targets {
+				for _, o := range owners[key(e.Target.get(t, e.Target.id().Column))] {
+					byParent[o] = append(byParent[o], t)
+				}
+			}
+		}
+
+	case e.fkOnOwner():
+		fk := e.Columns[0]
+		var fks []any
+		seen := make(map[any]struct{})
+		for _, p := range parents {
+			v := e.Owner.get(p, fk)
+			if v == nil {
+				continue
+			}
+			if k := key(v); !has(seen, k) {
+				seen[k] = struct{}{}
+				fks = append(fks, v)
+			}
+		}
+		byID := make(map[any]any, len(fks))
+		if len(fks) > 0 {
+			sub.Preds = append(sub.Preds, P{Op: OpIn, Col: e.Target.id().Column, Val: fks})
+			targets, err := sub.load(ctx, c)
+			if err != nil {
+				return err
+			}
+			for _, t := range targets {
+				byID[key(e.Target.get(t, e.Target.id().Column))] = t
+			}
+		}
+		for _, p := range parents {
+			var neighbors []any
+			if v := e.Owner.get(p, fk); v != nil {
+				if t, ok := byID[key(v)]; ok {
+					neighbors = []any{t}
+				}
+			}
+			e.link(p, neighbors)
+		}
+		return nil
+
+	default: // the foreign key is a column of the target's table
+		fk := e.Columns[0]
+		ids := make([]any, len(parents))
+		for i, p := range parents {
+			ids[i] = e.Owner.get(p, e.Owner.id().Column)
+		}
+		sub.Preds = append(sub.Preds, P{Op: OpIn, Col: fk, Val: ids})
+		children, err := sub.load(ctx, c)
+		if err != nil {
+			return err
+		}
+		for _, ch := range children {
+			v := e.Target.get(ch, fk)
+			if v == nil {
+				continue
+			}
+			k := key(v)
+			byParent[k] = append(byParent[k], ch)
+		}
+	}
+
+	for _, p := range parents {
+		children := byParent[key(e.Owner.get(p, e.Owner.id().Column))]
+		if l.Limit > 0 && len(children) > l.Limit {
+			children = children[:l.Limit]
+		}
+		e.link(p, children)
+	}
+	return nil
+}

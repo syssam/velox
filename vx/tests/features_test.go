@@ -1,0 +1,536 @@
+package tests
+
+import (
+	"context"
+	stdsql "database/sql"
+	"fmt"
+	"testing"
+
+	"github.com/syssam/velox/vx/tests/db/predicate"
+
+	client "github.com/syssam/velox/vx/tests/db"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql"
+	"github.com/syssam/velox/privacy"
+	testschema "github.com/syssam/velox/testschema"
+	"github.com/syssam/velox/vx/orm"
+	"github.com/syssam/velox/vx/tests/db/entity"
+	"github.com/syssam/velox/vx/tests/db/post"
+	"github.com/syssam/velox/vx/tests/db/user"
+)
+
+func TestByID_GetUpdateOneDeleteOne(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	u := newUser(t, db, "ann", 30)
+	assert.Equal(t, "User", user.ModelName)
+
+	got, err := client.User.Get(ctx, db, u.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "ann", got.Name)
+	_, err = client.User.Get(ctx, db, u.ID+99)
+	assert.ErrorIs(t, err, orm.ErrNotFound)
+
+	// Get is a plain function: it can be handed to a generic helper.
+	fetch := func(get func(context.Context, orm.Executor, int) (*entity.User, error)) (*entity.User, error) {
+		return get(ctx, db, u.ID)
+	}
+	_, err = fetch(client.User.Get)
+	require.NoError(t, err)
+
+	up, err := client.User.UpdateByID(db, u.ID).Set(user.Age.Set(31)).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 31, up.Age)
+	_, err = client.User.UpdateByID(db, u.ID+99).Set(user.Age.Set(1)).SaveOne(ctx)
+	assert.ErrorIs(t, err, orm.ErrNotFound)
+
+	// A missing row is an error for DeleteOne; Delete().Exec reports a count.
+	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID+99), orm.ErrNotFound)
+	require.NoError(t, client.User.DeleteByID(ctx, db, u.ID))
+	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID), orm.ErrNotFound)
+}
+
+func TestSetNillable(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	nick, age := "annie", 44
+	var noNick *string
+	var noAge *int
+
+	u, err := client.User.Create(db).
+		Set(user.Name.Set("ann"), user.Email.Set("a@example.com"), user.Age.Set(30), user.Nickname.SetNillable(noNick)).
+		Save(ctx)
+	require.NoError(t, err)
+	assert.Nil(t, u.Nickname, "SetNillable(nil) set something")
+
+	u, err = client.User.UpdateByID(db, u.ID).Set(user.Nickname.SetNillable(&nick), user.Age.SetNillable(noAge)).SaveOne(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, u.Nickname)
+	assert.Equal(t, "annie", *u.Nickname)
+	assert.Equal(t, 30, u.Age, "SetNillable(nil) changed the column")
+
+	// SetNillable(nil) after Set does not undo it, and is not a clear.
+	u, err = client.User.UpdateByID(db, u.ID).Set(user.Age.Set(age), user.Age.SetNillable(noAge), user.Nickname.SetNillable(noNick)).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 44, u.Age)
+	assert.NotNil(t, u.Nickname)
+
+	// In a bulk create, per row.
+	us, err := client.User.CreateBulk(db,
+		client.User.Create(db).Set(user.Name.Set("b1"), user.Email.Set("b1@example.com"), user.Age.Set(1), user.Nickname.SetNillable(&nick)),
+		client.User.Create(db).Set(user.Name.Set("b2"), user.Email.Set("b2@example.com"), user.Age.Set(2), user.Nickname.SetNillable(noNick)),
+	).Save(ctx)
+	require.NoError(t, err)
+	assert.NotNil(t, us[0].Nickname)
+	assert.Nil(t, us[1].Nickname)
+}
+
+// The zero predicate is no condition, wherever it appears.
+func TestZeroPredicate(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	newUser(t, db, "ann", 30)
+	newUser(t, db, "bob", 40)
+	var none predicate.User
+
+	n, err := client.User.Query(db).Where(none).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+	n, err = client.User.Query(db).Where(user.And(none, user.Age.GT(35))).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	n, err = client.User.Query(db).Where(user.Or(none, user.Age.GT(35))).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n, "no condition OR something is no condition")
+	// In an update or a delete the zero predicate is refused, alone or nested:
+	// a forgotten assignment must not become a statement over every row.
+	_, err = client.User.Update(db).Set(user.Age.Add(1)).Where(none).Exec(ctx)
+	require.ErrorContains(t, err, "zero predicate")
+	_, err = client.User.Delete(db).Where(none).Exec(ctx)
+	require.ErrorContains(t, err, "zero predicate")
+	_, err = client.User.Delete(db).Where(user.Or(none, user.Age.GT(35))).Exec(ctx)
+	require.ErrorContains(t, err, "zero predicate")
+	_, err = client.User.UpdateByID(db, 1).Set(user.Age.Add(1)).Where(user.And(none)).SaveOne(ctx)
+	require.ErrorContains(t, err, "zero predicate")
+	n, err = client.User.Query(db).Where(user.Age.GTE(0)).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n, "a refused mutation wrote")
+	// Every row is still reachable, by saying so: no Where.
+	n, err = client.User.Update(db).Set(user.Age.Add(1)).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+
+	// An operator the runtime does not know is an error, not a panic.
+	_, err = client.User.Query(db).Where(predicate.User{Op: 250}).All(ctx)
+	require.ErrorContains(t, err, "unknown predicate operator")
+	_, err = client.User.Delete(db).Where(predicate.User{Op: 250}).Exec(ctx)
+	require.Error(t, err)
+	n, err = client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n, "a delete with a broken condition deleted rows")
+}
+
+func TestSelectGroupAggregate(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, bob := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40)
+	newPost(t, db, ann, "a1")
+	newPost(t, db, ann, "a2")
+	newPost(t, db, bob, "b1")
+
+	var names []string
+	require.NoError(t, client.User.Query(db).OrderBy(user.Name.Asc()).Select("name").Scan(ctx, &names))
+	assert.Equal(t, []string{"ann", "bob"}, names)
+
+	var rows []struct {
+		AuthorID int `json:"user_posts"`
+		N        int `json:"n"`
+	}
+	require.NoError(t, client.Post.Query(db).Select().GroupBy("user_posts").Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows))
+	got := map[int]int{}
+	for _, r := range rows {
+		got[r.AuthorID] = r.N
+	}
+	assert.Equal(t, map[int]int{ann.ID: 2, bob.ID: 1}, got)
+
+	n, err := client.User.Query(db).Where(user.Age.GT(35)).Select().Aggregate(orm.Count()).Int(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	maxAge, err := client.User.Query(db).Select().Aggregate(orm.Max(user.ColumnAge)).Int(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 40, maxAge)
+	sum, err := client.User.Query(db).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 70, sum)
+	none, err := client.User.Query(db).Where(user.Age.GT(99)).Select().Aggregate(orm.Max(user.ColumnAge)).Int(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, none)
+
+	// A column that does not exist is refused before any SQL runs.
+	err = client.User.Query(db).Select("nickname_typo").Scan(ctx, &names)
+	require.ErrorContains(t, err, `no column "nickname_typo"`)
+	err = client.User.Query(db).Select(string(user.Name)).GroupBy("nope").Scan(ctx, &names)
+	require.ErrorContains(t, err, `no column "nope"`)
+
+	// The policy applies to a selection as to any read.
+	names = nil
+	require.NoError(t, client.User.Query(db).Select("name").Scan(testschema.FilterUserQueryToNameContext(ctx, "ann"), &names))
+	assert.Equal(t, []string{"ann"}, names)
+}
+
+func TestRawAndCompile(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, _ := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40)
+	newPost(t, db, ann, "a1")
+
+	// A condition the typed API cannot say: users that authored a post,
+	// written against the SQL builder.
+	authors := predicate.User(orm.Raw(func(s *sql.Selector) {
+		p := sql.Table(post.Table)
+		s.Where(sql.In(s.C("id"), sql.Select(p.C("user_posts")).From(p)))
+	}))
+	us, err := client.User.Query(db).Where(authors, user.Age.LT(99)).All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ann"}, names(us))
+
+	// A typed predicate handed to code that takes selector functions.
+	db.Intercept(velox.TraverseFunc(func(_ context.Context, q velox.Query) error {
+		if oq, ok := q.(*orm.Query); ok && oq.Type() == "User" {
+			oq.WhereP(orm.Compile(orm.P(user.Or(user.Age.GT(35), user.Name.EQ("nobody")))))
+		}
+		return nil
+	}))
+	us, err = client.User.Query(db).All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"bob"}, names(us))
+}
+
+func TestExecAndQuerySQL(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	u := newUser(t, db, "ann", 30)
+
+	// A statement issued through a transaction is part of it.
+	err := db.RunTx(ctx, func(tx *orm.Tx) error {
+		if _, err := orm.ExecSQL(ctx, tx, "UPDATE users SET age = age + 1"); err != nil {
+			return err
+		}
+		rows, err := orm.QuerySQL(ctx, tx, "SELECT age FROM users")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		require.True(t, rows.Next())
+		var age int
+		require.NoError(t, rows.Scan(&age))
+		assert.Equal(t, 31, age, "the query did not see the transaction's own write")
+		return assert.AnError
+	})
+	require.ErrorIs(t, err, assert.AnError)
+	got, err := client.User.Get(ctx, db, u.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 30, got.Age, "the raw statement was not rolled back with its transaction")
+
+	res, err := orm.ExecSQL(ctx, db, "UPDATE users SET age = age + 1")
+	require.NoError(t, err)
+	n, err := res.RowsAffected()
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+}
+
+func TestLocks(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	newPost(t, db, ann, "a1")
+
+	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+		u, err := client.User.Query(tx).Where(user.ID.EQ(ann.ID)).ForUpdate().Only(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = client.User.UpdateByID(tx, u.ID).Set(user.Age.Set(u.Age + 1)).SaveOne(ctx)
+		if err != nil {
+			return err
+		}
+		// With an eager load, with DISTINCT (which Postgres does not allow
+		// under a lock), with options, and shared.
+		if _, err := client.User.Query(tx).WithPosts().Distinct().ForUpdate(orm.SkipLocked).All(ctx); err != nil {
+			return err
+		}
+		if _, err := client.User.Query(tx).ForShare(orm.NoWait).All(ctx); err != nil {
+			return err
+		}
+		// A count of a locking query does not lock (an aggregate cannot).
+		_, err = client.User.Query(tx).ForUpdate().Count(ctx)
+		return err
+	}))
+	got, err := client.User.Get(ctx, db, ann.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 31, got.Age)
+}
+
+// The optimistic-lock shape: update the row with this id only if it still has
+// the value read earlier. A row that another writer changed in between is
+// "not found", and is not written; it used to be reported as updated.
+func TestSaveOne_GuardIsPartOfTheUpdate(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	u := newUser(t, db, "ann", 30)
+
+	// The other writer strikes after the mutation started and before its
+	// statement runs.
+	strike := true
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			if strike && m.Op().Is(velox.OpUpdateOne) {
+				strike = false
+				if _, err := orm.ExecSQL(ctx, m.(*orm.Mutation).Executor(), fmt.Sprintf("UPDATE users SET age = 99 WHERE id = %d", u.ID)); err != nil {
+					return nil, err
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+	for _, guard := range [][]predicate.User{
+		{user.ID.EQ(u.ID), user.Age.EQ(30)},    // id first
+		{user.Age.EQ(30), user.ID.EQ(u.ID)},    // guard first
+		{user.Name.EQ("ann"), user.Age.EQ(30)}, // no id at all
+	} {
+		strike = true
+		_, err := orm.ExecSQL(ctx, db, fmt.Sprintf("UPDATE users SET age = 30, name = 'ann' WHERE id = %d", u.ID))
+		require.NoError(t, err)
+		_, err = client.User.Update(db).Set(user.Name.Set("changed")).Where(guard...).SaveOne(ctx)
+		assert.ErrorIs(t, err, orm.ErrNotFound, "the guard no longer holds")
+		got, err := client.User.Get(ctx, db, u.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "ann", got.Name, "a row that failed its guard was written")
+		assert.Equal(t, 99, got.Age)
+	}
+
+	// With the guard holding, the row is updated and returned.
+	strike = false
+	got, err := client.User.Update(db).Set(user.Name.Set("changed")).Where(user.ID.EQ(u.ID), user.Age.EQ(99)).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "changed", got.Name)
+}
+
+// Iter visits the rows of a query one at a time and stops when the loop does.
+func TestIter(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	for i := range 7 {
+		newUser(t, db, fmt.Sprintf("u%d", i), 20+i)
+	}
+	var got []string
+	for u, err := range client.User.Query(db).Where(user.Age.GTE(22)).OrderBy(user.Age.Asc()).Iter(ctx) {
+		require.NoError(t, err)
+		got = append(got, u.Name)
+		if len(got) == 3 {
+			break // the rows are released; the next statement must work
+		}
+	}
+	assert.Equal(t, []string{"u2", "u3", "u4"}, got)
+	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 7, n)
+
+	// The policy applies, an error arrives as the last pair, and an eager
+	// load, which needs every row, is refused.
+	got = nil
+	for u, err := range client.User.Query(db).Iter(testschema.FilterUserQueryToNameContext(ctx, "u5")) {
+		require.NoError(t, err)
+		got = append(got, u.Name)
+	}
+	assert.Equal(t, []string{"u5"}, got)
+	var last error
+	for _, err := range client.User.Query(db).WithPosts().Iter(ctx) {
+		last = err
+	}
+	require.ErrorContains(t, last, "cannot eager-load")
+	for _, err := range client.User.Query(db).Where(predicate.User{Op: 250}).Iter(ctx) {
+		last = err
+	}
+	require.ErrorContains(t, last, "unknown predicate operator")
+}
+
+// A query or mutation runs on the handle it was built from. One built from
+// nothing, or from a nil transaction, is an error at the terminal, not a
+// panic; the query that describes an eager load needs none.
+func TestExecutorIsBoundAtTheHead(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	newPost(t, db, ann, "p1")
+
+	var noTx *orm.Tx
+	for name, ex := range map[string]orm.Executor{"nil": nil, "nil transaction": noTx} {
+		_, err := client.User.Query(ex).All(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.Query(ex).Count(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.Query(ex).Paginate(ctx, orm.PageArgs{})
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.Query(ex).Select().Aggregate(orm.Count()).Int(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		for _, err := range client.User.Query(ex).Iter(ctx) {
+			require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		}
+		_, err = client.User.Create(ex).Set(user.Name.Set("x")).Save(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.Update(ex).Set(user.Age.Set(1)).Exec(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.UpdateByID(ex, ann.ID).Set(user.Age.Set(1)).SaveOne(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.Delete(ex).Exec(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = client.User.CreateBulk(ex, client.User.Create(db).Set(user.Name.Set("x"))).Save(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		_, err = ann.QueryPosts(ex).All(ctx)
+		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+	}
+	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "a refused mutation wrote")
+
+	// A builder is finished and run by whoever holds it; nothing but the
+	// builder has to be passed along.
+	build := func(ex orm.Executor) *entity.UserQuery { return client.User.Query(ex).Where(user.Age.GTE(18)) }
+	run := func(q *entity.UserQuery) (int, error) { return q.OrderBy(user.ID.Asc()).Count(ctx) }
+	n, err = run(build(db))
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	// The rows of a bulk create come from the builders; the statement runs
+	// on the handle CreateBulk was given.
+	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+		_, err := client.User.CreateBulk(tx, client.User.Create(nil).Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40))).Save(ctx)
+		return err
+	}))
+
+	// The query given to Load describes the load: its conditions, order and
+	// limit are used, and the load runs with the query it belongs to.
+	users, err := client.User.Query(db).Where(user.ID.EQ(ann.ID)).
+		WithPosts(client.Post.Query(nil).Where(post.Title.EQ("p1"))).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, users[0].Edges.Posts, 1)
+	// A nil query describes nothing: the load is the whole edge, as it is
+	// without one.
+	var none *entity.PostQuery
+	for name, q := range map[string]*entity.UserQuery{
+		"a nil *PostQuery": client.User.Query(db).WithPosts(none),
+		"nil":              client.User.Query(db).WithPosts(nil),
+	} {
+		users, err = q.Where(user.ID.EQ(ann.ID)).All(ctx)
+		require.NoError(t, err, name)
+		require.Len(t, users[0].Edges.Posts, 1, name)
+	}
+	users, err = client.User.Query(db).Where(user.ID.EQ(ann.ID)).
+		WithPosts(client.Post.Query(nil).Where(post.Title.EQ("no such post"))).All(ctx)
+	require.NoError(t, err)
+	require.Empty(t, users[0].Edges.Posts, "a description that is given is used")
+
+	// The names of the columns, for the places that take a string.
+	assert.Equal(t, "name", user.ColumnName)
+	var names []string
+	require.NoError(t, client.User.Query(db).OrderBy(user.Name.Asc()).Select(user.ColumnName).Scan(ctx, &names))
+	assert.Equal(t, []string{"ann", "bob"}, names)
+}
+
+// A row written from an input struct goes through the same path as one
+// written with setters: velox reads the same row, hooks see the fields,
+// validators and the policy decide.
+func TestFill_SamePathAsSetters(t *testing.T) {
+	ctx := context.Background()
+	db, ref := open(t)
+
+	var seen []string
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			if m.Type() == "User" {
+				seen = m.Fields()
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+	type input struct {
+		Name, Email string
+		Age         *int
+		Nickname    orm.Opt[string]
+	}
+	age := 30
+	u, err := client.User.Create(db).Fill(input{Name: "ann", Email: "ann@example.com", Age: &age, Nickname: orm.Some("annie")}).Save(ctx)
+	require.NoError(t, err)
+	for _, f := range []string{"name", "email", "age", "nickname"} {
+		assert.Contains(t, seen, f, "the hook did not see a field of the input")
+	}
+	r := ref.User.GetX(ctx, u.ID)
+	assert.Equal(t, "ann", r.Name)
+	assert.Equal(t, 30, r.Age)
+	require.NotNil(t, r.Nickname)
+	assert.Equal(t, "annie", *r.Nickname)
+	assert.Equal(t, string(u.Role), string(r.Role), "the default of a field the input does not have")
+
+	// A partial update: the validator sees the value, null clears, and the
+	// row's updated_at moves.
+	zero := 0
+	_, err = client.User.UpdateByID(db, u.ID).Fill(input{Age: &zero}, "Name", "Email").SaveOne(ctx)
+	require.ErrorContains(t, err, "less than minimum", "the validator of age did not see the input's value")
+	age = 31
+	got, err := client.User.UpdateByID(db, u.ID).Fill(input{Age: &age, Nickname: orm.Null[string]()}, "Name", "Email").SaveOne(ctx)
+	require.NoError(t, err)
+	r = ref.User.GetX(ctx, u.ID)
+	assert.Equal(t, 31, r.Age)
+	assert.Nil(t, r.Nickname)
+	assert.Equal(t, "ann", r.Name)
+	assert.False(t, got.UpdatedAt.Before(u.UpdatedAt))
+	assert.ElementsMatch(t, []string{"age", "updated_at"}, seen, "the hook saw more or less than the update writes")
+
+	// Denied like any other mutation of the entity.
+	enforce := testschema.EnforceUserPrivacyContext(ctx)
+	_, err = client.User.Create(db).Fill(input{Name: "x", Email: "x@example.com", Age: &age}).Save(enforce)
+	require.ErrorIs(t, err, privacy.Deny)
+	_, err = client.User.UpdateByID(db, u.ID).Fill(input{Age: &age}, "Name", "Email").SaveOne(enforce)
+	require.ErrorIs(t, err, privacy.Deny)
+	n, err := ref.User.Query().Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+}
+
+// A transaction can be started with options; a read-only one refuses writes
+// where the database enforces it (Postgres), and reads everywhere.
+func TestTxOptions(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	newUser(t, db, "ann", 30)
+	opts := &stdsql.TxOptions{ReadOnly: true}
+	var n int
+	err := db.RunTxOptions(ctx, opts, func(tx *orm.Tx) error {
+		var err error
+		n, err = client.User.Query(tx).Count(ctx)
+		return err
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	err = db.RunTxOptions(ctx, opts, func(tx *orm.Tx) error {
+		_, err := client.User.Create(tx).Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40)).Save(ctx)
+		return err
+	})
+	if db.Dialect() == "postgres" {
+		require.Error(t, err, "a read-only transaction wrote")
+	}
+	// The pattern of the Go database documentation: a deferred Rollback after
+	// Commit does nothing.
+	tx, err := db.BeginTx(ctx, &stdsql.TxOptions{Isolation: stdsql.LevelSerializable})
+	require.NoError(t, err)
+	defer func() { assert.ErrorIs(t, tx.Rollback(), orm.ErrTxDone) }()
+	_, err = client.User.UpdateByID(tx, 1).Set(user.Age.Set(31)).SaveOne(ctx)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+}
