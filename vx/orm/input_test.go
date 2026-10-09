@@ -96,3 +96,16 @@ func TestApply(t *testing.T) {
 		t.Error("Apply of nothing changed the query")
 	}
 }
+
+func TestIDAs_StringKinds(t *testing.T) {
+	type slug string
+	if v, ok := IDAs[slug]("abc"); !ok || v != "abc" {
+		t.Errorf("a string as an id type declared on string: %v %v", v, ok)
+	}
+	if v, ok := IDAs[string](slug("abc")); !ok || v != "abc" {
+		t.Errorf("the reverse: %v %v", v, ok)
+	}
+	if _, ok := IDAs[slug](1); ok {
+		t.Error("a number as a string id")
+	}
+}

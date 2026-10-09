@@ -26,6 +26,9 @@ func Compile(p P) func(*sql.Selector) { return compile(&p) }
 // pg_advisory_xact_lock needs.
 func ExecSQL(ctx context.Context, ex Executor, query string, args ...any) (stdsql.Result, error) {
 	var res stdsql.Result
+	if ex == nil || ex.conn() == nil {
+		return nil, ErrNoExecutor
+	}
 	if err := ex.conn().drv.Exec(ctx, query, args, &res); err != nil {
 		return nil, err
 	}
@@ -36,6 +39,9 @@ func ExecSQL(ctx context.Context, ex Executor, query string, args ...any) (stdsq
 // closes the rows.
 func QuerySQL(ctx context.Context, ex Executor, query string, args ...any) (*stdsql.Rows, error) {
 	rows := &sql.Rows{}
+	if ex == nil || ex.conn() == nil {
+		return nil, ErrNoExecutor
+	}
 	if err := ex.conn().drv.Query(ctx, query, args, rows); err != nil {
 		return nil, err
 	}

@@ -67,8 +67,14 @@ func OrderTerm(m *Meta, columns map[string]string, field string, dir OrderDirect
 		}
 	case ok:
 		o.Col = col
+		if f := m.Field(col); f != nil && f.Sensitive {
+			o.Col, o.err = "", fmt.Errorf("orm: %s cannot be ordered by %q: the field is sensitive", m.Name, field)
+		}
 	default:
-		o.Col = field // not a column: the query says so by name
+		// Not one of the fields the entity is ordered by. The name is not
+		// tried as a column: that would order by, and put into the cursors
+		// of a page, a column the schema did not offer.
+		o.err = fmt.Errorf("orm: %s cannot be ordered by %q", m.Name, field)
 	}
 	return o
 }
@@ -109,7 +115,14 @@ func Where(in any, plan []WhereField) P {
 var predicateType = reflect.TypeFor[P]()
 
 func where(v reflect.Value, plan []WhereField, depth int) P {
-	if !v.IsValid() || v.Kind() != reflect.Pointer || v.IsNil() {
+	if !v.IsValid() {
+		return P{}
+	}
+	if v.Kind() != reflect.Pointer {
+		// A mistake of the caller's, and not "no condition".
+		return Invalid(fmt.Errorf("orm: a where input is given by its address, not as a %s", v.Type()))
+	}
+	if v.IsNil() {
 		return P{}
 	}
 	if depth > MaxWhereDepth {
@@ -247,6 +260,9 @@ func IDAs[T any](id any) (T, bool) {
 			return zero, false
 		}
 		to.SetUint(from.Uint())
+	case from.Kind() == reflect.String && to.Kind() == reflect.String:
+		// An id type declared on string, and a plain string.
+		to.SetString(from.String())
 	case from.CanUint() && to.CanInt():
 		i := int64(from.Uint()) //nolint:gosec // an id above MaxInt64 is refused on the next line
 		if from.Uint() > math.MaxInt64 || to.OverflowInt(i) {

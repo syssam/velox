@@ -2,10 +2,12 @@ package orm
 
 import (
 	"context"
+	stdsql "database/sql"
 	"fmt"
 	"math"
 	"reflect"
 	"slices"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -35,6 +37,28 @@ type QueryCore struct {
 	LockOpt  LockOption
 	// Cols, when not empty, are the columns to read into the entities.
 	Cols []string
+	// nulls, when set, is told which of its columns were NULL in each row
+	// read: a page's cursor needs to know, and a field that is not a
+	// pointer cannot say.
+	nulls *nullWatch
+}
+
+// nullWatch records, for the rows a query reads, which of some columns held
+// NULL.
+type nullWatch struct {
+	cols []int    // indexes into Meta.Columns
+	rows [][]bool // per row read, per watched column
+}
+
+// nullSeen scans a column and notes whether it was NULL.
+type nullSeen struct {
+	to   stdsql.Scanner
+	null *bool
+}
+
+func (n nullSeen) Scan(v any) error {
+	*n.null = v == nil
+	return n.to.Scan(v)
 }
 
 // Columns narrows what the query reads to the named columns.
@@ -133,8 +157,8 @@ func (f TraverseFunc) Traverse(ctx context.Context, q velox.Query) error {
 }
 
 // InterceptFunc is a function as an interceptor that runs before the read it
-// is handed and can refuse it. Unlike a traverser it is not run for the
-// queries a traversal or an eager load makes on the way.
+// is handed and can refuse it: every read of an entity, the ones an eager
+// load makes of its neighbors included.
 type InterceptFunc func(context.Context, *Query) error
 
 // Intercept runs f before the read.
@@ -219,8 +243,28 @@ func (q *QueryCore) All(ctx context.Context) ([]any, error) {
 		return nil, err
 	}
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.all(ctx, c) })
-	rows, _ := v.([]any)
-	return rows, err
+	return rowsOf(q.M, v, err)
+}
+
+func (q *QueryCore) nullsOf() []int {
+	if q.nulls == nil {
+		return nil
+	}
+	return q.nulls.cols
+}
+
+// rowsOf is what a read of entities returned through the interceptors. An
+// interceptor that hands back something else has replaced the result with
+// what the caller cannot be given, and that is an error, not no rows.
+func rowsOf(m *Meta, v any, err error) ([]any, error) {
+	if err != nil || v == nil {
+		return nil, err
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("orm: an interceptor returned %T for the rows of %s", v, m.Name)
+	}
+	return rows, nil
 }
 
 // First returns the first entity, or ErrNotFound.
@@ -330,8 +374,14 @@ func (q *QueryCore) Count(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.count(ctx, c) })
-	n, _ := v.(int)
-	return n, err
+	if err != nil {
+		return 0, err
+	}
+	n, ok := v.(int)
+	if !ok {
+		return 0, fmt.Errorf("orm: an interceptor returned %T for the count of %s", v, q.M.Name)
+	}
+	return n, nil
 }
 
 func (q *QueryCore) count(ctx context.Context, c *conn) (int, error) {
@@ -378,8 +428,7 @@ func (q *QueryCore) IDs(ctx context.Context) ([]any, error) {
 		return nil, err
 	}
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.ids(ctx, c) })
-	ids, _ := v.([]any)
-	return ids, err
+	return rowsOf(q.M, v, err)
 }
 
 func (q *QueryCore) ids(ctx context.Context, c *conn) ([]any, error) {
@@ -443,6 +492,10 @@ func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.S
 		compile(&q.Preds[i])(s)
 	}
 	for _, o := range q.Orders {
+		if o.err != nil {
+			s.AddError(o.err)
+			continue
+		}
 		if o.Col == "" {
 			continue // the zero term orders by nothing, as the zero predicate filters nothing
 		}
@@ -513,9 +566,19 @@ func (q *QueryCore) all(ctx context.Context, c *conn) ([]any, error) {
 	var out []any
 	for rows.Next() {
 		e := q.M.New()
+		var seen []bool
+		if q.nulls != nil {
+			seen = make([]bool, len(q.nulls.cols))
+			q.nulls.rows = append(q.nulls.rows, seen)
+		}
 		for i, at := range idx {
 			if at >= 0 {
 				dest[i] = q.M.dest(e, at, &slots[i])
+				if k := slices.Index(q.nullsOf(), at); k >= 0 {
+					if sc, ok := dest[i].(stdsql.Scanner); ok {
+						dest[i] = nullSeen{to: sc, null: &seen[k]}
+					}
+				}
 			} else {
 				dest[i] = discard{}
 			}
@@ -623,35 +686,46 @@ func compile(p *P) func(*sql.Selector) {
 		err, _ := p.Val.(error)
 		return func(s *sql.Selector) { s.AddError(err) }
 	case OpEQ:
-		return sql.FieldEQ(p.Col, p.Val)
+		return sql.FieldEQ(p.Col, operand(p.Val))
 	case OpNEQ:
-		return sql.FieldNEQ(p.Col, p.Val)
+		return sql.FieldNEQ(p.Col, operand(p.Val))
 	case OpGT:
-		return sql.FieldGT(p.Col, p.Val)
+		return sql.FieldGT(p.Col, operand(p.Val))
 	case OpGTE:
-		return sql.FieldGTE(p.Col, p.Val)
+		return sql.FieldGTE(p.Col, operand(p.Val))
 	case OpLT:
-		return sql.FieldLT(p.Col, p.Val)
+		return sql.FieldLT(p.Col, operand(p.Val))
 	case OpLTE:
-		return sql.FieldLTE(p.Col, p.Val)
-	case OpIn:
-		return sql.FieldInValues(p.Col, anys(p.Val)...)
-	case OpNotIn:
-		return sql.FieldNotInValues(p.Col, anys(p.Val)...)
+		return sql.FieldLTE(p.Col, operand(p.Val))
+	case OpIn, OpNotIn:
+		vals, ok := anys(p.Val)
+		if !ok {
+			return badOperand(p, "a list")
+		}
+		if p.Op == OpIn {
+			return sql.FieldInValues(p.Col, vals...)
+		}
+		return sql.FieldNotInValues(p.Col, vals...)
 	case OpIsNull:
 		return sql.FieldIsNull(p.Col)
 	case OpNotNull:
 		return sql.FieldNotNull(p.Col)
-	case OpContains:
-		return sql.FieldContains(p.Col, str(p.Val))
-	case OpHasPrefix:
-		return sql.FieldHasPrefix(p.Col, str(p.Val))
-	case OpHasSuffix:
-		return sql.FieldHasSuffix(p.Col, str(p.Val))
-	case OpEqualFold:
-		return sql.FieldEqualFold(p.Col, str(p.Val))
-	case OpContainsFold:
-		return sql.FieldContainsFold(p.Col, str(p.Val))
+	case OpContains, OpHasPrefix, OpHasSuffix, OpEqualFold, OpContainsFold:
+		text, ok := str(p.Val)
+		if !ok {
+			return badOperand(p, "a string")
+		}
+		switch p.Op {
+		case OpContains:
+			return sql.FieldContains(p.Col, text)
+		case OpHasPrefix:
+			return sql.FieldHasPrefix(p.Col, text)
+		case OpHasSuffix:
+			return sql.FieldHasSuffix(p.Col, text)
+		case OpEqualFold:
+			return sql.FieldEqualFold(p.Col, text)
+		}
+		return sql.FieldContainsFold(p.Col, text)
 	case OpAnd, OpOr, OpNot:
 		fn, k := combine(p)
 		switch k {
@@ -731,14 +805,54 @@ func targetPolicy(ctx context.Context, m *Meta, t *sql.Selector) error {
 }
 
 // anys and str read the operand of a predicate the generated code built.
-func anys(v any) []any {
-	a, _ := v.([]any)
-	return a
+// operand is a value as it is compared with a column: a time without its
+// monotonic clock reading, which a driver that writes times as text would
+// otherwise put into the statement.
+func operand(v any) any {
+	if t, ok := v.(time.Time); ok {
+		return t.Round(0)
+	}
+	return v
 }
 
-func str(v any) string {
-	s, _ := v.(string)
-	return s
+// anys returns the values of a list operand: a []any, or any other slice.
+func anys(v any) ([]any, bool) {
+	a, ok := v.([]any)
+	if !ok {
+		rv := reflect.ValueOf(v)
+		if rv.Kind() != reflect.Slice {
+			return nil, false
+		}
+		a = make([]any, rv.Len())
+		for i := range a {
+			a[i] = rv.Index(i).Interface()
+		}
+	} else {
+		a = slices.Clone(a)
+	}
+	for i := range a {
+		a[i] = operand(a[i])
+	}
+	return a, true
+}
+
+// str returns the text of a text operand: a string, or a value of a type
+// declared on string.
+func str(v any) (string, bool) {
+	if s, ok := v.(string); ok {
+		return s, true
+	}
+	if rv := reflect.ValueOf(v); rv.Kind() == reflect.String {
+		return rv.String(), true
+	}
+	return "", false
+}
+
+// badOperand fails the query: an operand of the wrong kind must not become
+// a condition that says something else (an empty pattern matches every row).
+func badOperand(p *P, want string) func(*sql.Selector) {
+	err := fmt.Errorf("orm: the condition on %q takes %s, not a %T", p.Col, want, p.Val)
+	return func(s *sql.Selector) { s.AddError(err) }
 }
 
 func sqlgraphRel(r Rel) sqlgraph.Rel {
@@ -826,8 +940,7 @@ func has(m map[any]struct{}, k any) bool {
 // their entity would read them, under its policy and the interceptors.
 func (q *QueryCore) load(ctx context.Context, c *conn) ([]any, error) {
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.all(ctx, c) })
-	rows, _ := v.([]any)
-	return rows, err
+	return rowsOf(q.M, v, err)
 }
 
 // loadEdge loads one edge for all parents with one query (two for M2M) and

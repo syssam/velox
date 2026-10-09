@@ -134,7 +134,13 @@ err = db.User.DeleteByID(ctx, conn, id)
   the user's and does not move `updated_at`.
 - `orm.One(q.Exec(ctx))` is for an update that must reach its row and has
   no use for the row: `orm.ErrNotFound` when no row matched, without the
-  read `SaveOne` makes.
+  read `SaveOne` makes. An update with nothing to write (a patch that
+  changed nothing) runs no statement and counts the rows its conditions
+  match, so the row that is there is still found.
+- A time is stored without its monotonic clock reading and to the
+  microsecond, and the entity a create returns holds it that way: a guard
+  such as `Where(x.UpdatedAt.EQ(u.UpdatedAt))` matches the row it was read
+  from on every database.
 - The zero predicate, `predicate.User{}`, is no condition: what a function
   returns when it has nothing to add (`orm.P(p).IsZero()` tells). An update
   or a delete refuses it, so that a forgotten condition is not a statement

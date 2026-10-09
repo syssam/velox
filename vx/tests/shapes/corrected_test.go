@@ -799,3 +799,51 @@ func TestTx_FailedMutationLeavesNothingBehind(t *testing.T) {
 	kept := must(client.Article.Query(db).Where(article.Title.EQ("kept")).WithTopics().Only(ctx))
 	assert.Len(t, kept.Edges.Topics, 1)
 }
+
+// A column that may be NULL, held in a field that is not a pointer, reads
+// NULL as zero. A page's cursor has to say NULL all the same: with zero the
+// walk continued after "0" instead of after the NULLs, and rows were never
+// served (ascending) or a page came back for ever (descending). Found by an
+// independent review of the runtime.
+func TestPaginate_NullInAFieldThatIsNotAPointer(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	owner := must(client.Author.Create(db).Set(author.Name.Set("ann")).Save(ctx))
+	var want []int
+	for _, name := range []string{"a", "b", "c", "d", "e"} { // no owner: NULL
+		want = append(want, must(client.Gadget.Create(db).Set(gadget.Name.Set(name)).Save(ctx)).ID)
+	}
+	for _, name := range []string{"f", "g"} {
+		want = append(want, must(client.Gadget.Create(db).Set(gadget.Name.Set(name), gadget.OwnerID.Set(owner.ID)).Save(ctx)).ID)
+	}
+	require.Equal(t, 5, rawValue[int](t, db, "SELECT COUNT(*) FROM gadgets WHERE owner_id IS NULL"))
+	two := 2
+	for _, term := range []predicate.GadgetOrder{gadget.OwnerID.Asc(), gadget.OwnerID.Desc()} {
+		var got []int
+		var after *orm.Cursor
+		for page := 0; page < 10; page++ {
+			conn := must(client.Gadget.Query(db).OrderBy(term).Paginate(ctx, after, &two, nil, nil))
+			for _, e := range conn.Edges {
+				got = append(got, e.Node.ID)
+			}
+			if !conn.PageInfo.HasNextPage {
+				break
+			}
+			after = conn.PageInfo.EndCursor
+		}
+		assert.ElementsMatch(t, want, got, "forward, descending=%v: the walk must serve every row once", term.Desc)
+		got = nil
+		var before *orm.Cursor
+		for page := 0; page < 10; page++ {
+			conn := must(client.Gadget.Query(db).OrderBy(term).Paginate(ctx, nil, nil, before, &two))
+			for _, e := range conn.Edges {
+				got = append(got, e.Node.ID)
+			}
+			if !conn.PageInfo.HasPreviousPage {
+				break
+			}
+			before = conn.PageInfo.StartCursor
+		}
+		assert.ElementsMatch(t, want, got, "backward, descending=%v", term.Desc)
+	}
+}

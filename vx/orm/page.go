@@ -117,6 +117,11 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 		}
 	}
 	// The sort key: the query's order, then the id unless it is there already.
+	for _, o := range q.Orders {
+		if o.err != nil {
+			return nil, o.err
+		}
+	}
 	keys := slices.DeleteFunc(slices.Clone(q.Orders), func(o O) bool { return o.Col == "" })
 	if !slices.ContainsFunc(keys, func(o O) bool { return o.Col == m.id().Column }) {
 		keys = append(keys, O{Col: m.id().Column})
@@ -142,7 +147,7 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 			page.Total = n
 		}
 		win := *q
-		win.Off, win.Lim, win.Lock = 0, 0, LockNone
+		win.Off, win.Lim = 0, 0
 		win.Preds = slices.Clone(q.Preds)
 		for _, cur := range []struct {
 			s     string
@@ -176,16 +181,31 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 		if limit > 0 {
 			win.Lim = limit + 1 // one more row tells whether a further page exists
 		}
+		// A key whose Go field cannot hold NULL (an optional column in a
+		// field that is not a pointer) reads NULL as zero. The cursor has
+		// to say NULL all the same, or the walk continues after "zero"
+		// instead of after the NULLs: rows dropped, or a page repeated
+		// for ever.
+		watch := &nullWatch{cols: make([]int, len(keys))}
+		for i, k := range keys {
+			watch.cols[i] = m.col(k.Col)
+			if kind := m.cols[watch.cols[i]]; kind.ptr || kind.dest != destNull {
+				watch.cols[i] = -1 // the field says NULL itself
+			}
+		}
+		win.nulls = watch
 		rows, err := win.all(ctx, c)
 		if err != nil {
 			return nil, err
 		}
+		null := watch.rows
 		more := limit > 0 && len(rows) > limit
 		if more {
-			rows = rows[:limit]
+			rows, null = rows[:limit], null[:limit]
 		}
 		if backward {
 			slices.Reverse(rows)
+			slices.Reverse(null)
 			page.Info.HasPreviousPage, page.Info.HasNextPage = more, args.Before != ""
 		} else {
 			page.Info.HasNextPage, page.Info.HasPreviousPage = more, args.After != ""
@@ -193,7 +213,7 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 		page.Rows = rows
 		page.Cursors = make([]Cursor, len(rows))
 		for i, e := range rows {
-			cur, err := m.encodeCursor(keys, e)
+			cur, err := m.encodeCursor(keys, e, null[i])
 			if err != nil {
 				return nil, err
 			}
@@ -279,10 +299,15 @@ func zoneName(t time.Time) string {
 	return name
 }
 
-func (m *Meta) encodeCursor(keys []O, e any) (string, error) {
+// encodeCursor makes the cursor of row e; null says which of the keys were
+// NULL in the row although e's field holds a zero value.
+func (m *Meta) encodeCursor(keys []O, e any, null []bool) (string, error) {
 	c := cursor{K: make([]string, len(keys)), V: make([]json.RawMessage, len(keys))}
 	for i, k := range keys {
 		v := m.get(e, k.Col)
+		if i < len(null) && null[i] {
+			v = nil
+		}
 		if t, ok := v.(time.Time); ok {
 			v = zonedTime{T: t, Zone: zoneName(t)}
 		}
@@ -314,7 +339,12 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 			return nil, fmt.Errorf("%w: it was made for another ordering", ErrBadCursor)
 		}
 		if string(c.V[i]) == "null" {
-			continue // the row's value was NULL
+			// The row's value was NULL, which a column that cannot be NULL
+			// never has: such a cursor was not made here.
+			if f := m.Field(k.Col); f != nil && (f.NotNull || f == m.id()) {
+				return nil, ErrBadCursor
+			}
+			continue
 		}
 		t := m.goType(m.col(k.Col))
 		if t == reflect.TypeFor[time.Time]() {

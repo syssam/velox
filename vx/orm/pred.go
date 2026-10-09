@@ -84,6 +84,9 @@ type S struct {
 type O struct {
 	Col  string
 	Desc bool
+	// err is why the term could not be built (an order input naming
+	// something the entity is not ordered by); the query reports it.
+	err error
 }
 
 // EdgeLoad asks a query to eager-load one edge.

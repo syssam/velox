@@ -78,7 +78,7 @@ func edgeSpec(e *EdgeMeta, ids []any) *sqlgraph.EdgeSpec {
 	if e.Through != nil && len(ids) > 0 {
 		for _, f := range e.Through.Fields {
 			if f.Default != nil && f != e.Through.id() {
-				spec.Target.Fields = append(spec.Target.Fields, &sqlgraph.FieldSpec{Column: f.Column, Type: f.Type, Value: f.Default()})
+				spec.Target.Fields = append(spec.Target.Fields, &sqlgraph.FieldSpec{Column: f.Column, Type: f.Type, Value: bytesValue(f, fresh(f, f.Default()))})
 			}
 		}
 	}
@@ -230,6 +230,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 			return nil, nil, err
 		}
 		v = bytesValue(f, v)
+		vals[f.Column] = v // what is stored, so that the entity returned equals the row
 		if rv := reflect.ValueOf(v); f.Type == field.TypeBytes && rv.Kind() == reflect.Slice && rv.IsNil() {
 			// NULL in a nullable column: the entity's field stays nil too.
 			delete(vals, f.Column)
@@ -262,14 +263,18 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 // A nil byte slice would be sent as NULL; in a column that does not accept
 // NULL it is the empty value.
 //
-// A time loses its monotonic clock reading. A driver that stores times as
-// text (SQLite) writes time.Time's String form, which for the result of
-// time.Now() ends in "m=+0.0123": a value that nothing read back from the
-// database can ever equal, so no cursor or optimistic-lock guard on that
-// column could match.
+// A time is written as stored (see stored), so that the entity a create
+// returns, a cursor made of it and an optimistic-lock guard on it equal what
+// is read back.
 func bytesValue(f *FieldMeta, v any) any {
-	if t, ok := v.(time.Time); ok {
-		return t.Round(0)
+	switch t := v.(type) {
+	case time.Time:
+		return stored(t)
+	case *time.Time:
+		if t != nil {
+			at := stored(*t)
+			return &at
+		}
 	}
 	if f.Type != field.TypeBytes || !f.NotNull {
 		return v
@@ -279,6 +284,15 @@ func bytesValue(f *FieldMeta, v any) any {
 	}
 	return v
 }
+
+// stored returns t as a database keeps it: without its monotonic clock
+// reading, and to the microsecond.
+//
+// A driver that stores times as text (SQLite) writes time.Time's String
+// form, which for the result of time.Now() ends in "m=+0.0123": a value that
+// nothing read back can equal. Postgres keeps microseconds, so a time with
+// nanoseconds is another value once it has been stored.
+func stored(t time.Time) time.Time { return t.Round(0).Truncate(time.Microsecond) }
 
 // zeroFilled reports whether an unset optional column of type t is written as
 // its zero value. An enum is not: the empty string is not one of its values,
@@ -481,7 +495,7 @@ func (m *MutCore) conditions() error {
 	var bad func(ps []P) bool
 	bad = func(ps []P) bool {
 		for i := range ps {
-			if ps[i].Op == 0 || (ps[i].Op == OpAnd || ps[i].Op == OpOr || ps[i].Op == OpNot) && bad(ps[i].Subs) {
+			if ps[i].Op == 0 || (ps[i].Op == OpAnd || ps[i].Op == OpOr || ps[i].Op == OpNot || ps[i].Op == OpHasEdge) && bad(ps[i].Subs) {
 				return true
 			}
 		}
@@ -615,7 +629,7 @@ func (m *MutCore) orderedSets() ([]S, error) {
 	out := make([]S, 0, len(m.Sets))
 	for _, s := range keyWrites(meta, m.Sets) {
 		if s.Edge == nil {
-			if s.Kind == SetValue || s.Kind == SetNull {
+			if s.Kind == SetValue || s.Kind == SetNull || s.Kind == SetKeep {
 				out = slices.DeleteFunc(out, func(o S) bool { return o.Col == s.Col })
 			}
 			out = append(out, s)
@@ -682,6 +696,14 @@ func (m *MutCore) update(ctx context.Context, c *conn) (int, error) {
 	spec, err := m.updateSpec()
 	if err != nil {
 		return 0, err
+	}
+	if len(spec.Fields.Set)+len(spec.Fields.Add)+len(spec.Fields.Clear)+len(spec.Edges.Add)+len(spec.Edges.Clear) == 0 {
+		// Nothing to write (an empty patch, a Keep and no more): no
+		// statement runs, and the count is of the rows the conditions
+		// match, as an UPDATE of them would have reported. Zero would say
+		// that no row matched, which orm.One turns into ErrNotFound.
+		matched, cerr := (&QueryCore{M: m.M, Preds: m.Preds}).count(ctx, c)
+		return matched, wrapErr(cerr)
 	}
 	n, err := sqlgraph.UpdateNodes(ctx, c.atomic(), spec)
 	return n, wrapErr(err)

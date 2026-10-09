@@ -172,11 +172,14 @@ func TestEdges_RequiredAndSetterKinds(t *testing.T) {
 	require.Error(t, err)
 	assert.Zero(t, must(client.Article.Query(db).Where(article.Title.EQ("x")).Count(ctx)))
 
-	// An Add of nothing is nothing; Exec reports what it updated, which is 0
-	// when there is nothing to set (Save still finds the row).
+	// An Add of nothing is nothing. With nothing to write no statement runs,
+	// and Exec reports the rows its conditions match, as an UPDATE of them
+	// would: 0 would say the row is not there, which orm.One turns into
+	// ErrNotFound for a patch that happened to change nothing.
 	n := must(client.Article.Update(db).Set(article.Topics.Add()).Where(article.ID.EQ(l.a1.ID)).Exec(ctx))
-	assert.Zero(t, n)
-	assert.Zero(t, must(client.Article.Update(db).Where(article.ID.EQ(l.a1.ID)).Exec(ctx)))
+	assert.Equal(t, 1, n)
+	assert.Equal(t, 1, must(client.Article.Update(db).Where(article.ID.EQ(l.a1.ID)).Exec(ctx)))
+	assert.Zero(t, must(client.Article.Update(db).Where(article.ID.EQ(-1)).Exec(ctx)))
 	assert.Equal(t, l.a1.ID, must(client.Article.Update(db).Where(article.ID.EQ(l.a1.ID)).SaveOne(ctx)).ID)
 	assert.Equal(t, 2, must(l.a1.QueryTopics(db).Count(ctx)))
 
