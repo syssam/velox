@@ -82,6 +82,21 @@ func linkGadget(dst any, es []any) {
 	}
 }
 
+// GadgetEdge is a row of a page of Gadget, with its cursor.
+type GadgetEdge struct {
+	Node   *Gadget    `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// GadgetConnection is one page of Gadget.
+type GadgetConnection struct {
+	Edges    []*GadgetEdge `json:"edges"`
+	PageInfo orm.PageInfo  `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // GadgetMeta is the runtime description of Gadget. Use it through its address.
 var GadgetMeta = orm.Meta{
 	Name:    "Gadget",
@@ -233,15 +248,21 @@ func (q *GadgetQuery) Iter(ctx context.Context) iter.Seq2[*Gadget, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *GadgetQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Gadget], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *GadgetQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*GadgetConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Gadget](p), nil
+	conn := &GadgetConnection{Edges: make([]*GadgetEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &GadgetEdge{Node: r.(*Gadget), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

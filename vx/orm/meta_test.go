@@ -2,7 +2,6 @@ package orm
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -173,12 +172,5 @@ func TestSlot(t *testing.T) {
 	// An entity whose schema has no code needs no slot.
 	if err := (&Meta{Name: "Plain"}).ready(); err != nil {
 		t.Error(err)
-	}
-}
-
-// Page must stay without methods: see its documentation.
-func TestPageHasNoMethods(t *testing.T) {
-	if n := reflect.TypeFor[*Page[*row]]().NumMethod(); n != 0 {
-		t.Errorf("Page has %d methods: every package that can reach a query's Paginate would compile them", n)
 	}
 }

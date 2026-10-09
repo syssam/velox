@@ -36,6 +36,21 @@ func ptrLoad(v any, i int) any {
 	return nil
 }
 
+// LoadEdge is a row of a page of Load, with its cursor.
+type LoadEdge struct {
+	Node   *Load      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// LoadConnection is one page of Load.
+type LoadConnection struct {
+	Edges    []*LoadEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // LoadMeta is the runtime description of Load. Use it through its address.
 var LoadMeta = orm.Meta{
 	Name:    "Load",
@@ -184,15 +199,21 @@ func (q *LoadQuery) Iter(ctx context.Context) iter.Seq2[*Load, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *LoadQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Load], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *LoadQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*LoadConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Load](p), nil
+	conn := &LoadConnection{Edges: make([]*LoadEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &LoadEdge{Node: r.(*Load), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

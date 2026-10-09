@@ -8,8 +8,9 @@ of the memory velox's do. The measurements behind each decision are in
 
 Status: experimental. Query, create, update, delete, bulk create,
 transactions, every edge kind with eager loading, defaults, validators, hooks,
-policies, interceptors, pagination and table migration work on SQLite and
-Postgres. Not there yet: GraphQL, upsert, MySQL, composite ids, external
+policies, interceptors, pagination, table migration and the GraphQL layer
+(schema, connections, order and where inputs, edge resolvers) work on SQLite
+and Postgres. Not there yet: upsert, MySQL, composite ids, external
 `ValueScanner`; the generator refuses the last two with an error that says so.
 
 ## Generate
@@ -29,6 +30,7 @@ This writes, under `db`:
 | `db/migrate` | the tables, and `migrate.Create(ctx, conn)` |
 | `db/predicate` | the types that keep one entity's conditions out of another's query |
 | `db/schemainit` | the schema's defaults, validators, hooks and policies; `db` links it |
+| `db/filter` | with `-graphql`: the where inputs of the GraphQL schema |
 
 The root package is named after the directory, so the application picks the
 name (`db`, `store`, `data`) by picking the directory. A generation removes the
@@ -232,8 +234,11 @@ for u, err := range db.User.Query(conn).Where(user.Age.GTE(22)).OrderBy(user.Age
     ...
 }
 
-// A page at a time, with a cursor per row: keyset pagination.
-page, err := db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, orm.PageArgs{First: &size}) // page.EndCursor is the After of the next page
+// A page at a time, with a cursor per row: keyset pagination in the shape of
+// a Relay connection (after, first, before, last).
+page, err := db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, nil, &size, nil, nil)
+// page.Edges[i].Node, page.Edges[i].Cursor, page.PageInfo.HasNextPage, page.TotalCount
+page, err = db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, page.PageInfo.EndCursor, &size, nil, nil)
 
 // Columns and aggregates instead of entities; a column that does not exist is an error.
 total, err := db.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
@@ -272,6 +277,93 @@ entity reads the query builder of every entity. With the neighbors queried
 from the root package instead (`db.User.QueryPosts(tx, u)`), the 312 services
 of the fixture compiled in 106-116 CPU-s; as generated, 141-147. What is paid
 is in proportion to the methods of a query type, so that type is kept small.
+
+## GraphQL
+
+```sh
+go run github.com/syssam/velox/vx/cmd/vxgen \
+    -schema ./schema -target ./db -package example.com/app/db \
+    -graphql ./graphql/velox.graphql
+```
+
+writes the GraphQL schema of the entities that carry velox's `graphql`
+annotations, one file per entity beside `velox.graphql`, and the Go types an
+engine binds it to. The schema text is velox's, byte for byte apart from the
+Go types it names: on a real 454-entity application the 439 schema files that
+had not changed since were identical. The Go is derived from that text, so the
+two cannot disagree, and it imports no engine.
+
+| in the schema | in Go |
+|---|---|
+| `type User`, its scalar fields | `entity.User` and its fields |
+| `author: User`, `tags: [Tag!]!` | a method of the entity: `(*Post).Author(ctx)` |
+| `posts(after, first, before, last, orderBy, where): PostConnection!` | `(*User).Posts(ctx, after, first, before, last, orderBy, where)` |
+| `PostConnection`, `PostEdge`, `PageInfo`, `Cursor` | `entity.PostConnection`, `entity.PostEdge`, `orm.PageInfo`, `orm.Cursor`: what `Paginate` returns |
+| `input PostOrder` | `entity.PostOrder` |
+| `enum PostOrderField` | `post.OrderField` and its constants, `post.OrderFieldCreatedAt` |
+| `input PostWhereInput` | `filter.PostWhereInput` |
+| `enum PostStatus` | `post.StatusEnum` and its constants |
+| `interface Node` | `db.Noder`; each entity has `IsNode()`, and `db.NodeTypes()` lists them |
+
+A list resolver is a query like any other; the inputs turn into what `Where`
+and `OrderBy` take:
+
+```go
+func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int,
+    orderBy *entity.PostOrder, where *filter.PostWhereInput,
+) (*entity.PostConnection, error) {
+    return db.Post.Query(s.db).
+        Where(where.P()).
+        OrderBy(orderBy.Term()).
+        Paginate(ctx, after, first, before, last)
+}
+```
+
+- `where.P()` of a nil or an empty input is no condition. An input that
+  cannot be one (an empty input inside `not`, `and`, `or` or `has...With`;
+  nesting deeper than `orm.MaxWhereDepth`) gives a predicate that fails the
+  query. Conditions the application adds go in `where.Predicates`, or in
+  another `Where`.
+- `orderBy.Term()` of a nil input orders by nothing; an order without a
+  `Field` orders by the id, in its direction.
+- **An edge method takes its filter as an interface**:
+  `(*User).Posts(ctx, ..., where interface{ P() predicate.Post })`. What is
+  passed is a `*filter.PostWhereInput` (or nil), and another entity's filter
+  does not compile. It is not declared as that type because a Go package
+  compiles against every type in the signatures of the methods of every type
+  it can reach: with the where input there, each package that returns an
+  entity read every where input of the schema (a quarter of its compile time
+  on a 454-entity schema). An engine has to bind an argument to a parameter
+  that is an interface the argument's type implements; gqlc does from the
+  change on graphql-go's branch `gqlc-interface-params`.
+- The fields a list can be ordered by are constants of the entity's own
+  package, `post.OrderFieldCreatedAt`, for the same kind of reason: a package
+  pays for every exported name of the packages it imports, and nearly every
+  package imports `entity`.
+- **The edge methods take the handle from the context.** An engine calls
+  `post.Author(ctx)` with the request's context and nothing else, and an
+  entity holds no connection, so a server puts the request's handle there
+  once: `ctx = orm.WithExecutor(ctx, conn)` (a transaction for a mutation's
+  response). Without it they return `orm.ErrNoExecutor`. A to-one edge the
+  query already loaded is returned without a query.
+- `Paginate` counts the rows of the whole query for `TotalCount`.
+  `orm.WithoutTotal(ctx)` skips the count (it is then -1): for a request that
+  does not select `totalCount`.
+- `db.NodeTypes()` is what a `node(id:)` field goes by when an id does not
+  say its type: each type's name, table, and a `Get(ctx, ex, id)` that takes
+  an id of any type (an id of another type than the entity's is
+  `orm.ErrNotFound`, like an id no row has; an `int64` from an engine finds
+  an `int` id). Ask each in turn and take the first that is not
+  `orm.ErrNotFound`. That is a query per type, so an application with many
+  types keeps what it learns.
+- Not there yet, and refused at generation with a message that says so: an
+  entity whose GraphQL type is renamed (`graphql.Type` on the entity),
+  ordering by the number of neighbors on an edge, filters on the elements of
+  a JSON array. Mutation inputs are the application's own types: move them to
+  a builder with `Set` or `Fill`. Loading edges by what a request selects is
+  not done: each edge is a query when it is asked for.
+
+What it costs to compile is in `benchmarks/fixtures/realistic/README.md`.
 
 ## Hooks, policies, interceptors
 

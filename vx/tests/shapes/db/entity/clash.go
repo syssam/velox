@@ -119,6 +119,21 @@ func edgeClash(v any, i int) any {
 	return nil
 }
 
+// ClashEdge is a row of a page of Clash, with its cursor.
+type ClashEdge struct {
+	Node   *Clash     `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// ClashConnection is one page of Clash.
+type ClashConnection struct {
+	Edges    []*ClashEdge `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // ClashMeta is the runtime description of Clash. Use it through its address.
 var ClashMeta = orm.Meta{
 	Name:    "Clash",
@@ -285,15 +300,21 @@ func (q *ClashQuery) Iter(ctx context.Context) iter.Seq2[*Clash, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ClashQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Clash], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *ClashQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ClashConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Clash](p), nil
+	conn := &ClashConnection{Edges: make([]*ClashEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &ClashEdge{Node: r.(*Clash), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

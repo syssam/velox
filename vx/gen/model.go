@@ -23,7 +23,7 @@ func (g *generator) names(e *ent) names { return namesOf(e.Name) }
 // always gets.
 func reservedNames(n string) []string {
 	x := namesOf(n)
-	return []string{x.Meta, x.Edges, x.Query, x.Create, x.CreateBulk, x.Update, x.Delete,
+	return []string{x.Meta, x.Edges, n + "Edge", n + "Connection", x.Query, x.Create, x.CreateBulk, x.Update, x.Delete,
 		x.NewQuery, x.NewCreate, x.NewCreateBulk, x.NewUpdate, x.NewDelete}
 }
 
@@ -66,7 +66,7 @@ func (g *generator) model() (map[string][]byte, error) {
 	// enum types of the fields live there), under names that no variable of the
 	// generated functions can shadow.
 	locals := map[string]bool{}
-	for _, s := range strings.Fields("e q b v i d s c r l p o ps os ls ss bs vs es id ids ctx ex err out rows subs dst context schemafield orm slices predicate entity iter slots") {
+	for _, s := range strings.Fields("e q b v i d s c r l p o ps os ls ss bs vs es id ids ctx ex err out rows subs dst context schemafield orm slices predicate entity iter slots filter") {
 		locals[s] = true
 	}
 	for _, e := range g.ents {
@@ -88,9 +88,9 @@ func (g *generator) model() (map[string][]byte, error) {
 			name += "pkg"
 		}
 		_, types, _, _ := g.enumNames(e)
-		if len(types) > 0 || len(e.Edges) > 0 {
-			// Only the entities whose enum types or edge descriptions the
-			// package entity uses are imported.
+		if q := g.gql[e]; len(types) > 0 || len(e.Edges) > 0 || (q != nil && q.HasOrder) {
+			// Only the entities whose enum types, edge descriptions or
+			// order fields the package entity uses are imported.
 			e.alias = im.use(g.cfg.Package+"/"+e.Pkg, name)
 		}
 		for f, t := range types {
@@ -168,6 +168,26 @@ func (g *generator) model() (map[string][]byte, error) {
 		if e.linked {
 			w("func %[1]s(dst any, es []any) {\n\tswitch d := dst.(type) {\n\tcase *[]*%[2]s:\n\t\ts := make([]*%[2]s, len(es))\n\t\tfor i, e := range es {\n\t\t\ts[i] = e.(*%[2]s)\n\t\t}\n\t\t*d = s\n\tcase **%[2]s:\n\t\t*d = nil\n\t\tif len(es) > 0 {\n\t\t\t*d = es[0].(*%[2]s)\n\t\t}\n\t}\n}\n\n", n.link, e.Name)
 		}
+
+		// One page of the entity: what Paginate returns. The shape and the
+		// field names are Relay's, which is also what a GraphQL engine binds
+		// the entity's connection type to.
+		w(`// %[1]sEdge is a row of a page of %[1]s, with its cursor.
+type %[1]sEdge struct {
+	Node   *%[1]s     `+"`json:\"node\"`"+`
+	Cursor orm.Cursor `+"`json:\"cursor\"`"+`
+}
+
+// %[1]sConnection is one page of %[1]s.
+type %[1]sConnection struct {
+	Edges    []*%[1]sEdge `+"`json:\"edges\"`"+`
+	PageInfo orm.PageInfo `+"`json:\"pageInfo\"`"+`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `+"`json:\"totalCount\"`"+`
+}
+
+`, e.Name)
 
 		// Meta.
 		var cols []string
@@ -326,13 +346,19 @@ func (q *%[1]s) Iter(ctx context.Context) iter.Seq2[*%[2]s, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
-func (q *%[1]s) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*%[2]s], error) {
-	p, err := q.c.Paginate(ctx, args)
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
+func (q *%[1]s) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*%[2]sConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*%[2]s](p), nil
+	conn := &%[2]sConnection{Edges: make([]*%[2]sEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &%[2]sEdge{Node: r.(*%[2]s), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -534,6 +560,10 @@ func (q *%[9]s) With%[1]s(opts ...*%[4]s) *%[9]s {
 `, x.GoName, x.E.Name, e.Name, t.Query, t.NewQuery, n.Meta, x.Index, x.Target.Name, n.Query)
 		}
 
+		if q := g.gql[e]; q != nil {
+			g.gqlModel(w, e, q)
+		}
+
 		// An edge is described by data in its owner's package, which cannot
 		// name package entity; package entity hands it the Metas it connects.
 		if hasRuntime(e) {
@@ -581,4 +611,110 @@ func noInline(src []byte) []byte {
 		out.Write(line)
 	}
 	return out.Bytes()
+}
+
+// gqlModel writes what package entity holds of an entity's GraphQL layer:
+// its order input, and a method per edge the schema exposes, by which a
+// GraphQL engine resolves the edge (it binds a field to the method of the
+// same name). The methods take what they run on from the context
+// (orm.WithExecutor): an entity holds no connection, and an engine passes
+// only the arguments of the field.
+//
+// An edge that takes a filter declares it as what it needs of one,
+// where interface{ P() predicate.Post }, and not as *filter.PostWhereInput,
+// which is what an engine passes. Package entity must not import package
+// filter: a package compiles against every type in the signatures of the
+// methods of every type it can reach, the entities reach each other, and so
+// with the where input in a signature every package that returns an entity
+// reads every where input in full. On a 454-entity schema (66,495 fields of
+// where inputs) that was 0.07 of the 0.31 CPU-seconds such a package took.
+// The predicate type in the interface keeps the check: a filter of another
+// entity does not compile.
+func (g *generator) gqlModel(w func(string, ...any), e *ent, q *gqlEnt) {
+	n := g.names(e)
+	if q.Node {
+		w("// IsNode marks %[1]s as a node of the GraphQL schema.\nfunc (*%[1]s) IsNode() {}\n\n", e.Name)
+	}
+	if q.HasOrder {
+		w("// %[2]sOrderColumns maps each field a list of %[1]s can be ordered by, as the\n// schema names it (the constants of %[3]s.%[4]s), to its column.\nvar %[2]sOrderColumns = map[string]string{\n", e.Name, lowerFirst(e.Name), e.alias, q.OrderType)
+		for _, o := range q.Order {
+			w("\t%q: %q,\n", o.Value, o.Column)
+		}
+		w(`}
+
+// %[1]sOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type %[1]sOrder struct {
+	Direction orm.OrderDirection `+"`json:\"direction\"`"+`
+	Field     %[5]s.%[6]s    `+"`json:\"field\"`"+`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+func (o *%[1]sOrder) Term() %[2]s {
+	if o == nil {
+		return %[2]s{}
+	}
+	return %[2]s(orm.OrderTerm(&%[3]s, %[4]sOrderColumns, string(o.Field), o.Direction))
+}
+
+`, e.Name, e.order(), n.Meta, lowerFirst(e.Name), e.alias, q.OrderType)
+	}
+	for _, x := range q.Edges {
+		t := x.X.Target
+		switch x.Kind {
+		case gqlOne:
+			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+func (e *%[3]s) %[1]s(ctx context.Context) (*%[4]s, error) {
+	v, err := e.Edges.%[5]sOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.Query%[5]s(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
+}
+
+`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName)
+		case gqlList:
+			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbors the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
+	if v, err := e.Edges.%[5]sOrErr(); !orm.IsNotLoaded(err) {
+		return v, err
+	}
+	return e.Query%[5]s(orm.ExecutorFrom(ctx)).All(ctx)
+}
+
+`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName)
+		case gqlConnection:
+			params, chain := "", ""
+			switch x.Order {
+			case 1:
+				params += ", orderBy *" + t.Name + "Order"
+				chain += ".OrderBy(orderBy.Term())"
+			case 2:
+				params += ", orderBy []*" + t.Name + "Order"
+			}
+			doc := ""
+			if x.Where {
+				// What the method needs of the where input, and not its
+				// type: see the note on gqlModel.
+				params += ", where interface{ P() " + t.pred() + " }"
+				doc = fmt.Sprintf("\n// where is a *filter.%sWhereInput, or nil.", t.Name)
+			}
+			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).%[8]s
+func (e *%[3]s) %[1]s(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int%[6]s) (*%[4]sConnection, error) {
+	q := e.Query%[5]s(orm.ExecutorFrom(ctx))%[7]s
+`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, params, chain, doc)
+			if x.Where {
+				w("\tif where != nil {\n\t\tq.Where(where.P())\n\t}\n")
+			}
+			if x.Order == 2 {
+				w("\tfor _, o := range orderBy {\n\t\tq.OrderBy(o.Term())\n\t}\n")
+			}
+			w("\treturn q.Paginate(ctx, after, first, before, last)\n}\n\n")
+		}
+	}
 }

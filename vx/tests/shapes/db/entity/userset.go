@@ -36,6 +36,21 @@ func ptrUserSet(v any, i int) any {
 	return nil
 }
 
+// UserSetEdge is a row of a page of UserSet, with its cursor.
+type UserSetEdge struct {
+	Node   *UserSet   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// UserSetConnection is one page of UserSet.
+type UserSetConnection struct {
+	Edges    []*UserSetEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // UserSetMeta is the runtime description of UserSet. Use it through its address.
 var UserSetMeta = orm.Meta{
 	Name:    "UserSet",
@@ -184,15 +199,21 @@ func (q *UserSetQuery) Iter(ctx context.Context) iter.Seq2[*UserSet, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UserSetQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*UserSet], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *UserSetQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UserSetConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*UserSet](p), nil
+	conn := &UserSetConnection{Edges: make([]*UserSetEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &UserSetEdge{Node: r.(*UserSet), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

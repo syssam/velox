@@ -25,6 +25,9 @@ type Config struct {
 	Target string
 	// Package is the import path of Target.
 	Package string
+	// GraphQL, when set, also generates the GraphQL schema and the Go types
+	// an engine binds it to.
+	GraphQL *GraphQL
 }
 
 const (
@@ -94,6 +97,12 @@ type generator struct {
 	ents  []*ent
 	by    map[string]*ent
 	taken map[string]bool // identifiers of package entity
+
+	// The GraphQL layer, when Config.GraphQL asks for it.
+	gql       map[*ent]*gqlEnt
+	enumOwner map[*fld]*ent
+	enumType  map[*fld]string
+	filterIm  *imports
 }
 
 // predicateNames names the derived types of every entity in the predicate
@@ -152,6 +161,30 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 		}
 	}
 	files := map[string][]byte{}
+	var schema map[string]string
+	if cfg.GraphQL != nil {
+		// The enum types are named, and every field knows its own, before
+		// the schema is read: a where input names them.
+		g.enumOwner, g.enumType = map[*fld]*ent{}, map[*fld]string{}
+		for _, e := range g.ents {
+			_, types, _, _ := g.enumNames(e)
+			for f, t := range types {
+				g.enumOwner[f], g.enumType[f] = e, t
+			}
+		}
+		g.filterIm = newImports()
+		var err error
+		if schema, err = g.graphql(graph); err != nil {
+			return err
+		}
+		filters, err := g.filters()
+		if err != nil {
+			return err
+		}
+		for name, src := range filters {
+			files[filepath.Join("filter", name)] = src
+		}
+	}
 	model, err := g.model()
 	if err != nil {
 		return err
@@ -214,7 +247,13 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 			return err
 		}
 	}
-	return prune(cfg.Target, files)
+	if err := prune(cfg.Target, files); err != nil {
+		return err
+	}
+	if cfg.GraphQL != nil {
+		return g.writeSchema(schema)
+	}
+	return nil
 }
 
 // prune removes what an earlier generation left in target and this one did
@@ -329,7 +368,7 @@ var goKeywords = map[string]bool{
 	"const": true, "fallthrough": true, "if": true, "range": true, "type": true, "continue": true, "for": true,
 	"import": true, "return": true, "var": true,
 	// Names the generated packages themselves use.
-	"entity": true, "orm": true, "init": true, "main": true, "schemainit": true, "predicate": true, "migrate": true,
+	"entity": true, "orm": true, "init": true, "main": true, "schemainit": true, "predicate": true, "migrate": true, "filter": true,
 	// A directory called internal can be imported from the generated tree
 	// only: the application could not name the entity's columns.
 	"internal": true,

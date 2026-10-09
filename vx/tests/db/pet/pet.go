@@ -15,6 +15,16 @@ const (
 	ModelName = "Pet"
 )
 
+// OrderField is a field a list of Pet can be ordered by, as the GraphQL schema
+// names it: the Field of an entity.PetOrder.
+type OrderField string
+
+// The fields a list of Pet can be ordered by.
+const (
+	OrderFieldName    OrderField = "NAME"
+	OrderFieldOwnerID OrderField = "OWNER_ID"
+)
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

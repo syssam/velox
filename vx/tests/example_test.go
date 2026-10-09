@@ -189,13 +189,19 @@ func Example_iter() {
 	fmt.Println(names)
 
 	// A page at a time, with a cursor.
-	var page *orm.Page[*entity.User]
+	var page *entity.UserConnection
 	size := 2
-	page, err := db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, orm.PageArgs{First: &size})
+	page, err := db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, nil, &size, nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(page.Items[0].Name, page.Items[1].Name, page.HasNext)
+	fmt.Println(page.Edges[0].Node.Name, page.Edges[1].Node.Name, page.PageInfo.HasNextPage, page.TotalCount)
+	// The next page starts after the last cursor of this one.
+	page, err = db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, page.PageInfo.EndCursor, &size, nil, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(len(page.Edges), page.PageInfo.HasNextPage)
 
 	// Columns and aggregates instead of entities.
 	total, err := db.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
@@ -229,7 +235,8 @@ func Example_iter() {
 	fmt.Println(older, exists)
 	// Output:
 	// [u2 u3 u4]
-	// u4 u3 true
+	// u4 u3 true 5
+	// 2 true
 	// 110 [{user 5}]
 	// 2 true
 }

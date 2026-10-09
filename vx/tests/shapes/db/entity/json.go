@@ -36,6 +36,21 @@ func ptrJson(v any, i int) any {
 	return nil
 }
 
+// JsonEdge is a row of a page of Json, with its cursor.
+type JsonEdge struct {
+	Node   *Json      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// JsonConnection is one page of Json.
+type JsonConnection struct {
+	Edges    []*JsonEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // JsonMeta is the runtime description of Json. Use it through its address.
 var JsonMeta = orm.Meta{
 	Name:    "Json",
@@ -184,15 +199,21 @@ func (q *JsonQuery) Iter(ctx context.Context) iter.Seq2[*Json, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *JsonQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Json], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *JsonQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*JsonConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Json](p), nil
+	conn := &JsonConnection{Edges: make([]*JsonEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &JsonEdge{Node: r.(*Json), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

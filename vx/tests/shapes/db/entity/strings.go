@@ -36,6 +36,21 @@ func ptrStrings(v any, i int) any {
 	return nil
 }
 
+// StringsEdge is a row of a page of Strings, with its cursor.
+type StringsEdge struct {
+	Node   *Strings   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// StringsConnection is one page of Strings.
+type StringsConnection struct {
+	Edges    []*StringsEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // StringsMeta is the runtime description of Strings. Use it through its address.
 var StringsMeta = orm.Meta{
 	Name:    "Strings",
@@ -184,15 +199,21 @@ func (q *StringsQuery) Iter(ctx context.Context) iter.Seq2[*Strings, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *StringsQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Strings], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *StringsQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*StringsConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Strings](p), nil
+	conn := &StringsConnection{Edges: make([]*StringsEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &StringsEdge{Node: r.(*Strings), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

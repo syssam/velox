@@ -109,6 +109,21 @@ func linkTag(dst any, es []any) {
 	}
 }
 
+// TagEdge is a row of a page of Tag, with its cursor.
+type TagEdge struct {
+	Node   *Tag       `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// TagConnection is one page of Tag.
+type TagConnection struct {
+	Edges    []*TagEdge   `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // TagMeta is the runtime description of Tag. Use it through its address.
 var TagMeta = orm.Meta{
 	Name:    "Tag",
@@ -259,15 +274,21 @@ func (q *TagQuery) Iter(ctx context.Context) iter.Seq2[*Tag, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TagQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Tag], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *TagQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TagConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Tag](p), nil
+	conn := &TagConnection{Edges: make([]*TagEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &TagEdge{Node: r.(*Tag), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -527,6 +548,70 @@ func (q *TagQuery) WithChildren(opts ...*TagQuery) *TagQuery {
 	}
 	q.c.Load(TagMeta.Edges[2], o, len(opts))
 	return q
+}
+
+// IsNode marks Tag as a node of the GraphQL schema.
+//
+//go:noinline
+func (*Tag) IsNode() {}
+
+// tagOrderColumns maps each field a list of Tag can be ordered by, as the
+// schema names it (the constants of tag.OrderField), to its column.
+var tagOrderColumns = map[string]string{
+	"NAME": "name",
+}
+
+// TagOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type TagOrder struct {
+	Direction orm.OrderDirection `json:"direction"`
+	Field     tag.OrderField     `json:"field"`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+//
+//go:noinline
+func (o *TagOrder) Term() predicate.TagOrder {
+	if o == nil {
+		return predicate.TagOrder{}
+	}
+	return predicate.TagOrder(orm.OrderTerm(&TagMeta, tagOrderColumns, string(o.Field), o.Direction))
+}
+
+// Posts resolves the "posts" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+// where is a *filter.PostWhereInput, or nil.
+//
+//go:noinline
+func (e *Tag) Posts(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *PostOrder, where interface{ P() predicate.Post }) (*PostConnection, error) {
+	q := e.QueryPosts(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+	if where != nil {
+		q.Where(where.P())
+	}
+	return q.Paginate(ctx, after, first, before, last)
+}
+
+// Parent resolves the "parent" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Tag) Parent(ctx context.Context) (*Tag, error) {
+	v, err := e.Edges.ParentOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryParent(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
+}
+
+// Children resolves the "children" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+//
+//go:noinline
+func (e *Tag) Children(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *TagOrder) (*TagConnection, error) {
+	q := e.QueryChildren(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+	return q.Paginate(ctx, after, first, before, last)
 }
 
 func init() { slots.Tag.Bind(&TagMeta) }

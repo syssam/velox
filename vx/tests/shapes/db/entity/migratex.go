@@ -36,6 +36,21 @@ func ptrMigrate(v any, i int) any {
 	return nil
 }
 
+// MigrateEdge is a row of a page of Migrate, with its cursor.
+type MigrateEdge struct {
+	Node   *Migrate   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// MigrateConnection is one page of Migrate.
+type MigrateConnection struct {
+	Edges    []*MigrateEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // MigrateMeta is the runtime description of Migrate. Use it through its address.
 var MigrateMeta = orm.Meta{
 	Name:    "Migrate",
@@ -184,15 +199,21 @@ func (q *MigrateQuery) Iter(ctx context.Context) iter.Seq2[*Migrate, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MigrateQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Migrate], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *MigrateQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MigrateConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Migrate](p), nil
+	conn := &MigrateConnection{Edges: make([]*MigrateEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &MigrateEdge{Node: r.(*Migrate), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

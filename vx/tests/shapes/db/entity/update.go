@@ -36,6 +36,21 @@ func ptrUpdate(v any, i int) any {
 	return nil
 }
 
+// UpdateEdge is a row of a page of Update, with its cursor.
+type UpdateEdge struct {
+	Node   *Update    `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// UpdateConnection is one page of Update.
+type UpdateConnection struct {
+	Edges    []*UpdateEdge `json:"edges"`
+	PageInfo orm.PageInfo  `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // UpdateMeta is the runtime description of Update. Use it through its address.
 var UpdateMeta = orm.Meta{
 	Name:    "Update",
@@ -184,15 +199,21 @@ func (q *UpdateQuery) Iter(ctx context.Context) iter.Seq2[*Update, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UpdateQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Update], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *UpdateQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UpdateConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Update](p), nil
+	conn := &UpdateConnection{Edges: make([]*UpdateEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &UpdateEdge{Node: r.(*Update), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

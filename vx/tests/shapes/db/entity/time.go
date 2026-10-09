@@ -41,6 +41,21 @@ func ptrTime(v any, i int) any {
 	return nil
 }
 
+// TimeEdge is a row of a page of Time, with its cursor.
+type TimeEdge struct {
+	Node   *Time      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// TimeConnection is one page of Time.
+type TimeConnection struct {
+	Edges    []*TimeEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // TimeMeta is the runtime description of Time. Use it through its address.
 var TimeMeta = orm.Meta{
 	Name:    "Time",
@@ -192,15 +207,21 @@ func (q *TimeQuery) Iter(ctx context.Context) iter.Seq2[*Time, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TimeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Time], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *TimeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TimeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Time](p), nil
+	conn := &TimeConnection{Edges: make([]*TimeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &TimeEdge{Node: r.(*Time), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

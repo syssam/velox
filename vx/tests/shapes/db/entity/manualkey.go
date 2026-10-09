@@ -37,6 +37,21 @@ func ptrManualKey(v any, i int) any {
 	return nil
 }
 
+// ManualKeyEdge is a row of a page of ManualKey, with its cursor.
+type ManualKeyEdge struct {
+	Node   *ManualKey `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// ManualKeyConnection is one page of ManualKey.
+type ManualKeyConnection struct {
+	Edges    []*ManualKeyEdge `json:"edges"`
+	PageInfo orm.PageInfo     `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // ManualKeyMeta is the runtime description of ManualKey. Use it through its address.
 var ManualKeyMeta = orm.Meta{
 	Name:    "ManualKey",
@@ -187,15 +202,21 @@ func (q *ManualKeyQuery) Iter(ctx context.Context) iter.Seq2[*ManualKey, error] 
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ManualKeyQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*ManualKey], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *ManualKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ManualKeyConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*ManualKey](p), nil
+	conn := &ManualKeyConnection{Edges: make([]*ManualKeyEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &ManualKeyEdge{Node: r.(*ManualKey), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

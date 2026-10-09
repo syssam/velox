@@ -17,6 +17,20 @@ const (
 	ModelName = "Token"
 )
 
+// OrderField is a field a list of Token can be ordered by, as the GraphQL schema
+// names it: the Field of an entity.TokenOrder.
+type OrderField string
+
+// The fields a list of Token can be ordered by.
+const (
+	OrderFieldName   OrderField = "NAME"
+	OrderFieldTier   OrderField = "TIER"
+	OrderFieldGrade  OrderField = "GRADE"
+	OrderFieldLabel  OrderField = "LABEL"
+	OrderFieldAlias  OrderField = "ALIAS"
+	OrderFieldWeight OrderField = "WEIGHT"
+)
+
 // UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

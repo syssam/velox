@@ -36,6 +36,21 @@ func ptrMeta(v any, i int) any {
 	return nil
 }
 
+// MetaEdge is a row of a page of Meta, with its cursor.
+type MetaEdge struct {
+	Node   *Meta      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// MetaConnection is one page of Meta.
+type MetaConnection struct {
+	Edges    []*MetaEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // MetaMeta is the runtime description of Meta. Use it through its address.
 var MetaMeta = orm.Meta{
 	Name:    "Meta",
@@ -184,15 +199,21 @@ func (q *MetaQuery) Iter(ctx context.Context) iter.Seq2[*Meta, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MetaQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Meta], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *MetaQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MetaConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Meta](p), nil
+	conn := &MetaConnection{Edges: make([]*MetaEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &MetaEdge{Node: r.(*Meta), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

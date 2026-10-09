@@ -52,3 +52,16 @@ func (c *TagClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) err
 	}
 	return err
 }
+
+// node is Get for an id of any type: see NodeTypes.
+func (c *TagClient) node(ctx context.Context, ex orm.Executor, id any) (Noder, error) {
+	v, ok := orm.IDAs[int](id)
+	if !ok {
+		return nil, orm.NotFound("Tag")
+	}
+	n, err := c.Get(ctx, ex, v)
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}

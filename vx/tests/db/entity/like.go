@@ -103,6 +103,21 @@ func linkLike(dst any, es []any) {
 	}
 }
 
+// LikeEdge is a row of a page of Like, with its cursor.
+type LikeEdge struct {
+	Node   *Like      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// LikeConnection is one page of Like.
+type LikeConnection struct {
+	Edges    []*LikeEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // LikeMeta is the runtime description of Like. Use it through its address.
 var LikeMeta = orm.Meta{
 	Name:    "Like",
@@ -257,15 +272,21 @@ func (q *LikeQuery) Iter(ctx context.Context) iter.Seq2[*Like, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *LikeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Like], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *LikeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*LikeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Like](p), nil
+	conn := &LikeConnection{Edges: make([]*LikeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &LikeEdge{Node: r.(*Like), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -508,6 +529,63 @@ func (q *LikeQuery) WithPost(opts ...*PostQuery) *LikeQuery {
 	}
 	q.c.Load(LikeMeta.Edges[1], o, len(opts))
 	return q
+}
+
+// IsNode marks Like as a node of the GraphQL schema.
+//
+//go:noinline
+func (*Like) IsNode() {}
+
+// likeOrderColumns maps each field a list of Like can be ordered by, as the
+// schema names it (the constants of like.OrderField), to its column.
+var likeOrderColumns = map[string]string{
+	"LIKED_AT": "liked_at",
+	"USER_ID":  "user_id",
+	"POST_ID":  "post_id",
+}
+
+// LikeOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type LikeOrder struct {
+	Direction orm.OrderDirection `json:"direction"`
+	Field     like.OrderField    `json:"field"`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+//
+//go:noinline
+func (o *LikeOrder) Term() predicate.LikeOrder {
+	if o == nil {
+		return predicate.LikeOrder{}
+	}
+	return predicate.LikeOrder(orm.OrderTerm(&LikeMeta, likeOrderColumns, string(o.Field), o.Direction))
+}
+
+// User resolves the "user" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Like) User(ctx context.Context) (*User, error) {
+	v, err := e.Edges.UserOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryUser(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
+}
+
+// Post resolves the "post" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Like) Post(ctx context.Context) (*Post, error) {
+	v, err := e.Edges.PostOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryPost(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
 }
 
 func init() { slots.Like.Bind(&LikeMeta) }

@@ -3,6 +3,7 @@ package gen
 import (
 	"bytes"
 	"fmt"
+	"sort"
 )
 
 // client generates the package at the root of the generated tree, the one
@@ -53,6 +54,7 @@ func (g *generator) client() (map[string][]byte, error) {
 		typeOf[e] = name
 	}
 
+	var nodes []*ent
 	for _, e := range g.ents {
 		n, t := g.names(e), typeOf[e]
 		ref, err := goTypeOf(e.ID.F)
@@ -107,6 +109,23 @@ func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex orm.Executor, id %[15]s) error
 }
 
 `, t, e.Name, modelPkg, n.Query, n.NewQuery, n.Create, n.NewCreate, n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, n.Delete, n.NewDelete, ctxPkg, id, e.pred(), e.ID.Col, e.Name)
+		if q := g.gql[e]; q != nil && q.Node {
+			nodes = append(nodes, e)
+			w(`// node is Get for an id of any type: see NodeTypes.
+func (c *%[1]s) node(ctx %[2]s.Context, ex orm.Executor, id any) (Noder, error) {
+	v, ok := orm.IDAs[%[3]s](id)
+	if !ok {
+		return nil, orm.NotFound(%[4]q)
+	}
+	n, err := c.Get(ctx, ex, v)
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+`, t, ctxPkg, id, e.Name)
+		}
 	}
 	var out bytes.Buffer
 	out.WriteString(header)
@@ -114,6 +133,37 @@ func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex orm.Executor, id %[15]s) error
 	fmt.Fprintf(&out, "// Package %[1]s is where every query and mutation starts: %[1]s.<Entity>.Query(conn),\n// %[1]s.<Entity>.Create(conn), %[1]s.<Entity>.UpdateByID(conn, id). The entities are in the\n// entity package, their columns and edges in a package each.\npackage %[1]s\n\n", root)
 	out.WriteString(im.block())
 	out.WriteString("\n")
+	if len(nodes) > 0 {
+		sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
+		fmt.Fprintf(&out, `// Noder is an entity that is a node of the GraphQL schema: what the schema's
+// Node interface is bound to.
+type Noder interface{ IsNode() }
+
+// NodeType is one type of node of the GraphQL schema.
+type NodeType struct {
+	// Name is the entity's, and the GraphQL type's.
+	Name  string
+	Table string
+	// Get returns the node of this type with the id, read like the Get of
+	// the entity (its policy and interceptors apply), or orm.ErrNotFound. An
+	// id that is not of the type's id type is the id of no node of it; an
+	// integer of another integer type is the same id.
+	Get func(ctx %[1]s.Context, ex orm.Executor, id any) (Noder, error)
+}
+
+// NodeTypes returns the types of node, ordered by name: what a node(id:)
+// field has to go by when an id does not say its type. To find a node, ask
+// each type in turn and take the first answer that is not orm.ErrNotFound;
+// that is a query per type, so an application with many types keeps what it
+// learns (a prefix in the id, or which type answered for a range of ids).
+func NodeTypes() []NodeType {
+	return []NodeType{
+`, ctxPkg)
+		for _, e := range nodes {
+			fmt.Fprintf(&out, "\t\t{Name: %q, Table: %q, Get: %s.node},\n", e.Name, e.T.Table(), e.Name)
+		}
+		out.WriteString("\t}\n}\n\n")
+	}
 	out.Write(b.Bytes())
 	return split(out.Bytes(), root)
 }

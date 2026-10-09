@@ -109,6 +109,21 @@ func linkComment(dst any, es []any) {
 	}
 }
 
+// CommentEdge is a row of a page of Comment, with its cursor.
+type CommentEdge struct {
+	Node   *Comment   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// CommentConnection is one page of Comment.
+type CommentConnection struct {
+	Edges    []*CommentEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // CommentMeta is the runtime description of Comment. Use it through its address.
 var CommentMeta = orm.Meta{
 	Name:    "Comment",
@@ -263,15 +278,21 @@ func (q *CommentQuery) Iter(ctx context.Context) iter.Seq2[*Comment, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *CommentQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Comment], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *CommentQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*CommentConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Comment](p), nil
+	conn := &CommentConnection{Edges: make([]*CommentEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &CommentEdge{Node: r.(*Comment), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -514,6 +535,62 @@ func (q *CommentQuery) WithAuthor(opts ...*UserQuery) *CommentQuery {
 	}
 	q.c.Load(CommentMeta.Edges[1], o, len(opts))
 	return q
+}
+
+// IsNode marks Comment as a node of the GraphQL schema.
+//
+//go:noinline
+func (*Comment) IsNode() {}
+
+// commentOrderColumns maps each field a list of Comment can be ordered by, as the
+// schema names it (the constants of comment.OrderField), to its column.
+var commentOrderColumns = map[string]string{
+	"CREATED_AT": "created_at",
+	"UPDATED_AT": "updated_at",
+}
+
+// CommentOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type CommentOrder struct {
+	Direction orm.OrderDirection `json:"direction"`
+	Field     comment.OrderField `json:"field"`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+//
+//go:noinline
+func (o *CommentOrder) Term() predicate.CommentOrder {
+	if o == nil {
+		return predicate.CommentOrder{}
+	}
+	return predicate.CommentOrder(orm.OrderTerm(&CommentMeta, commentOrderColumns, string(o.Field), o.Direction))
+}
+
+// Post resolves the "post" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Comment) Post(ctx context.Context) (*Post, error) {
+	v, err := e.Edges.PostOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryPost(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
+}
+
+// Author resolves the "author" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Comment) Author(ctx context.Context) (*User, error) {
+	v, err := e.Edges.AuthorOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryAuthor(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
 }
 
 func init() { slots.Comment.Bind(&CommentMeta) }

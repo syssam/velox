@@ -52,3 +52,16 @@ func (c *PostClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) er
 	}
 	return err
 }
+
+// node is Get for an id of any type: see NodeTypes.
+func (c *PostClient) node(ctx context.Context, ex orm.Executor, id any) (Noder, error) {
+	v, ok := orm.IDAs[int](id)
+	if !ok {
+		return nil, orm.NotFound("Post")
+	}
+	n, err := c.Get(ctx, ex, v)
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}

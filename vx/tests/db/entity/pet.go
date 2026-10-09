@@ -82,6 +82,21 @@ func linkPet(dst any, es []any) {
 	}
 }
 
+// PetEdge is a row of a page of Pet, with its cursor.
+type PetEdge struct {
+	Node   *Pet       `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// PetConnection is one page of Pet.
+type PetConnection struct {
+	Edges    []*PetEdge   `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // PetMeta is the runtime description of Pet. Use it through its address.
 var PetMeta = orm.Meta{
 	Name:    "Pet",
@@ -231,15 +246,21 @@ func (q *PetQuery) Iter(ctx context.Context) iter.Seq2[*Pet, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PetQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Pet], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *PetQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PetConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Pet](p), nil
+	conn := &PetConnection{Edges: make([]*PetEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &PetEdge{Node: r.(*Pet), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -453,6 +474,49 @@ func (q *PetQuery) WithOwner(opts ...*UserQuery) *PetQuery {
 	}
 	q.c.Load(PetMeta.Edges[0], o, len(opts))
 	return q
+}
+
+// IsNode marks Pet as a node of the GraphQL schema.
+//
+//go:noinline
+func (*Pet) IsNode() {}
+
+// petOrderColumns maps each field a list of Pet can be ordered by, as the
+// schema names it (the constants of pet.OrderField), to its column.
+var petOrderColumns = map[string]string{
+	"NAME":     "name",
+	"OWNER_ID": "owner_id",
+}
+
+// PetOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type PetOrder struct {
+	Direction orm.OrderDirection `json:"direction"`
+	Field     pet.OrderField     `json:"field"`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+//
+//go:noinline
+func (o *PetOrder) Term() predicate.PetOrder {
+	if o == nil {
+		return predicate.PetOrder{}
+	}
+	return predicate.PetOrder(orm.OrderTerm(&PetMeta, petOrderColumns, string(o.Field), o.Direction))
+}
+
+// Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Pet) Owner(ctx context.Context) (*User, error) {
+	v, err := e.Edges.OwnerOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryOwner(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
 }
 
 func init() {

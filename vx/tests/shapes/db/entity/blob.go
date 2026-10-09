@@ -83,6 +83,21 @@ func ptrBlob(v any, i int) any {
 	return nil
 }
 
+// BlobEdge is a row of a page of Blob, with its cursor.
+type BlobEdge struct {
+	Node   *Blob      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// BlobConnection is one page of Blob.
+type BlobConnection struct {
+	Edges    []*BlobEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // BlobMeta is the runtime description of Blob. Use it through its address.
 var BlobMeta = orm.Meta{
 	Name:    "Blob",
@@ -248,15 +263,21 @@ func (q *BlobQuery) Iter(ctx context.Context) iter.Seq2[*Blob, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *BlobQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Blob], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *BlobQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BlobConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Blob](p), nil
+	conn := &BlobConnection{Edges: make([]*BlobEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &BlobEdge{Node: r.(*Blob), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

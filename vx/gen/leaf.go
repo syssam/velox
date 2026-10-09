@@ -91,7 +91,12 @@ var leafReserved = []string{"And", "Or", "Not", "Table", "ModelName", "EdgeMetas
 
 // namer hands out the identifiers of one entity package: the first to ask for
 // a name gets it, the next gets the name with a suffix.
-type namer struct{ taken map[string]bool }
+type namer struct {
+	taken map[string]bool
+	// orderType is the name of the type of the fields a list can be ordered
+	// by, in a tree with a GraphQL schema.
+	orderType string
+}
 
 func (n *namer) unique(name, suffix string) string {
 	if n.taken[name] {
@@ -136,6 +141,16 @@ func (g *generator) enumNames(e *ent) (*namer, map[*fld]string, map[*fld][]strin
 	}
 	for _, f := range enums {
 		types[f] = n.unique(f.F.StructField()+"Enum", "Type")
+	}
+	// With a GraphQL schema, the fields a list can be ordered by are named
+	// here too (see gqlOrder for why not in package entity).
+	if g.cfg.GraphQL != nil {
+		n.orderType = n.unique("OrderField", "Type")
+		if q := g.gql[e]; q != nil {
+			for _, o := range q.Order {
+				n.taken[o.Const] = true
+			}
+		}
 	}
 	return n, types, consts, columns
 }
@@ -255,6 +270,13 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		w("// %[1]s is the type of the %[2]s field.\ntype %[1]s string\n\n// Values of the %[2]s field.\nconst (\n", enumType[f], f.F.Name)
 		for i, en := range f.F.Enums {
 			w("\t%s %s = %q\n", enumConsts[f][i], enumType[f], en.Value)
+		}
+		w(")\n\n")
+	}
+	if q := g.gql[e]; q != nil && q.HasOrder {
+		w("// %[1]s is a field a list of %[2]s can be ordered by, as the GraphQL schema\n// names it: the Field of an entity.%[2]sOrder.\ntype %[1]s string\n\n// The fields a list of %[2]s can be ordered by.\nconst (\n", names.orderType, e.Name)
+		for _, o := range q.Order {
+			w("\t%s %s = %q\n", o.Const, names.orderType, o.Value)
 		}
 		w(")\n\n")
 	}

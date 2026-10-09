@@ -74,6 +74,21 @@ func ptrGoTypeShape(v any, i int) any {
 	return nil
 }
 
+// GoTypeShapeEdge is a row of a page of GoTypeShape, with its cursor.
+type GoTypeShapeEdge struct {
+	Node   *GoTypeShape `json:"node"`
+	Cursor orm.Cursor   `json:"cursor"`
+}
+
+// GoTypeShapeConnection is one page of GoTypeShape.
+type GoTypeShapeConnection struct {
+	Edges    []*GoTypeShapeEdge `json:"edges"`
+	PageInfo orm.PageInfo       `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // GoTypeShapeMeta is the runtime description of GoTypeShape. Use it through its address.
 var GoTypeShapeMeta = orm.Meta{
 	Name:    "GoTypeShape",
@@ -236,15 +251,21 @@ func (q *GoTypeShapeQuery) Iter(ctx context.Context) iter.Seq2[*GoTypeShape, err
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *GoTypeShapeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*GoTypeShape], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *GoTypeShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*GoTypeShapeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*GoTypeShape](p), nil
+	conn := &GoTypeShapeConnection{Edges: make([]*GoTypeShapeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &GoTypeShapeEdge{Node: r.(*GoTypeShape), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

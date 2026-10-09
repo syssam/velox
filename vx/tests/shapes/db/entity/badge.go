@@ -89,6 +89,21 @@ func linkBadge(dst any, es []any) {
 	}
 }
 
+// BadgeEdge is a row of a page of Badge, with its cursor.
+type BadgeEdge struct {
+	Node   *Badge     `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// BadgeConnection is one page of Badge.
+type BadgeConnection struct {
+	Edges    []*BadgeEdge `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // BadgeMeta is the runtime description of Badge. Use it through its address.
 var BadgeMeta = orm.Meta{
 	Name:    "Badge",
@@ -239,15 +254,21 @@ func (q *BadgeQuery) Iter(ctx context.Context) iter.Seq2[*Badge, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *BadgeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Badge], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *BadgeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BadgeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Badge](p), nil
+	conn := &BadgeConnection{Edges: make([]*BadgeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &BadgeEdge{Node: r.(*Badge), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

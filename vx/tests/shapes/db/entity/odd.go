@@ -146,6 +146,21 @@ func edgeOdd(v any, i int) any {
 	return nil
 }
 
+// OddEdge is a row of a page of Odd, with its cursor.
+type OddEdge struct {
+	Node   *Odd       `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// OddConnection is one page of Odd.
+type OddConnection struct {
+	Edges    []*OddEdge   `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // OddMeta is the runtime description of Odd. Use it through its address.
 var OddMeta = orm.Meta{
 	Name:    "Odd",
@@ -302,15 +317,21 @@ func (q *OddQuery) Iter(ctx context.Context) iter.Seq2[*Odd, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *OddQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Odd], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *OddQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*OddConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Odd](p), nil
+	conn := &OddConnection{Edges: make([]*OddEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &OddEdge{Node: r.(*Odd), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

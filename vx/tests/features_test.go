@@ -374,7 +374,7 @@ func TestExecutorIsBoundAtTheHead(t *testing.T) {
 		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
 		_, err = client.User.Query(ex).Count(ctx)
 		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
-		_, err = client.User.Query(ex).Paginate(ctx, orm.PageArgs{})
+		_, err = client.User.Query(ex).Paginate(ctx, nil, nil, nil, nil)
 		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
 		_, err = client.User.Query(ex).Select().Aggregate(orm.Count()).Int(ctx)
 		require.ErrorIs(t, err, orm.ErrNoExecutor, name)

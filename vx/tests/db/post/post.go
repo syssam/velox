@@ -26,6 +26,19 @@ const (
 	StatusArchived  StatusEnum = "archived"
 )
 
+// OrderField is a field a list of Post can be ordered by, as the GraphQL schema
+// names it: the Field of an entity.PostOrder.
+type OrderField string
+
+// The fields a list of Post can be ordered by.
+const (
+	OrderFieldCreatedAt OrderField = "CREATED_AT"
+	OrderFieldUpdatedAt OrderField = "UPDATED_AT"
+	OrderFieldTitle     OrderField = "TITLE"
+	OrderFieldStatus    OrderField = "STATUS"
+	OrderFieldViewCount OrderField = "VIEW_COUNT"
+)
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

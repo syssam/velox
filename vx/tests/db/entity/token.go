@@ -100,6 +100,21 @@ func linkToken(dst any, es []any) {
 	}
 }
 
+// TokenEdge is a row of a page of Token, with its cursor.
+type TokenEdge struct {
+	Node   *Token     `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// TokenConnection is one page of Token.
+type TokenConnection struct {
+	Edges    []*TokenEdge `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // TokenMeta is the runtime description of Token. Use it through its address.
 var TokenMeta = orm.Meta{
 	Name:    "Token",
@@ -257,15 +272,21 @@ func (q *TokenQuery) Iter(ctx context.Context) iter.Seq2[*Token, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TokenQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Token], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *TokenQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TokenConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Token](p), nil
+	conn := &TokenConnection{Edges: make([]*TokenEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &TokenEdge{Node: r.(*Token), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -485,6 +506,53 @@ func (q *TokenQuery) WithOwner(opts ...*UserQuery) *TokenQuery {
 	}
 	q.c.Load(TokenMeta.Edges[0], o, len(opts))
 	return q
+}
+
+// IsNode marks Token as a node of the GraphQL schema.
+//
+//go:noinline
+func (*Token) IsNode() {}
+
+// tokenOrderColumns maps each field a list of Token can be ordered by, as the
+// schema names it (the constants of token.OrderField), to its column.
+var tokenOrderColumns = map[string]string{
+	"NAME":   "name",
+	"TIER":   "tier",
+	"GRADE":  "grade",
+	"LABEL":  "label",
+	"ALIAS":  "alias",
+	"WEIGHT": "weight",
+}
+
+// TokenOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type TokenOrder struct {
+	Direction orm.OrderDirection `json:"direction"`
+	Field     token.OrderField   `json:"field"`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+//
+//go:noinline
+func (o *TokenOrder) Term() predicate.TokenOrder {
+	if o == nil {
+		return predicate.TokenOrder{}
+	}
+	return predicate.TokenOrder(orm.OrderTerm(&TokenMeta, tokenOrderColumns, string(o.Field), o.Direction))
+}
+
+// Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *Token) Owner(ctx context.Context) (*User, error) {
+	v, err := e.Edges.OwnerOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryOwner(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
 }
 
 func init() { slots.Token.Bind(&TokenMeta) }

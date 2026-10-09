@@ -65,6 +65,21 @@ func ptrMixedIn(v any, i int) any {
 	return nil
 }
 
+// MixedInEdge is a row of a page of MixedIn, with its cursor.
+type MixedInEdge struct {
+	Node   *MixedIn   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// MixedInConnection is one page of MixedIn.
+type MixedInConnection struct {
+	Edges    []*MixedInEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // MixedInMeta is the runtime description of MixedIn. Use it through its address.
 var MixedInMeta = orm.Meta{
 	Name:    "MixedIn",
@@ -224,15 +239,21 @@ func (q *MixedInQuery) Iter(ctx context.Context) iter.Seq2[*MixedIn, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MixedInQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*MixedIn], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *MixedInQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MixedInConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*MixedIn](p), nil
+	conn := &MixedInConnection{Edges: make([]*MixedInEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &MixedInEdge{Node: r.(*MixedIn), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

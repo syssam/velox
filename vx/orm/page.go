@@ -6,65 +6,75 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
+	"strconv"
 	"time"
+
+	"github.com/syssam/velox/dialect"
 )
 
 // This file is what a list endpoint needs, whatever serves it (REST, GraphQL,
 // RPC): keyset pagination with opaque cursors, and predicates and order terms
 // built from field names that arrive in a request.
 
-// PageArgs asks for one page of a query.
-//
-// First with After pages forward, Last with Before pages backward; the
-// cursors are the ones a previous page returned. With neither First nor Last
-// the page is every row from the cursor on.
-type PageArgs struct {
-	First  *int
-	After  string
-	Last   *int
-	Before string
-	// Total asks for the number of rows the query matches in all, which
-	// costs a COUNT.
-	Total bool
+// Cursor is the position of a row in an ordering: an opaque string a page
+// returns with each row and takes back as After or Before. A cursor made for
+// one ordering is refused under another.
+type Cursor string
+
+// MarshalGQL and UnmarshalGQL are the methods a GraphQL engine binds a
+// scalar by (gqlgen's and graphql-go's Marshaler); nothing here imports one.
+func (c Cursor) MarshalGQL(w io.Writer) { _, _ = io.WriteString(w, strconv.Quote(string(c))) }
+
+// UnmarshalGQL takes the cursor a client sent back.
+func (c *Cursor) UnmarshalGQL(v any) error {
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("%w: it is a %T, not a string", ErrBadCursor, v)
+	}
+	*c = Cursor(s)
+	return nil
 }
 
-// Page is one page of entities of type T, a *Entity.
-//
-// It has fields and no methods, on purpose. A generic type's methods are
-// compiled by every package that can reach one of its instantiations, used
-// or not, and a query's Paginate method puts Page[*User] in reach of every
-// package that names UserQuery. With StartCursor and EndCursor as methods, a
-// package from which the queries of 450 entities could be reached compiled
-// them 450 times: half its compile time (benchmarks/fixtures/realistic).
-type Page[T any] struct {
-	Items []T
-	// Cursors[i] is the cursor of Items[i]: pass it as After or Before to
-	// continue from that row.
-	Cursors []string
-	// StartCursor and EndCursor are the cursors of the first and last item,
-	// or "" for an empty page.
-	StartCursor string
-	EndCursor   string
-	HasNext     bool
-	HasPrev     bool
-	// Total is the number of rows the query matches, or -1 when it was not
-	// asked for.
+// PageInfo says where a page lies in the whole: Relay's PageInfo.
+type PageInfo struct {
+	HasNextPage     bool    `json:"hasNextPage"`
+	HasPreviousPage bool    `json:"hasPreviousPage"`
+	StartCursor     *Cursor `json:"startCursor"`
+	EndCursor       *Cursor `json:"endCursor"`
+}
+
+// OrderDirection is the direction of an ordering that arrives in a request.
+type OrderDirection string
+
+// The two directions, spelled as GraphQL spells them.
+const (
+	OrderDirectionAsc  OrderDirection = "ASC"
+	OrderDirectionDesc OrderDirection = "DESC"
+)
+
+// Page is one page as the runtime returns it; the generated Paginate of an
+// entity turns it into that entity's connection.
+type Page struct {
+	Rows []any
+	// Cursors[i] is the cursor of Rows[i].
+	Cursors []Cursor
+	Info    PageInfo
+	// Total is the number of rows the query matches, or -1 when the caller
+	// said it does not want it (WithoutTotal).
 	Total int
 }
 
-// PageOf converts the page of any entity the runtime returns into the typed
-// page of T. Generated Paginate methods call it.
-func PageOf[T any](p *Page[any]) *Page[T] {
-	out := &Page[T]{Items: make([]T, len(p.Items)), Cursors: p.Cursors, HasNext: p.HasNext, HasPrev: p.HasPrev, Total: p.Total}
-	if n := len(p.Cursors); n > 0 {
-		out.StartCursor, out.EndCursor = p.Cursors[0], p.Cursors[n-1]
-	}
-	for i, e := range p.Items {
-		out.Items[i], _ = e.(T)
-	}
-	return out
+type noTotalKey struct{}
+
+// WithoutTotal returns a context under which Paginate does not count the
+// rows the query matches, and reports -1: for a caller that knows nobody
+// reads the total (a GraphQL request that did not select totalCount, an
+// endless list).
+func WithoutTotal(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noTotalKey{}, true)
 }
 
 // ErrBadCursor is returned for a cursor that this query did not produce: it
@@ -72,14 +82,28 @@ func PageOf[T any](p *Page[any]) *Page[T] {
 var ErrBadCursor = errors.New("orm: invalid cursor")
 
 // Paginate returns one page of the query, in the query's order with the id
-// as the final tie-break. The order columns must not hold NULL: a row is
-// located by comparing with the cursor's values.
+// as the final tie-break: first rows after the cursor after, or last rows
+// before the cursor before, as Relay's connections take them; with neither
+// first nor last, every row from the cursor on. An order column may hold
+// NULL: the walk passes the NULL rows where the database sorts them (first in
+// ascending order on SQLite and MySQL, last on PostgreSQL).
 //
 // Limit and Offset of the query are ignored; the entity's policy and the
 // interceptors apply as to any read.
 //
 //go:noinline
-func (q *QueryCore) Paginate(ctx context.Context, args PageArgs) (*Page[any], error) {
+func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, before *Cursor, last *int) (*Page, error) {
+	var args struct {
+		First, Last   *int
+		After, Before string
+	}
+	args.First, args.Last = first, last
+	if after != nil {
+		args.After = string(*after)
+	}
+	if before != nil {
+		args.Before = string(*before)
+	}
 	m := q.M
 	if m.id() == nil {
 		return nil, fmt.Errorf("orm: %s has no single-column id to paginate by", m.Name)
@@ -93,7 +117,7 @@ func (q *QueryCore) Paginate(ctx context.Context, args PageArgs) (*Page[any], er
 		}
 	}
 	// The sort key: the query's order, then the id unless it is there already.
-	keys := slices.Clone(q.Orders)
+	keys := slices.DeleteFunc(slices.Clone(q.Orders), func(o O) bool { return o.Col == "" })
 	if !slices.ContainsFunc(keys, func(o O) bool { return o.Col == m.id().Column }) {
 		keys = append(keys, O{Col: m.id().Column})
 	}
@@ -107,9 +131,10 @@ func (q *QueryCore) Paginate(ctx context.Context, args PageArgs) (*Page[any], er
 	if cerr != nil {
 		return nil, cerr
 	}
+	nullsFirst := dialect.GetCapabilities(c.drv.Dialect()).Has(dialect.CapNullsFirst)
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) {
-		page := &Page[any]{Total: -1}
-		if args.Total {
+		page := &Page{Total: -1}
+		if ctx.Value(noTotalKey{}) == nil {
 			n, err := q.count(ctx, c)
 			if err != nil {
 				return nil, err
@@ -130,7 +155,7 @@ func (q *QueryCore) Paginate(ctx context.Context, args PageArgs) (*Page[any], er
 			if err != nil {
 				return nil, err
 			}
-			win.Preds = append(win.Preds, beyond(keys, vals, cur.after))
+			win.Preds = append(win.Preds, beyond(keys, vals, cur.after, nullsFirst))
 		}
 		win.Orders = slices.Clone(keys)
 		if backward {
@@ -161,25 +186,28 @@ func (q *QueryCore) Paginate(ctx context.Context, args PageArgs) (*Page[any], er
 		}
 		if backward {
 			slices.Reverse(rows)
-			page.HasPrev, page.HasNext = more, args.Before != ""
+			page.Info.HasPreviousPage, page.Info.HasNextPage = more, args.Before != ""
 		} else {
-			page.HasNext, page.HasPrev = more, args.After != ""
+			page.Info.HasNextPage, page.Info.HasPreviousPage = more, args.After != ""
 		}
-		page.Items = rows
-		page.Cursors = make([]string, len(rows))
+		page.Rows = rows
+		page.Cursors = make([]Cursor, len(rows))
 		for i, e := range rows {
 			cur, err := m.encodeCursor(keys, e)
 			if err != nil {
 				return nil, err
 			}
-			page.Cursors[i] = cur
+			page.Cursors[i] = Cursor(cur)
+		}
+		if n := len(rows); n > 0 {
+			page.Info.StartCursor, page.Info.EndCursor = &page.Cursors[0], &page.Cursors[n-1]
 		}
 		return page, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	page, ok := v.(*Page[any])
+	page, ok := v.(*Page)
 	if !ok {
 		return nil, fmt.Errorf("orm: an interceptor returned %T for a page of %s", v, m.Name)
 	}
@@ -190,20 +218,41 @@ func (q *QueryCore) Paginate(ctx context.Context, args PageArgs) (*Page[any], er
 //
 //	a > x OR (a = x AND b > y) OR (a = x AND b = y AND id > z)
 //
-// with each comparison turned around for a descending column.
-func beyond(keys []O, vals []any, after bool) P {
+// with each comparison turned around for a descending column, "= NULL" being
+// IS NULL, and "after" taking NULL where the database sorts it (nullsFirst:
+// before every value in ascending order). A row comparison (a, id) > (x, z)
+// is NULL whenever a or x is, so a walk written that way stops at the first
+// NULL.
+func beyond(keys []O, vals []any, after, nullsFirstAsc bool) P {
 	ors := make([]P, 0, len(keys))
 	for i, k := range keys {
+		// asc is the direction the walk moves in on this column.
+		asc := k.Desc != after
+		nullsFirst := asc == nullsFirstAsc
 		op := OpGT
-		if k.Desc == after {
+		if !asc {
 			op = OpLT
+		}
+		var next P
+		switch {
+		case vals[i] == nil && nullsFirst:
+			next = P{Op: OpNotNull, Col: k.Col}
+		case vals[i] == nil:
+			continue // NULLs sort last here: nothing follows one on this column
+		case nullsFirst:
+			next = P{Op: op, Col: k.Col, Val: vals[i]}
+		default:
+			next = P{Op: OpOr, Subs: []P{{Op: op, Col: k.Col, Val: vals[i]}, {Op: OpIsNull, Col: k.Col}}}
 		}
 		and := make([]P, 0, i+1)
 		for j := range i {
-			and = append(and, P{Op: OpEQ, Col: keys[j].Col, Val: vals[j]})
+			if vals[j] == nil {
+				and = append(and, P{Op: OpIsNull, Col: keys[j].Col})
+			} else {
+				and = append(and, P{Op: OpEQ, Col: keys[j].Col, Val: vals[j]})
+			}
 		}
-		and = append(and, P{Op: op, Col: k.Col, Val: vals[i]})
-		ors = append(ors, P{Op: OpAnd, Subs: and})
+		ors = append(ors, P{Op: OpAnd, Subs: append(and, next)})
 	}
 	return P{Op: OpOr, Subs: ors}
 }
@@ -234,9 +283,6 @@ func (m *Meta) encodeCursor(keys []O, e any) (string, error) {
 	c := cursor{K: make([]string, len(keys)), V: make([]json.RawMessage, len(keys))}
 	for i, k := range keys {
 		v := m.get(e, k.Col)
-		if v == nil {
-			return "", fmt.Errorf("orm: cannot paginate %s by %q: the column holds NULL", m.Name, k.Col)
-		}
 		if t, ok := v.(time.Time); ok {
 			v = zonedTime{T: t, Zone: zoneName(t)}
 		}
@@ -266,6 +312,9 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 	for i, k := range keys {
 		if c.K[i] != k.Col {
 			return nil, fmt.Errorf("%w: it was made for another ordering", ErrBadCursor)
+		}
+		if string(c.V[i]) == "null" {
+			continue // the row's value was NULL
 		}
 		t := m.goType(m.col(k.Col))
 		if t == reflect.TypeFor[time.Time]() {

@@ -38,6 +38,21 @@ func ptrUUIDKey(v any, i int) any {
 	return nil
 }
 
+// UUIDKeyEdge is a row of a page of UUIDKey, with its cursor.
+type UUIDKeyEdge struct {
+	Node   *UUIDKey   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// UUIDKeyConnection is one page of UUIDKey.
+type UUIDKeyConnection struct {
+	Edges    []*UUIDKeyEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // UUIDKeyMeta is the runtime description of UUIDKey. Use it through its address.
 var UUIDKeyMeta = orm.Meta{
 	Name:    "UUIDKey",
@@ -188,15 +203,21 @@ func (q *UUIDKeyQuery) Iter(ctx context.Context) iter.Seq2[*UUIDKey, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UUIDKeyQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*UUIDKey], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *UUIDKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UUIDKeyConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*UUIDKey](p), nil
+	conn := &UUIDKeyConnection{Edges: make([]*UUIDKeyEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &UUIDKeyEdge{Node: r.(*UUIDKey), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

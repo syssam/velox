@@ -89,6 +89,21 @@ func edgeRenamed(v any, i int) any {
 	return nil
 }
 
+// RenamedEdge is a row of a page of Renamed, with its cursor.
+type RenamedEdge struct {
+	Node   *Renamed   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// RenamedConnection is one page of Renamed.
+type RenamedConnection struct {
+	Edges    []*RenamedEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // RenamedMeta is the runtime description of Renamed. Use it through its address.
 var RenamedMeta = orm.Meta{
 	Name:    "Renamed",
@@ -251,15 +266,21 @@ func (q *RenamedQuery) Iter(ctx context.Context) iter.Seq2[*Renamed, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *RenamedQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Renamed], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *RenamedQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*RenamedConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Renamed](p), nil
+	conn := &RenamedConnection{Edges: make([]*RenamedEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &RenamedEdge{Node: r.(*Renamed), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

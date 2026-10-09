@@ -36,6 +36,21 @@ func ptrRuntime(v any, i int) any {
 	return nil
 }
 
+// RuntimeEdge is a row of a page of Runtime, with its cursor.
+type RuntimeEdge struct {
+	Node   *Runtime   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// RuntimeConnection is one page of Runtime.
+type RuntimeConnection struct {
+	Edges    []*RuntimeEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // RuntimeMeta is the runtime description of Runtime. Use it through its address.
 var RuntimeMeta = orm.Meta{
 	Name:    "Runtime",
@@ -184,15 +199,21 @@ func (q *RuntimeQuery) Iter(ctx context.Context) iter.Seq2[*Runtime, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *RuntimeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Runtime], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *RuntimeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*RuntimeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Runtime](p), nil
+	conn := &RuntimeConnection{Edges: make([]*RuntimeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &RuntimeEdge{Node: r.(*Runtime), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

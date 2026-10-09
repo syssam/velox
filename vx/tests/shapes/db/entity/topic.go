@@ -92,6 +92,21 @@ func linkTopic(dst any, es []any) {
 	}
 }
 
+// TopicEdge is a row of a page of Topic, with its cursor.
+type TopicEdge struct {
+	Node   *Topic     `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// TopicConnection is one page of Topic.
+type TopicConnection struct {
+	Edges    []*TopicEdge `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // TopicMeta is the runtime description of Topic. Use it through its address.
 var TopicMeta = orm.Meta{
 	Name:    "Topic",
@@ -242,15 +257,21 @@ func (q *TopicQuery) Iter(ctx context.Context) iter.Seq2[*Topic, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TopicQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Topic], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *TopicQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TopicConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Topic](p), nil
+	conn := &TopicConnection{Edges: make([]*TopicEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &TopicEdge{Node: r.(*Topic), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

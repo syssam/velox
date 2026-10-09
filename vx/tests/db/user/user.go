@@ -27,6 +27,21 @@ const (
 	RoleGuest RoleEnum = "guest"
 )
 
+// OrderField is a field a list of User can be ordered by, as the GraphQL schema
+// names it: the Field of an entity.UserOrder.
+type OrderField string
+
+// The fields a list of User can be ordered by.
+const (
+	OrderFieldCreatedAt OrderField = "CREATED_AT"
+	OrderFieldUpdatedAt OrderField = "UPDATED_AT"
+	OrderFieldName      OrderField = "NAME"
+	OrderFieldEmail     OrderField = "EMAIL"
+	OrderFieldAge       OrderField = "AGE"
+	OrderFieldNickname  OrderField = "NICKNAME"
+	OrderFieldRole      OrderField = "ROLE"
+)
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

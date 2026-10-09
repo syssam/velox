@@ -38,6 +38,21 @@ func ptrEdgesEnum(v any, i int) any {
 	return nil
 }
 
+// EdgesEnumEdge is a row of a page of EdgesEnum, with its cursor.
+type EdgesEnumEdge struct {
+	Node   *EdgesEnum `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// EdgesEnumConnection is one page of EdgesEnum.
+type EdgesEnumConnection struct {
+	Edges    []*EdgesEnumEdge `json:"edges"`
+	PageInfo orm.PageInfo     `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // EdgesEnumMeta is the runtime description of EdgesEnum. Use it through its address.
 var EdgesEnumMeta = orm.Meta{
 	Name:    "EdgesEnum",
@@ -188,15 +203,21 @@ func (q *EdgesEnumQuery) Iter(ctx context.Context) iter.Seq2[*EdgesEnum, error] 
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EdgesEnumQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*EdgesEnum], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *EdgesEnumQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EdgesEnumConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*EdgesEnum](p), nil
+	conn := &EdgesEnumConnection{Edges: make([]*EdgesEnumEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &EdgesEnumEdge{Node: r.(*EdgesEnum), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

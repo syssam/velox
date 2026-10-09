@@ -36,6 +36,21 @@ func ptrSql(v any, i int) any {
 	return nil
 }
 
+// SqlEdge is a row of a page of Sql, with its cursor.
+type SqlEdge struct {
+	Node   *Sql       `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// SqlConnection is one page of Sql.
+type SqlConnection struct {
+	Edges    []*SqlEdge   `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // SqlMeta is the runtime description of Sql. Use it through its address.
 var SqlMeta = orm.Meta{
 	Name:    "Sql",
@@ -182,15 +197,21 @@ func (q *SqlQuery) Iter(ctx context.Context) iter.Seq2[*Sql, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *SqlQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Sql], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *SqlQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*SqlConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Sql](p), nil
+	conn := &SqlConnection{Edges: make([]*SqlEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &SqlEdge{Node: r.(*Sql), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

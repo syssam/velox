@@ -53,3 +53,16 @@ func (c *TokenClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.U
 	}
 	return err
 }
+
+// node is Get for an id of any type: see NodeTypes.
+func (c *TokenClient) node(ctx context.Context, ex orm.Executor, id any) (Noder, error) {
+	v, ok := orm.IDAs[uuid.UUID](id)
+	if !ok {
+		return nil, orm.NotFound("Token")
+	}
+	n, err := c.Get(ctx, ex, v)
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}

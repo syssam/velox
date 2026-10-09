@@ -10,6 +10,7 @@ import (
 
 	"github.com/syssam/velox/compiler"
 	vgen "github.com/syssam/velox/compiler/gen"
+	"github.com/syssam/velox/contrib/graphql/graphqlgen"
 )
 
 // The generated code the tests of this module run against is what the
@@ -23,9 +24,12 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 	for _, c := range []struct {
 		name, schema, dir string
 		cfg               Config
+		// sdl is the directory of the tree's GraphQL schema, for a tree
+		// that is generated with one.
+		sdl string
 	}{
-		{"testschema", "github.com/syssam/velox/testschema", "../tests/db", Config{Package: "github.com/syssam/velox/vx/tests/db"}},
-		{"shapes", "github.com/syssam/velox/vx/tests/shapes/schema", "../tests/shapes/db", Config{Package: "github.com/syssam/velox/vx/tests/shapes/db"}},
+		{"testschema", "github.com/syssam/velox/testschema", "../tests/db", Config{Package: "github.com/syssam/velox/vx/tests/db"}, "../tests/graphql"},
+		{"shapes", "github.com/syssam/velox/vx/tests/shapes/schema", "../tests/shapes/db", Config{Package: "github.com/syssam/velox/vx/tests/shapes/db"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			out := t.TempDir()
@@ -38,11 +42,34 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 				t.Fatal(err)
 			}
 			c.cfg.Target = out
+			sdlOut := t.TempDir()
+			if c.sdl != "" {
+				// As vxgen -graphql generates it.
+				c.cfg.GraphQL = &GraphQL{Dir: sdlOut, Schema: graphqlgen.Config{
+					SchemaFilename: "velox.graphql", SchemaSplitMode: graphqlgen.SchemaSplitPerEntity, WhereInputs: true,
+				}}
+			}
 			if err := Generate(graph, c.cfg); err != nil {
 				t.Fatal(err)
 			}
-			want := files(t, out)
-			got := files(t, c.dir)
+			if c.sdl != "" {
+				wantSDL, gotSDL := files(t, sdlOut, ".graphql"), files(t, c.sdl, ".graphql")
+				for rel, src := range wantSDL {
+					if !bytes.Equal(gotSDL[rel], src) {
+						t.Errorf("%s in %s is not what the generator writes now: regenerate", rel, c.sdl)
+					}
+				}
+				for rel := range gotSDL {
+					if _, ok := wantSDL[rel]; !ok {
+						t.Errorf("%s in %s is no longer generated: regenerate", rel, c.sdl)
+					}
+				}
+				if len(wantSDL) < 5 {
+					t.Errorf("only %d schema files were generated", len(wantSDL))
+				}
+			}
+			want := files(t, out, ".go")
+			got := files(t, c.dir, ".go")
 			for rel, src := range want {
 				switch have, ok := got[rel]; {
 				case !ok:
@@ -73,11 +100,11 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 	}
 }
 
-func files(t *testing.T, dir string) map[string][]byte {
+func files(t *testing.T, dir, ext string) map[string][]byte {
 	t.Helper()
 	out := map[string][]byte{}
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Ext(path) != ".go" {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ext {
 			return err
 		}
 		src, err := os.ReadFile(path) //nolint:gosec // a path under a test directory

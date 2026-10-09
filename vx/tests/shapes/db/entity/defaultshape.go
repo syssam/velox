@@ -99,6 +99,21 @@ func ptrDefaultShape(v any, i int) any {
 	return nil
 }
 
+// DefaultShapeEdge is a row of a page of DefaultShape, with its cursor.
+type DefaultShapeEdge struct {
+	Node   *DefaultShape `json:"node"`
+	Cursor orm.Cursor    `json:"cursor"`
+}
+
+// DefaultShapeConnection is one page of DefaultShape.
+type DefaultShapeConnection struct {
+	Edges    []*DefaultShapeEdge `json:"edges"`
+	PageInfo orm.PageInfo        `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // DefaultShapeMeta is the runtime description of DefaultShape. Use it through its address.
 var DefaultShapeMeta = orm.Meta{
 	Name:    "DefaultShape",
@@ -269,15 +284,21 @@ func (q *DefaultShapeQuery) Iter(ctx context.Context) iter.Seq2[*DefaultShape, e
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *DefaultShapeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*DefaultShape], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *DefaultShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*DefaultShapeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*DefaultShape](p), nil
+	conn := &DefaultShapeConnection{Edges: make([]*DefaultShapeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &DefaultShapeEdge{Node: r.(*DefaultShape), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

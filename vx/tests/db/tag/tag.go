@@ -15,6 +15,15 @@ const (
 	ModelName = "Tag"
 )
 
+// OrderField is a field a list of Tag can be ordered by, as the GraphQL schema
+// names it: the Field of an entity.TagOrder.
+type OrderField string
+
+// The fields a list of Tag can be ordered by.
+const (
+	OrderFieldName OrderField = "NAME"
+)
+
 // IntColumn is a column of Go type int: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.

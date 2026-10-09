@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox/vx/tests/db/predicate"
@@ -19,6 +20,15 @@ import (
 )
 
 func intp(n int) *int { return &n }
+
+// nodes are the rows of a page.
+func nodes(c *entity.UserConnection) []*entity.User {
+	out := make([]*entity.User, len(c.Edges))
+	for i, e := range c.Edges {
+		out[i] = e.Node
+	}
+	return out
+}
 
 // Walking a query page by page, in either direction, visits exactly the rows
 // of the query in its order, whatever the order: ties on the leading columns,
@@ -49,61 +59,121 @@ func TestPaginate_WalkEqualsQuery(t *testing.T) {
 
 			for _, size := range []int{1, 4, 7, 100} {
 				var got []int
-				after := ""
+				var after *orm.Cursor
 				for pages := 0; ; pages++ {
 					require.Less(t, pages, 50, "pagination does not end")
-					p, err := q().Paginate(ctx, orm.PageArgs{First: intp(size), After: after, Total: true})
+					p, err := q().Paginate(ctx, after, intp(size), nil, nil)
 					require.NoError(t, err)
-					assert.Equal(t, len(want), p.Total)
-					assert.Equal(t, after != "", p.HasPrev)
-					require.Len(t, p.Cursors, len(p.Items))
-					for _, u := range p.Items {
-						got = append(got, u.ID)
+					assert.Equal(t, len(want), p.TotalCount)
+					assert.Equal(t, after != nil, p.PageInfo.HasPreviousPage)
+					for _, e := range p.Edges {
+						require.NotEmpty(t, e.Cursor)
+						got = append(got, e.Node.ID)
 					}
-					if !p.HasNext {
+					if !p.PageInfo.HasNextPage {
 						break
 					}
-					require.Len(t, p.Items, size)
-					after = p.EndCursor
+					require.Len(t, p.Edges, size)
+					require.Equal(t, p.Edges[size-1].Cursor, *p.PageInfo.EndCursor)
+					after = p.PageInfo.EndCursor
 				}
 				assert.Equal(t, want, got, "forward, page size %d", size)
 
 				got = nil
-				before := ""
+				var before *orm.Cursor
 				for pages := 0; ; pages++ {
 					require.Less(t, pages, 50, "pagination does not end")
-					p, err := q().Paginate(ctx, orm.PageArgs{Last: intp(size), Before: before})
+					p, err := q().Paginate(orm.WithoutTotal(ctx), nil, nil, before, intp(size))
 					require.NoError(t, err)
-					assert.Equal(t, -1, p.Total, "a total that was not asked for")
-					assert.Equal(t, before != "", p.HasNext)
-					ids := make([]int, len(p.Items))
-					for i, u := range p.Items {
-						ids[i] = u.ID
+					assert.Equal(t, -1, p.TotalCount, "a total the caller did not want")
+					assert.Equal(t, before != nil, p.PageInfo.HasNextPage)
+					ids := make([]int, len(p.Edges))
+					for i, e := range p.Edges {
+						ids[i] = e.Node.ID
 					}
 					got = append(ids, got...)
-					if !p.HasPrev {
+					if !p.PageInfo.HasPreviousPage {
 						break
 					}
-					before = p.StartCursor
+					require.Equal(t, p.Edges[0].Cursor, *p.PageInfo.StartCursor)
+					before = p.PageInfo.StartCursor
 				}
 				assert.Equal(t, want, got, "backward, page size %d", size)
 			}
 
 			// Every row's own cursor continues from that row.
-			all, err := q().Paginate(ctx, orm.PageArgs{})
+			all, err := q().Paginate(ctx, nil, nil, nil, nil)
 			require.NoError(t, err)
-			require.Len(t, all.Items, len(want))
+			require.Len(t, all.Edges, len(want))
 			mid := len(want) / 2
-			rest, err := q().Paginate(ctx, orm.PageArgs{After: all.Cursors[mid]})
+			rest, err := q().Paginate(ctx, &all.Edges[mid].Cursor, nil, nil, nil)
 			require.NoError(t, err)
-			require.Len(t, rest.Items, len(want)-mid-1)
-			if len(rest.Items) > 0 {
-				assert.Equal(t, want[mid+1], rest.Items[0].ID)
+			require.Len(t, rest.Edges, len(want)-mid-1)
+			if len(rest.Edges) > 0 {
+				assert.Equal(t, want[mid+1], rest.Edges[0].Node.ID)
 			}
 			// A window between two cursors.
-			between, err := q().Paginate(ctx, orm.PageArgs{After: all.Cursors[0], Before: all.Cursors[len(want)-1]})
+			between, err := q().Paginate(ctx, &all.Edges[0].Cursor, nil, &all.Edges[len(want)-1].Cursor, nil)
 			require.NoError(t, err)
-			assert.Len(t, between.Items, len(want)-2)
+			assert.Len(t, between.Edges, len(want)-2)
+		})
+	}
+}
+
+// An order column may hold NULL: the walk passes the NULL rows where the
+// database sorts them, in both directions and whichever way the column is
+// ordered. (A cursor on a NULL value used to be an error.)
+func TestPaginate_NullableOrderColumn(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	for i := range 17 {
+		u := newUser(t, db, fmt.Sprintf("u%02d", i), 20+i)
+		if i%3 != 0 { // a third of the rows keep a NULL nickname; the rest tie in pairs
+			_, err := client.User.UpdateByID(db, u.ID).Set(user.Nickname.Set(fmt.Sprintf("n%d", i/2))).SaveOne(ctx)
+			require.NoError(t, err)
+		}
+	}
+	for name, order := range map[string]predicate.UserOrder{"asc": user.Nickname.Asc(), "desc": user.Nickname.Desc()} {
+		t.Run(name, func(t *testing.T) {
+			q := func() *entity.UserQuery { return client.User.Query(db).OrderBy(order) }
+			want, err := q().OrderBy(user.ID.Asc()).IDs(ctx)
+			require.NoError(t, err)
+			require.Len(t, want, 17)
+			for _, size := range []int{1, 3, 5} {
+				var got []int
+				var after *orm.Cursor
+				for pages := 0; ; pages++ {
+					require.Less(t, pages, 40, "pagination does not end")
+					p, err := q().Paginate(ctx, after, intp(size), nil, nil)
+					require.NoError(t, err)
+					for _, e := range p.Edges {
+						got = append(got, e.Node.ID)
+					}
+					if !p.PageInfo.HasNextPage {
+						break
+					}
+					after = p.PageInfo.EndCursor
+				}
+				assert.Equal(t, want, got, "forward, page size %d", size)
+
+				got = nil
+				var before *orm.Cursor
+				for pages := 0; ; pages++ {
+					require.Less(t, pages, 40, "pagination does not end")
+					p, err := q().Paginate(ctx, nil, nil, before, intp(size))
+					require.NoError(t, err)
+					ids := make([]int, len(p.Edges))
+					for i, e := range p.Edges {
+						ids[i] = e.Node.ID
+					}
+					got = append(ids, got...)
+					if !p.PageInfo.HasPreviousPage {
+						break
+					}
+					before = p.PageInfo.StartCursor
+				}
+				assert.Equal(t, want, got, "backward, page size %d", size)
+			}
 		})
 	}
 }
@@ -115,40 +185,50 @@ func TestPaginate_ArgsCursorsAndPolicy(t *testing.T) {
 	newUser(t, db, "bob", 40)
 	newUser(t, db, "cat", 50)
 
-	_, err := client.User.Query(db).Paginate(ctx, orm.PageArgs{First: intp(1), Last: intp(1)})
+	_, err := client.User.Query(db).Paginate(ctx, nil, intp(1), nil, intp(1))
 	require.Error(t, err)
-	_, err = client.User.Query(db).Paginate(ctx, orm.PageArgs{First: intp(-1)})
+	_, err = client.User.Query(db).Paginate(ctx, nil, intp(-1), nil, nil)
 	require.Error(t, err)
-	_, err = client.User.Query(db).Paginate(ctx, orm.PageArgs{After: "not a cursor"})
+	bad := orm.Cursor("not a cursor")
+	_, err = client.User.Query(db).Paginate(ctx, &bad, nil, nil, nil)
 	assert.ErrorIs(t, err, orm.ErrBadCursor)
 
 	// A cursor is only good for the ordering that made it.
-	byAge, err := client.User.Query(db).OrderBy(user.Age.Asc()).Paginate(ctx, orm.PageArgs{First: intp(1)})
+	byAge, err := client.User.Query(db).OrderBy(user.Age.Asc()).Paginate(ctx, nil, intp(1), nil, nil)
 	require.NoError(t, err)
-	_, err = client.User.Query(db).OrderBy(user.Name.Asc()).Paginate(ctx, orm.PageArgs{After: byAge.EndCursor})
+	_, err = client.User.Query(db).OrderBy(user.Name.Asc()).Paginate(ctx, byAge.PageInfo.EndCursor, nil, nil, nil)
 	assert.ErrorIs(t, err, orm.ErrBadCursor)
 
-	// First: 0 asks for no rows, and still answers the total.
-	p, err := client.User.Query(db).Paginate(ctx, orm.PageArgs{First: intp(0), Total: true})
+	// first: 0 asks for no rows, and still answers the total.
+	p, err := client.User.Query(db).Paginate(ctx, nil, intp(0), nil, nil)
 	require.NoError(t, err)
-	assert.Empty(t, p.Items)
-	assert.Equal(t, 3, p.Total)
-	assert.Equal(t, "", p.EndCursor)
+	assert.Empty(t, p.Edges)
+	assert.Equal(t, 3, p.TotalCount)
+	assert.Nil(t, p.PageInfo.EndCursor)
+	assert.Nil(t, p.PageInfo.StartCursor)
 
 	// Limit and Offset of the query do not leak into a page.
-	p, err = client.User.Query(db).Limit(1).Offset(1).Paginate(ctx, orm.PageArgs{First: intp(2)})
+	p, err = client.User.Query(db).Limit(1).Offset(1).Paginate(ctx, nil, intp(2), nil, nil)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"ann", "bob"}, names(p.Items))
-	assert.True(t, p.HasNext)
+	assert.Equal(t, []string{"ann", "bob"}, names(nodes(p)))
+	assert.True(t, p.PageInfo.HasNextPage)
 
 	// The policy narrows the page and its total; eager loads come with it.
 	only := testschema.FilterUserQueryToNameContext(ctx, "bob")
-	p, err = client.User.Query(db).WithPosts().Paginate(only, orm.PageArgs{First: intp(10), Total: true})
+	p, err = client.User.Query(db).WithPosts().Paginate(only, nil, intp(10), nil, nil)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"bob"}, names(p.Items))
-	assert.Equal(t, 1, p.Total)
-	_, err = p.Items[0].Edges.PostsOrErr()
+	assert.Equal(t, []string{"bob"}, names(nodes(p)))
+	assert.Equal(t, 1, p.TotalCount)
+	_, err = p.Edges[0].Node.Edges.PostsOrErr()
 	assert.NoError(t, err)
+
+	// A cursor as a GraphQL engine reads and writes it.
+	var buf strings.Builder
+	p.Edges[0].Cursor.MarshalGQL(&buf)
+	var back orm.Cursor
+	require.NoError(t, back.UnmarshalGQL(strings.Trim(buf.String(), `"`)))
+	assert.Equal(t, p.Edges[0].Cursor, back)
+	assert.ErrorIs(t, back.UnmarshalGQL(7), orm.ErrBadCursor)
 }
 
 // A list endpoint that takes its filter and order as field names: nothing

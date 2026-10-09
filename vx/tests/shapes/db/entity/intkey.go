@@ -36,6 +36,21 @@ func ptrIntKey(v any, i int) any {
 	return nil
 }
 
+// IntKeyEdge is a row of a page of IntKey, with its cursor.
+type IntKeyEdge struct {
+	Node   *IntKey    `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// IntKeyConnection is one page of IntKey.
+type IntKeyConnection struct {
+	Edges    []*IntKeyEdge `json:"edges"`
+	PageInfo orm.PageInfo  `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // IntKeyMeta is the runtime description of IntKey. Use it through its address.
 var IntKeyMeta = orm.Meta{
 	Name:    "IntKey",
@@ -184,15 +199,21 @@ func (q *IntKeyQuery) Iter(ctx context.Context) iter.Seq2[*IntKey, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *IntKeyQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*IntKey], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *IntKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*IntKeyConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*IntKey](p), nil
+	conn := &IntKeyConnection{Edges: make([]*IntKeyEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &IntKeyEdge{Node: r.(*IntKey), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

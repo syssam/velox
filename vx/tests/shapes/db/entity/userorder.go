@@ -36,6 +36,21 @@ func ptrUserOrder(v any, i int) any {
 	return nil
 }
 
+// UserOrderEdge is a row of a page of UserOrder, with its cursor.
+type UserOrderEdge struct {
+	Node   *UserOrder `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// UserOrderConnection is one page of UserOrder.
+type UserOrderConnection struct {
+	Edges    []*UserOrderEdge `json:"edges"`
+	PageInfo orm.PageInfo     `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // UserOrderMeta is the runtime description of UserOrder. Use it through its address.
 var UserOrderMeta = orm.Meta{
 	Name:    "UserOrder",
@@ -184,15 +199,21 @@ func (q *UserOrderQuery) Iter(ctx context.Context) iter.Seq2[*UserOrder, error] 
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UserOrderQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*UserOrder], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *UserOrderQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UserOrderConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*UserOrder](p), nil
+	conn := &UserOrderConnection{Edges: make([]*UserOrderEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &UserOrderEdge{Node: r.(*UserOrder), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

@@ -345,6 +345,13 @@ func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.S
 		compile(&q.Preds[i])(s)
 	}
 	for _, o := range q.Orders {
+		if o.Col == "" {
+			continue // the zero term orders by nothing, as the zero predicate filters nothing
+		}
+		if q.M.col(o.Col) < 0 {
+			s.AddError(fmt.Errorf("orm: %s cannot be ordered by %q: not a column", q.M.Name, o.Col))
+			continue
+		}
 		if o.Desc {
 			s.OrderBy(sql.Desc(s.C(o.Col)))
 		} else {
@@ -510,6 +517,9 @@ func compile(p *P) func(*sql.Selector) {
 	case opRaw:
 		fn, _ := p.raw.(func(*sql.Selector))
 		return fn
+	case opInvalid:
+		err, _ := p.Val.(error)
+		return func(s *sql.Selector) { s.AddError(err) }
 	case OpEQ:
 		return sql.FieldEQ(p.Col, p.Val)
 	case OpNEQ:

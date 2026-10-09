@@ -36,6 +36,21 @@ func ptrSet(v any, i int) any {
 	return nil
 }
 
+// SetEdge is a row of a page of Set, with its cursor.
+type SetEdge struct {
+	Node   *Set       `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// SetConnection is one page of Set.
+type SetConnection struct {
+	Edges    []*SetEdge   `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // SetMeta is the runtime description of Set. Use it through its address.
 var SetMeta = orm.Meta{
 	Name:    "Set",
@@ -182,15 +197,21 @@ func (q *SetQuery) Iter(ctx context.Context) iter.Seq2[*Set, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *SetQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Set], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *SetQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*SetConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Set](p), nil
+	conn := &SetConnection{Edges: make([]*SetEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &SetEdge{Node: r.(*Set), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

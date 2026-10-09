@@ -89,6 +89,21 @@ func linkStudent(dst any, es []any) {
 	}
 }
 
+// StudentEdge is a row of a page of Student, with its cursor.
+type StudentEdge struct {
+	Node   *Student   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// StudentConnection is one page of Student.
+type StudentConnection struct {
+	Edges    []*StudentEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // StudentMeta is the runtime description of Student. Use it through its address.
 var StudentMeta = orm.Meta{
 	Name:    "Student",
@@ -239,15 +254,21 @@ func (q *StudentQuery) Iter(ctx context.Context) iter.Seq2[*Student, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *StudentQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Student], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *StudentQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*StudentConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Student](p), nil
+	conn := &StudentConnection{Edges: make([]*StudentEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &StudentEdge{Node: r.(*Student), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

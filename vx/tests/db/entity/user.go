@@ -164,6 +164,21 @@ func linkUser(dst any, es []any) {
 	}
 }
 
+// UserEdge is a row of a page of User, with its cursor.
+type UserEdge struct {
+	Node   *User      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// UserConnection is one page of User.
+type UserConnection struct {
+	Edges    []*UserEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // UserMeta is the runtime description of User. Use it through its address.
 var UserMeta = orm.Meta{
 	Name:    "User",
@@ -322,15 +337,21 @@ func (q *UserQuery) Iter(ctx context.Context) iter.Seq2[*User, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UserQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*User], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *UserQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UserConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*User](p), nil
+	conn := &UserConnection{Edges: make([]*UserEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &UserEdge{Node: r.(*User), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
@@ -665,6 +686,110 @@ func (q *UserQuery) WithLikes(opts ...*LikeQuery) *UserQuery {
 	}
 	q.c.Load(UserMeta.Edges[5], o, len(opts))
 	return q
+}
+
+// IsNode marks User as a node of the GraphQL schema.
+//
+//go:noinline
+func (*User) IsNode() {}
+
+// userOrderColumns maps each field a list of User can be ordered by, as the
+// schema names it (the constants of user.OrderField), to its column.
+var userOrderColumns = map[string]string{
+	"CREATED_AT": "created_at",
+	"UPDATED_AT": "updated_at",
+	"NAME":       "name",
+	"EMAIL":      "email",
+	"AGE":        "age",
+	"NICKNAME":   "nickname",
+	"ROLE":       "role",
+}
+
+// UserOrder is the ordering a request asks for: the orderBy argument of a
+// GraphQL connection. Without a Field it orders by the id.
+type UserOrder struct {
+	Direction orm.OrderDirection `json:"direction"`
+	Field     user.OrderField    `json:"field"`
+}
+
+// Term returns the order term of the input, for OrderBy; the term of a nil
+// input orders by nothing.
+//
+//go:noinline
+func (o *UserOrder) Term() predicate.UserOrder {
+	if o == nil {
+		return predicate.UserOrder{}
+	}
+	return predicate.UserOrder(orm.OrderTerm(&UserMeta, userOrderColumns, string(o.Field), o.Direction))
+}
+
+// Posts resolves the "posts" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+// where is a *filter.PostWhereInput, or nil.
+//
+//go:noinline
+func (e *User) Posts(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *PostOrder, where interface{ P() predicate.Post }) (*PostConnection, error) {
+	q := e.QueryPosts(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+	if where != nil {
+		q.Where(where.P())
+	}
+	return q.Paginate(ctx, after, first, before, last)
+}
+
+// Pets resolves the "pets" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+//
+//go:noinline
+func (e *User) Pets(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *PetOrder) (*PetConnection, error) {
+	q := e.QueryPets(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+	return q.Paginate(ctx, after, first, before, last)
+}
+
+// Comments resolves the "comments" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+//
+//go:noinline
+func (e *User) Comments(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy []*CommentOrder) (*CommentConnection, error) {
+	q := e.QueryComments(orm.ExecutorFrom(ctx))
+	for _, o := range orderBy {
+		q.OrderBy(o.Term())
+	}
+	return q.Paginate(ctx, after, first, before, last)
+}
+
+// Token resolves the "token" edge for a GraphQL engine: the neighbor the query
+// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// An edge without a neighbor is nil, not an error.
+//
+//go:noinline
+func (e *User) Token(ctx context.Context) (*Token, error) {
+	v, err := e.Edges.TokenOrErr()
+	if orm.IsNotLoaded(err) {
+		v, err = e.QueryToken(orm.ExecutorFrom(ctx)).Only(ctx)
+	}
+	return v, orm.MaskNotFound(err)
+}
+
+// LikedPosts resolves the "liked_posts" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+// where is a *filter.PostWhereInput, or nil.
+//
+//go:noinline
+func (e *User) LikedPosts(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *PostOrder, where interface{ P() predicate.Post }) (*PostConnection, error) {
+	q := e.QueryLikedPosts(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+	if where != nil {
+		q.Where(where.P())
+	}
+	return q.Paginate(ctx, after, first, before, last)
+}
+
+// Likes resolves the "likes" edge for a GraphQL engine: one page of the
+// neighbors, queried on the handle of the context (orm.WithExecutor).
+//
+//go:noinline
+func (e *User) Likes(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *LikeOrder) (*LikeConnection, error) {
+	q := e.QueryLikes(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+	return q.Paginate(ctx, after, first, before, last)
 }
 
 func init() { slots.User.Bind(&UserMeta) }

@@ -40,6 +40,21 @@ func ptrEntityx(v any, i int) any {
 	return nil
 }
 
+// EntityxEdge is a row of a page of Entityx, with its cursor.
+type EntityxEdge struct {
+	Node   *Entityx   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// EntityxConnection is one page of Entityx.
+type EntityxConnection struct {
+	Edges    []*EntityxEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // EntityxMeta is the runtime description of Entityx. Use it through its address.
 var EntityxMeta = orm.Meta{
 	Name:    "Entityx",
@@ -191,15 +206,21 @@ func (q *EntityxQuery) Iter(ctx context.Context) iter.Seq2[*Entityx, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EntityxQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Entityx], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *EntityxQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EntityxConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Entityx](p), nil
+	conn := &EntityxConnection{Edges: make([]*EntityxEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &EntityxEdge{Node: r.(*Entityx), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

@@ -37,6 +37,21 @@ func ptrStringKey(v any, i int) any {
 	return nil
 }
 
+// StringKeyEdge is a row of a page of StringKey, with its cursor.
+type StringKeyEdge struct {
+	Node   *StringKey `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// StringKeyConnection is one page of StringKey.
+type StringKeyConnection struct {
+	Edges    []*StringKeyEdge `json:"edges"`
+	PageInfo orm.PageInfo     `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // StringKeyMeta is the runtime description of StringKey. Use it through its address.
 var StringKeyMeta = orm.Meta{
 	Name:    "StringKey",
@@ -187,15 +202,21 @@ func (q *StringKeyQuery) Iter(ctx context.Context) iter.Seq2[*StringKey, error] 
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *StringKeyQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*StringKey], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *StringKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*StringKeyConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*StringKey](p), nil
+	conn := &StringKeyConnection{Edges: make([]*StringKeyEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &StringKeyEdge{Node: r.(*StringKey), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

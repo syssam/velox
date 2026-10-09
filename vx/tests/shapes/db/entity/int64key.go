@@ -36,6 +36,21 @@ func ptrInt64Key(v any, i int) any {
 	return nil
 }
 
+// Int64KeyEdge is a row of a page of Int64Key, with its cursor.
+type Int64KeyEdge struct {
+	Node   *Int64Key  `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// Int64KeyConnection is one page of Int64Key.
+type Int64KeyConnection struct {
+	Edges    []*Int64KeyEdge `json:"edges"`
+	PageInfo orm.PageInfo    `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // Int64KeyMeta is the runtime description of Int64Key. Use it through its address.
 var Int64KeyMeta = orm.Meta{
 	Name:    "Int64Key",
@@ -184,15 +199,21 @@ func (q *Int64KeyQuery) Iter(ctx context.Context) iter.Seq2[*Int64Key, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *Int64KeyQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Int64Key], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *Int64KeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*Int64KeyConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Int64Key](p), nil
+	conn := &Int64KeyConnection{Edges: make([]*Int64KeyEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &Int64KeyEdge{Node: r.(*Int64Key), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

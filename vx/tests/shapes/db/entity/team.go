@@ -117,6 +117,21 @@ func linkTeam(dst any, es []any) {
 	}
 }
 
+// TeamEdge is a row of a page of Team, with its cursor.
+type TeamEdge struct {
+	Node   *Team      `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// TeamConnection is one page of Team.
+type TeamConnection struct {
+	Edges    []*TeamEdge  `json:"edges"`
+	PageInfo orm.PageInfo `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // TeamMeta is the runtime description of Team. Use it through its address.
 var TeamMeta = orm.Meta{
 	Name:    "Team",
@@ -269,15 +284,21 @@ func (q *TeamQuery) Iter(ctx context.Context) iter.Seq2[*Team, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TeamQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Team], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *TeamQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TeamConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Team](p), nil
+	conn := &TeamConnection{Edges: make([]*TeamEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &TeamEdge{Node: r.(*Team), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

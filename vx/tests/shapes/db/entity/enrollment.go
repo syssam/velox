@@ -109,6 +109,21 @@ func linkEnrollment(dst any, es []any) {
 	}
 }
 
+// EnrollmentEdge is a row of a page of Enrollment, with its cursor.
+type EnrollmentEdge struct {
+	Node   *Enrollment `json:"node"`
+	Cursor orm.Cursor  `json:"cursor"`
+}
+
+// EnrollmentConnection is one page of Enrollment.
+type EnrollmentConnection struct {
+	Edges    []*EnrollmentEdge `json:"edges"`
+	PageInfo orm.PageInfo      `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // EnrollmentMeta is the runtime description of Enrollment. Use it through its address.
 var EnrollmentMeta = orm.Meta{
 	Name:    "Enrollment",
@@ -265,15 +280,21 @@ func (q *EnrollmentQuery) Iter(ctx context.Context) iter.Seq2[*Enrollment, error
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EnrollmentQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Enrollment], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *EnrollmentQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EnrollmentConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Enrollment](p), nil
+	conn := &EnrollmentConnection{Edges: make([]*EnrollmentEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &EnrollmentEdge{Node: r.(*Enrollment), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

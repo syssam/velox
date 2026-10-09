@@ -82,6 +82,21 @@ func linkPassport(dst any, es []any) {
 	}
 }
 
+// PassportEdge is a row of a page of Passport, with its cursor.
+type PassportEdge struct {
+	Node   *Passport  `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// PassportConnection is one page of Passport.
+type PassportConnection struct {
+	Edges    []*PassportEdge `json:"edges"`
+	PageInfo orm.PageInfo    `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // PassportMeta is the runtime description of Passport. Use it through its address.
 var PassportMeta = orm.Meta{
 	Name:    "Passport",
@@ -232,15 +247,21 @@ func (q *PassportQuery) Iter(ctx context.Context) iter.Seq2[*Passport, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PassportQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Passport], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *PassportQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PassportConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Passport](p), nil
+	conn := &PassportConnection{Edges: make([]*PassportEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &PassportEdge{Node: r.(*Passport), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

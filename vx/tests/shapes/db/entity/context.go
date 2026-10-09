@@ -36,6 +36,21 @@ func ptrContext(v any, i int) any {
 	return nil
 }
 
+// ContextEdge is a row of a page of Context, with its cursor.
+type ContextEdge struct {
+	Node   *Context   `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// ContextConnection is one page of Context.
+type ContextConnection struct {
+	Edges    []*ContextEdge `json:"edges"`
+	PageInfo orm.PageInfo   `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // ContextMeta is the runtime description of Context. Use it through its address.
 var ContextMeta = orm.Meta{
 	Name:    "Context",
@@ -184,15 +199,21 @@ func (q *ContextQuery) Iter(ctx context.Context) iter.Seq2[*Context, error] {
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ContextQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*Context], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *ContextQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ContextConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*Context](p), nil
+	conn := &ContextConnection{Edges: make([]*ContextEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &ContextEdge{Node: r.(*Context), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.

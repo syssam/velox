@@ -54,6 +54,21 @@ func ptrEnumShape(v any, i int) any {
 	return nil
 }
 
+// EnumShapeEdge is a row of a page of EnumShape, with its cursor.
+type EnumShapeEdge struct {
+	Node   *EnumShape `json:"node"`
+	Cursor orm.Cursor `json:"cursor"`
+}
+
+// EnumShapeConnection is one page of EnumShape.
+type EnumShapeConnection struct {
+	Edges    []*EnumShapeEdge `json:"edges"`
+	PageInfo orm.PageInfo     `json:"pageInfo"`
+	// TotalCount is the number of rows the query matches, or -1 when it
+	// was not counted (orm.WithoutTotal).
+	TotalCount int `json:"totalCount"`
+}
+
 // EnumShapeMeta is the runtime description of EnumShape. Use it through its address.
 var EnumShapeMeta = orm.Meta{
 	Name:    "EnumShape",
@@ -209,15 +224,21 @@ func (q *EnumShapeQuery) Iter(ctx context.Context) iter.Seq2[*EnumShape, error] 
 }
 
 // Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: keyset pagination for any kind of list endpoint.
+// a cursor per row: the first rows after the cursor after, or the last rows
+// before the cursor before. It is keyset pagination in the shape of a Relay
+// connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EnumShapeQuery) Paginate(ctx context.Context, args orm.PageArgs) (*orm.Page[*EnumShape], error) {
-	p, err := q.c.Paginate(ctx, args)
+func (q *EnumShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EnumShapeConnection, error) {
+	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
 	}
-	return orm.PageOf[*EnumShape](p), nil
+	conn := &EnumShapeConnection{Edges: make([]*EnumShapeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
+	for i, r := range p.Rows {
+		conn.Edges[i] = &EnumShapeEdge{Node: r.(*EnumShape), Cursor: p.Cursors[i]}
+	}
+	return conn, nil
 }
 
 // Count returns the number of matching rows.
