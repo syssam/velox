@@ -667,27 +667,8 @@ Properties by which %s connections can be ordered.
 		fmt.Fprintf(&buf, "enum %s {\n", orderFieldName)
 	}
 
-	// Filter by SkipOrderField annotation, then exclude non-orderable fields.
-	// Text fields (field.Text(), Size >= MaxInt32) are excluded because ordering
-	// by unbounded text columns is inefficient and rarely useful in practice.
-	// Orderable types: String (non-Text), Int, Int64, Float, Bool, Enum, Time.
-	fields := g.filterFields(t.Fields, graphql.SkipOrderField)
-	for _, f := range fields {
-		if !g.isOrderableField(f) {
-			continue
-		}
-		orderName := g.getOrderFieldName(f)
-		fmt.Fprintf(&buf, "  %s\n", orderName)
-	}
-
-	// Edge count ordering - only when explicitly annotated with OrderField (like Ent)
-	for _, e := range t.Edges {
-		if !e.Unique {
-			ann := g.getEdgeAnnotation(e)
-			if orderField := ann.GetOrderField(); orderField != "" {
-				fmt.Fprintf(&buf, "  %s\n", orderField)
-			}
-		}
+	for _, of := range g.OrderFields(t) {
+		fmt.Fprintf(&buf, "  %s\n", of.Name)
 	}
 
 	buf.WriteString("}\n")
