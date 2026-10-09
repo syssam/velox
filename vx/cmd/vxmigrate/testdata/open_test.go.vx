@@ -1,0 +1,39 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"sync/atomic"
+	"testing"
+
+	"github.com/syssam/velox/vx/orm"
+	"github.com/syssam/velox/vx/tests/db/entity"
+	"github.com/syssam/velox/vx/tests/db/migrate"
+	"github.com/syssam/velox/vx/tests/db/post"
+
+	_ "modernc.org/sqlite"
+)
+
+var seq atomic.Int64
+
+// This file is the part of the tests the tool does not migrate: how a
+// database is opened is the application's own, and an order input is what a
+// GraphQL engine hands over.
+
+// byTitle is the order input "by title, ascending".
+func byTitle(*testing.T) *entity.PostOrder {
+	return &entity.PostOrder{Field: post.OrderFieldTitle, Direction: orm.OrderDirectionAsc}
+}
+
+func open(t *testing.T) *Store {
+	t.Helper()
+	conn, err := orm.Open("sqlite", fmt.Sprintf("file:appvx%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", seq.Add(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	if err := migrate.Create(context.Background(), conn); err != nil {
+		t.Fatal(err)
+	}
+	return &Store{Client: conn}
+}

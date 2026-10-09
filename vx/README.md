@@ -417,6 +417,27 @@ The root package links `schemainit`, so a program that starts its queries at
 `db/schemainit` itself; until it does, an entity whose schema has defaults,
 validators, hooks or a policy returns an error from every query and mutation.
 
+## Moving an application from velox
+
+`cmd/vxmigrate` rewrites an application written against velox's generated
+code. Run it in the application's module while the old generated code is
+still there (it reads the application with types, and needs them), then
+generate with `vxgen` and build:
+
+```sh
+go run github.com/syssam/velox/vx/cmd/vxmigrate -generated example.com/app/velox -write -report todo.txt
+```
+
+It does not compile anything, so a large application is read in seconds. On
+one of 455 entities and 9,400 files it rewrote 88,000 references and left
+some 700 for a person, each a line of the report with the reason: grouped
+reads, edge queries from an entity (which need a handle now), code generic
+over predicates as functions, and how the application opens its database.
+Its package comment lists what it rewrites.
+
+Before moving, rewrite the hooks that assert a mutation to typed setters
+(see above); `vxgen` refuses them, and the rewritten form works with velox.
+
 ## Go conventions
 
 The API was checked against the Go team's guidance (Code Review Comments,
