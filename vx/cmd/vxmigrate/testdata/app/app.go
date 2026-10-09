@@ -261,6 +261,26 @@ func (s *Store) CountByID(ctx context.Context, ids ...int) (users, posts int, er
 	return users, posts, err
 }
 
+// guarded turns a where input into a predicate through whatever is handed
+// to it, the way a permission check that wraps every list does.
+func guarded[W, P any](where *W, toPredicate func(*W) (P, error)) (P, error) {
+	return toPredicate(where)
+}
+
+// PostsMatching counts the posts a where input matches.
+func (s *Store) PostsMatching(ctx context.Context, where *filter.PostWhereInput) (int, error) {
+	p, err := guarded(where, (*filter.PostWhereInput).P)
+	if err != nil {
+		return 0, err
+	}
+	late := where.P
+	q, err := late()
+	if err != nil {
+		return 0, err
+	}
+	return s.Post.Query().Where(p, q).Count(ctx)
+}
+
 // PostCount counts the posts of a user it is handed.
 func PostCount(ctx context.Context, u *entity.User) (int, error) {
 	return u.QueryPosts().Count(ctx)

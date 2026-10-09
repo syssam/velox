@@ -136,6 +136,8 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value
 		"return upd.Set(user.Nickname.Clear())",
 		"func(v user.RoleEnum) *entity.UserUpdate {",
+		"guarded(where, func(w *filter.PostWhereInput) (predicate.Post, error) { return w.P(), nil })", // P as a value
+		"late := func() (predicate.Post, error) { return where.P(), nil }",
 		"func idIn[P orm.Predicate](id orm.OrderedColumn[int, P], ids ...int) P {", // generic over entities
 		"return *new(P)",
 		"func both[P orm.Predicate](ps ...P) P {",

@@ -60,6 +60,9 @@ func TestStore(t *testing.T) {
 	nu, np, err = s.CountByID(ctx)
 	eq(t, "generic over entities, with nothing to add", show(nu, np, err), "3 2 <nil>")
 
+	n, err := s.PostsMatching(ctx, &filter.PostWhereInput{TitleNEQ: ptr("a1")})
+	eq(t, "posts matching a where input", show(n, err), "2 <nil>")
+
 	adults, err := s.Adults(ctx, 0)
 	eq(t, "adults", show(names(adults), err), "[cat ann] <nil>")
 	adults, err = s.Adults(ctx, 40)
@@ -68,7 +71,7 @@ func TestStore(t *testing.T) {
 	eq(t, "named", show(u.ID, err), show(bob.ID, nil))
 	u, err = s.Named(ctx, "nobody")
 	eq(t, "named nobody", show(u == nil, err), "true <nil>")
-	n, err := s.AuthorsOfDrafts(ctx)
+	n, err = s.AuthorsOfDrafts(ctx)
 	eq(t, "authors of drafts", show(n, err), "2 <nil>")
 	ok, err := s.HasEmail(ctx, "cat@example.com")
 	eq(t, "has email", show(ok, err), "true <nil>")

@@ -450,6 +450,19 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 	if t.where == "filter" && obj.Name() == "Filter" {
 		return // an argument of With<Entity>Filter: Paginate handles it
 	}
+	if t.where == "filter" && obj.Name() == "P" && t.ent != nil {
+		// P as a value, for something that calls it: it returned an error
+		// too, and what calls it still expects one.
+		pred := r.predicate(sel.Pos()) + "." + t.ent.name
+		if selection.Kind() == types.MethodExpr {
+			input := "*" + r.ref(r.s.to+"/filter", "filter", sel.Pos()) + "." + t.ent.name + "WhereInput"
+			r.replace(sel.Pos(), sel.End(), "func(w "+input+") ("+pred+", error) { return w.P(), nil }")
+		} else {
+			r.replace(sel.Pos(), sel.End(), "func() ("+pred+", error) { return "+r.render(sel.X)+".P(), nil }")
+		}
+		r.count("P as a value")
+		return
+	}
 	if t.where == "client/<entity>" && (t.kind == "Create" || t.kind == "Update" || t.kind == "UpdateOne") && r.setterValue(sel, t, obj) {
 		return
 	}
