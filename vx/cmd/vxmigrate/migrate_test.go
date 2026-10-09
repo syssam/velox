@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -157,6 +158,140 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		t.Logf("migrated app.go:\n%s", migrated)
 	}
 	gotest(app)
+}
+
+// The cases in testdata/notes are what an independent review of the tool
+// found it getting wrong without saying so: code that compiled afterwards
+// and did something else (an assertion that never holds, a deferred call
+// that runs at once, the wrong handle), and code that no longer compiled
+// with no word on why. Each is now rewritten so that it does what it did,
+// or reported; the fixture says which, line by line.
+func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
+	if testing.Short() {
+		t.Skip("lists and type-checks packages")
+	}
+	work, err := os.MkdirTemp("testdata", "work-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(work) })
+	dir := filepath.Join(work, "notes")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{} // "file:line" -> text
+	sources, err := filepath.Glob("testdata/notes/*.go")
+	if err != nil || len(sources) != 2 {
+		t.Fatal(sources, err)
+	}
+	for _, src := range sources {
+		data, err := os.ReadFile(src) //nolint:gosec // a file of testdata
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, filepath.Base(src)), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			if _, text, ok := strings.Cut(line, "// note: "); ok {
+				want[fmt.Sprintf("%s:%d", filepath.Base(src), i+1)] = strings.TrimSpace(text)
+			}
+		}
+	}
+	if len(want) < 20 {
+		t.Fatalf("the fixture carries %d expected notes", len(want))
+	}
+
+	var log bytes.Buffer
+	report := filepath.Join(work, "report.txt")
+	err = run([]string{"-dir", "../..", "-generated", "github.com/syssam/velox/tests/integration", "-to", "github.com/syssam/velox/vx/tests/db",
+		"-write", "-report", report, "./cmd/vxmigrate/" + filepath.ToSlash(dir)}, &log)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log.String())
+	}
+	if !strings.Contains(log.String(), "(0 files did not parse afterwards)") {
+		t.Errorf("a rewritten file does not parse:\n%s", log.String())
+	}
+	notes, err := os.ReadFile(report) //nolint:gosec // written by the run above
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(notes)), "\n") {
+		// <path>/<file>:<line>: <text>
+		rest := line[strings.LastIndex(line, "/")+1:]
+		parts := strings.SplitN(rest, ": ", 2)
+		if len(parts) != 2 {
+			t.Errorf("a line of the report: %q", line)
+			continue
+		}
+		got[parts[0]] = append(got[parts[0]], parts[1])
+	}
+	for at, text := range want {
+		found := false
+		for _, note := range got[at] {
+			found = found || strings.Contains(note, text)
+		}
+		if !found {
+			t.Errorf("%s: not reported: %q (reported there: %q)", at, text, got[at])
+		}
+	}
+	for at, notes := range got {
+		if _, expected := want[at]; !expected {
+			t.Errorf("%s: reported and not expected: %q", at, notes)
+		}
+	}
+
+	migrated, err := os.ReadFile(filepath.Join(dir, "notes.go")) //nolint:gosec // written by the run above
+	if err != nil {
+		t.Fatal(err)
+	}
+	flat := strings.Join(strings.Fields(string(migrated)), " ")
+	for _, text := range []string{
+		// The tests of an error are the runtime's.
+		"case orm.IsNotSingular(err), orm.IsNotFound(err), orm.IsValidationError(err):",
+		"var ve *orm.ValidationError",
+		"return ve.Field",
+		// Deferred: still later.
+		"defer func() { orm.Must(db.User.Update(c).Set(user.Age.Set(0)).Exec(ctx)) }()",
+		`go func() { orm.Must(db.User.Create(c).Set(user.Name.Set("x")).Save(ctx)) }()`,
+		// The last order; no order.
+		"return db.Post.Query(c).OrderBy(b.Term()).Paginate(ctx, nil, nil, nil, nil) //",
+		"return db.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) }",
+		// The adapter of package intercept, called.
+		"return orm.TraverseFunc(func(ctx context.Context, q *orm.Query) error { q.Limit(100)",
+		// A parameter that does not capture the builder.
+		"return func(v_ string) *entity.UserUpdate { return v.Set(user.Name.Set(v_)) }",
+		// A first argument that is itself rewritten.
+		`return db.User.CreateBulk(c, db.User.Create(c).Set(user.Name.Set("a"), user.Email.Set("a@x")), db.User.Create(c).Set(user.Name.Set("b"), user.Email.Set("b@x"))).Save(ctx)`,
+		// Predicates in a field and in a map.
+		"cond: predicate.User(orm.Raw(func(s *sql.Selector) {",
+		`"none": predicate.User{}`,
+		// The id of an entity given by its address.
+		"Set(post.Title.Set(title), post.Author.Set(author.ID)).Save(ctx)",
+		// A column's name where no rule rewrites the call around it.
+		"s.OrderBy(sql.Asc(user.ColumnName))",
+		// Likes, not LikedPosts.
+		"orm.One(db.User.UpdateByID(c, userID).Set(user.Likes.Add(likeIDs...)).Exec(ctx))",
+		// A package name the application has taken, in another file.
+		"return slicespkg.Contains(user.RoleValues(), r)",
+	} {
+		if !strings.Contains(flat, text) {
+			t.Errorf("the migrated file does not contain %q", text)
+		}
+	}
+	// An entity whose handle the text does not settle is not given one.
+	for _, text := range []string{"u.QueryPosts(tx)", "u.QueryPosts(c)", "v.QueryPosts(tx)", "u.QueryPosts(a)", "u.QueryPosts(b)"} {
+		if strings.Contains(flat, text) {
+			t.Errorf("the migrated file contains %q: a handle the text does not settle", text)
+		}
+	}
+	if n := strings.Count(flat, ".QueryPosts(orm.ExecutorFrom(ctx))"); n != 3 {
+		t.Errorf("%d edge queries were given the context's handle, want 3", n)
+	}
+	if t.Failed() {
+		t.Logf("migrated notes.go:\n%s", migrated)
+	}
 }
 
 // Without -write nothing is written: the report says what would be done.

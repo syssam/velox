@@ -84,12 +84,33 @@ func (f *fileEdits) replace(from, to token.Pos, text string) {
 func (f *fileEdits) drop(start, end int) {
 	kept := f.edits[:0]
 	for _, e := range f.edits {
-		if e.start >= start && e.end <= end {
+		if within(e, start, end) {
 			continue
 		}
 		kept = append(kept, e)
 	}
 	f.edits = kept
+}
+
+// within reports whether e is a change to the text from start to end. An
+// insertion at an end of the range belongs to it or to its neighbor by what
+// it does: one that opens something goes with the text after it, one that
+// closes or continues something with the text before it. (Counting both
+// ends in dropped the opening of a rewritten first argument with the
+// parenthesis before it, and the file no longer parsed.)
+func within(e edit, start, end int) bool {
+	if e.start < start || e.end > end {
+		return false
+	}
+	if e.start == e.end && start != end {
+		if e.start == start && !e.opens {
+			return false
+		}
+		if e.start == end && e.opens {
+			return false
+		}
+	}
+	return true
 }
 
 // render returns the source of n with the changes made inside it, and takes
@@ -99,7 +120,7 @@ func (f *fileEdits) render(n ast.Node) string {
 	var inside []edit
 	kept := f.edits[:0]
 	for _, e := range f.edits {
-		if e.start >= start && e.end <= end {
+		if within(e, start, end) {
 			inside = append(inside, e)
 		} else {
 			kept = append(kept, e)
@@ -183,6 +204,10 @@ func (f *fileEdits) ref(path, name string, pos token.Pos) string {
 	local := name
 	taken := func(local string) bool {
 		if f.declared[local] {
+			return true
+		}
+		// A name another file of the package declares at package level.
+		if f.pkg != nil && f.pkg.Scope().Lookup(local) != nil {
 			return true
 		}
 		for p, n := range f.names {

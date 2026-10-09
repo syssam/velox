@@ -58,3 +58,31 @@ func TestMemberNames(t *testing.T) {
 		}
 	}
 }
+
+// An insertion at an end of a replaced range goes with the range or with
+// its neighbor by what it does.
+func TestReplaceKeepsWhatBelongsToTheNeighbors(t *testing.T) {
+	// c.M(g(x)): the rule for g(x) opened a wrapper at its start; the rule
+	// for the outer call then replaces ".M(" up to that same place.
+	f := &fileEdits{src: []byte("c.M(g(x))")}
+	f.seq++
+	f.edits = append(f.edits, edit{start: 4, end: 4, text: "w(", seq: f.seq, opens: true}) // around g(x)
+	f.add(8, 8, ")")                                                                       // closes it
+	f.add(1, 1, ".h")                                                                      // continues c
+	f.drop(1, 4)
+	f.add(1, 4, "(")
+	if got := string(apply(f.src, 0, f.edits)); got != "c.h(w(g(x)))" {
+		t.Errorf("got %s", got)
+	}
+}
+
+func TestEdgeOfSingular(t *testing.T) {
+	edges := map[string]bool{"Likes": true, "LikedPosts": true, "Tags": true, "Categories": true, "Children": true, "Owner": true}
+	for singular, want := range map[string]string{
+		"Like": "Likes", "LikedPost": "LikedPosts", "Tag": "Tags", "Category": "Categories", "Child": "Children", "Zebra": "",
+	} {
+		if got := edgeOfSingular(singular, edges); got != want {
+			t.Errorf("%s: got %q, want %q", singular, got, want)
+		}
+	}
+}

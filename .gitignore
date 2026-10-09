@@ -116,3 +116,7 @@ benchmarks/fixtures/realistic/gqlschema/
 benchmarks/fixtures/realistic/gqlschema_vx/
 benchmarks/fixtures/realistic/services_velox/
 benchmarks/fixtures/realistic/services_vx/
+
+# Binaries built in place by `go build` in a command directory.
+/vx/cmd/vxmigrate/vxmigrate
+/vx/cmd/vxgen/vxgen

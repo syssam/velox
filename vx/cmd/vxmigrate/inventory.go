@@ -87,23 +87,34 @@ func singulars(p *program, root string, e *entityInfo) map[string]string {
 		if !ok || !strings.HasPrefix(methods.At(i).Obj().Name(), "Add") || mid == "" || e.edges[mid] {
 			continue
 		}
-		// The edge that shares the longest start with it: Tag and Tags,
-		// Category and Categories, Child and Children.
-		best, shared := "", 0
-		for edge := range e.edges {
-			n := 0
-			for n < len(edge) && n < len(mid) && edge[n] == mid[n] {
-				n++
-			}
-			if n > shared || (n == shared && n > 0 && edge < best) {
-				best, shared = edge, n
-			}
-		}
-		if best != "" && shared*2 >= len(mid) {
-			out[mid] = best
+		if edge := edgeOfSingular(mid, e.edges); edge != "" {
+			out[mid] = edge
 		}
 	}
 	return out
+}
+
+// edgeOfSingular returns the edge whose name in AddTagIDs is singular: the
+// one that shares the longest start with it (Tag and Tags, Category and
+// Categories, Child and Children), and of several that share as much, the
+// one with the least after it (Like is Likes, not LikedPosts).
+func edgeOfSingular(singular string, edges map[string]bool) string {
+	best, shared := "", 0
+	for edge := range edges {
+		n := 0
+		for n < len(edge) && n < len(singular) && edge[n] == singular[n] {
+			n++
+		}
+		switch {
+		case n == 0 || n < shared:
+		case n > shared, len(edge) < len(best), len(edge) == len(best) && edge < best:
+			best, shared = edge, n
+		}
+	}
+	if shared*2 < len(singular) {
+		return ""
+	}
+	return best
 }
 
 // use is one kind of reference to the old API.

@@ -114,7 +114,7 @@ func run(args []string, stderr io.Writer) error {
 			if err != nil {
 				return err
 			}
-			r := &rewriter{fileEdits: fe, s: s, lib: *lib, done: done, sets: map[*ast.CallExpr]bool{}, made: map[*ast.CallExpr]bool{}}
+			r := &rewriter{fileEdits: fe, s: s, lib: *lib, done: done, sets: map[*ast.CallExpr]bool{}, made: map[*ast.CallExpr]bool{}, wrapped: map[*ast.CallExpr]bool{}}
 			if k := p.pkgs[*lib]; k != nil && k.types != nil {
 				r.libScope = k.types.Scope()
 			}

@@ -492,6 +492,31 @@ the context, and reported, since only a person knows whether every caller's
 context carries one.
 Its package comment lists what it rewrites.
 
+The report is also where the tool says that code which still compiles would
+do something else, when it cannot keep what the code did. Read those lines
+first:
+
+| Reported | Why |
+|---|---|
+| a value asserted to the query or mutation type of one entity | every entity's is `*orm.Query` and `*orm.Mutation` now: the assertion holds for all of them, or for none; test `Type()` |
+| `Or` of a list that may be empty | velox's matched every row, `orm.Or()` matches none |
+| `p, err := where.P()` | an input with no condition was an error and is no condition now |
+| `Limit` in the option of an eager load | it was over all neighbors read, and is for each parent now |
+| a method value (`b.SetName`, `c.User.Get`) whose receiver is not a variable assigned once, unless it is handed straight to a call from a variable | the function in its place evaluates the receiver when called |
+| a field or a constructor of velox's error types | the runtime's are `orm.ErrNotFound`, `orm.ErrNotSingular`, `*orm.ValidationError` (`Name` is `Field`, rewritten), `*orm.ConstraintError` |
+| a package of the generated tree the new one does not have (`hook`, something of the application's own kept there) | once, at its first reference; the summary of the run counts the rest |
+| several orders or filters given to `Paginate` | velox used the last of each |
+| `tx.Client()` handed on as a value | it is the transaction; what takes it must take `orm.Executor` |
+| a GraphQL edge method called on an entity (`u.Posts(ctx, ...)`) | it reads on the handle of the context |
+| a deferred call that came to be wrapped (`defer q.ExecX(ctx)`) | it is put in a function so that it still runs later; its arguments are evaluated then |
+
+What it keeps without a word: `IsNotFound`, `IsNotSingular`,
+`IsConstraintError`, `IsValidationError` and `IsNotLoaded`, of the generated
+package or of the library, become the runtime's (velox's never hold for an
+error of the new code); an edge query is given the handle its entity was
+read on only when the entity's variable has one assignment and the handle's
+is not reassigned.
+
 Before moving, rewrite the hooks that assert a mutation to typed setters
 (see above); `vxgen` refuses them, and the rewritten form works with velox.
 

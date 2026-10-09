@@ -25,6 +25,9 @@ type rewriter struct {
 	// made are the calls that were functions on a selector and are
 	// predicates now (the library's AndPredicates): not to be wrapped.
 	made map[*ast.CallExpr]bool
+	// wrapped are the calls that became the argument of another call
+	// (orm.Must, orm.One, orm.Check) or a call with other arguments.
+	wrapped map[*ast.CallExpr]bool
 }
 
 // What the old API's packages are, seen from a reference into one.
@@ -165,6 +168,10 @@ func (r *rewriter) run() {
 				}
 			case *ast.CompositeLit:
 				r.elements(top)
+			case *ast.SwitchStmt:
+				if top.Tag != nil && r.predicateOf(r.info.TypeOf(top.Tag)) != "" {
+					r.note(top.Pos(), "a switch on a predicate: it is data now and is not compared; orm.P(p).IsZero() says whether it is no condition")
+				}
 			}
 			return true
 		}
@@ -216,6 +223,9 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 	obj := r.info.Uses[sel.Sel]
 	t, ok := r.targetOf(obj, "")
 	if !ok {
+		return
+	}
+	if r.failure(sel, obj) {
 		return
 	}
 	name := obj.Name()
@@ -284,6 +294,14 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			r.note(sel.Pos(), "the type %s has no counterpart", name)
 			return
 		}
+		if asserted(sel, stack) {
+			switch kind {
+			case "Mutation":
+				r.note(sel.Pos(), "a value is asserted to the mutation type of %s: every entity's mutation is *orm.Mutation now, so this holds for all of them; test m.Type() == %q as well", ent.name, ent.name)
+			case "Query":
+				r.note(sel.Pos(), "a value is asserted to the query type of %s: an interceptor or a rule is handed *orm.Query whatever the entity, so this never holds there; test q.Type() == %q", ent.name, ent.name)
+			}
+		}
 		switch kind {
 		case "Create", "CreateBulk", "Update", "Delete", "Query":
 			r.replace(sel.Pos(), sel.End(), r.entity(sel.Pos())+"."+ent.name+kind)
@@ -307,6 +325,9 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 	case "entity":
 		if _, ok := obj.(*types.TypeName); ok {
 			if ent, kind := r.s.kindOf(name); ent != nil && kind == "Querier" {
+				if asserted(sel, stack) {
+					r.note(sel.Pos(), "a value is asserted to the query type of %s: an interceptor or a rule is handed *orm.Query whatever the entity, so this never holds there; test q.Type() == %q", ent.name, ent.name)
+				}
 				r.replace(sel.Pos(), sel.End(), "*"+r.entity(sel.Pos())+"."+ent.name+"Query")
 				r.count("type Querier")
 			} else if ent != nil && kind == "PaginateOption" {
@@ -338,18 +359,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			r.note(sel.Pos(), "%s: an order or a filter is a call on the query now, .OrderBy(o.Term()) and .Where(w.P())", name)
 		}
 	case "intercept":
-		switch name {
-		case "Func":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".InterceptFunc")
-		case "TraverseFunc":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".TraverseFunc")
-		case "Query":
-			r.replace(sel.Pos(), sel.End(), "*"+r.orm(sel.Pos())+".Query")
-		default:
-			r.note(sel.Pos(), "intercept.%s: an interceptor is handed *orm.Query, whatever the entity", name)
-			return
-		}
-		r.count("intercept")
+		r.intercept(sel, name)
 	case "privacy":
 		// The generated package repeated the library's.
 		r.replace(sel.X.Pos(), sel.X.End(), r.ref(r.lib+"/privacy", "privacy", sel.Pos()))
@@ -368,7 +378,140 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			default:
 				r.note(sel.Pos(), "gqlrelay.%s: rewrite by hand", name)
 			}
+			return
 		}
+		r.foreign(sel, obj, t.where)
+	}
+}
+
+// intercept rewrites a name of the generated package intercept.
+func (r *rewriter) intercept(sel *ast.SelectorExpr, name string) {
+	switch name {
+	case "Func":
+		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".InterceptFunc")
+	case "TraverseFunc":
+		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".TraverseFunc")
+	case "Query":
+		r.replace(sel.Pos(), sel.End(), "*"+r.orm(sel.Pos())+".Query")
+	default:
+		r.note(sel.Pos(), "intercept.%s: an interceptor is handed *orm.Query, whatever the entity", name)
+		return
+	}
+	r.count("intercept")
+}
+
+// foreign reports a reference to a package of the old generated tree that
+// the new one does not have, or to a name of one that it has that no rule
+// knows: left as it is, it would be found by the build, without a word on
+// what to do.
+func (r *rewriter) foreign(sel *ast.SelectorExpr, obj types.Object, where string) {
+	path := obj.Pkg().Path()
+	if path != r.s.root && !strings.HasPrefix(path, r.s.root+"/") {
+		return
+	}
+	switch where {
+	case "filter":
+		if strings.HasPrefix(obj.Name(), "ErrEmpty") {
+			r.note(sel.Pos(), "%s: an input with no condition is not an error now: P() returns the zero predicate, which is no condition", obj.Name())
+		}
+	case "predicate", "migrate", "entity", "root", "<entity>", "client/<entity>", "query", "intercept", "privacy":
+	default:
+		// Once for the run: an application may refer to such a package in
+		// a thousand places (a test opener kept in the generated tree).
+		rule := "no counterpart: package " + where
+		if r.done[rule] == 0 {
+			r.note(sel.Pos(), "%s.%s: the package %s of the generated tree has no counterpart; this is the first reference to it, the summary of the run counts them", where[strings.LastIndex(where, "/")+1:], obj.Name(), where)
+		}
+		r.count(rule)
+	}
+}
+
+// failure rewrites the names of velox's errors, which the generated root
+// package repeated, to the runtime's. An error of the new code is none of
+// velox's: left as it was (or moved to the library's name), IsNotSingular
+// and the others would compile and never hold.
+func (r *rewriter) failure(sel *ast.SelectorExpr, obj types.Object) bool {
+	if obj.Pkg() == nil {
+		return false
+	}
+	// The library has them in its root package and in runtime, which the
+	// generated root package's names point to.
+	if path := obj.Pkg().Path(); path != r.s.root && path != r.lib && path != r.lib+"/runtime" {
+		return false
+	}
+	name := obj.Name()
+	_, isType := obj.(*types.TypeName)
+	switch {
+	case !isType && (name == "IsNotFound" || name == "IsConstraintError" || name == "IsNotLoaded" || name == "IsNotSingular" || name == "IsValidationError"):
+		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
+		r.count(name)
+	case isType && (name == "ValidationError" || name == "ConstraintError" || name == "NotLoadedError"):
+		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
+		r.note(sel.Pos(), "%s is the runtime's type now: check the fields read from it (orm.%s)", name, name)
+		r.count("error type")
+	case isType && name == "NotFoundError":
+		r.note(sel.Pos(), "a missing row is the value orm.ErrNotFound now, not a type: errors.Is(err, orm.ErrNotFound)")
+	case isType && name == "NotSingularError":
+		r.note(sel.Pos(), "more than one row is the value orm.ErrNotSingular now, not a type: errors.Is(err, orm.ErrNotSingular)")
+	case !isType && (name == "NewNotFoundError" || name == "NewNotSingularError" || name == "NewNotLoadedError" || name == "NewConstraintError" || name == "NewValidationError"):
+		r.note(sel.Pos(), "%s: the runtime's errors are orm.ErrNotFound, orm.ErrNotSingular, *orm.ValidationError, *orm.ConstraintError; return one of those", name)
+	default:
+		return false
+	}
+	return true
+}
+
+// validationName reports whether obj is the field Name of velox's
+// ValidationError, which the runtime's calls Field (velox's has both, with
+// the same value).
+func (r *rewriter) validationName(obj types.Object) bool {
+	v, ok := obj.(*types.Var)
+	if !ok || !v.IsField() || v.Name() != "Name" || v.Pkg() == nil {
+		return false
+	}
+	if path := v.Pkg().Path(); path != r.lib && path != r.lib+"/runtime" {
+		return false
+	}
+	// The struct that declares it, by the position of its fields.
+	scope := v.Pkg().Scope()
+	tn, ok := scope.Lookup("ValidationError").(*types.TypeName)
+	if !ok {
+		return false
+	}
+	st, ok := tn.Type().Underlying().(*types.Struct)
+	if !ok {
+		return false
+	}
+	for i := range st.NumFields() {
+		if st.Field(i) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// asserted reports whether the type n names, or a pointer to it, is what a
+// type assertion or a case of a type switch asserts.
+func asserted(n ast.Expr, stack []ast.Node) bool {
+	e, up := ast.Node(n), 1
+	if star, ok := parent(stack, 1).(*ast.StarExpr); ok {
+		e, up = star, 2
+	}
+	switch p := parent(stack, up).(type) {
+	case *ast.TypeAssertExpr:
+		return ast.Node(p.Type) == e
+	case *ast.CaseClause:
+		_, ok := parent(stack, up+2).(*ast.TypeSwitchStmt)
+		return ok
+	}
+	return false
+}
+
+// emptyList reports an Or (or a Not) of a list that may be empty: velox's
+// matched every row then, and the runtime's matches none.
+func (r *rewriter) emptyList(call *ast.CallExpr, name string) {
+	if call.Ellipsis.IsValid() || len(call.Args) == 0 {
+		r.note(call.Pos(), "%s of a list that may be empty: velox's matched every row then, this one matches none; check the list, or skip the condition when it is empty", name)
 	}
 }
 
@@ -401,12 +544,10 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 		}
 	case *types.Const:
 		if f, ok := strings.CutPrefix(name, "Field"); ok && e.fields[f] {
-			// SkipDefault(pkg.FieldX) takes the constant with it.
-			if c, ok := parent(stack, 1).(*ast.CallExpr); ok {
-				if s, ok := c.Fun.(*ast.SelectorExpr); ok && (s.Sel.Name == "SkipDefault" || s.Sel.Name == "Asc" || s.Sel.Name == "Desc") {
-					return
-				}
-			}
+			// Also inside SkipDefault(pkg.FieldX) and velox.Asc(pkg.FieldX):
+			// the rules for those replace the call with this in it when
+			// they apply, and when they do not (sql.Asc, an Order they
+			// leave to a person) the name must still be one that exists.
 			rename("Column"+f, "column name")
 		}
 	}
@@ -415,6 +556,11 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 // member handles a field or a method value selected from a value.
 func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, stack []ast.Node) {
 	obj := selection.Obj()
+	if r.validationName(obj) {
+		r.replace(sel.Sel.Pos(), sel.Sel.End(), "Field")
+		r.count("ValidationError.Field")
+		return
+	}
 	t, ok := r.targetOf(obj, declaring(selection))
 	if !ok {
 		return
@@ -441,8 +587,11 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 		if ok && isFunc && sig.Params().Len() == 2 {
 			id := types.TypeString(sig.Params().At(1).Type(), func(p *types.Package) string { return r.ref(p.Path(), p.Name(), sel.Pos()) })
 			ctx := r.ref("context", "context", sel.Pos())
-			r.replace(sel.Pos(), sel.End(), "func(ctx "+ctx+".Context, id "+id+") (*"+r.entity(sel.Pos())+"."+t.ent.name+", error) {\n\treturn "+
-				r.root(sel.Pos())+"."+t.ent.name+".Get(ctx, "+r.render(inner.X)+through(r.info.Selections[inner])+", id)\n}")
+			r.late(inner.X, stack, "the handle of Get")
+			handle := r.render(inner.X) + through(r.info.Selections[inner])
+			pc, pid := fresh("ctx", handle, ctx), fresh("id", handle, ctx)
+			r.replace(sel.Pos(), sel.End(), "func("+pc+" "+ctx+".Context, "+pid+" "+id+") (*"+r.entity(sel.Pos())+"."+t.ent.name+", error) {\n\treturn "+
+				r.root(sel.Pos())+"."+t.ent.name+".Get("+pc+", "+handle+", "+pid+")\n}")
 			r.count("Get as a value")
 			return
 		}
@@ -458,12 +607,13 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 			input := "*" + r.ref(r.s.to+"/filter", "filter", sel.Pos()) + "." + t.ent.name + "WhereInput"
 			r.replace(sel.Pos(), sel.End(), "func(w "+input+") ("+pred+", error) { return w.P(), nil }")
 		} else {
+			r.late(sel.X, stack, "the input of P")
 			r.replace(sel.Pos(), sel.End(), "func() ("+pred+", error) { return "+r.render(sel.X)+".P(), nil }")
 		}
 		r.count("P as a value")
 		return
 	}
-	if t.where == "client/<entity>" && (t.kind == "Create" || t.kind == "Update" || t.kind == "UpdateOne") && r.setterValue(sel, t, obj) {
+	if t.where == "client/<entity>" && (t.kind == "Create" || t.kind == "Update" || t.kind == "UpdateOne") && r.setterValue(sel, t, obj, stack) {
 		return
 	}
 	if t.where == "root" || t.where == "client/<entity>" || t.where == "entity" || t.where == "query" {
@@ -473,8 +623,36 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 
 // call handles a call of something of the old API.
 func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
+	r.dispatch(call, stack)
+	if !r.wrapped[call] {
+		return
+	}
+	// defer q.ExecX(ctx) ran ExecX when the function returned. As the
+	// argument of orm.Must it would run where the defer statement is.
+	switch p := parent(stack, 1).(type) {
+	case *ast.DeferStmt:
+		if p.Call != call {
+			return
+		}
+	case *ast.GoStmt:
+		if p.Call != call {
+			return
+		}
+	default:
+		return
+	}
+	r.open(call.Pos(), "func() { ")
+	r.insert(call.End(), " }()")
+	r.note(call.Pos(), "a deferred (or go) call is inside a function now, so that it still runs later: its arguments are evaluated then too, not at the statement")
+	r.count("deferred call")
+}
+
+func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 	if r.combinator(call) {
 		return
+	}
+	if tv, ok := r.info.Types[call.Fun]; ok && !tv.IsType() && r.predicateOf(tv.Type) != "" {
+		r.note(call.Pos(), "a predicate is called as a function on a selector: it is data now (a function on a selector is made one with orm.Raw)")
 	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
@@ -505,6 +683,7 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 			r.replace(sel.Sel.Pos(), sel.Sel.End(), strings.TrimSuffix(name, "X"))
 			r.open(call.Pos(), r.orm(call.Pos())+".Must(")
 			r.insert(call.End(), ")")
+			r.wrapped[call] = true
 			r.count(name)
 		}
 	case t.where == "root" && (t.kind == "Client" || t.kind == "Tx"):
@@ -520,6 +699,10 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 		case "Client":
 			r.replace(call.Pos(), call.End(), r.render(sel.X))
 			r.count("tx.Client()")
+			if m, _ := receiverOf(call, stack); m == "" {
+				// Handed on rather than queried on at once.
+				r.note(call.Pos(), "tx.Client() is the transaction itself now: what it is given to must take orm.Executor (a transaction is not a *orm.DB)")
+			}
 		default:
 			r.note(call.Pos(), "%s.%s: rewrite by hand", t.kind, name)
 		}
@@ -546,6 +729,9 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 			default:
 				r.note(call.Pos(), "%s takes the handle to query on now: e.%s(handle)", name, name)
 			}
+		case t.ent.edges[name]:
+			// The method a GraphQL engine resolves the edge with.
+			r.note(call.Pos(), "%s.%s reads the edge on the handle of the context now: the context must carry one (orm.WithExecutor), or it returns orm.ErrNoExecutor", t.ent.name, name)
 		}
 	case t.where == "<entity>":
 		// A method of an enum type.
@@ -591,8 +777,17 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 	if !ok {
 		return
 	}
+	if r.failure(sel, obj) {
+		return
+	}
 	name := obj.Name()
 	switch t.where {
+	case "intercept":
+		r.intercept(sel, name)
+	case "client/<entity>", "query":
+		if _, isType := obj.(*types.TypeName); !isType {
+			r.note(call.Pos(), "%s of a package the new tree does not have: an entity's client is <root>.<Entity>, and takes the handle with each call", name)
+		}
 	case "<entity>":
 		e := t.ent
 		if edge, ok := strings.CutSuffix(strings.TrimPrefix(name, "Has"), "With"); ok && strings.HasPrefix(name, "Has") && e.edges[edge] {
@@ -612,7 +807,10 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			return
 		}
 		switch name {
-		case "And", "Or", "Not":
+		case "Or":
+			r.emptyList(call, name)
+			return
+		case "And", "Not":
 			return
 		}
 		if f, ok := strings.CutSuffix(name, "Values"); ok && e.fields[f] {
@@ -658,6 +856,8 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			}
 			r.option(call, name, obj, stack)
 		}
+	default:
+		r.foreign(sel, obj, t.where)
 	}
 }
 
@@ -700,7 +900,7 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 		prepend("UpdateByID")
 	case "UpdateOne":
 		if len(call.Args) == 1 {
-			r.insert(call.Args[0].End(), ".ID")
+			r.idOf(call.Args[0])
 			prepend("UpdateByID")
 		}
 	case "Get", "GetX":
@@ -710,6 +910,7 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 		text := start + "Get(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + r.render(call.Args[1]) + ")"
 		if name == "GetX" {
 			text = r.orm(call.Pos()) + ".Must(" + text + ")"
+			r.wrapped[call] = true
 		}
 		r.replace(call.Pos(), call.End(), text)
 		r.count(name)
@@ -767,7 +968,7 @@ func (r *rewriter) typeText(t types.Type, pos token.Pos) string {
 
 // setterValue rewrites a setter used as a value, b.SetName passed to a
 // function that calls it, to a function that makes the assignment.
-func (r *rewriter) setterValue(sel *ast.SelectorExpr, t target, obj types.Object) bool {
+func (r *rewriter) setterValue(sel *ast.SelectorExpr, t target, obj types.Object, stack []ast.Node) bool {
 	pre, mid, suf, field, edge := split(t.ent, obj.Name(), setterPrefixes, setterSuffixes)
 	if !field && !edge {
 		return false
@@ -781,39 +982,225 @@ func (r *rewriter) setterValue(sel *ast.SelectorExpr, t target, obj types.Object
 	if kind == "UpdateOne" {
 		kind = "Update"
 	}
+	builder := "*" + r.entity(sel.Pos()) + "." + t.ent.name + kind
+	column := r.leaf(t.ent, sel.Pos()) + "." + mid
+	methodExpr := false
+	if s := r.info.Selections[sel]; s != nil && s.Kind() == types.MethodExpr {
+		methodExpr = true
+	}
+	recv := ""
+	if !methodExpr {
+		// b.SetName as a value held b; the function reads it when called.
+		r.late(sel.X, stack, "the builder of "+obj.Name())
+		recv = r.render(sel.X)
+	}
+	// Names for the parameters that nothing written inside the function uses.
+	v := fresh("v", recv, column, builder)
 	params, arg := "", ""
 	if sig.Params().Len() == 1 {
 		pt := sig.Params().At(0).Type()
-		arg = "v"
+		arg = v
 		slice, isSlice := pt.(*types.Slice)
 		switch {
 		case sig.Variadic() && isSlice:
-			params = "v ..." + r.typeText(slice.Elem(), sel.Pos())
-			arg = "v..."
+			params = v + " ..." + r.typeText(slice.Elem(), sel.Pos())
+			arg = v + "..."
 		case viaID:
 			// SetOwner took the entity; the edge takes its id.
-			params = "v " + r.typeText(pt, sel.Pos())
-			arg = "v.ID"
+			params = v + " " + r.typeText(pt, sel.Pos())
+			arg = v + ".ID"
 		default:
-			params = "v " + r.typeText(pt, sel.Pos())
+			params = v + " " + r.typeText(pt, sel.Pos())
 		}
 	}
-	builder := "*" + r.entity(sel.Pos()) + "." + t.ent.name + kind
-	recv := ""
-	if s := r.info.Selections[sel]; s != nil && s.Kind() == types.MethodExpr {
+	if methodExpr {
 		// (*UserUpdateOne).SetName: the builder is the first argument.
-		recv = "b"
+		recv = fresh("b", column, builder, params)
 		if params != "" {
 			params = ", " + params
 		}
-		params = "b " + builder + params
-	} else {
-		recv = r.render(sel.X)
+		params = recv + " " + builder + params
 	}
 	r.replace(sel.Pos(), sel.End(), "func("+params+") "+builder+" {\n\treturn "+
-		recv+".Set("+r.leaf(t.ent, sel.Pos())+"."+mid+"."+method+"("+arg+"))\n}")
+		recv+".Set("+column+"."+method+"("+arg+"))\n}")
 	r.count("setter as a value")
 	return true
+}
+
+// fresh returns name, with underscores added until none of the texts that
+// will be written inside the function it is a parameter of uses it: a
+// builder held in a variable v must not become the parameter v.
+func fresh(name string, texts ...string) string {
+	for {
+		used := false
+		for _, t := range texts {
+			used = used || hasWord(t, name)
+		}
+		if !used {
+			return name
+		}
+		name += "_"
+	}
+}
+
+// hasWord reports whether text has word as a whole identifier.
+func hasWord(text, word string) bool {
+	part := func(c byte) bool {
+		return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
+	}
+	for i := 0; ; {
+		j := strings.Index(text[i:], word)
+		if j < 0 {
+			return false
+		}
+		start, end := i+j, i+j+len(word)
+		if (start == 0 || !part(text[start-1])) && (end == len(text) || !part(text[end])) {
+			return true
+		}
+		i = start + 1
+	}
+}
+
+// late reports an expression that a method value held when it was made and
+// that the function in its place reads when it is called, unless it is
+// plainly the same then: a variable of the function given its value once,
+// or fields selected from one.
+func (r *rewriter) late(e ast.Expr, stack []ast.Node, what string) {
+	plain := true
+	for x := e; plain; {
+		switch y := x.(type) {
+		case *ast.ParenExpr:
+			x = y.X
+			continue
+		case *ast.SelectorExpr:
+			x = y.X
+			continue
+		case *ast.Ident:
+		default:
+			plain = false
+		}
+		break
+	}
+	if plain && r.unchanged(e, stack) {
+		return
+	}
+	// set(v, b.SetName, b.ClearName): handed to a call as it is made, from
+	// a variable. It is read when the call uses it, a statement at most
+	// away from where it was; only a function that keeps it for later
+	// could see another value, and that is not what such helpers do.
+	if c, ok := parent(stack, 1).(*ast.CallExpr); ok && plain {
+		for _, a := range c.Args {
+			if sel, ok := a.(*ast.SelectorExpr); ok && sel.X == e {
+				return
+			}
+		}
+	}
+	r.note(e.Pos(), "%s was taken when the method value was made; the function in its place evaluates it at each call: take it into a variable first if it can differ by then", what)
+}
+
+// writes counts the places in the function around that give the variable a
+// value, and returns what the last of them gives it. A variable whose
+// address is taken counts as given a value more than once.
+func (r *rewriter) writes(obj types.Object, stack []ast.Node) (n int, from ast.Expr) {
+	var body *ast.BlockStmt
+	for _, node := range stack {
+		switch fn := node.(type) {
+		case *ast.FuncDecl:
+			body = fn.Body
+		case *ast.FuncLit:
+			body = fn.Body
+		}
+		if body != nil {
+			break
+		}
+	}
+	if body == nil {
+		return 2, nil
+	}
+	is := func(e ast.Expr) bool {
+		id, ok := e.(*ast.Ident)
+		return ok && (r.info.Defs[id] == obj || r.info.Uses[id] == obj)
+	}
+	ast.Inspect(body, func(node ast.Node) bool {
+		switch st := node.(type) {
+		case *ast.AssignStmt:
+			for j, lhs := range st.Lhs {
+				if !is(lhs) {
+					continue
+				}
+				n++
+				switch {
+				case len(st.Rhs) == len(st.Lhs):
+					from = st.Rhs[j]
+				case len(st.Rhs) == 1 && j == 0:
+					from = st.Rhs[0] // v, err := call
+				default:
+					from = nil
+				}
+			}
+		case *ast.RangeStmt:
+			if st.Key != nil && is(st.Key) {
+				n, from = n+1, nil
+			}
+			if st.Value != nil && is(st.Value) {
+				n, from = n+1, st.X
+			}
+		case *ast.ValueSpec:
+			for j, id := range st.Names {
+				if r.info.Defs[id] != obj || len(st.Values) == 0 {
+					continue
+				}
+				n++
+				switch {
+				case len(st.Values) == len(st.Names):
+					from = st.Values[j]
+				case j == 0:
+					from = st.Values[0]
+				default:
+					from = nil
+				}
+			}
+		case *ast.IncDecStmt:
+			if is(st.X) {
+				n++
+			}
+		case *ast.UnaryExpr:
+			if st.Op == token.AND && is(st.X) {
+				n += 2
+			}
+		}
+		return true
+	})
+	return n, from
+}
+
+// unchanged reports whether the variable e starts with is given a value at
+// most once in the function around (a parameter never, a local once). What
+// is not a variable of the function (a field of the receiver, a variable of
+// the package) is taken to hold what it held.
+func (r *rewriter) unchanged(e ast.Expr, stack []ast.Node) bool {
+	for {
+		switch x := e.(type) {
+		case *ast.ParenExpr:
+			e = x.X
+			continue
+		case *ast.SelectorExpr:
+			e = x.X
+			continue
+		case *ast.Ident:
+			v, ok := r.info.Uses[x].(*types.Var)
+			if !ok {
+				_, isPkg := r.info.Uses[x].(*types.PkgName)
+				return isPkg
+			}
+			if v.IsField() || v.Parent() == nil || v.Parent() == r.pkg.Scope() || v.Pkg() != r.pkg {
+				return true
+			}
+			n, _ := r.writes(v, stack)
+			return n <= 1
+		}
+		return false
+	}
 }
 
 // handleOf finds what an entity was read on, by looking at where the
@@ -841,11 +1228,16 @@ func (r *rewriter) handleOf(e ast.Expr, at token.Pos, stack []ast.Node, depth in
 						ex, via = holder.X, through(fs)
 					}
 				}
-				if !r.sameAt(ex, at) {
+				if !r.sameAt(ex, at) || !r.unchanged(ex, stack) {
 					return "", false
 				}
 				return string(r.src[r.off(ex.Pos()):r.off(ex.End())]) + via, true
 			}
+		}
+		if sel.Sel.Name == "Unwrap" {
+			// Read in a transaction and taken out of it: what its edges
+			// are read on is the client behind, which is not written here.
+			return "", false
 		}
 		return r.handleOf(sel.X, at, stack, depth)
 	case *ast.SelectorExpr:
@@ -854,52 +1246,15 @@ func (r *rewriter) handleOf(e ast.Expr, at token.Pos, stack []ast.Node, depth in
 	case *ast.IndexExpr:
 		return r.handleOf(e.X, at, stack, depth)
 	case *ast.Ident:
-		obj := r.info.Uses[e]
-		if obj == nil {
+		// A variable of the function that is given its value in one
+		// place: with two (a reassignment, the branches of an if) which of
+		// them reached here is not something the text says.
+		obj, ok := r.info.Uses[e].(*types.Var)
+		if !ok || obj.IsField() || obj.Parent() == r.pkg.Scope() {
 			return "", false
 		}
-		// The assignment to it that comes last before the place.
-		var from ast.Expr
-		for i := len(stack) - 1; i >= 0; i-- {
-			var body *ast.BlockStmt
-			switch fn := stack[i].(type) {
-			case *ast.FuncDecl:
-				body = fn.Body
-			case *ast.FuncLit:
-				body = fn.Body
-			}
-			if body == nil {
-				continue
-			}
-			ast.Inspect(body, func(n ast.Node) bool {
-				if n == nil || n.Pos() >= at {
-					return false
-				}
-				switch st := n.(type) {
-				case *ast.AssignStmt:
-					for j, lhs := range st.Lhs {
-						id, ok := lhs.(*ast.Ident)
-						if !ok || (r.info.Defs[id] != obj && r.info.Uses[id] != obj) {
-							continue
-						}
-						if len(st.Rhs) == len(st.Lhs) {
-							from = st.Rhs[j]
-						} else if len(st.Rhs) == 1 && j == 0 {
-							from = st.Rhs[0] // v, err := call
-						}
-					}
-				case *ast.RangeStmt:
-					if id, ok := st.Value.(*ast.Ident); ok && r.info.Defs[id] == obj {
-						from = st.X
-					}
-				}
-				return true
-			})
-			if from != nil {
-				break
-			}
-		}
-		if from == nil {
+		n, from := r.writes(obj, stack)
+		if n != 1 || from == nil {
 			return "", false
 		}
 		return r.handleOf(from, at, stack, depth+1)
@@ -993,6 +1348,7 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 	wrap := func(fn string) {
 		r.open(call.Pos(), r.orm(call.Pos())+"."+fn+"(")
 		r.insert(call.End(), ")")
+		r.wrapped[call] = true
 	}
 	rename := func(to string) { r.replace(sel.Sel.Pos(), sel.Sel.End(), to) }
 
@@ -1003,7 +1359,7 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 			return
 		}
 		if viaID {
-			r.insert(call.Args[0].End(), ".ID")
+			r.idOf(call.Args[0])
 		}
 		assign(mid, method)
 		return
@@ -1078,6 +1434,24 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 	}
 }
 
+// idOf makes an expression that is an entity the entity's id: u is u.ID, &u
+// is u.ID too, and anything that does not end in a name is parenthesized.
+func (r *rewriter) idOf(arg ast.Expr) {
+	switch a := arg.(type) {
+	case *ast.UnaryExpr:
+		if a.Op == token.AND {
+			r.replace(a.Pos(), a.X.Pos(), "")
+			r.insert(a.X.End(), ".ID")
+			return
+		}
+	case *ast.Ident, *ast.SelectorExpr, *ast.CallExpr, *ast.IndexExpr, *ast.ParenExpr:
+		r.insert(arg.End(), ".ID")
+		return
+	}
+	r.open(arg.Pos(), "(")
+	r.insert(arg.End(), ").ID")
+}
+
 // dropCount makes `err := call` and `err = call` take the count the call now
 // returns before the error, and reports whether it could.
 func (r *rewriter) dropCount(call *ast.CallExpr, stack []ast.Node) bool {
@@ -1110,13 +1484,14 @@ func (r *rewriter) deleteOne(call *ast.CallExpr, sel *ast.SelectorExpr, t target
 			ex, via = holder.X, through(fs)
 		}
 	}
-	id := r.render(inner.Args[0])
 	if innerSel.Sel.Name == "DeleteOne" {
-		id += ".ID"
+		r.idOf(inner.Args[0])
 	}
+	id := r.render(inner.Args[0])
 	text := r.root(call.Pos()) + "." + t.ent.name + ".DeleteByID(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + id + ")"
 	if name == "ExecX" {
 		text = r.orm(call.Pos()) + ".Check(" + text + ")"
+		r.wrapped[call] = true
 	}
 	r.replace(call.Pos(), call.End(), text)
 	r.count("DeleteByID")
@@ -1129,6 +1504,7 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 	must := func() {
 		r.open(call.Pos(), r.orm(call.Pos())+".Must(")
 		r.insert(call.End(), ")")
+		r.wrapped[call] = true
 	}
 	switch name {
 	case "Where", "All", "Only", "First", "Count", "IDs", "Limit", "Offset", "ForUpdate", "ForShare", "Clone":
@@ -1222,6 +1598,20 @@ func (r *rewriter) loadOption(call *ast.CallExpr) bool {
 	if target == nil || (kind != "Query" && kind != "Querier") {
 		return false
 	}
+	for e := stmt.X; e != nil; {
+		c, ok := e.(*ast.CallExpr)
+		if !ok {
+			break
+		}
+		m, ok := c.Fun.(*ast.SelectorExpr)
+		if !ok {
+			break
+		}
+		if m.Sel.Name == "Limit" || m.Sel.Name == "Offset" {
+			r.note(c.Pos(), "%s in the option of an eager load was over all the neighbors read; on the query given to the load it is for each parent", m.Sel.Name)
+		}
+		e = m.X
+	}
 	r.replace(first.Pos(), first.End(), r.root(call.Pos())+"."+target.name+".Query(nil)")
 	text := r.render(stmt.X)
 	r.replace(fn.Pos(), fn.End(), text)
@@ -1294,12 +1684,23 @@ func (r *rewriter) paginate(call *ast.CallExpr, sel *ast.SelectorExpr) {
 	if len(call.Args) < 5 {
 		return
 	}
-	var chain string
+	// Of several orders, and of several filters, velox used the last.
+	var order, filter string
+	orderAt, filterAt := -1, -1
 	var applied []string
+	inline, repeated := 0, false
 	for i, opt := range call.Args[5:] {
 		if c, ok := opt.(*ast.CallExpr); ok {
-			if text, inline := r.inlineOption(c, true); inline {
-				chain += text
+			if text, ok := r.inlineOption(c, true); ok {
+				inline++
+				switch {
+				case strings.HasPrefix(text, ".OrderBy("):
+					repeated = repeated || order != ""
+					order, orderAt = text, i
+				case text != "":
+					repeated = repeated || filter != ""
+					filter, filterAt = text, i
+				}
 				continue
 			}
 		}
@@ -1313,6 +1714,17 @@ func (r *rewriter) paginate(call *ast.CallExpr, sel *ast.SelectorExpr) {
 	}
 	if len(call.Args) == 5 {
 		return
+	}
+	if repeated {
+		r.note(call.Pos(), "Paginate was given more than one order or more than one filter: the last of each was used, and is the one kept")
+	}
+	if len(applied) > 0 && len(applied)+inline > 1 {
+		r.note(call.Pos(), "the options of Paginate held in variables are applied to the query one after the other now: of several orders or filters velox used the last, here each adds to the ones before")
+	}
+	// In the order they were written, for whoever reads the result.
+	chain := order + filter
+	if filterAt < orderAt {
+		chain = filter + order
 	}
 	recv := r.render(sel.X) + chain
 	if len(applied) > 0 {
@@ -1342,6 +1754,9 @@ func (r *rewriter) inlineOption(c *ast.CallExpr, take bool) (string, bool) {
 		// is not an argument of Paginate.
 		if sig == nil || sig.Results().Len() != 1 {
 			return "", false
+		}
+		if id, isNil := c.Args[0].(*ast.Ident); isNil && id.Name == "nil" && r.info.Types[c.Args[0]].IsNil() {
+			return "", true // no order: the default
 		}
 		if !take {
 			return "", true
@@ -1375,24 +1790,31 @@ func (r *rewriter) option(call *ast.CallExpr, name string, obj types.Object, sta
 		r.note(call.Pos(), "%s: an order or a filter is a call on the query now, .OrderBy(o.Term()) and .Where(w.P())", name)
 		return
 	}
-	head := "func(q *" + r.entity(call.Pos()) + "." + ent.name + "Query) {"
+	// The argument is written inside the function: its parameter and its
+	// variables take names the argument does not use.
+	arg := r.render(call.Args[0])
+	if w, ok := call.Args[0].(*ast.SelectorExpr); ok && w.Sel.Name == "Filter" && !strings.HasSuffix(name, "Order") {
+		arg = strings.TrimSuffix(arg, ".Filter")
+	}
+	q, o, p, e := fresh("q", arg), fresh("o", arg), fresh("p", arg), fresh("err", arg)
+	head := "func(" + q + " *" + r.entity(call.Pos()) + "." + ent.name + "Query) {"
 	var text string
 	switch {
 	case strings.HasSuffix(name, "Order"):
 		if _, many := sig.Params().At(0).Type().(*types.Slice); many {
-			text = head + "\n\tfor _, o := range " + r.render(call.Args[0]) + " {\n\t\tq.OrderBy(o.Term())\n\t}\n}"
+			text = head + "\n\tfor _, " + o + " := range " + arg + " {\n\t\t" + q + ".OrderBy(" + o + ".Term())\n\t}\n}"
 		} else {
-			text = head + " q.OrderBy(" + r.render(call.Args[0]) + ".Term()) }"
+			text = head + " " + q + ".OrderBy(" + arg + ".Term()) }"
 		}
 	default:
 		if w, ok := call.Args[0].(*ast.SelectorExpr); ok && w.Sel.Name == "Filter" {
-			text = head + " q.Where(" + r.render(w.X) + ".P()) }"
+			text = head + " " + q + ".Where(" + arg + ".P()) }"
 			break
 		}
 		// A filter of the application's own: a function that returns the
 		// predicate or an error, which fails the query as it did.
-		text = head + "\n\tp, err := (" + r.render(call.Args[0]) + ")()\n\tif err != nil {\n\t\tp = " +
-			r.predicate(call.Pos()) + "." + ent.name + "(" + r.orm(call.Pos()) + ".Invalid(err))\n\t}\n\tq.Where(p)\n}"
+		text = head + "\n\t" + p + ", " + e + " := (" + arg + ")()\n\tif " + e + " != nil {\n\t\t" + p + " = " +
+			r.predicate(call.Pos()) + "." + ent.name + "(" + r.orm(call.Pos()) + ".Invalid(" + e + "))\n\t}\n\t" + q + ".Where(" + p + ")\n}"
 	}
 	if sig.Results().Len() == 2 {
 		// The option and an error that is always nil now.
@@ -1601,6 +2023,9 @@ func (r *rewriter) combinator(call *ast.CallExpr) bool {
 	default:
 		return false
 	}
+	if to != "And" {
+		r.emptyList(call, to)
+	}
 	r.replace(call.Fun.Pos(), call.Fun.End(), r.orm(call.Pos())+"."+to)
 	r.made[call] = true
 	r.count("generic " + to)
@@ -1715,21 +2140,47 @@ func (r *rewriter) whereInput(as *ast.AssignStmt) {
 		return
 	}
 	r.insert(call.End(), ", error(nil)")
+	r.note(call.Pos(), "P of an input with no condition was an error; it is the zero predicate now, which is no condition: every row. Refuse an empty input here if the code relied on the error")
 	r.count("P without an error")
 }
 
-// elements looks at the elements of a slice or array of predicates.
+// elements looks at the elements of a slice, an array or a map of
+// predicates, and at the fields of a struct that are predicates.
 func (r *rewriter) elements(lit *ast.CompositeLit) {
-	var elem types.Type
+	value := func(e ast.Expr) ast.Expr {
+		if kv, ok := e.(*ast.KeyValueExpr); ok {
+			return kv.Value
+		}
+		return e
+	}
 	switch t := types.Unalias(r.info.TypeOf(lit)).Underlying().(type) {
 	case *types.Slice:
-		elem = t.Elem()
+		for _, e := range lit.Elts {
+			r.into(value(e), t.Elem())
+		}
 	case *types.Array:
-		elem = t.Elem()
-	default:
-		return
-	}
-	for _, e := range lit.Elts {
-		r.into(e, elem)
+		for _, e := range lit.Elts {
+			r.into(value(e), t.Elem())
+		}
+	case *types.Map:
+		for _, e := range lit.Elts {
+			r.into(value(e), t.Elem())
+		}
+	case *types.Struct:
+		for i, e := range lit.Elts {
+			if kv, ok := e.(*ast.KeyValueExpr); ok {
+				if id, ok := kv.Key.(*ast.Ident); ok {
+					if f, ok := r.info.Uses[id].(*types.Var); ok {
+						r.into(kv.Value, f.Type())
+						if r.validationName(f) {
+							r.replace(id.Pos(), id.End(), "Field")
+							r.count("ValidationError.Field")
+						}
+					}
+				}
+			} else if i < t.NumFields() {
+				r.into(e, t.Field(i).Type())
+			}
+		}
 	}
 }

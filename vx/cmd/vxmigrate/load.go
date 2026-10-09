@@ -57,6 +57,23 @@
 // application's own plumbing around the client, cursors built by hand, and
 // how the application opens its database.
 //
+// Where the result compiles and would do something else, it keeps what the
+// code did or says so in the report; it does not leave that to be found in
+// production. The tests of an error (IsNotFound, IsNotSingular, ...) become
+// the runtime's, since velox's never hold for an error of the new code. A
+// deferred call that became the argument of orm.Must is put inside a
+// function, so that it still runs when the function returns. An edge query
+// is given the handle its entity was read on only when the variable has one
+// assignment and the handle is not reassigned; otherwise the context's, and
+// a line in the report. Reported, and left as written: an assertion to the
+// query or mutation type of one entity (every entity's is *orm.Query and
+// *orm.Mutation now), Or of a list that may be empty (velox's matched every
+// row, the runtime's none), P of an input with no condition (an error, now
+// no condition), a limit in the option of an eager load (over all neighbors,
+// now for each parent), a method value whose receiver may change before it
+// is called, several orders or filters given to Paginate, and a call of a
+// GraphQL edge method of an entity, which reads the handle of the context.
+//
 // It assumes the names vx gives: a column is called like the field, an enum
 // type like the field with Enum. A schema where one of those is taken (vx
 // then adds a suffix) needs those references fixed by hand.
