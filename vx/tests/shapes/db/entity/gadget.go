@@ -351,24 +351,31 @@ func (b *GadgetCreate) Exec(ctx context.Context) error {
 
 // GadgetCreateBulk creates several Gadget rows with one statement.
 type GadgetCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*GadgetCreate
 }
 
-// NewGadgetCreateBulk returns a builder that creates one row per given builder.
+// NewGadgetCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewGadgetCreateBulk(ex orm.Executor, bs ...*GadgetCreate) *GadgetCreateBulk {
-	c := &GadgetCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &GadgetCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *GadgetCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *GadgetCreateBulk) Save(ctx context.Context) ([]*Gadget, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &GadgetMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &GadgetMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +390,7 @@ func (b *GadgetCreateBulk) Save(ctx context.Context) ([]*Gadget, error) {
 //
 //go:noinline
 func (b *GadgetCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &GadgetMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &GadgetMeta, b.sets())
 	return err
 }
 

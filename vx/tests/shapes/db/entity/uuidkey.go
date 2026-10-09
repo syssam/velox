@@ -306,24 +306,31 @@ func (b *UUIDKeyCreate) Exec(ctx context.Context) error {
 
 // UUIDKeyCreateBulk creates several UUIDKey rows with one statement.
 type UUIDKeyCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*UUIDKeyCreate
 }
 
-// NewUUIDKeyCreateBulk returns a builder that creates one row per given builder.
+// NewUUIDKeyCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewUUIDKeyCreateBulk(ex orm.Executor, bs ...*UUIDKeyCreate) *UUIDKeyCreateBulk {
-	c := &UUIDKeyCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &UUIDKeyCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *UUIDKeyCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *UUIDKeyCreateBulk) Save(ctx context.Context) ([]*UUIDKey, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &UUIDKeyMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &UUIDKeyMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +345,7 @@ func (b *UUIDKeyCreateBulk) Save(ctx context.Context) ([]*UUIDKey, error) {
 //
 //go:noinline
 func (b *UUIDKeyCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &UUIDKeyMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &UUIDKeyMeta, b.sets())
 	return err
 }
 

@@ -360,24 +360,31 @@ func (b *TopicCreate) Exec(ctx context.Context) error {
 
 // TopicCreateBulk creates several Topic rows with one statement.
 type TopicCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*TopicCreate
 }
 
-// NewTopicCreateBulk returns a builder that creates one row per given builder.
+// NewTopicCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewTopicCreateBulk(ex orm.Executor, bs ...*TopicCreate) *TopicCreateBulk {
-	c := &TopicCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &TopicCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *TopicCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *TopicCreateBulk) Save(ctx context.Context) ([]*Topic, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &TopicMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &TopicMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +399,7 @@ func (b *TopicCreateBulk) Save(ctx context.Context) ([]*Topic, error) {
 //
 //go:noinline
 func (b *TopicCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &TopicMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &TopicMeta, b.sets())
 	return err
 }
 

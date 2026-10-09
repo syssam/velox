@@ -312,24 +312,31 @@ func (b *MixinOnlyCreate) Exec(ctx context.Context) error {
 
 // MixinOnlyCreateBulk creates several MixinOnly rows with one statement.
 type MixinOnlyCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*MixinOnlyCreate
 }
 
-// NewMixinOnlyCreateBulk returns a builder that creates one row per given builder.
+// NewMixinOnlyCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewMixinOnlyCreateBulk(ex orm.Executor, bs ...*MixinOnlyCreate) *MixinOnlyCreateBulk {
-	c := &MixinOnlyCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &MixinOnlyCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *MixinOnlyCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *MixinOnlyCreateBulk) Save(ctx context.Context) ([]*MixinOnly, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &MixinOnlyMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &MixinOnlyMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +351,7 @@ func (b *MixinOnlyCreateBulk) Save(ctx context.Context) ([]*MixinOnly, error) {
 //
 //go:noinline
 func (b *MixinOnlyCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &MixinOnlyMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &MixinOnlyMeta, b.sets())
 	return err
 }
 

@@ -387,24 +387,31 @@ func (b *TeamCreate) Exec(ctx context.Context) error {
 
 // TeamCreateBulk creates several Team rows with one statement.
 type TeamCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*TeamCreate
 }
 
-// NewTeamCreateBulk returns a builder that creates one row per given builder.
+// NewTeamCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewTeamCreateBulk(ex orm.Executor, bs ...*TeamCreate) *TeamCreateBulk {
-	c := &TeamCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &TeamCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *TeamCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *TeamCreateBulk) Save(ctx context.Context) ([]*Team, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &TeamMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &TeamMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +426,7 @@ func (b *TeamCreateBulk) Save(ctx context.Context) ([]*Team, error) {
 //
 //go:noinline
 func (b *TeamCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &TeamMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &TeamMeta, b.sets())
 	return err
 }
 

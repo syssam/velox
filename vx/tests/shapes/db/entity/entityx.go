@@ -309,24 +309,31 @@ func (b *EntityxCreate) Exec(ctx context.Context) error {
 
 // EntityxCreateBulk creates several Entityx rows with one statement.
 type EntityxCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*EntityxCreate
 }
 
-// NewEntityxCreateBulk returns a builder that creates one row per given builder.
+// NewEntityxCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewEntityxCreateBulk(ex orm.Executor, bs ...*EntityxCreate) *EntityxCreateBulk {
-	c := &EntityxCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &EntityxCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *EntityxCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *EntityxCreateBulk) Save(ctx context.Context) ([]*Entityx, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &EntityxMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &EntityxMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +348,7 @@ func (b *EntityxCreateBulk) Save(ctx context.Context) ([]*Entityx, error) {
 //
 //go:noinline
 func (b *EntityxCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &EntityxMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &EntityxMeta, b.sets())
 	return err
 }
 

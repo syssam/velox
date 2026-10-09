@@ -367,24 +367,31 @@ func (b *PlayerCreate) Exec(ctx context.Context) error {
 
 // PlayerCreateBulk creates several Player rows with one statement.
 type PlayerCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*PlayerCreate
 }
 
-// NewPlayerCreateBulk returns a builder that creates one row per given builder.
+// NewPlayerCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewPlayerCreateBulk(ex orm.Executor, bs ...*PlayerCreate) *PlayerCreateBulk {
-	c := &PlayerCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &PlayerCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *PlayerCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *PlayerCreateBulk) Save(ctx context.Context) ([]*Player, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &PlayerMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &PlayerMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +406,7 @@ func (b *PlayerCreateBulk) Save(ctx context.Context) ([]*Player, error) {
 //
 //go:noinline
 func (b *PlayerCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &PlayerMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &PlayerMeta, b.sets())
 	return err
 }
 

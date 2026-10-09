@@ -404,6 +404,15 @@ func NotFound(entity string) error { return fmt.Errorf("%w: %s", ErrNotFound, en
 // IsNotFound reports whether err is ErrNotFound.
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
 
+// IsNotSingular reports whether err is ErrNotSingular.
+func IsNotSingular(err error) bool { return errors.Is(err, ErrNotSingular) }
+
+// IsValidationError reports whether err is a *ValidationError.
+func IsValidationError(err error) bool {
+	var v *ValidationError
+	return errors.As(err, &v)
+}
+
 // Must returns v, and panics when err is not nil: for a test, and for the
 // start of a program, where an error ends things either way.
 //

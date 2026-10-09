@@ -305,24 +305,31 @@ func (b *Uint16KeyCreate) Exec(ctx context.Context) error {
 
 // Uint16KeyCreateBulk creates several Uint16Key rows with one statement.
 type Uint16KeyCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*Uint16KeyCreate
 }
 
-// NewUint16KeyCreateBulk returns a builder that creates one row per given builder.
+// NewUint16KeyCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewUint16KeyCreateBulk(ex orm.Executor, bs ...*Uint16KeyCreate) *Uint16KeyCreateBulk {
-	c := &Uint16KeyCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &Uint16KeyCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *Uint16KeyCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *Uint16KeyCreateBulk) Save(ctx context.Context) ([]*Uint16Key, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &Uint16KeyMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &Uint16KeyMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +344,7 @@ func (b *Uint16KeyCreateBulk) Save(ctx context.Context) ([]*Uint16Key, error) {
 //
 //go:noinline
 func (b *Uint16KeyCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &Uint16KeyMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &Uint16KeyMeta, b.sets())
 	return err
 }
 

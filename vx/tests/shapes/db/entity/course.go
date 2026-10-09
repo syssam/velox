@@ -357,24 +357,31 @@ func (b *CourseCreate) Exec(ctx context.Context) error {
 
 // CourseCreateBulk creates several Course rows with one statement.
 type CourseCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*CourseCreate
 }
 
-// NewCourseCreateBulk returns a builder that creates one row per given builder.
+// NewCourseCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewCourseCreateBulk(ex orm.Executor, bs ...*CourseCreate) *CourseCreateBulk {
-	c := &CourseCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &CourseCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *CourseCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *CourseCreateBulk) Save(ctx context.Context) ([]*Course, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &CourseMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &CourseMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +396,7 @@ func (b *CourseCreateBulk) Save(ctx context.Context) ([]*Course, error) {
 //
 //go:noinline
 func (b *CourseCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &CourseMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &CourseMeta, b.sets())
 	return err
 }
 

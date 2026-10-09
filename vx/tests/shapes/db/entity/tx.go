@@ -298,24 +298,31 @@ func (b *TxCreate) Exec(ctx context.Context) error {
 
 // TxCreateBulk creates several Tx rows with one statement.
 type TxCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*TxCreate
 }
 
-// NewTxCreateBulk returns a builder that creates one row per given builder.
+// NewTxCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewTxCreateBulk(ex orm.Executor, bs ...*TxCreate) *TxCreateBulk {
-	c := &TxCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &TxCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *TxCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *TxCreateBulk) Save(ctx context.Context) ([]*Tx, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &TxMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &TxMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +337,7 @@ func (b *TxCreateBulk) Save(ctx context.Context) ([]*Tx, error) {
 //
 //go:noinline
 func (b *TxCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &TxMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &TxMeta, b.sets())
 	return err
 }
 

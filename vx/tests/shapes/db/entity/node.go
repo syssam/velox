@@ -398,24 +398,31 @@ func (b *NodeCreate) Exec(ctx context.Context) error {
 
 // NodeCreateBulk creates several Node rows with one statement.
 type NodeCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*NodeCreate
 }
 
-// NewNodeCreateBulk returns a builder that creates one row per given builder.
+// NewNodeCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewNodeCreateBulk(ex orm.Executor, bs ...*NodeCreate) *NodeCreateBulk {
-	c := &NodeCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &NodeCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *NodeCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &NodeMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &NodeMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +437,7 @@ func (b *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
 //
 //go:noinline
 func (b *NodeCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &NodeMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &NodeMeta, b.sets())
 	return err
 }
 

@@ -357,24 +357,31 @@ func (b *StudentCreate) Exec(ctx context.Context) error {
 
 // StudentCreateBulk creates several Student rows with one statement.
 type StudentCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*StudentCreate
 }
 
-// NewStudentCreateBulk returns a builder that creates one row per given builder.
+// NewStudentCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewStudentCreateBulk(ex orm.Executor, bs ...*StudentCreate) *StudentCreateBulk {
-	c := &StudentCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &StudentCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *StudentCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *StudentCreateBulk) Save(ctx context.Context) ([]*Student, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &StudentMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &StudentMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +396,7 @@ func (b *StudentCreateBulk) Save(ctx context.Context) ([]*Student, error) {
 //
 //go:noinline
 func (b *StudentCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &StudentMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &StudentMeta, b.sets())
 	return err
 }
 

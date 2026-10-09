@@ -432,22 +432,28 @@ func (b *%[1]s) Exec(ctx context.Context) error {
 
 // %[6]s creates several %[2]s rows with one statement.
 type %[6]s struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*%[1]s
 }
 
-// %[7]s returns a builder that creates one row per given builder.
+// %[7]s returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func %[7]s(ex orm.Executor, bs ...*%[1]s) *%[6]s {
-	c := &%[6]s{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &%[6]s{ex: ex, bs: bs}
+}
+
+func (b *%[6]s) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 func (b *%[6]s) Save(ctx context.Context) ([]*%[2]s, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &%[4]s, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &%[4]s, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +466,7 @@ func (b *%[6]s) Save(ctx context.Context) ([]*%[2]s, error) {
 
 // Exec inserts the rows.
 func (b *%[6]s) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &%[4]s, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &%[4]s, b.sets())
 	return err
 }
 

@@ -384,24 +384,31 @@ func (b *ValidatedCreate) Exec(ctx context.Context) error {
 
 // ValidatedCreateBulk creates several Validated rows with one statement.
 type ValidatedCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*ValidatedCreate
 }
 
-// NewValidatedCreateBulk returns a builder that creates one row per given builder.
+// NewValidatedCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewValidatedCreateBulk(ex orm.Executor, bs ...*ValidatedCreate) *ValidatedCreateBulk {
-	c := &ValidatedCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &ValidatedCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *ValidatedCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *ValidatedCreateBulk) Save(ctx context.Context) ([]*Validated, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &ValidatedMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &ValidatedMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +423,7 @@ func (b *ValidatedCreateBulk) Save(ctx context.Context) ([]*Validated, error) {
 //
 //go:noinline
 func (b *ValidatedCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &ValidatedMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &ValidatedMeta, b.sets())
 	return err
 }
 

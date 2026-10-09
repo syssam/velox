@@ -302,24 +302,31 @@ func (b *UserSetCreate) Exec(ctx context.Context) error {
 
 // UserSetCreateBulk creates several UserSet rows with one statement.
 type UserSetCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*UserSetCreate
 }
 
-// NewUserSetCreateBulk returns a builder that creates one row per given builder.
+// NewUserSetCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewUserSetCreateBulk(ex orm.Executor, bs ...*UserSetCreate) *UserSetCreateBulk {
-	c := &UserSetCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &UserSetCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *UserSetCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *UserSetCreateBulk) Save(ctx context.Context) ([]*UserSet, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &UserSetMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &UserSetMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *UserSetCreateBulk) Save(ctx context.Context) ([]*UserSet, error) {
 //
 //go:noinline
 func (b *UserSetCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &UserSetMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &UserSetMeta, b.sets())
 	return err
 }
 

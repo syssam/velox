@@ -298,24 +298,31 @@ func (b *NotCreate) Exec(ctx context.Context) error {
 
 // NotCreateBulk creates several Not rows with one statement.
 type NotCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*NotCreate
 }
 
-// NewNotCreateBulk returns a builder that creates one row per given builder.
+// NewNotCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewNotCreateBulk(ex orm.Executor, bs ...*NotCreate) *NotCreateBulk {
-	c := &NotCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &NotCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *NotCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *NotCreateBulk) Save(ctx context.Context) ([]*Not, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &NotMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &NotMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +337,7 @@ func (b *NotCreateBulk) Save(ctx context.Context) ([]*Not, error) {
 //
 //go:noinline
 func (b *NotCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &NotMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &NotMeta, b.sets())
 	return err
 }
 

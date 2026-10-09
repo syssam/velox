@@ -347,24 +347,31 @@ func (b *PetCreate) Exec(ctx context.Context) error {
 
 // PetCreateBulk creates several Pet rows with one statement.
 type PetCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*PetCreate
 }
 
-// NewPetCreateBulk returns a builder that creates one row per given builder.
+// NewPetCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewPetCreateBulk(ex orm.Executor, bs ...*PetCreate) *PetCreateBulk {
-	c := &PetCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &PetCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *PetCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &PetMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &PetMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +386,7 @@ func (b *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
 //
 //go:noinline
 func (b *PetCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &PetMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &PetMeta, b.sets())
 	return err
 }
 

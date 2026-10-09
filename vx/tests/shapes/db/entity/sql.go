@@ -298,24 +298,31 @@ func (b *SqlCreate) Exec(ctx context.Context) error {
 
 // SqlCreateBulk creates several Sql rows with one statement.
 type SqlCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*SqlCreate
 }
 
-// NewSqlCreateBulk returns a builder that creates one row per given builder.
+// NewSqlCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewSqlCreateBulk(ex orm.Executor, bs ...*SqlCreate) *SqlCreateBulk {
-	c := &SqlCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &SqlCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *SqlCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *SqlCreateBulk) Save(ctx context.Context) ([]*Sql, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &SqlMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &SqlMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +337,7 @@ func (b *SqlCreateBulk) Save(ctx context.Context) ([]*Sql, error) {
 //
 //go:noinline
 func (b *SqlCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &SqlMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &SqlMeta, b.sets())
 	return err
 }
 

@@ -302,24 +302,31 @@ func (b *MetaCreate) Exec(ctx context.Context) error {
 
 // MetaCreateBulk creates several Meta rows with one statement.
 type MetaCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*MetaCreate
 }
 
-// NewMetaCreateBulk returns a builder that creates one row per given builder.
+// NewMetaCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewMetaCreateBulk(ex orm.Executor, bs ...*MetaCreate) *MetaCreateBulk {
-	c := &MetaCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &MetaCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *MetaCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *MetaCreateBulk) Save(ctx context.Context) ([]*Meta, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &MetaMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &MetaMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *MetaCreateBulk) Save(ctx context.Context) ([]*Meta, error) {
 //
 //go:noinline
 func (b *MetaCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &MetaMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &MetaMeta, b.sets())
 	return err
 }
 

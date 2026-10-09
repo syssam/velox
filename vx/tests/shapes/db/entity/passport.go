@@ -350,24 +350,31 @@ func (b *PassportCreate) Exec(ctx context.Context) error {
 
 // PassportCreateBulk creates several Passport rows with one statement.
 type PassportCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*PassportCreate
 }
 
-// NewPassportCreateBulk returns a builder that creates one row per given builder.
+// NewPassportCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewPassportCreateBulk(ex orm.Executor, bs ...*PassportCreate) *PassportCreateBulk {
-	c := &PassportCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &PassportCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *PassportCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *PassportCreateBulk) Save(ctx context.Context) ([]*Passport, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &PassportMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &PassportMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +389,7 @@ func (b *PassportCreateBulk) Save(ctx context.Context) ([]*Passport, error) {
 //
 //go:noinline
 func (b *PassportCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &PassportMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &PassportMeta, b.sets())
 	return err
 }
 

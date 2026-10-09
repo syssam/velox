@@ -386,24 +386,31 @@ func (b *EnrollmentCreate) Exec(ctx context.Context) error {
 
 // EnrollmentCreateBulk creates several Enrollment rows with one statement.
 type EnrollmentCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*EnrollmentCreate
 }
 
-// NewEnrollmentCreateBulk returns a builder that creates one row per given builder.
+// NewEnrollmentCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewEnrollmentCreateBulk(ex orm.Executor, bs ...*EnrollmentCreate) *EnrollmentCreateBulk {
-	c := &EnrollmentCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &EnrollmentCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *EnrollmentCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *EnrollmentCreateBulk) Save(ctx context.Context) ([]*Enrollment, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &EnrollmentMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &EnrollmentMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +425,7 @@ func (b *EnrollmentCreateBulk) Save(ctx context.Context) ([]*Enrollment, error) 
 //
 //go:noinline
 func (b *EnrollmentCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &EnrollmentMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &EnrollmentMeta, b.sets())
 	return err
 }
 

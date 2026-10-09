@@ -357,24 +357,31 @@ func (b *GoTypeShapeCreate) Exec(ctx context.Context) error {
 
 // GoTypeShapeCreateBulk creates several GoTypeShape rows with one statement.
 type GoTypeShapeCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*GoTypeShapeCreate
 }
 
-// NewGoTypeShapeCreateBulk returns a builder that creates one row per given builder.
+// NewGoTypeShapeCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewGoTypeShapeCreateBulk(ex orm.Executor, bs ...*GoTypeShapeCreate) *GoTypeShapeCreateBulk {
-	c := &GoTypeShapeCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &GoTypeShapeCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *GoTypeShapeCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *GoTypeShapeCreateBulk) Save(ctx context.Context) ([]*GoTypeShape, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &GoTypeShapeMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &GoTypeShapeMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +396,7 @@ func (b *GoTypeShapeCreateBulk) Save(ctx context.Context) ([]*GoTypeShape, error
 //
 //go:noinline
 func (b *GoTypeShapeCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &GoTypeShapeMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &GoTypeShapeMeta, b.sets())
 	return err
 }
 

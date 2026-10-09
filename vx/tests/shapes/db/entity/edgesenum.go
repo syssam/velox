@@ -309,24 +309,31 @@ func (b *EdgesEnumCreate) Exec(ctx context.Context) error {
 
 // EdgesEnumCreateBulk creates several EdgesEnum rows with one statement.
 type EdgesEnumCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*EdgesEnumCreate
 }
 
-// NewEdgesEnumCreateBulk returns a builder that creates one row per given builder.
+// NewEdgesEnumCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewEdgesEnumCreateBulk(ex orm.Executor, bs ...*EdgesEnumCreate) *EdgesEnumCreateBulk {
-	c := &EdgesEnumCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &EdgesEnumCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *EdgesEnumCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *EdgesEnumCreateBulk) Save(ctx context.Context) ([]*EdgesEnum, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &EdgesEnumMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &EdgesEnumMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +348,7 @@ func (b *EdgesEnumCreateBulk) Save(ctx context.Context) ([]*EdgesEnum, error) {
 //
 //go:noinline
 func (b *EdgesEnumCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &EdgesEnumMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &EdgesEnumMeta, b.sets())
 	return err
 }
 

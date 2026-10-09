@@ -358,24 +358,31 @@ func (b *LabelKeyCreate) Exec(ctx context.Context) error {
 
 // LabelKeyCreateBulk creates several LabelKey rows with one statement.
 type LabelKeyCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*LabelKeyCreate
 }
 
-// NewLabelKeyCreateBulk returns a builder that creates one row per given builder.
+// NewLabelKeyCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewLabelKeyCreateBulk(ex orm.Executor, bs ...*LabelKeyCreate) *LabelKeyCreateBulk {
-	c := &LabelKeyCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &LabelKeyCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *LabelKeyCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *LabelKeyCreateBulk) Save(ctx context.Context) ([]*LabelKey, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &LabelKeyMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &LabelKeyMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +397,7 @@ func (b *LabelKeyCreateBulk) Save(ctx context.Context) ([]*LabelKey, error) {
 //
 //go:noinline
 func (b *LabelKeyCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &LabelKeyMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &LabelKeyMeta, b.sets())
 	return err
 }
 

@@ -390,24 +390,31 @@ func (b *DefaultShapeCreate) Exec(ctx context.Context) error {
 
 // DefaultShapeCreateBulk creates several DefaultShape rows with one statement.
 type DefaultShapeCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*DefaultShapeCreate
 }
 
-// NewDefaultShapeCreateBulk returns a builder that creates one row per given builder.
+// NewDefaultShapeCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewDefaultShapeCreateBulk(ex orm.Executor, bs ...*DefaultShapeCreate) *DefaultShapeCreateBulk {
-	c := &DefaultShapeCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &DefaultShapeCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *DefaultShapeCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *DefaultShapeCreateBulk) Save(ctx context.Context) ([]*DefaultShape, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &DefaultShapeMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &DefaultShapeMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +429,7 @@ func (b *DefaultShapeCreateBulk) Save(ctx context.Context) ([]*DefaultShape, err
 //
 //go:noinline
 func (b *DefaultShapeCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &DefaultShapeMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &DefaultShapeMeta, b.sets())
 	return err
 }
 

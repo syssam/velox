@@ -332,24 +332,31 @@ func (b *EdgesFieldCreate) Exec(ctx context.Context) error {
 
 // EdgesFieldCreateBulk creates several EdgesField rows with one statement.
 type EdgesFieldCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*EdgesFieldCreate
 }
 
-// NewEdgesFieldCreateBulk returns a builder that creates one row per given builder.
+// NewEdgesFieldCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewEdgesFieldCreateBulk(ex orm.Executor, bs ...*EdgesFieldCreate) *EdgesFieldCreateBulk {
-	c := &EdgesFieldCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &EdgesFieldCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *EdgesFieldCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *EdgesFieldCreateBulk) Save(ctx context.Context) ([]*EdgesField, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &EdgesFieldMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &EdgesFieldMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +371,7 @@ func (b *EdgesFieldCreateBulk) Save(ctx context.Context) ([]*EdgesField, error) 
 //
 //go:noinline
 func (b *EdgesFieldCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &EdgesFieldMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &EdgesFieldMeta, b.sets())
 	return err
 }
 

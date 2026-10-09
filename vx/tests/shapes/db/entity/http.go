@@ -302,24 +302,31 @@ func (b *HttpCreate) Exec(ctx context.Context) error {
 
 // HttpCreateBulk creates several Http rows with one statement.
 type HttpCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*HttpCreate
 }
 
-// NewHttpCreateBulk returns a builder that creates one row per given builder.
+// NewHttpCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewHttpCreateBulk(ex orm.Executor, bs ...*HttpCreate) *HttpCreateBulk {
-	c := &HttpCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &HttpCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *HttpCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *HttpCreateBulk) Save(ctx context.Context) ([]*Http, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &HttpMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &HttpMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *HttpCreateBulk) Save(ctx context.Context) ([]*Http, error) {
 //
 //go:noinline
 func (b *HttpCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &HttpMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &HttpMeta, b.sets())
 	return err
 }
 

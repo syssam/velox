@@ -313,24 +313,31 @@ func (b *NamedBoolCreate) Exec(ctx context.Context) error {
 
 // NamedBoolCreateBulk creates several NamedBool rows with one statement.
 type NamedBoolCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*NamedBoolCreate
 }
 
-// NewNamedBoolCreateBulk returns a builder that creates one row per given builder.
+// NewNamedBoolCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewNamedBoolCreateBulk(ex orm.Executor, bs ...*NamedBoolCreate) *NamedBoolCreateBulk {
-	c := &NamedBoolCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &NamedBoolCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *NamedBoolCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *NamedBoolCreateBulk) Save(ctx context.Context) ([]*NamedBool, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &NamedBoolMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &NamedBoolMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +352,7 @@ func (b *NamedBoolCreateBulk) Save(ctx context.Context) ([]*NamedBool, error) {
 //
 //go:noinline
 func (b *NamedBoolCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &NamedBoolMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &NamedBoolMeta, b.sets())
 	return err
 }
 

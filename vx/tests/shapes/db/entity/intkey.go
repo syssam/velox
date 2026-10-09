@@ -302,24 +302,31 @@ func (b *IntKeyCreate) Exec(ctx context.Context) error {
 
 // IntKeyCreateBulk creates several IntKey rows with one statement.
 type IntKeyCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*IntKeyCreate
 }
 
-// NewIntKeyCreateBulk returns a builder that creates one row per given builder.
+// NewIntKeyCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewIntKeyCreateBulk(ex orm.Executor, bs ...*IntKeyCreate) *IntKeyCreateBulk {
-	c := &IntKeyCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &IntKeyCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *IntKeyCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *IntKeyCreateBulk) Save(ctx context.Context) ([]*IntKey, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &IntKeyMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &IntKeyMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *IntKeyCreateBulk) Save(ctx context.Context) ([]*IntKey, error) {
 //
 //go:noinline
 func (b *IntKeyCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &IntKeyMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &IntKeyMeta, b.sets())
 	return err
 }
 

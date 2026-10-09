@@ -476,24 +476,31 @@ func (b *ScalarCreate) Exec(ctx context.Context) error {
 
 // ScalarCreateBulk creates several Scalar rows with one statement.
 type ScalarCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*ScalarCreate
 }
 
-// NewScalarCreateBulk returns a builder that creates one row per given builder.
+// NewScalarCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewScalarCreateBulk(ex orm.Executor, bs ...*ScalarCreate) *ScalarCreateBulk {
-	c := &ScalarCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &ScalarCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *ScalarCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *ScalarCreateBulk) Save(ctx context.Context) ([]*Scalar, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &ScalarMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &ScalarMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +515,7 @@ func (b *ScalarCreateBulk) Save(ctx context.Context) ([]*Scalar, error) {
 //
 //go:noinline
 func (b *ScalarCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &ScalarMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &ScalarMeta, b.sets())
 	return err
 }
 

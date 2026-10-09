@@ -252,3 +252,22 @@ func TestWhereInput_DepthThroughAnEdge(t *testing.T) {
 	_, err = client.User.Query(db).Where(empty.P()).Count(ctx)
 	require.ErrorContains(t, err, "empty PostWhereInput")
 }
+
+// A bulk create takes its builders as they are when the rows are inserted:
+// what is set on one after CreateBulk was called used to be lost (the
+// builder's assignments were copied when the bulk was made), where velox
+// and Ent keep the builders.
+func TestCreateBulk_BuildersCompletedAfterwards(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	a := client.User.Create(db).Set(user.Name.Set("a"), user.Email.Set("a@x"))
+	b := client.User.Create(db).Set(user.Name.Set("b"), user.Email.Set("b@x"))
+	bulk := client.User.CreateBulk(db, a, b)
+	a.Set(user.Age.Set(41))
+	b.Set(user.Age.Set(42))
+	users, err := bulk.Save(ctx)
+	require.NoError(t, err)
+	require.Len(t, users, 2)
+	require.Equal(t, 41, users[0].Age)
+	require.Equal(t, 42, users[1].Age)
+}

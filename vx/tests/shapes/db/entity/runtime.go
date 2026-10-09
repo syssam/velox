@@ -302,24 +302,31 @@ func (b *RuntimeCreate) Exec(ctx context.Context) error {
 
 // RuntimeCreateBulk creates several Runtime rows with one statement.
 type RuntimeCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*RuntimeCreate
 }
 
-// NewRuntimeCreateBulk returns a builder that creates one row per given builder.
+// NewRuntimeCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewRuntimeCreateBulk(ex orm.Executor, bs ...*RuntimeCreate) *RuntimeCreateBulk {
-	c := &RuntimeCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &RuntimeCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *RuntimeCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *RuntimeCreateBulk) Save(ctx context.Context) ([]*Runtime, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &RuntimeMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &RuntimeMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *RuntimeCreateBulk) Save(ctx context.Context) ([]*Runtime, error) {
 //
 //go:noinline
 func (b *RuntimeCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &RuntimeMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &RuntimeMeta, b.sets())
 	return err
 }
 

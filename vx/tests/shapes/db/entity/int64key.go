@@ -302,24 +302,31 @@ func (b *Int64KeyCreate) Exec(ctx context.Context) error {
 
 // Int64KeyCreateBulk creates several Int64Key rows with one statement.
 type Int64KeyCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*Int64KeyCreate
 }
 
-// NewInt64KeyCreateBulk returns a builder that creates one row per given builder.
+// NewInt64KeyCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewInt64KeyCreateBulk(ex orm.Executor, bs ...*Int64KeyCreate) *Int64KeyCreateBulk {
-	c := &Int64KeyCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &Int64KeyCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *Int64KeyCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *Int64KeyCreateBulk) Save(ctx context.Context) ([]*Int64Key, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &Int64KeyMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &Int64KeyMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *Int64KeyCreateBulk) Save(ctx context.Context) ([]*Int64Key, error) {
 //
 //go:noinline
 func (b *Int64KeyCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &Int64KeyMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &Int64KeyMeta, b.sets())
 	return err
 }
 

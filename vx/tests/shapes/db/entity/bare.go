@@ -298,24 +298,31 @@ func (b *BareCreate) Exec(ctx context.Context) error {
 
 // BareCreateBulk creates several Bare rows with one statement.
 type BareCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*BareCreate
 }
 
-// NewBareCreateBulk returns a builder that creates one row per given builder.
+// NewBareCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewBareCreateBulk(ex orm.Executor, bs ...*BareCreate) *BareCreateBulk {
-	c := &BareCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &BareCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *BareCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *BareCreateBulk) Save(ctx context.Context) ([]*Bare, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &BareMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &BareMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +337,7 @@ func (b *BareCreateBulk) Save(ctx context.Context) ([]*Bare, error) {
 //
 //go:noinline
 func (b *BareCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &BareMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &BareMeta, b.sets())
 	return err
 }
 

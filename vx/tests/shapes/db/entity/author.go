@@ -409,24 +409,31 @@ func (b *AuthorCreate) Exec(ctx context.Context) error {
 
 // AuthorCreateBulk creates several Author rows with one statement.
 type AuthorCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*AuthorCreate
 }
 
-// NewAuthorCreateBulk returns a builder that creates one row per given builder.
+// NewAuthorCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewAuthorCreateBulk(ex orm.Executor, bs ...*AuthorCreate) *AuthorCreateBulk {
-	c := &AuthorCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &AuthorCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *AuthorCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *AuthorCreateBulk) Save(ctx context.Context) ([]*Author, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &AuthorMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &AuthorMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +448,7 @@ func (b *AuthorCreateBulk) Save(ctx context.Context) ([]*Author, error) {
 //
 //go:noinline
 func (b *AuthorCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &AuthorMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &AuthorMeta, b.sets())
 	return err
 }
 

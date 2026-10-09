@@ -403,24 +403,31 @@ func (b *ClashCreate) Exec(ctx context.Context) error {
 
 // ClashCreateBulk creates several Clash rows with one statement.
 type ClashCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*ClashCreate
 }
 
-// NewClashCreateBulk returns a builder that creates one row per given builder.
+// NewClashCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewClashCreateBulk(ex orm.Executor, bs ...*ClashCreate) *ClashCreateBulk {
-	c := &ClashCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &ClashCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *ClashCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *ClashCreateBulk) Save(ctx context.Context) ([]*Clash, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &ClashMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &ClashMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +442,7 @@ func (b *ClashCreateBulk) Save(ctx context.Context) ([]*Clash, error) {
 //
 //go:noinline
 func (b *ClashCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &ClashMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &ClashMeta, b.sets())
 	return err
 }
 

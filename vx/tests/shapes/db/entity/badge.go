@@ -357,24 +357,31 @@ func (b *BadgeCreate) Exec(ctx context.Context) error {
 
 // BadgeCreateBulk creates several Badge rows with one statement.
 type BadgeCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*BadgeCreate
 }
 
-// NewBadgeCreateBulk returns a builder that creates one row per given builder.
+// NewBadgeCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewBadgeCreateBulk(ex orm.Executor, bs ...*BadgeCreate) *BadgeCreateBulk {
-	c := &BadgeCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &BadgeCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *BadgeCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *BadgeCreateBulk) Save(ctx context.Context) ([]*Badge, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &BadgeMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &BadgeMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +396,7 @@ func (b *BadgeCreateBulk) Save(ctx context.Context) ([]*Badge, error) {
 //
 //go:noinline
 func (b *BadgeCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &BadgeMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &BadgeMeta, b.sets())
 	return err
 }
 

@@ -465,24 +465,31 @@ func (b *WideCreate) Exec(ctx context.Context) error {
 
 // WideCreateBulk creates several Wide rows with one statement.
 type WideCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*WideCreate
 }
 
-// NewWideCreateBulk returns a builder that creates one row per given builder.
+// NewWideCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewWideCreateBulk(ex orm.Executor, bs ...*WideCreate) *WideCreateBulk {
-	c := &WideCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &WideCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *WideCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *WideCreateBulk) Save(ctx context.Context) ([]*Wide, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &WideMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &WideMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +504,7 @@ func (b *WideCreateBulk) Save(ctx context.Context) ([]*Wide, error) {
 //
 //go:noinline
 func (b *WideCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &WideMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &WideMeta, b.sets())
 	return err
 }
 

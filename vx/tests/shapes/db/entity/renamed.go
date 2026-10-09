@@ -369,24 +369,31 @@ func (b *RenamedCreate) Exec(ctx context.Context) error {
 
 // RenamedCreateBulk creates several Renamed rows with one statement.
 type RenamedCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*RenamedCreate
 }
 
-// NewRenamedCreateBulk returns a builder that creates one row per given builder.
+// NewRenamedCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewRenamedCreateBulk(ex orm.Executor, bs ...*RenamedCreate) *RenamedCreateBulk {
-	c := &RenamedCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &RenamedCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *RenamedCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *RenamedCreateBulk) Save(ctx context.Context) ([]*Renamed, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &RenamedMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &RenamedMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +408,7 @@ func (b *RenamedCreateBulk) Save(ctx context.Context) ([]*Renamed, error) {
 //
 //go:noinline
 func (b *RenamedCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &RenamedMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &RenamedMeta, b.sets())
 	return err
 }
 

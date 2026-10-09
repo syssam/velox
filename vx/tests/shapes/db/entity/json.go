@@ -302,24 +302,31 @@ func (b *JsonCreate) Exec(ctx context.Context) error {
 
 // JsonCreateBulk creates several Json rows with one statement.
 type JsonCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*JsonCreate
 }
 
-// NewJsonCreateBulk returns a builder that creates one row per given builder.
+// NewJsonCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewJsonCreateBulk(ex orm.Executor, bs ...*JsonCreate) *JsonCreateBulk {
-	c := &JsonCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &JsonCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *JsonCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *JsonCreateBulk) Save(ctx context.Context) ([]*Json, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &JsonMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &JsonMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +341,7 @@ func (b *JsonCreateBulk) Save(ctx context.Context) ([]*Json, error) {
 //
 //go:noinline
 func (b *JsonCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &JsonMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &JsonMeta, b.sets())
 	return err
 }
 

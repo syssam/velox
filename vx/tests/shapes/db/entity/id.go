@@ -298,24 +298,31 @@ func (b *IdCreate) Exec(ctx context.Context) error {
 
 // IdCreateBulk creates several Id rows with one statement.
 type IdCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*IdCreate
 }
 
-// NewIdCreateBulk returns a builder that creates one row per given builder.
+// NewIdCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewIdCreateBulk(ex orm.Executor, bs ...*IdCreate) *IdCreateBulk {
-	c := &IdCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &IdCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *IdCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *IdCreateBulk) Save(ctx context.Context) ([]*Id, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &IdMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &IdMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +337,7 @@ func (b *IdCreateBulk) Save(ctx context.Context) ([]*Id, error) {
 //
 //go:noinline
 func (b *IdCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &IdMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &IdMeta, b.sets())
 	return err
 }
 

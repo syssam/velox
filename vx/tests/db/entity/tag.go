@@ -375,24 +375,31 @@ func (b *TagCreate) Exec(ctx context.Context) error {
 
 // TagCreateBulk creates several Tag rows with one statement.
 type TagCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*TagCreate
 }
 
-// NewTagCreateBulk returns a builder that creates one row per given builder.
+// NewTagCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewTagCreateBulk(ex orm.Executor, bs ...*TagCreate) *TagCreateBulk {
-	c := &TagCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &TagCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *TagCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *TagCreateBulk) Save(ctx context.Context) ([]*Tag, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &TagMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &TagMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +414,7 @@ func (b *TagCreateBulk) Save(ctx context.Context) ([]*Tag, error) {
 //
 //go:noinline
 func (b *TagCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &TagMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &TagMeta, b.sets())
 	return err
 }
 

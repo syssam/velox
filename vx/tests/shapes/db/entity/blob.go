@@ -366,24 +366,31 @@ func (b *BlobCreate) Exec(ctx context.Context) error {
 
 // BlobCreateBulk creates several Blob rows with one statement.
 type BlobCreateBulk struct {
-	ex   orm.Executor
-	rows [][]orm.S
+	ex orm.Executor
+	bs []*BlobCreate
 }
 
-// NewBlobCreateBulk returns a builder that creates one row per given builder.
+// NewBlobCreateBulk returns a builder that creates one row per given builder, as each
+// is when the rows are inserted: what is set on one after this call is part
+// of its row.
 func NewBlobCreateBulk(ex orm.Executor, bs ...*BlobCreate) *BlobCreateBulk {
-	c := &BlobCreateBulk{ex: ex, rows: make([][]orm.S, len(bs))}
-	for i, b := range bs {
-		c.rows[i] = b.c.Sets
+	return &BlobCreateBulk{ex: ex, bs: bs}
+}
+
+//go:noinline
+func (b *BlobCreateBulk) sets() [][]orm.S {
+	rows := make([][]orm.S, len(b.bs))
+	for i, c := range b.bs {
+		rows[i] = c.c.Sets
 	}
-	return c
+	return rows
 }
 
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *BlobCreateBulk) Save(ctx context.Context) ([]*Blob, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &BlobMeta, b.rows)
+	rows, err := orm.InsertBulk(ctx, b.ex, &BlobMeta, b.sets())
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +405,7 @@ func (b *BlobCreateBulk) Save(ctx context.Context) ([]*Blob, error) {
 //
 //go:noinline
 func (b *BlobCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &BlobMeta, b.rows)
+	_, err := orm.InsertBulk(ctx, b.ex, &BlobMeta, b.sets())
 	return err
 }
 
