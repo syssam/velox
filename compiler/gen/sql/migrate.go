@@ -348,6 +348,11 @@ func genColumnDict(col *schema.Column, fieldPkg string) jen.Dict {
 			dict[jen.Id("Default")] = jen.Lit(v)
 		case int, int64, float64, bool:
 			dict[jen.Id("Default")] = jen.Lit(v)
+		case int8, int16, int32, uint, uint8, uint16, uint32, uint64, float32:
+			// The default of a sized or unsigned field arrives in the field's
+			// own Go type. Leaving these out of the switch dropped the
+			// column's DEFAULT without an error.
+			dict[jen.Id("Default")] = jen.Lit(v)
 		case schema.Expr:
 			dict[jen.Id("Default")] = jen.Qual("github.com/syssam/velox/dialect/sql/schema", "Expr").Call(jen.Lit(string(v)))
 		case map[string]schema.Expr:

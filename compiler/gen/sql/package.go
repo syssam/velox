@@ -590,6 +590,15 @@ func genPackageRuntimeVars(h gen.GeneratorHelper, f *jen.File, t *gen.Type, grap
 		}
 	}
 
+	if hasSchemaRuntime(t) {
+		f.Commentf("%s reports that the runtime code of the schema (default values,", schemaReadyVar)
+		f.Comment("validators, hooks and policy) was stitched to the variables of this")
+		f.Comment("package. The generated root package does that on import; the entity")
+		f.Comment("client refuses to be built before it, because a missing policy or hook")
+		f.Comment("would otherwise go unnoticed.")
+		f.Var().Id(schemaReadyVar).Bool()
+	}
+
 	if numHooks > 0 || numPolicy > 0 || hasDefaults || hasValidators {
 		f.Var().DefsFunc(func(defs *jen.Group) {
 			if numHooks > 0 {

@@ -77,9 +77,15 @@ func (d *Dialect) GenEntityClient(h gen.GeneratorHelper, t *gen.Type) (*jen.File
 	return genEntityClient(h, t), nil
 }
 
-// GenEntityRuntime generates per-entity runtime.go with init() for defaults/validators/hooks.
+// GenEntityRuntime generates per-entity runtime.go with the init() that registers the entity.
 func (d *Dialect) GenEntityRuntime(h gen.GeneratorHelper, t *gen.Type) (*jen.File, error) {
 	return genEntityRuntime(h, t), nil
+}
+
+// GenSchemaInit generates internal/schemainit/schemainit.go, which stitches
+// the schema's runtime code for every entity.
+func (d *Dialect) GenSchemaInit(h gen.GeneratorHelper, forEntity func(*gen.Type) gen.GeneratorHelper) (*jen.File, error) {
+	return genSchemaInit(h, forEntity), nil
 }
 
 // GenEntityPkg generates a typed entity struct file for the shared entity/ package.

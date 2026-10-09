@@ -105,6 +105,8 @@ const (
 
 // ConstName returns the constant name of a cascade action (e.g., "Cascade", "SetNull").
 // Used by code generation templates for printing the constant name.
+//
+//go:noinline
 func (c CascadeAction) ConstName() string {
 	switch c {
 	case Cascade:
@@ -264,6 +266,8 @@ type IndexAnnotation struct {
 }
 
 // Name implements schema.Annotation for IndexAnnotation.
+//
+//go:noinline
 func (IndexAnnotation) Name() string {
 	return IndexAnnotationName
 }
@@ -271,6 +275,8 @@ func (IndexAnnotation) Name() string {
 // Merge implements schema.Merger so multiple IndexAnnotation values on the same
 // index are combined rather than the second silently overwriting the first.
 // Non-zero fields in other win; zero fields leave the receiver's value intact.
+//
+//go:noinline
 func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation {
 	var ant IndexAnnotation
 	switch v := other.(type) {
@@ -332,12 +338,16 @@ func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation {
 }
 
 // Name implements schema.Annotation.
+//
+//go:noinline
 func (a Annotation) Name() string {
 	return AnnotationName
 }
 
 // Err returns any error that occurred during annotation construction (e.g. from ViewFor).
 // The compiler loader checks this and surfaces it as a schema validation error.
+//
+//go:noinline
 func (a Annotation) Err() error {
 	return a.err
 }
@@ -345,6 +355,8 @@ func (a Annotation) Err() error {
 // Merge implements schema.Merger so multiple Annotation values on the same
 // entity/field/edge are combined rather than the second silently overwriting the first.
 // Non-zero fields in other win; zero fields leave the receiver's value intact.
+//
+//go:noinline
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 	var ant Annotation
 	switch v := other.(type) {
@@ -468,6 +480,8 @@ var _ interface {
 //	        sql.Table("users"),
 //	    }
 //	}
+//
+//go:noinline
 func Table(name string) Annotation {
 	return Annotation{Table: name}
 }
@@ -478,6 +492,8 @@ func Table(name string) Annotation {
 //
 //	field.String("code").
 //	    Annotations(sqlschema.Size(10))
+//
+//go:noinline
 func Size(size int64) Annotation {
 	return Annotation{Size: size}
 }
@@ -488,6 +504,8 @@ func Size(size int64) Annotation {
 //
 //	edge.To("posts", Post.Type).
 //	    Annotations(sql.OnDelete(sql.Cascade))
+//
+//go:noinline
 func OnDelete(action CascadeAction) Annotation {
 	return Annotation{OnDelete: action}
 }
@@ -506,6 +524,8 @@ func OnDelete(action CascadeAction) Annotation {
 // Adding an inverse (`edge.From("merged_from", Customer.Type).Ref("merged_into")`) is the
 // other way to make the relationship many-to-one, but it also adds a to-many edge and
 // everything generated from it. A genuine one-to-one needs nothing: it stays unique.
+//
+//go:noinline
 func NonUniqueFK() Annotation {
 	return Annotation{NonUniqueFK: true}
 }
@@ -516,6 +536,8 @@ func NonUniqueFK() Annotation {
 //
 //	edge.To("posts", Post.Type).
 //	    Annotations(sql.OnUpdate(sql.Cascade))
+//
+//go:noinline
 func OnUpdate(action CascadeAction) Annotation {
 	return Annotation{OnUpdate: action}
 }
@@ -528,6 +550,8 @@ func OnUpdate(action CascadeAction) Annotation {
 //	field.String("internal_note").
 //	    Comment("This comment won't be stored in the database").
 //	    Annotations(sql.WithComments(false))
+//
+//go:noinline
 func WithComments(enable bool) Annotation {
 	return Annotation{WithComments: &enable}
 }
@@ -553,12 +577,16 @@ func validateSQLFragment(context, value string) error {
 
 // ValidateColumnType checks that a column type string does not contain
 // SQL statement separators or dangerous patterns that could lead to injection.
+//
+//go:noinline
 func ValidateColumnType(typ string) error {
 	return validateSQLFragment("column type", typ)
 }
 
 // ValidateExpression checks that a SQL expression does not contain
 // statement separators or dangerous DDL/DML keywords that could lead to injection.
+//
+//go:noinline
 func ValidateExpression(expr string) error {
 	return validateSQLFragment("expression", expr)
 }
@@ -570,6 +598,8 @@ func ValidateExpression(expr string) error {
 //
 //	field.String("data").
 //	    Annotations(sql.ColumnType("JSONB"))
+//
+//go:noinline
 func ColumnType(typ string) Annotation {
 	if err := ValidateColumnType(typ); err != nil {
 		panic(err)
@@ -583,6 +613,8 @@ func ColumnType(typ string) Annotation {
 //
 //	field.String("name").
 //	    Annotations(sql.Collation("utf8mb4_unicode_ci"))
+//
+//go:noinline
 func Collation(c string) Annotation {
 	return Annotation{Collation: c}
 }
@@ -593,6 +625,8 @@ func Collation(c string) Annotation {
 //
 //	field.Int("age").
 //	    Annotations(sql.Check("age >= 0"))
+//
+//go:noinline
 func Check(expr string) Annotation {
 	if err := ValidateExpression(expr); err != nil {
 		panic(fmt.Errorf("sqlschema.Check: %w", err))
@@ -612,6 +646,8 @@ func Check(expr string) Annotation {
 //
 //	field.String("status").
 //	    Annotations(sql.Default("'pending'"))
+//
+//go:noinline
 func Default(value string) Annotation {
 	if err := validateSQLFragment("default value", value); err != nil {
 		panic(fmt.Errorf("sqlschema.Default: %w", err))
@@ -630,6 +666,8 @@ func Default(value string) Annotation {
 //
 //	field.UUID("id").
 //	    Annotations(sql.DefaultExpr("gen_random_uuid()"))
+//
+//go:noinline
 func DefaultExpr(expr string) Annotation {
 	if err := ValidateExpression(expr); err != nil {
 		panic(fmt.Errorf("sqlschema.DefaultExpr: %w", err))
@@ -643,6 +681,8 @@ func DefaultExpr(expr string) Annotation {
 //
 //	field.String("name").
 //	    Annotations(sql.Charset("utf8mb4"))
+//
+//go:noinline
 func Charset(charset string) Annotation {
 	return Annotation{Charset: charset}
 }
@@ -656,6 +696,8 @@ func Charset(charset string) Annotation {
 //	        sql.Schema("public"),
 //	    }
 //	}
+//
+//go:noinline
 func Schema(schemaName string) Annotation {
 	return Annotation{Schema: schemaName}
 }
@@ -669,6 +711,8 @@ func Schema(schemaName string) Annotation {
 //	        sqlschema.SchemaTable("public", "users"),
 //	    }
 //	}
+//
+//go:noinline
 func SchemaTable(s, t string) Annotation {
 	return Annotation{Schema: s, Table: t}
 }
@@ -684,6 +728,8 @@ func SchemaTable(s, t string) Annotation {
 //	        }),
 //	    }
 //	}
+//
+//go:noinline
 func Checks(c map[string]string) Annotation {
 	return Annotation{Checks: c}
 }
@@ -697,6 +743,8 @@ func Checks(c map[string]string) Annotation {
 //	        dialect.MySQL:    "uuid()",
 //	        dialect.Postgres: "uuid_generate_v4()",
 //	    }))
+//
+//go:noinline
 func DefaultExprs(exprs map[string]string) Annotation {
 	return Annotation{DefaultExprs: exprs}
 }
@@ -710,6 +758,8 @@ func DefaultExprs(exprs map[string]string) Annotation {
 //	        sqlschema.IncrementStart(1000),
 //	    }
 //	}
+//
+//go:noinline
 func IncrementStart(start int) Annotation {
 	return Annotation{IncrementStart: &start}
 }
@@ -720,6 +770,8 @@ func IncrementStart(start int) Annotation {
 //
 //	field.String("computed").
 //	    Annotations(sql.Skip())
+//
+//go:noinline
 func Skip() Annotation {
 	return Annotation{Skip: true}
 }
@@ -729,6 +781,8 @@ func Skip() Annotation {
 // Example:
 //
 //	index.Fields("tags").Annotations(sqlschema.IndexType("GIN"))
+//
+//go:noinline
 func IndexType(typ string) *IndexAnnotation {
 	return &IndexAnnotation{Type: typ}
 }
@@ -738,6 +792,8 @@ func IndexType(typ string) *IndexAnnotation {
 // Example:
 //
 //	index.Fields("id").Annotations(sqlschema.StorageParams("fillfactor=90"))
+//
+//go:noinline
 func StorageParams(params string) *IndexAnnotation {
 	return &IndexAnnotation{StorageParams: params}
 }
@@ -749,6 +805,8 @@ func StorageParams(params string) *IndexAnnotation {
 //
 //	index.Fields("name").Annotations(sqlschema.Prefix(100))
 //	// CREATE INDEX `t_name` ON `t`(`name`(100))
+//
+//go:noinline
 func Prefix(prefix uint) *IndexAnnotation {
 	return &IndexAnnotation{Prefix: prefix}
 }
@@ -763,6 +821,8 @@ func Prefix(prefix uint) *IndexAnnotation {
 //	    sqlschema.PrefixColumn("c2", 200),
 //	)
 //	// CREATE INDEX `t_c1_c2` ON `t`(`c1`(100), `c2`(200))
+//
+//go:noinline
 func PrefixColumn(name string, prefix uint) *IndexAnnotation {
 	return &IndexAnnotation{PrefixColumns: map[string]uint{name: prefix}}
 }
@@ -774,6 +834,8 @@ func PrefixColumn(name string, prefix uint) *IndexAnnotation {
 //
 //	index.Fields("c1", "c2", "c3").Annotations(sqlschema.DescColumns("c1", "c2"))
 //	// CREATE INDEX `t_c1_c2_c3` ON `t`(`c1` DESC, `c2` DESC, `c3`)
+//
+//go:noinline
 func DescColumns(names ...string) *IndexAnnotation {
 	ant := &IndexAnnotation{DescColumns: make(map[string]bool, len(names))}
 	for _, name := range names {
@@ -788,6 +850,8 @@ func DescColumns(names ...string) *IndexAnnotation {
 // Example:
 //
 //	index.Fields("created_at").Annotations(sqlschema.Desc())
+//
+//go:noinline
 func Desc() *IndexAnnotation {
 	return &IndexAnnotation{Desc: true}
 }
@@ -802,6 +866,8 @@ func Desc() *IndexAnnotation {
 //	    sqlschema.OpClass("int8_bloom_ops"),
 //	)
 //	// CREATE INDEX "t_col" ON "t" USING BRIN ("col" int8_bloom_ops)
+//
+//go:noinline
 func OpClass(op string) *IndexAnnotation {
 	return &IndexAnnotation{OpClass: op}
 }
@@ -815,6 +881,8 @@ func OpClass(op string) *IndexAnnotation {
 //	    sqlschema.IndexType("BRIN"),
 //	    sqlschema.OpClassColumn("c1", "int8_bloom_ops"),
 //	)
+//
+//go:noinline
 func OpClassColumn(name, op string) *IndexAnnotation {
 	return &IndexAnnotation{OpClassColumns: map[string]string{name: op}}
 }
@@ -826,6 +894,8 @@ func OpClassColumn(name, op string) *IndexAnnotation {
 //
 //	index.Fields("c1").Annotations(sqlschema.IncludeColumns("c2", "c3"))
 //	// CREATE INDEX "t_c1" ON "t"("c1") INCLUDE ("c2", "c3")
+//
+//go:noinline
 func IncludeColumns(names ...string) *IndexAnnotation {
 	return &IndexAnnotation{IncludeColumns: names}
 }
@@ -838,6 +908,8 @@ func IncludeColumns(names ...string) *IndexAnnotation {
 //	    dialect.MySQL:    "FULLTEXT",
 //	    dialect.Postgres: "GIN",
 //	}))
+//
+//go:noinline
 func IndexTypes(types map[string]string) *IndexAnnotation {
 	return &IndexAnnotation{Types: types}
 }
@@ -850,6 +922,8 @@ func IndexTypes(types map[string]string) *IndexAnnotation {
 //
 //	index.Fields("status").Annotations(sqlschema.IndexWhere("status = 'active'"))
 //	// CREATE INDEX "t_status" ON "t"("status") WHERE (status = 'active')
+//
+//go:noinline
 func IndexWhere(pred string) *IndexAnnotation {
 	return &IndexAnnotation{Where: pred}
 }
@@ -864,6 +938,8 @@ func IndexWhere(pred string) *IndexAnnotation {
 //	        sqlschema.View("SELECT name FROM pets"),
 //	    }
 //	}
+//
+//go:noinline
 func View(query string) *Annotation {
 	return &Annotation{ViewAs: query}
 }
@@ -880,6 +956,8 @@ func View(query string) *Annotation {
 //	        }),
 //	    }
 //	}
+//
+//go:noinline
 func ViewFor(d string, fn func(*sql.Selector)) *Annotation {
 	s := sql.Dialect(d).Select()
 	fn(s)
@@ -893,26 +971,36 @@ func ViewFor(d string, fn func(*sql.Selector)) *Annotation {
 // Getters for use by generators.
 
 // GetTable returns the table name and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetTable() (string, bool) {
 	return a.Table, a.Table != ""
 }
 
 // GetSize returns the size override and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetSize() (int64, bool) {
 	return a.Size, a.Size != 0
 }
 
 // GetOnDelete returns the ON DELETE action and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetOnDelete() (CascadeAction, bool) {
 	return a.OnDelete, a.OnDelete != ""
 }
 
 // GetOnUpdate returns the ON UPDATE action and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetOnUpdate() (CascadeAction, bool) {
 	return a.OnUpdate, a.OnUpdate != ""
 }
 
 // GetWithComments returns whether comments should be stored and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetWithComments() (bool, bool) {
 	if a.WithComments == nil {
 		return true, false // default is true
@@ -921,36 +1009,50 @@ func (a Annotation) GetWithComments() (bool, bool) {
 }
 
 // GetColumnType returns the custom column type.
+//
+//go:noinline
 func (a Annotation) GetColumnType() string {
 	return a.ColumnType
 }
 
 // GetCollation returns the collation setting.
+//
+//go:noinline
 func (a Annotation) GetCollation() string {
 	return a.Collation
 }
 
 // GetCheck returns the CHECK constraint expression.
+//
+//go:noinline
 func (a Annotation) GetCheck() string {
 	return a.Check
 }
 
 // GetDefault returns the SQL default value and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetDefault() (string, bool) {
 	return a.Default, a.Default != ""
 }
 
 // GetDefaultExpr returns the SQL default expression and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetDefaultExpr() (string, bool) {
 	return a.DefaultExpr, a.DefaultExpr != ""
 }
 
 // GetCharset returns the character set.
+//
+//go:noinline
 func (a Annotation) GetCharset() string {
 	return a.Charset
 }
 
 // GetIncremental returns whether auto-increment is enabled and whether it was set.
+//
+//go:noinline
 func (a Annotation) GetIncremental() (bool, bool) {
 	if a.Incremental == nil {
 		return false, false
@@ -959,17 +1061,23 @@ func (a Annotation) GetIncremental() (bool, bool) {
 }
 
 // GetIndexType returns the index type.
+//
+//go:noinline
 func (a Annotation) GetIndexType() string {
 	return a.IndexType
 }
 
 // GetStorageParams returns the storage parameters.
+//
+//go:noinline
 func (a Annotation) GetStorageParams() string {
 	return a.StorageParams
 }
 
 // Merge combines multiple SQL annotations into one.
 // Later annotations override earlier ones for scalar fields; maps are merged.
+//
+//go:noinline
 func Merge(annotations ...Annotation) Annotation {
 	result := Annotation{}
 	for _, a := range annotations {

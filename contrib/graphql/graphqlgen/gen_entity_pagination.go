@@ -301,10 +301,18 @@ func (g *Generator) genEntityPagination(t *gen.Type) *jen.File {
 			}
 		})
 
-		// Fetch
-		grp.List(jen.Id("nodes"), jen.Id("err")).Op(":=").Id("q").Dot("All").Call(jen.Id("ctx"))
-		grp.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Nil(), jen.Err()),
+		// Fetch — unless the request reads only totalCount. Without first or
+		// last the page query has no LIMIT, so it would scan every row of the
+		// table (or of the edge, once per parent) for a result nobody reads.
+		grp.Var().Id("nodes").Index().Op("*").Qual(entityPkg, g.goEntityName(t))
+		grp.If(jen.Qual(gqlrelayPkg, "PageRowsSelected").Call(jen.Id("ctx"))).Block(
+			jen.Var().Err().Error(),
+			jen.If(
+				jen.List(jen.Id("nodes"), jen.Err()).Op("=").Id("q").Dot("All").Call(jen.Id("ctx")),
+				jen.Err().Op("!=").Nil(),
+			).Block(
+				jen.Return(jen.Nil(), jen.Err()),
+			),
 		)
 
 		// Backward post-processing: trim probe row and reverse to natural

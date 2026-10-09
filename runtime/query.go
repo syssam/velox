@@ -533,13 +533,29 @@ func ScanAll[T any, PT ScannableOf[T]](ctx context.Context, drv dialect.Driver, 
 	if err != nil {
 		return nil, fmt.Errorf("scan columns: %w", err)
 	}
-	var nodes []*T
+	var (
+		nodes []*T
+		// reuse holds the first row's scan holders when they can be scanned
+		// into again (see scanHolderPlan); fresh lists the ones replaced for
+		// every row.
+		reuse []any
+		fresh []int
+	)
 	for rows.Next() {
 		node := new(T)
 		pt := PT(node)
-		vals, err := pt.ScanValues(scannedCols)
-		if err != nil {
-			return nil, err
+		vals := reuse
+		if vals == nil {
+			if vals, err = pt.ScanValues(scannedCols); err != nil {
+				return nil, err
+			}
+			if idx, ok := scanHolderPlan(vals); ok {
+				reuse, fresh = vals, idx
+			}
+		} else {
+			for _, i := range fresh {
+				vals[i] = new([]byte)
+			}
 		}
 		if err := rows.Scan(vals...); err != nil {
 			return nil, err
@@ -553,6 +569,31 @@ func ScanAll[T any, PT ScannableOf[T]](ctx context.Context, drv dialect.Driver, 
 		return nil, err
 	}
 	return nodes, nil
+}
+
+// scanHolderPlan reports whether the scan holders of one row can be used
+// for the next, and which of them must still be replaced for every row.
+//
+// The database/sql null types are reusable as they are: generated
+// AssignValues copies their value out. A *[]byte is NOT — a nillable bytes
+// field stores the holder pointer itself (e.Data = value), so a shared one
+// would make every row's field point at the last row's bytes. Those holders
+// are listed in fresh and get a new([]byte) per row; a JSON or plain bytes
+// column costs one allocation per row, as before.
+//
+// Any other holder (sql.UnknownType, whose pointer selectValues keeps; a
+// custom ValueScanner the entity may retain) makes the whole row unshareable.
+func scanHolderPlan(vals []any) (fresh []int, ok bool) {
+	for i, v := range vals {
+		switch v.(type) {
+		case *sql.NullInt64, *sql.NullString, *sql.NullTime, *sql.NullBool, *sql.NullFloat64:
+		case *[]byte:
+			fresh = append(fresh, i)
+		default:
+			return nil, false
+		}
+	}
+	return fresh, true
 }
 
 // ScanFirst executes the query with LIMIT 1 and returns the first result.

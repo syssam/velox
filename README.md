@@ -680,6 +680,7 @@ To enable Omittable for **all** nullable fields globally, set `nullable_input_om
 | [Reference](docs/reference.md) | Schema annotations, field types, validation, generated code patterns |
 | [DataLoader](docs/dataloader.md) | Batch loading helpers for GraphQL N+1 |
 | [Migration](docs/migration.md) | Database migration strategies and Atlas integration |
+| [Compile Time](docs/compile-time.md) | Why application packages compile slowly on a large schema, how to measure it, and the `From`/`runtime.TxRunner` path that avoids it |
 | [Benchmarks](docs/benchmarks.md) | Performance comparison methodology and results |
 | [Ent Comparison](docs/ent-comparison.md) | API, architecture, and feature comparison with Ent |
 | [Compatibility](COMPATIBILITY.md) | API stability contract and database support matrix |

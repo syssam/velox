@@ -354,6 +354,7 @@ type ArticleUpdateOne struct {
 	hooks             []runtime.Hook
 	modifiers         []func(*sql.UpdateBuilder)
 	selectFields      []string
+	execOnly          bool
 	skipDefaults      bool
 	skipDefaultFields map[string]struct{}
 }
@@ -670,6 +671,9 @@ func (_u *ArticleUpdateOne) sqlSave(ctx context.Context) (*entity.Article, error
 			}
 		}
 	}
+	if _u.execOnly {
+		return nil, nil
+	}
 	build := func(_ context.Context) (*sql.Selector, error) {
 		s := sql.Select(columns...).From(sql.Table(article.Table))
 		s.SetDialect(_u.config.Driver.Dialect())
@@ -710,6 +714,9 @@ func (_u *ArticleUpdateOne) Save(ctx context.Context) (*entity.Article, error) {
 		return nil, err
 	}
 	hooks := _u.hooks
+	if len(hooks) > 0 {
+		_u.execOnly = false
+	}
 	return velox.WithHooks[*entity.Article, ArticleMutation, *ArticleMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
@@ -722,8 +729,13 @@ func (_u *ArticleUpdateOne) SaveX(ctx context.Context) *entity.Article {
 	return node
 }
 
-// Exec executes the query on the entity.
+// Exec executes the query on the entity. Without hooks it does not read the
+// updated row back: use Save when the entity is needed.
 func (_u *ArticleUpdateOne) Exec(ctx context.Context) error {
+	_u.execOnly = true
+	defer func() {
+		_u.execOnly = false
+	}()
 	_, err := _u.Save(ctx)
 	return err
 }

@@ -31,6 +31,8 @@ type Builder struct {
 //			Unique(),
 //
 //	}
+//
+//go:noinline
 func Fields(fields ...string) *Builder {
 	return &Builder{desc: &Descriptor{Fields: fields}}
 }
@@ -45,6 +47,8 @@ func Fields(fields ...string) *Builder {
 //			Unique(),
 //
 //	}
+//
+//go:noinline
 func Edges(edges ...string) *Builder {
 	return &Builder{desc: &Descriptor{Edges: edges}}
 }
@@ -64,6 +68,8 @@ func Edges(edges ...string) *Builder {
 //
 // Note: calling Fields multiple times overwrites (does not append) the field list.
 // Pass all desired fields in a single call.
+//
+//go:noinline
 func (b *Builder) Fields(fields ...string) *Builder {
 	b.desc.Fields = fields
 	return b
@@ -78,6 +84,8 @@ func (b *Builder) Fields(fields ...string) *Builder {
 //			Edges("parent").
 //			Unique(),
 //	}
+//
+//go:noinline
 func (b *Builder) Edges(edges ...string) *Builder {
 	b.desc.Edges = edges
 	return b
@@ -86,12 +94,16 @@ func (b *Builder) Edges(edges ...string) *Builder {
 // Unique sets the index to be a unique index.
 // Note that defining a uniqueness on optional fields won't prevent
 // duplicates if one of the column contains NULL values.
+//
+//go:noinline
 func (b *Builder) Unique() *Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // StorageKey sets the storage key of the index. In SQL dialects, it's the index name.
+//
+//go:noinline
 func (b *Builder) StorageKey(key string) *Builder {
 	b.desc.StorageKey = key
 	return b
@@ -106,12 +118,16 @@ func (b *Builder) StorageKey(key string) *Builder {
 //			Annotations(sqlschema.Prefix(100))
 //
 //	}
+//
+//go:noinline
 func (b *Builder) Annotations(annotations ...schema.Annotation) *Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
 }
 
 // Descriptor implements the velox.Descriptor interface.
+//
+//go:noinline
 func (b *Builder) Descriptor() *Descriptor {
 	return b.desc
 }

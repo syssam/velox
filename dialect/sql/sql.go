@@ -12,6 +12,8 @@ import (
 // full predicates API, check out the sql.P in builder.go.
 
 // FieldIsNull returns a raw predicate to check if the given field is NULL.
+//
+//go:noinline
 func FieldIsNull(name string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(IsNull(s.C(name)))
@@ -19,6 +21,8 @@ func FieldIsNull(name string) func(*Selector) {
 }
 
 // FieldNotNull returns a raw predicate to check if the given field is not NULL.
+//
+//go:noinline
 func FieldNotNull(name string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(NotNull(s.C(name)))
@@ -26,6 +30,8 @@ func FieldNotNull(name string) func(*Selector) {
 }
 
 // FieldEQ returns a raw predicate to check if the given field equals to the given value.
+//
+//go:noinline
 func FieldEQ(name string, v any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(EQ(s.C(name), v))
@@ -33,6 +39,8 @@ func FieldEQ(name string, v any) func(*Selector) {
 }
 
 // FieldsEQ returns a raw predicate to check if the given fields (columns) are equal.
+//
+//go:noinline
 func FieldsEQ(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsEQ(s.C(field1), s.C(field2)))
@@ -40,6 +48,8 @@ func FieldsEQ(field1, field2 string) func(*Selector) {
 }
 
 // FieldNEQ returns a raw predicate to check if the given field does not equal to the given value.
+//
+//go:noinline
 func FieldNEQ(name string, v any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(NEQ(s.C(name), v))
@@ -47,6 +57,8 @@ func FieldNEQ(name string, v any) func(*Selector) {
 }
 
 // FieldsNEQ returns a raw predicate to check if the given fields (columns) are not equal.
+//
+//go:noinline
 func FieldsNEQ(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsNEQ(s.C(field1), s.C(field2)))
@@ -54,6 +66,8 @@ func FieldsNEQ(field1, field2 string) func(*Selector) {
 }
 
 // FieldGT returns a raw predicate to check if the given field is greater than the given value.
+//
+//go:noinline
 func FieldGT(name string, v any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(GT(s.C(name), v))
@@ -61,6 +75,8 @@ func FieldGT(name string, v any) func(*Selector) {
 }
 
 // FieldsGT returns a raw predicate to check if field1 is greater than field2.
+//
+//go:noinline
 func FieldsGT(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsGT(s.C(field1), s.C(field2)))
@@ -68,6 +84,8 @@ func FieldsGT(field1, field2 string) func(*Selector) {
 }
 
 // FieldGTE returns a raw predicate to check if the given field is greater than or equal the given value.
+//
+//go:noinline
 func FieldGTE(name string, v any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(GTE(s.C(name), v))
@@ -75,6 +93,8 @@ func FieldGTE(name string, v any) func(*Selector) {
 }
 
 // FieldsGTE returns a raw predicate to check if field1 is greater than or equal field2.
+//
+//go:noinline
 func FieldsGTE(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsGTE(s.C(field1), s.C(field2)))
@@ -82,6 +102,8 @@ func FieldsGTE(field1, field2 string) func(*Selector) {
 }
 
 // FieldLT returns a raw predicate to check if the value of the field is less than the given value.
+//
+//go:noinline
 func FieldLT(name string, v any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(LT(s.C(name), v))
@@ -89,6 +111,8 @@ func FieldLT(name string, v any) func(*Selector) {
 }
 
 // FieldsLT returns a raw predicate to check if field1 is lower than field2.
+//
+//go:noinline
 func FieldsLT(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsLT(s.C(field1), s.C(field2)))
@@ -96,6 +120,8 @@ func FieldsLT(field1, field2 string) func(*Selector) {
 }
 
 // FieldLTE returns a raw predicate to check if the value of the field is less than the given value.
+//
+//go:noinline
 func FieldLTE(name string, v any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(LTE(s.C(name), v))
@@ -103,6 +129,8 @@ func FieldLTE(name string, v any) func(*Selector) {
 }
 
 // FieldsLTE returns a raw predicate to check if field1 is lower than or equal field2.
+//
+//go:noinline
 func FieldsLTE(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsLTE(s.C(field1), s.C(field2)))
@@ -110,6 +138,8 @@ func FieldsLTE(field1, field2 string) func(*Selector) {
 }
 
 // FieldsHasPrefix returns a raw predicate to checks if field1 begins with the value of field2.
+//
+//go:noinline
 func FieldsHasPrefix(field1, field2 string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ColumnsHasPrefix(s.C(field1), s.C(field2)))
@@ -118,6 +148,8 @@ func FieldsHasPrefix(field1, field2 string) func(*Selector) {
 
 // FieldIn returns a raw predicate to check if the value of the field is IN the given values.
 // Generic version for user code that passes typed slices.
+//
+//go:noinline
 func FieldIn[T any](name string, vs ...T) func(*Selector) {
 	v := make([]any, len(vs))
 	for i := range v {
@@ -128,6 +160,8 @@ func FieldIn[T any](name string, vs ...T) func(*Selector) {
 
 // FieldNotIn returns a raw predicate to check if the value of the field is NOT IN the given values.
 // Generic version for user code that passes typed slices.
+//
+//go:noinline
 func FieldNotIn[T any](name string, vs ...T) func(*Selector) {
 	v := make([]any, len(vs))
 	for i := range v {
@@ -138,6 +172,8 @@ func FieldNotIn[T any](name string, vs ...T) func(*Selector) {
 
 // FieldInValues is the non-generic version of FieldIn. Used by generated code
 // to avoid generic monomorphization overhead.
+//
+//go:noinline
 func FieldInValues(name string, vs ...any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(In(s.C(name), vs...))
@@ -146,6 +182,8 @@ func FieldInValues(name string, vs ...any) func(*Selector) {
 
 // FieldNotInValues is the non-generic version of FieldNotIn. Used by generated code
 // to avoid generic monomorphization overhead.
+//
+//go:noinline
 func FieldNotInValues(name string, vs ...any) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(NotIn(s.C(name), vs...))
@@ -153,6 +191,8 @@ func FieldNotInValues(name string, vs ...any) func(*Selector) {
 }
 
 // FieldEqualFold returns a raw predicate to check if the field is equal to the given string under case-folding.
+//
+//go:noinline
 func FieldEqualFold(name string, substr string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(EqualFold(s.C(name), substr))
@@ -160,6 +200,8 @@ func FieldEqualFold(name string, substr string) func(*Selector) {
 }
 
 // FieldHasPrefix returns a raw predicate to check if the field has the given prefix.
+//
+//go:noinline
 func FieldHasPrefix(name string, prefix string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(HasPrefix(s.C(name), prefix))
@@ -167,6 +209,8 @@ func FieldHasPrefix(name string, prefix string) func(*Selector) {
 }
 
 // FieldHasPrefixFold returns a raw predicate to check if the field has the given prefix with case-folding
+//
+//go:noinline
 func FieldHasPrefixFold(name string, prefix string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(HasPrefixFold(s.C(name), prefix))
@@ -174,6 +218,8 @@ func FieldHasPrefixFold(name string, prefix string) func(*Selector) {
 }
 
 // FieldHasSuffix returns a raw predicate to check if the field has the given suffix.
+//
+//go:noinline
 func FieldHasSuffix(name string, suffix string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(HasSuffix(s.C(name), suffix))
@@ -181,6 +227,8 @@ func FieldHasSuffix(name string, suffix string) func(*Selector) {
 }
 
 // FieldHasSuffixFold returns a raw predicate to check if the field has the given suffix with case-folding
+//
+//go:noinline
 func FieldHasSuffixFold(name string, suffix string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(HasSuffixFold(s.C(name), suffix))
@@ -188,6 +236,8 @@ func FieldHasSuffixFold(name string, suffix string) func(*Selector) {
 }
 
 // FieldContains returns a raw predicate to check if the field contains the given substring.
+//
+//go:noinline
 func FieldContains(name string, substr string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(Contains(s.C(name), substr))
@@ -195,6 +245,8 @@ func FieldContains(name string, substr string) func(*Selector) {
 }
 
 // FieldContainsFold returns a raw predicate to check if the field contains the given substring with case-folding.
+//
+//go:noinline
 func FieldContainsFold(name string, substr string) func(*Selector) {
 	return func(s *Selector) {
 		s.Where(ContainsFold(s.C(name), substr))

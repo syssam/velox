@@ -223,3 +223,40 @@ func TestGenScalars_MultipleScalarsSorted(t *testing.T) {
 	coordIdx := bytes.Index([]byte(code), []byte("MarshalCoordinate"))
 	assert.Less(t, addrIdx, coordIdx, "Address should appear before Coordinate (sorted)")
 }
+
+func TestGenScalars_WithoutGQLGenImportsNoEngine(t *testing.T) {
+	scalars := map[string]typedJSONScalar{
+		"example.com/schema.Address": {
+			ScalarName:  "Address",
+			GoType:      "example.com/ent.Address",
+			OrigPkgPath: "example.com/schema",
+			TypeName:    "Address",
+		},
+	}
+	render := func(withoutGQLGen bool) string {
+		g := &Generator{
+			config:           Config{Package: "test", ORMPackage: "example.com/ent", WithoutGQLGen: withoutGQLGen},
+			typedJSONScalars: scalars,
+		}
+		var buf bytes.Buffer
+		require.NoError(t, g.genScalars().Render(&buf))
+		return buf.String()
+	}
+
+	t.Run("default keeps gqlgen's Marshaler", func(t *testing.T) {
+		code := render(false)
+		assert.Contains(t, code, "github.com/99designs/gqlgen/graphql")
+		assert.Contains(t, code, "graphql.Marshaler")
+	})
+
+	t.Run("WithoutGQLGen links no gqlgen", func(t *testing.T) {
+		code := render(true)
+		assert.NotContains(t, code, "gqlgen")
+		// The marshalers return the encoded JSON for the server to write, and
+		// the unmarshalers are the ones gqlgen servers use.
+		assert.Contains(t, code, "func MarshalAddress(v schema.Address) ([]byte, error)")
+		assert.Contains(t, code, "func MarshalAddressPtr(v *schema.Address) ([]byte, error)")
+		assert.Contains(t, code, "func UnmarshalAddress(v any) (schema.Address, error)")
+		assert.Contains(t, code, "func UnmarshalAddressPtr(v any) (*schema.Address, error)")
+	})
+}

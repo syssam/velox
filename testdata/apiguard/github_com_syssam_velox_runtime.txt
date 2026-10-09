@@ -70,6 +70,7 @@
   field QueryPlan.Edges []EdgePlan
   field QueryPlan.Interceptors []string
   field QueryPlan.SQL string
+  method ConfigProvider.RuntimeConfig() Config
   method FieldCollectable.GetCtx() *QueryContext
   method FieldCollectable.GetIDColumn() string
   method FieldCollectable.WithEdgeLoad(string, ...LoadOption) FieldCollectable
@@ -116,7 +117,13 @@
   method Selector.StringX(context.Context) string
   method Selector.Strings(context.Context) ([]string, error)
   method Selector.StringsX(context.Context) []string
+  method Transaction.Commit() error
+  method Transaction.Rollback() error
+  method Transaction.RuntimeConfig() Config
   method TxDriverUnwrapper.BaseDriver() github.com/syssam/velox/dialect.Driver
+  method TxRunner.RunTx(context.Context, func(tx ConfigProvider) error) error
+  method TxRunner.RuntimeConfig() Config
+  method TxRunner.StartTx(context.Context) (Transaction, error)
 const OpCreate github.com/syssam/velox.Op
 const OpDelete github.com/syssam/velox.Op
 const OpDeleteOne github.com/syssam/velox.Op
@@ -172,6 +179,7 @@ func WithEdge(string, ...LoadOption) LoadOption
 type AggregateFunc = AggregateFunc
 type CollectMeta struct
 type Config struct
+type ConfigProvider interface
 type ConstraintError = ConstraintError
 type DeleterBase struct
 type EdgeMeta struct
@@ -206,8 +214,10 @@ type QueryReader interface
 type Scannable interface
 type ScannableOf[T any] interface
 type Selector struct
+type Transaction interface
 type Traverser = Traverser
 type TxDriverUnwrapper interface
+type TxRunner interface
 type ValidationError = ValidationError
 type Value = Value
 var ErrAmbiguousNodeID error

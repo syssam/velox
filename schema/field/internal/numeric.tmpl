@@ -17,6 +17,8 @@ import (
 {{ range $t := $.Ints }}
 	{{ $title := title $t.String }}
 	// {{ $title }} returns a new Field with type {{ $t }}.
+	//
+	//go:noinline
 	func {{ $title }}(name string) *{{ $t }}Builder { return &{{ $t }}Builder{&Descriptor{
 			Name: name,
 			Info: &TypeInfo{Type: Type{{ $title }} },
@@ -25,6 +27,8 @@ import (
 {{ end }}
 
 // Float returns a new Field with type float64.
+//
+//go:noinline
 func Float(name string) *float64Builder { return &float64Builder{&Descriptor{
 		Name: name,
 		Info: &TypeInfo{Type: TypeFloat64},
@@ -33,11 +37,15 @@ func Float(name string) *float64Builder { return &float64Builder{&Descriptor{
 
 // Float64 returns a new Field with type float64.
 // It is an alias for Float, provided for naming symmetry with Float32.
+//
+//go:noinline
 func Float64(name string) *float64Builder {
 	return Float(name)
 }
 
 // Float32 returns a new Field with type float32.
+//
+//go:noinline
 func Float32(name string) *float32Builder { return &float32Builder{&Descriptor{
 		Name: name,
 		Info: &TypeInfo{Type: TypeFloat32},
@@ -53,12 +61,16 @@ type {{ $builder }} struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *{{ $builder }}) Unique() *{{ $builder }} {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
@@ -71,6 +83,8 @@ func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Min(i {{ $t }}) *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
@@ -83,6 +97,8 @@ func (b *{{ $builder }}) Min(i {{ $t }}) *{{ $builder }} {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
@@ -95,23 +111,31 @@ func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Positive() *{{ $builder }} {
 	return b.Min(1)
 }
 
 {{ if hasPrefix $t.String "uint" | not }}
 	// Negative adds a maximum value validator with the value of -1. Operation fails if the validator fails.
+	//
+	//go:noinline
 	func (b *{{ $builder }}) Negative() *{{ $builder }} {
 		return b.Max(-1)
 	}
 
 	// NonNegative adds a minimum value validator with the value of 0. Operation fails if the validator fails.
+	//
+	//go:noinline
 	func (b *{{ $builder }}) NonNegative() *{{ $builder }} {
 		return b.Min(0)
 	}
 {{ end }}
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *{{ $builder }}) Default(i {{ $t }}) *{{ $builder }} {
 	b.desc.Default = i
 	return b
@@ -119,6 +143,8 @@ func (b *{{ $builder }}) Default(i {{ $t }}) *{{ $builder }} {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *{{ $builder }}) DefaultFunc(fn any) *{{ $builder }} {
 	b.desc.Default = fn
 	return b
@@ -131,6 +157,7 @@ func (b *{{ $builder }}) DefaultFunc(fn any) *{{ $builder }} {
 //		Default(0).
 //		UpdateDefault(GenNumber),
 //
+//go:noinline
 func (b *{{ $builder }}) UpdateDefault(fn any) *{{ $builder }} {
     b.desc.UpdateDefault = fn
     return b
@@ -138,12 +165,16 @@ func (b *{{ $builder }}) UpdateDefault(fn any) *{{ $builder }} {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *{{ $builder }}) Nillable() *{{ $builder }} {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *{{ $builder }}) Comment(c string) *{{ $builder }} {
 	b.desc.Comment = c
 	return b
@@ -151,6 +182,8 @@ func (b *{{ $builder }}) Comment(c string) *{{ $builder }} {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *{{ $builder }}) Optional() *{{ $builder }} {
 	b.desc.Optional = true
 	return b
@@ -159,6 +192,8 @@ func (b *{{ $builder }}) Optional() *{{ $builder }} {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *{{ $builder }}) Nullable() *{{ $builder }} {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -166,18 +201,24 @@ func (b *{{ $builder }}) Nullable() *{{ $builder }} {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *{{ $builder }}) Immutable() *{{ $builder }} {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *{{ $builder }}) StructTag(s string) *{{ $builder }} {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Validate(fn func({{ $t }}) error) *{{ $builder }} {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -185,6 +226,8 @@ func (b *{{ $builder }}) Validate(fn func({{ $t }}) error) *{{ $builder }} {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *{{ $builder }}) StorageKey(key string) *{{ $builder }} {
 	b.desc.StorageKey = key
 	return b
@@ -198,6 +241,7 @@ func (b *{{ $builder }}) StorageKey(key string) *{{ $builder }} {
 //			dialect.Postgres: "CustomType",
 //		})
 //
+//go:noinline
 func (b *{{ $builder }}) SchemaType(types map[string]string) *{{ $builder }} {
 	b.desc.SchemaType = types
 	return b
@@ -220,6 +264,7 @@ func (b *{{ $builder }}) SchemaType(types map[string]string) *{{ $builder }} {
 //		return add(t1, t2)
 //	}
 //
+//go:noinline
 func (b *{{ $builder }}) GoType(typ any) *{{ $builder }} {
 	b.desc.goType(typ)
 	return b
@@ -228,6 +273,8 @@ func (b *{{ $builder }}) GoType(typ any) *{{ $builder }} {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *{{ $builder }}) ValueScanner(vs any) *{{ $builder }} {
 	b.desc.ValueScanner = vs
 	return b
@@ -239,6 +286,7 @@ func (b *{{ $builder }}) ValueScanner(vs any) *{{ $builder }} {
 //	field.{{ $tt }}("{{ $t }}").
 //		Annotations(entgql.OrderField("{{ $t.String | toUpper }}"))
 //
+//go:noinline
 func (b *{{ $builder }}) Annotations(annotations ...schema.Annotation) *{{ $builder }} {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -247,6 +295,8 @@ func (b *{{ $builder }}) Annotations(annotations ...schema.Annotation) *{{ $buil
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *{{ $builder }}) Deprecated(reason ...string) *{{ $builder }} {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -256,6 +306,8 @@ func (b *{{ $builder }}) Deprecated(reason ...string) *{{ $builder }} {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *{{ $builder }}) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc({{ $t }}Type)
@@ -281,12 +333,16 @@ type {{ $builder }} struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *{{ $builder }}) Unique() *{{ $builder }} {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v  {{ $t }}) error {
@@ -299,6 +355,8 @@ func (b *{{ $builder }}) Range(i, j {{ $t }}) *{{ $builder }} {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Min(i  {{ $t }}) *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v  {{ $t }}) error {
@@ -311,6 +369,8 @@ func (b *{{ $builder }}) Min(i  {{ $t }}) *{{ $builder }} {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
@@ -324,6 +384,8 @@ func (b *{{ $builder }}) Max(i {{ $t }}) *{{ $builder }} {
 
 // Positive adds a validator that requires the value to be strictly greater than 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Positive() *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
@@ -337,6 +399,8 @@ func (b *{{ $builder }}) Positive() *{{ $builder }} {
 
 // Negative adds a validator that requires the value to be strictly less than 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Negative() *{{ $builder }} {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v {{ $t }}) error {
@@ -350,11 +414,15 @@ func (b *{{ $builder }}) Negative() *{{ $builder }} {
 
 // NonNegative adds a minimum value validator with the value of 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *{{ $builder }}) NonNegative() *{{ $builder }} {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *{{ $builder }}) Default(i {{ $t }}) *{{ $builder }} {
 	b.desc.Default = i
 	return b
@@ -362,6 +430,8 @@ func (b *{{ $builder }}) Default(i {{ $t }}) *{{ $builder }} {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *{{ $builder }}) DefaultFunc(fn any) *{{ $builder }} {
 	b.desc.Default = fn
 	return b
@@ -374,6 +444,7 @@ func (b *{{ $builder }}) DefaultFunc(fn any) *{{ $builder }} {
 //		Default(0).
 //		UpdateDefault(GenNumber),
 //
+//go:noinline
 func (b *{{ $builder }}) UpdateDefault(fn any) *{{ $builder }} {
 	b.desc.UpdateDefault = fn
 	return b
@@ -381,12 +452,16 @@ func (b *{{ $builder }}) UpdateDefault(fn any) *{{ $builder }} {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *{{ $builder }}) Nillable() *{{ $builder }} {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *{{ $builder }}) Comment(c string) *{{ $builder }} {
 	b.desc.Comment = c
 	return b
@@ -394,6 +469,8 @@ func (b *{{ $builder }}) Comment(c string) *{{ $builder }} {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *{{ $builder }}) Optional() *{{ $builder }} {
 	b.desc.Optional = true
 	return b
@@ -402,6 +479,8 @@ func (b *{{ $builder }}) Optional() *{{ $builder }} {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *{{ $builder }}) Nullable() *{{ $builder }} {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -409,18 +488,24 @@ func (b *{{ $builder }}) Nullable() *{{ $builder }} {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *{{ $builder }}) Immutable() *{{ $builder }} {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *{{ $builder }}) StructTag(s string) *{{ $builder }} {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *{{ $builder }}) Validate(fn func({{ $t }}) error) *{{ $builder }} {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -429,6 +514,8 @@ func (b *{{ $builder }}) Validate(fn func({{ $t }}) error) *{{ $builder }} {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *{{ $builder }}) StorageKey(key string) *{{ $builder }} {
 	b.desc.StorageKey = key
 	return b
@@ -443,6 +530,7 @@ func (b *{{ $builder }}) StorageKey(key string) *{{ $builder }} {
 //			dialect.Postgres: 	"numeric(5, 2)",
 //		})
 //
+//go:noinline
 func (b *{{ $builder }}) SchemaType(types map[string]string) *{{ $builder }} {
 	b.desc.SchemaType = types
 	return b
@@ -465,6 +553,7 @@ func (b *{{ $builder }}) SchemaType(types map[string]string) *{{ $builder }} {
 //		return add(t1, t2)
 //	}
 //
+//go:noinline
 func (b *{{ $builder }}) GoType(typ any) *{{ $builder }} {
 	b.desc.goType(typ)
 	return b
@@ -473,6 +562,8 @@ func (b *{{ $builder }}) GoType(typ any) *{{ $builder }} {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *{{ $builder }}) ValueScanner(vs any) *{{ $builder }} {
 	b.desc.ValueScanner = vs
 	return b
@@ -484,6 +575,7 @@ func (b *{{ $builder }}) ValueScanner(vs any) *{{ $builder }} {
 //	field.{{ $tt }}("{{ $t }}").
 //		Annotations(entgql.OrderField("{{ $t.String | toUpper }}"))
 //
+//go:noinline
 func (b *{{ $builder }}) Annotations(annotations ...schema.Annotation) *{{ $builder }} {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -492,6 +584,8 @@ func (b *{{ $builder }}) Annotations(annotations ...schema.Annotation) *{{ $buil
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *{{ $builder }}) Deprecated(reason ...string) *{{ $builder }} {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -501,6 +595,8 @@ func (b *{{ $builder }}) Deprecated(reason ...string) *{{ $builder }} {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *{{ $builder }}) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc({{ $t }}Type)

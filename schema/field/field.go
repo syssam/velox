@@ -17,6 +17,8 @@ import (
 )
 
 // String returns a new Field with type string.
+//
+//go:noinline
 func String(name string) *stringBuilder {
 	return &stringBuilder{&Descriptor{
 		Name: name,
@@ -26,6 +28,8 @@ func String(name string) *stringBuilder {
 
 // Text returns a new string field without limitation on the size.
 // In MySQL, it is the "longtext" type, but in SQLite it has no effect.
+//
+//go:noinline
 func Text(name string) *stringBuilder {
 	return &stringBuilder{&Descriptor{
 		Name: name,
@@ -36,6 +40,8 @@ func Text(name string) *stringBuilder {
 
 // Bytes returns a new Field with type bytes/buffer.
 // In MySQL and SQLite, it is the "BLOB" type.
+//
+//go:noinline
 func Bytes(name string) *bytesBuilder {
 	return &bytesBuilder{&Descriptor{
 		Name: name,
@@ -44,6 +50,8 @@ func Bytes(name string) *bytesBuilder {
 }
 
 // Bool returns a new Field with type bool.
+//
+//go:noinline
 func Bool(name string) *boolBuilder {
 	return &boolBuilder{&Descriptor{
 		Name: name,
@@ -52,6 +60,8 @@ func Bool(name string) *boolBuilder {
 }
 
 // Time returns a new Field with type timestamp.
+//
+//go:noinline
 func Time(name string) *timeBuilder {
 	return &timeBuilder{&Descriptor{
 		Name: name,
@@ -68,6 +78,8 @@ func Time(name string) *timeBuilder {
 //
 //	field.JSON("info", &Info{}).
 //		Optional()
+//
+//go:noinline
 func JSON(name string, typ any) *jsonBuilder {
 	b := &jsonBuilder{&Descriptor{
 		Name: name,
@@ -93,16 +105,22 @@ func JSON(name string, typ any) *jsonBuilder {
 }
 
 // Strings returns a new JSON Field with type []string.
+//
+//go:noinline
 func Strings(name string) *sliceBuilder[string] {
 	return sb[string](name)
 }
 
 // Ints returns a new JSON Field with type []int.
+//
+//go:noinline
 func Ints(name string) *sliceBuilder[int] {
 	return sb[int](name)
 }
 
 // Floats returns a new JSON Field with type []float.
+//
+//go:noinline
 func Floats(name string) *sliceBuilder[float64] {
 	return sb[float64](name)
 }
@@ -110,6 +128,8 @@ func Floats(name string) *sliceBuilder[float64] {
 // Any returns a new JSON Field with type any. Although this field type can be
 // useful for fields with dynamic data layout, it is strongly recommended to use
 // JSON with json.RawMessage instead and implement custom marshaling.
+//
+//go:noinline
 func Any(name string) *jsonBuilder {
 	const t = "any"
 	return &jsonBuilder{&Descriptor{
@@ -135,6 +155,8 @@ func Any(name string) *jsonBuilder {
 //			"off",
 //		).
 //		Default("on")
+//
+//go:noinline
 func Enum(name string) *enumBuilder {
 	return &enumBuilder{&Descriptor{
 		Name: name,
@@ -145,6 +167,8 @@ func Enum(name string) *enumBuilder {
 // UUID returns a new Field with type UUID. An example for defining UUID field is as follows:
 //
 //	field.UUID("id", uuid.New())
+//
+//go:noinline
 func UUID(name string, typ driver.Valuer) *uuidBuilder {
 	rt := reflect.TypeOf(typ)
 	b := &uuidBuilder{&Descriptor{
@@ -170,6 +194,8 @@ func UUID(name string, typ driver.Valuer) *uuidBuilder {
 //			dialect.MySQL:    "text",
 //			dialect.Postgres: "varchar",
 //		})
+//
+//go:noinline
 func Other(name string, typ driver.Valuer) *otherBuilder {
 	ob := &otherBuilder{&Descriptor{
 		Name: name,
@@ -185,12 +211,16 @@ type stringBuilder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *stringBuilder) Unique() *stringBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Sensitive fields not printable and not serializable.
+//
+//go:noinline
 func (b *stringBuilder) Sensitive() *stringBuilder {
 	b.desc.Sensitive = true
 	return b
@@ -202,6 +232,8 @@ func (b *stringBuilder) Sensitive() *stringBuilder {
 // and all errors are collected.
 
 // Match adds a regex matcher for this field. Operation fails if the regex fails.
+//
+//go:noinline
 func (b *stringBuilder) Match(re *regexp.Regexp) *stringBuilder {
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
 		if !re.MatchString(v) {
@@ -214,6 +246,8 @@ func (b *stringBuilder) Match(re *regexp.Regexp) *stringBuilder {
 
 // MinLen adds a length validator for this field.
 // Operation fails if the length of the string is less than the given value.
+//
+//go:noinline
 func (b *stringBuilder) MinLen(i int) *stringBuilder {
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
 		if len(v) < i {
@@ -226,6 +260,8 @@ func (b *stringBuilder) MinLen(i int) *stringBuilder {
 
 // MinRuneLen adds a rune length validator for this field.
 // Operation fails if the rune count of the string is less than the given value.
+//
+//go:noinline
 func (b *stringBuilder) MinRuneLen(i int) *stringBuilder {
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
 		if utf8.RuneCountInString(v) < i {
@@ -238,12 +274,16 @@ func (b *stringBuilder) MinRuneLen(i int) *stringBuilder {
 
 // NotEmpty adds a length validator for this field.
 // Operation fails if the length of the string is zero.
+//
+//go:noinline
 func (b *stringBuilder) NotEmpty() *stringBuilder {
 	return b.MinLen(1)
 }
 
 // MaxLen adds a length validator for this field.
 // Operation fails if the length of the string is greater than the given value.
+//
+//go:noinline
 func (b *stringBuilder) MaxLen(i int) *stringBuilder {
 	b.desc.Size = i
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
@@ -257,6 +297,8 @@ func (b *stringBuilder) MaxLen(i int) *stringBuilder {
 
 // MaxRuneLen adds a rune length validator for this field.
 // Operation fails if the rune count of the string is greater than the given value.
+//
+//go:noinline
 func (b *stringBuilder) MaxRuneLen(i int) *stringBuilder {
 	b.desc.Size = i
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
@@ -269,12 +311,16 @@ func (b *stringBuilder) MaxRuneLen(i int) *stringBuilder {
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *stringBuilder) Validate(fn func(string) error) *stringBuilder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *stringBuilder) Default(s string) *stringBuilder {
 	b.desc.Default = s
 	return b
@@ -285,6 +331,8 @@ func (b *stringBuilder) Default(s string) *stringBuilder {
 //
 //	field.String("cuid").
 //		DefaultFunc(cuid.New)
+//
+//go:noinline
 func (b *stringBuilder) DefaultFunc(fn any) *stringBuilder {
 	t := reflect.TypeOf(fn)
 	if t == nil {
@@ -300,6 +348,8 @@ func (b *stringBuilder) DefaultFunc(fn any) *stringBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *stringBuilder) Nillable() *stringBuilder {
 	b.desc.Nillable = true
 	return b
@@ -307,6 +357,8 @@ func (b *stringBuilder) Nillable() *stringBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *stringBuilder) Optional() *stringBuilder {
 	b.desc.Optional = true
 	return b
@@ -315,6 +367,8 @@ func (b *stringBuilder) Optional() *stringBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *stringBuilder) Nullable() *stringBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -322,18 +376,24 @@ func (b *stringBuilder) Nullable() *stringBuilder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *stringBuilder) Immutable() *stringBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *stringBuilder) Comment(c string) *stringBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *stringBuilder) StructTag(s string) *stringBuilder {
 	b.desc.Tag = s
 	return b
@@ -341,6 +401,8 @@ func (b *stringBuilder) StructTag(s string) *stringBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *stringBuilder) StorageKey(key string) *stringBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -354,6 +416,8 @@ func (b *stringBuilder) StorageKey(key string) *stringBuilder {
 //			dialect.MySQL:    "text",
 //			dialect.Postgres: "varchar",
 //		})
+//
+//go:noinline
 func (b *stringBuilder) SchemaType(types map[string]string) *stringBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -366,6 +430,8 @@ func (b *stringBuilder) SchemaType(types map[string]string) *stringBuilder {
 //
 //	field.String("dir").
 //		GoType(http.Dir("dir"))
+//
+//go:noinline
 func (b *stringBuilder) GoType(typ any) *stringBuilder {
 	b.desc.goType(typ)
 	return b
@@ -375,6 +441,8 @@ func (b *stringBuilder) GoType(typ any) *stringBuilder {
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces, such as slices and maps
 // or types exist in external packages (e.g., url.URL).
+//
+//go:noinline
 func (b *stringBuilder) ValueScanner(vs any) *stringBuilder {
 	b.desc.ValueScanner = vs
 	return b
@@ -387,6 +455,8 @@ func (b *stringBuilder) ValueScanner(vs any) *stringBuilder {
 //		Annotations(
 //			entgql.OrderField("DIR"),
 //		)
+//
+//go:noinline
 func (b *stringBuilder) Annotations(annotations ...schema.Annotation) *stringBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -395,6 +465,8 @@ func (b *stringBuilder) Annotations(annotations ...schema.Annotation) *stringBui
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *stringBuilder) Deprecated(reason ...string) *stringBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -404,6 +476,8 @@ func (b *stringBuilder) Deprecated(reason ...string) *stringBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *stringBuilder) Descriptor() *Descriptor {
 	if b.desc.Default != nil {
 		b.desc.checkDefaultFunc(stringType)
@@ -419,6 +493,8 @@ type timeBuilder struct {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *timeBuilder) Nillable() *timeBuilder {
 	b.desc.Nillable = true
 	return b
@@ -426,6 +502,8 @@ func (b *timeBuilder) Nillable() *timeBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *timeBuilder) Optional() *timeBuilder {
 	b.desc.Optional = true
 	return b
@@ -434,6 +512,8 @@ func (b *timeBuilder) Optional() *timeBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *timeBuilder) Nullable() *timeBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -442,18 +522,24 @@ func (b *timeBuilder) Nullable() *timeBuilder {
 
 // Immutable fields are fields that can be set only in the creation of the entity.
 // i.e., no setters will be generated for the entity updaters (one and many).
+//
+//go:noinline
 func (b *timeBuilder) Immutable() *timeBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *timeBuilder) Comment(c string) *timeBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *timeBuilder) StructTag(s string) *timeBuilder {
 	b.desc.Tag = s
 	return b
@@ -464,6 +550,8 @@ func (b *timeBuilder) StructTag(s string) *timeBuilder {
 //
 //	field.Time("created_at").
 //		Default(time.Now)
+//
+//go:noinline
 func (b *timeBuilder) Default(fn any) *timeBuilder {
 	b.desc.Default = fn
 	return b
@@ -480,6 +568,8 @@ func (b *timeBuilder) Default(fn any) *timeBuilder {
 //		Optional().
 //		GoType(&sql.NullTime{}).
 //		UpdateDefault(NewNullTime),
+//
+//go:noinline
 func (b *timeBuilder) UpdateDefault(fn any) *timeBuilder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -487,6 +577,8 @@ func (b *timeBuilder) UpdateDefault(fn any) *timeBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *timeBuilder) StorageKey(key string) *timeBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -499,6 +591,8 @@ func (b *timeBuilder) StorageKey(key string) *timeBuilder {
 //
 //	field.Time("deleted_at").
 //		GoType(&sql.NullTime{})
+//
+//go:noinline
 func (b *timeBuilder) GoType(typ any) *timeBuilder {
 	b.desc.goType(typ)
 	return b
@@ -511,6 +605,8 @@ func (b *timeBuilder) GoType(typ any) *timeBuilder {
 //		Annotations(
 //			entgql.OrderField("DELETED_AT"),
 //		)
+//
+//go:noinline
 func (b *timeBuilder) Annotations(annotations ...schema.Annotation) *timeBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -519,6 +615,8 @@ func (b *timeBuilder) Annotations(annotations ...schema.Annotation) *timeBuilder
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *timeBuilder) Deprecated(reason ...string) *timeBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -528,12 +626,16 @@ func (b *timeBuilder) Deprecated(reason ...string) *timeBuilder {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *timeBuilder) Unique() *timeBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *timeBuilder) Descriptor() *Descriptor {
 	if b.desc.Default != nil {
 		b.desc.checkDefaultFunc(timeType)
@@ -550,6 +652,8 @@ func (b *timeBuilder) Descriptor() *Descriptor {
 //			dialect.MySQL:    "datetime",
 //			dialect.Postgres: "time with time zone",
 //		})
+//
+//go:noinline
 func (b *timeBuilder) SchemaType(types map[string]string) *timeBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -561,6 +665,8 @@ type boolBuilder struct {
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *boolBuilder) Default(v bool) *boolBuilder {
 	b.desc.Default = v
 	return b
@@ -568,6 +674,8 @@ func (b *boolBuilder) Default(v bool) *boolBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *boolBuilder) Nillable() *boolBuilder {
 	b.desc.Nillable = true
 	return b
@@ -575,6 +683,8 @@ func (b *boolBuilder) Nillable() *boolBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *boolBuilder) Optional() *boolBuilder {
 	b.desc.Optional = true
 	return b
@@ -583,6 +693,8 @@ func (b *boolBuilder) Optional() *boolBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *boolBuilder) Nullable() *boolBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -590,18 +702,24 @@ func (b *boolBuilder) Nullable() *boolBuilder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *boolBuilder) Immutable() *boolBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *boolBuilder) Comment(c string) *boolBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *boolBuilder) StructTag(s string) *boolBuilder {
 	b.desc.Tag = s
 	return b
@@ -609,6 +727,8 @@ func (b *boolBuilder) StructTag(s string) *boolBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *boolBuilder) StorageKey(key string) *boolBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -621,6 +741,8 @@ func (b *boolBuilder) StorageKey(key string) *boolBuilder {
 //
 //	field.Bool("deleted").
 //		GoType(&sql.NullBool{})
+//
+//go:noinline
 func (b *boolBuilder) GoType(typ any) *boolBuilder {
 	b.desc.goType(typ)
 	return b
@@ -633,6 +755,8 @@ func (b *boolBuilder) GoType(typ any) *boolBuilder {
 //		Annotations(
 //			entgql.OrderField("DELETED"),
 //		)
+//
+//go:noinline
 func (b *boolBuilder) Annotations(annotations ...schema.Annotation) *boolBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -645,6 +769,8 @@ func (b *boolBuilder) Annotations(annotations ...schema.Annotation) *boolBuilder
 //		SchemaType(map[string]string{
 //			dialect.MySQL: "tinyint(1)",
 //		})
+//
+//go:noinline
 func (b *boolBuilder) SchemaType(types map[string]string) *boolBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -653,6 +779,8 @@ func (b *boolBuilder) SchemaType(types map[string]string) *boolBuilder {
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *boolBuilder) Deprecated(reason ...string) *boolBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -662,6 +790,8 @@ func (b *boolBuilder) Deprecated(reason ...string) *boolBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *boolBuilder) Descriptor() *Descriptor {
 	b.desc.checkGoType(boolType)
 	return b.desc
@@ -673,6 +803,8 @@ type bytesBuilder struct {
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *bytesBuilder) Default(v []byte) *bytesBuilder {
 	b.desc.Default = v
 	return b
@@ -683,6 +815,8 @@ func (b *bytesBuilder) Default(v []byte) *bytesBuilder {
 //
 //	field.Bytes("cuid").
 //		DefaultFunc(cuid.New)
+//
+//go:noinline
 func (b *bytesBuilder) DefaultFunc(fn any) *bytesBuilder {
 	t := reflect.TypeOf(fn)
 	if t == nil {
@@ -698,6 +832,8 @@ func (b *bytesBuilder) DefaultFunc(fn any) *bytesBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *bytesBuilder) Nillable() *bytesBuilder {
 	b.desc.Nillable = true
 	return b
@@ -705,6 +841,8 @@ func (b *bytesBuilder) Nillable() *bytesBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *bytesBuilder) Optional() *bytesBuilder {
 	b.desc.Optional = true
 	return b
@@ -713,6 +851,8 @@ func (b *bytesBuilder) Optional() *bytesBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *bytesBuilder) Nullable() *bytesBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -720,6 +860,8 @@ func (b *bytesBuilder) Nullable() *bytesBuilder {
 }
 
 // Sensitive fields not printable and not serializable.
+//
+//go:noinline
 func (b *bytesBuilder) Sensitive() *bytesBuilder {
 	b.desc.Sensitive = true
 	return b
@@ -727,24 +869,32 @@ func (b *bytesBuilder) Sensitive() *bytesBuilder {
 
 // Unique makes the field unique within all vertices of this type.
 // Only supported in PostgreSQL.
+//
+//go:noinline
 func (b *bytesBuilder) Unique() *bytesBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *bytesBuilder) Immutable() *bytesBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *bytesBuilder) Comment(c string) *bytesBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *bytesBuilder) StructTag(s string) *bytesBuilder {
 	b.desc.Tag = s
 	return b
@@ -753,6 +903,8 @@ func (b *bytesBuilder) StructTag(s string) *bytesBuilder {
 // MaxLen sets the max-length of the bytes type in the database.
 // In MySQL, this affects the BLOB type (tiny 2^8-1, regular 2^16-1, medium 2^24-1, long 2^32-1).
 // In SQLite, it does not have any effect on the type size, which is default to 1B bytes.
+//
+//go:noinline
 func (b *bytesBuilder) MaxLen(i int) *bytesBuilder {
 	b.desc.Size = i
 	b.desc.Validators = append(b.desc.Validators, func(buf []byte) error {
@@ -766,6 +918,8 @@ func (b *bytesBuilder) MaxLen(i int) *bytesBuilder {
 
 // MinLen adds a length validator for this field.
 // Operation fails if the length of the buffer is less than the given value.
+//
+//go:noinline
 func (b *bytesBuilder) MinLen(i int) *bytesBuilder {
 	b.desc.Validators = append(b.desc.Validators, func(buf []byte) error {
 		if len(buf) < i {
@@ -778,6 +932,8 @@ func (b *bytesBuilder) MinLen(i int) *bytesBuilder {
 
 // NotEmpty adds a length validator for this field.
 // Operation fails if the length of the buffer is zero.
+//
+//go:noinline
 func (b *bytesBuilder) NotEmpty() *bytesBuilder {
 	return b.MinLen(1)
 }
@@ -791,6 +947,8 @@ func (b *bytesBuilder) NotEmpty() *bytesBuilder {
 //			}
 //			return nil
 //		})
+//
+//go:noinline
 func (b *bytesBuilder) Validate(fn func([]byte) error) *bytesBuilder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -798,6 +956,8 @@ func (b *bytesBuilder) Validate(fn func([]byte) error) *bytesBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *bytesBuilder) StorageKey(key string) *bytesBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -810,6 +970,8 @@ func (b *bytesBuilder) StorageKey(key string) *bytesBuilder {
 //
 //	field.Bytes("ip").
 //		GoType(net.IP("127.0.0.1"))
+//
+//go:noinline
 func (b *bytesBuilder) GoType(typ any) *bytesBuilder {
 	b.desc.goType(typ)
 	return b
@@ -819,6 +981,8 @@ func (b *bytesBuilder) GoType(typ any) *bytesBuilder {
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces, such as slices and maps
 // or types exist in external packages (e.g., url.URL).
+//
+//go:noinline
 func (b *bytesBuilder) ValueScanner(vs any) *bytesBuilder {
 	b.desc.ValueScanner = vs
 	return b
@@ -826,6 +990,8 @@ func (b *bytesBuilder) ValueScanner(vs any) *bytesBuilder {
 
 // Annotations adds a list of annotations to the field object to be used by
 // codegen extensions.
+//
+//go:noinline
 func (b *bytesBuilder) Annotations(annotations ...schema.Annotation) *bytesBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -839,6 +1005,8 @@ func (b *bytesBuilder) Annotations(annotations ...schema.Annotation) *bytesBuild
 //			dialect.MySQL:	"tinyblob",
 //			dialect.SQLite:	"tinyblob",
 //		})
+//
+//go:noinline
 func (b *bytesBuilder) SchemaType(types map[string]string) *bytesBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -847,6 +1015,8 @@ func (b *bytesBuilder) SchemaType(types map[string]string) *bytesBuilder {
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *bytesBuilder) Deprecated(reason ...string) *bytesBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -856,6 +1026,8 @@ func (b *bytesBuilder) Deprecated(reason ...string) *bytesBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *bytesBuilder) Descriptor() *Descriptor {
 	if b.desc.Default != nil {
 		b.desc.checkDefaultFunc(bytesType)
@@ -871,6 +1043,8 @@ type jsonBuilder struct {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *jsonBuilder) StorageKey(key string) *jsonBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -878,30 +1052,40 @@ func (b *jsonBuilder) StorageKey(key string) *jsonBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *jsonBuilder) Optional() *jsonBuilder {
 	b.desc.Optional = true
 	return b
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *jsonBuilder) Immutable() *jsonBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *jsonBuilder) Comment(c string) *jsonBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // Sensitive fields not printable and not serializable.
+//
+//go:noinline
 func (b *jsonBuilder) Sensitive() *jsonBuilder {
 	b.desc.Sensitive = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *jsonBuilder) StructTag(s string) *jsonBuilder {
 	b.desc.Tag = s
 	return b
@@ -915,6 +1099,8 @@ func (b *jsonBuilder) StructTag(s string) *jsonBuilder {
 //			dialect.MySQL:		"json",
 //			dialect.Postgres:	"jsonb",
 //		})
+//
+//go:noinline
 func (b *jsonBuilder) SchemaType(types map[string]string) *jsonBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -922,6 +1108,8 @@ func (b *jsonBuilder) SchemaType(types map[string]string) *jsonBuilder {
 
 // Annotations adds a list of annotations to the field object to be used by
 // codegen extensions.
+//
+//go:noinline
 func (b *jsonBuilder) Annotations(annotations ...schema.Annotation) *jsonBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -936,6 +1124,8 @@ func (b *jsonBuilder) Annotations(annotations ...schema.Annotation) *jsonBuilder
 //	field.JSON("dirs", []http.Dir{}).
 //		// A function for generating the default value.
 //		Default(DefaultDirs)
+//
+//go:noinline
 func (b *jsonBuilder) Default(v any) *jsonBuilder {
 	b.desc.Default = v
 	switch fieldT, defaultT := b.desc.Info.RType.rtype, reflect.TypeOf(v); {
@@ -951,6 +1141,8 @@ func (b *jsonBuilder) Default(v any) *jsonBuilder {
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *jsonBuilder) Deprecated(reason ...string) *jsonBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -960,6 +1152,8 @@ func (b *jsonBuilder) Deprecated(reason ...string) *jsonBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *jsonBuilder) Descriptor() *Descriptor {
 	return b.desc
 }
@@ -975,6 +1169,8 @@ type (
 )
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Validate(fn func([]T) error) *sliceBuilder[T] {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -982,6 +1178,8 @@ func (b *sliceBuilder[T]) Validate(fn func([]T) error) *sliceBuilder[T] {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *sliceBuilder[T]) StorageKey(key string) *sliceBuilder[T] {
 	b.desc.StorageKey = key
 	return b
@@ -989,30 +1187,40 @@ func (b *sliceBuilder[T]) StorageKey(key string) *sliceBuilder[T] {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Optional() *sliceBuilder[T] {
 	b.desc.Optional = true
 	return b
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Immutable() *sliceBuilder[T] {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Comment(c string) *sliceBuilder[T] {
 	b.desc.Comment = c
 	return b
 }
 
 // Sensitive fields not printable and not serializable.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Sensitive() *sliceBuilder[T] {
 	b.desc.Sensitive = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *sliceBuilder[T]) StructTag(s string) *sliceBuilder[T] {
 	b.desc.Tag = s
 	return b
@@ -1026,6 +1234,8 @@ func (b *sliceBuilder[T]) StructTag(s string) *sliceBuilder[T] {
 //			dialect.MySQL:		"json",
 //			dialect.Postgres:	"jsonb",
 //		})
+//
+//go:noinline
 func (b *sliceBuilder[T]) SchemaType(types map[string]string) *sliceBuilder[T] {
 	b.desc.SchemaType = types
 	return b
@@ -1033,6 +1243,8 @@ func (b *sliceBuilder[T]) SchemaType(types map[string]string) *sliceBuilder[T] {
 
 // Annotations adds a list of annotations to the field object to be used by
 // codegen extensions.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Annotations(annotations ...schema.Annotation) *sliceBuilder[T] {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1042,6 +1254,8 @@ func (b *sliceBuilder[T]) Annotations(annotations ...schema.Annotation) *sliceBu
 //
 //	field.Strings("names").
 //		Default([]string{"a8m", "masseelch"})
+//
+//go:noinline
 func (b *sliceBuilder[T]) Default(v []T) *sliceBuilder[T] {
 	b.desc.Default = v
 	return b
@@ -1050,6 +1264,8 @@ func (b *sliceBuilder[T]) Default(v []T) *sliceBuilder[T] {
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Deprecated(reason ...string) *sliceBuilder[T] {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1059,6 +1275,8 @@ func (b *sliceBuilder[T]) Deprecated(reason ...string) *sliceBuilder[T] {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *sliceBuilder[T]) Descriptor() *Descriptor {
 	return b.desc
 }
@@ -1094,6 +1312,8 @@ type enumBuilder struct {
 //
 //	field.Enum("priority").
 //		Values("low", "mid", "high")
+//
+//go:noinline
 func (b *enumBuilder) Values(values ...string) *enumBuilder {
 	for _, v := range values {
 		b.desc.Enums = append(b.desc.Enums, struct{ N, V string }{N: v, V: v})
@@ -1113,6 +1333,8 @@ func (b *enumBuilder) Values(values ...string) *enumBuilder {
 //			"Mid", "MID",
 //			"High", "HIGH",
 //		)
+//
+//go:noinline
 func (b *enumBuilder) NamedValues(namevalue ...string) *enumBuilder {
 	if len(namevalue)%2 == 1 {
 		b.desc.Err = fmt.Errorf("Enum.NamedValues: odd argument count")
@@ -1125,6 +1347,8 @@ func (b *enumBuilder) NamedValues(namevalue ...string) *enumBuilder {
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *enumBuilder) Default(value string) *enumBuilder {
 	b.desc.Default = value
 	return b
@@ -1132,6 +1356,8 @@ func (b *enumBuilder) Default(value string) *enumBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *enumBuilder) StorageKey(key string) *enumBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -1139,6 +1365,8 @@ func (b *enumBuilder) StorageKey(key string) *enumBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *enumBuilder) Optional() *enumBuilder {
 	b.desc.Optional = true
 	return b
@@ -1147,6 +1375,8 @@ func (b *enumBuilder) Optional() *enumBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *enumBuilder) Nullable() *enumBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1154,12 +1384,16 @@ func (b *enumBuilder) Nullable() *enumBuilder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *enumBuilder) Immutable() *enumBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *enumBuilder) Comment(c string) *enumBuilder {
 	b.desc.Comment = c
 	return b
@@ -1167,12 +1401,16 @@ func (b *enumBuilder) Comment(c string) *enumBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *enumBuilder) Nillable() *enumBuilder {
 	b.desc.Nillable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *enumBuilder) StructTag(s string) *enumBuilder {
 	b.desc.Tag = s
 	return b
@@ -1185,6 +1423,8 @@ func (b *enumBuilder) StructTag(s string) *enumBuilder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "EnumType",
 //		})
+//
+//go:noinline
 func (b *enumBuilder) SchemaType(types map[string]string) *enumBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -1197,6 +1437,8 @@ func (b *enumBuilder) SchemaType(types map[string]string) *enumBuilder {
 //		Annotations(
 //			entgql.OrderField("ENUM"),
 //		)
+//
+//go:noinline
 func (b *enumBuilder) Annotations(annotations ...schema.Annotation) *enumBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1214,6 +1456,8 @@ type EnumValues interface {
 //
 //	field.Enum("enum").
 //		GoType(role.Enum("role"))
+//
+//go:noinline
 func (b *enumBuilder) GoType(ev EnumValues) *enumBuilder {
 	b.Values(ev.Values()...)
 	b.desc.goType(ev)
@@ -1223,6 +1467,8 @@ func (b *enumBuilder) GoType(ev EnumValues) *enumBuilder {
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *enumBuilder) Deprecated(reason ...string) *enumBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1232,6 +1478,8 @@ func (b *enumBuilder) Deprecated(reason ...string) *enumBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *enumBuilder) Descriptor() *Descriptor {
 	if b.desc.Info.RType != nil {
 		// If an error already exists, let that be returned instead.
@@ -1251,6 +1499,8 @@ type uuidBuilder struct {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *uuidBuilder) StorageKey(key string) *uuidBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -1258,6 +1508,8 @@ func (b *uuidBuilder) StorageKey(key string) *uuidBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *uuidBuilder) Nillable() *uuidBuilder {
 	b.desc.Nillable = true
 	return b
@@ -1265,6 +1517,8 @@ func (b *uuidBuilder) Nillable() *uuidBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *uuidBuilder) Optional() *uuidBuilder {
 	b.desc.Optional = true
 	return b
@@ -1273,6 +1527,8 @@ func (b *uuidBuilder) Optional() *uuidBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *uuidBuilder) Nullable() *uuidBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1280,24 +1536,32 @@ func (b *uuidBuilder) Nullable() *uuidBuilder {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *uuidBuilder) Unique() *uuidBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *uuidBuilder) Immutable() *uuidBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *uuidBuilder) Comment(c string) *uuidBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *uuidBuilder) StructTag(s string) *uuidBuilder {
 	b.desc.Tag = s
 	return b
@@ -1309,6 +1573,8 @@ func (b *uuidBuilder) StructTag(s string) *uuidBuilder {
 //
 //	field.UUID("id", uuid.UUID{}).
 //		Default(uuid.New)
+//
+//go:noinline
 func (b *uuidBuilder) Default(fn any) *uuidBuilder {
 	typ := reflect.TypeOf(fn)
 	if typ == nil {
@@ -1329,6 +1595,8 @@ func (b *uuidBuilder) Default(fn any) *uuidBuilder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomUUID",
 //		})
+//
+//go:noinline
 func (b *uuidBuilder) SchemaType(types map[string]string) *uuidBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -1341,6 +1609,8 @@ func (b *uuidBuilder) SchemaType(types map[string]string) *uuidBuilder {
 //		Annotations(
 //			entgql.OrderField("ID"),
 //		)
+//
+//go:noinline
 func (b *uuidBuilder) Annotations(annotations ...schema.Annotation) *uuidBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1349,6 +1619,8 @@ func (b *uuidBuilder) Annotations(annotations ...schema.Annotation) *uuidBuilder
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *uuidBuilder) Deprecated(reason ...string) *uuidBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1358,6 +1630,8 @@ func (b *uuidBuilder) Deprecated(reason ...string) *uuidBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *uuidBuilder) Descriptor() *Descriptor {
 	b.desc.checkGoType(valueScannerType)
 	return b.desc
@@ -1369,12 +1643,16 @@ type otherBuilder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *otherBuilder) Unique() *otherBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Sensitive fields not printable and not serializable.
+//
+//go:noinline
 func (b *otherBuilder) Sensitive() *otherBuilder {
 	b.desc.Sensitive = true
 	return b
@@ -1397,6 +1675,8 @@ func (b *otherBuilder) Sensitive() *otherBuilder {
 //		}).
 //		// A function for generating the default value.
 //		Default(NewLink)
+//
+//go:noinline
 func (b *otherBuilder) Default(v any) *otherBuilder {
 	b.desc.Default = v
 	switch fieldT, defaultT := b.desc.Info.RType.rtype, reflect.TypeOf(v); {
@@ -1411,6 +1691,8 @@ func (b *otherBuilder) Default(v any) *otherBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated field.
+//
+//go:noinline
 func (b *otherBuilder) Nillable() *otherBuilder {
 	b.desc.Nillable = true
 	return b
@@ -1418,6 +1700,8 @@ func (b *otherBuilder) Nillable() *otherBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *otherBuilder) Optional() *otherBuilder {
 	b.desc.Optional = true
 	return b
@@ -1426,6 +1710,8 @@ func (b *otherBuilder) Optional() *otherBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *otherBuilder) Nullable() *otherBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1433,18 +1719,24 @@ func (b *otherBuilder) Nullable() *otherBuilder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *otherBuilder) Immutable() *otherBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *otherBuilder) Comment(c string) *otherBuilder {
 	b.desc.Comment = c
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *otherBuilder) StructTag(s string) *otherBuilder {
 	b.desc.Tag = s
 	return b
@@ -1452,6 +1744,8 @@ func (b *otherBuilder) StructTag(s string) *otherBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *otherBuilder) StorageKey(key string) *otherBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -1465,6 +1759,8 @@ func (b *otherBuilder) StorageKey(key string) *otherBuilder {
 //			dialect.MySQL:    "text",
 //			dialect.Postgres: "varchar",
 //		})
+//
+//go:noinline
 func (b *otherBuilder) SchemaType(types map[string]string) *otherBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -1481,6 +1777,8 @@ func (b *otherBuilder) SchemaType(types map[string]string) *otherBuilder {
 //		Annotations(
 //			entgql.OrderField("LINK"),
 //		)
+//
+//go:noinline
 func (b *otherBuilder) Annotations(annotations ...schema.Annotation) *otherBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1489,6 +1787,8 @@ func (b *otherBuilder) Annotations(annotations ...schema.Annotation) *otherBuild
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *otherBuilder) Deprecated(reason ...string) *otherBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1498,6 +1798,8 @@ func (b *otherBuilder) Deprecated(reason ...string) *otherBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *otherBuilder) Descriptor() *Descriptor {
 	b.desc.checkGoType(valueScannerType)
 	if len(b.desc.SchemaType) == 0 {
@@ -1695,16 +1997,22 @@ type TextValueScanner[T interface {
 }] struct{}
 
 // Value implements the TypeValueScanner.Value method.
+//
+//go:noinline
 func (TextValueScanner[T]) Value(v T) (driver.Value, error) {
 	return v.MarshalText()
 }
 
 // ScanValue implements the TypeValueScanner.ScanValue method.
+//
+//go:noinline
 func (TextValueScanner[T]) ScanValue() ValueScanner {
 	return &sql.NullString{}
 }
 
 // FromValue implements the TypeValueScanner.FromValue method.
+//
+//go:noinline
 func (TextValueScanner[T]) FromValue(v driver.Value) (tv T, err error) {
 	s, ok := v.(*sql.NullString)
 	if !ok {
@@ -1726,16 +2034,22 @@ type BinaryValueScanner[T interface {
 }] struct{}
 
 // Value implements the TypeValueScanner.Value method.
+//
+//go:noinline
 func (BinaryValueScanner[T]) Value(v T) (driver.Value, error) {
 	return v.MarshalBinary()
 }
 
 // ScanValue implements the TypeValueScanner.ScanValue method.
+//
+//go:noinline
 func (BinaryValueScanner[T]) ScanValue() ValueScanner {
 	return &sql.NullString{}
 }
 
 // FromValue implements the TypeValueScanner.FromValue method.
+//
+//go:noinline
 func (BinaryValueScanner[T]) FromValue(v driver.Value) (tv T, err error) {
 	s, ok := v.(*sql.NullString)
 	if !ok {
@@ -1755,17 +2069,23 @@ type ValueScannerFunc[T any, S ValueScanner] struct {
 }
 
 // Value implements the TypeValueScanner.Value method.
+//
+//go:noinline
 func (f ValueScannerFunc[T, S]) Value(t T) (driver.Value, error) {
 	return f.V(t)
 }
 
 // ScanValue implements the TypeValueScanner.ScanValue method.
+//
+//go:noinline
 func (f ValueScannerFunc[T, S]) ScanValue() ValueScanner {
 	var s S
 	return newT(s).(S)
 }
 
 // FromValue implements the TypeValueScanner.FromValue method.
+//
+//go:noinline
 func (f ValueScannerFunc[T, S]) FromValue(v driver.Value) (tv T, err error) {
 	s, ok := v.(S)
 	if !ok {

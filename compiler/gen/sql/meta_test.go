@@ -173,10 +173,12 @@ func TestGenEntityRuntime_WithRootPkg_WithDefaults(t *testing.T) {
 	file := genEntityRuntime(helper, userType)
 	require.NotNil(t, file)
 
+	// The client package registers the entity; the schema defaults are
+	// stitched by internal/schemainit, not here.
 	code := file.GoString()
-	// Should have BOTH schema defaults AND registration
 	assert.Contains(t, code, "RegisterEntity")
-	assert.Contains(t, code, "Default")
+	assert.NotContains(t, code, "DefaultName")
+	assert.Contains(t, schemaInitSrc(helper, userType), "user.DefaultName = ")
 }
 
 // =============================================================================

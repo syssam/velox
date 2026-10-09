@@ -165,6 +165,8 @@ var (
 		"Sum",
 		"Policy",
 		"Query",
+		"RunTx",
+		"StartTx",
 		"Value",
 	)
 	// private fields used by the different builders.

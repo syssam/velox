@@ -10,6 +10,11 @@ import (
 // functions for typed JSON fields defined in the schema.
 // This allows gqlgen to automatically handle these types without custom resolvers.
 //
+// By default the Marshal functions return gqlgen's graphql.Marshaler. With
+// WithoutGQLGen they return the encoded JSON instead, so the generated package
+// links no gqlgen: a graphql-go server binds each scalar with
+// graphql.Scalar, writing the bytes with Writer.Raw.
+//
 // Note: For third-party types like decimal.Decimal, users should define their own
 // scalar and marshal/unmarshal functions, then configure gqlgen.yml accordingly.
 func (g *Generator) genScalars() *jen.File {
@@ -38,9 +43,18 @@ func (g *Generator) genTypedJSONMarshalers(f *jen.File, scalar typedJSONScalar) 
 
 	// Generate type alias
 	f.Comment(scalar.ScalarName + " is a type alias for " + scalar.GoType + ".")
-	f.Comment("This allows gqlgen to use the Marshal" + scalar.ScalarName + "/Unmarshal" + scalar.ScalarName + " functions from this package.")
+	if g.config.WithoutGQLGen {
+		f.Comment("This lets a server bind the scalar with Marshal" + scalar.ScalarName + "/Unmarshal" + scalar.ScalarName + " from this package.")
+	} else {
+		f.Comment("This allows gqlgen to use the Marshal" + scalar.ScalarName + "/Unmarshal" + scalar.ScalarName + " functions from this package.")
+	}
 	f.Type().Id(scalar.ScalarName).Op("=").Qual(pkgPath, typeName)
 	f.Line()
+
+	if g.config.WithoutGQLGen {
+		g.genEngineFreeMarshalers(f, scalar)
+		return
+	}
 
 	// Generate Marshal function
 	f.Comment("Marshal" + scalar.ScalarName + " implements graphql.Marshaler for " + scalar.GoType + ".")
@@ -61,6 +75,60 @@ func (g *Generator) genTypedJSONMarshalers(f *jen.File, scalar typedJSONScalar) 
 		),
 	)
 	f.Line()
+
+	g.genUnmarshal(f, scalar)
+
+	// Generate MarshalPtr function
+	f.Comment("Marshal" + scalar.ScalarName + "Ptr implements graphql.Marshaler for *" + scalar.GoType + ".")
+	f.Func().Id("Marshal"+scalar.ScalarName+"Ptr").Params(
+		jen.Id("v").Op("*").Qual(pkgPath, typeName),
+	).Qual("github.com/99designs/gqlgen/graphql", "Marshaler").Block(
+		jen.If(jen.Id("v").Op("==").Nil()).Block(
+			jen.Return(jen.Qual("github.com/99designs/gqlgen/graphql", "Null")),
+		),
+		jen.Return(jen.Id("Marshal"+scalar.ScalarName).Call(jen.Op("*").Id("v"))),
+	)
+	f.Line()
+
+	g.genUnmarshalPtr(f, scalar)
+}
+
+// genEngineFreeMarshalers generates the marshalers of a typed JSON scalar for a
+// server that does not use gqlgen: Marshal<Scalar> returns the encoded JSON,
+// which the caller writes as the scalar's value, and the Unmarshal functions
+// are the ones gqlgen's servers use, which never involved gqlgen.
+func (g *Generator) genEngineFreeMarshalers(f *jen.File, scalar typedJSONScalar) {
+	pkgPath := scalar.OrigPkgPath
+	typeName := scalar.TypeName
+
+	f.Comment("Marshal" + scalar.ScalarName + " returns the JSON encoding of " + scalar.GoType + ", the scalar's value on the wire.")
+	f.Func().Id("Marshal"+scalar.ScalarName).Params(
+		jen.Id("v").Qual(pkgPath, typeName),
+	).Params(jen.Index().Byte(), jen.Error()).Block(
+		jen.Return(jen.Qual("encoding/json", "Marshal").Call(jen.Id("v"))),
+	)
+	f.Line()
+
+	f.Comment("Marshal" + scalar.ScalarName + "Ptr is Marshal" + scalar.ScalarName + " for *" + scalar.GoType + "; nil encodes as null.")
+	f.Func().Id("Marshal"+scalar.ScalarName+"Ptr").Params(
+		jen.Id("v").Op("*").Qual(pkgPath, typeName),
+	).Params(jen.Index().Byte(), jen.Error()).Block(
+		jen.If(jen.Id("v").Op("==").Nil()).Block(
+			jen.Return(jen.Index().Byte().Call(jen.Lit("null")), jen.Nil()),
+		),
+		jen.Return(jen.Id("Marshal"+scalar.ScalarName).Call(jen.Op("*").Id("v"))),
+	)
+	f.Line()
+
+	g.genUnmarshal(f, scalar)
+	g.genUnmarshalPtr(f, scalar)
+}
+
+// genUnmarshal generates Unmarshal<Scalar>, which decodes a scalar value (a
+// JSON string, bytes or object) into the Go type. It involves no GraphQL engine.
+func (g *Generator) genUnmarshal(f *jen.File, scalar typedJSONScalar) {
+	pkgPath := scalar.OrigPkgPath
+	typeName := scalar.TypeName
 
 	// Generate Unmarshal function
 	f.Comment("Unmarshal" + scalar.ScalarName + " implements graphql.Unmarshaler for " + scalar.GoType + ".")
@@ -125,18 +193,13 @@ func (g *Generator) genTypedJSONMarshalers(f *jen.File, scalar typedJSONScalar) 
 		),
 	)
 	f.Line()
+}
 
-	// Generate MarshalPtr function
-	f.Comment("Marshal" + scalar.ScalarName + "Ptr implements graphql.Marshaler for *" + scalar.GoType + ".")
-	f.Func().Id("Marshal"+scalar.ScalarName+"Ptr").Params(
-		jen.Id("v").Op("*").Qual(pkgPath, typeName),
-	).Qual("github.com/99designs/gqlgen/graphql", "Marshaler").Block(
-		jen.If(jen.Id("v").Op("==").Nil()).Block(
-			jen.Return(jen.Qual("github.com/99designs/gqlgen/graphql", "Null")),
-		),
-		jen.Return(jen.Id("Marshal"+scalar.ScalarName).Call(jen.Op("*").Id("v"))),
-	)
-	f.Line()
+// genUnmarshalPtr generates Unmarshal<Scalar>Ptr, the pointer form of
+// Unmarshal<Scalar>; null decodes to nil.
+func (g *Generator) genUnmarshalPtr(f *jen.File, scalar typedJSONScalar) {
+	pkgPath := scalar.OrigPkgPath
+	typeName := scalar.TypeName
 
 	// Generate UnmarshalPtr function
 	f.Comment("Unmarshal" + scalar.ScalarName + "Ptr implements graphql.Unmarshaler for *" + scalar.GoType + ".")

@@ -13,6 +13,8 @@ import (
 //go:generate go run internal/gen.go
 
 // Int returns a new Field with type int.
+//
+//go:noinline
 func Int(name string) *intBuilder {
 	return &intBuilder{&Descriptor{
 		Name: name,
@@ -21,6 +23,8 @@ func Int(name string) *intBuilder {
 }
 
 // Uint returns a new Field with type uint.
+//
+//go:noinline
 func Uint(name string) *uintBuilder {
 	return &uintBuilder{&Descriptor{
 		Name: name,
@@ -29,6 +33,8 @@ func Uint(name string) *uintBuilder {
 }
 
 // Int8 returns a new Field with type int8.
+//
+//go:noinline
 func Int8(name string) *int8Builder {
 	return &int8Builder{&Descriptor{
 		Name: name,
@@ -37,6 +43,8 @@ func Int8(name string) *int8Builder {
 }
 
 // Int16 returns a new Field with type int16.
+//
+//go:noinline
 func Int16(name string) *int16Builder {
 	return &int16Builder{&Descriptor{
 		Name: name,
@@ -45,6 +53,8 @@ func Int16(name string) *int16Builder {
 }
 
 // Int32 returns a new Field with type int32.
+//
+//go:noinline
 func Int32(name string) *int32Builder {
 	return &int32Builder{&Descriptor{
 		Name: name,
@@ -53,6 +63,8 @@ func Int32(name string) *int32Builder {
 }
 
 // Int64 returns a new Field with type int64.
+//
+//go:noinline
 func Int64(name string) *int64Builder {
 	return &int64Builder{&Descriptor{
 		Name: name,
@@ -61,6 +73,8 @@ func Int64(name string) *int64Builder {
 }
 
 // Uint8 returns a new Field with type uint8.
+//
+//go:noinline
 func Uint8(name string) *uint8Builder {
 	return &uint8Builder{&Descriptor{
 		Name: name,
@@ -69,6 +83,8 @@ func Uint8(name string) *uint8Builder {
 }
 
 // Uint16 returns a new Field with type uint16.
+//
+//go:noinline
 func Uint16(name string) *uint16Builder {
 	return &uint16Builder{&Descriptor{
 		Name: name,
@@ -77,6 +93,8 @@ func Uint16(name string) *uint16Builder {
 }
 
 // Uint32 returns a new Field with type uint32.
+//
+//go:noinline
 func Uint32(name string) *uint32Builder {
 	return &uint32Builder{&Descriptor{
 		Name: name,
@@ -85,6 +103,8 @@ func Uint32(name string) *uint32Builder {
 }
 
 // Uint64 returns a new Field with type uint64.
+//
+//go:noinline
 func Uint64(name string) *uint64Builder {
 	return &uint64Builder{&Descriptor{
 		Name: name,
@@ -93,6 +113,8 @@ func Uint64(name string) *uint64Builder {
 }
 
 // Float returns a new Field with type float64.
+//
+//go:noinline
 func Float(name string) *float64Builder {
 	return &float64Builder{&Descriptor{
 		Name: name,
@@ -102,11 +124,15 @@ func Float(name string) *float64Builder {
 
 // Float64 returns a new Field with type float64.
 // It is an alias for Float, provided for naming symmetry with Float32.
+//
+//go:noinline
 func Float64(name string) *float64Builder {
 	return Float(name)
 }
 
 // Float32 returns a new Field with type float32.
+//
+//go:noinline
 func Float32(name string) *float32Builder {
 	return &float32Builder{&Descriptor{
 		Name: name,
@@ -120,12 +146,16 @@ type intBuilder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *intBuilder) Unique() *intBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *intBuilder) Range(i, j int) *intBuilder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int) error {
@@ -138,6 +168,8 @@ func (b *intBuilder) Range(i, j int) *intBuilder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *intBuilder) Min(i int) *intBuilder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int) error {
@@ -150,6 +182,8 @@ func (b *intBuilder) Min(i int) *intBuilder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *intBuilder) Max(i int) *intBuilder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int) error {
@@ -162,21 +196,29 @@ func (b *intBuilder) Max(i int) *intBuilder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *intBuilder) Positive() *intBuilder {
 	return b.Min(1)
 }
 
 // Negative adds a maximum value validator with the value of -1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *intBuilder) Negative() *intBuilder {
 	return b.Max(-1)
 }
 
 // NonNegative adds a minimum value validator with the value of 0. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *intBuilder) NonNegative() *intBuilder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *intBuilder) Default(i int) *intBuilder {
 	b.desc.Default = i
 	return b
@@ -184,6 +226,8 @@ func (b *intBuilder) Default(i int) *intBuilder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *intBuilder) DefaultFunc(fn any) *intBuilder {
 	b.desc.Default = fn
 	return b
@@ -195,6 +239,8 @@ func (b *intBuilder) DefaultFunc(fn any) *intBuilder {
 //	field.Int("int").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *intBuilder) UpdateDefault(fn any) *intBuilder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -202,12 +248,16 @@ func (b *intBuilder) UpdateDefault(fn any) *intBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *intBuilder) Nillable() *intBuilder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *intBuilder) Comment(c string) *intBuilder {
 	b.desc.Comment = c
 	return b
@@ -215,6 +265,8 @@ func (b *intBuilder) Comment(c string) *intBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *intBuilder) Optional() *intBuilder {
 	b.desc.Optional = true
 	return b
@@ -223,6 +275,8 @@ func (b *intBuilder) Optional() *intBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *intBuilder) Nullable() *intBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -230,18 +284,24 @@ func (b *intBuilder) Nullable() *intBuilder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *intBuilder) Immutable() *intBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *intBuilder) StructTag(s string) *intBuilder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *intBuilder) Validate(fn func(int) error) *intBuilder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -249,6 +309,8 @@ func (b *intBuilder) Validate(fn func(int) error) *intBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *intBuilder) StorageKey(key string) *intBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -261,6 +323,8 @@ func (b *intBuilder) StorageKey(key string) *intBuilder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *intBuilder) SchemaType(types map[string]string) *intBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -281,6 +345,8 @@ func (b *intBuilder) SchemaType(types map[string]string) *intBuilder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *intBuilder) GoType(typ any) *intBuilder {
 	b.desc.goType(typ)
 	return b
@@ -289,6 +355,8 @@ func (b *intBuilder) GoType(typ any) *intBuilder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *intBuilder) ValueScanner(vs any) *intBuilder {
 	b.desc.ValueScanner = vs
 	return b
@@ -299,6 +367,8 @@ func (b *intBuilder) ValueScanner(vs any) *intBuilder {
 //
 //	field.Int("int").
 //		Annotations(entgql.OrderField("INT"))
+//
+//go:noinline
 func (b *intBuilder) Annotations(annotations ...schema.Annotation) *intBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -307,6 +377,8 @@ func (b *intBuilder) Annotations(annotations ...schema.Annotation) *intBuilder {
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *intBuilder) Deprecated(reason ...string) *intBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -316,6 +388,8 @@ func (b *intBuilder) Deprecated(reason ...string) *intBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *intBuilder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(intType)
@@ -330,12 +404,16 @@ type uintBuilder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *uintBuilder) Unique() *uintBuilder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *uintBuilder) Range(i, j uint) *uintBuilder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint) error {
@@ -348,6 +426,8 @@ func (b *uintBuilder) Range(i, j uint) *uintBuilder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uintBuilder) Min(i uint) *uintBuilder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint) error {
@@ -360,6 +440,8 @@ func (b *uintBuilder) Min(i uint) *uintBuilder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uintBuilder) Max(i uint) *uintBuilder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint) error {
@@ -372,11 +454,15 @@ func (b *uintBuilder) Max(i uint) *uintBuilder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uintBuilder) Positive() *uintBuilder {
 	return b.Min(1)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *uintBuilder) Default(i uint) *uintBuilder {
 	b.desc.Default = i
 	return b
@@ -384,6 +470,8 @@ func (b *uintBuilder) Default(i uint) *uintBuilder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *uintBuilder) DefaultFunc(fn any) *uintBuilder {
 	b.desc.Default = fn
 	return b
@@ -395,6 +483,8 @@ func (b *uintBuilder) DefaultFunc(fn any) *uintBuilder {
 //	field.Uint("uint").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *uintBuilder) UpdateDefault(fn any) *uintBuilder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -402,12 +492,16 @@ func (b *uintBuilder) UpdateDefault(fn any) *uintBuilder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *uintBuilder) Nillable() *uintBuilder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *uintBuilder) Comment(c string) *uintBuilder {
 	b.desc.Comment = c
 	return b
@@ -415,6 +509,8 @@ func (b *uintBuilder) Comment(c string) *uintBuilder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *uintBuilder) Optional() *uintBuilder {
 	b.desc.Optional = true
 	return b
@@ -423,6 +519,8 @@ func (b *uintBuilder) Optional() *uintBuilder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *uintBuilder) Nullable() *uintBuilder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -430,18 +528,24 @@ func (b *uintBuilder) Nullable() *uintBuilder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *uintBuilder) Immutable() *uintBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *uintBuilder) StructTag(s string) *uintBuilder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *uintBuilder) Validate(fn func(uint) error) *uintBuilder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -449,6 +553,8 @@ func (b *uintBuilder) Validate(fn func(uint) error) *uintBuilder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *uintBuilder) StorageKey(key string) *uintBuilder {
 	b.desc.StorageKey = key
 	return b
@@ -461,6 +567,8 @@ func (b *uintBuilder) StorageKey(key string) *uintBuilder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *uintBuilder) SchemaType(types map[string]string) *uintBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -481,6 +589,8 @@ func (b *uintBuilder) SchemaType(types map[string]string) *uintBuilder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *uintBuilder) GoType(typ any) *uintBuilder {
 	b.desc.goType(typ)
 	return b
@@ -489,6 +599,8 @@ func (b *uintBuilder) GoType(typ any) *uintBuilder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *uintBuilder) ValueScanner(vs any) *uintBuilder {
 	b.desc.ValueScanner = vs
 	return b
@@ -499,6 +611,8 @@ func (b *uintBuilder) ValueScanner(vs any) *uintBuilder {
 //
 //	field.Uint("uint").
 //		Annotations(entgql.OrderField("UINT"))
+//
+//go:noinline
 func (b *uintBuilder) Annotations(annotations ...schema.Annotation) *uintBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -507,6 +621,8 @@ func (b *uintBuilder) Annotations(annotations ...schema.Annotation) *uintBuilder
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *uintBuilder) Deprecated(reason ...string) *uintBuilder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -516,6 +632,8 @@ func (b *uintBuilder) Deprecated(reason ...string) *uintBuilder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *uintBuilder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(uintType)
@@ -530,12 +648,16 @@ type int8Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *int8Builder) Unique() *int8Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *int8Builder) Range(i, j int8) *int8Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int8) error {
@@ -548,6 +670,8 @@ func (b *int8Builder) Range(i, j int8) *int8Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int8Builder) Min(i int8) *int8Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int8) error {
@@ -560,6 +684,8 @@ func (b *int8Builder) Min(i int8) *int8Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int8Builder) Max(i int8) *int8Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int8) error {
@@ -572,21 +698,29 @@ func (b *int8Builder) Max(i int8) *int8Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int8Builder) Positive() *int8Builder {
 	return b.Min(1)
 }
 
 // Negative adds a maximum value validator with the value of -1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int8Builder) Negative() *int8Builder {
 	return b.Max(-1)
 }
 
 // NonNegative adds a minimum value validator with the value of 0. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int8Builder) NonNegative() *int8Builder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *int8Builder) Default(i int8) *int8Builder {
 	b.desc.Default = i
 	return b
@@ -594,6 +728,8 @@ func (b *int8Builder) Default(i int8) *int8Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *int8Builder) DefaultFunc(fn any) *int8Builder {
 	b.desc.Default = fn
 	return b
@@ -605,6 +741,8 @@ func (b *int8Builder) DefaultFunc(fn any) *int8Builder {
 //	field.Int8("int8").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *int8Builder) UpdateDefault(fn any) *int8Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -612,12 +750,16 @@ func (b *int8Builder) UpdateDefault(fn any) *int8Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *int8Builder) Nillable() *int8Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *int8Builder) Comment(c string) *int8Builder {
 	b.desc.Comment = c
 	return b
@@ -625,6 +767,8 @@ func (b *int8Builder) Comment(c string) *int8Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *int8Builder) Optional() *int8Builder {
 	b.desc.Optional = true
 	return b
@@ -633,6 +777,8 @@ func (b *int8Builder) Optional() *int8Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *int8Builder) Nullable() *int8Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -640,18 +786,24 @@ func (b *int8Builder) Nullable() *int8Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *int8Builder) Immutable() *int8Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *int8Builder) StructTag(s string) *int8Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *int8Builder) Validate(fn func(int8) error) *int8Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -659,6 +811,8 @@ func (b *int8Builder) Validate(fn func(int8) error) *int8Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *int8Builder) StorageKey(key string) *int8Builder {
 	b.desc.StorageKey = key
 	return b
@@ -671,6 +825,8 @@ func (b *int8Builder) StorageKey(key string) *int8Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *int8Builder) SchemaType(types map[string]string) *int8Builder {
 	b.desc.SchemaType = types
 	return b
@@ -691,6 +847,8 @@ func (b *int8Builder) SchemaType(types map[string]string) *int8Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *int8Builder) GoType(typ any) *int8Builder {
 	b.desc.goType(typ)
 	return b
@@ -699,6 +857,8 @@ func (b *int8Builder) GoType(typ any) *int8Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *int8Builder) ValueScanner(vs any) *int8Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -709,6 +869,8 @@ func (b *int8Builder) ValueScanner(vs any) *int8Builder {
 //
 //	field.Int8("int8").
 //		Annotations(entgql.OrderField("INT8"))
+//
+//go:noinline
 func (b *int8Builder) Annotations(annotations ...schema.Annotation) *int8Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -717,6 +879,8 @@ func (b *int8Builder) Annotations(annotations ...schema.Annotation) *int8Builder
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *int8Builder) Deprecated(reason ...string) *int8Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -726,6 +890,8 @@ func (b *int8Builder) Deprecated(reason ...string) *int8Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *int8Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(int8Type)
@@ -740,12 +906,16 @@ type int16Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *int16Builder) Unique() *int16Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *int16Builder) Range(i, j int16) *int16Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int16) error {
@@ -758,6 +928,8 @@ func (b *int16Builder) Range(i, j int16) *int16Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int16Builder) Min(i int16) *int16Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int16) error {
@@ -770,6 +942,8 @@ func (b *int16Builder) Min(i int16) *int16Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int16Builder) Max(i int16) *int16Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int16) error {
@@ -782,21 +956,29 @@ func (b *int16Builder) Max(i int16) *int16Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int16Builder) Positive() *int16Builder {
 	return b.Min(1)
 }
 
 // Negative adds a maximum value validator with the value of -1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int16Builder) Negative() *int16Builder {
 	return b.Max(-1)
 }
 
 // NonNegative adds a minimum value validator with the value of 0. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int16Builder) NonNegative() *int16Builder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *int16Builder) Default(i int16) *int16Builder {
 	b.desc.Default = i
 	return b
@@ -804,6 +986,8 @@ func (b *int16Builder) Default(i int16) *int16Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *int16Builder) DefaultFunc(fn any) *int16Builder {
 	b.desc.Default = fn
 	return b
@@ -815,6 +999,8 @@ func (b *int16Builder) DefaultFunc(fn any) *int16Builder {
 //	field.Int16("int16").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *int16Builder) UpdateDefault(fn any) *int16Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -822,12 +1008,16 @@ func (b *int16Builder) UpdateDefault(fn any) *int16Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *int16Builder) Nillable() *int16Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *int16Builder) Comment(c string) *int16Builder {
 	b.desc.Comment = c
 	return b
@@ -835,6 +1025,8 @@ func (b *int16Builder) Comment(c string) *int16Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *int16Builder) Optional() *int16Builder {
 	b.desc.Optional = true
 	return b
@@ -843,6 +1035,8 @@ func (b *int16Builder) Optional() *int16Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *int16Builder) Nullable() *int16Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -850,18 +1044,24 @@ func (b *int16Builder) Nullable() *int16Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *int16Builder) Immutable() *int16Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *int16Builder) StructTag(s string) *int16Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *int16Builder) Validate(fn func(int16) error) *int16Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -869,6 +1069,8 @@ func (b *int16Builder) Validate(fn func(int16) error) *int16Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *int16Builder) StorageKey(key string) *int16Builder {
 	b.desc.StorageKey = key
 	return b
@@ -881,6 +1083,8 @@ func (b *int16Builder) StorageKey(key string) *int16Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *int16Builder) SchemaType(types map[string]string) *int16Builder {
 	b.desc.SchemaType = types
 	return b
@@ -901,6 +1105,8 @@ func (b *int16Builder) SchemaType(types map[string]string) *int16Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *int16Builder) GoType(typ any) *int16Builder {
 	b.desc.goType(typ)
 	return b
@@ -909,6 +1115,8 @@ func (b *int16Builder) GoType(typ any) *int16Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *int16Builder) ValueScanner(vs any) *int16Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -919,6 +1127,8 @@ func (b *int16Builder) ValueScanner(vs any) *int16Builder {
 //
 //	field.Int16("int16").
 //		Annotations(entgql.OrderField("INT16"))
+//
+//go:noinline
 func (b *int16Builder) Annotations(annotations ...schema.Annotation) *int16Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -927,6 +1137,8 @@ func (b *int16Builder) Annotations(annotations ...schema.Annotation) *int16Build
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *int16Builder) Deprecated(reason ...string) *int16Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -936,6 +1148,8 @@ func (b *int16Builder) Deprecated(reason ...string) *int16Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *int16Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(int16Type)
@@ -950,12 +1164,16 @@ type int32Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *int32Builder) Unique() *int32Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *int32Builder) Range(i, j int32) *int32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int32) error {
@@ -968,6 +1186,8 @@ func (b *int32Builder) Range(i, j int32) *int32Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int32Builder) Min(i int32) *int32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int32) error {
@@ -980,6 +1200,8 @@ func (b *int32Builder) Min(i int32) *int32Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int32Builder) Max(i int32) *int32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int32) error {
@@ -992,21 +1214,29 @@ func (b *int32Builder) Max(i int32) *int32Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int32Builder) Positive() *int32Builder {
 	return b.Min(1)
 }
 
 // Negative adds a maximum value validator with the value of -1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int32Builder) Negative() *int32Builder {
 	return b.Max(-1)
 }
 
 // NonNegative adds a minimum value validator with the value of 0. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int32Builder) NonNegative() *int32Builder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *int32Builder) Default(i int32) *int32Builder {
 	b.desc.Default = i
 	return b
@@ -1014,6 +1244,8 @@ func (b *int32Builder) Default(i int32) *int32Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *int32Builder) DefaultFunc(fn any) *int32Builder {
 	b.desc.Default = fn
 	return b
@@ -1025,6 +1257,8 @@ func (b *int32Builder) DefaultFunc(fn any) *int32Builder {
 //	field.Int32("int32").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *int32Builder) UpdateDefault(fn any) *int32Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -1032,12 +1266,16 @@ func (b *int32Builder) UpdateDefault(fn any) *int32Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *int32Builder) Nillable() *int32Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *int32Builder) Comment(c string) *int32Builder {
 	b.desc.Comment = c
 	return b
@@ -1045,6 +1283,8 @@ func (b *int32Builder) Comment(c string) *int32Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *int32Builder) Optional() *int32Builder {
 	b.desc.Optional = true
 	return b
@@ -1053,6 +1293,8 @@ func (b *int32Builder) Optional() *int32Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *int32Builder) Nullable() *int32Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1060,18 +1302,24 @@ func (b *int32Builder) Nullable() *int32Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *int32Builder) Immutable() *int32Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *int32Builder) StructTag(s string) *int32Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *int32Builder) Validate(fn func(int32) error) *int32Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -1079,6 +1327,8 @@ func (b *int32Builder) Validate(fn func(int32) error) *int32Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *int32Builder) StorageKey(key string) *int32Builder {
 	b.desc.StorageKey = key
 	return b
@@ -1091,6 +1341,8 @@ func (b *int32Builder) StorageKey(key string) *int32Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *int32Builder) SchemaType(types map[string]string) *int32Builder {
 	b.desc.SchemaType = types
 	return b
@@ -1111,6 +1363,8 @@ func (b *int32Builder) SchemaType(types map[string]string) *int32Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *int32Builder) GoType(typ any) *int32Builder {
 	b.desc.goType(typ)
 	return b
@@ -1119,6 +1373,8 @@ func (b *int32Builder) GoType(typ any) *int32Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *int32Builder) ValueScanner(vs any) *int32Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -1129,6 +1385,8 @@ func (b *int32Builder) ValueScanner(vs any) *int32Builder {
 //
 //	field.Int32("int32").
 //		Annotations(entgql.OrderField("INT32"))
+//
+//go:noinline
 func (b *int32Builder) Annotations(annotations ...schema.Annotation) *int32Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1137,6 +1395,8 @@ func (b *int32Builder) Annotations(annotations ...schema.Annotation) *int32Build
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *int32Builder) Deprecated(reason ...string) *int32Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1146,6 +1406,8 @@ func (b *int32Builder) Deprecated(reason ...string) *int32Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *int32Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(int32Type)
@@ -1160,12 +1422,16 @@ type int64Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *int64Builder) Unique() *int64Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *int64Builder) Range(i, j int64) *int64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v int64) error {
@@ -1178,6 +1444,8 @@ func (b *int64Builder) Range(i, j int64) *int64Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int64Builder) Min(i int64) *int64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int64) error {
@@ -1190,6 +1458,8 @@ func (b *int64Builder) Min(i int64) *int64Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int64Builder) Max(i int64) *int64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v int64) error {
@@ -1202,21 +1472,29 @@ func (b *int64Builder) Max(i int64) *int64Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int64Builder) Positive() *int64Builder {
 	return b.Min(1)
 }
 
 // Negative adds a maximum value validator with the value of -1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int64Builder) Negative() *int64Builder {
 	return b.Max(-1)
 }
 
 // NonNegative adds a minimum value validator with the value of 0. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *int64Builder) NonNegative() *int64Builder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *int64Builder) Default(i int64) *int64Builder {
 	b.desc.Default = i
 	return b
@@ -1224,6 +1502,8 @@ func (b *int64Builder) Default(i int64) *int64Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *int64Builder) DefaultFunc(fn any) *int64Builder {
 	b.desc.Default = fn
 	return b
@@ -1235,6 +1515,8 @@ func (b *int64Builder) DefaultFunc(fn any) *int64Builder {
 //	field.Int64("int64").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *int64Builder) UpdateDefault(fn any) *int64Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -1242,12 +1524,16 @@ func (b *int64Builder) UpdateDefault(fn any) *int64Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *int64Builder) Nillable() *int64Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *int64Builder) Comment(c string) *int64Builder {
 	b.desc.Comment = c
 	return b
@@ -1255,6 +1541,8 @@ func (b *int64Builder) Comment(c string) *int64Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *int64Builder) Optional() *int64Builder {
 	b.desc.Optional = true
 	return b
@@ -1263,6 +1551,8 @@ func (b *int64Builder) Optional() *int64Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *int64Builder) Nullable() *int64Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1270,18 +1560,24 @@ func (b *int64Builder) Nullable() *int64Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *int64Builder) Immutable() *int64Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *int64Builder) StructTag(s string) *int64Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *int64Builder) Validate(fn func(int64) error) *int64Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -1289,6 +1585,8 @@ func (b *int64Builder) Validate(fn func(int64) error) *int64Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *int64Builder) StorageKey(key string) *int64Builder {
 	b.desc.StorageKey = key
 	return b
@@ -1301,6 +1599,8 @@ func (b *int64Builder) StorageKey(key string) *int64Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *int64Builder) SchemaType(types map[string]string) *int64Builder {
 	b.desc.SchemaType = types
 	return b
@@ -1321,6 +1621,8 @@ func (b *int64Builder) SchemaType(types map[string]string) *int64Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *int64Builder) GoType(typ any) *int64Builder {
 	b.desc.goType(typ)
 	return b
@@ -1329,6 +1631,8 @@ func (b *int64Builder) GoType(typ any) *int64Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *int64Builder) ValueScanner(vs any) *int64Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -1339,6 +1643,8 @@ func (b *int64Builder) ValueScanner(vs any) *int64Builder {
 //
 //	field.Int64("int64").
 //		Annotations(entgql.OrderField("INT64"))
+//
+//go:noinline
 func (b *int64Builder) Annotations(annotations ...schema.Annotation) *int64Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1347,6 +1653,8 @@ func (b *int64Builder) Annotations(annotations ...schema.Annotation) *int64Build
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *int64Builder) Deprecated(reason ...string) *int64Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1356,6 +1664,8 @@ func (b *int64Builder) Deprecated(reason ...string) *int64Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *int64Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(int64Type)
@@ -1370,12 +1680,16 @@ type uint8Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *uint8Builder) Unique() *uint8Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *uint8Builder) Range(i, j uint8) *uint8Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint8) error {
@@ -1388,6 +1702,8 @@ func (b *uint8Builder) Range(i, j uint8) *uint8Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint8Builder) Min(i uint8) *uint8Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint8) error {
@@ -1400,6 +1716,8 @@ func (b *uint8Builder) Min(i uint8) *uint8Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint8Builder) Max(i uint8) *uint8Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint8) error {
@@ -1412,11 +1730,15 @@ func (b *uint8Builder) Max(i uint8) *uint8Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint8Builder) Positive() *uint8Builder {
 	return b.Min(1)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *uint8Builder) Default(i uint8) *uint8Builder {
 	b.desc.Default = i
 	return b
@@ -1424,6 +1746,8 @@ func (b *uint8Builder) Default(i uint8) *uint8Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *uint8Builder) DefaultFunc(fn any) *uint8Builder {
 	b.desc.Default = fn
 	return b
@@ -1435,6 +1759,8 @@ func (b *uint8Builder) DefaultFunc(fn any) *uint8Builder {
 //	field.Uint8("uint8").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *uint8Builder) UpdateDefault(fn any) *uint8Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -1442,12 +1768,16 @@ func (b *uint8Builder) UpdateDefault(fn any) *uint8Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *uint8Builder) Nillable() *uint8Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *uint8Builder) Comment(c string) *uint8Builder {
 	b.desc.Comment = c
 	return b
@@ -1455,6 +1785,8 @@ func (b *uint8Builder) Comment(c string) *uint8Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *uint8Builder) Optional() *uint8Builder {
 	b.desc.Optional = true
 	return b
@@ -1463,6 +1795,8 @@ func (b *uint8Builder) Optional() *uint8Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *uint8Builder) Nullable() *uint8Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1470,18 +1804,24 @@ func (b *uint8Builder) Nullable() *uint8Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *uint8Builder) Immutable() *uint8Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *uint8Builder) StructTag(s string) *uint8Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *uint8Builder) Validate(fn func(uint8) error) *uint8Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -1489,6 +1829,8 @@ func (b *uint8Builder) Validate(fn func(uint8) error) *uint8Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *uint8Builder) StorageKey(key string) *uint8Builder {
 	b.desc.StorageKey = key
 	return b
@@ -1501,6 +1843,8 @@ func (b *uint8Builder) StorageKey(key string) *uint8Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *uint8Builder) SchemaType(types map[string]string) *uint8Builder {
 	b.desc.SchemaType = types
 	return b
@@ -1521,6 +1865,8 @@ func (b *uint8Builder) SchemaType(types map[string]string) *uint8Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *uint8Builder) GoType(typ any) *uint8Builder {
 	b.desc.goType(typ)
 	return b
@@ -1529,6 +1875,8 @@ func (b *uint8Builder) GoType(typ any) *uint8Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *uint8Builder) ValueScanner(vs any) *uint8Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -1539,6 +1887,8 @@ func (b *uint8Builder) ValueScanner(vs any) *uint8Builder {
 //
 //	field.Uint8("uint8").
 //		Annotations(entgql.OrderField("UINT8"))
+//
+//go:noinline
 func (b *uint8Builder) Annotations(annotations ...schema.Annotation) *uint8Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1547,6 +1897,8 @@ func (b *uint8Builder) Annotations(annotations ...schema.Annotation) *uint8Build
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *uint8Builder) Deprecated(reason ...string) *uint8Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1556,6 +1908,8 @@ func (b *uint8Builder) Deprecated(reason ...string) *uint8Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *uint8Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(uint8Type)
@@ -1570,12 +1924,16 @@ type uint16Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *uint16Builder) Unique() *uint16Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *uint16Builder) Range(i, j uint16) *uint16Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint16) error {
@@ -1588,6 +1946,8 @@ func (b *uint16Builder) Range(i, j uint16) *uint16Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint16Builder) Min(i uint16) *uint16Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint16) error {
@@ -1600,6 +1960,8 @@ func (b *uint16Builder) Min(i uint16) *uint16Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint16Builder) Max(i uint16) *uint16Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint16) error {
@@ -1612,11 +1974,15 @@ func (b *uint16Builder) Max(i uint16) *uint16Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint16Builder) Positive() *uint16Builder {
 	return b.Min(1)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *uint16Builder) Default(i uint16) *uint16Builder {
 	b.desc.Default = i
 	return b
@@ -1624,6 +1990,8 @@ func (b *uint16Builder) Default(i uint16) *uint16Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *uint16Builder) DefaultFunc(fn any) *uint16Builder {
 	b.desc.Default = fn
 	return b
@@ -1635,6 +2003,8 @@ func (b *uint16Builder) DefaultFunc(fn any) *uint16Builder {
 //	field.Uint16("uint16").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *uint16Builder) UpdateDefault(fn any) *uint16Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -1642,12 +2012,16 @@ func (b *uint16Builder) UpdateDefault(fn any) *uint16Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *uint16Builder) Nillable() *uint16Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *uint16Builder) Comment(c string) *uint16Builder {
 	b.desc.Comment = c
 	return b
@@ -1655,6 +2029,8 @@ func (b *uint16Builder) Comment(c string) *uint16Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *uint16Builder) Optional() *uint16Builder {
 	b.desc.Optional = true
 	return b
@@ -1663,6 +2039,8 @@ func (b *uint16Builder) Optional() *uint16Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *uint16Builder) Nullable() *uint16Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1670,18 +2048,24 @@ func (b *uint16Builder) Nullable() *uint16Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *uint16Builder) Immutable() *uint16Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *uint16Builder) StructTag(s string) *uint16Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *uint16Builder) Validate(fn func(uint16) error) *uint16Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -1689,6 +2073,8 @@ func (b *uint16Builder) Validate(fn func(uint16) error) *uint16Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *uint16Builder) StorageKey(key string) *uint16Builder {
 	b.desc.StorageKey = key
 	return b
@@ -1701,6 +2087,8 @@ func (b *uint16Builder) StorageKey(key string) *uint16Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *uint16Builder) SchemaType(types map[string]string) *uint16Builder {
 	b.desc.SchemaType = types
 	return b
@@ -1721,6 +2109,8 @@ func (b *uint16Builder) SchemaType(types map[string]string) *uint16Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *uint16Builder) GoType(typ any) *uint16Builder {
 	b.desc.goType(typ)
 	return b
@@ -1729,6 +2119,8 @@ func (b *uint16Builder) GoType(typ any) *uint16Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *uint16Builder) ValueScanner(vs any) *uint16Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -1739,6 +2131,8 @@ func (b *uint16Builder) ValueScanner(vs any) *uint16Builder {
 //
 //	field.Uint16("uint16").
 //		Annotations(entgql.OrderField("UINT16"))
+//
+//go:noinline
 func (b *uint16Builder) Annotations(annotations ...schema.Annotation) *uint16Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1747,6 +2141,8 @@ func (b *uint16Builder) Annotations(annotations ...schema.Annotation) *uint16Bui
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *uint16Builder) Deprecated(reason ...string) *uint16Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1756,6 +2152,8 @@ func (b *uint16Builder) Deprecated(reason ...string) *uint16Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *uint16Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(uint16Type)
@@ -1770,12 +2168,16 @@ type uint32Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *uint32Builder) Unique() *uint32Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *uint32Builder) Range(i, j uint32) *uint32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint32) error {
@@ -1788,6 +2190,8 @@ func (b *uint32Builder) Range(i, j uint32) *uint32Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint32Builder) Min(i uint32) *uint32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint32) error {
@@ -1800,6 +2204,8 @@ func (b *uint32Builder) Min(i uint32) *uint32Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint32Builder) Max(i uint32) *uint32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint32) error {
@@ -1812,11 +2218,15 @@ func (b *uint32Builder) Max(i uint32) *uint32Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint32Builder) Positive() *uint32Builder {
 	return b.Min(1)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *uint32Builder) Default(i uint32) *uint32Builder {
 	b.desc.Default = i
 	return b
@@ -1824,6 +2234,8 @@ func (b *uint32Builder) Default(i uint32) *uint32Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *uint32Builder) DefaultFunc(fn any) *uint32Builder {
 	b.desc.Default = fn
 	return b
@@ -1835,6 +2247,8 @@ func (b *uint32Builder) DefaultFunc(fn any) *uint32Builder {
 //	field.Uint32("uint32").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *uint32Builder) UpdateDefault(fn any) *uint32Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -1842,12 +2256,16 @@ func (b *uint32Builder) UpdateDefault(fn any) *uint32Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *uint32Builder) Nillable() *uint32Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *uint32Builder) Comment(c string) *uint32Builder {
 	b.desc.Comment = c
 	return b
@@ -1855,6 +2273,8 @@ func (b *uint32Builder) Comment(c string) *uint32Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *uint32Builder) Optional() *uint32Builder {
 	b.desc.Optional = true
 	return b
@@ -1863,6 +2283,8 @@ func (b *uint32Builder) Optional() *uint32Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *uint32Builder) Nullable() *uint32Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -1870,18 +2292,24 @@ func (b *uint32Builder) Nullable() *uint32Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *uint32Builder) Immutable() *uint32Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *uint32Builder) StructTag(s string) *uint32Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *uint32Builder) Validate(fn func(uint32) error) *uint32Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -1889,6 +2317,8 @@ func (b *uint32Builder) Validate(fn func(uint32) error) *uint32Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *uint32Builder) StorageKey(key string) *uint32Builder {
 	b.desc.StorageKey = key
 	return b
@@ -1901,6 +2331,8 @@ func (b *uint32Builder) StorageKey(key string) *uint32Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *uint32Builder) SchemaType(types map[string]string) *uint32Builder {
 	b.desc.SchemaType = types
 	return b
@@ -1921,6 +2353,8 @@ func (b *uint32Builder) SchemaType(types map[string]string) *uint32Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *uint32Builder) GoType(typ any) *uint32Builder {
 	b.desc.goType(typ)
 	return b
@@ -1929,6 +2363,8 @@ func (b *uint32Builder) GoType(typ any) *uint32Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *uint32Builder) ValueScanner(vs any) *uint32Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -1939,6 +2375,8 @@ func (b *uint32Builder) ValueScanner(vs any) *uint32Builder {
 //
 //	field.Uint32("uint32").
 //		Annotations(entgql.OrderField("UINT32"))
+//
+//go:noinline
 func (b *uint32Builder) Annotations(annotations ...schema.Annotation) *uint32Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1947,6 +2385,8 @@ func (b *uint32Builder) Annotations(annotations ...schema.Annotation) *uint32Bui
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *uint32Builder) Deprecated(reason ...string) *uint32Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -1956,6 +2396,8 @@ func (b *uint32Builder) Deprecated(reason ...string) *uint32Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *uint32Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(uint32Type)
@@ -1970,12 +2412,16 @@ type uint64Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *uint64Builder) Unique() *uint64Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *uint64Builder) Range(i, j uint64) *uint64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint64) error {
@@ -1988,6 +2434,8 @@ func (b *uint64Builder) Range(i, j uint64) *uint64Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint64Builder) Min(i uint64) *uint64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint64) error {
@@ -2000,6 +2448,8 @@ func (b *uint64Builder) Min(i uint64) *uint64Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint64Builder) Max(i uint64) *uint64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v uint64) error {
@@ -2012,11 +2462,15 @@ func (b *uint64Builder) Max(i uint64) *uint64Builder {
 }
 
 // Positive adds a minimum value validator with the value of 1. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *uint64Builder) Positive() *uint64Builder {
 	return b.Min(1)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *uint64Builder) Default(i uint64) *uint64Builder {
 	b.desc.Default = i
 	return b
@@ -2024,6 +2478,8 @@ func (b *uint64Builder) Default(i uint64) *uint64Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *uint64Builder) DefaultFunc(fn any) *uint64Builder {
 	b.desc.Default = fn
 	return b
@@ -2035,6 +2491,8 @@ func (b *uint64Builder) DefaultFunc(fn any) *uint64Builder {
 //	field.Uint64("uint64").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *uint64Builder) UpdateDefault(fn any) *uint64Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -2042,12 +2500,16 @@ func (b *uint64Builder) UpdateDefault(fn any) *uint64Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *uint64Builder) Nillable() *uint64Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *uint64Builder) Comment(c string) *uint64Builder {
 	b.desc.Comment = c
 	return b
@@ -2055,6 +2517,8 @@ func (b *uint64Builder) Comment(c string) *uint64Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *uint64Builder) Optional() *uint64Builder {
 	b.desc.Optional = true
 	return b
@@ -2063,6 +2527,8 @@ func (b *uint64Builder) Optional() *uint64Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *uint64Builder) Nullable() *uint64Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -2070,18 +2536,24 @@ func (b *uint64Builder) Nullable() *uint64Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *uint64Builder) Immutable() *uint64Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *uint64Builder) StructTag(s string) *uint64Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *uint64Builder) Validate(fn func(uint64) error) *uint64Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -2089,6 +2561,8 @@ func (b *uint64Builder) Validate(fn func(uint64) error) *uint64Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *uint64Builder) StorageKey(key string) *uint64Builder {
 	b.desc.StorageKey = key
 	return b
@@ -2101,6 +2575,8 @@ func (b *uint64Builder) StorageKey(key string) *uint64Builder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomType",
 //		})
+//
+//go:noinline
 func (b *uint64Builder) SchemaType(types map[string]string) *uint64Builder {
 	b.desc.SchemaType = types
 	return b
@@ -2121,6 +2597,8 @@ func (b *uint64Builder) SchemaType(types map[string]string) *uint64Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *uint64Builder) GoType(typ any) *uint64Builder {
 	b.desc.goType(typ)
 	return b
@@ -2129,6 +2607,8 @@ func (b *uint64Builder) GoType(typ any) *uint64Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *uint64Builder) ValueScanner(vs any) *uint64Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -2139,6 +2619,8 @@ func (b *uint64Builder) ValueScanner(vs any) *uint64Builder {
 //
 //	field.Uint64("uint64").
 //		Annotations(entgql.OrderField("UINT64"))
+//
+//go:noinline
 func (b *uint64Builder) Annotations(annotations ...schema.Annotation) *uint64Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -2147,6 +2629,8 @@ func (b *uint64Builder) Annotations(annotations ...schema.Annotation) *uint64Bui
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *uint64Builder) Deprecated(reason ...string) *uint64Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -2156,6 +2640,8 @@ func (b *uint64Builder) Deprecated(reason ...string) *uint64Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *uint64Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(uint64Type)
@@ -2183,12 +2669,16 @@ type float64Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *float64Builder) Unique() *float64Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *float64Builder) Range(i, j float64) *float64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
@@ -2201,6 +2691,8 @@ func (b *float64Builder) Range(i, j float64) *float64Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float64Builder) Min(i float64) *float64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
@@ -2213,6 +2705,8 @@ func (b *float64Builder) Min(i float64) *float64Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float64Builder) Max(i float64) *float64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
@@ -2226,6 +2720,8 @@ func (b *float64Builder) Max(i float64) *float64Builder {
 
 // Positive adds a validator that requires the value to be strictly greater than 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float64Builder) Positive() *float64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
@@ -2239,6 +2735,8 @@ func (b *float64Builder) Positive() *float64Builder {
 
 // Negative adds a validator that requires the value to be strictly less than 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float64Builder) Negative() *float64Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float64) error {
@@ -2252,11 +2750,15 @@ func (b *float64Builder) Negative() *float64Builder {
 
 // NonNegative adds a minimum value validator with the value of 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float64Builder) NonNegative() *float64Builder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *float64Builder) Default(i float64) *float64Builder {
 	b.desc.Default = i
 	return b
@@ -2264,6 +2766,8 @@ func (b *float64Builder) Default(i float64) *float64Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *float64Builder) DefaultFunc(fn any) *float64Builder {
 	b.desc.Default = fn
 	return b
@@ -2275,6 +2779,8 @@ func (b *float64Builder) DefaultFunc(fn any) *float64Builder {
 //	field.Float64("float64").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *float64Builder) UpdateDefault(fn any) *float64Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -2282,12 +2788,16 @@ func (b *float64Builder) UpdateDefault(fn any) *float64Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *float64Builder) Nillable() *float64Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *float64Builder) Comment(c string) *float64Builder {
 	b.desc.Comment = c
 	return b
@@ -2295,6 +2805,8 @@ func (b *float64Builder) Comment(c string) *float64Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *float64Builder) Optional() *float64Builder {
 	b.desc.Optional = true
 	return b
@@ -2303,6 +2815,8 @@ func (b *float64Builder) Optional() *float64Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *float64Builder) Nullable() *float64Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -2310,18 +2824,24 @@ func (b *float64Builder) Nullable() *float64Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *float64Builder) Immutable() *float64Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *float64Builder) StructTag(s string) *float64Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *float64Builder) Validate(fn func(float64) error) *float64Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -2329,6 +2849,8 @@ func (b *float64Builder) Validate(fn func(float64) error) *float64Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *float64Builder) StorageKey(key string) *float64Builder {
 	b.desc.StorageKey = key
 	return b
@@ -2342,6 +2864,8 @@ func (b *float64Builder) StorageKey(key string) *float64Builder {
 //			dialect.MySQL:		"decimal(5, 2)",
 //			dialect.Postgres: 	"numeric(5, 2)",
 //		})
+//
+//go:noinline
 func (b *float64Builder) SchemaType(types map[string]string) *float64Builder {
 	b.desc.SchemaType = types
 	return b
@@ -2362,6 +2886,8 @@ func (b *float64Builder) SchemaType(types map[string]string) *float64Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *float64Builder) GoType(typ any) *float64Builder {
 	b.desc.goType(typ)
 	return b
@@ -2370,6 +2896,8 @@ func (b *float64Builder) GoType(typ any) *float64Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *float64Builder) ValueScanner(vs any) *float64Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -2380,6 +2908,8 @@ func (b *float64Builder) ValueScanner(vs any) *float64Builder {
 //
 //	field.Float64("float64").
 //		Annotations(entgql.OrderField("FLOAT64"))
+//
+//go:noinline
 func (b *float64Builder) Annotations(annotations ...schema.Annotation) *float64Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -2388,6 +2918,8 @@ func (b *float64Builder) Annotations(annotations ...schema.Annotation) *float64B
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *float64Builder) Deprecated(reason ...string) *float64Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -2397,6 +2929,8 @@ func (b *float64Builder) Deprecated(reason ...string) *float64Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *float64Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(float64Type)
@@ -2411,12 +2945,16 @@ type float32Builder struct {
 }
 
 // Unique makes the field unique within all vertices of this type.
+//
+//go:noinline
 func (b *float32Builder) Unique() *float32Builder {
 	b.desc.Unique = true
 	return b
 }
 
 // Range adds a range validator for this field where the given value needs to be in the range of [i, j].
+//
+//go:noinline
 func (b *float32Builder) Range(i, j float32) *float32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)}, Bound{Op: "<=", Value: fmt.Sprint(j)})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
@@ -2429,6 +2967,8 @@ func (b *float32Builder) Range(i, j float32) *float32Builder {
 }
 
 // Min adds a minimum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float32Builder) Min(i float32) *float32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
@@ -2441,6 +2981,8 @@ func (b *float32Builder) Min(i float32) *float32Builder {
 }
 
 // Max adds a maximum value validator for this field. Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float32Builder) Max(i float32) *float32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<=", Value: fmt.Sprint(i)})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
@@ -2454,6 +2996,8 @@ func (b *float32Builder) Max(i float32) *float32Builder {
 
 // Positive adds a validator that requires the value to be strictly greater than 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float32Builder) Positive() *float32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: ">", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
@@ -2467,6 +3011,8 @@ func (b *float32Builder) Positive() *float32Builder {
 
 // Negative adds a validator that requires the value to be strictly less than 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float32Builder) Negative() *float32Builder {
 	b.desc.Bounds = append(b.desc.Bounds, Bound{Op: "<", Value: "0"})
 	b.desc.Validators = append(b.desc.Validators, func(v float32) error {
@@ -2480,11 +3026,15 @@ func (b *float32Builder) Negative() *float32Builder {
 
 // NonNegative adds a minimum value validator with the value of 0.
 // Operation fails if the validator fails.
+//
+//go:noinline
 func (b *float32Builder) NonNegative() *float32Builder {
 	return b.Min(0)
 }
 
 // Default sets the default value of the field.
+//
+//go:noinline
 func (b *float32Builder) Default(i float32) *float32Builder {
 	b.desc.Default = i
 	return b
@@ -2492,6 +3042,8 @@ func (b *float32Builder) Default(i float32) *float32Builder {
 
 // DefaultFunc sets the function that is applied to set the default value
 // of the field on creation.
+//
+//go:noinline
 func (b *float32Builder) DefaultFunc(fn any) *float32Builder {
 	b.desc.Default = fn
 	return b
@@ -2503,6 +3055,8 @@ func (b *float32Builder) DefaultFunc(fn any) *float32Builder {
 //	field.Float32("float32").
 //		Default(0).
 //		UpdateDefault(GenNumber),
+//
+//go:noinline
 func (b *float32Builder) UpdateDefault(fn any) *float32Builder {
 	b.desc.UpdateDefault = fn
 	return b
@@ -2510,12 +3064,16 @@ func (b *float32Builder) UpdateDefault(fn any) *float32Builder {
 
 // Nillable indicates that this field is a nillable.
 // Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+//
+//go:noinline
 func (b *float32Builder) Nillable() *float32Builder {
 	b.desc.Nillable = true
 	return b
 }
 
 // Comment sets the comment of the field.
+//
+//go:noinline
 func (b *float32Builder) Comment(c string) *float32Builder {
 	b.desc.Comment = c
 	return b
@@ -2523,6 +3081,8 @@ func (b *float32Builder) Comment(c string) *float32Builder {
 
 // Optional indicates that this field is optional on create.
 // Unlike edges, fields are required by default.
+//
+//go:noinline
 func (b *float32Builder) Optional() *float32Builder {
 	b.desc.Optional = true
 	return b
@@ -2531,6 +3091,8 @@ func (b *float32Builder) Optional() *float32Builder {
 // Nullable makes the field NULL in the database and *T (pointer) in Go.
 // Equivalent to Optional().Nillable() — use when "this field can be absent"
 // should mean NULL at every layer.
+//
+//go:noinline
 func (b *float32Builder) Nullable() *float32Builder {
 	b.desc.Optional = true
 	b.desc.Nillable = true
@@ -2538,18 +3100,24 @@ func (b *float32Builder) Nullable() *float32Builder {
 }
 
 // Immutable indicates that this field cannot be updated.
+//
+//go:noinline
 func (b *float32Builder) Immutable() *float32Builder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the field.
+//
+//go:noinline
 func (b *float32Builder) StructTag(s string) *float32Builder {
 	b.desc.Tag = s
 	return b
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//go:noinline
 func (b *float32Builder) Validate(fn func(float32) error) *float32Builder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -2557,6 +3125,8 @@ func (b *float32Builder) Validate(fn func(float32) error) *float32Builder {
 
 // StorageKey sets the storage key of the field.
 // In SQL dialects this is the column name.
+//
+//go:noinline
 func (b *float32Builder) StorageKey(key string) *float32Builder {
 	b.desc.StorageKey = key
 	return b
@@ -2570,6 +3140,8 @@ func (b *float32Builder) StorageKey(key string) *float32Builder {
 //			dialect.MySQL:		"decimal(5, 2)",
 //			dialect.Postgres: 	"numeric(5, 2)",
 //		})
+//
+//go:noinline
 func (b *float32Builder) SchemaType(types map[string]string) *float32Builder {
 	b.desc.SchemaType = types
 	return b
@@ -2590,6 +3162,8 @@ func (b *float32Builder) SchemaType(types map[string]string) *float32Builder {
 //	func(t1 T) Add(t2 T) T {
 //		return add(t1, t2)
 //	}
+//
+//go:noinline
 func (b *float32Builder) GoType(typ any) *float32Builder {
 	b.desc.goType(typ)
 	return b
@@ -2598,6 +3172,8 @@ func (b *float32Builder) GoType(typ any) *float32Builder {
 // ValueScanner provides an external value scanner for the given GoType.
 // Using this option allow users to use field types that do not implement
 // the sql.Scanner and driver.Valuer interfaces.
+//
+//go:noinline
 func (b *float32Builder) ValueScanner(vs any) *float32Builder {
 	b.desc.ValueScanner = vs
 	return b
@@ -2608,6 +3184,8 @@ func (b *float32Builder) ValueScanner(vs any) *float32Builder {
 //
 //	field.Float32("float32").
 //		Annotations(entgql.OrderField("FLOAT32"))
+//
+//go:noinline
 func (b *float32Builder) Annotations(annotations ...schema.Annotation) *float32Builder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -2616,6 +3194,8 @@ func (b *float32Builder) Annotations(annotations ...schema.Annotation) *float32B
 // Deprecated marks the field as deprecated. Deprecated fields are not
 // selected by default in queries, and their struct fields are annotated
 // with `deprecated` in the generated code.
+//
+//go:noinline
 func (b *float32Builder) Deprecated(reason ...string) *float32Builder {
 	b.desc.Deprecated = true
 	if len(reason) > 0 {
@@ -2625,6 +3205,8 @@ func (b *float32Builder) Deprecated(reason ...string) *float32Builder {
 }
 
 // Descriptor implements the velox.Field interface by returning its descriptor.
+//
+//go:noinline
 func (b *float32Builder) Descriptor() *Descriptor {
 	if b.desc.Default != nil || b.desc.UpdateDefault != nil {
 		b.desc.checkDefaultFunc(float32Type)

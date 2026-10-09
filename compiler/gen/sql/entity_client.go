@@ -34,6 +34,14 @@ func genEntityClient(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 	f.Func().Id("New" + clientName).Params(
 		jen.Id("c").Qual(runtimePkg, "Config"),
 	).Op("*").Id(clientName).BlockFunc(func(grp *jen.Group) {
+		if hasSchemaRuntime(t) {
+			// The schema's defaults, validators, hooks and policy are stitched
+			// by internal/schemainit, which only the root package imports. A
+			// client built without it would run with no policy and no hooks.
+			grp.If(jen.Op("!").Qual(h.LeafPkgPath(t), schemaReadyVar)).Block(
+				jen.Panic(jen.Lit("velox: the " + t.Name + " schema runtime (defaults, validators, hooks, policy) is not linked: import the generated root package, and do not build entity clients in package-level variables (they may initialize before it)")),
+			)
+		}
 		grp.Id("hs").Op(",").Id("_").Op(":=").Id("c").Dot("HookStore").Assert(jen.Op("*").Qual(entityPkg, "HookStore"))
 		grp.If(jen.Id("hs").Op("==").Nil()).Block(
 			jen.Id("hs").Op("=").Op("&").Qual(entityPkg, "HookStore").Values(),
@@ -52,6 +60,17 @@ func genEntityClient(h gen.GeneratorHelper, t *gen.Type) *jen.File {
 		}
 		grp.Return(jen.Op("&").Id(clientName).Values(vals))
 	})
+
+	// From: the entity client of a ConfigProvider (the root Client or a Tx),
+	// for packages that must not name those types.
+	f.Commentf("From returns the %s of p — the generated root Client or a Tx. A", clientName)
+	f.Comment("package that takes a runtime.ConfigProvider and calls From compiles without")
+	f.Comment("loading the root Client type and, through it, every other entity's client.")
+	f.Func().Id("From").Params(
+		jen.Id("p").Qual(runtimePkg, "ConfigProvider"),
+	).Op("*").Id(clientName).Block(
+		jen.Return(jen.Id("New" + clientName).Call(jen.Id("p").Dot("RuntimeConfig").Call())),
+	)
 
 	// Generate full CRUD + Query methods.
 	genEntityClientCRUD(h, f, t)

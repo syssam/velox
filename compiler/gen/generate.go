@@ -299,6 +299,16 @@ func (g *JenniferGenerator) generateShared(ctx context.Context, errg *errgroup.G
 			f, err := creator.GenEntityHooks(entityHelper)
 			return g.writeFileResult(ctx, f, err, "entity", "hooks.go")
 		})
+		errg.Go(func() error {
+			rootPkg := ""
+			if g.graph.Config != nil {
+				rootPkg = g.graph.Package
+			}
+			f, err := creator.GenSchemaInit(g, func(t *Type) GeneratorHelper {
+				return newClientPkgHelper(g, t.PackageDir(), rootPkg)
+			})
+			return g.writeFileResult(ctx, f, err, filepath.Join("internal", "schemainit"), "schemainit.go")
+		})
 	}
 
 	errg.Go(g.genAndWrite(ctx, g.dialect.GenRuntime, "", "runtime.go"))

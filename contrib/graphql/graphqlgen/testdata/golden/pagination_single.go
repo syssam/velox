@@ -76,9 +76,12 @@ func (q *UserQuery) Paginate(ctx context.Context, after *gqlrelay.Cursor, first 
 			q.ctx.AppendFieldOnce(cfg.Order.Field.Column)
 		}
 	}
-	nodes, err := q.All(ctx)
-	if err != nil {
-		return nil, err
+	var nodes []*entity.User
+	if gqlrelay.PageRowsSelected(ctx) {
+		var err error
+		if nodes, err = q.All(ctx); err != nil {
+			return nil, err
+		}
 	}
 	var backwardHasPrev bool
 	if last != nil {

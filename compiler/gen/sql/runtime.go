@@ -19,8 +19,7 @@ func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, sc
 	// their validator is assigned here, and a nil one panics on Save).
 	hasRuntimeFields := t.HasDefault() || t.HasUpdateDefault() || t.HasValidators()
 
-	// Skip if no runtime code needed (no mixins and no runtime fields)
-	if !hasRuntimeFields && !t.RuntimeMixin() {
+	if !hasSchemaRuntime(t) {
 		return
 	}
 
@@ -42,6 +41,24 @@ func genRuntimeEntityInit(h gen.GeneratorHelper, grp *jen.Group, t *gen.Type, sc
 		genRuntimeFields(h, grp, t, schemaPkg, entityPkg, pkg)
 	}
 }
+
+// hasSchemaRuntime reports whether the schema of t carries runtime code that
+// must be stitched to the leaf package: defaults, validators, hooks or a
+// policy. A Policy() or Hooks() declared on the schema itself counts:
+// RuntimeMixin covers the mixed-in ones only, and skipping a schema with a
+// policy but no default or validator left RuntimePolicy nil — no policy at all.
+func hasSchemaRuntime(t *gen.Type) bool {
+	return t.HasDefault() || t.HasUpdateDefault() || t.HasValidators() ||
+		t.RuntimeMixin() || t.NumPolicy() > 0 || t.NumHooks() > 0
+}
+
+// schemaInitDir is the output directory, relative to the generated root, of
+// the package that stitches schema runtime code (see genSchemaInit).
+const schemaInitDir = "internal/schemainit"
+
+// schemaReadyVar is the leaf-package flag genSchemaInit sets once the schema
+// runtime code of an entity is stitched; the entity client constructor reads it.
+const schemaReadyVar = "SchemaReady"
 
 // genRuntimePolicies generates the policies initialization for an entity.
 // This sets the package-level RuntimePolicy variable that the entity client

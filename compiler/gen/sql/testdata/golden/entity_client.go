@@ -39,6 +39,13 @@ func NewUserClient(c runtime.Config) *UserClient {
 	}
 }
 
+// From returns the UserClient of p — the generated root Client or a Tx. A
+// package that takes a runtime.ConfigProvider and calls From compiles without
+// loading the root Client type and, through it, every other entity's client.
+func From(p runtime.ConfigProvider) *UserClient {
+	return NewUserClient(p.RuntimeConfig())
+}
+
 // Create returns a builder for creating a User entity.
 func (c *UserClient) Create() *UserCreate {
 	mutation := NewUserMutation(c.config, runtime.OpCreate)

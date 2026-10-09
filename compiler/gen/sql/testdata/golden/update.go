@@ -302,6 +302,7 @@ type UserUpdateOne struct {
 	hooks        []runtime.Hook
 	modifiers    []func(*sql.UpdateBuilder)
 	selectFields []string
+	execOnly     bool
 }
 
 // NewUserUpdateOne creates a new UserUpdateOne builder.
@@ -573,6 +574,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (*entity.User, error) {
 			}
 		}
 	}
+	if _u.execOnly {
+		return nil, nil
+	}
 	build := func(_ context.Context) (*sql.Selector, error) {
 		s := sql.Select(columns...).From(sql.Table(user.Table))
 		s.SetDialect(_u.config.Driver.Dialect())
@@ -610,6 +614,9 @@ func (_u *UserUpdateOne) Save(ctx context.Context) (*entity.User, error) {
 		return _old, nil
 	}
 	hooks := _u.hooks
+	if len(hooks) > 0 {
+		_u.execOnly = false
+	}
 	return velox.WithHooks[*entity.User, UserMutation, *UserMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
@@ -622,8 +629,13 @@ func (_u *UserUpdateOne) SaveX(ctx context.Context) *entity.User {
 	return node
 }
 
-// Exec executes the query on the entity.
+// Exec executes the query on the entity. Without hooks it does not read the
+// updated row back: use Save when the entity is needed.
 func (_u *UserUpdateOne) Exec(ctx context.Context) error {
+	_u.execOnly = true
+	defer func() {
+		_u.execOnly = false
+	}()
 	_, err := _u.Save(ctx)
 	return err
 }

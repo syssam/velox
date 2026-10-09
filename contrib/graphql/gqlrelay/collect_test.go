@@ -348,6 +348,22 @@ func TestTotalCountSelected(t *testing.T) {
 	assert.False(t, TotalCountSelected(newGQLContext(t, ast.SelectionSet{nodeSel(field("title"))})))
 }
 
+func TestPageRowsSelected(t *testing.T) {
+	assert.True(t, PageRowsSelected(context.Background()), "outside a resolver there is no selection to consult: fetch")
+	assert.False(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{field("totalCount")})))
+	assert.False(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{field("__typename"), field("totalCount")})))
+	assert.True(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{field("__typename")})),
+		"without totalCount no COUNT runs: the page query must, or the policy is never evaluated")
+	assert.False(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{
+		&ast.InlineFragment{SelectionSet: ast.SelectionSet{field("totalCount")}},
+	})), "a totalCount inside a fragment is still the only field")
+	assert.True(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{field("totalCount"), nodeSel(field("title"))})))
+	assert.True(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{field("totalCount"), field("pageInfo", field("hasNextPage"))})),
+		"pageInfo is computed from the rows")
+	assert.True(t, PageRowsSelected(newGQLContext(t, ast.SelectionSet{field("totalCount"), field("summary")})),
+		"a field the application added may read the rows")
+}
+
 func TestGqlToInt(t *testing.T) {
 	tests := []struct {
 		name   string

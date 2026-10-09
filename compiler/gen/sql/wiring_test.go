@@ -748,6 +748,68 @@ func TestEntityRuntimeRegistersNodeResolver(t *testing.T) {
 	}
 }
 
+// TestSchemaRuntimeIsStitchedInOnePackage pins the build-cache layout: the
+// user's schema package is read by internal/schemainit only. Go rebuilds
+// every direct importer of a package whose object changed, so when each
+// client/<entity> package read the schema, editing a hook body or adding a
+// comment to a schema file recompiled all of them.
+func TestSchemaRuntimeIsStitchedInOnePackage(t *testing.T) {
+	helper := newMockHelper()
+	helper.rootPkg = "github.com/test/project/ent"
+	helper.graph.Package = "github.com/test/project/ent"
+	helper.graph.Schema = "github.com/test/project/schema"
+	userType := createTypeWithSchemaFields(t, "User", []*load.Field{
+		{Name: "name", Info: &field.TypeInfo{Type: field.TypeString}, Default: true},
+	})
+	plainType := createTestType("Plain")
+	helper.graph.Nodes = []*gen.Type{userType, plainType}
+
+	// The client package must not import the schema package.
+	clientRuntime := genEntityRuntime(helper, userType).GoString()
+	if strings.Contains(clientRuntime, "github.com/test/project/schema") {
+		t.Errorf("client/<entity>/runtime.go imports the schema package; only internal/schemainit may:\n%s", clientRuntime)
+	}
+
+	// internal/schemainit reads it, stitches the default and marks the leaf ready.
+	initSrc := genSchemaInit(helper, func(*gen.Type) gen.GeneratorHelper { return helper }).GoString()
+	for _, want := range []string{
+		"package schemainit",
+		`"github.com/test/project/schema"`,
+		"user.DefaultName = ",
+		"user.SchemaReady = true",
+	} {
+		if !strings.Contains(initSrc, want) {
+			t.Errorf("internal/schemainit must contain %q:\n%s", want, initSrc)
+		}
+	}
+	// A schema without runtime code gets no init and no flag.
+	if strings.Contains(initSrc, "plain.") {
+		t.Errorf("internal/schemainit stitches a schema that has no runtime code:\n%s", initSrc)
+	}
+
+	// The leaf declares the flag and the client constructor refuses to run
+	// before it is set: an unlinked schema means no policy and no hooks.
+	leaf := genPackage(helper, userType, buildEntityPkgEnumRegistry(helper.graph.Nodes)).GoString()
+	if !strings.Contains(leaf, "SchemaReady bool") {
+		t.Errorf("leaf package must declare SchemaReady:\n%s", leaf)
+	}
+	client := genEntityClient(helper, userType).GoString()
+	if !strings.Contains(client, "if !user.SchemaReady {\n\t\tpanic(") {
+		t.Errorf("NewUserClient must panic when the schema runtime is not linked:\n%s", client)
+	}
+	plainLeaf := genPackage(helper, plainType, buildEntityPkgEnumRegistry(helper.graph.Nodes)).GoString()
+	plainClient := genEntityClient(helper, plainType).GoString()
+	if strings.Contains(plainLeaf, "SchemaReady") || strings.Contains(plainClient, "SchemaReady") {
+		t.Error("a schema without runtime code must not declare or check SchemaReady")
+	}
+
+	// The root package links it.
+	root := genClient(helper).GoString()
+	if !strings.Contains(root, `_ "github.com/test/project/ent/internal/schemainit"`) {
+		t.Errorf("root client.go must blank-import internal/schemainit:\n%s", root)
+	}
+}
+
 // TestNodeResolverIDTypeAssertion guards that the resolver's id type assertion
 // targets the entity's actual Go ID type — int64 for default, uuid.UUID for a
 // UUID-id schema. A wrong assertion makes the resolver fail at runtime.
@@ -2281,4 +2343,70 @@ func TestSchemaConfigReachesEveryBuilder(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestHandlesReachNothing pins the shape of ClientHandle and TxHandle: an
+// interface with exactly one unexported, signature-less method, and the
+// accessor as a package function. A method on the interface that returned
+// *Client or *Tx would put the whole client back in the export data of every
+// package that names the handle — which is the cost the handle exists to avoid.
+func TestHandlesReachNothing(t *testing.T) {
+	helper := newMockHelper()
+	helper.rootPkg = "github.com/test/project/ent"
+	helper.graph.Package = "github.com/test/project/ent"
+	helper.graph.Nodes = []*gen.Type{createTestType("User")}
+
+	for _, tc := range []struct{ src, typ string }{
+		{genTx(helper).GoString(), "Tx"},
+		{genClient(helper).GoString(), "Client"},
+	} {
+		iface := "type " + tc.typ + "Handle interface {\n\tis" + tc.typ + "()\n}"
+		if !strings.Contains(tc.src, iface) {
+			t.Errorf("%sHandle must be an interface with the single method is%s():\n%s", tc.typ, tc.typ, tc.src)
+		}
+		if !strings.Contains(tc.src, "func (*"+tc.typ+") is"+tc.typ+"() {}") {
+			t.Errorf("*%s must implement %sHandle", tc.typ, tc.typ)
+		}
+		if !strings.Contains(tc.src, "func "+tc.typ+"Of(h "+tc.typ+"Handle) *"+tc.typ+" {") {
+			t.Errorf("%sOf must be a package function, not a method of the handle", tc.typ)
+		}
+	}
+}
+
+// TestNarrowAccessPathIsGenerated pins the path by which a package reaches an
+// entity client without naming the root Client or Tx: From in every client
+// package, and RunTx/StartTx on the root client whose signatures carry only
+// runtime types. A *Tx or *Client in one of those signatures would defeat it
+// — the caller would be back to loading every entity's client to compile.
+func TestNarrowAccessPathIsGenerated(t *testing.T) {
+	helper := newMockHelper()
+	helper.rootPkg = "github.com/test/project/ent"
+	helper.graph.Package = "github.com/test/project/ent"
+	userType := createTestType("User")
+	helper.graph.Nodes = []*gen.Type{userType}
+
+	entityClient := genEntityClient(helper, userType).GoString()
+	if !strings.Contains(entityClient, "func From(p runtime.ConfigProvider) *UserClient {\n\treturn NewUserClient(p.RuntimeConfig())\n}") {
+		t.Errorf("client package must define From(runtime.ConfigProvider):\n%s", entityClient)
+	}
+
+	root := genClient(helper).GoString()
+	for _, want := range []string{
+		"func (c *Client) RunTx(ctx context.Context, fn func(tx runtime.ConfigProvider) error) error {",
+		"func (c *Client) StartTx(ctx context.Context) (runtime.Transaction, error) {",
+		"var _ runtime.TxRunner = (*Client)(nil)",
+	} {
+		if !strings.Contains(root, want) {
+			t.Errorf("root client.go must contain %q", want)
+		}
+	}
+	tx := genTx(helper).GoString()
+	for _, want := range []string{
+		"func (tx *Tx) RuntimeConfig() runtime.Config {",
+		"var _ runtime.Transaction = (*Tx)(nil)",
+	} {
+		if !strings.Contains(tx, want) {
+			t.Errorf("tx.go must contain %q", want)
+		}
+	}
 }

@@ -325,3 +325,49 @@ func genFieldValidatorCheck(grp *jen.Group, entityPkg string, t *gen.Type, fd *g
 		)
 	})
 }
+
+// genHandle emits an opaque handle for a root type (Client or Tx): an
+// interface with one unexported method that only *typ implements, and a
+// function that returns the *typ behind it.
+//
+// The compiler writes into a package's export data the full declaration of
+// every type its exported API can reach, and *Client and *Tx reach every
+// generated builder through their per-entity fields. A package with one
+// exported function that takes a *Tx carries all of that in its archive, and
+// so does every package whose exported API names it in turn. The handle
+// reaches nothing, so exported signatures can take one instead:
+//
+//	func NewService(h velox.ClientHandle) *Service { c := velox.ClientOf(h); ... }
+//
+// The accessor is a function and NOT a method of the interface on purpose: a
+// method returning *typ would put *typ back in reach of everything that
+// names the handle. Do not add one.
+//
+// Measured on tests/integration (7 entities): a package exporting
+// func F(*Tx) has 389 KB of export data, func F(TxHandle) has 25 KB — as
+// long as F is not inlinable. An inlinable F that calls TxOf is back at
+// 389 KB, and //go:noinline on TxOf does not change that: the reference to
+// TxOf carries its signature.
+func genHandle(f *jen.File, typ, noun string) {
+	handle, of, marker := typ+"Handle", typ+"Of", "is"+typ
+
+	f.Commentf("%s is a *%s for the exported signatures of other packages. Declaring a", handle, typ)
+	f.Commentf("parameter, result or field as *%s makes the compiler describe %s — and", typ, typ)
+	f.Comment("every entity client and builder its fields reach — in the export data of the")
+	f.Commentf("declaring package and of each package that names it in turn. %s", handle)
+	f.Commentf("describes nothing, and only a *%s implements it. Use %s for the %s", typ, of, noun)
+	f.Comment("behind one.")
+	f.Type().Id(handle).Interface(jen.Id(marker).Params())
+
+	f.Func().Params(jen.Op("*").Id(typ)).Id(marker).Params().Block()
+
+	f.Commentf("%s returns the %s behind h, or nil for a nil %s.", of, noun, handle)
+	f.Comment("")
+	f.Commentf("Call it from a function with a real body. A function small enough to be")
+	f.Commentf("inlined has its body in the export data too, and a body that calls %s", of)
+	f.Commentf("describes %s again.", typ)
+	f.Func().Id(of).Params(jen.Id("h").Id(handle)).Op("*").Id(typ).Block(
+		jen.List(jen.Id("v"), jen.Id("_")).Op(":=").Id("h").Assert(jen.Op("*").Id(typ)),
+		jen.Return(jen.Id("v")),
+	)
+}

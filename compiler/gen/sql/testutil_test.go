@@ -222,3 +222,17 @@ func createFieldWithValidators(name string, typ field.Type, count int) *gen.Fiel
 		Validators: count,
 	}
 }
+
+// schemaInitSrc renders the schema-stitching init() of each type the way
+// genSchemaInit does for a whole graph, with h as every entity's helper.
+func schemaInitSrc(h *mockHelper, types ...*gen.Type) string {
+	schemaPkg := h.Graph().Schema
+	if schemaPkg == "" {
+		schemaPkg = h.Graph().Package + "/schema"
+	}
+	f := h.NewFile("schemainit")
+	for _, t := range types {
+		genSchemaInitEntity(h, f, t, schemaPkg)
+	}
+	return f.GoString()
+}

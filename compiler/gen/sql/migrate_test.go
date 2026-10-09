@@ -709,6 +709,18 @@ func TestGenColumnDict(t *testing.T) {
 		assert.Greater(t, len(dict), 2)
 	})
 
+	// Every numeric Go type a field default can have must reach the rendered
+	// column. The switch used to know int, int64 and float64 only, so a
+	// field.Uint8("n").Default(1) or a field.Float32("r").Default(0.5) lost its
+	// DEFAULT in the generated migration, silently.
+	t.Run("column_with_default_of_every_numeric_type", func(t *testing.T) {
+		for _, def := range []any{int(1), int8(1), int16(1), int32(1), int64(1), uint(1), uint8(1), uint16(1), uint32(1), uint64(1), float32(0.5), float64(0.5)} {
+			col := &schema.Column{Name: "n", Type: field.TypeInt, Default: def}
+			src := fmt.Sprintf("%#v", jen.Values(genColumnDict(col, fieldPkg)))
+			assert.Contains(t, src, "Default:", "default of type %T is not rendered", def)
+		}
+	})
+
 	t.Run("column_with_default_bool", func(t *testing.T) {
 		col := &schema.Column{Name: "active", Type: field.TypeBool, Default: true}
 		dict := genColumnDict(col, fieldPkg)

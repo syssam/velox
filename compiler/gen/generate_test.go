@@ -1115,6 +1115,10 @@ func (d *fullMockDialect) GenEntityRuntime(_ GeneratorHelper, t *Type) (*jen.Fil
 	d.record("GenEntityRuntime")
 	return mockJenFile(t.PackageDir()), nil
 }
+func (d *fullMockDialect) GenSchemaInit(_ GeneratorHelper, _ func(*Type) GeneratorHelper) (*jen.File, error) {
+	d.record("GenSchemaInit")
+	return mockJenFile("schemainit"), nil
+}
 func (d *fullMockDialect) GenCreate(_ GeneratorHelper, t *Type) (*jen.File, error) {
 	d.record("GenCreate")
 	return mockJenFile(t.PackageDir()), nil

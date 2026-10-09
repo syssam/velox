@@ -849,6 +849,32 @@ WHERE "s1"."users"."id" IN
 	}
 }
 
+// A self-referencing edge nested in itself: HasNeighborsWith aliases the
+// subquery "nodes_edge", and HasNeighbors inside it must not take the same
+// alias, or its correlation compares the inner table with itself
+// (nodes_edge.id = nodes_edge.parent_id) and matches no row.
+func TestHasNeighbors_NestedInSelfReference(t *testing.T) {
+	step := NewStep(
+		From("nodes", "id"),
+		To("nodes", "id"),
+		Edge(O2M, false, "nodes", "parent_id"),
+	)
+	for _, d := range []string{dialect.Postgres, dialect.MySQL, dialect.SQLite} {
+		q := sql.Dialect(d).Select("*").From(sql.Table("nodes"))
+		HasNeighborsWith(q, step, func(s *sql.Selector) { HasNeighbors(s, step) })
+		query, _ := q.Query()
+		quote := func(s string) string {
+			if d == dialect.Postgres {
+				return strings.ReplaceAll(s, "`", `"`)
+			}
+			return s
+		}
+		// The inner EXISTS correlates the outer subquery's row with a third alias.
+		require.Contains(t, query, quote("`nodes_edge`.`id` = `nodes_edge_1`.`parent_id`"), d)
+		require.NotContains(t, query, quote("`nodes_edge`.`id` = `nodes_edge`.`parent_id`"), d)
+	}
+}
+
 func TestHasNeighborsWithContext(t *testing.T) {
 	type key string
 	ctx := context.WithValue(context.Background(), key("mykey"), "myval")

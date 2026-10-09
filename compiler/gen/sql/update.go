@@ -251,6 +251,9 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		}
 		group.Id("modifiers").Index().Func().Params(jen.Op("*").Qual(h.SQLPkg(), "UpdateBuilder"))
 		group.Id("selectFields").Index().String()
+		// execOnly is set by Exec for the duration of its Save: nobody
+		// reads the entity, so sqlSave skips the SELECT that reads it back.
+		group.Id("execOnly").Bool()
 		if t.HasUpdateDefault() {
 			group.Id("skipDefaults").Bool()
 			group.Id("skipDefaultFields").Map(jen.String()).Struct()
@@ -430,6 +433,12 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 				),
 			),
 		)
+		// Exec discards the entity, so the read-back would be a round trip
+		// for nothing. The UPDATE already reported a missing row, and the
+		// Select() columns were validated above.
+		grp.If(jen.Id(recv).Dot("execOnly")).Block(
+			jen.Return(jen.Nil(), jen.Nil()),
+		)
 		grp.Id("build").Op(":=").Func().Params(
 			jen.Id("_").Qual("context", "Context"),
 		).Params(
@@ -531,6 +540,11 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 		}
 		// Collect hooks: client-level (from Use) + schema-level (from codegen init).
 		genSchemaHooksLocal(h, grp, t, recv, "hooks")
+		// A hook receives the saved entity as the mutation's value, so with
+		// hooks the read-back runs even under Exec.
+		grp.If(jen.Len(jen.Id("hooks")).Op(">").Lit(0)).Block(
+			jen.Id(recv).Dot("execOnly").Op("=").False(),
+		)
 		genPolicyAfterHooks(h, grp, t, recv, "sqlSave", jen.Op("*").Qual(entityReturnPkg, t.Name), jen.Id(mutName))
 	})
 
@@ -545,10 +559,13 @@ func genUpdateOne(h gen.GeneratorHelper, f *jen.File, t *gen.Type, entityPkg, en
 	)
 
 	// --- Exec ---
-	f.Comment("Exec executes the query on the entity.")
+	f.Comment("Exec executes the query on the entity. Without hooks it does not read the")
+	f.Comment("updated row back: use Save when the entity is needed.")
 	f.Func().Params(jen.Id(recv).Op("*").Id(updateOneName)).Id("Exec").Params(
 		jen.Id("ctx").Qual("context", "Context"),
 	).Error().Block(
+		jen.Id(recv).Dot("execOnly").Op("=").True(),
+		jen.Defer().Func().Params().Block(jen.Id(recv).Dot("execOnly").Op("=").False()).Call(),
 		jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id(recv).Dot("Save").Call(jen.Id("ctx")),
 		jen.Return(jen.Id("err")),
 	)

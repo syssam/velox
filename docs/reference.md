@@ -349,7 +349,8 @@ Uses entity sub-packages (not flat files) for compile isolation at 300+ schemas.
 │   ├── update.go           # Update/UpdateOne builders
 │   ├── delete.go           # Delete/DeleteOne builders
 │   ├── mutation.go         # Mutation type
-│   └── runtime.go          # init() — RegisterEntity + defaults/validators
+│   └── runtime.go          # init() — RegisterEntity, node resolver
+├── internal/schemainit/    # init() per entity — schema defaults, validators, hooks, policies
 ├── query/
 │   ├── helpers.go          # RegisterQueryFactory for all entities
 │   └── {entity}.go         # Query builder + edge loading

@@ -138,6 +138,12 @@ func ValidColumn(column string) bool {
 	return ok
 }
 
+// SchemaReady reports that the runtime code of the schema (default values,
+// validators, hooks and policy) was stitched to the variables of this
+// package. The generated root package does that on import; the entity
+// client refuses to be built before it, because a missing policy or hook
+// would otherwise go unnoticed.
+var SchemaReady bool
 var (
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt time.Time

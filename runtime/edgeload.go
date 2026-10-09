@@ -256,39 +256,53 @@ func (l M2MLoad[Q, P, T, PT, K, TK]) scan(ctx context.Context, tq Q, edgeIDs []a
 	*edges = (*edges)[:0]
 	var (
 		result []*T
-		// seen holds, per target, the parents it was already paired with;
-		// a target's first appearance is when its entry is created.
-		seen = make(map[TK]map[K]struct{})
+		// targets holds the targets already in result; pairs holds the
+		// (target, parent) edges already recorded.
+		targets = make(map[TK]struct{})
+		pairs   = make(map[m2mPair[TK, K]]struct{})
+		// dest is the scan destination of one row: the pivot, then the
+		// target's holders. It is reused for the next row when scanHolderPlan
+		// allows it, with the holders in fresh replaced per row.
+		dest  []any
+		fresh []int
+		reuse bool
 	)
 	for rows.Next() {
 		node := new(T)
-		values, err := PT(node).ScanValues(columns[1:])
-		if err != nil {
+		if !reuse {
+			values, err := PT(node).ScanValues(columns[1:])
+			if err != nil {
+				return nil, err
+			}
+			dest = make([]any, 0, len(values)+1)
+			dest = append(append(dest, l.NewPivot()), values...)
+			fresh, reuse = scanHolderPlan(dest)
+		} else {
+			for _, i := range fresh {
+				dest[i] = new([]byte)
+			}
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
-		pivot := l.NewPivot()
-		if err := rows.Scan(append([]any{pivot}, values...)...); err != nil {
+		if err := PT(node).AssignValues(columns[1:], dest[1:]); err != nil {
 			return nil, err
 		}
-		if err := PT(node).AssignValues(columns[1:], values); err != nil {
-			return nil, err
-		}
-		key := l.PivotKey(pivot)
+		key := l.PivotKey(dest[0])
 		if !limit.Keep(key) {
 			continue
 		}
 		tk := l.TargetKey(node)
-		ps, ok := seen[tk]
-		if !ok {
-			ps = make(map[K]struct{}, 1)
-			seen[tk] = ps
+		if _, ok := targets[tk]; !ok {
+			targets[tk] = struct{}{}
 			result = append(result, node)
 		}
-		if _, dup := ps[key]; dup {
+		pair := m2mPair[TK, K]{target: tk, parent: key}
+		if _, dup := pairs[pair]; dup {
 			continue
 		}
-		ps[key] = struct{}{}
-		*edges = append(*edges, m2mPair[TK, K]{target: tk, parent: key})
+		pairs[pair] = struct{}{}
+		*edges = append(*edges, pair)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

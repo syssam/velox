@@ -11,9 +11,7 @@ import (
 	user "github.com/test/project/ent/user"
 )
 
-// The init function reads schema descriptors with runtime code
-// (default values, validators, hooks and policies) and stitches it
-// to the package variables.
+// The init function registers the entity with the velox runtime.
 func init() {
 	runtime.RegisterEntity(runtime.EntityRegistration{
 		Mutator: func(ctx context.Context, cfg runtime.Config, m any) (any, error) {

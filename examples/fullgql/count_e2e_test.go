@@ -101,3 +101,46 @@ func TestPaginate_CountsOnlyWhenTotalCountIsSelected(t *testing.T) {
 		assert.Len(t, countQueries(log, "users"), 1, "%v", log.snapshot())
 	})
 }
+
+// TestPaginate_TotalCountOnlySkipsThePageQuery pins that a connection asked
+// for nothing but totalCount is answered by the COUNT alone. The page query
+// used to run anyway — and with no first/last it has no LIMIT, so it read the
+// id of every row for a result nobody selected.
+func TestPaginate_TotalCountOnlySkipsThePageQuery(t *testing.T) {
+	type response struct {
+		Users struct {
+			TotalCount int `json:"totalCount"`
+			Edges      []struct {
+				Node struct {
+					Name string `json:"name"`
+				} `json:"node"`
+			} `json:"edges"`
+		} `json:"users"`
+	}
+	client, gql, log := openCountingClient(t)
+	seedTodos(t, client, 3, 4, 0)
+
+	t.Run("totalCount only", func(t *testing.T) {
+		log.reset()
+		var resp response
+		gql.MustPost(`{ users { totalCount } }`, &resp)
+		assert.Equal(t, 3, resp.Users.TotalCount)
+		require.Len(t, log.snapshot(), 1, "the COUNT and nothing else: %v", log.snapshot())
+		assert.Len(t, countQueries(log, "users"), 1)
+	})
+	t.Run("totalCount with edges still pages", func(t *testing.T) {
+		log.reset()
+		var resp response
+		gql.MustPost(`{ users { totalCount edges { node { name } } } }`, &resp)
+		assert.Equal(t, 3, resp.Users.TotalCount)
+		assert.Len(t, resp.Users.Edges, 3)
+		assert.Len(t, log.snapshot(), 2, "COUNT + page: %v", log.snapshot())
+	})
+	t.Run("outside an operation it pages", func(t *testing.T) {
+		log.reset()
+		conn, err := client.User.Query().Paginate(context.Background(), nil, nil, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 3, conn.TotalCount)
+		assert.Len(t, conn.Edges, 3)
+	})
+}

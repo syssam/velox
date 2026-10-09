@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vmihailenco/msgpack/v5"
@@ -170,9 +171,6 @@ func unwrapTime(v velox.Value) velox.Value {
 // no cursor" instead of "the next paginated request fails with a confusing
 // decode error far from the source".
 func (c Cursor) MarshalGQL(w io.Writer) {
-	quote := []byte{'"'}
-	var body bytes.Buffer
-	enc := base64.NewEncoder(base64.RawStdEncoding, &body)
 	c.Value = wrapTime(c.Value)
 	if len(c.Values) > 0 {
 		values := make([]velox.Value, len(c.Values))
@@ -181,27 +179,41 @@ func (c Cursor) MarshalGQL(w io.Writer) {
 		}
 		c.Values = values
 	}
-	if err := msgpack.NewEncoder(enc).Encode(c); err != nil {
-		// Close to release the base64 writer's internal buffer; we don't
-		// use its contents because we're writing an empty token on failure.
-		_ = enc.Close()
+	// One call per edge of every page that selects cursor: the encoder and
+	// both buffers are pooled rather than built per call.
+	buf, ok := cursorBufPool.Get().(*cursorBuf)
+	if !ok {
+		buf = new(cursorBuf)
+	}
+	defer cursorBufPool.Put(buf)
+	buf.packed.Reset()
+	enc := msgpack.GetEncoder()
+	enc.Reset(&buf.packed)
+	err := enc.Encode(c)
+	msgpack.PutEncoder(enc)
+	if err != nil {
 		slog.Error("gqlrelay: cursor msgpack encode failed; emitting empty token",
 			"err", err)
-		_, _ = w.Write(quote)
-		_, _ = w.Write(quote)
+		_, _ = w.Write(emptyCursorToken)
 		return
 	}
-	if err := enc.Close(); err != nil {
-		slog.Error("gqlrelay: cursor base64 close failed; emitting empty token",
-			"err", err)
-		_, _ = w.Write(quote)
-		_, _ = w.Write(quote)
-		return
-	}
-	_, _ = w.Write(quote)
-	_, _ = w.Write(body.Bytes())
-	_, _ = w.Write(quote)
+	buf.token = append(buf.token[:0], '"')
+	buf.token = base64.RawStdEncoding.AppendEncode(buf.token, buf.packed.Bytes())
+	buf.token = append(buf.token, '"')
+	_, _ = w.Write(buf.token)
 }
+
+// cursorBuf holds the scratch space of one MarshalGQL call: the msgpack
+// encoding and the quoted base64 token built from it.
+type cursorBuf struct {
+	packed bytes.Buffer
+	token  []byte
+}
+
+var (
+	cursorBufPool    = sync.Pool{New: func() any { return new(cursorBuf) }}
+	emptyCursorToken = []byte(`""`)
+)
 
 // UnmarshalGQL implements the graphql.Unmarshaler interface.
 func (c *Cursor) UnmarshalGQL(v any) error {

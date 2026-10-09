@@ -214,6 +214,13 @@ func TestGolden_EntityRuntime(t *testing.T) {
 	checkGolden(t, filepath.Join("testdata", "golden", "entity_runtime.go"), file.GoString())
 }
 
+func TestGolden_SchemaInit(t *testing.T) {
+	t.Parallel()
+	h, _ := goldenTestType()
+	file := genSchemaInit(h, func(*gen.Type) gen.GeneratorHelper { return h })
+	checkGolden(t, filepath.Join("testdata", "golden", "schemainit.go"), file.GoString())
+}
+
 // =============================================================================
 // Golden tests for CRUD generators (previously uncovered)
 // =============================================================================

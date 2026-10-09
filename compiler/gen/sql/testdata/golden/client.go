@@ -15,6 +15,7 @@ import (
 	postclient "github.com/test/project/ent/client/post"
 	userclient "github.com/test/project/ent/client/user"
 	entity "github.com/test/project/ent/entity"
+	_ "github.com/test/project/ent/internal/schemainit"
 	migrate "github.com/test/project/ent/migrate"
 	_ "github.com/test/project/ent/query"
 )
@@ -57,6 +58,50 @@ func (c *config) runtimeConfig() runtime.Config {
 // RuntimeConfig returns a runtime.Config for use by entity sub-packages.
 func (c *Client) RuntimeConfig() runtime.Config {
 	return c.config.runtimeConfig()
+}
+
+// RunTx runs fn in a transaction and hands it the transaction as a
+// runtime.ConfigProvider, from which entity clients are built
+// (userclient.From(tx)). It commits when fn returns nil and rolls back when fn
+// returns an error or panics. It is WithTx for packages that do not name *Tx.
+func (c *Client) RunTx(ctx context.Context, fn func(tx runtime.ConfigProvider) error) error {
+	return WithTx(ctx, c, func(tx *Tx) error {
+		return fn(tx)
+	})
+}
+
+// StartTx starts a transaction and returns it as a runtime.Transaction: Tx for
+// packages that do not name *Tx. The caller must Commit or Rollback it.
+func (c *Client) StartTx(ctx context.Context) (runtime.Transaction, error) {
+	tx, err := c.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+var _ runtime.TxRunner = (*Client)(nil)
+
+// ClientHandle is a *Client for the exported signatures of other packages. Declaring a
+// parameter, result or field as *Client makes the compiler describe Client — and
+// every entity client and builder its fields reach — in the export data of the
+// declaring package and of each package that names it in turn. ClientHandle
+// describes nothing, and only a *Client implements it. Use ClientOf for the client
+// behind one.
+type ClientHandle interface {
+	isClient()
+}
+
+func (*Client) isClient() {}
+
+// ClientOf returns the client behind h, or nil for a nil ClientHandle.
+//
+// Call it from a function with a real body. A function small enough to be
+// inlined has its body in the export data too, and a body that calls ClientOf
+// describes Client again.
+func ClientOf(h ClientHandle) *Client {
+	v, _ := h.(*Client)
+	return v
 }
 
 // NewClient creates a new client configured with the given options.

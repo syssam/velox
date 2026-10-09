@@ -588,6 +588,8 @@ func (f OtherField[P, T]) NotNil() P {
 }
 
 // FieldInGeneric is a generic version of FieldIn for use with generic types.
+//
+//go:noinline
 func FieldInGeneric[T any](name string, vs ...T) func(*Selector) {
 	return func(s *Selector) {
 		v := make([]any, len(vs))
@@ -599,6 +601,8 @@ func FieldInGeneric[T any](name string, vs ...T) func(*Selector) {
 }
 
 // FieldNotInGeneric is a generic version of FieldNotIn for use with generic types.
+//
+//go:noinline
 func FieldNotInGeneric[T any](name string, vs ...T) func(*Selector) {
 	return func(s *Selector) {
 		v := make([]any, len(vs))

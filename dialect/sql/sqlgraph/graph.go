@@ -268,6 +268,18 @@ func HasNeighbors(q *sql.Selector, s *Step) {
 		// the edge an alias to make qualifier different.
 		if s.From.Table == s.Edge.Table {
 			to.As(fmt.Sprintf("%s_edge", s.Edge.Table))
+			// The selector may itself be the aliased subquery of an outer
+			// HasNeighborsWith on the same table (a self-referencing edge
+			// nested in itself): with the same alias the correlation below
+			// would compare the inner table with itself, and match nothing.
+			// Choose the alias name until we do not have a collision, as
+			// HasNeighborsWith does.
+			for i := 1; i <= 5; i++ {
+				if to.C("c") != q.C("c") {
+					break
+				}
+				to.As(fmt.Sprintf("%s_edge_%d", s.Edge.Table, i))
+			}
 		}
 		q.Where(
 			sql.Exists(
@@ -715,6 +727,12 @@ type (
 		//	}
 		//
 		OnConflict []sql.ConflictOption
+
+		// fieldBuf backs the FieldSpecs SetField hands out, so a row costs
+		// one allocation per chunk of fields rather than one per field.
+		// A CreateSpec must not be copied by value and then extended on
+		// both copies: they would share the chunk.
+		fieldBuf []FieldSpec
 	}
 
 	// BatchCreateSpec holds the information for creating
@@ -742,12 +760,25 @@ func NewCreateSpec(table string, id *FieldSpec) *CreateSpec {
 
 // SetField appends a new field setter to the creation spec.
 func (u *CreateSpec) SetField(column string, t field.Type, value driver.Value) {
-	u.Fields = append(u.Fields, &FieldSpec{
+	// A full chunk is left as is — Fields points into it — and a new one
+	// started; append must never move a FieldSpec that was handed out.
+	if len(u.fieldBuf) == cap(u.fieldBuf) {
+		u.fieldBuf = make([]FieldSpec, 0, createFieldChunk)
+	}
+	u.fieldBuf = append(u.fieldBuf, FieldSpec{
 		Column: column,
 		Type:   t,
 		Value:  value,
 	})
+	if u.Fields == nil {
+		u.Fields = make([]*FieldSpec, 0, createFieldChunk)
+	}
+	u.Fields = append(u.Fields, &u.fieldBuf[len(u.fieldBuf)-1])
 }
+
+// createFieldChunk is the number of FieldSpecs CreateSpec.SetField allocates
+// at a time.
+const createFieldChunk = 8
 
 // CreateNode applies the CreateSpec on the graph. The operation creates a new
 // record in the database, and connects it to other nodes specified in spec.Edges.

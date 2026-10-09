@@ -80,6 +80,36 @@ func TotalCountSelected(ctx context.Context) bool {
 	return use.totalCount
 }
 
+// PageRowsSelected reports whether the Relay connection being resolved in ctx
+// reads anything that comes from the page's rows. Generated Paginate methods
+// skip the page query when it returns false: a selection of totalCount (with
+// or without __typename) is answered by the COUNT.
+//
+// It errs towards fetching: outside a resolver, and for any field it does not
+// know to be row-free — edges, pageInfo, a field the application added to its
+// connection type — it returns true. It also returns true when totalCount is
+// NOT selected: then no COUNT runs either, and skipping the page query would
+// leave the request without a single query, so the entity's policy would
+// never be evaluated and a denied caller would get an empty connection
+// instead of the error.
+func PageRowsSelected(ctx context.Context) bool {
+	fc, ok := selectedField(ctx)
+	if !ok {
+		return true
+	}
+	counted := false
+	for _, f := range fc.Fields(nil) {
+		switch f.FieldName() {
+		case "totalCount":
+			counted = true
+		case "__typename":
+		default:
+			return true
+		}
+	}
+	return !counted
+}
+
 // occurrence is one selection of an entity: a field (or a connection's
 // node) and the type conditions its fragments are collected under.
 type occurrence struct {

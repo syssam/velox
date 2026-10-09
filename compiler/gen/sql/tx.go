@@ -254,6 +254,17 @@ func genTx(h gen.GeneratorHelper) *jen.File {
 		jen.Return(jen.Id("tx").Dot("client")),
 	)
 
+	// RuntimeConfig makes *Tx a runtime.ConfigProvider: entity clients built
+	// from it (userclient.From(tx)) use the transaction's driver.
+	f.Comment("RuntimeConfig returns the runtime.Config of the transaction. Entity clients")
+	f.Comment("built from it run inside the transaction.")
+	f.Func().Params(jen.Id("tx").Op("*").Id("Tx")).Id("RuntimeConfig").Params().Qual(runtimePkg, "Config").Block(
+		jen.Return(jen.Id("tx").Dot("config").Dot("runtimeConfig").Call()),
+	)
+	f.Var().Id("_").Qual(runtimePkg, "Transaction").Op("=").Parens(jen.Op("*").Id("Tx")).Parens(jen.Nil())
+
+	genHandle(f, "Tx", "transaction")
+
 	// txDriver struct with middleware hook types
 	f.Comment("txDriver wraps the dialect driver to provide transaction capabilities.")
 	f.Type().Id("txDriver").Struct(

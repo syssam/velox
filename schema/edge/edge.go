@@ -27,12 +27,16 @@ type Descriptor struct {
 }
 
 // To defines an association edge between two vertices.
+//
+//go:noinline
 func To(name string, t any) *assocBuilder {
 	typeName, err := typ(name, t)
 	return &assocBuilder{desc: &Descriptor{Name: name, Type: typeName, Err: err}}
 }
 
 // From represents a reversed-edge between two vertices that has a back-reference to its source edge.
+//
+//go:noinline
 func From(name string, t any) *inverseBuilder {
 	typeName, err := typ(name, t)
 	return &inverseBuilder{desc: &Descriptor{Name: name, Type: typeName, Inverse: true, Err: err}}
@@ -64,6 +68,8 @@ type assocBuilder struct {
 
 // Unique sets the edge type to be unique. Basically, it limits the edge to be one of the two:
 // one2one or one2many. one2one applied if the inverse-edge is also unique.
+//
+//go:noinline
 func (b *assocBuilder) Unique() *assocBuilder {
 	b.desc.Unique = true
 	return b
@@ -71,24 +77,32 @@ func (b *assocBuilder) Unique() *assocBuilder {
 
 // Required indicates that this edge is a required field on creation.
 // Unlike fields, edges are optional by default.
+//
+//go:noinline
 func (b *assocBuilder) Required() *assocBuilder {
 	b.desc.Required = true
 	return b
 }
 
 // Immutable indicates that this edge cannot be updated.
+//
+//go:noinline
 func (b *assocBuilder) Immutable() *assocBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the assoc edge.
+//
+//go:noinline
 func (b *assocBuilder) StructTag(s string) *assocBuilder {
 	b.desc.Tag = s
 	return b
 }
 
 // From creates an inverse-edge with the same type.
+//
+//go:noinline
 func (b *assocBuilder) From(name string) *inverseBuilder {
 	return &inverseBuilder{desc: &Descriptor{Name: name, Type: b.desc.Type, Inverse: true, Ref: b.desc}}
 }
@@ -101,6 +115,8 @@ func (b *assocBuilder) From(name string) *inverseBuilder {
 //	edge.To("owner", User.Type).
 //		Field("owner_id").
 //		Unique(),
+//
+//go:noinline
 func (b *assocBuilder) Field(f string) *assocBuilder {
 	b.desc.Field = f
 	return b
@@ -110,6 +126,8 @@ func (b *assocBuilder) Field(f string) *assocBuilder {
 //
 //	edge.To("friends", User.Type).
 //		Through("friendships", Friendship.Type)
+//
+//go:noinline
 func (b *assocBuilder) Through(name string, t any) *assocBuilder {
 	typeName, err := typ(name, t)
 	if err != nil && b.desc.Err == nil {
@@ -120,6 +138,8 @@ func (b *assocBuilder) Through(name string, t any) *assocBuilder {
 }
 
 // Comment used to put annotations on the schema.
+//
+//go:noinline
 func (b *assocBuilder) Comment(c string) *assocBuilder {
 	b.desc.Comment = c
 	return b
@@ -129,6 +149,8 @@ func (b *assocBuilder) Comment(c string) *assocBuilder {
 //
 //	edge.To("groups", Group.Type).
 //		StorageKey(edge.Table("user_groups"), edge.Columns("user_id", "group_id"))
+//
+//go:noinline
 func (b *assocBuilder) StorageKey(opts ...StorageOption) *assocBuilder {
 	if b.desc.StorageKey == nil {
 		b.desc.StorageKey = &StorageKey{}
@@ -144,12 +166,16 @@ func (b *assocBuilder) StorageKey(opts ...StorageOption) *assocBuilder {
 //
 //	edge.To("pets", Pet.Type).
 //		Annotations(entgql.Bind())
+//
+//go:noinline
 func (b *assocBuilder) Annotations(annotations ...schema.Annotation) *assocBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
 }
 
 // Descriptor implements the velox.Descriptor interface.
+//
+//go:noinline
 func (b *assocBuilder) Descriptor() *Descriptor {
 	return b.desc
 }
@@ -160,6 +186,8 @@ type inverseBuilder struct {
 }
 
 // Ref sets the referenced-edge of this inverse edge.
+//
+//go:noinline
 func (b *inverseBuilder) Ref(ref string) *inverseBuilder {
 	b.desc.RefName = ref
 	return b
@@ -167,6 +195,8 @@ func (b *inverseBuilder) Ref(ref string) *inverseBuilder {
 
 // Unique sets the edge type to be unique. Basically, it limits the edge to be one of the two:
 // one-2-one or one-2-many. one-2-one applied if the inverse-edge is also unique.
+//
+//go:noinline
 func (b *inverseBuilder) Unique() *inverseBuilder {
 	b.desc.Unique = true
 	return b
@@ -174,24 +204,32 @@ func (b *inverseBuilder) Unique() *inverseBuilder {
 
 // Required indicates that this edge is a required field on creation.
 // Unlike fields, edges are optional by default.
+//
+//go:noinline
 func (b *inverseBuilder) Required() *inverseBuilder {
 	b.desc.Required = true
 	return b
 }
 
 // Immutable indicates that this edge cannot be updated.
+//
+//go:noinline
 func (b *inverseBuilder) Immutable() *inverseBuilder {
 	b.desc.Immutable = true
 	return b
 }
 
 // StructTag sets the struct tag of the inverse edge.
+//
+//go:noinline
 func (b *inverseBuilder) StructTag(s string) *inverseBuilder {
 	b.desc.Tag = s
 	return b
 }
 
 // Comment used to put annotations on the schema.
+//
+//go:noinline
 func (b *inverseBuilder) Comment(c string) *inverseBuilder {
 	b.desc.Comment = c
 	return b
@@ -206,6 +244,8 @@ func (b *inverseBuilder) Comment(c string) *inverseBuilder {
 //		Ref("pets").
 //		Field("owner_id").
 //		Unique(),
+//
+//go:noinline
 func (b *inverseBuilder) Field(f string) *inverseBuilder {
 	b.desc.Field = f
 	return b
@@ -216,6 +256,8 @@ func (b *inverseBuilder) Field(f string) *inverseBuilder {
 //	edge.From("liked_users", User.Type).
 //		Ref("liked_tweets").
 //		Through("likes", TweetLike.Type)
+//
+//go:noinline
 func (b *inverseBuilder) Through(name string, t any) *inverseBuilder {
 	typeName, err := typ(name, t)
 	if err != nil && b.desc.Err == nil {
@@ -232,12 +274,16 @@ func (b *inverseBuilder) Through(name string, t any) *inverseBuilder {
 //		Ref("pets").
 //		Unique().
 //		Annotations(entgql.Bind())
+//
+//go:noinline
 func (b *inverseBuilder) Annotations(annotations ...schema.Annotation) *inverseBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
 }
 
 // Descriptor implements the velox.Descriptor interface.
+//
+//go:noinline
 func (b *inverseBuilder) Descriptor() *Descriptor {
 	return b.desc
 }
@@ -253,6 +299,8 @@ type StorageKey struct {
 type StorageOption func(*StorageKey)
 
 // Table sets the table name option for M2M edges.
+//
+//go:noinline
 func Table(name string) StorageOption {
 	return func(key *StorageKey) {
 		key.Table = name
@@ -261,6 +309,8 @@ func Table(name string) StorageOption {
 
 // Symbol sets the symbol/name of the foreign-key constraint for O2O, O2M and M2O edges.
 // Note that, for M2M edges (2 columns and 2 constraints), use the edge.Symbols option.
+//
+//go:noinline
 func Symbol(symbol string) StorageOption {
 	return func(key *StorageKey) {
 		key.Symbols = []string{symbol}
@@ -271,6 +321,8 @@ func Symbol(symbol string) StorageOption {
 // The 1st column defines the name of the "To" edge, and the 2nd defines
 // the name of the "From" edge (inverse edge).
 // Note that, for O2O, O2M and M2O edges, use the edge.Symbol option.
+//
+//go:noinline
 func Symbols(to, from string) StorageOption {
 	return func(key *StorageKey) {
 		key.Symbols = []string{to, from}
@@ -279,6 +331,8 @@ func Symbols(to, from string) StorageOption {
 
 // Column sets the foreign-key column name option for O2O, O2M and M2O edges.
 // Note that, for M2M edges (2 columns), use the edge.Columns option.
+//
+//go:noinline
 func Column(name string) StorageOption {
 	return func(key *StorageKey) {
 		key.Columns = []string{name}
@@ -289,6 +343,8 @@ func Column(name string) StorageOption {
 // The 1st column defines the name of the "To" edge, and the 2nd defines
 // the name of the "From" edge (inverse edge).
 // Note that, for O2O, O2M and M2O edges, use the edge.Column option.
+//
+//go:noinline
 func Columns(to, from string) StorageOption {
 	return func(key *StorageKey) {
 		key.Columns = []string{to, from}

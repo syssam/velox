@@ -73,8 +73,12 @@ type EntityPackageDialect interface {
 	WithHelper(h GeneratorHelper) MinimalDialect
 	// GenEntityClient generates an entity client for entity sub-packages.
 	GenEntityClient(h GeneratorHelper, t *Type) (*jen.File, error)
-	// GenEntityRuntime generates per-entity runtime.go with init() for defaults/validators/hooks.
+	// GenEntityRuntime generates per-entity runtime.go with the init() that registers the entity.
 	GenEntityRuntime(h GeneratorHelper, t *Type) (*jen.File, error)
+	// GenSchemaInit generates internal/schemainit/schemainit.go: the one
+	// package that reads the schema's defaults, validators, hooks and policies.
+	// forEntity returns the helper scoped to an entity's client package.
+	GenSchemaInit(h GeneratorHelper, forEntity func(*Type) GeneratorHelper) (*jen.File, error)
 	// GenCreate generates the create builder file ({entity}/create.go).
 	GenCreate(h GeneratorHelper, t *Type) (*jen.File, error)
 	// GenUpdate generates the update builder file ({entity}/update.go).

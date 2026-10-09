@@ -61,7 +61,7 @@ func TestValidatorsGeneratedWithoutFeatureFlag(t *testing.T) {
 	// The runtime init assigns the schema validator — a declared, unassigned
 	// validator is a nil func that panics on the first Save. The enum
 	// validator is a function and is not assigned.
-	rtSrc := genEntityRuntime(helper, typ).GoString()
+	rtSrc := schemaInitSrc(helper, typ)
 	if !strings.Contains(rtSrc, "user.NameValidator =") {
 		t.Errorf("runtime init does not assign user.NameValidator\n%s", rtSrc)
 	}

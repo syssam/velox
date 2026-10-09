@@ -216,6 +216,7 @@ type PostUpdateOne struct {
 	hooks        []runtime.Hook
 	modifiers    []func(*sql.UpdateBuilder)
 	selectFields []string
+	execOnly     bool
 }
 
 // NewPostUpdateOne creates a new PostUpdateOne builder.
@@ -401,6 +402,9 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (*entity.Post, error) {
 			}
 		}
 	}
+	if _u.execOnly {
+		return nil, nil
+	}
 	build := func(_ context.Context) (*sql.Selector, error) {
 		s := sql.Select(columns...).From(sql.Table(post.Table))
 		s.SetDialect(_u.config.Driver.Dialect())
@@ -438,6 +442,9 @@ func (_u *PostUpdateOne) Save(ctx context.Context) (*entity.Post, error) {
 		return _old, nil
 	}
 	hooks := _u.hooks
+	if len(hooks) > 0 {
+		_u.execOnly = false
+	}
 	return velox.WithHooks[*entity.Post, PostMutation, *PostMutation](ctx, _u.sqlSave, _u.mutation, hooks)
 }
 
@@ -450,8 +457,13 @@ func (_u *PostUpdateOne) SaveX(ctx context.Context) *entity.Post {
 	return node
 }
 
-// Exec executes the query on the entity.
+// Exec executes the query on the entity. Without hooks it does not read the
+// updated row back: use Save when the entity is needed.
 func (_u *PostUpdateOne) Exec(ctx context.Context) error {
+	_u.execOnly = true
+	defer func() {
+		_u.execOnly = false
+	}()
 	_, err := _u.Save(ctx)
 	return err
 }

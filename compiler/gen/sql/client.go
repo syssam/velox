@@ -1,6 +1,8 @@
 package sql
 
 import (
+	"strings"
+
 	"github.com/dave/jennifer/jen"
 
 	"github.com/syssam/velox/compiler/gen"
@@ -18,6 +20,10 @@ func genClient(h gen.GeneratorHelper) *jen.File {
 	// the panic unless they remembered a manual blank import.
 	if len(h.Graph().Nodes) > 0 {
 		f.Anon(h.QueryPkg())
+		// Same for internal/schemainit, whose init() functions stitch the
+		// schema's defaults, validators, hooks and policies. It is the only
+		// package that imports the user's schema for them (see genSchemaInit).
+		f.Anon(strings.TrimSuffix(h.QueryPkg(), "query") + schemaInitDir)
 	}
 
 	// ErrTxStarted aliases the velox sentinel rather than declaring its own
@@ -115,6 +121,34 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 		jen.Return(jen.Id("c").Dot("config").Dot("runtimeConfig").Call()),
 	)
 
+	// RunTx: the transaction entry point that does not name *Tx, so a
+	// package can run one through runtime.TxRunner without importing this
+	// package's Client and Tx types (see runtime.ConfigProvider for the cost).
+	f.Comment("RunTx runs fn in a transaction and hands it the transaction as a")
+	f.Comment("runtime.ConfigProvider, from which entity clients are built")
+	f.Comment("(userclient.From(tx)). It commits when fn returns nil and rolls back when fn")
+	f.Comment("returns an error or panics. It is WithTx for packages that do not name *Tx.")
+	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("RunTx").Params(
+		jen.Id("ctx").Qual("context", "Context"),
+		jen.Id("fn").Func().Params(jen.Id("tx").Qual(runtimePkg, "ConfigProvider")).Error(),
+	).Error().Block(
+		jen.Return(jen.Id("WithTx").Call(jen.Id("ctx"), jen.Id("c"), jen.Func().Params(jen.Id("tx").Op("*").Id("Tx")).Error().Block(
+			jen.Return(jen.Id("fn").Call(jen.Id("tx"))),
+		))),
+	)
+	f.Comment("StartTx starts a transaction and returns it as a runtime.Transaction: Tx for")
+	f.Comment("packages that do not name *Tx. The caller must Commit or Rollback it.")
+	f.Func().Params(jen.Id("c").Op("*").Id("Client")).Id("StartTx").Params(
+		jen.Id("ctx").Qual("context", "Context"),
+	).Params(jen.Qual(runtimePkg, "Transaction"), jen.Error()).Block(
+		jen.List(jen.Id("tx"), jen.Err()).Op(":=").Id("c").Dot("Tx").Call(jen.Id("ctx")),
+		// Return an untyped nil on failure: a nil *Tx in the interface
+		// would compare unequal to nil.
+		jen.If(jen.Err().Op("!=").Nil()).Block(jen.Return(jen.Nil(), jen.Err())),
+		jen.Return(jen.Id("tx"), jen.Nil()),
+	)
+	f.Var().Id("_").Qual(runtimePkg, "TxRunner").Op("=").Parens(jen.Op("*").Id("Client")).Parens(jen.Nil())
+
 	// SchemaConfig type alias + AlternateSchema option (gated on feature)
 	if h.FeatureEnabled(gen.FeatureSchemaConfig.Name) {
 		f.Comment("SchemaConfig is an alias for the generated internal.SchemaConfig type.")
@@ -134,6 +168,8 @@ func genClientStruct(h gen.GeneratorHelper, f *jen.File) {
 	if h.FeatureEnabled(gen.FeatureExecQuery.Name) {
 		genConfigExecQueryMethods(h, f)
 	}
+
+	genHandle(f, "Client", "client")
 
 	// NewClient constructor
 	f.Comment("NewClient creates a new client configured with the given options.")

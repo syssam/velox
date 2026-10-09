@@ -1724,7 +1724,10 @@ func (s *SelectTable) C(column string) string {
 	if s.as != "" {
 		name = s.as
 	}
-	b := &Builder{dialect: s.dialect}
+	var b Builder
+	b.dialect = s.dialect
+	b.sb = &strings.Builder{}
+	b.sb.Grow(len(s.schema) + len(name) + len(column) + 8)
 	if s.as == "" {
 		b.writeSchema(s.schema)
 	}
@@ -2743,6 +2746,11 @@ func (s *Selector) Having(p *Predicate) *Selector {
 // Query returns query representation of a `SELECT` statement.
 func (s *Selector) Query() (string, []any) {
 	b := s.clone()
+	n := 160
+	for i := range s.selection {
+		n += len(s.selection[i].c) + 2
+	}
+	b.sb.Grow(n)
 	s.joinPrefix(&b)
 	b.WriteString("SELECT ")
 	if s.distinct {
@@ -3326,15 +3334,39 @@ func (b *Builder) Quote(ident string) string {
 	return quote + ident + quote
 }
 
+// writeQuoted writes Quote(ident) without building the intermediate string.
+func (b *Builder) writeQuoted(ident string) {
+	q := byte('`')
+	switch {
+	case b.postgres():
+		if strings.Contains(ident, "`") {
+			b.WriteString(strings.ReplaceAll(ident, "`", `"`))
+			return
+		}
+		q = '"'
+	case b.dialect == "" && strings.ContainsAny(ident, "`\""):
+		b.WriteString(ident)
+		return
+	}
+	if b.sb == nil {
+		b.sb = &strings.Builder{}
+	}
+	b.sb.Grow(len(ident) + 2)
+	b.sb.WriteByte(q)
+	b.sb.WriteString(ident)
+	b.sb.WriteByte(q)
+}
+
 // Ident appends the given string as an identifier.
 func (b *Builder) Ident(s string) *Builder {
 	switch {
 	case s == "":
 	case !strings.HasSuffix(s, "*") && !b.isIdent(s) && !isFunc(s) && !isModifier(s) && !isAlias(s):
 		if b.qualifier != "" {
-			b.WriteString(b.Quote(b.qualifier)).Byte('.')
+			b.writeQuoted(b.qualifier)
+			b.Byte('.')
 		}
-		b.WriteString(b.Quote(s))
+		b.writeQuoted(s)
 	case (isFunc(s) || isModifier(s) || isAlias(s)) && b.postgres():
 		// Modifiers and aggregation functions that
 		// were called without dialect information.
@@ -3510,6 +3542,20 @@ func (b *Builder) Arg(a any) *Builder {
 		return b
 	case Querier:
 		b.Join(v)
+		return b
+	}
+	_, formatted := a.(ParamFormatter)
+	if !formatted && b.postgres() {
+		// The common case: write "$n" into the statement directly instead of
+		// building the placeholder as a string first.
+		b.total++
+		b.args = append(b.args, a)
+		if b.sb == nil {
+			b.sb = &strings.Builder{}
+		}
+		var buf [20]byte
+		b.sb.WriteByte('$')
+		b.sb.Write(strconv.AppendInt(buf[:0], int64(b.total), 10))
 		return b
 	}
 	// Default placeholder param (MySQL and SQLite).

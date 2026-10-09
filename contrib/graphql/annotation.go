@@ -47,6 +47,8 @@ const (
 )
 
 // Is reports whether m has flag set.
+//
+//go:noinline
 func (m SkipMode) Is(flag SkipMode) bool { return m&flag != 0 }
 
 // MutationType is a bitmask for entity-level mutation control.
@@ -58,9 +60,13 @@ const (
 )
 
 // HasCreate reports whether the create mutation is enabled.
+//
+//go:noinline
 func (m MutationType) HasCreate() bool { return m&mutCreate != 0 }
 
 // HasUpdate reports whether the update mutation is enabled.
+//
+//go:noinline
 func (m MutationType) HasUpdate() bool { return m&mutUpdate != 0 }
 
 // MutationOption configures which mutations to generate for an entity.
@@ -77,9 +83,13 @@ type builtinMutation struct {
 	isCreate    bool
 }
 
-func (v builtinMutation) IsCreate() bool         { return v.isCreate }
+//go:noinline
+func (v builtinMutation) IsCreate() bool { return v.isCreate }
+
+//go:noinline
 func (v builtinMutation) GetDescription() string { return v.description }
 
+//go:noinline
 func (v builtinMutation) Description(desc string) MutationOption {
 	v.description = desc
 	return v
@@ -92,6 +102,8 @@ func (v builtinMutation) Description(desc string) MutationOption {
 //
 //	graphql.Mutations(graphql.MutationCreate())
 //	graphql.Mutations(graphql.MutationCreate().Description("Fields for creating a user"))
+//
+//go:noinline
 func MutationCreate() MutationOption {
 	return builtinMutation{isCreate: true}
 }
@@ -103,6 +115,8 @@ func MutationCreate() MutationOption {
 //
 //	graphql.Mutations(graphql.MutationUpdate())
 //	graphql.Mutations(graphql.MutationUpdate().Description("Fields for updating a user"))
+//
+//go:noinline
 func MutationUpdate() MutationOption {
 	return builtinMutation{isCreate: false}
 }
@@ -227,63 +241,103 @@ const (
 )
 
 // Has reports whether the given flag is set.
+//
+//go:noinline
 func (op WhereOp) Has(flag WhereOp) bool { return op&flag != 0 }
 
 // HasEQ reports whether the EQ operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasEQ() bool { return op&OpEQ != 0 }
 
 // HasNEQ reports whether the NEQ operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasNEQ() bool { return op&OpNEQ != 0 }
 
 // HasIn reports whether the In operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasIn() bool { return op&OpIn != 0 }
 
 // HasNotIn reports whether the NotIn operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasNotIn() bool { return op&OpNotIn != 0 }
 
 // HasGT reports whether the GT operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasGT() bool { return op&OpGT != 0 }
 
 // HasGTE reports whether the GTE operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasGTE() bool { return op&OpGTE != 0 }
 
 // HasLT reports whether the LT operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasLT() bool { return op&OpLT != 0 }
 
 // HasLTE reports whether the LTE operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasLTE() bool { return op&OpLTE != 0 }
 
 // HasContains reports whether the Contains operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasContains() bool { return op&OpContains != 0 }
 
 // HasHasPrefix reports whether the HasPrefix operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasHasPrefix() bool { return op&OpHasPrefix != 0 }
 
 // HasHasSuffix reports whether the HasSuffix operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasHasSuffix() bool { return op&OpHasSuffix != 0 }
 
 // HasEqualFold reports whether the EqualFold operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasEqualFold() bool { return op&OpEqualFold != 0 }
 
 // HasContainsFold reports whether the ContainsFold operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasContainsFold() bool { return op&OpContainsFold != 0 }
 
 // HasIsNil reports whether the IsNil operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasIsNil() bool { return op&OpIsNil != 0 }
 
 // HasNotNil reports whether the NotNil operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasNotNil() bool { return op&OpNotNil != 0 }
 
 // HasHas reports whether the Has operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasHas() bool { return op&OpHas != 0 }
 
 // HasHasSome reports whether the HasSome operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasHasSome() bool { return op&OpHasSome != 0 }
 
 // HasHasEvery reports whether the HasEvery operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasHasEvery() bool { return op&OpHasEvery != 0 }
 
 // HasIsEmpty reports whether the IsEmpty operator is enabled.
+//
+//go:noinline
 func (op WhereOp) HasIsEmpty() bool { return op&OpIsEmpty != 0 }
 
 // MutationOp defines which mutation inputs a field appears in.
@@ -302,9 +356,13 @@ const (
 )
 
 // InCreate reports whether the field is included in create inputs.
+//
+//go:noinline
 func (op MutationOp) InCreate() bool { return op&IncludeCreate != 0 }
 
 // InUpdate reports whether the field is included in update inputs.
+//
+//go:noinline
 func (op MutationOp) InUpdate() bool { return op&IncludeUpdate != 0 }
 
 // ResolverMapping defines a custom resolver field for an entity.
@@ -349,6 +407,8 @@ type ResolverMapping struct {
 // still projected, onto the columns Reads names. A mapped field declaring
 // neither keeps the entity unprojected (SELECT *), since its resolver might
 // read any column.
+//
+//go:noinline
 func (rm ResolverMapping) Loads(edges ...string) ResolverMapping {
 	rm.LoadEdges = append(slices.Clip(rm.LoadEdges), edges...)
 	return rm
@@ -359,6 +419,8 @@ func (rm ResolverMapping) Loads(edges ...string) ResolverMapping {
 // keeps projecting the rest of the entity's selection.
 //
 //	graphql.Map("displayName", "String!").Reads("first_name", "last_name")
+//
+//go:noinline
 func (rm ResolverMapping) Reads(fields ...string) ResolverMapping {
 	rm.ReadFields = append(slices.Clip(rm.ReadFields), fields...)
 	return rm
@@ -366,6 +428,8 @@ func (rm ResolverMapping) Reads(fields ...string) ResolverMapping {
 
 // BaseName is the mapped field's name without its inline arguments:
 // "priceListItem(priceListId: ID!)" is "priceListItem".
+//
+//go:noinline
 func (rm ResolverMapping) BaseName() string { return resolverBaseName(rm.FieldName) }
 
 func resolverBaseName(fieldName string) string {
@@ -395,6 +459,8 @@ func appendUnique(base []string, items ...string) []string {
 // Example:
 //
 //	graphql.Map("glAccount", "PublicGlAccount!").WithComment("The associated GL account")
+//
+//go:noinline
 func (rm ResolverMapping) WithComment(comment string) ResolverMapping {
 	rm.Comment = comment
 	return rm
@@ -421,6 +487,8 @@ type SubscriptionFieldBuilder struct {
 //	    graphql.SubscriptionField("onUserCreated", "User!"),
 //	    graphql.SubscriptionField("onPostPublished", "Post!").WithDescription("Fires when published"),
 //	)
+//
+//go:noinline
 func SubscriptionField(name, returnType string) SubscriptionFieldBuilder {
 	return SubscriptionFieldBuilder{
 		config: SubscriptionConfig{Name: name, ReturnType: returnType},
@@ -428,12 +496,16 @@ func SubscriptionField(name, returnType string) SubscriptionFieldBuilder {
 }
 
 // WithDescription sets a description for the subscription field.
+//
+//go:noinline
 func (b SubscriptionFieldBuilder) WithDescription(desc string) SubscriptionFieldBuilder {
 	b.config.Description = desc
 	return b
 }
 
 // WithArgs sets arguments for the subscription field (e.g., "id: ID!").
+//
+//go:noinline
 func (b SubscriptionFieldBuilder) WithArgs(args string) SubscriptionFieldBuilder {
 	b.config.Args = args
 	return b
@@ -442,6 +514,8 @@ func (b SubscriptionFieldBuilder) WithArgs(args string) SubscriptionFieldBuilder
 // Subscription defines subscription fields for an entity.
 // These are collected into a `type Subscription` block in the generated schema.
 // gqlgen handles the runtime subscription implementation.
+//
+//go:noinline
 func Subscription(fields ...SubscriptionFieldBuilder) Annotation {
 	configs := make([]SubscriptionConfig, len(fields))
 	for i, f := range fields {
@@ -623,6 +697,8 @@ type Annotation struct {
 }
 
 // Name implements schema.Annotation.
+//
+//go:noinline
 func (a Annotation) Name() string {
 	return AnnotationName
 }
@@ -665,6 +741,8 @@ var _ schema.Annotation = (*Annotation)(nil)
 //
 //	graphql.Skip()                                                   // skip all (= SkipAll)
 //	graphql.Skip(graphql.SkipMutationCreate, graphql.SkipWhereInput) // skip specific surfaces
+//
+//go:noinline
 func Skip(modes ...SkipMode) Annotation {
 	if len(modes) == 0 {
 		return Annotation{Skip: SkipAll}
@@ -681,6 +759,8 @@ func Skip(modes ...SkipMode) Annotation {
 // Example:
 //
 //	graphql.RelayConnection()
+//
+//go:noinline
 func RelayConnection() Annotation {
 	return Annotation{RelayConnection: true}
 }
@@ -703,12 +783,16 @@ type QueryFieldAnnotation struct {
 }
 
 // Description sets the GraphQL description for the query field.
+//
+//go:noinline
 func (a QueryFieldAnnotation) Description(text string) QueryFieldAnnotation {
 	a.QueryFieldConfig.Description = text
 	return a
 }
 
 // Directives adds GraphQL directives to the query field.
+//
+//go:noinline
 func (a QueryFieldAnnotation) Directives(directives ...Directive) QueryFieldAnnotation {
 	a.QueryFieldConfig.Directives = directives
 	return a
@@ -722,6 +806,8 @@ func (a QueryFieldAnnotation) Directives(directives ...Directive) QueryFieldAnno
 //
 //	graphql.QueryField()
 //	graphql.QueryField("allUsers").Description("List all users")
+//
+//go:noinline
 func QueryField(name ...string) QueryFieldAnnotation {
 	cfg := &QueryFieldSettings{}
 	if len(name) > 0 {
@@ -740,6 +826,8 @@ func QueryField(name ...string) QueryFieldAnnotation {
 // Field-level example:
 //
 //	field.String("user_id").Annotations(graphql.Type("ID"))
+//
+//go:noinline
 func Type(name string) Annotation {
 	return Annotation{Type: name}
 }
@@ -760,6 +848,8 @@ func Type(name string) Annotation {
 //
 //	// Create and update (explicit)
 //	graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate())
+//
+//go:noinline
 func Mutations(opts ...MutationOption) Annotation {
 	// Ent-compatible: default to both create and update if no options specified
 	if len(opts) == 0 {
@@ -787,6 +877,8 @@ func Mutations(opts ...MutationOption) Annotation {
 // Example:
 //
 //	graphql.MultiOrder()
+//
+//go:noinline
 func MultiOrder() Annotation {
 	return Annotation{MultiOrder: true}
 }
@@ -799,6 +891,8 @@ func MultiOrder() Annotation {
 //	    graphql.Directive{Name: "cacheControl", Args: map[string]any{"maxAge": 300}},
 //	    graphql.Directive{Name: "deprecated", Args: map[string]any{"reason": "Use NewUser"}},
 //	)
+//
+//go:noinline
 func Directives(dirs ...Directive) Annotation {
 	return Annotation{Directives: dirs}
 }
@@ -811,6 +905,8 @@ func Directives(dirs ...Directive) Annotation {
 //	graphql.Directives(
 //	    graphql.NewDirective("cacheControl", map[string]any{"maxAge": 300}),
 //	)
+//
+//go:noinline
 func NewDirective(name string, args map[string]any) Directive {
 	return Directive{Name: name, Args: args}
 }
@@ -821,6 +917,8 @@ func NewDirective(name string, args map[string]any) Directive {
 // Example:
 //
 //	graphql.Directives(graphql.Deprecated("Use Member instead"))
+//
+//go:noinline
 func Deprecated(reason string) Directive {
 	if reason == "" {
 		return Directive{Name: "deprecated"}
@@ -839,6 +937,8 @@ func Deprecated(reason string) Directive {
 // This generates:
 //
 //	type User implements Node & Auditable & Timestamped { ... }
+//
+//go:noinline
 func Implements(interfaces ...string) Annotation {
 	return Annotation{Implements: interfaces}
 }
@@ -870,6 +970,8 @@ func Implements(interfaces ...string) Annotation {
 // from the fields all implementors have in common, and a Go interface with
 // marker methods is emitted in the entity package for gqlgen to bind.
 // Ported from entgql.InterfaceField (ent/contrib #638).
+//
+//go:noinline
 func InterfaceField(name string) Annotation {
 	return Annotation{InterfaceField: name}
 }
@@ -888,6 +990,8 @@ func InterfaceField(name string) Annotation {
 //	}
 //
 // This renders as: type User @key(fields: "id") { ... }
+//
+//go:noinline
 func FederationKey(fields string) Annotation {
 	return Annotation{
 		Directives: []Directive{{
@@ -909,6 +1013,8 @@ func FederationKey(fields string) Annotation {
 //	}
 //
 // This renders as: type Product @key(fields: "id", resolvable: false) { ... }
+//
+//go:noinline
 func FederationKeyResolvable(fields string, resolvable bool) Annotation {
 	return Annotation{
 		Directives: []Directive{{
@@ -930,6 +1036,8 @@ func FederationKeyResolvable(fields string, resolvable bool) Annotation {
 //	field.Float("price").Annotations(graphql.FederationExternal())
 //
 // This renders as: price: Float @external
+//
+//go:noinline
 func FederationExternal() Annotation {
 	return Annotation{
 		Directives: []Directive{{Name: "external"}},
@@ -946,6 +1054,8 @@ func FederationExternal() Annotation {
 //	)
 //
 // This renders as: inEuros: Float @requires(fields: "price currency")
+//
+//go:noinline
 func FederationRequires(fields string) Annotation {
 	return Annotation{
 		Directives: []Directive{{
@@ -965,6 +1075,8 @@ func FederationRequires(fields string) Annotation {
 //	)
 //
 // This renders as: product: Product @provides(fields: "name price")
+//
+//go:noinline
 func FederationProvides(fields string) Annotation {
 	return Annotation{
 		Directives: []Directive{{
@@ -982,6 +1094,8 @@ func FederationProvides(fields string) Annotation {
 //	field.String("name").Annotations(graphql.FederationShareable())
 //
 // This renders as: name: String @shareable
+//
+//go:noinline
 func FederationShareable() Annotation {
 	return Annotation{
 		Directives: []Directive{{Name: "shareable"}},
@@ -997,6 +1111,8 @@ func FederationShareable() Annotation {
 //	field.String("internalCode").Annotations(graphql.FederationInaccessible())
 //
 // This renders as: internalCode: String @inaccessible
+//
+//go:noinline
 func FederationInaccessible() Annotation {
 	return Annotation{
 		Directives: []Directive{{Name: "inaccessible"}},
@@ -1011,6 +1127,8 @@ func FederationInaccessible() Annotation {
 //	field.String("name").Annotations(graphql.FederationOverride("products"))
 //
 // This renders as: name: String @override(from: "products")
+//
+//go:noinline
 func FederationOverride(from string) Annotation {
 	return Annotation{
 		Directives: []Directive{{
@@ -1027,6 +1145,8 @@ func FederationOverride(from string) Annotation {
 //
 //	graphql.EnableWhereInputs(true)   // Enable WhereInput
 //	graphql.EnableWhereInputs(false)  // Disable WhereInput
+//
+//go:noinline
 func EnableWhereInputs(enable bool) Annotation {
 	return Annotation{WithWhereInputs: &enable}
 }
@@ -1038,6 +1158,8 @@ func EnableWhereInputs(enable bool) Annotation {
 //
 //	graphql.EnableOrderField(true)   // Enable OrderField
 //	graphql.EnableOrderField(false)  // Disable OrderField
+//
+//go:noinline
 func EnableOrderField(enable bool) Annotation {
 	return Annotation{WithOrderField: &enable}
 }
@@ -1049,6 +1171,8 @@ func EnableOrderField(enable bool) Annotation {
 // Example:
 //
 //	field.String("internal_id").Annotations(graphql.SkipField())
+//
+//go:noinline
 func SkipField() Annotation {
 	return Annotation{SkipField: true}
 }
@@ -1058,6 +1182,8 @@ func SkipField() Annotation {
 // Example:
 //
 //	field.String("user_id").Annotations(graphql.FieldName("userId"))
+//
+//go:noinline
 func FieldName(name string) Annotation {
 	return Annotation{FieldName: name}
 }
@@ -1068,6 +1194,8 @@ func FieldName(name string) Annotation {
 // Example:
 //
 //	field.String("email").Annotations(graphql.OrderField("EMAIL"))
+//
+//go:noinline
 func OrderField(name string) Annotation {
 	return Annotation{OrderField: name}
 }
@@ -1102,6 +1230,8 @@ func OrderField(name string) Annotation {
 //	field.String("description").Annotations(
 //	    graphql.WhereOps(graphql.OpsString),
 //	)
+//
+//go:noinline
 func WhereOps(ops WhereOp) Annotation {
 	return Annotation{WhereOps: ops, HasWhereOps: true}
 }
@@ -1119,6 +1249,8 @@ func WhereOps(ops WhereOp) Annotation {
 //
 //	// Only in UpdateUserInput (e.g., password change)
 //	field.String("new_password").Annotations(graphql.FieldMutationOps(graphql.IncludeUpdate))
+//
+//go:noinline
 func FieldMutationOps(ops MutationOp) Annotation {
 	return Annotation{FieldMutationOps: ops, HasFieldMutationOps: true}
 }
@@ -1139,6 +1271,8 @@ func FieldMutationOps(ops MutationOp) Annotation {
 //	type CreateUserInput struct {
 //	    Email string `json:"email" validate:"required,email"`
 //	}
+//
+//go:noinline
 func CreateInputValidate(tag string) Annotation {
 	return Annotation{CreateInputValidateTag: tag}
 }
@@ -1157,6 +1291,8 @@ func CreateInputValidate(tag string) Annotation {
 //	type UpdateUserInput struct {
 //	    Email *string `json:"email,omitempty" validate:"omitempty,email"`
 //	}
+//
+//go:noinline
 func UpdateInputValidate(tag string) Annotation {
 	return Annotation{UpdateInputValidateTag: tag}
 }
@@ -1169,6 +1305,8 @@ func UpdateInputValidate(tag string) Annotation {
 //	field.String("email").Annotations(
 //	    graphql.MutationInputValidate("required,email", "omitempty,email"),
 //	)
+//
+//go:noinline
 func MutationInputValidate(createTag, updateTag string) Annotation {
 	return Annotation{
 		CreateInputValidateTag: createTag,
@@ -1201,6 +1339,8 @@ func MutationInputValidate(createTag, updateTag string) Annotation {
 //	    inProgress
 //	    completed
 //	}
+//
+//go:noinline
 func EnumValues(mapping map[string]string) Annotation {
 	return Annotation{EnumValues: mapping}
 }
@@ -1216,6 +1356,8 @@ func EnumValues(mapping map[string]string) Annotation {
 //	        graphql.EnumValue("pending", "PENDING"),
 //	        graphql.EnumValue("active", "ACTIVE"),
 //	    )
+//
+//go:noinline
 func EnumValue(dbValue, graphqlValue string) Annotation {
 	return Annotation{EnumValues: map[string]string{dbValue: graphqlValue}}
 }
@@ -1239,6 +1381,8 @@ func EnumValue(dbValue, graphqlValue string) Annotation {
 //
 //	field.String("status").Annotations(graphql.WhereInput())
 //	edge.To("posts", Post.Type).Annotations(graphql.WhereInput())
+//
+//go:noinline
 func WhereInput() Annotation {
 	return Annotation{WhereInputEnabled: true}
 }
@@ -1255,6 +1399,8 @@ func WhereInput() Annotation {
 //	        graphql.WhereInputFields("status", "customer_id", "created_at"),
 //	    }
 //	}
+//
+//go:noinline
 func WhereInputFields(fields ...string) Annotation {
 	return Annotation{WhereInputFieldNames: fields}
 }
@@ -1269,6 +1415,8 @@ func WhereInputFields(fields ...string) Annotation {
 //	        graphql.WhereInputEdges("items", "payments"),
 //	    }
 //	}
+//
+//go:noinline
 func WhereInputEdges(edges ...string) Annotation {
 	return Annotation{WhereInputEdgeNames: edges}
 }
@@ -1289,6 +1437,8 @@ func WhereInputEdges(edges ...string) Annotation {
 //	        ),
 //	    }
 //	}
+//
+//go:noinline
 func Resolvers(mappings ...ResolverMapping) Annotation {
 	return Annotation{ResolverMappings: mappings}
 }
@@ -1306,6 +1456,8 @@ func Resolvers(mappings ...ResolverMapping) Annotation {
 //
 //	graphql.Map("priceListItem(priceListId: ID!)", "PriceListItem!")
 //	graphql.Map("search(query: String!, limit: Int)", "[Result!]!")
+//
+//go:noinline
 func Map(fieldName, returnType string) ResolverMapping {
 	return ResolverMapping{FieldName: fieldName, ReturnType: returnType}
 }
@@ -1320,6 +1472,8 @@ func Map(fieldName, returnType string) ResolverMapping {
 //
 //	field.String("memo").Optional().Nillable().
 //	    Annotations(graphql.Omittable())
+//
+//go:noinline
 func Omittable() Annotation {
 	return Annotation{Omittable: true}
 }
@@ -1332,6 +1486,8 @@ func Omittable() Annotation {
 // Example:
 //
 //	edge.To("posts", Post.Type).Annotations(graphql.Unbind())
+//
+//go:noinline
 func Unbind() Annotation {
 	return Annotation{Unbind: true}
 }
@@ -1345,6 +1501,8 @@ func Unbind() Annotation {
 //	    graphql.Unbind(),
 //	    graphql.Mapping("authorPosts", "publishedPosts"),
 //	)
+//
+//go:noinline
 func Mapping(fields ...string) Annotation {
 	return Annotation{Mapping: fields}
 }
@@ -1358,6 +1516,8 @@ func Mapping(fields ...string) Annotation {
 //	edge.To("children", Todo.Type).Annotations(
 //	    graphql.MapsTo("subTasks", "assignedTasks"),
 //	)
+//
+//go:noinline
 func MapsTo(names ...string) Annotation {
 	return Annotation{
 		Mapping: names,
@@ -1373,6 +1533,8 @@ func MapsTo(names ...string) Annotation {
 //	field.String("computed_name").Annotations(
 //	    graphql.CollectedFor("fullName", "displayName"),
 //	)
+//
+//go:noinline
 func CollectedFor(fields ...string) Annotation {
 	return Annotation{CollectedFor: fields}
 }
@@ -1393,6 +1555,8 @@ func CollectedFor(fields ...string) Annotation {
 //	        graphql.UnionMember("SearchResult", "Activity"),
 //	    }
 //	}
+//
+//go:noinline
 func UnionMember(names ...string) Annotation {
 	return Annotation{Unions: names}
 }
@@ -1400,55 +1564,83 @@ func UnionMember(names ...string) Annotation {
 // --- Entity-Level Getters ---
 
 // IsSkipType returns true if the entire type should be skipped.
+//
+//go:noinline
 func (a Annotation) IsSkipType() bool { return a.Skip&SkipType != 0 }
 
 // IsSkipWhereInput returns true if WhereInput should be skipped.
+//
+//go:noinline
 func (a Annotation) IsSkipWhereInput() bool { return a.Skip&SkipWhereInput != 0 }
 
 // IsSkipOrderField returns true if OrderField should be skipped.
+//
+//go:noinline
 func (a Annotation) IsSkipOrderField() bool { return a.Skip&SkipOrderField != 0 }
 
 // IsSkipMutationCreateInput returns true if CreateInput should be skipped.
 // SkipType implies skipping all GraphQL surfaces including mutation inputs.
+//
+//go:noinline
 func (a Annotation) IsSkipMutationCreateInput() bool {
 	return a.Skip&(SkipMutationCreateInput|SkipType) != 0
 }
 
 // IsSkipMutationUpdateInput returns true if UpdateInput should be skipped.
 // SkipType implies skipping all GraphQL surfaces including mutation inputs.
+//
+//go:noinline
 func (a Annotation) IsSkipMutationUpdateInput() bool {
 	return a.Skip&(SkipMutationUpdateInput|SkipType) != 0
 }
 
 // IsSkipMutationCreate returns true if create mutation should be skipped.
+//
+//go:noinline
 func (a Annotation) IsSkipMutationCreate() bool { return a.Skip&SkipMutationCreate != 0 }
 
 // IsSkipMutationUpdate returns true if update mutation should be skipped.
+//
+//go:noinline
 func (a Annotation) IsSkipMutationUpdate() bool { return a.Skip&SkipMutationUpdate != 0 }
 
 // HasRelayConnection returns true if Relay connections are explicitly enabled.
+//
+//go:noinline
 func (a Annotation) HasRelayConnection() bool { return a.RelayConnection }
 
 // HasQueryField returns true if query field is explicitly enabled.
+//
+//go:noinline
 func (a Annotation) HasQueryField() bool { return a.QueryField }
 
 // GetTypeName returns the custom GraphQL type name, or empty string for default.
 //
 // Deprecated: Use GetType() instead.
+//
+//go:noinline
 func (a Annotation) GetTypeName() string { return a.Type }
 
 // GetType returns the custom GraphQL type name, or empty string for default.
+//
+//go:noinline
 func (a Annotation) GetType() string { return a.Type }
 
 // HasMutations returns true if Mutations was explicitly set.
+//
+//go:noinline
 func (a Annotation) HasMutations() bool { return a.HasMutationsSet }
 
 // EnabledMutations returns the bitmask of enabled mutations.
+//
+//go:noinline
 func (a Annotation) EnabledMutations() MutationType { return a.Mutations }
 
 // WantsMutationCreate returns true if create mutation should be generated.
 // Following Ent's opt-in style: mutations are only generated when explicitly enabled
 // via graphql.Mutations(graphql.MutationCreate()).
+//
+//go:noinline
 func (a Annotation) WantsMutationCreate() bool {
 	if a.HasMutationsSet {
 		return a.Mutations&mutCreate != 0
@@ -1460,6 +1652,8 @@ func (a Annotation) WantsMutationCreate() bool {
 // WantsMutationUpdate returns true if update mutation should be generated.
 // Following Ent's opt-in style: mutations are only generated when explicitly enabled
 // via graphql.Mutations(graphql.MutationUpdate()).
+//
+//go:noinline
 func (a Annotation) WantsMutationUpdate() bool {
 	if a.HasMutationsSet {
 		return a.Mutations&mutUpdate != 0
@@ -1469,6 +1663,8 @@ func (a Annotation) WantsMutationUpdate() bool {
 }
 
 // WantsWhereInputs returns true if WhereInput should be generated.
+//
+//go:noinline
 func (a Annotation) WantsWhereInputs() bool {
 	if a.WithWhereInputs != nil {
 		return *a.WithWhereInputs
@@ -1477,6 +1673,8 @@ func (a Annotation) WantsWhereInputs() bool {
 }
 
 // WantsOrderField returns true if OrderField should be generated.
+//
+//go:noinline
 func (a Annotation) WantsOrderField() bool {
 	if a.WithOrderField != nil {
 		return *a.WithOrderField
@@ -1485,21 +1683,31 @@ func (a Annotation) WantsOrderField() bool {
 }
 
 // HasMultiOrder returns true if multi-column ordering is enabled.
+//
+//go:noinline
 func (a Annotation) HasMultiOrder() bool { return a.MultiOrder }
 
 // GetDirectives returns the custom directives for this entity.
+//
+//go:noinline
 func (a Annotation) GetDirectives() []Directive { return a.Directives }
 
 // GetImplements returns the additional GraphQL interfaces this type implements.
 // The "Node" interface is automatically included when RelaySpec is enabled.
+//
+//go:noinline
 func (a Annotation) GetImplements() []string { return a.Implements }
 
 // GetInterfaceField returns the interface field name an edge contributes to,
 // or "" when the edge is not annotated.
+//
+//go:noinline
 func (a Annotation) GetInterfaceField() string { return a.InterfaceField }
 
 // GetMutationInputs returns the mutation input configurations.
 // If not explicitly set, returns default configs based on Skip flags.
+//
+//go:noinline
 func (a Annotation) GetMutationInputs() []MutationConfig {
 	if len(a.MutationInputs) > 0 {
 		return a.MutationInputs
@@ -1518,50 +1726,76 @@ func (a Annotation) GetMutationInputs() []MutationConfig {
 // --- Field-Level Getters ---
 
 // IsSkipField returns true if this field should be excluded from GraphQL schema.
+//
+//go:noinline
 func (a Annotation) IsSkipField() bool { return a.SkipField }
 
 // GetFieldName returns the custom GraphQL field name, or empty string for default.
+//
+//go:noinline
 func (a Annotation) GetFieldName() string { return a.FieldName }
 
 // GetOrderField returns the order field enum name (e.g., "EMAIL"), or empty for default.
+//
+//go:noinline
 func (a Annotation) GetOrderField() string { return a.OrderField }
 
 // GetWhereOps returns the filter operations configured for this field in WhereInput.
+//
+//go:noinline
 func (a Annotation) GetWhereOps() WhereOp {
 	return a.WhereOps
 }
 
 // HasWhereOpsSet returns true if WhereOps was explicitly configured.
+//
+//go:noinline
 func (a Annotation) HasWhereOpsSet() bool { return a.HasWhereOps }
 
 // GetFieldMutationOps returns the mutation input configuration for this field.
+//
+//go:noinline
 func (a Annotation) GetFieldMutationOps() MutationOp { return a.FieldMutationOps }
 
 // HasFieldMutationOpsSet returns true if field mutation ops were explicitly configured.
+//
+//go:noinline
 func (a Annotation) HasFieldMutationOpsSet() bool { return a.HasFieldMutationOps }
 
 // InCreateInput returns true if this field should appear in CreateXXXInput.
+//
+//go:noinline
 func (a Annotation) InCreateInput() bool {
 	return !a.HasFieldMutationOps || a.FieldMutationOps.InCreate()
 }
 
 // InUpdateInput returns true if this field should appear in UpdateXXXInput.
+//
+//go:noinline
 func (a Annotation) InUpdateInput() bool {
 	return !a.HasFieldMutationOps || a.FieldMutationOps.InUpdate()
 }
 
 // GetCreateInputValidateTag returns the validation tag for CreateXXXInput fields.
+//
+//go:noinline
 func (a Annotation) GetCreateInputValidateTag() string { return a.CreateInputValidateTag }
 
 // GetUpdateInputValidateTag returns the validation tag for UpdateXXXInput fields.
+//
+//go:noinline
 func (a Annotation) GetUpdateInputValidateTag() string { return a.UpdateInputValidateTag }
 
 // GetEnumValues returns the custom GraphQL enum value mappings.
 // Key is database value, value is GraphQL enum name.
+//
+//go:noinline
 func (a Annotation) GetEnumValues() map[string]string { return a.EnumValues }
 
 // GetGraphQLEnumValue returns the GraphQL enum value for a database value.
 // If no custom mapping exists, returns the original database value.
+//
+//go:noinline
 func (a Annotation) GetGraphQLEnumValue(dbValue string) string {
 	if a.EnumValues != nil {
 		if gqlValue, ok := a.EnumValues[dbValue]; ok {
@@ -1574,29 +1808,43 @@ func (a Annotation) GetGraphQLEnumValue(dbValue string) string {
 // --- Edge-Level Getters ---
 
 // IsUnbound returns true if the edge is unbound from GraphQL field name.
+//
+//go:noinline
 func (a Annotation) IsUnbound() bool { return a.Unbind }
 
 // GetMapping returns the custom GraphQL field name mappings for this edge.
+//
+//go:noinline
 func (a Annotation) GetMapping() []string { return a.Mapping }
 
 // GetCollectedFor returns the GraphQL fields that trigger collection of this field.
+//
+//go:noinline
 func (a Annotation) GetCollectedFor() []string { return a.CollectedFor }
 
 // --- Resolver Getters ---
 
 // GetResolverMappings returns the resolver mappings for this entity.
+//
+//go:noinline
 func (a Annotation) GetResolverMappings() []ResolverMapping { return a.ResolverMappings }
 
 // IsOmittable returns true if this field uses Omittable for PATCH semantics.
+//
+//go:noinline
 func (a Annotation) IsOmittable() bool { return a.Omittable }
 
 // GetUnions returns the GraphQL union names this entity is a member of.
+//
+//go:noinline
 func (a Annotation) GetUnions() []string { return a.Unions }
 
 // --- Merge ---
 
 // Merge implements schema.Merger interface for combining annotations.
 // This is called when multiple annotations are added to the same schema element.
+//
+//go:noinline
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 	switch o := other.(type) {
 	case Annotation:
@@ -1775,6 +2023,8 @@ func mergeResolverMappings(a, o []ResolverMapping) []ResolverMapping {
 // MergeAnnotations combines multiple GraphQL annotations into one.
 // Skip flags are OR'd together, other settings use last non-zero value.
 // Delegates to Annotation.Merge() for each annotation.
+//
+//go:noinline
 func MergeAnnotations(annotations ...Annotation) Annotation {
 	result := Annotation{}
 	for _, a := range annotations {

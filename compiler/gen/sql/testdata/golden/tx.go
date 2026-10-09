@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	dialect "github.com/syssam/velox/dialect"
+	runtime "github.com/syssam/velox/runtime"
 	postclient "github.com/test/project/ent/client/post"
 	userclient "github.com/test/project/ent/client/user"
 )
@@ -193,6 +194,36 @@ func (tx *Tx) Client() *Client {
 		tx.client.init()
 	})
 	return tx.client
+}
+
+// RuntimeConfig returns the runtime.Config of the transaction. Entity clients
+// built from it run inside the transaction.
+func (tx *Tx) RuntimeConfig() runtime.Config {
+	return tx.config.runtimeConfig()
+}
+
+var _ runtime.Transaction = (*Tx)(nil)
+
+// TxHandle is a *Tx for the exported signatures of other packages. Declaring a
+// parameter, result or field as *Tx makes the compiler describe Tx — and
+// every entity client and builder its fields reach — in the export data of the
+// declaring package and of each package that names it in turn. TxHandle
+// describes nothing, and only a *Tx implements it. Use TxOf for the transaction
+// behind one.
+type TxHandle interface {
+	isTx()
+}
+
+func (*Tx) isTx() {}
+
+// TxOf returns the transaction behind h, or nil for a nil TxHandle.
+//
+// Call it from a function with a real body. A function small enough to be
+// inlined has its body in the export data too, and a body that calls TxOf
+// describes Tx again.
+func TxOf(h TxHandle) *Tx {
+	v, _ := h.(*Tx)
+	return v
 }
 
 // txDriver wraps the dialect driver to provide transaction capabilities.

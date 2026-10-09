@@ -71,7 +71,7 @@ func TestGoTypeValidators_DeclaredAssertedAndCalledAtBasicType(t *testing.T) {
 	h, typ := goTypeValidatorFixture(t)
 
 	pkg := genPackage(h, typ, buildEntityPkgEnumRegistry(h.graph.Nodes)).GoString()
-	rt := genEntityRuntime(h, typ).GoString()
+	rt := schemaInitSrc(h, typ)
 	cf, err := genCreate(h, typ)
 	require.NoError(t, err)
 	create := cf.GoString()
