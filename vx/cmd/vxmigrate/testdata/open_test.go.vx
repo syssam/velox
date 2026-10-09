@@ -21,6 +21,12 @@ func byNameDesc(*testing.T) []*entity.UserOrder {
 	return []*entity.UserOrder{{Field: user.OrderFieldName, Direction: orm.OrderDirectionDesc}}
 }
 
+// withHandle is what a server does once per request where edges are resolved
+// from entities: it puts the handle in the context.
+func withHandle(ctx context.Context, s *Store) context.Context {
+	return orm.WithExecutor(ctx, s.Client)
+}
+
 var seq atomic.Int64
 
 // This file is the part of the tests the tool does not migrate: how a

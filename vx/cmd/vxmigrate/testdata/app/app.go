@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/tests/integration"
 	postclient "github.com/syssam/velox/tests/integration/client/post"
+	userclient "github.com/syssam/velox/tests/integration/client/user"
 	"github.com/syssam/velox/tests/integration/entity"
 	"github.com/syssam/velox/tests/integration/filter"
 	"github.com/syssam/velox/tests/integration/post"
@@ -112,6 +113,14 @@ func (s *Store) SetNickname(ctx context.Context, id int, nick *string, role *use
 
 func apply[T, B any](v T, set func(T) B) { set(v) }
 
+// rename is a setter named without a builder: a row of a table of them.
+var rename = (*userclient.UserUpdateOne).SetName
+
+// Retitle renames a user through that table.
+func (s *Store) Retitle(ctx context.Context, id int, name string) error {
+	return rename(s.User.UpdateOneID(id), name).Exec(ctx)
+}
+
 func (s *Store) Rename(ctx context.Context, id int, name string) error {
 	return s.User.UpdateOneID(id).SetName(name).Exec(ctx)
 }
@@ -208,6 +217,11 @@ func (s *Store) Titles(ctx context.Context, id int) ([]string, error) {
 		out = append(out, author.Name+":"+p.Title)
 	}
 	return out, nil
+}
+
+// PostCount counts the posts of a user it is handed.
+func PostCount(ctx context.Context, u *entity.User) (int, error) {
+	return u.QueryPosts().Count(ctx)
 }
 
 // NamesOnly reads the users with their names and nothing else.

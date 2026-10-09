@@ -90,6 +90,7 @@ func TestStore(t *testing.T) {
 	if err := s.Rename(ctx, 9999, "x"); err == nil {
 		t.Error("renaming a user that does not exist did not fail")
 	}
+	eq(t, "retitle", s.Retitle(ctx, cat.ID, "kat"), nil)
 	got, err := s.Find(ctx, cat.ID)
 	eq(t, "found", show(got.Name, err), "kat <nil>")
 
@@ -142,6 +143,8 @@ func TestStore(t *testing.T) {
 	moved, err := s.Post.Query().Where(post.HasAuthorWith(user.IDField.EQ(cat.ID))).Count(ctx)
 	eq(t, "posts moved, and the failed transfer rolled back", show(moved, err), "2 <nil>")
 
+	n, err = PostCount(withHandle(ctx, s), cat)
+	eq(t, "posts counted from an entity that was handed over", show(n, err), "2 <nil>")
 	narrow, err := s.NamesOnly(ctx)
 	if err != nil {
 		t.Fatal(err)

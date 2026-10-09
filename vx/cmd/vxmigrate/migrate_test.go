@@ -73,10 +73,20 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	contextHandle := 0
 	for _, line := range strings.Split(strings.TrimSpace(string(notes)), "\n") {
-		if line != "" && !strings.Contains(line, "open_test.go") {
+		switch {
+		case line == "", strings.Contains(line, "open_test.go"):
+		case strings.Contains(line, "QueryPosts is given the handle of the context"):
+			// Rewritten, and reported: whether the context carries a
+			// handle is not something the tool can see.
+			contextHandle++
+		default:
 			t.Errorf("left for a person outside open_test.go: %s", line)
 		}
+	}
+	if contextHandle != 1 {
+		t.Errorf("%d edge queries were reported as given the context's handle, want 1", contextHandle)
 	}
 	// That file, as a person migrating would write it.
 	opened, err := os.ReadFile("testdata/open_test.go.vx")
@@ -126,7 +136,9 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value
 		"return upd.Set(user.Nickname.Clear())",
 		"func(v user.RoleEnum) *entity.UserUpdate {",
-		".OrderBy(user.Name.Asc()).Columns(user.ColumnName).All(ctx)", // entities with some columns
+		"var rename = func(b *entity.UserUpdate, v string) *entity.UserUpdate {", // a method expression
+		"return u.QueryPosts(orm.ExecutorFrom(ctx)).Count(ctx)",                  // an entity handed over: the context's handle
+		".OrderBy(user.Name.Asc()).Columns(user.ColumnName).All(ctx)",            // entities with some columns
 	} {
 		if !strings.Contains(string(migrated), want) {
 			t.Errorf("the migrated application does not contain %q", want)

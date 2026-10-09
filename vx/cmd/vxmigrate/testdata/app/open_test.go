@@ -26,6 +26,10 @@ func byNameDesc(t *testing.T) []*entity.UserOrder {
 	return []*entity.UserOrder{{Field: f, Direction: gqlrelay.OrderDirectionDesc}}
 }
 
+// withHandle is what a server does once per request where edges are resolved
+// from entities: nothing with velox, whose entities remember their client.
+func withHandle(ctx context.Context, _ *Store) context.Context { return ctx }
+
 var seq atomic.Int64
 
 // This file is the part of the tests the tool does not migrate: how a

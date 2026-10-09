@@ -495,10 +495,20 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 			r.count("Unwrap")
 		case strings.HasPrefix(name, "Query") && t.ent.edges[strings.TrimPrefix(name, "Query")]:
 			// An entity remembered what it was read on; it is told now.
-			if handle, ok := r.handleOf(sel.X, call.Pos(), stack, 0); ok && len(call.Args) == 0 {
+			switch handle, ok := r.handleOf(sel.X, call.Pos(), stack, 0); {
+			case len(call.Args) != 0:
+			case ok:
 				r.open(call.Lparen+1, handle)
 				r.count("edge query")
-			} else {
+			case r.contextAt(call.Pos()) != "":
+				// The entity came from somewhere else (a parameter). The
+				// handle of the context is what its edges are resolved on
+				// for a GraphQL engine too; whether every caller's context
+				// carries one is for a person to check.
+				r.open(call.Lparen+1, r.orm(call.Pos())+".ExecutorFrom("+r.contextAt(call.Pos())+")")
+				r.note(call.Pos(), "%s is given the handle of the context (orm.ExecutorFrom): check that every caller's context carries one (orm.WithExecutor), or pass the handle", name)
+				r.count("edge query on the context's handle")
+			default:
 				r.note(call.Pos(), "%s takes the handle to query on now: e.%s(handle)", name, name)
 			}
 		}
@@ -753,8 +763,20 @@ func (r *rewriter) setterValue(sel *ast.SelectorExpr, t target, obj types.Object
 			params = "v " + r.typeText(pt, sel.Pos())
 		}
 	}
-	r.replace(sel.Pos(), sel.End(), "func("+params+") *"+r.entity(sel.Pos())+"."+t.ent.name+kind+" {\n\treturn "+
-		r.render(sel.X)+".Set("+r.leaf(t.ent, sel.Pos())+"."+mid+"."+method+"("+arg+"))\n}")
+	builder := "*" + r.entity(sel.Pos()) + "." + t.ent.name + kind
+	recv := ""
+	if s := r.info.Selections[sel]; s != nil && s.Kind() == types.MethodExpr {
+		// (*UserUpdateOne).SetName: the builder is the first argument.
+		recv = "b"
+		if params != "" {
+			params = ", " + params
+		}
+		params = "b " + builder + params
+	} else {
+		recv = r.render(sel.X)
+	}
+	r.replace(sel.Pos(), sel.End(), "func("+params+") "+builder+" {\n\treturn "+
+		recv+".Set("+r.leaf(t.ent, sel.Pos())+"."+mid+"."+method+"("+arg+"))\n}")
 	r.count("setter as a value")
 	return true
 }
@@ -848,6 +870,25 @@ func (r *rewriter) handleOf(e ast.Expr, at token.Pos, stack []ast.Node, depth in
 		return r.handleOf(from, at, stack, depth+1)
 	}
 	return "", false
+}
+
+// contextAt names the context.Context variable called ctx that is visible
+// at pos, or returns "".
+func (r *rewriter) contextAt(pos token.Pos) string {
+	scope := r.pkg.Scope().Innermost(pos)
+	if scope == nil {
+		return ""
+	}
+	_, obj := scope.LookupParent("ctx", pos)
+	v, ok := obj.(*types.Var)
+	if !ok {
+		return ""
+	}
+	named, ok := types.Unalias(v.Type()).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != "context" || named.Obj().Name() != "Context" {
+		return ""
+	}
+	return "ctx"
 }
 
 // sameAt reports whether the names e starts with mean at pos what they

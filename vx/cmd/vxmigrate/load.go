@@ -42,10 +42,13 @@
 // function that makes the assignment; an edge query from an entity is given
 // the handle the entity was read on, when the function shows which.
 //
-// What it leaves to a person: rows read as entities with only some columns
-// (Select followed by All), a query changed through Modify, an edge query
-// from an entity whose origin the function does not show, code generic over
-// predicates as functions or over velox's column types, and how the
+// Select followed by All becomes Columns. An edge query from an entity that
+// was handed to the function is given the handle of the context
+// (orm.ExecutorFrom(ctx)) and reported: whether every caller's context
+// carries one is not something the tool can see.
+//
+// What it leaves to a person: a query changed through Modify, code generic
+// over predicates as functions or over velox's column types, and how the
 // application opens its database.
 //
 // It assumes the names vx gives: a column is called like the field, an enum
