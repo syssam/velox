@@ -126,6 +126,7 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value
 		"return upd.Set(user.Nickname.Clear())",
 		"func(v user.RoleEnum) *entity.UserUpdate {",
+		".OrderBy(user.Name.Asc()).Columns(user.ColumnName).All(ctx)", // entities with some columns
 	} {
 		if !strings.Contains(string(migrated), want) {
 			t.Errorf("the migrated application does not contain %q", want)

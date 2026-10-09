@@ -33,6 +33,49 @@ type QueryCore struct {
 	Distinct bool
 	Lock     Lock
 	LockOpt  LockOption
+	// Cols, when not empty, are the columns to read into the entities.
+	Cols []string
+}
+
+// Columns narrows what the query reads to the named columns.
+func (q *QueryCore) Columns(cols ...string) {
+	q.Cols = append(q.Cols[:len(q.Cols):len(q.Cols)], cols...)
+}
+
+// projection returns the columns the query reads into its entities: nil for
+// all of them, and otherwise the ones asked for together with the ones the
+// query cannot do without (the id, what a page's cursor is made of, the key
+// of an edge it loads that is stored in its own table).
+func (q *QueryCore) projection() ([]string, error) {
+	if len(q.Cols) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(q.Cols)+1)
+	add := func(col string) {
+		if !slices.Contains(out, col) {
+			out = append(out, col)
+		}
+	}
+	if id := q.M.id(); id != nil {
+		add(id.Column)
+	}
+	for _, col := range q.Cols {
+		if q.M.col(col) < 0 {
+			return nil, fmt.Errorf("orm: %s has no column %q to read", q.M.Name, col)
+		}
+		add(col)
+	}
+	for _, o := range q.Orders {
+		if o.Col != "" && q.M.col(o.Col) >= 0 {
+			add(o.Col)
+		}
+	}
+	for _, l := range q.With {
+		if l.Edge != nil && l.Edge.fkOnOwner() {
+			add(l.Edge.Columns[0])
+		}
+	}
+	return out, nil
 }
 
 // Query is what query policies and interceptors receive: the pending query
@@ -232,7 +275,11 @@ func (q *QueryCore) Each(ctx context.Context, fn func(any) bool) error {
 		return cerr
 	}
 	_, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) {
-		sel := q.selector(ctx, c, nil)
+		read, perr := q.projection()
+		if perr != nil {
+			return nil, perr
+		}
+		sel := q.selector(ctx, c, read)
 		query, args := sel.Query()
 		if err := sel.Err(); err != nil {
 			return nil, err
@@ -438,7 +485,11 @@ func (q *QueryCore) all(ctx context.Context, c *conn) ([]any, error) {
 	if err := loadErr(q.With); err != nil {
 		return nil, err
 	}
-	sel := q.selector(ctx, c, nil)
+	read, perr := q.projection()
+	if perr != nil {
+		return nil, perr
+	}
+	sel := q.selector(ctx, c, read)
 	query, args := sel.Query()
 	if err := sel.Err(); err != nil {
 		return nil, err

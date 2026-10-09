@@ -463,6 +463,15 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 		r.builder(call, sel, t, name, stack)
 	case (t.where == "entity" && (t.kind == "Querier" || t.kind == "Paginatable")) || (t.where == "query" && t.kind == "Query"):
 		r.query(call, sel, t, name, stack)
+	case t.where == "entity" && t.kind == "Selector":
+		// What Select returned: the query itself now, after Columns.
+		switch name {
+		case "AllX", "OnlyX", "FirstX":
+			r.replace(sel.Sel.Pos(), sel.Sel.End(), strings.TrimSuffix(name, "X"))
+			r.open(call.Pos(), r.orm(call.Pos())+".Must(")
+			r.insert(call.End(), ")")
+			r.count(name)
+		}
 	case t.where == "root" && (t.kind == "Client" || t.kind == "Tx"):
 		// A method promoted from an embedded client: the field is named now.
 		if via := through(selection); via != "" && name != "Client" {
@@ -1079,8 +1088,12 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 		// way; rows read as entities with only some columns are not.
 		switch next, _ := receiverOf(call, stack); next {
 		case "Scan", "Int", "GroupBy", "Aggregate":
+		case "All", "Only", "First", "AllX", "OnlyX", "FirstX":
+			// Entities with only some of their columns read.
+			r.replace(sel.Sel.Pos(), sel.Sel.End(), "Columns")
+			r.count("Columns")
 		default:
-			r.note(call.Pos(), "Select followed by %s: entities are read whole; read the columns with Select(...).Scan(ctx, &rows), or drop the Select", next)
+			r.note(call.Pos(), "Select followed by %s: read the columns with Select(...).Scan(ctx, &rows)", next)
 		}
 	default:
 		if edge, ok := strings.CutPrefix(name, "With"); ok && e.edges[edge] {

@@ -116,6 +116,18 @@ func (q *NamedBoolQuery) Offset(n int) *NamedBoolQuery { q.c.Off = n; return q }
 //go:noinline
 func (q *NamedBoolQuery) Distinct() *NamedBoolQuery { q.c.Distinct = true; return q }
 
+// Columns reads only the named columns into the entities, for a list that
+// shows a few columns of a wide table; every other field of an entity is
+// left at its zero value, so such an entity is for reading, not for saving
+// back. The id is always read, and so is what the query needs itself: the
+// columns it is ordered by and the keys of the edges it loads.
+//
+//go:noinline
+func (q *NamedBoolQuery) Columns(columns ...string) *NamedBoolQuery {
+	q.c.Columns(columns...)
+	return q
+}
+
 // ForUpdate locks the rows read against concurrent changes until the
 // transaction ends. It needs a transaction to mean anything.
 //

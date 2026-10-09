@@ -277,6 +277,13 @@ func (q *%[1]s) Offset(n int) *%[1]s { q.c.Off = n; return q }
 // Distinct removes duplicate rows.
 func (q *%[1]s) Distinct() *%[1]s { q.c.Distinct = true; return q }
 
+// Columns reads only the named columns into the entities, for a list that
+// shows a few columns of a wide table; every other field of an entity is
+// left at its zero value, so such an entity is for reading, not for saving
+// back. The id is always read, and so is what the query needs itself: the
+// columns it is ordered by and the keys of the edges it loads.
+func (q *%[1]s) Columns(columns ...string) *%[1]s { q.c.Columns(columns...); return q }
+
 // ForUpdate locks the rows read against concurrent changes until the
 // transaction ends. It needs a transaction to mean anything.
 func (q *%[1]s) ForUpdate(opts ...orm.LockOption) *%[1]s { q.c.SetLock(orm.LockUpdate, opts); return q }

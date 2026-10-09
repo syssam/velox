@@ -586,3 +586,76 @@ func TestUpdate_KeepSkipsTheUpdateDefault(t *testing.T) {
 func TestEnumValues(t *testing.T) {
 	assert.Equal(t, []user.RoleEnum{user.RoleAdmin, user.RoleUser, user.RoleGuest}, user.RoleValues())
 }
+
+// Columns reads the named columns into the entities and leaves the rest
+// zero, together with what the query cannot do without.
+func TestQuery_Columns(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	bob := newUser(t, db, "bob", 40)
+	newPost(t, db, ann, "a1")
+	newPost(t, db, bob, "b1")
+
+	us, err := client.User.Query(db).Columns(user.ColumnName).OrderBy(user.Age.Desc()).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, us, 2)
+	assert.Equal(t, "bob", us[0].Name)
+	assert.Equal(t, bob.ID, us[0].ID, "the id is always read")
+	assert.Equal(t, 40, us[0].Age, "what the query is ordered by is read")
+	assert.Empty(t, us[0].Email, "a column that was not asked for")
+	assert.True(t, us[0].CreatedAt.IsZero())
+
+	// A page: the cursor is made of the order's columns.
+	page, err := client.User.Query(db).Columns(user.ColumnEmail).OrderBy(user.Name.Asc()).Paginate(ctx, nil, intp(1), nil, nil)
+	require.NoError(t, err)
+	require.Len(t, page.Edges, 1)
+	assert.Equal(t, "ann@example.com", page.Edges[0].Node.Email)
+	page, err = client.User.Query(db).Columns(user.ColumnEmail).OrderBy(user.Name.Asc()).Paginate(ctx, page.PageInfo.EndCursor, intp(1), nil, nil)
+	require.NoError(t, err)
+	require.Len(t, page.Edges, 1)
+	assert.Equal(t, "bob@example.com", page.Edges[0].Node.Email)
+
+	// An edge stored in the entity's own table is loaded: its key is read.
+	ps, err := client.Post.Query(db).Columns(post.ColumnTitle).WithAuthor().OrderBy(post.Title.Asc()).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, ps, 2)
+	require.NotNil(t, ps[0].Edges.Author)
+	assert.Equal(t, "ann", ps[0].Edges.Author.Name)
+	assert.Empty(t, ps[0].Status, "a column that was not asked for")
+	// And one stored on the other side, from the id.
+	withPosts, err := client.User.Query(db).Columns(user.ColumnName).WithPosts().OrderBy(user.Name.Asc()).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, withPosts[0].Edges.Posts, 1)
+	assert.Equal(t, "a1", withPosts[0].Edges.Posts[0].Title, "the neighbors are read whole")
+
+	// One row, row by row, and a copy that does not share the choice.
+	one, err := client.User.Query(db).Columns(user.ColumnName).Where(user.ID.EQ(ann.ID)).Only(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "ann", one.Name)
+	assert.Empty(t, one.Email)
+	for u, err := range client.User.Query(db).Columns(user.ColumnName).Iter(ctx) {
+		require.NoError(t, err)
+		assert.NotEmpty(t, u.Name)
+		assert.Empty(t, u.Email)
+	}
+	narrow := client.User.Query(db).Columns(user.ColumnName)
+	wider := narrow.Clone().Columns(user.ColumnEmail)
+	only, err := narrow.Where(user.ID.EQ(ann.ID)).Only(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, only.Email, "Columns on a clone reached the query it was cloned from")
+	both, err := wider.Where(user.ID.EQ(ann.ID)).Only(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "ann@example.com", both.Email)
+
+	// The count and the ids are of the rows, whatever is read of them.
+	n, err := client.User.Query(db).Columns(user.ColumnName).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+
+	// What cannot be done says so.
+	_, err = client.User.Query(db).Columns("no_such_column").All(ctx)
+	require.ErrorContains(t, err, `User has no column "no_such_column" to read`)
+	_, err = client.User.Query(db).WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle)).All(ctx)
+	require.ErrorContains(t, err, "Columns is not supported on an eager load")
+}

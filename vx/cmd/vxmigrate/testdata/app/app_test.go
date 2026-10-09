@@ -142,6 +142,11 @@ func TestStore(t *testing.T) {
 	moved, err := s.Post.Query().Where(post.HasAuthorWith(user.IDField.EQ(cat.ID))).Count(ctx)
 	eq(t, "posts moved, and the failed transfer rolled back", show(moved, err), "2 <nil>")
 
+	narrow, err := s.NamesOnly(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "only the names were read", show(names(narrow), narrow[0].Email == "", narrow[0].ID == ann.ID), "[ann bob kat] true true")
 	titles, err := s.Titles(ctx, cat.ID)
 	eq(t, "titles through the entity", show(titles, err), "[kat:ab2 kat:b1] <nil>")
 	per, err := s.PostsPerStatus(ctx)

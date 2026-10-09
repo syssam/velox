@@ -115,6 +115,9 @@ func (q *QueryCore) Load(e *EdgeMeta, opts *QueryCore, given int) {
 		if opts.Off != 0 || opts.Distinct {
 			l.Err = fmt.Errorf("orm: loading edge %q of %s: Offset and Distinct are not supported on an eager load", e.Name, e.Owner.Name)
 		}
+		if len(opts.Cols) > 0 {
+			l.Err = fmt.Errorf("orm: loading edge %q of %s: the neighbors are read whole, Columns is not supported on an eager load", e.Name, e.Owner.Name)
+		}
 	}
 	if given > 1 {
 		l.Err = fmt.Errorf("orm: loading edge %q of %s: one query describes the load, %d were given", e.Name, e.Owner.Name, given)

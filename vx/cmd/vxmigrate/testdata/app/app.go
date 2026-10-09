@@ -210,6 +210,11 @@ func (s *Store) Titles(ctx context.Context, id int) ([]string, error) {
 	return out, nil
 }
 
+// NamesOnly reads the users with their names and nothing else.
+func (s *Store) NamesOnly(ctx context.Context) ([]*entity.User, error) {
+	return s.User.Query().Order(user.ByName()).Select(user.FieldName).All(ctx)
+}
+
 // PostsPerStatus counts the posts of each status.
 func (s *Store) PostsPerStatus(ctx context.Context) (map[string]int, error) {
 	var rows []struct {

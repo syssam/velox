@@ -122,6 +122,12 @@ err = db.User.DeleteByID(ctx, conn, id)
   `UpdateByID(tx, id).Where(x.Version.EQ(v))` is one `UPDATE ... WHERE
   id = ? AND version = ?`, and a row that no longer matches is `ErrNotFound`,
   not written.
+- `Columns(user.ColumnName, ...)` on a query reads only those columns into
+  the entities, for a list that shows a few columns of a wide table. The
+  other fields stay zero, so such an entity is for reading. The id, the
+  columns the query is ordered by and the keys of the edges it loads are
+  read too. `Select(...)` is the other thing: columns and aggregates scanned
+  into a struct of the caller's.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
