@@ -115,6 +115,17 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 		`user.ModelName + ":" + string(u.Role)`,
 		".Set(post.Tags.Add(tagIDs...))", // AddTagIDs: the edge is Tags
 		".Set(post.Tags.Remove(tagIDs...))",
+		"opts := make([]func(*entity.UserQuery), 0, 3)", // options kept in a slice
+		"q.OrderBy(o.Term())",
+		"p = predicate.User(orm.Invalid(err))",
+		"orm.Apply(q, opts...).Paginate(ctx, nil, first, nil, nil)",
+		"q, ok := db.User.Query(s.Client), true",
+		`.Select().GroupBy(post.ColumnStatus).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)`,
+		"u.QueryPosts(s.Client).OrderBy(post.Title.Asc()).All(ctx)", // the handle the entity was read on
+		"p.QueryAuthor(s.Client).Only(ctx)",                         // through the loop over what a query returned
+		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value
+		"return upd.Set(user.Nickname.Clear())",
+		"func(v user.RoleEnum) *entity.UserUpdate {",
 	} {
 		if !strings.Contains(string(migrated), want) {
 			t.Errorf("the migrated application does not contain %q", want)

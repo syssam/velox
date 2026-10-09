@@ -429,10 +429,11 @@ go run github.com/syssam/velox/vx/cmd/vxmigrate -generated example.com/app/velox
 ```
 
 It does not compile anything, so a large application is read in seconds. On
-one of 455 entities and 9,400 files it rewrote 88,000 references and left
-some 700 for a person, each a line of the report with the reason: grouped
-reads, edge queries from an entity (which need a handle now), code generic
-over predicates as functions, and how the application opens its database.
+one of 455 entities and 9,400 files it rewrote 88,500 references and left
+some 300 for a person, each a line of the report with the reason: rows read
+as entities with only some columns, queries changed through `Modify`, code
+generic over predicates as functions or over velox's column types, and how
+the application opens its database.
 Its package comment lists what it rewrites.
 
 Before moving, rewrite the hooks that assert a mutation to typed setters

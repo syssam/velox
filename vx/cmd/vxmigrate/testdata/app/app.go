@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 
 	"github.com/syssam/velox/contrib/graphql/gqlrelay"
 	"github.com/syssam/velox/dialect/sql"
@@ -90,6 +91,27 @@ func (s *Store) Promote(ctx context.Context, id int) (*entity.User, error) {
 	return s.User.UpdateOneID(id).SetRole(user.RoleAdmin).ClearNickname().AddAge(1).Save(ctx)
 }
 
+// optional calls set when there is a value and clear when there is none.
+func optional[T, B any](v *T, set func(T) B, clear func() B) {
+	if v == nil {
+		clear()
+		return
+	}
+	set(*v)
+}
+
+// SetNickname sets or clears a user's nickname, and their role when given.
+func (s *Store) SetNickname(ctx context.Context, id int, nick *string, role *user.Role) (*entity.User, error) {
+	upd := s.User.UpdateOneID(id)
+	optional(nick, upd.SetNickname, upd.ClearNickname)
+	if role != nil {
+		apply(*role, upd.SetRole)
+	}
+	return upd.Save(ctx)
+}
+
+func apply[T, B any](v T, set func(T) B) { set(v) }
+
 func (s *Store) Rename(ctx context.Context, id int, name string) error {
 	return s.User.UpdateOneID(id).SetName(name).Exec(ctx)
 }
@@ -112,6 +134,29 @@ func (s *Store) Find(ctx context.Context, id int) (*entity.User, error) {
 
 func (s *Store) Posts(ctx context.Context, after *gqlrelay.Cursor, first *int, orderBy *entity.PostOrder, where *filter.PostWhereInput) (*entity.PostConnection, error) {
 	return s.Post.Query().Paginate(ctx, after, first, nil, nil, entity.WithPostOrder(orderBy), entity.WithPostFilter(where.Filter))
+}
+
+// Users pages the users, with the options of the page collected first.
+func (s *Store) Users(ctx context.Context, first *int, orderBy []*entity.UserOrder, where *filter.UserWhereInput, adults bool) (*entity.UserConnection, error) {
+	opts := make([]entity.UserPaginateOption, 0, 3)
+	order, err := entity.WithUserOrder(orderBy)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, order)
+	if where != nil {
+		opts = append(opts, entity.WithUserFilter(where.Filter))
+	}
+	if adults {
+		opts = append(opts, entity.WithUserFilter(func() (predicate.User, error) {
+			return user.AgeField.GTE(18), nil
+		}))
+	}
+	q, ok := s.User.Query().(entity.UserPaginatable)
+	if !ok {
+		return nil, errors.New("users cannot be paged")
+	}
+	return q.Paginate(ctx, nil, first, nil, nil, opts...)
 }
 
 // Transfer moves every post of one user to another, in a transaction.
@@ -142,6 +187,41 @@ func (s *Store) WithPostsStarting(ctx context.Context, prefix string) ([]*entity
 		WithPosts(func(q entity.PostQuerier) { q.Where(post.TitleField.HasPrefix(prefix)) }).
 		Order(integration.Asc(user.FieldID)).
 		All(ctx)
+}
+
+// Titles lists the titles of a user's posts, from the user.
+func (s *Store) Titles(ctx context.Context, id int) ([]string, error) {
+	u, err := s.User.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	posts, err := u.QueryPosts().Order(post.ByTitle()).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range posts {
+		author, err := p.QueryAuthor().Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, author.Name+":"+p.Title)
+	}
+	return out, nil
+}
+
+// PostsPerStatus counts the posts of each status.
+func (s *Store) PostsPerStatus(ctx context.Context) (map[string]int, error) {
+	var rows []struct {
+		Status string `json:"status"`
+		N      int    `json:"n"`
+	}
+	err := s.Post.Query().GroupBy(post.FieldStatus).Aggregate(integration.As(integration.Count(), "n")).Scan(ctx, &rows)
+	out := map[string]int{}
+	for _, r := range rows {
+		out[r.Status] = r.N
+	}
+	return out, err
 }
 
 func (s *Store) IDs(ctx context.Context) ([]int, error) {

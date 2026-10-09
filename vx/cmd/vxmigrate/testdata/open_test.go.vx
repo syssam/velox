@@ -10,9 +10,16 @@ import (
 	"github.com/syssam/velox/vx/tests/db/entity"
 	"github.com/syssam/velox/vx/tests/db/migrate"
 	"github.com/syssam/velox/vx/tests/db/post"
+	"github.com/syssam/velox/vx/tests/db/user"
 
 	_ "modernc.org/sqlite"
 )
+
+// byNameDesc is the order input "by name, descending", of an entity that
+// takes a list of orders.
+func byNameDesc(*testing.T) []*entity.UserOrder {
+	return []*entity.UserOrder{{Field: user.OrderFieldName, Direction: orm.OrderDirectionDesc}}
+}
 
 var seq atomic.Int64
 

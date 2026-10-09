@@ -239,6 +239,9 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".DB")
 				embedded()
 				r.count("type Client")
+			case "Noder":
+				r.replace(sel.Pos(), sel.End(), r.root(sel.Pos())+".Noder")
+				r.count("type Noder")
 			default:
 				if !r.repeated(sel, obj) {
 					r.note(sel.Pos(), "the type %s of the generated root package has no counterpart", name)
@@ -297,6 +300,20 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			if ent, kind := r.s.kindOf(name); ent != nil && kind == "Querier" {
 				r.replace(sel.Pos(), sel.End(), "*"+r.entity(sel.Pos())+"."+ent.name+"Query")
 				r.count("type Querier")
+			} else if ent != nil && kind == "PaginateOption" {
+				// An option was applied by Paginate; it is a function of
+				// the query now, applied before it (orm.Apply).
+				r.replace(sel.Pos(), sel.End(), "func(*"+r.entity(sel.Pos())+"."+ent.name+"Query)")
+				r.count("pagination option")
+			} else if ent != nil && kind == "Paginatable" {
+				if assert, ok := parent(stack, 1).(*ast.TypeAssertExpr); ok && assert.Type == ast.Expr(sel) {
+					// q.(entity.UserPaginatable): every query paginates.
+					r.replace(assert.X.End(), assert.End(), "")
+					if as, ok := parent(stack, 2).(*ast.AssignStmt); ok && len(as.Lhs) == 2 && len(as.Rhs) == 1 {
+						r.insert(assert.End(), ", true")
+					}
+					r.count("Paginatable")
+				}
 			} else if name == "Cursor" || name == "PageInfo" || name == "OrderDirection" {
 				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
 				r.count("type " + name)
@@ -414,6 +431,9 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 	if t.where == "filter" && obj.Name() == "Filter" {
 		return // an argument of With<Entity>Filter: Paginate handles it
 	}
+	if t.where == "client/<entity>" && (t.kind == "Create" || t.kind == "Update" || t.kind == "UpdateOne") && r.setterValue(sel, t, obj) {
+		return
+	}
 	if t.where == "root" || t.where == "client/<entity>" || t.where == "entity" || t.where == "query" {
 		r.note(sel.Pos(), "the method %s is used as a value: rewrite by hand", obj.Name())
 	}
@@ -441,8 +461,8 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 		r.client(call, sel, t, name, stack)
 	case t.where == "client/<entity>" && (t.kind == "Create" || t.kind == "Update" || t.kind == "UpdateOne" || t.kind == "CreateBulk" || t.kind == "Delete" || t.kind == "DeleteOne"):
 		r.builder(call, sel, t, name, stack)
-	case (t.where == "entity" && t.kind == "Querier") || (t.where == "query" && t.kind == "Query"):
-		r.query(call, sel, t, name)
+	case (t.where == "entity" && (t.kind == "Querier" || t.kind == "Paginatable")) || (t.where == "query" && t.kind == "Query"):
+		r.query(call, sel, t, name, stack)
 	case t.where == "root" && (t.kind == "Client" || t.kind == "Tx"):
 		// A method promoted from an embedded client: the field is named now.
 		if via := through(selection); via != "" && name != "Client" {
@@ -465,7 +485,13 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 			r.replace(call.Pos(), call.End(), r.render(sel.X))
 			r.count("Unwrap")
 		case strings.HasPrefix(name, "Query") && t.ent.edges[strings.TrimPrefix(name, "Query")]:
-			r.note(call.Pos(), "%s takes the handle to query on now: e.%s(handle)", name, name)
+			// An entity remembered what it was read on; it is told now.
+			if handle, ok := r.handleOf(sel.X, call.Pos(), stack, 0); ok && len(call.Args) == 0 {
+				r.open(call.Lparen+1, handle)
+				r.count("edge query")
+			} else {
+				r.note(call.Pos(), "%s takes the handle to query on now: e.%s(handle)", name, name)
+			}
 		}
 	case t.where == "<entity>":
 		// A method of an enum type.
@@ -571,10 +597,12 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 		if strings.HasPrefix(name, "With") && (strings.HasSuffix(name, "Order") || strings.HasSuffix(name, "Filter")) {
 			if c, ok := parent(stack, 1).(*ast.CallExpr); ok {
 				if s, ok := c.Fun.(*ast.SelectorExpr); ok && s.Sel.Name == "Paginate" {
-					return // Paginate handles it
+					if _, inline := r.inlineOption(call, false); inline {
+						return // Paginate puts it on the query
+					}
 				}
 			}
-			r.note(call.Pos(), "%s: an order or a filter is a call on the query now, .OrderBy(o.Term()) and .Where(w.P())", name)
+			r.option(call, name, obj, stack)
 		}
 	}
 }
@@ -641,6 +669,199 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 	}
 }
 
+// setterOf says which method of a column or an edge a generated setter is:
+// SetName is the column's Set, AddTagIDs the edge's Add, SetOwner the edge's
+// Set of the entity's id (viaID).
+func setterOf(pre, suf string, field, edge bool) (method string, viaID, ok bool) {
+	switch {
+	case field && suf == "" && (pre == "Set" || pre == "SetNillable" || pre == "Clear" || pre == "Add"):
+		return pre, false, true
+	case edge && pre == "Set" && suf == "ID":
+		return "Set", false, true
+	case edge && pre == "Set" && suf == "":
+		return "Set", true, true
+	case edge && (pre == "Add" || pre == "Remove") && suf == "IDs":
+		return pre, false, true
+	case edge && pre == "Clear" && suf == "":
+		return "Clear", false, true
+	}
+	return "", false, false
+}
+
+// typeText writes a type of the old code as the new code spells it.
+func (r *rewriter) typeText(t types.Type, pos token.Pos) string {
+	switch t := t.(type) {
+	case *types.Pointer:
+		return "*" + r.typeText(t.Elem(), pos)
+	case *types.Slice:
+		return "[]" + r.typeText(t.Elem(), pos)
+	case *types.Named:
+		if pkg := t.Obj().Pkg(); pkg != nil {
+			if e := r.s.byLeaf[pkg.Path()]; e != nil && e.fields[t.Obj().Name()] {
+				return r.leaf(e, pos) + "." + t.Obj().Name() + "Enum"
+			}
+		}
+	}
+	return types.TypeString(t, func(p *types.Package) string {
+		path := p.Path()
+		if to, ok := r.s.moveTo(path); ok {
+			path = to
+		}
+		return r.ref(path, p.Name(), pos)
+	})
+}
+
+// setterValue rewrites a setter used as a value, b.SetName passed to a
+// function that calls it, to a function that makes the assignment.
+func (r *rewriter) setterValue(sel *ast.SelectorExpr, t target, obj types.Object) bool {
+	pre, mid, suf, field, edge := split(t.ent, obj.Name(), setterPrefixes, setterSuffixes)
+	if !field && !edge {
+		return false
+	}
+	method, viaID, ok := setterOf(pre, suf, field, edge)
+	sig, isFunc := obj.Type().(*types.Signature)
+	if !ok || !isFunc || sig.Params().Len() > 1 {
+		return false
+	}
+	kind := t.kind
+	if kind == "UpdateOne" {
+		kind = "Update"
+	}
+	params, arg := "", ""
+	if sig.Params().Len() == 1 {
+		pt := sig.Params().At(0).Type()
+		arg = "v"
+		slice, isSlice := pt.(*types.Slice)
+		switch {
+		case sig.Variadic() && isSlice:
+			params = "v ..." + r.typeText(slice.Elem(), sel.Pos())
+			arg = "v..."
+		case viaID:
+			// SetOwner took the entity; the edge takes its id.
+			params = "v " + r.typeText(pt, sel.Pos())
+			arg = "v.ID"
+		default:
+			params = "v " + r.typeText(pt, sel.Pos())
+		}
+	}
+	r.replace(sel.Pos(), sel.End(), "func("+params+") *"+r.entity(sel.Pos())+"."+t.ent.name+kind+" {\n\treturn "+
+		r.render(sel.X)+".Set("+r.leaf(t.ent, sel.Pos())+"."+mid+"."+method+"("+arg+"))\n}")
+	r.count("setter as a value")
+	return true
+}
+
+// handleOf finds what an entity was read on, by looking at where the
+// variable that holds it got its value in the functions around: a query or
+// a mutation that starts at a client names the handle. It answers only when
+// that handle is the same thing at the place it is needed.
+func (r *rewriter) handleOf(e ast.Expr, at token.Pos, stack []ast.Node, depth int) (string, bool) {
+	if depth > 4 {
+		return "", false
+	}
+	switch e := e.(type) {
+	case *ast.ParenExpr:
+		return r.handleOf(e.X, at, stack, depth)
+	case *ast.CallExpr:
+		// A chain: walk to where it starts.
+		sel, ok := e.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return "", false
+		}
+		if selection := r.info.Selections[sel]; selection != nil {
+			if t, ok := r.targetOf(selection.Obj(), declaring(selection)); ok && t.where == "client/<entity>" && t.kind == "Client" {
+				ex, via := sel.X, ""
+				if holder, ok := sel.X.(*ast.SelectorExpr); ok {
+					if fs := r.info.Selections[holder]; fs != nil && fs.Kind() == types.FieldVal && r.isRootClient(fs) {
+						ex, via = holder.X, through(fs)
+					}
+				}
+				if !r.sameAt(ex, at) {
+					return "", false
+				}
+				return string(r.src[r.off(ex.Pos()):r.off(ex.End())]) + via, true
+			}
+		}
+		return r.handleOf(sel.X, at, stack, depth)
+	case *ast.SelectorExpr:
+		// parent.Edges.Items: read with its parent.
+		return r.handleOf(e.X, at, stack, depth)
+	case *ast.IndexExpr:
+		return r.handleOf(e.X, at, stack, depth)
+	case *ast.Ident:
+		obj := r.info.Uses[e]
+		if obj == nil {
+			return "", false
+		}
+		// The assignment to it that comes last before the place.
+		var from ast.Expr
+		for i := len(stack) - 1; i >= 0; i-- {
+			var body *ast.BlockStmt
+			switch fn := stack[i].(type) {
+			case *ast.FuncDecl:
+				body = fn.Body
+			case *ast.FuncLit:
+				body = fn.Body
+			}
+			if body == nil {
+				continue
+			}
+			ast.Inspect(body, func(n ast.Node) bool {
+				if n == nil || n.Pos() >= at {
+					return false
+				}
+				switch st := n.(type) {
+				case *ast.AssignStmt:
+					for j, lhs := range st.Lhs {
+						id, ok := lhs.(*ast.Ident)
+						if !ok || (r.info.Defs[id] != obj && r.info.Uses[id] != obj) {
+							continue
+						}
+						if len(st.Rhs) == len(st.Lhs) {
+							from = st.Rhs[j]
+						} else if len(st.Rhs) == 1 && j == 0 {
+							from = st.Rhs[0] // v, err := call
+						}
+					}
+				case *ast.RangeStmt:
+					if id, ok := st.Value.(*ast.Ident); ok && r.info.Defs[id] == obj {
+						from = st.X
+					}
+				}
+				return true
+			})
+			if from != nil {
+				break
+			}
+		}
+		if from == nil {
+			return "", false
+		}
+		return r.handleOf(from, at, stack, depth+1)
+	}
+	return "", false
+}
+
+// sameAt reports whether the names e starts with mean at pos what they
+// mean where e is written.
+func (r *rewriter) sameAt(e ast.Expr, pos token.Pos) bool {
+	for {
+		switch x := e.(type) {
+		case *ast.SelectorExpr:
+			e = x.X
+			continue
+		case *ast.Ident:
+			obj := r.info.Uses[x]
+			scope := r.pkg.Scope().Innermost(pos)
+			if obj == nil || scope == nil {
+				return false
+			}
+			_, found := scope.LookupParent(x.Name, pos)
+			return found == obj
+		}
+		return false
+	}
+}
+
 // isRootClient reports whether sel selects an entity's client from the
 // generated root client or transaction.
 func (r *rewriter) isRootClient(sel *types.Selection) bool {
@@ -691,29 +912,15 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 	rename := func(to string) { r.replace(sel.Sel.Pos(), sel.Sel.End(), to) }
 
 	if pre, mid, suf, field, edge := split(e, name, setterPrefixes, setterSuffixes); field || edge {
-		switch {
-		case field && pre == "Set":
-			assign(mid, "Set")
-		case field && pre == "SetNillable":
-			assign(mid, "SetNillable")
-		case field && pre == "Clear":
-			assign(mid, "Clear")
-		case field && pre == "Add":
-			assign(mid, "Add")
-		case edge && pre == "Set" && suf == "ID":
-			assign(mid, "Set")
-		case edge && pre == "Set" && suf == "" && len(call.Args) == 1:
-			r.insert(call.Args[0].End(), ".ID")
-			assign(mid, "Set")
-		case edge && pre == "Add" && suf == "IDs":
-			assign(mid, "Add")
-		case edge && pre == "Remove" && suf == "IDs":
-			assign(mid, "Remove")
-		case edge && pre == "Clear" && suf == "":
-			assign(mid, "Clear")
-		default:
+		method, viaID, ok := setterOf(pre, suf, field, edge)
+		if !ok || (viaID && len(call.Args) != 1) {
 			r.note(call.Pos(), "%s.%s: rewrite by hand", t.kind, name)
+			return
 		}
+		if viaID {
+			r.insert(call.Args[0].End(), ".ID")
+		}
+		assign(mid, method)
 		return
 	}
 	switch name {
@@ -831,7 +1038,7 @@ func (r *rewriter) deleteOne(call *ast.CallExpr, sel *ast.SelectorExpr, t target
 }
 
 // query handles a method of a query.
-func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, name string) {
+func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, name string, stack []ast.Node) {
 	e := t.ent
 	rename := func(to string) { r.replace(sel.Sel.Pos(), sel.Sel.End(), to) }
 	must := func() {
@@ -862,6 +1069,19 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 		r.order(call, sel, e)
 	case "Paginate":
 		r.paginate(call, sel)
+	case "GroupBy", "Aggregate":
+		// A grouped read starts at Select, which may name no column:
+		// q.Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows)
+		r.replace(sel.Sel.Pos(), sel.Sel.End(), "Select()."+name)
+		r.count("grouped read")
+	case "Select":
+		// Columns scanned into something of the caller's are read the same
+		// way; rows read as entities with only some columns are not.
+		switch next, _ := receiverOf(call, stack); next {
+		case "Scan", "Int", "GroupBy", "Aggregate":
+		default:
+			r.note(call.Pos(), "Select followed by %s: entities are read whole; read the columns with Select(...).Scan(ctx, &rows), or drop the Select", next)
+		}
 	default:
 		if edge, ok := strings.CutPrefix(name, "With"); ok && e.edges[edge] {
 			if len(call.Args) > 0 && !r.loadOption(call) {
@@ -986,36 +1206,116 @@ func (r *rewriter) paginate(call *ast.CallExpr, sel *ast.SelectorExpr) {
 		return
 	}
 	var chain string
-	for _, opt := range call.Args[5:] {
-		c, ok := opt.(*ast.CallExpr)
-		var fn *ast.SelectorExpr
-		if ok {
-			fn, _ = c.Fun.(*ast.SelectorExpr)
-		}
-		if fn == nil || len(c.Args) != 1 {
-			r.note(call.Pos(), "Paginate with an option that is not WithOrder or WithFilter: rewrite by hand")
-			return
-		}
-		switch {
-		case strings.HasPrefix(fn.Sel.Name, "With") && strings.HasSuffix(fn.Sel.Name, "Order"):
-			chain += ".OrderBy(" + r.render(c.Args[0]) + ".Term())"
-		case strings.HasPrefix(fn.Sel.Name, "With") && strings.HasSuffix(fn.Sel.Name, "Filter"):
-			w, ok := c.Args[0].(*ast.SelectorExpr)
-			if !ok || w.Sel.Name != "Filter" {
-				r.note(call.Pos(), "Paginate with a filter that is not a where input's Filter: rewrite by hand")
-				return
+	var applied []string
+	for i, opt := range call.Args[5:] {
+		if c, ok := opt.(*ast.CallExpr); ok {
+			if text, inline := r.inlineOption(c, true); inline {
+				chain += text
+				continue
 			}
-			chain += ".Where(" + r.render(w.X) + ".P())"
-		default:
-			r.note(call.Pos(), "Paginate with the option %s: rewrite by hand", fn.Sel.Name)
+		}
+		// An option held in a variable or a slice: a function of the query
+		// by now, whatever made it.
+		text := r.render(opt)
+		if call.Ellipsis.IsValid() && i == len(call.Args[5:])-1 {
+			text += "..."
+		}
+		applied = append(applied, text)
+	}
+	if len(call.Args) == 5 {
+		return
+	}
+	recv := r.render(sel.X) + chain
+	if len(applied) > 0 {
+		recv = r.orm(call.Pos()) + ".Apply(" + recv + ", " + strings.Join(applied, ", ") + ")"
+	}
+	r.replace(sel.X.Pos(), sel.X.End(), recv)
+	r.replace(call.Args[4].End(), call.Rparen, "")
+	r.count("Paginate")
+}
+
+// inlineOption says whether c is an option Paginate can put on the query
+// itself, entity.WithUserOrder(o) or entity.WithUserFilter(w.Filter), and
+// returns the calls that do (taking the arguments' text when take is set).
+func (r *rewriter) inlineOption(c *ast.CallExpr, take bool) (string, bool) {
+	fn, ok := c.Fun.(*ast.SelectorExpr)
+	if !ok || len(c.Args) != 1 || !strings.HasPrefix(fn.Sel.Name, "With") {
+		return "", false
+	}
+	t, known := r.targetOf(r.info.Uses[fn.Sel], "")
+	if !known || t.where != "entity" {
+		return "", false
+	}
+	sig, _ := r.info.TypeOf(c.Fun).(*types.Signature)
+	switch {
+	case strings.HasSuffix(fn.Sel.Name, "Order"):
+		// The form that takes a list of orders returns an error too, and
+		// is not an argument of Paginate.
+		if sig == nil || sig.Results().Len() != 1 {
+			return "", false
+		}
+		if !take {
+			return "", true
+		}
+		return ".OrderBy(" + r.render(c.Args[0]) + ".Term())", true
+	case strings.HasSuffix(fn.Sel.Name, "Filter"):
+		w, ok := c.Args[0].(*ast.SelectorExpr)
+		if !ok || w.Sel.Name != "Filter" {
+			return "", false
+		}
+		if !take {
+			return "", true
+		}
+		return ".Where(" + r.render(w.X) + ".P())", true
+	}
+	return "", false
+}
+
+// option rewrites entity.WithUserOrder(o) and entity.WithUserFilter(f) where
+// the option is kept (in a variable, in a slice): to a function of the
+// query, which orm.Apply calls.
+func (r *rewriter) option(call *ast.CallExpr, name string, obj types.Object, stack []ast.Node) {
+	sig, ok := obj.Type().(*types.Signature)
+	if !ok || len(call.Args) != 1 || sig.Params().Len() != 1 {
+		r.note(call.Pos(), "%s: an order or a filter is a call on the query now, .OrderBy(o.Term()) and .Where(w.P())", name)
+		return
+	}
+	base := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(name, "With"), "Order"), "Filter")
+	ent := r.s.entities[base]
+	if ent == nil {
+		r.note(call.Pos(), "%s: an order or a filter is a call on the query now, .OrderBy(o.Term()) and .Where(w.P())", name)
+		return
+	}
+	head := "func(q *" + r.entity(call.Pos()) + "." + ent.name + "Query) {"
+	var text string
+	switch {
+	case strings.HasSuffix(name, "Order"):
+		if _, many := sig.Params().At(0).Type().(*types.Slice); many {
+			text = head + "\n\tfor _, o := range " + r.render(call.Args[0]) + " {\n\t\tq.OrderBy(o.Term())\n\t}\n}"
+		} else {
+			text = head + " q.OrderBy(" + r.render(call.Args[0]) + ".Term()) }"
+		}
+	default:
+		if w, ok := call.Args[0].(*ast.SelectorExpr); ok && w.Sel.Name == "Filter" {
+			text = head + " q.Where(" + r.render(w.X) + ".P()) }"
+			break
+		}
+		// A filter of the application's own: a function that returns the
+		// predicate or an error, which fails the query as it did.
+		text = head + "\n\tp, err := (" + r.render(call.Args[0]) + ")()\n\tif err != nil {\n\t\tp = " +
+			r.predicate(call.Pos()) + "." + ent.name + "(" + r.orm(call.Pos()) + ".Invalid(err))\n\t}\n\tq.Where(p)\n}"
+	}
+	if sig.Results().Len() == 2 {
+		// The option and an error that is always nil now.
+		as, ok := parent(stack, 1).(*ast.AssignStmt)
+		if !ok || len(as.Lhs) != 2 || len(as.Rhs) != 1 {
+			r.note(call.Pos(), "%s returned an error: it is a function of the query now and returns none", name)
 			return
 		}
+		text += ", error(nil)"
 	}
-	if len(call.Args) > 5 {
-		r.replace(call.Args[4].End(), call.Rparen, "")
-	}
-	r.insert(sel.X.End(), chain)
-	r.count("Paginate")
+	r.replace(call.Pos(), call.End(), text)
+	r.count("pagination option")
 }
 
 // repeated rewrites a name the generated root package repeated from the

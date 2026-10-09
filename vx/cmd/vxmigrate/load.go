@@ -37,10 +37,16 @@
 // keeps its field name, a nil predicate is the zero predicate, a function on
 // a selector used as a predicate is wrapped in orm.Raw.
 //
-// What it leaves to a person: grouped reads (Select, GroupBy, Aggregate,
-// Modify), an edge query from an entity (e.QueryPosts needs a handle now),
-// Paginate with options built in a slice, code generic over predicates as
-// functions, and how the application opens its database.
+// A pagination option kept in a variable or a slice becomes a function of
+// the query, applied with orm.Apply; a setter passed as a value becomes a
+// function that makes the assignment; an edge query from an entity is given
+// the handle the entity was read on, when the function shows which.
+//
+// What it leaves to a person: rows read as entities with only some columns
+// (Select followed by All), a query changed through Modify, an edge query
+// from an entity whose origin the function does not show, code generic over
+// predicates as functions or over velox's column types, and how the
+// application opens its database.
 //
 // It assumes the names vx gives: a column is called like the field, an enum
 // type like the field with Enum. A schema where one of those is taken (vx

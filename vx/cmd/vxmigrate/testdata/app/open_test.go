@@ -15,6 +15,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// byNameDesc is the order input "by name, descending", of an entity that
+// takes a list of orders.
+func byNameDesc(t *testing.T) []*entity.UserOrder {
+	t.Helper()
+	f := &entity.UserOrderField{}
+	if err := f.UnmarshalGQL("NAME"); err != nil {
+		t.Fatal(err)
+	}
+	return []*entity.UserOrder{{Field: f, Direction: gqlrelay.OrderDirectionDesc}}
+}
+
 var seq atomic.Int64
 
 // This file is the part of the tests the tool does not migrate: how a

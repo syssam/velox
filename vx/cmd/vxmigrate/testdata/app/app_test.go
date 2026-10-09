@@ -75,6 +75,17 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	eq(t, "promoted", show(p.Role, p.Age, p.Nickname == nil), "admin 31 true")
+	guest := user.RoleGuest
+	p, err = s.SetNickname(ctx, ann.ID, ptr("an"), &guest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "nickname set through a setter passed as a value", show(*p.Nickname, p.Role), "an guest")
+	p, err = s.SetNickname(ctx, ann.ID, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "nickname cleared", show(p.Nickname == nil, p.Role), "true guest")
 	eq(t, "rename", s.Rename(ctx, cat.ID, "kat"), nil)
 	if err := s.Rename(ctx, 9999, "x"); err == nil {
 		t.Error("renaming a user that does not exist did not fail")
@@ -93,6 +104,17 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	eq(t, "next page", show(len(page.Edges), page.Edges[0].Node.Title), "1 b1")
+
+	users, err := s.Users(ctx, &first, byNameDesc(t), &filter.UserWhereInput{NameNEQ: ptr("zzz")}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "users", show(len(users.Edges), users.TotalCount, users.Edges[0].Node.Name), "2 3 kat")
+	users, err = s.Users(ctx, nil, byNameDesc(t), nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "adult users", show(len(users.Edges), users.Edges[0].Node.Name), "2 kat")
 
 	red, err := s.AddTag(ctx, "red")
 	if err != nil {
@@ -120,6 +142,10 @@ func TestStore(t *testing.T) {
 	moved, err := s.Post.Query().Where(post.HasAuthorWith(user.IDField.EQ(cat.ID))).Count(ctx)
 	eq(t, "posts moved, and the failed transfer rolled back", show(moved, err), "2 <nil>")
 
+	titles, err := s.Titles(ctx, cat.ID)
+	eq(t, "titles through the entity", show(titles, err), "[kat:ab2 kat:b1] <nil>")
+	per, err := s.PostsPerStatus(ctx)
+	eq(t, "posts per status", show(per, err), "map[draft:3] <nil>")
 	n, err = s.Publish(ctx)
 	eq(t, "published", show(n, err), "3 <nil>")
 	n, err = s.RemovePosts(ctx, cat.ID)

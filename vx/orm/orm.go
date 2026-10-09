@@ -433,6 +433,23 @@ func One(n int, err error) error {
 	return err
 }
 
+// Apply calls each function on q and returns q: for the parts of a query
+// that were collected before the query was built.
+//
+//	var parts []func(*entity.UserQuery)
+//	if adultsOnly {
+//		parts = append(parts, func(q *entity.UserQuery) { q.Where(user.Age.GTE(18)) })
+//	}
+//	us, err := orm.Apply(db.User.Query(conn), parts...).All(ctx)
+func Apply[Q any](q Q, fns ...func(Q)) Q {
+	for _, fn := range fns {
+		if fn != nil {
+			fn(q)
+		}
+	}
+	return q
+}
+
 // Check panics when err is not nil: Must for a call that returns only an
 // error.
 func Check(err error) {
