@@ -43,6 +43,11 @@ type P struct {
 	raw any
 }
 
+// IsZero reports whether p is the zero predicate: no condition, which holds
+// for every row. A function that may have nothing to add returns it
+// (predicate.User{}), and Where takes it like any other.
+func (p P) IsZero() bool { return p.Op == 0 }
+
 // opRaw applies P.raw to the selector.
 const opRaw Op = 101
 

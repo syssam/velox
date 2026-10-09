@@ -62,6 +62,52 @@ func (q *Query) HasColumn(column string) bool { return q.c.M.col(column) >= 0 }
 // Limit caps the number of rows.
 func (q *Query) Limit(n int) { q.c.Lim = n }
 
+// TraverseFunc is a function as a traverser: it is handed the query of every
+// read before it runs, of any entity, to narrow it. Register it with
+// DB.Intercept.
+//
+//	conn.Intercept(orm.TraverseFunc(func(ctx context.Context, q *orm.Query) error {
+//		if q.HasColumn("deleted_at") {
+//			q.WhereP(sql.FieldIsNull("deleted_at"))
+//		}
+//		return nil
+//	}))
+//
+// It reaches reads only: see the README on why a rule about which rows a
+// caller may touch belongs in the policy.
+type TraverseFunc func(context.Context, *Query) error
+
+// Intercept leaves the read as it is: a traverser acts before it.
+func (f TraverseFunc) Intercept(next velox.Querier) velox.Querier { return next }
+
+// Traverse calls f.
+func (f TraverseFunc) Traverse(ctx context.Context, q velox.Query) error {
+	oq, ok := q.(*Query)
+	if !ok {
+		return fmt.Errorf("orm: a traverser was handed a %T, not a query of this package", q)
+	}
+	return f(ctx, oq)
+}
+
+// InterceptFunc is a function as an interceptor that runs before the read it
+// is handed and can refuse it. Unlike a traverser it is not run for the
+// queries a traversal or an eager load makes on the way.
+type InterceptFunc func(context.Context, *Query) error
+
+// Intercept runs f before the read.
+func (f InterceptFunc) Intercept(next velox.Querier) velox.Querier {
+	return velox.QuerierFunc(func(ctx context.Context, q velox.Query) (velox.Value, error) {
+		oq, ok := q.(*Query)
+		if !ok {
+			return nil, fmt.Errorf("orm: an interceptor was handed a %T, not a query of this package", q)
+		}
+		if err := f(ctx, oq); err != nil {
+			return nil, err
+		}
+		return next.Query(ctx, q)
+	})
+}
+
 // Offset skips rows.
 func (q *Query) Offset(n int) { q.c.Off = n }
 

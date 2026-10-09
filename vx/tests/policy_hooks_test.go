@@ -539,3 +539,57 @@ func TestFilter_HasColumn(t *testing.T) {
 		"mutation Post age": false, "mutation Post no_such": false,
 	}, seen)
 }
+
+// The interceptors as functions of *orm.Query: no assertion to write, and a
+// traverser reaches the reads an eager load makes while an interceptor is
+// for the read it is registered on.
+func TestTraverseFuncAndInterceptFunc(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, _ := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40)
+	newPost(t, db, ann, "a1")
+
+	var traversed, intercepted []string
+	db.Intercept(
+		orm.TraverseFunc(func(_ context.Context, q *orm.Query) error {
+			traversed = append(traversed, q.Type())
+			if q.Type() == "User" {
+				q.WhereP(sql.FieldLTE("age", 35))
+			}
+			return nil
+		}),
+		orm.InterceptFunc(func(_ context.Context, q *orm.Query) error {
+			intercepted = append(intercepted, q.Type())
+			if q.Type() == "Tag" {
+				return errors.New("no tags today")
+			}
+			return nil
+		}),
+	)
+	us, err := client.User.Query(db).All(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ann"}, names(us))
+	ps, err := client.Post.Query(db).WithAuthor().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, ps, 1)
+	assert.Contains(t, traversed, "Post")
+	assert.Contains(t, intercepted, "User")
+	_, err = client.Tag.Query(db).All(ctx)
+	require.ErrorContains(t, err, "no tags today")
+}
+
+func TestZeroPredicate_IsZero(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	newUser(t, db, "ann", 30)
+	var none predicate.User
+	assert.True(t, orm.P(none).IsZero())
+	assert.False(t, orm.P(user.Age.GT(1)).IsZero())
+	// It is no condition, alone and among others.
+	n, err := client.User.Query(db).Where(none).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	n, err = client.User.Query(db).Where(none, user.Age.GT(100)).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+}

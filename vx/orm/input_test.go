@@ -73,3 +73,15 @@ func TestMustAndCheck(t *testing.T) {
 		}()
 	}
 }
+
+func TestOne(t *testing.T) {
+	if err := One(1, nil); err != nil {
+		t.Errorf("one row: %v", err)
+	}
+	if err := One(0, nil); err != ErrNotFound { //nolint:errorlint // the sentinel itself
+		t.Errorf("no row: %v", err)
+	}
+	if err := One(0, ErrTxDone); err != ErrTxDone { //nolint:errorlint // the error that was passed
+		t.Errorf("an error: %v", err)
+	}
+}

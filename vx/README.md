@@ -126,6 +126,13 @@ err = db.User.DeleteByID(ctx, conn, id)
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
   the user's and does not move `updated_at`.
+- `orm.One(q.Exec(ctx))` is for an update that must reach its row and has
+  no use for the row: `orm.ErrNotFound` when no row matched, without the
+  read `SaveOne` makes.
+- The zero predicate, `predicate.User{}`, is no condition: what a function
+  returns when it has nothing to add (`orm.P(p).IsZero()` tells). An update
+  or a delete refuses it, so that a forgotten condition is not a statement
+  over every row.
 - There is no `SaveX`, `GetX` or `ExecX`. In a test, `orm.Must(q.Save(ctx))`
   and `orm.Check(q.Exec(ctx))` panic on an error. As methods they would be on
   every builder, and a package pays for the methods of every type it can
@@ -396,7 +403,9 @@ the column it filters on: `f.(interface{ HasColumn(string) bool })`, on
 queries and mutations alike.
 
 `conn.Use(hooks...)` and `conn.Intercept(interceptors...)` register on the
-handle, at start-up. A policy covers every read (terminals, eager loads,
+handle, at start-up. An interceptor is handed `*orm.Query`, one type for
+every entity (`Type()`, `HasColumn`, `WhereP`, `Limit`); `orm.TraverseFunc`
+and `orm.InterceptFunc` make one of a function of it. A policy covers every read (terminals, eager loads,
 traversals, edge predicates) and every create, update and delete of its own
 entity; an interceptor covers reads only, so rules about which rows a caller
 may touch belong in the policy. As in Ent, changing an edge writes the other
