@@ -87,7 +87,7 @@ func singulars(p *program, root string, e *entityInfo) map[string]string {
 	methods := types.NewMethodSet(types.NewPointer(create.Type()))
 	for i := range methods.Len() {
 		mid, ok := strings.CutSuffix(strings.TrimPrefix(methods.At(i).Obj().Name(), "Add"), "IDs")
-		if !ok || !strings.HasPrefix(methods.At(i).Obj().Name(), "Add") || mid == "" || e.edges[mid] {
+		if !ok || !strings.HasPrefix(methods.At(i).Obj().Name(), "Add") || mid == "" {
 			continue
 		}
 		if edge := edgeOfSingular(mid, e.edges); edge != "" {
@@ -112,13 +112,18 @@ func edgeOfSingular(singular string, edges map[string]bool) string {
 	exact := ""
 	for edge := range edges {
 		// In lower case: the rules for irregular words (men, children)
-		// are written that way.
-		if strings.EqualFold(singularRules.Singularize(strings.ToLower(edge)), singular) && (exact == "" || edge < exact) {
+		// are written that way. An edge called like the singular itself
+		// (Parent, next to Parents) is not the one, unless it is the only
+		// one: its ids are set with SetParentID.
+		if edge != singular && strings.EqualFold(singularRules.Singularize(strings.ToLower(edge)), singular) && (exact == "" || edge < exact) {
 			exact = edge
 		}
 	}
 	if exact != "" {
 		return exact
+	}
+	if edges[singular] {
+		return singular // an edge to many whose name has no other plural (staff)
 	}
 	best, shared := "", 0
 	for edge := range edges {

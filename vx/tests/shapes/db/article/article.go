@@ -233,6 +233,26 @@ func (f *IntKeyColumn) NotIn(vs ...int) predicate.Article {
 	return predicate.Article{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// GT matches the rows whose column is greater than v.
+func (f *IntKeyColumn) GT(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *IntKeyColumn) GTE(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *IntKeyColumn) LT(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *IntKeyColumn) LTE(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
 // Set assigns v to the column.
 func (f *IntKeyColumn) Set(v int) predicate.ArticleSetter {
 	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -288,6 +308,26 @@ func (f *NullableIntKeyColumn) NotIn(vs ...int) predicate.Article {
 		a[i] = v
 	}
 	return predicate.Article{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// GT matches the rows whose column is greater than v.
+func (f *NullableIntKeyColumn) GT(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *NullableIntKeyColumn) GTE(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *NullableIntKeyColumn) LT(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *NullableIntKeyColumn) LTE(v int) predicate.Article {
+	return predicate.Article{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // IsNil matches the rows whose column is NULL.

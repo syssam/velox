@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	stdsql "database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"reflect"
@@ -78,7 +79,7 @@ func edgeSpec(e *EdgeMeta, ids []any) *sqlgraph.EdgeSpec {
 	if e.Through != nil && len(ids) > 0 {
 		for _, f := range e.Through.Fields {
 			if f.Default != nil && f != e.Through.id() {
-				spec.Target.Fields = append(spec.Target.Fields, &sqlgraph.FieldSpec{Column: f.Column, Type: f.Type, Value: bytesValue(f, fresh(f, f.Default()))})
+				spec.Target.Fields = append(spec.Target.Fields, &sqlgraph.FieldSpec{Column: f.Column, Type: f.Type, Value: bound(f, bytesValue(f, fresh(f, f.Default())))})
 			}
 		}
 	}
@@ -239,7 +240,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 			spec.ID.Value = v
 			continue
 		}
-		spec.SetField(f.Column, f.Type, v)
+		spec.SetField(f.Column, f.Type, bound(f, v))
 	}
 	// A required to-one edge whose key is not a schema field has no field to
 	// be found missing by the loop above: the edge is.
@@ -276,6 +277,7 @@ func bytesValue(f *FieldMeta, v any) any {
 			return &at
 		}
 	}
+
 	if f.Type != field.TypeBytes || !f.NotNull {
 		return v
 	}
@@ -283,6 +285,42 @@ func bytesValue(f *FieldMeta, v any) any {
 		return reflect.MakeSlice(rv.Type(), 0, 0).Interface()
 	}
 	return v
+}
+
+// bound returns the value as the statement is given it. It is v, but for a
+// time field of a Go type of its own, whose Value the driver would call and
+// write as it comes: that time, as a time is stored. (The entity keeps the
+// value of its own type.)
+func bound(f *FieldMeta, v any) any {
+	if f.Type == field.TypeTime {
+		if at, ok := valuedTime(v); ok {
+			return at
+		}
+	}
+	return v
+}
+
+// valuedTime returns the time a value of a type with a Value method stands
+// for, as it would be stored, when it stands for one. A driver would call
+// Value itself and write what it returns as it is: for SQLite, with the
+// monotonic clock reading in the text.
+func valuedTime(v any) (time.Time, bool) {
+	vl, ok := v.(driver.Valuer)
+	if !ok {
+		return time.Time{}, false
+	}
+	if rv := reflect.ValueOf(v); rv.Kind() == reflect.Pointer && rv.IsNil() {
+		return time.Time{}, false
+	}
+	dv, err := vl.Value()
+	if err != nil {
+		return time.Time{}, false
+	}
+	t, ok := dv.(time.Time)
+	if !ok {
+		return time.Time{}, false
+	}
+	return stored(t), true
 }
 
 // stored returns t as a database keeps it: without its monotonic clock
@@ -550,7 +588,7 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 				if err := validate(meta, f, s.Val); err != nil {
 					return nil, err
 				}
-				spec.SetField(f.Column, f.Type, bytesValue(f, s.Val))
+				spec.SetField(f.Column, f.Type, bound(f, bytesValue(f, s.Val)))
 			case SetAdd:
 				spec.AddField(f.Column, f.Type, s.Val)
 			default:
@@ -577,7 +615,7 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 	}
 	for _, f := range meta.Fields {
 		if f.UpdateDefault != nil && !touched[f.Column] {
-			spec.SetField(f.Column, f.Type, bytesValue(f, f.UpdateDefault()))
+			spec.SetField(f.Column, f.Type, bound(f, bytesValue(f, f.UpdateDefault())))
 		}
 	}
 	if len(m.Preds) > 0 {
@@ -845,6 +883,19 @@ func (m *MutCore) updateByID(ctx context.Context, c *conn, id any) (any, error) 
 	drv := c.drv
 	if len(spec.Edges.Add)+len(spec.Edges.Clear) > 0 {
 		drv = c.atomic()
+	}
+	if len(spec.Edges.Add)+len(spec.Edges.Clear) > 0 {
+		// The rows of a join table are written before the row itself is
+		// looked at, and a row that is not there would be reported as a
+		// broken foreign key: look first.
+		there := append(slices.Clone(m.Preds), P{Op: OpEQ, Col: meta.id().Column, Val: id})
+		n, err := (&QueryCore{M: meta, Preds: there}).count(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			return nil, NotFound(meta.Name)
+		}
 	}
 	if err := sqlgraph.UpdateNode(ctx, drv, spec); err != nil {
 		var nf *sqlgraph.NotFoundError

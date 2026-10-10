@@ -148,6 +148,7 @@ func newInfo() *types.Info {
 		Uses:       map[*ast.Ident]types.Object{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 		Implicits:  map[ast.Node]types.Object{},
+		Instances:  map[*ast.Ident]types.Instance{},
 	}
 }
 

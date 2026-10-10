@@ -30,6 +30,15 @@ func ExecutorFrom(ctx context.Context) Executor {
 	return ex
 }
 
+// TxFrom returns the transaction the context carries, or nil when it
+// carries none or a handle that is not a transaction: for code that does
+// something only inside a transaction (a check that must be rolled back
+// with the write it follows).
+func TxFrom(ctx context.Context) *Tx {
+	tx, _ := ctx.Value(executorKey{}).(*Tx)
+	return tx
+}
+
 // MaskNotFound returns nil for ErrNotFound and err for anything else: a
 // to-one edge without a neighbor resolves to null, not to an error.
 func MaskNotFound(err error) error {

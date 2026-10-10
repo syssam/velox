@@ -252,6 +252,35 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"case orm.IsNotSingular(err), orm.IsNotFound(err), orm.IsValidationError(err):",
 		"var ve *orm.ValidationError",
 		"return ve.Field",
+		`return &orm.ValidationError{Entity: "User", Field: "name", Err: errors.New("x")}`,
+		// The driver under a transaction; the handle of a context.
+		`return tx.Driver().Exec(ctx, "SELECT 1", []any{key}, nil)`,
+		"ctx = orm.WithExecutor(ctx, c) ctx = orm.WithExecutor(ctx, tx)",
+		"return orm.TxFrom(ctx) != nil && orm.ExecutorFrom(ctx) != nil",
+		// Order terms in a variable.
+		"order := func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnCreatedAt)), sql.Desc(s.C(user.ColumnName))) } return db.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(order))).First(ctx)",
+		"byAge := func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C(user.ColumnAge))) } return db.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(byAge))).First(ctx)",
+		// An order written as a function; a column named at run time; a list of functions.
+		`OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { s.OrderBy(s.C(user.ColumnNickname) + " NULLS LAST") })), predicate.UserOrderTerm{Col: column, Desc: true}).All(ctx)`,
+		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { for _, f := range fs { f(s) } }))).All(ctx)",
+		// A predicate where a function on a selector is wanted.
+		"func asFunction(p predicate.User) func(*sql.Selector) { return orm.Compile(p) }",
+		// The where input's own additions, and Filter.
+		"where.Predicates = append(where.Predicates, user.Age.GT(1)) return where.P(), error(nil)",
+		// A client that is only queried on.
+		"func countUsers(ctx context.Context, c orm.Executor) (int, error) {",
+		"func countIn(ctx context.Context, tx *orm.Tx) (int, error) { return countUsers(ctx, tx) }",
+		"func begins(ctx context.Context, c *orm.DB) error {",
+		// An option kept in a variable shapes the query it is given.
+		"func loadWith(ctx context.Context, c orm.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
+		"type exister interface { Exists(context.Context) (bool, error) }",
+		`func opened(dsn string) (*orm.DB, error) { return orm.Open("sqlite", dsn) }`,
+		// The start of a query as a value.
+		"func starter(c *orm.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",
+		// Some columns of an eager load's neighbors.
+		"WithAuthor(db.User.Query(nil).Columns(user.ColumnName)).All(ctx)",
+		// Conditions that are not predicate types keep the library's combinator.
+		"func plain(fs ...func(*sql.Selector)) func(*sql.Selector) { return sql.AndPredicates(fs...) }",
 		// Deferred: still later.
 		"defer func() { orm.Must(db.User.Update(c).Set(user.Age.Set(0)).Exec(ctx)) }()",
 		`go func() { orm.Must(db.User.Create(c).Set(user.Name.Set("x")).Save(ctx)) }()`,
@@ -299,8 +328,21 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 			t.Errorf("the migrated file contains %q: a handle the text does not settle", text)
 		}
 	}
-	if n := strings.Count(flat, ".QueryPosts(orm.ExecutorFrom(ctx))"); n != 8 {
-		t.Errorf("%d edge queries were given the context's handle, want 8", n)
+	if n := strings.Count(flat, ".QueryPosts(orm.ExecutorFrom(ctx))"); n != 9 {
+		t.Errorf("%d edge queries were given the context's handle, want 9", n)
+	}
+	// And one the text does settle: read on a field of the receiver, kept
+	// on the receiver and changed in a field since.
+	if !strings.Contains(flat, `s.last = u u.Name = "seen" return u.QueryPosts(s.c).Count(ctx)`) {
+		t.Error("an entity read on a field of the receiver was not given that handle")
+	}
+	for _, text := range []string{
+		"func keptDefault() func(*entity.PostQuery) { return func(q *entity.PostQuery) {} }",
+		"defer func() {}()",
+	} {
+		if !strings.Contains(flat, text) {
+			t.Errorf("the migrated file does not contain %q", text)
+		}
 	}
 	if t.Failed() {
 		t.Logf("migrated notes.go:\n%s", migrated)

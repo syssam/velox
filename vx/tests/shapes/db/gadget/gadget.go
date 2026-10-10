@@ -233,6 +233,26 @@ func (f *NullableIntKeyColumn) NotIn(vs ...int) predicate.Gadget {
 	return predicate.Gadget{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// GT matches the rows whose column is greater than v.
+func (f *NullableIntKeyColumn) GT(v int) predicate.Gadget {
+	return predicate.Gadget{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *NullableIntKeyColumn) GTE(v int) predicate.Gadget {
+	return predicate.Gadget{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *NullableIntKeyColumn) LT(v int) predicate.Gadget {
+	return predicate.Gadget{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *NullableIntKeyColumn) LTE(v int) predicate.Gadget {
+	return predicate.Gadget{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
 // IsNil matches the rows whose column is NULL.
 func (f *NullableIntKeyColumn) IsNil() predicate.Gadget {
 	return predicate.Gadget{Op: orm.OpIsNil, Col: string(*f)}

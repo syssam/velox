@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox/vx/tests/shapes/db/predicate"
 
@@ -43,6 +44,7 @@ import (
 	"github.com/syssam/velox/vx/tests/shapes/db/player"
 	"github.com/syssam/velox/vx/tests/shapes/db/renamed"
 	"github.com/syssam/velox/vx/tests/shapes/db/scalar"
+	"github.com/syssam/velox/vx/tests/shapes/db/stamped"
 	"github.com/syssam/velox/vx/tests/shapes/db/stringkey"
 	"github.com/syssam/velox/vx/tests/shapes/db/student"
 	"github.com/syssam/velox/vx/tests/shapes/db/team"
@@ -878,5 +880,26 @@ func TestPaginate_NullWhereTheSchemaHasNone(t *testing.T) {
 			after = conn.PageInfo.EndCursor
 		}
 		assert.ElementsMatch(t, want, got, "%+v: the walk must serve every row once", term)
+	}
+}
+
+// A time field of a Go type of its own (a struct with Value and Scan) is
+// written as a time is stored, and compared that way: the driver would have
+// written what Value returned, monotonic reading and nanoseconds included,
+// and the row would not have been found by the value it was created with,
+// nor by the one read back.
+func TestTimeOfItsOwnType(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	for i, at := range []time.Time{time.Now(), time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)} {
+		made := must(client.Stamped.Create(db).Set(stamped.At.Set(types.Stamp{T: at}), stamped.Plain.Set(at)).Save(ctx))
+		got := must(client.Stamped.Get(ctx, db, made.ID))
+		assert.True(t, got.At.T.Equal(at.Truncate(time.Microsecond)), "time %d: stored %v for %v", i, got.At.T, at)
+		for name, by := range map[string]types.Stamp{"created with": {T: at}, "returned": made.At, "read back": got.At} {
+			n := must(client.Stamped.Query(db).Where(stamped.ID.EQ(made.ID), stamped.At.EQ(by)).Count(ctx))
+			assert.Equal(t, 1, n, "time %d, by the value %s", i, name)
+		}
+		n := must(client.Stamped.Query(db).Where(stamped.ID.EQ(made.ID), stamped.Plain.EQ(at)).Count(ctx))
+		assert.Equal(t, 1, n, "time %d, the plain column", i)
 	}
 }

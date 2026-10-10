@@ -75,6 +75,95 @@ func fieldOf(err error) string {
 	return ""
 }
 
+// A validation error written out, with the name under both of velox's keys.
+func refused() error {
+	return &velox.ValidationError{Entity: "User", Field: "name", Name: "name", Err: errors.New("x")} // note: ValidationError is the runtime's type now
+}
+
+// The driver under a handle, and the handle a context carries.
+func lock(ctx context.Context, tx *integration.Tx, key int64) error {
+	return tx.Client().RuntimeConfig().Driver.Exec(ctx, "SELECT 1", []any{key}, nil)
+}
+
+func inContext(ctx context.Context, c *integration.Client, tx *integration.Tx) bool {
+	ctx = integration.NewContext(ctx, c)
+	ctx = integration.NewTxContext(ctx, tx)
+	return integration.TxFromContext(ctx) != nil && integration.FromContext(ctx) != nil // note: FromContext is orm.ExecutorFrom
+}
+
+// Order terms held in a variable: one, and several.
+func newest(ctx context.Context, c *integration.Client) (*entity.User, error) {
+	order := integration.Desc(user.FieldCreatedAt, user.FieldName)
+	return c.User.Query().Order(order).First(ctx)
+}
+
+func youngest(ctx context.Context, c *integration.Client) (*entity.User, error) {
+	byAge := integration.Asc(user.FieldAge)
+	return c.User.Query().Order(byAge).First(ctx)
+}
+
+// An order written as a function, and by a column named at run time.
+func nullsLast(ctx context.Context, c *integration.Client, column string) ([]*entity.User, error) {
+	return c.User.Query().Order(func(s *sql.Selector) { s.OrderBy(s.C(user.FieldNickname) + " NULLS LAST") }, integration.Desc(column)).All(ctx)
+}
+
+func inOrderOf(ctx context.Context, c *integration.Client, fs []func(*sql.Selector)) ([]*entity.User, error) {
+	return c.User.Query().Order(fs...).All(ctx)
+}
+
+// A predicate where a function on a selector is wanted.
+func asFunction(p predicate.User) func(*sql.Selector) { return p }
+
+// The conditions an application adds to a where input, and its Filter.
+func scoped(where *filter.UserWhereInput) (predicate.User, error) {
+	where.AddPredicates(user.AgeField.GT(1))
+	return where.Filter() // note: P of an input with no condition was an error
+}
+
+// A client taken only to query on it takes a transaction as well.
+func countUsers(ctx context.Context, c *integration.Client) (int, error) {
+	if c == nil {
+		return 0, nil
+	}
+	return c.User.Query().Count(ctx)
+}
+
+func countIn(ctx context.Context, tx *integration.Tx) (int, error) {
+	return countUsers(ctx, tx.Client())
+}
+
+// One that begins a transaction on it needs the database.
+func begins(ctx context.Context, c *integration.Client) error {
+	tx, err := c.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	return tx.Rollback()
+}
+
+// An option of an eager load kept in a variable.
+func loadWith(ctx context.Context, c *integration.Client, opt func(entity.PostQuerier)) ([]*entity.User, error) {
+	return c.User.Query().WithPosts(opt).All(ctx)
+}
+
+// An interface of the application's that names a method of a query.
+type exister interface {
+	Exist(context.Context) (bool, error)
+}
+
+func opened(dsn string) (*integration.Client, error) { return integration.Open("sqlite", dsn) }
+
+// The start of a query as a value.
+func starter(c *integration.Client) func() entity.UserQuerier { return c.User.Query }
+
+// Only some columns of the neighbors of an eager load.
+func authorNames(ctx context.Context, c *integration.Client) ([]*entity.Post, error) {
+	return c.Post.Query().WithAuthor(func(q entity.UserQuerier) { q.Select(user.FieldName) }).All(ctx)
+}
+
+// The library's combinator of conditions that are not predicate types.
+func plain(fs ...func(*sql.Selector)) func(*sql.Selector) { return sql.AndPredicates(fs...) }
+
 // A deferred call that comes to be the argument of another runs later still.
 func cleanup(ctx context.Context, c *integration.Client) {
 	defer c.User.Update().SetAge(0).ExecX(ctx) // note: a deferred (or go) call is inside a function now
@@ -142,6 +231,40 @@ func around(ctx context.Context, cs []*integration.Client) (int, error) {
 		}
 	}
 	return total, nil
+}
+
+// A handle that is another one each time round, and an entity kept outside.
+func firstOnly(ctx context.Context, clients []*integration.Client) (int, error) {
+	total := 0
+	var u *entity.User
+	for i, c := range clients {
+		if i == 0 {
+			u, _ = c.User.Query().First(ctx)
+		}
+		n, err := u.QueryPosts().Count(ctx) // note: QueryPosts is given the handle of the context
+		if err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// What is kept on the receiver is not a change of the handle, nor is a
+// field of the entity a change of what it was read on.
+type cache struct {
+	c    *integration.Client
+	last *entity.User
+}
+
+func (s *cache) posts(ctx context.Context) (int, error) {
+	u, err := s.c.User.Query().First(ctx)
+	if err != nil {
+		return 0, err
+	}
+	s.last = u
+	u.Name = "seen"
+	return u.QueryPosts().Count(ctx)
 }
 
 // A handle that is a parameter, given another value.
@@ -212,6 +335,14 @@ func none(ps ...predicate.User) predicate.User {
 
 func either() func(...predicate.User) predicate.User {
 	return user.Or // note: Or as a value
+}
+
+// No order, kept as an option.
+func keptDefault() entity.PostPaginateOption { return entity.WithPostOrder(nil) }
+
+// Unwrap put off.
+func later2(u *entity.User) {
+	defer u.Unwrap()
 }
 
 // Or and Not of nothing.
@@ -344,6 +475,7 @@ func like(ctx context.Context, c *integration.Client, userID int, likeIDs ...int
 
 func valid(r user.Role) bool { return r.IsValid() }
 
-var _ = []any{scope, capped, stamp, classify, fieldOf, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
+var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
+	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
 	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}

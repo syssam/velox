@@ -138,8 +138,20 @@ err = db.User.DeleteByID(ctx, conn, id)
   the entities, for a list that shows a few columns of a wide table. The
   other fields stay zero, so such an entity is for reading. The id, the
   columns the query is ordered by and the keys of the edges it loads are
-  read too. `Select(...)` is the other thing: columns and aggregates scanned
+  read too. The query given to an eager load takes it as well:
+  `WithPosts(db.Post.Query(nil).Columns(post.ColumnTitle))`. `Select(...)`
+  is the other thing: columns and aggregates scanned
   into a struct of the caller's.
+- An order is `user.Name.Asc()`; by a column named at run time,
+  `predicate.UserOrderTerm{Col: name, Desc: true}` (a name that is no column
+  fails the query); and for what neither says (NULLS LAST, an expression),
+  `predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { ... }))`. A
+  query ordered by a function cannot be paged: a cursor is made of columns.
+- The key of an edge (`comment.PostID`) compares like any column of its type,
+  `GT` and `LT` included; it has no `Add`.
+- `tx.Driver()` and `db.Driver()` give the driver under a handle, for SQL of
+  the caller's own inside the same transaction; `orm.TxFrom(ctx)` is the
+  transaction a context carries (`orm.WithExecutor(ctx, tx)`), or nil.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
@@ -534,14 +546,29 @@ first:
 | a deferred call that came to be wrapped (`defer q.ExecX(ctx)`) | it is put in a function so that it still runs later; its arguments are evaluated then |
 
 What it keeps without a word: `IsNotFound`, `IsNotSingular`,
-`IsConstraintError`, `IsValidationError` and `IsNotLoaded`, and the values
-`ErrNotFound` and `ErrNotSingular`, of the generated package or of the
-library, become the runtime's (velox's never hold for an error of the new
-code). An edge query is given the handle its entity was read on only when
-the text settles it: the entity's variable is given its value in one place,
-before the query, nothing is written through it and `Unwrap` is not called
-on it, and the handle's variable is not given another value. Otherwise it
-gets the context's handle and a line in the report.
+`IsConstraintError`, `IsValidationError` and `IsNotLoaded`, of the generated
+package or of the library, and the library's values `ErrNotFound` and
+`ErrNotSingular`, become the runtime's (velox's never hold for an error of
+the new code). An edge query is given the handle its entity was read on
+only when the text settles it: the entity's variable is given its value in
+one place, before the query; `Unwrap` is not called on it; when what is
+queried is an element or a field of it (`us[0]`), nothing is written through
+it; and the handle's variable is not given another value and is declared
+around the entity's (not the variable of a loop the entity outlives).
+Otherwise it gets the context's handle and a line in the report, or, where
+no `ctx` is in sight, only the line.
+
+A parameter of type `*Client` that a function only queries on (and hands to
+functions that only query on it) becomes an `orm.Executor`, so that
+`tx.Client()`, which is the transaction now, can be passed for it. One the
+function begins a transaction on, or closes, stays a `*orm.DB`.
+
+One difference in a hook is not rewritten or reported, because nothing in
+the application's text shows it: `m.OldField` reads the row under the
+mutation's own conditions, where velox read it by its id. For an update
+whose guard the row fails (an optimistic lock), velox handed the hook the
+old value and then found no row to update; here the hook's `OldField` is
+already `orm.ErrNotFound`.
 
 What it does not see, and a person must: a query or mutation type of one
 entity given to a generic function as a type argument (`as[*UserMutation](m)`

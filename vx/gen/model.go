@@ -241,6 +241,11 @@ type %[1]sConnection struct {
 		}
 		w("\t},\n}\n\n")
 		if sensitive {
+			for _, f := range e.Fields {
+				if !f.Hidden && f.GoName == "String" {
+					return nil, fmt.Errorf("vx: %s has a field %q and, with a sensitive field, a method String that keeps the secret out of what is printed: rename the field", e.Name, f.F.Name)
+				}
+			}
 			w("// String renders the %[1]s without its sensitive fields, so that printing\n// one does not put a secret in a log.\nfunc (e *%[1]s) String() string { return orm.Describe(&%[2]s, e) }\n\n", e.Name, n.Meta)
 		}
 

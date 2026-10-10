@@ -265,6 +265,44 @@ func stamp(m velox.Mutation) {
 var _ = stamp
 `,
 		want: generateFails, wantSubstr: "through as, a velox.Mutation is asserted to an interface with SetLabel"},
+	{name: "hook asserts a type defined on the mutation",
+		schema: labelEntities("Thing") + `
+type Mut velox.Mutation
+
+type Mut2 Mut
+
+func stamp(m Mut2) {
+	if s, ok := m.(interface{ SetLabel(string) }); ok {
+		s.SetLabel("x")
+	}
+}
+
+var _ = stamp
+`,
+		want: generateFails, wantSubstr: "a velox.Mutation is asserted to an interface with SetLabel"},
+	// The exemption with its reason after a colon or a tab, and inside a
+	// helper that takes any.
+	{name: "an exemption with a reason, and inside a generic helper",
+		schema: labelEntities("Thing") + `
+func as[T any](v any) (T, bool) {
+	t, ok := v.(T) //vx:nocheck: the typed way first
+	return t, ok
+}
+
+func stamp(m velox.Mutation) {
+	if s, ok := as[interface{ SetLabel(string) }](m); ok {
+		s.SetLabel("x")
+		return
+	}
+	if s, ok := m.(interface{ SetOther(string) }); ok { //vx:nocheck	by name below
+		s.SetOther("x")
+	}
+	_ = m.SetField("label", "x")
+}
+
+var _ = stamp
+`,
+		want: builds},
 	// The exemption is for the line it is on, or the next when it stands
 	// alone: at the end of a line it does not cover the line below.
 	{name: "an exemption at the end of a line is for that line",
@@ -513,6 +551,49 @@ func (NodeType) Fields() []velox.Field { return []velox.Field{field.String("labe
 func (NodeType) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
 		want: generateFails, wantSubstr: "has the name of what the root package declares"},
+	// A time field of a Go type that is a time under another name, without
+	// methods of its own: nothing could write it.
+	{name: "a time field of a type without Value and Scan",
+		extra: map[string]string{
+			"stamps/stamps.go": "package stamps\n\nimport \"time\"\n\ntype Stamp time.Time\n",
+			"schema/thing.go": `package schema
+
+import (
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema/field"
+
+	"IMPORTPATH/stamps"
+)
+
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.Time("at").GoType(stamps.Stamp{})}
+}
+`},
+		schema: labelEntities("Other"),
+		want:   generateFails, wantSubstr: "needs that type to have Value and Scan"},
+	// A field called string on an entity that gets a String method.
+	{name: "a field called string next to a sensitive field",
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("string"), field.String("secret").Sensitive()}
+}
+`,
+		want: generateFails, wantSubstr: "a method String"},
+	// A string id of a named Go type is told apart from another column of
+	// that type by its name, not by a number.
+	{name: "a string id of a named type next to a field of that type",
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("id").GoType(types.Label("")), field.String("label").GoType(types.Label(""))}
+}
+`,
+		want: builds, generated: map[string][]string{"thing/thing.go": {"type LabelIDColumn string", "type LabelColumn string"}}},
 	// An entity nothing can be ordered by: velox's schema generator writes
 	// an order enum without values, and refuses its own schema. Said at
 	// generation; the entity needs a field to order by, or to be left out

@@ -3,6 +3,8 @@ package tests
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/vx/orm"
 	client "github.com/syssam/velox/vx/tests/db"
 	"github.com/syssam/velox/vx/tests/db/entity"
@@ -110,6 +113,29 @@ func TestInterceptorReturningNil(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, users)
 	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	page, err := client.User.Query(db).Paginate(ctx, nil, intp(1), nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, page.Edges)
+}
+
+// A row that is not there is not found, also when the update changes an
+// edge kept in a join table: the join rows are written first, and the
+// missing row used to come back as a broken foreign key from SaveOne (and
+// as not found from ExecOne).
+func TestUpdateOfAMissingRowWithEdges(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	p := newPost(t, db, ann, "a1")
+	_, err := client.User.UpdateByID(db, 9999).Set(user.LikedPosts.Add(p.ID)).SaveOne(ctx)
+	require.ErrorIs(t, err, orm.ErrNotFound)
+	require.ErrorIs(t, client.User.UpdateByID(db, 9999).Set(user.LikedPosts.Add(p.ID)).ExecOne(ctx), orm.ErrNotFound)
+	// And under a condition the row fails.
+	_, err = client.User.UpdateByID(db, ann.ID).Where(user.Age.EQ(99)).Set(user.LikedPosts.Add(p.ID)).SaveOne(ctx)
+	require.ErrorIs(t, err, orm.ErrNotFound)
+	n, err := ann.QueryLikedPosts(db).Count(ctx)
 	require.NoError(t, err)
 	require.Zero(t, n)
 }
@@ -361,4 +387,79 @@ func TestExecOne(t *testing.T) {
 	u, ok := saved.(*entity.User)
 	require.True(t, ok, "the hook was handed %T", saved)
 	require.Equal(t, 32, u.Age)
+}
+
+// The key of an edge is compared against a bound like any column of its
+// type: code moved from velox applies one numeric filter to every int64
+// column, keys included.
+func TestKeyColumn_Comparisons(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+	bob := newUser(t, db, "bob", 40)
+	p := newPost(t, db, ann, "a1")
+	for _, u := range []*entity.User{ann, bob} {
+		require.NoError(t, client.Like.Create(db).Set(like.User.Set(u.ID), like.Post.Set(p.ID)).Exec(ctx))
+	}
+	n, err := client.Like.Query(db).Where(like.UserID.GT(ann.ID)).Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	n, err = client.Like.Query(db).Where(like.UserID.LTE(bob.ID), like.PostID.GTE(p.ID)).Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	var ranged orm.OrderedColumn[int, predicate.Like] = &like.UserID
+	n, err = client.Like.Query(db).Where(ranged.LT(bob.ID)).Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+}
+
+// The transaction of a context, and the driver under one.
+func TestTxFromAndDriver(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	require.Nil(t, orm.TxFrom(ctx))
+	require.Nil(t, orm.TxFrom(orm.WithExecutor(ctx, db)), "a handle that is not a transaction")
+	require.ErrorContains(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+		in := orm.WithExecutor(ctx, tx)
+		require.Same(t, tx, orm.TxFrom(in))
+		require.Equal(t, orm.Executor(tx), orm.ExecutorFrom(in))
+		// What is written through the transaction's driver is the
+		// transaction's: gone with it.
+		u := newUser(t, tx, "ann", 30)
+		require.NoError(t, tx.Driver().Exec(in, "UPDATE users SET age = 31 WHERE id = "+strconv.Itoa(u.ID), []any{}, nil))
+		got, err := client.User.Get(in, tx, u.ID)
+		require.NoError(t, err)
+		require.Equal(t, 31, got.Age)
+		return errors.New("roll back")
+	}), "roll back")
+	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n)
+}
+
+// An order written against the SQL builder, for what Asc and Desc of a
+// column do not say; a query ordered that way is not paged.
+func TestRawOrder(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	for i, name := range []string{"ann", "bob", "cy"} {
+		u := newUser(t, db, name, 30+i)
+		if name != "bob" {
+			require.NoError(t, client.User.UpdateByID(db, u.ID).Set(user.Nickname.Set("n-"+name)).ExecOne(ctx))
+		}
+	}
+	// Those with a nickname first, by nickname descending; bob, who has
+	// none, last on every database.
+	byNick := predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) {
+		s.OrderBy("CASE WHEN "+s.C(user.ColumnNickname)+" IS NULL THEN 1 ELSE 0 END", sql.Desc(s.C(user.ColumnNickname)))
+	}))
+	us, err := client.User.Query(db).OrderBy(byNick, user.Name.Asc()).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, us, 3)
+	assert.Equal(t, []string{"cy", "ann", "bob"}, []string{us[0].Name, us[1].Name, us[2].Name})
+	// On an eager load too.
+	_, err = client.Post.Query(db).WithAuthor(client.User.Query(nil).OrderBy(byNick)).All(ctx)
+	require.NoError(t, err)
+	_, err = client.User.Query(db).OrderBy(byNick).Paginate(ctx, nil, intp(1), nil, nil)
+	require.ErrorContains(t, err, "cannot be paged")
 }

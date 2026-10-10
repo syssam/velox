@@ -224,6 +224,18 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 			return nil, err
 		}
 		ops := f.F.Ops()
+		// The key of an edge is compared against a bound like any other
+		// column of its type. velox (as Ent) lists only equality for an
+		// edge field, and its generic column types had the rest anyway:
+		// code that applies one numeric filter to every int64 column,
+		// keys included, was written against that.
+		if f.F.IsEdgeField() && !slices.Contains(ops, vgen.GT) && f.F.Type != nil {
+			switch t := f.F.Type.Type; {
+			case t.Numeric(), t == field.TypeString, t == field.TypeTime, t == field.TypeUUID:
+				at := slices.Index(ops, vgen.NotIn) + 1
+				ops = slices.Insert(slices.Clone(ops), at, vgen.GT, vgen.GTE, vgen.LT, vgen.LTE)
+			}
+		}
 		var names []string
 		ordered := false
 		for _, o := range ops {
@@ -248,9 +260,9 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		// included, though it has no range predicates.
 		sortable := ordered || f.IsID || (f.F.Type != nil && f.F.Type.Type != field.TypeJSON && f.F.Type.Type != field.TypeBytes && f.F.Type.Type != field.TypeOther)
 		// What a column offers follows from its Go type, whether it can be
-		// NULL, and whether it is the key of an edge (a key is compared for
-		// equality, not ordered against a bound, and not incremented): those
-		// three also name its type. Add on the id is refused when it runs.
+		// NULL, and whether it is the key of an edge (a key is not
+		// incremented): those three also name its type. Add on the id is
+		// refused when it runs.
 		isKey := f.F.IsEdgeField()
 		add := !isKey && (f.F.Type != nil && f.F.Type.Numeric() || f.F.IsOther())
 		s := &shape{gotype: gt, ops: ops, nullable: nullable, clear: nullable && f.F.Optional, add: add, order: sortable, keep: f.F.UpdateDefault}
@@ -273,13 +285,14 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		if s.nullable && !s.clear {
 			qualifier += "Required"
 		}
-		if f.IsID && !isKey && gt == "string" {
+		if f.IsID && !isKey && f.F.Type != nil && f.F.Type.Type == field.TypeString {
 			base = strings.TrimSuffix(base, "Column") + "IDColumn"
 		}
 		base = qualifier + base
 		s.name = base
-		// A number only for what the above cannot tell apart: two Go types
-		// with one name (map[string]int and map[string]any).
+		// A number for what the above does not tell apart: two Go types
+		// with one name (map[string]int and map[string]any), a field called
+		// like the type (auto_time_column).
 		for i := 2; taken[s.name]; i++ {
 			s.name = fmt.Sprintf("%s%d", base, i)
 		}

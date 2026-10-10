@@ -150,6 +150,17 @@ func (NamedBoolNil) Fields() []velox.Field {
 	}
 }
 
+// Stamped has a time field of a Go type of its own, next to a plain one.
+type Stamped struct{ velox.Schema }
+
+// Fields of the Stamped.
+func (Stamped) Fields() []velox.Field {
+	return []velox.Field{
+		field.Time("at").GoType(types.Stamp{}),
+		field.Time("plain"),
+	}
+}
+
 // NamedBytes holds bytes fields with a named Go type.
 type NamedBytes struct{ velox.Schema }
 

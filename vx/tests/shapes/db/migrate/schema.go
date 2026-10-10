@@ -2183,6 +2183,26 @@ var SqlTable = &schema.Table{
 	PrimaryKey: []*schema.Column{SqlColumns[0]},
 }
 
+// StampedColumns holds the columns for the "stampeds" table.
+var StampedColumns = []*schema.Column{{
+	Increment: true,
+	Name:      "id",
+	Type:      field.TypeInt,
+}, {
+	Name: "at",
+	Type: field.TypeTime,
+}, {
+	Name: "plain",
+	Type: field.TypeTime,
+}}
+
+// StampedTable holds the schema information for the "stampeds" table.
+var StampedTable = &schema.Table{
+	Columns:    StampedColumns,
+	Name:       "stampeds",
+	PrimaryKey: []*schema.Column{StampedColumns[0]},
+}
+
 // StringKeyColumns holds the columns for the "string_keys" table.
 var StringKeyColumns = []*schema.Column{{
 	Name: "id",
@@ -2979,7 +2999,7 @@ var WeightKeyPeersTable = &schema.Table{
 }
 
 // Tables holds all the tables in the schema.
-var Tables = []*schema.Table{AndTable, ArticleTable, AuthorTable, BadgeTable, BareTable, BlobTable, BulkTable, ClashTable, ContextTable, CourseTable, CreateTable, DbTable, DefaultShapeTable, EdgeTable, EdgesTable, EdgesEnumTable, EdgesFieldTable, EnrollmentTable, EntityTable, EntityxTable, EnumShapeTable, ErrFieldTable, ErrorsTable, FieldTable, GadgetTable, GoTypeShapeTable, HttpTable, IdTable, Int64KeyTable, IntKeyTable, InternalTable, JsonTable, KeywordsTable, KindTable, KindShapeTable, LabelKeyTable, LoadTable, LockerTable, ManualKeyTable, MathTable, MetaTable, MigrateTable, MixedInTable, MixinOnlyTable, NamedBoolTable, NamedBoolNilTable, NamedBytesTable, NodeTable, NotTable, NoteTable, OddTable, OrTable, OrderTable, OrmTable, PassportTable, PersonTable, PlayerTable, PredTable, PredicateTable, QueryUserTable, RenamedTable, RuntimeTable, ScalarTable, SchemainitTable, SetTable, SqlTable, StringKeyTable, StringsTable, StudentTable, TableTable, TeamTable, TimeTable, TopicTable, TxTable, UUIDTable, UUIDKeyTable, Uint16KeyTable, UpdateTable, UserTable, UserClientTable, UserOrderTermTable, UserSetterTable, ValidatedTable, WeightKeyTable, WideTable, ArticleTopicsTable, ArticleBansTable, LabelWeightsTable, PersonFriendsTable, PersonFollowingTable, TeamFansTable, TeamRivalsTable, TeamBadgesTable, WeightKeyPeersTable}
+var Tables = []*schema.Table{AndTable, ArticleTable, AuthorTable, BadgeTable, BareTable, BlobTable, BulkTable, ClashTable, ContextTable, CourseTable, CreateTable, DbTable, DefaultShapeTable, EdgeTable, EdgesTable, EdgesEnumTable, EdgesFieldTable, EnrollmentTable, EntityTable, EntityxTable, EnumShapeTable, ErrFieldTable, ErrorsTable, FieldTable, GadgetTable, GoTypeShapeTable, HttpTable, IdTable, Int64KeyTable, IntKeyTable, InternalTable, JsonTable, KeywordsTable, KindTable, KindShapeTable, LabelKeyTable, LoadTable, LockerTable, ManualKeyTable, MathTable, MetaTable, MigrateTable, MixedInTable, MixinOnlyTable, NamedBoolTable, NamedBoolNilTable, NamedBytesTable, NodeTable, NotTable, NoteTable, OddTable, OrTable, OrderTable, OrmTable, PassportTable, PersonTable, PlayerTable, PredTable, PredicateTable, QueryUserTable, RenamedTable, RuntimeTable, ScalarTable, SchemainitTable, SetTable, SqlTable, StampedTable, StringKeyTable, StringsTable, StudentTable, TableTable, TeamTable, TimeTable, TopicTable, TxTable, UUIDTable, UUIDKeyTable, Uint16KeyTable, UpdateTable, UserTable, UserClientTable, UserOrderTermTable, UserSetterTable, ValidatedTable, WeightKeyTable, WideTable, ArticleTopicsTable, ArticleBansTable, LabelWeightsTable, PersonFriendsTable, PersonFollowingTable, TeamFansTable, TeamRivalsTable, TeamBadgesTable, WeightKeyPeersTable}
 
 func init() {
 	ArticleTable.ForeignKeys[0].RefTable = AuthorTable

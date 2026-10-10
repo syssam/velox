@@ -1,6 +1,10 @@
 package orm
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/syssam/velox/dialect/sql"
+)
 
 // Op is the operator of a predicate.
 type Op uint8
@@ -87,6 +91,8 @@ type O struct {
 	// err is why the term could not be built (an order input naming
 	// something the entity is not ordered by); the query reports it.
 	err error
+	// raw, when set, writes the term itself: see RawOrder.
+	raw func(*sql.Selector)
 }
 
 // EdgeLoad asks a query to eager-load one edge.
@@ -96,7 +102,10 @@ type EdgeLoad struct {
 	Orders []O
 	// Limit caps the neighbors loaded per parent; 0 loads all.
 	Limit int
-	With  []*EdgeLoad
+	// Cols, when not empty, are the columns read into the neighbors, with
+	// the ones the load cannot do without.
+	Cols []string
+	With []*EdgeLoad
 	// Err is reported by the query that loads the edge.
 	Err error
 }
@@ -118,9 +127,7 @@ func (q *QueryCore) Load(e *EdgeMeta, opts *QueryCore, given int) {
 		if opts.Offset != 0 || opts.Distinct {
 			l.Err = fmt.Errorf("orm: loading edge %q of %s: Offset and Distinct are not supported on an eager load", e.Name, e.Owner.Name)
 		}
-		if len(opts.Cols) > 0 {
-			l.Err = fmt.Errorf("orm: loading edge %q of %s: the neighbors are read whole, Columns is not supported on an eager load", e.Name, e.Owner.Name)
-		}
+		l.Cols = append([]string(nil), opts.Cols...)
 	}
 	if given > 1 {
 		l.Err = fmt.Errorf("orm: loading edge %q of %s: one query describes the load, %d were given", e.Name, e.Owner.Name, given)

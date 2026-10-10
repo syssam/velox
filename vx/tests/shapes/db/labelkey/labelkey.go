@@ -17,23 +17,23 @@ const (
 	ModelName = "LabelKey"
 )
 
-// LabelColumn is a column of Go type types.Label: its methods build the predicates,
+// LabelIDColumn is a column of Go type types.Label: its methods build the predicates,
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
-type LabelColumn string
+type LabelIDColumn string
 
 // EQ matches the rows whose column equals v.
-func (f *LabelColumn) EQ(v types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) EQ(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpEQ, Col: string(*f), Val: v}
 }
 
 // NEQ matches the rows whose column differs from v.
-func (f *LabelColumn) NEQ(v types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) NEQ(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
 // In matches the rows whose column is one of vs; without any, none.
-func (f *LabelColumn) In(vs ...types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) In(vs ...types.Label) predicate.LabelKey {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -42,7 +42,7 @@ func (f *LabelColumn) In(vs ...types.Label) predicate.LabelKey {
 }
 
 // NotIn matches the rows whose column is none of vs.
-func (f *LabelColumn) NotIn(vs ...types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) NotIn(vs ...types.Label) predicate.LabelKey {
 	a := make([]any, len(vs))
 	for i, v := range vs {
 		a[i] = v
@@ -51,33 +51,33 @@ func (f *LabelColumn) NotIn(vs ...types.Label) predicate.LabelKey {
 }
 
 // GT matches the rows whose column is greater than v.
-func (f *LabelColumn) GT(v types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) GT(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpGT, Col: string(*f), Val: v}
 }
 
 // GTE matches the rows whose column is v or greater.
-func (f *LabelColumn) GTE(v types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) GTE(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpGTE, Col: string(*f), Val: v}
 }
 
 // LT matches the rows whose column is less than v.
-func (f *LabelColumn) LT(v types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) LT(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpLT, Col: string(*f), Val: v}
 }
 
 // LTE matches the rows whose column is v or less.
-func (f *LabelColumn) LTE(v types.Label) predicate.LabelKey {
+func (f *LabelIDColumn) LTE(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
 // Set assigns v to the column.
-func (f *LabelColumn) Set(v types.Label) predicate.LabelKeySetter {
+func (f *LabelIDColumn) Set(v types.Label) predicate.LabelKeySetter {
 	return predicate.LabelKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
 }
 
 // SetNillable assigns *v to the column, or nothing when v is nil: the setter
 // for an input field the caller may have left out.
-func (f *LabelColumn) SetNillable(v *types.Label) predicate.LabelKeySetter {
+func (f *LabelIDColumn) SetNillable(v *types.Label) predicate.LabelKeySetter {
 	if v == nil {
 		return predicate.LabelKeySetter{}
 	}
@@ -85,12 +85,12 @@ func (f *LabelColumn) SetNillable(v *types.Label) predicate.LabelKeySetter {
 }
 
 // Asc orders by the column, smallest first.
-func (f *LabelColumn) Asc() predicate.LabelKeyOrderTerm {
+func (f *LabelIDColumn) Asc() predicate.LabelKeyOrderTerm {
 	return predicate.LabelKeyOrderTerm{Col: string(*f)}
 }
 
 // Desc orders by the column, greatest first.
-func (f *LabelColumn) Desc() predicate.LabelKeyOrderTerm {
+func (f *LabelIDColumn) Desc() predicate.LabelKeyOrderTerm {
 	return predicate.LabelKeyOrderTerm{Col: string(*f), Desc: true}
 }
 
@@ -204,7 +204,7 @@ const (
 
 // The columns of LabelKey.
 var (
-	ID   = LabelColumn(ColumnID)
+	ID   = LabelIDColumn(ColumnID)
 	Name = StringColumn(ColumnName)
 )
 

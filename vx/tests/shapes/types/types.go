@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Tier is a custom enum type. field.Enum(...).GoType requires Values().
@@ -127,4 +128,31 @@ func (p *Pair) Scan(src any) error {
 	}
 	p.B, err = strconv.Atoi(b)
 	return err
+}
+
+// Stamp is a time under a type of its own: it reaches the database through
+// its Valuer, and comes back through its Scanner.
+type Stamp struct{ T time.Time }
+
+// Value implements driver.Valuer.
+func (s Stamp) Value() (driver.Value, error) { return s.T, nil }
+
+// Scan implements sql.Scanner.
+func (s *Stamp) Scan(v any) error {
+	switch t := v.(type) {
+	case time.Time:
+		s.T = t
+		return nil
+	case string:
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05.999999999"} {
+			if at, err := time.Parse(layout, t); err == nil {
+				s.T = at
+				return nil
+			}
+		}
+	case nil:
+		s.T = time.Time{}
+		return nil
+	}
+	return fmt.Errorf("types: cannot scan %T into a Stamp", v)
 }

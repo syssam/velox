@@ -87,7 +87,7 @@ type ent struct {
 // named like the entity, as in velox (predicate.User): the package name says
 // what it is. The others carry a suffix, and give way to an entity that is
 // named like one of them (the setters of Purchase and an entity called
-// PurchaseSet).
+// PurchaseSetter).
 func (e *ent) pred() string  { return "predicate." + e.Name }
 func (e *ent) set() string   { return "predicate." + e.pnames[0] }
 func (e *ent) order() string { return "predicate." + e.pnames[1] }
@@ -394,6 +394,12 @@ func (g *generator) entity(t *vgen.Type) (*ent, error) {
 		// that does not build or cannot write a row.
 		if f.HasValueScanner() {
 			return fmt.Errorf("field %q: an external ValueScanner is not supported yet; give the field's Go type Scan and Value methods instead", f.Name)
+		}
+		// A time field of a Go type that is not time.Time is written and
+		// read by that type's own Value and Scan: without them (type Stamp
+		// time.Time) every create would fail, at run time.
+		if f.Type != nil && f.Type.Type == field.TypeTime && f.HasGoType() && f.Type.RType != nil && f.Type.RType.Ident != "time.Time" && (!f.Type.Valuer() || !f.Type.ValueScanner()) {
+			return fmt.Errorf("field %q: a time field of the Go type %s needs that type to have Value and Scan methods (driver.Valuer and sql.Scanner)", f.Name, f.Type.RType.Ident)
 		}
 		base, enum, err := g.baseType(e, f)
 		if err != nil {

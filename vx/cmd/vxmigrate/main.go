@@ -103,6 +103,7 @@ func run(args []string, stderr io.Writer) error {
 		return path[strings.LastIndex(path, "/")+1:]
 	}
 	done := map[string]int{}
+	handles, methods := handleParams(p, s), ownMethods(p)
 	var notes []string
 	changed, failed := 0, 0
 	rewrite := func(files []*ast.File, info *types.Info, pkg *types.Package, reserved map[string]bool) error {
@@ -115,7 +116,7 @@ func run(args []string, stderr io.Writer) error {
 				return err
 			}
 			fe.reserved = reserved
-			r := &rewriter{fileEdits: fe, s: s, lib: *lib, done: done, sets: map[*ast.CallExpr]bool{}, made: map[*ast.CallExpr]bool{}, wrapped: map[*ast.CallExpr]bool{}}
+			r := &rewriter{fileEdits: fe, s: s, lib: *lib, done: done, sets: map[*ast.CallExpr]bool{}, made: map[*ast.CallExpr]bool{}, wrapped: map[*ast.CallExpr]bool{}, handles: handles, ownMethods: methods}
 			if k := p.pkgs[*lib]; k != nil && k.types != nil {
 				r.libScope = k.types.Scope()
 			}

@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	stdsql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"math"
 	"reflect"
@@ -501,6 +502,10 @@ func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.S
 			s.AddError(o.err)
 			continue
 		}
+		if o.raw != nil {
+			o.raw(s)
+			continue
+		}
 		if o.Col == "" {
 			continue // the zero term orders by nothing, as the zero predicate filters nothing
 		}
@@ -826,6 +831,10 @@ func operand(v any) any {
 			at := stored(*t)
 			return &at
 		}
+	case driver.Valuer:
+		if at, ok := valuedTime(t); ok {
+			return at
+		}
 	}
 	return v
 }
@@ -976,6 +985,15 @@ func loadEdge(ctx context.Context, c *conn, l *EdgeLoad, parents []any) error {
 		}
 	}
 	sub := &QueryCore{M: e.Target, Preds: append([]P(nil), l.Preds...), Orders: l.Orders, With: l.With}
+	if len(l.Cols) > 0 {
+		// With the key the neighbors are matched to their parents by, when
+		// it is a column of theirs. (The id, and the keys of the edges
+		// loaded from them in turn, the query adds itself.)
+		sub.Cols = append([]string(nil), l.Cols...)
+		if e.Rel != M2M && !e.fkOnOwner() {
+			sub.Cols = append(sub.Cols, e.Columns[0])
+		}
+	}
 	byParent := make(map[any][]any, len(parents))
 
 	switch {

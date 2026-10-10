@@ -35,14 +35,16 @@ func TestApplyDropsAnOverlap(t *testing.T) {
 }
 
 func TestMemberNames(t *testing.T) {
-	e := &entityInfo{name: "Post", fields: map[string]bool{"Title": true, "OwnerID": true}, edges: map[string]bool{"Owner": true, "Tags": true},
-		singular: map[string]string{"Tag": "Tags"}}
+	e := &entityInfo{name: "Post", fields: map[string]bool{"Title": true, "OwnerID": true}, edges: map[string]bool{"Owner": true, "Tags": true, "Parent": true, "Parents": true},
+		singular: map[string]string{"Tag": "Tags", "Parent": "Parents"}}
 	for name, want := range map[string]string{
 		"SetTitle":           "Set|Title||field",
 		"SetNillableOwnerID": "SetNillable|OwnerID||field", // the field wins over the edge and its ID
 		"AddTagIDs":          "Add|Tags|IDs|edge",
 		"ClearOwner":         "Clear|Owner||edge",
 		"SetOwner":           "Set|Owner||edge",
+		"AddParentIDs":       "Add|Parents|IDs|edge", // not the to-one edge Parent
+		"SetParentID":        "Set|Parent|ID|edge",
 		"Where":              "|||",
 	} {
 		pre, mid, suf, field, edge := split(e, name, setterPrefixes, setterSuffixes)
@@ -78,10 +80,12 @@ func TestReplaceKeepsWhatBelongsToTheNeighbors(t *testing.T) {
 
 func TestEdgeOfSingular(t *testing.T) {
 	edges := map[string]bool{"Likes": true, "LikedPosts": true, "Tags": true, "Categories": true, "CategoryTags": true, "Children": true, "Owner": true,
-		"Companies": true, "CompanyMembers": true, "Replies": true, "ReplyLikes": true, "Men": true, "Managers": true}
+		"Companies": true, "CompanyMembers": true, "Replies": true, "ReplyLikes": true, "Men": true, "Managers": true,
+		"Parent": true, "Parents": true, "Staff": true}
 	for singular, want := range map[string]string{
 		"Like": "Likes", "LikedPost": "LikedPosts", "Tag": "Tags", "Category": "Categories", "CategoryTag": "CategoryTags", "Child": "Children", "Zebra": "",
 		"Company": "Companies", "CompanyMember": "CompanyMembers", "Reply": "Replies", "ReplyLike": "ReplyLikes", "Man": "Men", "Manager": "Managers",
+		"Parent": "Parents", "Staff": "Staff",
 	} {
 		if got := edgeOfSingular(singular, edges); got != want {
 			t.Errorf("%s: got %q, want %q", singular, got, want)

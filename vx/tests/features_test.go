@@ -21,6 +21,7 @@ import (
 	"github.com/syssam/velox/vx/orm"
 	"github.com/syssam/velox/vx/tests/db/entity"
 	"github.com/syssam/velox/vx/tests/db/post"
+	"github.com/syssam/velox/vx/tests/db/tag"
 	"github.com/syssam/velox/vx/tests/db/user"
 )
 
@@ -656,8 +657,32 @@ func TestQuery_Columns(t *testing.T) {
 	// What cannot be done says so.
 	_, err = client.User.Query(db).Columns("no_such_column").All(ctx)
 	require.ErrorContains(t, err, `User has no column "no_such_column" to read`)
-	_, err = client.User.Query(db).WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle)).All(ctx)
-	require.ErrorContains(t, err, "Columns is not supported on an eager load")
+	// The neighbors of an eager load with only some of their columns: each
+	// kind of edge keeps what it is matched to its parent by.
+	loaded, err := client.User.Query(db).WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle).OrderBy(post.Title.Asc())).OrderBy(user.Name.Asc()).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, loaded[0].Edges.Posts, 1)
+	assert.Equal(t, "a1", loaded[0].Edges.Posts[0].Title)
+	assert.Empty(t, loaded[0].Edges.Posts[0].Status, "a column of the neighbor that was not asked for")
+	require.Len(t, loaded[1].Edges.Posts, 1)
+	assert.Equal(t, "b1", loaded[1].Edges.Posts[0].Title)
+	// To one, the key on this side.
+	authored, err := client.Post.Query(db).WithAuthor(client.User.Query(nil).Columns(user.ColumnName)).OrderBy(post.Title.Asc()).All(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, authored[0].Edges.Author)
+	assert.Equal(t, "ann", authored[0].Edges.Author.Name)
+	assert.Empty(t, authored[0].Edges.Author.Email)
+	// Through a join table, and nested under another load.
+	tagged := must(client.Tag.Create(db).Set(tag.Name.Set("go")).Save(ctx))
+	require.NoError(t, client.Post.UpdateByID(db, authored[0].ID).Set(post.Tags.Add(tagged.ID)).ExecOne(ctx))
+	nested, err := client.User.Query(db).Where(user.ID.EQ(ann.ID)).
+		WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle).WithTags(client.Tag.Query(nil).Columns(tag.ColumnName))).Only(ctx)
+	require.NoError(t, err)
+	require.Len(t, nested.Edges.Posts, 1)
+	require.Len(t, nested.Edges.Posts[0].Edges.Tags, 1)
+	assert.Equal(t, "go", nested.Edges.Posts[0].Edges.Tags[0].Name)
+	_, err = client.User.Query(db).WithPosts(client.Post.Query(nil).Columns("no_such_column")).All(ctx)
+	require.ErrorContains(t, err, `Post has no column "no_such_column" to read`)
 }
 
 // Code written once for several entities: orm.Predicate as the constraint,

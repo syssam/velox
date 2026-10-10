@@ -121,6 +121,9 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 		if o.err != nil {
 			return nil, o.err
 		}
+		if o.raw != nil {
+			return nil, errors.New("orm: a query ordered by a function (orm.RawOrder) cannot be paged: a cursor is made of the columns ordered by")
+		}
 	}
 	keys := slices.DeleteFunc(slices.Clone(q.Orders), func(o O) bool { return o.Col == "" })
 	if !slices.ContainsFunc(keys, func(o O) bool { return o.Col == m.id().Column }) {
@@ -226,6 +229,9 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 	})
 	if err != nil {
 		return nil, err
+	}
+	if v == nil {
+		return &Page{}, nil // as All returns no rows for an interceptor's nil
 	}
 	page, ok := v.(*Page)
 	if !ok {

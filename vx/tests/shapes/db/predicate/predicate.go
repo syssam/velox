@@ -732,6 +732,17 @@ type SqlSetter orm.S
 // SqlOrderTerm is an order term of a query of Sql.
 type SqlOrderTerm orm.O
 
+// Stamped is a predicate of Stamped. It is a type of its own, as are the
+// assignments and order terms below, so those of another entity do not
+// compile in a query or mutation of this one.
+type Stamped orm.P
+
+// StampedSetter is an assignment of a mutation of Stamped.
+type StampedSetter orm.S
+
+// StampedOrderTerm is an order term of a query of Stamped.
+type StampedOrderTerm orm.O
+
 // StringKey is a predicate of StringKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.

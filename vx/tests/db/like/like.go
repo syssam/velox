@@ -216,6 +216,26 @@ func (f *IntKeyColumn) NotIn(vs ...int) predicate.Like {
 	return predicate.Like{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// GT matches the rows whose column is greater than v.
+func (f *IntKeyColumn) GT(v int) predicate.Like {
+	return predicate.Like{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *IntKeyColumn) GTE(v int) predicate.Like {
+	return predicate.Like{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *IntKeyColumn) LT(v int) predicate.Like {
+	return predicate.Like{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *IntKeyColumn) LTE(v int) predicate.Like {
+	return predicate.Like{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
 // Set assigns v to the column.
 func (f *IntKeyColumn) Set(v int) predicate.LikeSetter {
 	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}

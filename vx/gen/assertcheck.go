@@ -109,6 +109,42 @@ func checkAssertions(schemaPkg string) error {
 			return fmt.Errorf("vx: reading the schema's source: %s", e)
 		}
 	}
+	// The types the schema's code defines on a subject (type Mut
+	// velox.Mutation, and a type defined on that): a value of one is the
+	// subject. An interface written out with the same methods is not: that
+	// is the application's own, whatever it resembles.
+	defined := map[*types.TypeName]string{}
+	for range 3 {
+		for _, p := range pkgs {
+			if p.TypesInfo == nil {
+				continue
+			}
+			for _, f := range p.Syntax {
+				for _, d := range f.Decls {
+					gd, ok := d.(*ast.GenDecl)
+					if !ok {
+						continue
+					}
+					for _, spec := range gd.Specs {
+						ts, ok := spec.(*ast.TypeSpec)
+						if !ok || ts.TypeParams != nil {
+							continue
+						}
+						tn, _ := p.TypesInfo.Defs[ts.Name].(*types.TypeName)
+						named, isNamed := types.Unalias(p.TypesInfo.TypeOf(ts.Type)).(*types.Named)
+						if tn == nil || !isNamed || named.Obj().Pkg() == nil {
+							continue
+						}
+						if name := named.Obj().Pkg().Path() + "." + named.Obj().Name(); assertSubjects[name] != nil {
+							defined[tn] = name
+						} else if name := defined[named.Obj()]; name != "" {
+							defined[tn] = name
+						}
+					}
+				}
+			}
+		}
+	}
 	var found []string
 	// holds reports whether a value this generator passes for the subject
 	// can be asserted to t, and what t wants that it lacks.
@@ -140,7 +176,7 @@ func checkAssertions(schemaPkg string) error {
 			continue
 		}
 		info := p.TypesInfo
-		subjectOf := func(e ast.Expr) string { return subjectOf(info, e) }
+		subjectOf := func(e ast.Expr) string { return subjectOf(info, defined, e) }
 		skip := func(pos token.Pos) bool { return nocheck(p.Fset, p.Syntax, pos) }
 		say := func(pos token.Pos, subject string, t types.Type, missing []string) {
 			what := "to " + types.TypeString(t, types.RelativeTo(p.Types))
@@ -170,7 +206,7 @@ func checkAssertions(schemaPkg string) error {
 				// it is fine when any of them can hold.
 				check := func(pos token.Pos, operand ast.Expr, targets []ast.Expr) {
 					subject := subjectOf(operand)
-					if subject == "" && len(targets) == 1 && len(funcs) > 0 && funcs[len(funcs)-1] != nil {
+					if subject == "" && len(targets) == 1 && len(funcs) > 0 && funcs[len(funcs)-1] != nil && !skip(pos) {
 						// as[T any](v any) (T, bool) { t, ok := v.(T); ... }
 						tp, isParam := types.Unalias(info.TypeOf(targets[0])).(*types.TypeParam)
 						id, isIdent := ast.Unparen(operand).(*ast.Ident)
@@ -292,7 +328,7 @@ func checkAssertions(schemaPkg string) error {
 					if fn.Origin() != g.fn || g.arg < 0 || g.arg >= len(call.Args) || g.param >= inst.TypeArgs.Len() {
 						continue
 					}
-					if subject := subjectOf(p.TypesInfo, call.Args[g.arg]); subject != "" {
+					if subject := subjectOf(p.TypesInfo, defined, call.Args[g.arg]); subject != "" {
 						report(call.Pos(), fn, subject, inst.TypeArgs.At(g.param))
 					}
 				}
@@ -308,17 +344,17 @@ func checkAssertions(schemaPkg string) error {
 	return fmt.Errorf("vx: the schema's code relies on methods generated code does not have here (a typed setter or getter per field). "+
 		"Read and write a field of a mutation by name instead: m.Field(\"workspace_id\"), m.SetField(\"workspace_id\", id), m.OldField(ctx, \"status\"); "+
 		"narrow a filter with f.WhereP. These work with velox's generated code too. "+
-		"An assertion that is meant to fail here (the typed way first, the way by name after it) is marked with a comment on its line or the line above: //vx:nocheck\n\t%s", strings.Join(found, "\n\t"))
+		"An assertion that is meant to fail here (the typed way first, the way by name after it) is marked with the comment //vx:nocheck at the end of its line, or alone on the line above\n\t%s", strings.Join(found, "\n\t"))
 }
 
 // subjectOf names the interface an operand is, looking through a
 // conversion to an interface (any(m)) and at interfaces that embed
 // one of the subjects.
-func subjectOf(info *types.Info, e ast.Expr) string {
+func subjectOf(info *types.Info, defined map[*types.TypeName]string, e ast.Expr) string {
 	e = ast.Unparen(e)
 	if call, ok := e.(*ast.CallExpr); ok && len(call.Args) == 1 {
 		if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
-			return subjectOf(info, call.Args[0])
+			return subjectOf(info, defined, call.Args[0])
 		}
 	}
 	t := info.TypeOf(e)
@@ -327,6 +363,11 @@ func subjectOf(info *types.Info, e ast.Expr) string {
 	}
 	if named, ok := types.Unalias(t).(*types.Named); ok && named.Obj().Pkg() != nil {
 		if name := named.Obj().Pkg().Path() + "." + named.Obj().Name(); assertSubjects[name] != nil {
+			return name
+		}
+		// type Mut velox.Mutation: the subject under a name of the
+		// application's.
+		if name := defined[named.Obj()]; name != "" {
 			return name
 		}
 	}
@@ -372,7 +413,10 @@ func nocheck(fset *token.FileSet, files []*ast.File, pos token.Pos) bool {
 		}
 		for _, group := range f.Comments {
 			for _, c := range group.List {
-				if c.Text != "//vx:nocheck" && !strings.HasPrefix(c.Text, "//vx:nocheck ") {
+				// //vx:nocheck, alone or followed by the reason after a
+				// space, a tab or a colon; not //vx:nochecker.
+				rest, isDirective := strings.CutPrefix(c.Text, "//vx:nocheck")
+				if !isDirective || (rest != "" && (rest[0] == '_' || rest[0] >= '0' && rest[0] <= '9' || rest[0] >= 'a' && rest[0] <= 'z' || rest[0] >= 'A' && rest[0] <= 'Z')) {
 					continue
 				}
 				switch cp := fset.Position(c.Pos()); cp.Line {

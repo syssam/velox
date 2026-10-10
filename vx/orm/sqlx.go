@@ -16,6 +16,18 @@ import (
 // to the entity's predicate type to use it: predicate.User(orm.Raw(f)).
 func Raw(f func(*sql.Selector)) P { return P{Op: opRaw, raw: f} }
 
+// RawOrder returns an order term written against the SQL builder, for what a
+// column's Asc and Desc do not say: NULLS LAST, an expression, a column of a
+// joined table. Convert it to the entity's order type to use it:
+//
+//	q.OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) {
+//		s.OrderBy(sql.Desc(s.C(user.ColumnNickname)) + " NULLS LAST")
+//	})))
+//
+// A query ordered this way cannot be paged with Paginate: a cursor is made of
+// the columns a page is ordered by, and a function does not name them.
+func RawOrder(f func(*sql.Selector)) O { return O{raw: f} }
+
 // Compile returns the predicate as a function on a selector of its entity's
 // table, for code that builds SQL itself or registers the same condition as a
 // privacy filter or interceptor: q.WhereP(orm.Compile(user.Age.GT(18))).

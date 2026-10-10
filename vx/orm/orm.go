@@ -212,6 +212,11 @@ func (db *DB) BeginTx(ctx context.Context, opts *stdsql.TxOptions) (*Tx, error) 
 	return &Tx{c: conn{drv: txDriver{t: t, name: db.c.drv.Dialect(), seq: new(int)}, ext: db.c.ext}, tx: t}, nil
 }
 
+// Driver returns the driver the transaction runs on, for code that works
+// below the ORM inside the transaction: a lock statement, SQL of the
+// caller's own.
+func (tx *Tx) Driver() dialect.Driver { return tx.c.drv }
+
 // Commit commits the transaction.
 func (tx *Tx) Commit() error {
 	if tx.done {

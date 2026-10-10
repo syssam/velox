@@ -280,6 +280,26 @@ func (f *IntKeyColumn) NotIn(vs ...int) predicate.Enrollment {
 	return predicate.Enrollment{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// GT matches the rows whose column is greater than v.
+func (f *IntKeyColumn) GT(v int) predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpGT, Col: string(*f), Val: v}
+}
+
+// GTE matches the rows whose column is v or greater.
+func (f *IntKeyColumn) GTE(v int) predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpGTE, Col: string(*f), Val: v}
+}
+
+// LT matches the rows whose column is less than v.
+func (f *IntKeyColumn) LT(v int) predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpLT, Col: string(*f), Val: v}
+}
+
+// LTE matches the rows whose column is v or less.
+func (f *IntKeyColumn) LTE(v int) predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
 // Set assigns v to the column.
 func (f *IntKeyColumn) Set(v int) predicate.EnrollmentSetter {
 	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
