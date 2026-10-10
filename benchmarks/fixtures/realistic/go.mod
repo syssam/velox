@@ -27,7 +27,3 @@ require (
 )
 
 replace github.com/syssam/velox => ../../..
-
-require github.com/syssam/velox/vx v0.0.0
-
-replace github.com/syssam/velox/vx => ../../../vx

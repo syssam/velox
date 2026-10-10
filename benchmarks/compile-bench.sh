@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Compile cost of the generated ORM code for the "realistic" fixture, for
-# velox and for vx, on the same schema.
+# velox, the generator being replaced, and for orm, the new one (cmd/velox-gen
+# and package orm), on the same schema.
 #
-#	benchmarks/compile-bench.sh <velox|vx> [scenario...]
+#	benchmarks/compile-bench.sh <velox|orm> [scenario...]
 #
 # Scenarios (default: cold noop hook field):
 #
@@ -16,9 +17,9 @@
 #
 # Only the generated packages are timed; the Go packages they import (the
 # runtime, the SQL builder) are built first and are not part of the numbers.
-# Set GOGC=200 (or GOMAXPROCS, -p via BENCH_P) to see their effect; VX_FLAGS
-# is passed to vxgen. With REALISTIC_LIST=1 the services also have a GraphQL
-# list endpoint per entity; vx then needs VX_FLAGS="-graphql ./gqlschema_vx/velox.graphql".
+# Set GOGC=200 (or GOMAXPROCS, -p via BENCH_P) to see their effect; ORM_FLAGS
+# is passed to velox-gen. With REALISTIC_LIST=1 the services also have a GraphQL
+# list endpoint per entity; orm then needs ORM_FLAGS="-graphql ./gqlschema_orm/velox.graphql".
 # Output
 # is a line per scenario: wall seconds, packages compiled, CPU seconds, and
 # the largest compile's memory.
@@ -27,7 +28,7 @@
 # CPU and memory numbers are far less sensitive to load than the wall time.
 set -euo pipefail
 
-orm="${1:?usage: compile-bench.sh <velox|vx> [scenario...]}"
+orm="${1:?usage: compile-bench.sh <velox|orm> [scenario...]}"
 shift || true
 scenarios=("$@")
 [ ${#scenarios[@]} -eq 0 ] && scenarios=(cold noop hook field)
@@ -40,7 +41,7 @@ cd "$fix"
 
 case "$orm" in
 velox) target=./velox/... ; warm=(github.com/syssam/velox/...) ;;
-vx) target=./vx/... ; warm=(github.com/syssam/velox/vx/orm) ;;
+orm) target=./db/... ; warm=(github.com/syssam/velox/orm) ;;
 *) echo "unknown ORM $orm" >&2; exit 2 ;;
 esac
 
@@ -62,8 +63,8 @@ generate() {
 	if [ "$orm" = velox ]; then
 		go run generate_velox.go >/dev/null
 	else
-		go run github.com/syssam/velox/vx/cmd/vxgen -schema example.com/realistic/schema \
-			-target ./vx -package example.com/realistic/vx ${VX_FLAGS:-} >/dev/null 2>&1
+		go run github.com/syssam/velox/cmd/velox-gen -schema example.com/realistic/schema \
+			-target ./db -package example.com/realistic/db ${ORM_FLAGS:-} >/dev/null 2>&1
 	fi
 }
 

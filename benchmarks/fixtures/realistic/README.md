@@ -4,6 +4,11 @@ A 450-entity schema that is shaped like a real large application, for
 measuring what an ORM's generated code costs the Go compiler. Nothing in it
 comes from that application except counts and proportions.
 
+In these notes `velox` is the generator being replaced (`cmd/velox`, the
+`runtime` package) and `orm` the new one (`cmd/velox-gen`, package `orm`),
+which was developed under the name vx: a measurement taken then carries the
+date it was taken on and is of the code of that day.
+
 The other fixtures in this directory (`stress-100`, `stress-200`, `stress-328`)
 are chains of entities with four fields each. They are useful for the
 generator's speed and understate the compiler's work: the application this
@@ -55,11 +60,11 @@ go run shape.go                          # prints the table above
 
 ```sh
 benchmarks/compile-bench.sh velox        # cold, noop, hook, field
-benchmarks/compile-bench.sh vx
-GOGC=200 benchmarks/compile-bench.sh vx cold
+benchmarks/compile-bench.sh orm
+GOGC=200 benchmarks/compile-bench.sh orm cold
 ```
 
-It generates the ORM's code into `velox/` or `vx/` (not tracked), builds it
+It generates the ORM's code into `velox/` or `db/` (not tracked), builds it
 with an empty build cache and a timing wrapper (`benchmarks/tools/
 compile-timing.sh`), and prints wall time, number of packages compiled, CPU
 time, and the largest compile's memory, for a cold build, a repeated build, an
@@ -75,7 +80,7 @@ busy (load average 25 to 35 for these runs), which inflates wall time and
 somewhat CPU time: the same velox cold build measured 1,324 CPU-s at load 62
 and 1,098 CPU-s at load 34. Repeat on an idle machine before quoting.
 
-| | velox (core + GraphQL extension) | vx |
+| | velox (core + GraphQL extension) | orm |
 |---|---|---|
 | cold: packages compiled | 910 | 454 |
 | cold: CPU | 1,098 s | 97 s |
@@ -88,7 +93,7 @@ and 1,098 CPU-s at load 34. Repeat on an idle machine before quoting.
 | one field added: wall | 285 s | 38 s |
 | one field added: largest compile | 7.1 GB (`query`) | 1.4 GB (`model`) |
 
-For vx, a field added to one entity rebuilds that entity's package, `model`,
+For orm, a field added to one entity rebuilds that entity's package, `model`,
 `client` and `schemainit`; every other entity package is untouched because
 entity packages import only the `predicate` package. For velox it rebuilds
 every package that imports the shared `entity`, `query` and `filter`.
@@ -98,15 +103,15 @@ packages pay for importing them is a separate cost.
 
 ### Mock application: 312 services on top of the ORM
 
-`gen_services.go` writes `services_velox/` and `services_vx/`: 312 packages, each
+`gen_services.go` writes `services_velox/` and `services_orm/`: 312 packages, each
 with about 24 ORM calls drawn from the call mix of the modelled application
 (queries 52%, lookups by id 15%, one-row updates 15%, creates 9%, deletes,
 bulk creates; a third of the queries with an eager load, a quarter of the
 writes in a transaction) and about 1,200 lines in all, written against velox's
-API and against vx's from the same plan. `benchmarks/compile-bench.sh <orm> app`
+API and against orm's from the same plan. `benchmarks/compile-bench.sh <orm> app`
 builds the ORM first and times the services alone.
 
-| | velox | vx |
+| | velox | orm |
 |---|---|---|
 | 312 services: CPU | 1,151 s | 190 s |
 | per service: median CPU | 3.44 s | 0.65 s |
@@ -115,16 +120,16 @@ builds the ORM first and times the services alone.
 
 For calibration: the same measurement on the real services of the modelled
 application (velox) gave a median of 3.18 s and 895 MB per service, so the mock
-is a fair stand-in on the velox side. Nothing like the real vx number exists
-yet; the mock is written to fit vx's API as vx's author sees it.
+is a fair stand-in on the velox side. Nothing like the real orm number exists
+yet; the mock is written to fit orm's API as orm's author sees it.
 
-ORM plus services, cold: velox 2,249 CPU-s, vx 287 CPU-s (7.8x). The
+ORM plus services, cold: velox 2,249 CPU-s, orm 287 CPU-s (7.8x). The
 application's GraphQL layer is not in this fixture.
 
-## vx after the package rename (2026-10-08, load 40-80)
+## orm after the package rename (2026-10-08, load 40-80)
 
-The generated tree is now `vx` (root, where queries start), `vx/entity`,
-`vx/migrate`, `vx/predicate`, `vx/schemainit` and a package per entity; the
+The generated tree is now `db` (root, where queries start), `db/entity`,
+`db/migrate`, `db/predicate`, `db/schemainit` and a package per entity; the
 root package links `schemainit`.
 
 | scenario | packages compiled | CPU | wall | largest compile |
@@ -139,18 +144,18 @@ Linking `schemainit` from the root package added one small package to the
 hook and field edits (they were 1 and 4) and nothing else: the root package's
 compiled form does not change, so nothing that imports it is rebuilt.
 
-`VX_FLAGS=-setters VX_SETTERS=1 benchmarks/compile-bench.sh vx cold app`
+`ORM_FLAGS=-setters ORM_SETTERS=1 benchmarks/compile-bench.sh orm cold app`
 measures a `Set<Field>` method per field: the `entity` package goes from
 18,958 to 46,348 functions, 14 to 28 CPU-s and 1.6 to 2.6 GB (four alternating
 runs each: 13.9/14.2/17.9/14.2 against 26.1/31.4/29.1/27.8 s); the services
 that call them are within the noise (249 and 211 CPU-s).
 
-## What a velox-shaped surface costs on the vx engine (2026-10-08, one round, load 30-80)
+## What a velox-shaped surface costs on the orm engine (2026-10-08, one round, load 30-80)
 
 (The root struct of this section came from an experimental generator option,
 `-handle`, that was removed once it had been measured; `-setters` remains.)
 
-`VX_FLAGS="-setters -handle" VX_SETTERS=1 VX_HANDLE=1` generated velox's setter
+`ORM_FLAGS="-setters -handle" ORM_SETTERS=1 ORM_HANDLE=1` generated velox's setter
 families (`Set<F>`, `SetNillable<F>`, `Clear<F>`: 76,564 functions in `entity`
 against 18,958) and a root struct with a field per entity that the services
 name. The run was stopped by the system for low memory before its second
@@ -173,12 +178,12 @@ What a column descriptor costs to compile, for the same 450 entities and, for
 the users, the 19,355 descriptor expressions of the mock services
 (`rec010.NameField.EQ(x)`, `.To`, `.GTE`, `.Desc`) in 311 packages that hold
 nothing else. CPU seconds of the compiles, three rounds (two for the rows
-marked *, which were taken at a higher load beside vx at 58.5 / 62.0 and
+marked *, which were taken at a higher load beside orm at 58.5 / 62.0 and
 14.6 / 15.3):
 
 | design | value type checked | entity checked | 450 descriptor packages | 311 user packages |
 |---|---|---|---|---|
-| vx: generated types, methods with pointer receivers | compile | compile | 40.5 / 43.3 / 41.9 | 8.9 / 8.8 / 9.0 |
+| orm: generated types, methods with pointer receivers | compile | compile | 40.5 / 43.3 / 41.9 | 8.9 / 8.8 / 9.0 |
 | the same with value receivers * | compile | compile | 100.3 / 108.4 | 14.3 / 15.1 |
 | generic `Column[T]`, value receivers * | compile | no | 96.2 / 100.5 | 35.8 / 37.2 |
 | generic `Column[T]`, pointer receivers | compile | no | 32.2 / 31.7 / 32.9 | 16.3 / 16.3 / 17.1 |
@@ -187,14 +192,14 @@ marked *, which were taken at a higher load beside vx at 58.5 / 62.0 and
 | generic functions, `orm.EQ(col, v)`, `Column[T]` | compile | no | 3.9 / 4.0 / 4.0 | 5.8 / 5.8 / 6.5 |
 | generic functions, `ColumnE[E, T]` | compile | compile | 4.1 / 4.1 / 4.0 | 6.7 / 6.8 / 7.1 |
 | shared runtime types (`orm.StringCol`), no generics | basic types only | no | 2.8 / 3.0 / 3.1 | 3.6 / 3.6 / 3.6 |
-| vx's types, all in one package * | compile | compile | 43.8 / 31.1, 3.1-3.3 GB | 56.4 / 36.8 |
+| orm's types, all in one package * | compile | compile | 43.8 / 31.1, 3.1-3.3 GB | 56.4 / 36.8 |
 
 What the table says:
 
 - **The receiver matters more than generic or generated.** A method with a
   value receiver is compiled twice; with pointer receivers a generic
-  `Column[T]` costs in total what vx's generated types cost (cheaper to
-  declare, dearer to use). An earlier version of this section compared vx with
+  `Column[T]` costs in total what orm's generated types cost (cheaper to
+  declare, dearer to use). An earlier version of this section compared orm with
   value-receiver generics only and concluded that generics cost 1.8 to 3
   times more; that comparison was unfair and is withdrawn.
 - **Method syntax is what is paid for.** Any design in which `col.EQ(v)` is a
@@ -204,7 +209,7 @@ What the table says:
   it is called.
 - One package for every entity's columns costs the same CPU serially, 3 GB,
   and makes every user dearer.
-- vx's descriptor packages are 91% column methods (162 of 178 functions on
+- orm's descriptor packages are 91% column methods (162 of 178 functions on
   average); the rest, which the other designs do not have, are edges.
 
 In proportion: the descriptor packages are about 41 of the 290 to 330 CPU-s of
@@ -228,7 +233,7 @@ rec010.IDField does not match ..." where the method style says
 
 | | 450 descriptor packages | 311 user packages | generated source | language server, descriptors only |
 |---|---|---|---|---|
-| vx: methods | 39.8 / 41.6 / 44.8 CPU-s | 8.7 / 8.7 / 9.0 | 18.6 MB | 1.7 GB |
+| orm: methods | 39.8 / 41.6 / 44.8 CPU-s | 8.7 / 8.7 / 9.0 | 18.6 MB | 1.7 GB |
 | functions, every check | 4.2 / 4.3 / 4.6 | 7.4 / 8.0 / 7.3 | 3.1 MB | 0.6 GB |
 
 ## The language server (2026-10-08)
@@ -238,13 +243,13 @@ workspace that holds one ORM's generated code and its 312 services. Two runs:
 
 | | wall | CPU | peak memory |
 |---|---|---|---|
-| vx | 9 s / 8 s | 42 s / 43 s | 5.1 / 5.0 GB |
+| orm | 9 s / 8 s | 42 s / 43 s | 5.1 / 5.0 GB |
 | velox | 43 s / 41 s | 290 s / 286 s | 12.2 / 12.3 GB |
 
 ## What an entity's methods name (2026-10-09, load 15-55)
 
 A package compiles against everything the types it names expose: fields, and
-the parameters and results of methods. vx had two methods per edge that named
+the parameters and results of methods. orm had two methods per edge that named
 another entity's query builder, `(*User).QueryPosts(ex) *PostQuery` and
 `(*UserQuery).WithPosts(...*PostQuery)`. Through them a service that used one
 entity read the query builder of every entity.
@@ -269,7 +274,7 @@ real schema has at most 30 edges on an entity (median 3).
 The language server, cold `gopls check` of one service with the generated
 code in the workspace: 4.8-5.0 GB before, 2.8-3.4 GB after.
 
-Pinned by `vx/gen/reach_test.go::TestBuildersStayOutOfTheTypeGraph`.
+Pinned by `orm/ormgen/reach_test.go::TestBuildersStayOutOfTheTypeGraph`.
 
 ### Tried the same day, without effect
 
@@ -358,8 +363,8 @@ generic type's methods are compiled by every package that can reach one of
 its instantiations, called or not: a service that could reach 450 query
 types compiled `Page[*RecN].StartCursor` and `EndCursor` 450 times.
 `iter.Seq2` has no methods and costs nothing. `StartCursor` and `EndCursor`
-are now fields; `vx/gen/reach_test.go` pins which generic types a generated
-signature may name, `vx/orm` that `Page` has no methods.
+are now fields; `orm/ormgen/reach_test.go` pins which generic types a generated
+signature may name, `orm` that `Page` has no methods.
 
 What is left is the size of 450 query types, in proportion to their methods:
 with the final generator, 110 / 111 / 114 CPU-s by default and 150 / 148 /
@@ -392,7 +397,7 @@ exist; the numbers stand as the reason.)
 
 ## The final design, standard benchmark (2026-10-09, load 45-55)
 
-`benchmarks/compile-bench.sh vx cold app`, two runs: one spelling for each
+`benchmarks/compile-bench.sh orm cold app`, two runs: one spelling for each
 thing (`user.Name.Set(v)`, `u.QueryPosts(tx)`), one file per entity.
 
 | | CPU-s | largest compile | median service |
@@ -410,12 +415,12 @@ about a third less CPU.
 
 ## The GraphQL layer (2026-10-09, load 30-60)
 
-vx now writes velox's GraphQL schema and the Go an engine binds it to
-(`vxgen -graphql`). `REALISTIC_LIST=1` gives each mock service a list endpoint
+orm now writes velox's GraphQL schema and the Go an engine binds it to
+(`velox-gen -graphql`). `REALISTIC_LIST=1` gives each mock service a list endpoint
 per entity it uses: Relay's four arguments, an order input, a where input, a
 connection back.
 
-| `compile-bench.sh vx cold app`, two runs | cold | the 312 services | median service |
+| `compile-bench.sh orm cold app`, two runs | cold | the 312 services | median service |
 |---|---|---|---|
 | without the GraphQL layer (above) | 99.9 / 88.0 CPU-s | 138.6 / 138.2 | 0.42 s, 104-121 MB |
 | with it as first written, and the list endpoints | 103.7 / 116.4 | 217.2 / 214.3 | 0.70 s, 131-139 MB |

@@ -3,7 +3,7 @@
 // gen_services writes a mock application on top of the fixture: one package
 // per service, each making the ORM calls a service makes and padded with
 // ordinary Go to a realistic size, once against velox's API
-// (services_velox/) and once against vx's (services_vx/). Both flavors are
+// (services_velox/) and once against the new generator's (services_orm/). Both flavors are
 // rendered from the same plan, so they ask the database for the same things.
 //
 //	go run gen_services.go           # 312 services, seed 1
@@ -96,12 +96,12 @@ func main() {
 
 	r := rand.New(rand.NewPCG(*seed, 0xa5a5a5a5))
 	main := r.Perm(len(names))
-	for _, dir := range []string{"services_velox", "services_vx"} {
+	for _, dir := range []string{"services_velox", "services_orm"} {
 		_ = os.RemoveAll(dir)
 	}
 	for i := 0; i < *nsvc && i < len(main); i++ {
 		p := plan(r, ents, names[main[i]], i)
-		for _, flavor := range []string{"velox", "vx"} {
+		for _, flavor := range []string{"velox", "orm"} {
 			dir := filepath.Join("services_"+flavor, p.pkg)
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				panic(err)
@@ -236,7 +236,7 @@ func renderList(flavor string, p *service) string {
 	if flavor == "velox" {
 		w("\t\"%[1]s/velox/entity\"\n\t\"%[1]s/velox/filter\"\n\tgqlrelay \"github.com/syssam/velox/contrib/graphql/gqlrelay\"\n)\n", module)
 	} else {
-		w("\tclient \"%[1]s/vx\"\n\t\"%[1]s/vx/entity\"\n\t\"%[1]s/vx/filter\"\n\t\"github.com/syssam/velox/vx/orm\"\n)\n", module)
+		w("\tclient \"%[1]s/db\"\n\t\"%[1]s/db/entity\"\n\t\"%[1]s/db/filter\"\n\t\"github.com/syssam/velox/orm\"\n)\n", module)
 	}
 	for _, e := range p.used {
 		if flavor == "velox" {
@@ -258,9 +258,9 @@ func render(flavor string, p *service) string {
 			w("\t\"%s/velox/%s\"\n", module, e.pkg)
 		}
 	} else {
-		w("\t\"github.com/syssam/velox/vx/orm\"\n\tclient \"%s/vx\"\n\t\"%s/vx/entity\"\n", module, module)
+		w("\t\"github.com/syssam/velox/orm\"\n\tclient \"%s/db\"\n\t\"%s/db/entity\"\n", module, module)
 		for _, e := range p.used {
-			w("\t\"%s/vx/%s\"\n", module, e.pkg)
+			w("\t\"%s/db/%s\"\n", module, e.pkg)
 		}
 	}
 	w(")\n\n// Service makes the ORM calls of a mock service.\ntype Service struct {\n")
@@ -287,7 +287,7 @@ func render(flavor string, p *service) string {
 		if flavor == "velox" {
 			veloxCall(w, i, c)
 		} else {
-			vxCall(w, i, c)
+			ormCall(w, i, c)
 		}
 	}
 	for j := range p.filler {
@@ -308,7 +308,7 @@ func veloxPreds(c call) string {
 	return strings.Join(ps, ", ")
 }
 
-func vxPreds(c call) string {
+func ormPreds(c call) string {
 	var ps []string
 	for _, f := range c.preds {
 		op := "EQ"
@@ -365,7 +365,7 @@ func veloxCall(w func(string, ...any), i int, c call) {
 	}
 }
 
-func vxCall(w func(string, ...any), i int, c call) {
+func ormCall(w func(string, ...any), i int, c call) {
 	e := c.ent
 	head := func(ret string) {
 		w("\nfunc (s *Service) op%d(ctx context.Context, id int64, now time.Time) %s {\n", i, ret)
@@ -373,7 +373,7 @@ func vxCall(w func(string, ...any), i int, c call) {
 	switch c.op {
 	case "query":
 		head(fmt.Sprintf("([]*entity.%s, error)", e.name))
-		w("\treturn client.%s.Query(s.db).\n\t\tWhere(%s).\n", e.name, vxPreds(c))
+		w("\treturn client.%s.Query(s.db).\n\t\tWhere(%s).\n", e.name, ormPreds(c))
 		if c.with != "" {
 			w("\t\tWith%s().\n", c.with)
 		}
@@ -384,19 +384,19 @@ func vxCall(w func(string, ...any), i int, c call) {
 	case "update1":
 		head("error")
 		if c.inTx {
-			w("\treturn s.db.RunTx(ctx, func(tx *orm.Tx) error {\n\t\t_, err := client.%s.UpdateByID(tx, id)%s.SaveOne(ctx)\n\t\treturn err\n\t})\n}\n", e.name, vxSets(c))
+			w("\treturn s.db.RunTx(ctx, func(tx *orm.Tx) error {\n\t\t_, err := client.%s.UpdateByID(tx, id)%s.SaveOne(ctx)\n\t\treturn err\n\t})\n}\n", e.name, ormSets(c))
 		} else {
-			w("\t_, err := client.%s.UpdateByID(s.db, id)%s.SaveOne(ctx)\n\treturn err\n}\n", e.name, vxSets(c))
+			w("\t_, err := client.%s.UpdateByID(s.db, id)%s.SaveOne(ctx)\n\treturn err\n}\n", e.name, ormSets(c))
 		}
 	case "updateN":
 		head("(int, error)")
-		w("\treturn client.%s.Update(s.db).Where(%s)%s.Exec(ctx)\n}\n", e.name, vxPreds(c), vxSets(c))
+		w("\treturn client.%s.Update(s.db).Where(%s)%s.Exec(ctx)\n}\n", e.name, ormPreds(c), ormSets(c))
 	case "create":
 		head(fmt.Sprintf("(*entity.%s, error)", e.name))
-		w("\treturn client.%s.Create(s.db)%s.Save(ctx)\n}\n", e.name, vxSets(c))
+		w("\treturn client.%s.Create(s.db)%s.Save(ctx)\n}\n", e.name, ormSets(c))
 	case "bulk":
 		head("error")
-		w("\t_, err := client.%s.CreateBulk(s.db,\n\t\tclient.%s.Create(s.db)%s,\n\t\tclient.%s.Create(s.db)%s,\n\t).Save(ctx)\n\treturn err\n}\n", e.name, e.name, vxSets(c), e.name, vxSets(c))
+		w("\t_, err := client.%s.CreateBulk(s.db,\n\t\tclient.%s.Create(s.db)%s,\n\t\tclient.%s.Create(s.db)%s,\n\t).Save(ctx)\n\treturn err\n}\n", e.name, e.name, ormSets(c), e.name, ormSets(c))
 	case "delete":
 		head("error")
 		w("\treturn client.%s.DeleteByID(ctx, s.db, id)\n}\n", e.name)
@@ -411,8 +411,8 @@ func setters(c call, flavor string) string {
 	return b.String()
 }
 
-// vxSets renders the setters of a call: .Set(pkg.Field.Set(v), ...).
-func vxSets(c call) string {
+// ormSets renders the setters of a call: .Set(pkg.Field.Set(v), ...).
+func ormSets(c call) string {
 	var ss []string
 	for _, f := range c.sets {
 		ss = append(ss, fmt.Sprintf("%s.%s.Set(%s)", c.ent.pkg, f.pascal, f.lit))
