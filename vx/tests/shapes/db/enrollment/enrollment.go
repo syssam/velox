@@ -26,6 +26,9 @@ const (
 	StatusDropped StatusEnum = "dropped"
 )
 
+// DefaultStatus is the value of the status field of a row created without one.
+const DefaultStatus = StatusActive
+
 // StatusValues returns the values of the status field, in the order of the schema.
 func StatusValues() []StatusEnum {
 	return []StatusEnum{StatusActive, StatusDropped}

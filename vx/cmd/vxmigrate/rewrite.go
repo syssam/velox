@@ -347,6 +347,11 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			if ent, kind := r.s.kindOf(name); ent != nil && kind == "Querier" {
 				r.replace(sel.Pos(), sel.End(), "*"+r.entity(sel.Pos())+"."+ent.name+"Query")
 				r.count("type Querier")
+			} else if ent != nil && kind == "OrderField" {
+				// The fields a list is ordered by are of the entity's own
+				// package now.
+				r.replace(sel.Pos(), sel.End(), r.leaf(ent, sel.Pos())+".OrderField")
+				r.count("type OrderField")
 			} else if ent != nil && kind == "PaginateOption" {
 				// An option was applied by Paginate; it is a function of
 				// the query now, applied before it (orm.Apply).
@@ -522,7 +527,9 @@ func (r *rewriter) queryMethods(it *ast.InterfaceType) {
 			continue
 		}
 		sig, ok := r.info.TypeOf(m.Type).(*types.Signature)
-		if !ok || types.TypeString(sig, nil) != "func(context.Context) (bool, error)" {
+		if !ok || sig.Params().Len() != 1 || sig.Results().Len() != 2 ||
+			types.TypeString(sig.Params().At(0).Type(), nil) != "context.Context" ||
+			types.TypeString(sig.Results().At(0).Type(), nil) != "bool" || types.TypeString(sig.Results().At(1).Type(), nil) != "error" {
 			continue
 		}
 		r.replace(m.Names[0].Pos(), m.Names[0].End(), "Exists")
@@ -890,6 +897,23 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 				r.note(call.Pos(), "IsValid of %s: rewrite by hand", recv)
 			}
 		}
+	case t.where == "migrate" && name == "Create" && len(call.Args) >= 1:
+		// client.Schema.Create(ctx, opts...): the tables are made by the
+		// generated migrate package, on a handle.
+		holder, ok := sel.X.(*ast.SelectorExpr)
+		if !ok || holder.Sel.Name != "Schema" {
+			break
+		}
+		args := []string{r.render(call.Args[0]), r.render(holder.X) + embeddedPath(r.info.Selections[holder])}
+		for i, a := range call.Args[1:] {
+			text := r.render(a)
+			if call.Ellipsis.IsValid() && i == len(call.Args)-2 {
+				text += "..."
+			}
+			args = append(args, text)
+		}
+		r.replace(call.Pos(), call.End(), r.ref(r.s.to+"/migrate", "migrate", call.Pos())+".Create("+strings.Join(args, ", ")+")")
+		r.count("migrate.Create")
 	case t.where == "filter" && name == "P":
 		r.whereInput(call, stack)
 	case t.where == "filter" && name == "Filter":
@@ -2474,6 +2498,13 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	if len(args) == 2 {
 		value = r.render(args[len(args)-1])
 	}
+	// A column the code asks IsNil of is one that can be NULL.
+	nullable := func(text string) string {
+		if !r.nilAsked(obj) {
+			return text
+		}
+		return "interface {\n\t" + text + "\n\t" + orm + ".NullableColumn[" + p + "]\n}"
+	}
 	var text string
 	switch base := strings.TrimSuffix(obj.Name(), "Field"); {
 	case base == "String":
@@ -2490,8 +2521,41 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 		r.note(n.Pos(), "the column type sql.%s: declare what the code needs of a column with orm.Column or orm.OrderedColumn", obj.Name())
 		return
 	}
-	r.replace(n.Pos(), n.End(), text)
+	r.replace(n.Pos(), n.End(), nullable(text))
 	r.count("generic column")
+}
+
+// nilAsked reports whether the package calls IsNil or NotNil (IsNull,
+// NotNull) on a value of the library's generic column type.
+func (r *rewriter) nilAsked(column *types.TypeName) bool {
+	for sel, selection := range r.info.Selections {
+		switch sel.Sel.Name {
+		case "IsNil", "NotNil", "IsNull", "NotNull":
+		default:
+			continue
+		}
+		named, ok := types.Unalias(deref(selection.Recv())).(*types.Named)
+		if !ok || named.Origin().Obj() != column {
+			continue
+		}
+		// Not of a column of the generated tree itself (user.NicknameField
+		// is of this type too): of a value the application holds in a
+		// variable or a field of this type.
+		var id *ast.Ident
+		switch x := ast.Unparen(sel.X).(type) {
+		case *ast.Ident:
+			id = x
+		case *ast.SelectorExpr:
+			id = x.Sel
+		}
+		if id != nil {
+			if obj := r.info.Uses[id]; obj != nil && obj.Pkg() != nil && (obj.Pkg().Path() == r.s.root || strings.HasPrefix(obj.Pkg().Path(), r.s.root+"/")) {
+				continue
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // funcConstraint rewrites ~func(*sql.Selector) in a constraint: what

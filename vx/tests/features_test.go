@@ -741,3 +741,15 @@ func TestGenericOverEntities(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 }
+
+// The value a create writes for an enum field that is not set has a name.
+func TestEnumDefaultConstant(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	u := newUser(t, db, "ann", 30)
+	assert.Equal(t, user.DefaultRole, u.Role)
+	p := newPost(t, db, u, "a1")
+	got, err := client.Post.Get(ctx, db, p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, post.DefaultStatus, got.Status)
+}

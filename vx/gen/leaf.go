@@ -309,6 +309,16 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 			w("\t%s %s = %q\n", enumConsts[f][i], enumType[f], en.Value)
 		}
 		w(")\n\n")
+		// The value a create writes when the field is not set, by name: an
+		// application shows it in a form, or tells "left as it was" from
+		// "chosen". (velox has it as a variable of the same name.)
+		if def, ok := f.F.DefaultValue().(string); ok && f.F.Default && !f.F.DefaultFunc() {
+			for i, en := range f.F.Enums {
+				if en.Value == def {
+					w("// %[1]s is the value of the %[2]s field of a row created without one.\nconst %[1]s = %[3]s\n\n", unique("Default"+f.F.StructField(), "Value"), f.F.Name, enumConsts[f][i])
+				}
+			}
+		}
 		values := unique(f.F.StructField()+"Values", "List")
 		w("// %s returns the values of the %s field, in the order of the schema.\nfunc %s() []%s {\n\treturn []%s{%s}\n}\n\n", values, f.F.Name, values, enumType[f], enumType[f], strings.Join(enumConsts[f], ", "))
 	}

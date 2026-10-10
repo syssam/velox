@@ -25,6 +25,9 @@ const (
 	EdgesB EdgesEnum = "b"
 )
 
+// DefaultEdges is the value of the edges field of a row created without one.
+const DefaultEdges = EdgesA
+
 // EdgesValues returns the values of the edges field, in the order of the schema.
 func EdgesValues() []EdgesEnum {
 	return []EdgesEnum{EdgesA, EdgesB}

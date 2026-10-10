@@ -148,10 +148,22 @@ func loadWith(ctx context.Context, c *integration.Client, opt func(entity.PostQu
 
 // An interface of the application's that names a method of a query.
 type exister interface {
-	Exist(context.Context) (bool, error)
+	Exist(ctx context.Context) (bool, error)
 }
 
 func opened(dsn string) (*integration.Client, error) { return integration.Open("sqlite", dsn) }
+
+// A column of the library's generic type that is asked whether it is NULL.
+type scopeColumns[P sql.PredicateFunc] struct {
+	Owner sql.IntField[P]
+}
+
+func unowned[P sql.PredicateFunc](c scopeColumns[P]) P { return c.Owner.IsNil() }
+
+// The type of the fields a list is ordered by, and the tables.
+func orderField() *entity.PostOrderField { return new(entity.PostOrderField) }
+
+func tables(ctx context.Context, c *integration.Client) error { return c.Schema.Create(ctx) }
 
 // The start of a query as a value.
 func starter(c *integration.Client) func() entity.UserQuerier { return c.User.Query }
@@ -476,6 +488,6 @@ func like(ctx context.Context, c *integration.Client, userID int, likeIDs ...int
 func valid(r user.Role) bool { return r.IsValid() }
 
 var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
-	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
+	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
 	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}

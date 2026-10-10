@@ -26,6 +26,9 @@ const (
 	OrderDesc OrderEnum = "desc"
 )
 
+// DefaultOrder is the value of the order field of a row created without one.
+const DefaultOrder = OrderAsc
+
 // OrderValues returns the values of the order field, in the order of the schema.
 func OrderValues() []OrderEnum {
 	return []OrderEnum{OrderAsc, OrderDesc}
@@ -39,6 +42,9 @@ const (
 	SetA SetEnum = "a"
 	SetB SetEnum = "b"
 )
+
+// DefaultSet is the value of the set field of a row created without one.
+const DefaultSet = SetA
 
 // SetValues returns the values of the set field, in the order of the schema.
 func SetValues() []SetEnum {
@@ -54,6 +60,9 @@ const (
 	QueryB QueryEnum = "b"
 )
 
+// DefaultQuery is the value of the query field of a row created without one.
+const DefaultQuery = QueryA
+
 // QueryValues returns the values of the query field, in the order of the schema.
 func QueryValues() []QueryEnum {
 	return []QueryEnum{QueryA, QueryB}
@@ -67,6 +76,9 @@ const (
 	CreateBulk   CreateEnum = "bulk"
 	CreateSingle CreateEnum = "single"
 )
+
+// DefaultCreate is the value of the create field of a row created without one.
+const DefaultCreate = CreateSingle
 
 // CreateValues returns the values of the create field, in the order of the schema.
 func CreateValues() []CreateEnum {
@@ -82,6 +94,9 @@ const (
 	UpdateB UpdateEnum = "b"
 )
 
+// DefaultUpdate is the value of the update field of a row created without one.
+const DefaultUpdate = UpdateA
+
 // UpdateValues returns the values of the update field, in the order of the schema.
 func UpdateValues() []UpdateEnum {
 	return []UpdateEnum{UpdateA, UpdateB}
@@ -95,6 +110,9 @@ const (
 	LoadLow  LoadEnum = "low"
 	LoadHigh LoadEnum = "high"
 )
+
+// DefaultLoad is the value of the load field of a row created without one.
+const DefaultLoad = LoadLow
 
 // LoadValues returns the values of the load field, in the order of the schema.
 func LoadValues() []LoadEnum {
@@ -110,6 +128,9 @@ const (
 	EdgeB EdgeEnum = "b"
 )
 
+// DefaultEdge is the value of the edge field of a row created without one.
+const DefaultEdge = EdgeA
+
 // EdgeValues returns the values of the edge field, in the order of the schema.
 func EdgeValues() []EdgeEnum {
 	return []EdgeEnum{EdgeA, EdgeB}
@@ -123,6 +144,9 @@ const (
 	MetaA MetaEnum = "a"
 	MetaB MetaEnum = "b"
 )
+
+// DefaultMeta is the value of the meta field of a row created without one.
+const DefaultMeta = MetaA
 
 // MetaValues returns the values of the meta field, in the order of the schema.
 func MetaValues() []MetaEnum {
@@ -138,6 +162,9 @@ const (
 	PredB PredEnum = "b"
 )
 
+// DefaultPred is the value of the pred field of a row created without one.
+const DefaultPred = PredA
+
 // PredValues returns the values of the pred field, in the order of the schema.
 func PredValues() []PredEnum {
 	return []PredEnum{PredA, PredB}
@@ -151,6 +178,9 @@ const (
 	KindType  KindEnum = "type"
 	KindOther KindEnum = "other"
 )
+
+// DefaultKind is the value of the kind field of a row created without one.
+const DefaultKind = KindOther
 
 // KindValues returns the values of the kind field, in the order of the schema.
 func KindValues() []KindEnum {
@@ -166,6 +196,9 @@ const (
 	AX  AEnum = "x"
 )
 
+// DefaultA is the value of the a field of a row created without one.
+const DefaultA = AX
+
 // AValues returns the values of the a field, in the order of the schema.
 func AValues() []AEnum {
 	return []AEnum{ABC, AX}
@@ -179,6 +212,9 @@ const (
 	ABCValue ABEnum = "c"
 	ABY      ABEnum = "y"
 )
+
+// DefaultAB is the value of the a_b field of a row created without one.
+const DefaultAB = ABY
 
 // ABValues returns the values of the a_b field, in the order of the schema.
 func ABValues() []ABEnum {

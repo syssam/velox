@@ -74,20 +74,33 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contextHandle := 0
-	for _, line := range strings.Split(strings.TrimSpace(string(notes)), "\n") {
-		switch {
-		case line == "", strings.Contains(line, "open_test.go"):
-		case strings.Contains(line, "QueryPosts is given the handle of the context"):
-			// Rewritten, and reported: whether the context carries a
-			// handle is not something the tool can see.
-			contextHandle++
-		default:
-			t.Errorf("left for a person outside open_test.go: %s", line)
-		}
+	// Rewritten and reported, each once: what the tool cannot see for
+	// itself (whether the context carries a handle), or does in another
+	// way than the text did (a deferred call, the last of two orders, the
+	// runtime's type of a validation error).
+	reported := map[string]int{
+		"QueryPosts is given the handle of the context":    0,
+		"a deferred (or go) call is inside a function now": 0,
+		"more than one order or more than one filter":      0,
+		"ValidationError is the runtime's type now":        0,
 	}
-	if contextHandle != 1 {
-		t.Errorf("%d edge queries were reported as given the context's handle, want 1", contextHandle)
+next:
+	for _, line := range strings.Split(strings.TrimSpace(string(notes)), "\n") {
+		if line == "" || strings.Contains(line, "open_test.go") {
+			continue
+		}
+		for text := range reported {
+			if strings.Contains(line, text) {
+				reported[text]++
+				continue next
+			}
+		}
+		t.Errorf("left for a person outside open_test.go: %s", line)
+	}
+	for text, n := range reported {
+		if n != 1 {
+			t.Errorf("%q was reported %d times, want once", text, n)
+		}
 	}
 	// That file, as a person migrating would write it.
 	opened, err := os.ReadFile("testdata/open_test.go.vx")
@@ -273,7 +286,10 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func begins(ctx context.Context, c *orm.DB) error {",
 		// An option kept in a variable shapes the query it is given.
 		"func loadWith(ctx context.Context, c orm.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
-		"type exister interface { Exists(context.Context) (bool, error) }",
+		"type exister interface { Exists(ctx context.Context) (bool, error) }",
+		"Owner interface { orm.OrderedColumn[int, P] orm.NullableColumn[P] }",
+		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
+		"func tables(ctx context.Context, c *orm.DB) error { return migrate.Create(ctx, c) }",
 		`func opened(dsn string) (*orm.DB, error) { return orm.Open("sqlite", dsn) }`,
 		// The start of a query as a value.
 		"func starter(c *orm.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",
@@ -371,7 +387,7 @@ func TestMigrateWithoutWriteChangesNothing(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Error("the application was rewritten without -write")
 	}
-	if !strings.Contains(log.String(), "references rewritten in 3 files") {
+	if !strings.Contains(log.String(), "references rewritten in 4 files") {
 		t.Errorf("the run does not say what it would do:\n%s", log.String())
 	}
 	if _, err := os.Stat(report); err != nil {

@@ -30,6 +30,9 @@ func byNameDesc(t *testing.T) []*entity.UserOrder {
 // from entities: nothing with velox, whose entities remember their client.
 func withHandle(ctx context.Context, _ *Store) context.Context { return ctx }
 
+// descending is the direction of an order input.
+const descending = gqlrelay.OrderDirectionDesc
+
 var seq atomic.Int64
 
 // This file is the part of the tests the tool does not migrate: how a

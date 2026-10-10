@@ -27,6 +27,9 @@ func withHandle(ctx context.Context, s *Store) context.Context {
 	return orm.WithExecutor(ctx, s.Client)
 }
 
+// descending is the direction of an order input.
+const descending = orm.OrderDirectionDesc
+
 var seq atomic.Int64
 
 // This file is the part of the tests the tool does not migrate: how a

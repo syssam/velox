@@ -26,6 +26,9 @@ const (
 	RoleUser       RoleEnum = "user"
 )
 
+// DefaultRole is the value of the role field of a row created without one.
+const DefaultRole = RoleUser
+
 // RoleValues returns the values of the role field, in the order of the schema.
 func RoleValues() []RoleEnum {
 	return []RoleEnum{RoleAdminValue, RoleUser}

@@ -98,7 +98,8 @@ err = db.User.DeleteByID(ctx, conn, id)
   (`.Has()`, `.HasWith(...)`, `.Add(ids...)`, `.Remove(ids...)`, `.Clear()`;
   `.Set(id)` on a to-one edge). The type of an enum field is the field's name
   with `Enum`, its values as in velox: `post.StatusEnum`, `post.StatusDraft`;
-  `post.StatusValues()` lists them.
+  `post.StatusValues()` lists them, and `post.DefaultStatus` is the one a
+  create writes when the field is not set.
   The columns get their names first, so a name that would be taken twice
   goes to the column and the other takes a suffix: an edge called like a
   column is `user.OwnerEdge`, an enum value `user.RoleAdminValue`. Six names
@@ -516,14 +517,14 @@ go run github.com/syssam/velox/vx/cmd/vxmigrate -generated example.com/app/velox
 ```
 
 It does not compile anything, so a large application is read in seconds. On
-one of 455 entities and 9,400 files it rewrote 90,400 references and left
-some 425 lines for a person, each with the reason (170 of them the warnings
-in the table below; the rest what it cannot rewrite): queries
-changed through `Modify`, the application's own plumbing around the client
-(a client in a context, its runtime configuration), cursors built by hand,
-and how the application opens its database. An edge
-query from an entity that was handed to a function is given the handle of
-the context, and reported, since only a person knows whether every caller's
+one of 455 entities and 9,400 files it rewrote 90,500 references and left
+some 330 lines for a person, each with the reason. What is left is the
+application's own design, not spelling: queries changed through `Modify`
+whose extra columns are read from the entities, generic helpers constrained
+on a builder's typed setters, predicates kept as bare functions, cursors
+built by hand, and how the application opens its database. An edge query
+from an entity that was handed to a function is given the handle of the
+context, and reported, since only a person knows whether every caller's
 context carries one.
 Its package comment lists what it rewrites.
 
