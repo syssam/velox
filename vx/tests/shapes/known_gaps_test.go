@@ -594,10 +594,10 @@ func (Thing) Fields() []velox.Field {
 }
 `,
 		want: builds, generated: map[string][]string{"thing/thing.go": {"type LabelIDColumn string", "type LabelColumn string"}}},
-	// An entity nothing can be ordered by: velox's schema generator writes
-	// an order enum without values, and refuses its own schema. Said at
-	// generation; the entity needs a field to order by, or to be left out
-	// of the schema.
+	// An entity nothing can be ordered by has no order in the schema: lists
+	// of it take no orderBy, and the edge to it has none either. (velox's
+	// schema generator wrote an order enum without values, and refused its
+	// own schema.)
 	{name: "an entity with no field to order by, in a GraphQL schema", graphql: true,
 		schema: `
 type Bare struct{ velox.Schema }
@@ -605,8 +605,19 @@ type Bare struct{ velox.Schema }
 func (Bare) Fields() []velox.Field { return []velox.Field{field.Bytes("blob")} }
 
 func (Bare) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+
+type Owner struct{ velox.Schema }
+
+func (Owner) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Owner) Edges() []velox.Edge { return []velox.Edge{edge.To("bares", Bare.Type)} }
+
+func (Owner) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
-		want: generateFails, wantSubstr: "is invalid", gap: true},
+		want: builds,
+		generated: map[string][]string{"entity/owner.go": {
+			"func (e *Owner) Bares(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BareConnection, error)",
+		}}},
 	// Names velox's schema loader rejects before the vx generator runs.
 	{name: "entity named Query", schema: labelEntities("Query"),
 		want: loadFails, wantSubstr: `schema name conflicts with ent predeclared identifier \"Query\"`},

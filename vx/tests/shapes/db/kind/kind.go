@@ -25,8 +25,8 @@ const (
 	ShapeFlat  ShapeEnum = "flat"
 )
 
-// DefaultShape is the value of the shape field of a row created without one.
-const DefaultShape = ShapeRound
+// DefaultShape returns the value of the shape field of a row created without one.
+func DefaultShape() ShapeEnum { return ShapeRound }
 
 // ShapeValues returns the values of the shape field, in the order of the schema.
 func ShapeValues() []ShapeEnum {

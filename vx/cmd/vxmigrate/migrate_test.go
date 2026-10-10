@@ -290,6 +290,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"Owner interface { orm.OrderedColumn[int, P] orm.NullableColumn[P] }",
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
 		"func tables(ctx context.Context, c *orm.DB) error { return migrate.Create(ctx, c) }",
+		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
 		`func opened(dsn string) (*orm.DB, error) { return orm.Open("sqlite", dsn) }`,
 		// The start of a query as a value.
 		"func starter(c *orm.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",

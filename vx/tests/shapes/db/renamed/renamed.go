@@ -26,8 +26,8 @@ const (
 	KindB KindEnum = "b"
 )
 
-// DefaultKind is the value of the kind field of a row created without one.
-const DefaultKind = KindA
+// DefaultKind returns the value of the kind field of a row created without one.
+func DefaultKind() KindEnum { return KindA }
 
 // KindValues returns the values of the kind field, in the order of the schema.
 func KindValues() []KindEnum {

@@ -27,8 +27,8 @@ const (
 	StateGone  StateEnum = "gone"
 )
 
-// DefaultState is the value of the state field of a row created without one.
-const DefaultState = StateDraft
+// DefaultState returns the value of the state field of a row created without one.
+func DefaultState() StateEnum { return StateDraft }
 
 // StateValues returns the values of the state field, in the order of the schema.
 func StateValues() []StateEnum {
@@ -59,8 +59,8 @@ const (
 	PhaseOnHold     PhaseEnum = "on_hold"
 )
 
-// DefaultPhase is the value of the phase field of a row created without one.
-const DefaultPhase = PhaseInProgress
+// DefaultPhase returns the value of the phase field of a row created without one.
+func DefaultPhase() PhaseEnum { return PhaseInProgress }
 
 // PhaseValues returns the values of the phase field, in the order of the schema.
 func PhaseValues() []PhaseEnum {

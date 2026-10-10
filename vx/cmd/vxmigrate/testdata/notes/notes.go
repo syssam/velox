@@ -165,6 +165,9 @@ func orderField() *entity.PostOrderField { return new(entity.PostOrderField) }
 
 func tables(ctx context.Context, c *integration.Client) error { return c.Schema.Create(ctx) }
 
+// The default of an enum field, by name.
+func defaultRole() user.Role { return user.DefaultRole }
+
 // The start of a query as a value.
 func starter(c *integration.Client) func() entity.UserQuerier { return c.User.Query }
 
@@ -488,6 +491,6 @@ func like(ctx context.Context, c *integration.Client, userID int, likeIDs ...int
 func valid(r user.Role) bool { return r.IsValid() }
 
 var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
-	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
+	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
 	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}

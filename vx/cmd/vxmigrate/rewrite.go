@@ -152,9 +152,9 @@ func (r *rewriter) run() {
 			case *ast.SelectorExpr:
 				r.selector(top, stack)
 			case *ast.IndexExpr:
-				r.columnType(top, top.X, []ast.Expr{top.Index})
+				r.columnType(top, top.X, []ast.Expr{top.Index}, stack)
 			case *ast.IndexListExpr:
-				r.columnType(top, top.X, top.Indices)
+				r.columnType(top, top.X, top.Indices, stack)
 			case *ast.UnaryExpr:
 				r.funcConstraint(top)
 			case *ast.BinaryExpr:
@@ -623,6 +623,12 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 			if up, ok := parent(stack, 1).(*ast.SelectorExpr); !ok || up.X != ast.Expr(sel) {
 				r.open(sel.Pos(), "&")
 			}
+			return
+		}
+		if f, ok := strings.CutPrefix(name, "Default"); ok && e.fields[f] {
+			// The default of an enum field: a function now.
+			r.insert(sel.End(), "()")
+			r.count("enum default")
 			return
 		}
 		switch name {
@@ -2482,7 +2488,7 @@ func (r *rewriter) combinator(call *ast.CallExpr) bool {
 
 // columnType rewrites the library's generic column types where code generic
 // over entities names them: sql.Int64Field[P] is orm.OrderedColumn[int64, P].
-func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
+func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr, stack []ast.Node) {
 	sel, ok := x.(*ast.SelectorExpr)
 	if !ok {
 		return
@@ -2498,9 +2504,13 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	if len(args) == 2 {
 		value = r.render(args[len(args)-1])
 	}
-	// A column the code asks IsNil of is one that can be NULL.
+	// A field of a struct that the code asks IsNil of holds columns that
+	// can be NULL. (Not a parameter: a function that asks every column it
+	// is given whether it is NULL says so in its body, once, and not at
+	// each of its calls.)
 	nullable := func(text string) string {
-		if !r.nilAsked(obj) {
+		f, ok := parent(stack, 1).(*ast.Field)
+		if _, inStruct := parent(stack, 3).(*ast.StructType); !ok || !inStruct || !r.nilAsked(f) {
 			return text
 		}
 		return "interface {\n\t" + text + "\n\t" + orm + ".NullableColumn[" + p + "]\n}"
@@ -2526,34 +2536,29 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 }
 
 // nilAsked reports whether the package calls IsNil or NotNil (IsNull,
-// NotNull) on a value of the library's generic column type.
-func (r *rewriter) nilAsked(column *types.TypeName) bool {
-	for sel, selection := range r.info.Selections {
+// NotNull) on the value of one of the fields the declaration names.
+func (r *rewriter) nilAsked(f *ast.Field) bool {
+	fields := map[types.Object]bool{}
+	for _, name := range f.Names {
+		if v, ok := r.info.Defs[name].(*types.Var); ok {
+			fields[v] = true
+		}
+	}
+	for sel := range r.info.Selections {
 		switch sel.Sel.Name {
 		case "IsNil", "NotNil", "IsNull", "NotNull":
 		default:
 			continue
 		}
-		named, ok := types.Unalias(deref(selection.Recv())).(*types.Named)
-		if !ok || named.Origin().Obj() != column {
+		recv, ok := ast.Unparen(sel.X).(*ast.SelectorExpr)
+		if !ok {
 			continue
 		}
-		// Not of a column of the generated tree itself (user.NicknameField
-		// is of this type too): of a value the application holds in a
-		// variable or a field of this type.
-		var id *ast.Ident
-		switch x := ast.Unparen(sel.X).(type) {
-		case *ast.Ident:
-			id = x
-		case *ast.SelectorExpr:
-			id = x.Sel
-		}
-		if id != nil {
-			if obj := r.info.Uses[id]; obj != nil && obj.Pkg() != nil && (obj.Pkg().Path() == r.s.root || strings.HasPrefix(obj.Pkg().Path(), r.s.root+"/")) {
-				continue
+		if fs := r.info.Selections[recv]; fs != nil {
+			if v, isVar := fs.Obj().(*types.Var); isVar && fields[v.Origin()] {
+				return true
 			}
 		}
-		return true
 	}
 	return false
 }

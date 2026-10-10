@@ -98,7 +98,7 @@ err = db.User.DeleteByID(ctx, conn, id)
   (`.Has()`, `.HasWith(...)`, `.Add(ids...)`, `.Remove(ids...)`, `.Clear()`;
   `.Set(id)` on a to-one edge). The type of an enum field is the field's name
   with `Enum`, its values as in velox: `post.StatusEnum`, `post.StatusDraft`;
-  `post.StatusValues()` lists them, and `post.DefaultStatus` is the one a
+  `post.StatusValues()` lists them, and `post.DefaultStatus()` is the one a
   create writes when the field is not set.
   The columns get their names first, so a name that would be taken twice
   goes to the column and the other takes a suffix: an edge called like a
@@ -424,9 +424,8 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
   typed JSON field, the accessor of a nillable bytes field). Every `@goModel`
   that names a package this generator writes, and every `@goField(name:)` of
   an entity's type, is checked against what was generated; a package of the
-  application's own under the same directory is not this check's business. An entity with no field a list could be ordered by is
-  refused by the schema generator itself (an order enum without values):
-  give it one, or leave it out of the schema. Mutation inputs are the application's own types: move them to
+  application's own under the same directory is not this check's business. An entity with nothing a list could be ordered by
+  (bytes and JSON fields only) has no order: its lists take no `orderBy`. Mutation inputs are the application's own types: move them to
   a builder with `Set` or `Fill`. Loading edges by what a request selects is
   not done: each edge is a query when it is asked for.
 

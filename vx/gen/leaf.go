@@ -311,11 +311,15 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 		w(")\n\n")
 		// The value a create writes when the field is not set, by name: an
 		// application shows it in a form, or tells "left as it was" from
-		// "chosen". (velox has it as a variable of the same name.)
+		// "chosen". (velox has it as a variable of the same name.) A
+		// function, not a constant: a second constant of the enum's type
+		// with the value of one of its values is a second name for that
+		// value, and what binds a GraphQL enum to the constants of the type
+		// (gqlc) can no longer tell which is the value's.
 		if def, ok := f.F.DefaultValue().(string); ok && f.F.Default && !f.F.DefaultFunc() {
 			for i, en := range f.F.Enums {
 				if en.Value == def {
-					w("// %[1]s is the value of the %[2]s field of a row created without one.\nconst %[1]s = %[3]s\n\n", unique("Default"+f.F.StructField(), "Value"), f.F.Name, enumConsts[f][i])
+					w("// %[1]s returns the value of the %[2]s field of a row created without one.\nfunc %[1]s() %[4]s { return %[3]s }\n\n", unique("Default"+f.F.StructField(), "Value"), f.F.Name, enumConsts[f][i], enumType[f])
 				}
 			}
 		}
