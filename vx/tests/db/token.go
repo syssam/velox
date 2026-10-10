@@ -49,7 +49,7 @@ func (c *TokenClient) UpdateByID(ex orm.Executor, id uuid.UUID) *entity.TokenUpd
 func (c *TokenClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.Token(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Token")
+		err = entity.TokenMeta.NotFound()
 	}
 	return err
 }
@@ -58,7 +58,7 @@ func (c *TokenClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.U
 func (c *TokenClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[uuid.UUID](key)
 	if !ok {
-		return nil, orm.NotFound("Token")
+		return nil, entity.TokenMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

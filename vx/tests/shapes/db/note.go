@@ -48,7 +48,7 @@ func (c *NoteClient) UpdateByID(ex orm.Executor, id int) *entity.NoteUpdate {
 func (c *NoteClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Note(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Note")
+		err = entity.NoteMeta.NotFound()
 	}
 	return err
 }

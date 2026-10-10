@@ -56,7 +56,7 @@ func (c *PassportClient) UpdateByID(ex orm.Executor, id int) *entity.PassportUpd
 func (c *PassportClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Passport")
+		err = entity.PassportMeta.NotFound()
 	}
 	return err
 }

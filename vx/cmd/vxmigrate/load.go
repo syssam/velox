@@ -64,6 +64,9 @@
 // production. The tests of an error (IsNotFound, IsNotSingular, ...) become
 // the runtime's, since velox's never hold for an error of the new code, and
 // NewNotFoundError, which a test makes for a stand-in, orm.NotFound. A
+// mutation asserted to an interface with a method velox generated per
+// entity is reported: no mutation has such a method now, and the assertion
+// would compile and never hold. A
 // deferred call that became the argument of orm.Must is put inside a
 // function, so that it still runs when the function returns. An edge query
 // is given the handle its entity was read on only when the variable has one

@@ -495,7 +495,8 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 	for _, w := range sdl.WhereFields(e.T) {
 		described[w.Name] = w
 	}
-	members := map[string]bool{"Predicates": true, "Not": true, "Or": true, "And": true, "UnmarshalGQL": true, "MarshalGQL": true, "P": true}
+	members := map[string]bool{"Predicates": true, "Not": true, "Or": true, "And": true}
+	methods := map[string]bool{"P": true, "UnmarshalGQL": true, "MarshalGQL": true, "UnmarshalJSON": true, "MarshalJSON": true}
 	enumAt := map[*fld]int{}
 	for i, f := range d.Fields {
 		if i < 3 {
@@ -555,11 +556,18 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 				if !ok {
 					at = len(q.Enums)
 					enumAt[c] = at
-					q.Enums = append(q.Enums, sdl.EnumValues(src.Field))
+					values := sdl.EnumValues(src.Field)
+					if err := distinctEnum(values); err != nil {
+						return fmt.Errorf("vx: graphql: the enum of %s.%s: %w", e.Name, src.Field.Name, err)
+					}
+					q.Enums = append(q.Enums, values)
 				}
 				w.Plan += fmt.Sprintf(", Enum: %sEnums[%d]", lowerFirst(e.Name), at)
 			}
 			w.Plan += "}"
+		}
+		if methods[w.GoName] {
+			return fmt.Errorf("vx: graphql: %sWhereInput: the field %s would be called %s, as a method of the input is", e.Name, f.Name, w.GoName)
 		}
 		if members[w.GoName] {
 			return fmt.Errorf("vx: graphql: %sWhereInput: two fields would be called %s", e.Name, w.GoName)
@@ -668,8 +676,34 @@ func (g *generator) filters() (map[string][]byte, error) {
 			w("}\n\n")
 		}
 		w("// P returns the condition the input describes: none for a nil or an empty\n// input, and one that fails the query for an input that cannot be a condition\n// (an empty input nested in not, and, or; nesting deeper than orm.MaxWhereDepth).\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) P() %[2]s { return %[2]s(orm.Where(i, %[3]sWhere)) }\n\n", e.Name, e.pred(), lowerFirst(e.Name))
-		w("// UnmarshalGQL reads the input from the object given for it: the where argument\n// of a request as the engine hands it over, or a filter kept as a document. See\n// orm.DecodeWhere for what it accepts.\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, %[2]sWhere, v) }\n\n", e.Name, lowerFirst(e.Name))
-		w("// MarshalGQL writes the input as JSON. With UnmarshalGQL it tells an engine that\n// the type reads itself, so that it generates no decoder of its own for it.\n//\n//go:noinline\nfunc (i %[1]sWhereInput) MarshalGQL(w %[2]s.Writer) { orm.EncodeWhere(w, i) }\n\n", e.Name, im.use("io", "io"))
+		w(`// UnmarshalGQL reads the input from the object given for it: the where argument
+// of a request as the engine hands it over, or a filter kept as a document. See
+// orm.DecodeWhere for what it accepts and what it refuses.
+//
+//go:noinline
+func (i *%[1]sWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, %[2]sWhere, v) }
+
+// MarshalGQL writes the input as the document UnmarshalGQL reads. With
+// UnmarshalGQL it tells an engine that the type reads itself, so that it
+// generates no decoder of its own for it.
+//
+//go:noinline
+func (i %[1]sWhereInput) MarshalGQL(w %[3]s.Writer) { orm.WriteWhere(w, &i, %[2]sWhere) }
+
+// UnmarshalJSON reads the input from the JSON text of its document, as
+// UnmarshalGQL reads the object: json.Unmarshal refuses a key the input does
+// not have, where the struct alone would let it pass.
+//
+//go:noinline
+func (i *%[1]sWhereInput) UnmarshalJSON(b []byte) error { return orm.DecodeWhere(i, %[2]sWhere, b) }
+
+// MarshalJSON writes the document of the input: json.Marshal of an input is
+// what UnmarshalJSON reads back as the same conditions. See orm.EncodeWhere.
+//
+//go:noinline
+func (i %[1]sWhereInput) MarshalJSON() ([]byte, error) { return orm.EncodeWhere(&i, %[2]sWhere) }
+
+`, e.Name, lowerFirst(e.Name), im.use("io", "io"))
 	}
 	if inputs == 0 {
 		return nil, nil
@@ -709,6 +743,26 @@ func (g *generator) writeSchema(files map[string]string) error {
 			if err := os.Remove(path); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// distinctEnum reports an enum the schema cannot tell the values of apart:
+// two values under one name, or a value stored as what another is called. A
+// where input reads a value by its name or as it is stored, and for such an
+// enum one text would be two values.
+func distinctEnum(values []graphqlgen.EnumValue) error {
+	byName := make(map[string]string, len(values))
+	for _, v := range values {
+		if other, taken := byName[v.Name]; taken {
+			return fmt.Errorf("the values %q and %q are both called %s in the schema", other, v.Value, v.Name)
+		}
+		byName[v.Name] = v.Value
+	}
+	for _, v := range values {
+		if other, named := byName[v.Value]; named && other != v.Value {
+			return fmt.Errorf("the value %q is what the value %q is called in the schema (%s)", v.Value, other, v.Value)
 		}
 	}
 	return nil

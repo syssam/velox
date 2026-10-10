@@ -57,7 +57,7 @@ func (c *LabelKeyClient) UpdateByID(ex orm.Executor, id types.Label) *entity.Lab
 func (c *LabelKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id types.Label) error {
 	n, err := c.Delete(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("LabelKey")
+		err = entity.LabelKeyMeta.NotFound()
 	}
 	return err
 }

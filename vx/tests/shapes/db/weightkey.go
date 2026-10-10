@@ -57,7 +57,7 @@ func (c *WeightKeyClient) UpdateByID(ex orm.Executor, id types.Weight) *entity.W
 func (c *WeightKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id types.Weight) error {
 	n, err := c.Delete(ex).Where(predicate.WeightKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("WeightKey")
+		err = entity.WeightKeyMeta.NotFound()
 	}
 	return err
 }

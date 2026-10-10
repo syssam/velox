@@ -56,7 +56,7 @@ func (c *EnumShapeClient) UpdateByID(ex orm.Executor, id int) *entity.EnumShapeU
 func (c *EnumShapeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.EnumShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("EnumShape")
+		err = entity.EnumShapeMeta.NotFound()
 	}
 	return err
 }

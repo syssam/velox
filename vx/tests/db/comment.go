@@ -54,7 +54,7 @@ func (c *CommentClient) UpdateByID(ex orm.Executor, id int) *entity.CommentUpdat
 func (c *CommentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Comment")
+		err = entity.CommentMeta.NotFound()
 	}
 	return err
 }
@@ -63,7 +63,7 @@ func (c *CommentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int)
 func (c *CommentClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
-		return nil, orm.NotFound("Comment")
+		return nil, entity.CommentMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

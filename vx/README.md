@@ -325,6 +325,7 @@ query, args, err := db.User.Query(conn).Where(user.Age.GT(18)).Select().SQL(ctx)
 p := predicate.User(orm.Raw(func(s *sql.Selector) { ... }))
 q, err := orm.FieldPredicate(&entity.UserMeta, "age", orm.OpGT, 18)
 // A typed predicate as a selector function (for a privacy filter or interceptor).
+// The zero predicate, which is no condition, is no function: nil.
 fn := orm.Compile(user.Age.GT(18))
 // Plain statements, on the transaction when given one.
 _, err = orm.ExecSQL(ctx, tx, "SELECT pg_advisory_xact_lock($1)", key)
@@ -397,28 +398,49 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
   nesting deeper than `orm.MaxWhereDepth`) gives a predicate that fails the
   query. Conditions the application adds go in `where.Predicates`, or in
   another `Where`.
-- **A where input reads itself**: `(*filter.PostWhereInput).UnmarshalGQL`
-  takes the object an engine hands over for the `where` argument, and with
-  `MarshalGQL` beside it an engine generates no decoder of its own for the
-  type (a where input of a wide entity has hundreds of fields, and there is
-  one per entity). The same method reads a filter kept as a document, such
-  as a saved view or a rule of an access policy:
+- **A where input reads and writes itself**, as the document a request
+  carries for it. `(*filter.PostWhereInput).UnmarshalGQL` takes the object an
+  engine hands over for the `where` argument, and with `MarshalGQL` beside
+  it an engine generates no decoder of its own for the type (a where input
+  of a wide entity has hundreds of fields, and there is one per entity).
+  `json.Unmarshal` and `json.Marshal` read and write the same document,
+  which is how a filter is kept: a saved view, a rule of an access policy.
 
   ```go
+  text, err := json.Marshal(where)   // to keep it
+  ...
   var where filter.PostWhereInput
-  if err := where.UnmarshalGQL(doc); err != nil { // doc: map[string]any, as JSON decodes it
+  if err := json.Unmarshal(text, &where); err != nil {
       return err
   }
   posts, err := db.Post.Query(conn).Where(where.P()).All(ctx)
   ```
 
-  A key the input does not have is an error, never a condition dropped. An
+  A filter narrows what a caller sees, so nothing is read or written as
+  fewer conditions than it was. Reading: a key the input does not have is an
+  error (the struct's tags alone would let `json.Unmarshal` skip it); an
   enum is given by its name in the schema (`DRAFT`) or as the value stored
-  (`draft`), an integer as a number or as a string of digits (how a 64-bit id
-  reaches a browser whole), one value where a list goes is a list of one, and
-  `null` is a key that was not given. A type with an `UnmarshalGQL` or an
-  `UnmarshalText` of its own reads itself. `orm.DecodeWhere` is the function
-  behind it.
+  (`draft`); an integer as a number or as a string of digits; one value
+  where a list goes is a list of one; `null` is a key that was not given; a
+  type with an `UnmarshalGQL` or an `UnmarshalText` of its own reads itself.
+  A number that reached `UnmarshalGQL` as a float beyond 2^53 is refused,
+  since it has been rounded already; `json.Unmarshal` reads a document's
+  numbers whole. Writing: an empty list of values is written, because among
+  no values nothing matches, and left out it would match every row; an enum
+  is written by its name, an integer beyond 2^53 as a string of digits. An
+  input that holds `Predicates` cannot be written, since conditions added in
+  Go have no form in a document: `json.Marshal` returns the error, and
+  `MarshalGQL`, which has none to return, writes a document that says why
+  and that is refused when read. The generator refuses an enum the schema
+  cannot tell the values of apart (two values under one name, or one stored
+  as what another is called).
+
+  One thing is as in velox and Ent, and worth knowing for a rule that is
+  kept: **an empty list for `and`, `or` or `has...With` is no condition**,
+  as an absent one is, which is what a client sends for an empty form. A
+  rule that must match nothing when it has no alternatives has to say so
+  (`idIn: []`). `orm.DecodeWhere` and `orm.EncodeWhere` are the functions
+  behind all of this.
 - `orderBy.Term()` of a nil input orders by nothing; an order without a
   `Field` orders by the id, in its direction.
 - **An edge method takes its filter as an interface**:
@@ -505,6 +527,14 @@ A filter rule shared by many entities asks the filter whether the table has
 the column it filters on: `f.(interface{ HasColumn(string) bool })`, on
 queries and mutations alike.
 
+A hook that decides by rows narrows the statement with `m.WhereP(...)` and
+reads which rows it is about to touch from `m.PredicatesFuncs()`, the
+mutation's conditions as functions a query of the entity takes
+(`predicate.User(orm.Raw(f))`). `WhereP` of a mutation refuses a nil
+function, which is what `orm.Compile` makes of the zero predicate: a rule
+that meant to narrow a statement and narrowed it by nothing fails it, and
+does not let it run on every row. In a query a nil function is no condition.
+
 `conn.Use(hooks...)` and `conn.Intercept(interceptors...)` register on the
 handle, at start-up. An interceptor is handed `*orm.Query`, one type for
 every entity (`Type()`, `HasColumn`, `WhereP`, `Limit`); `orm.TraverseFunc`
@@ -574,6 +604,7 @@ first:
 | Reported | Why |
 |---|---|
 | a value asserted to the query or mutation type of one entity | every entity's is `*orm.Query` and `*orm.Mutation` now: the assertion holds for all of them, or for none; test `Type()` |
+| a mutation asserted to an interface with a method velox generated per entity (`SetOwnerID`, `Where(...predicate.X)`) | no mutation has it now: the assertion never holds, anywhere in the application, and what the hook did it does for no entity. `vxgen` refuses this in the schema's own packages; the tool reports it everywhere else |
 | `Or` or `Not` of a list that may be empty, or taken as a value | velox's matched every row, `orm.Or()` matches none |
 | `p, err := where.P()` | an input with no condition was an error and is no condition now |
 | `Limit` in the option of an eager load | it was over all neighbors read, and is for each parent now |
@@ -590,12 +621,17 @@ What it keeps without a word: `IsNotFound`, `IsNotSingular`,
 package or of the library, and the library's values `ErrNotFound` and
 `ErrNotSingular`, become the runtime's (velox's never hold for an error of
 the new code), and `NewNotFoundError(x)`, which tests make for a stand-in of
-the store, becomes `orm.NotFound(x)`. testify's `Nil` and `NotNil` of a
+the store, becomes `orm.NotFound(x)`, whose text is velox's after the
+prefix (`orm: user not found`; a missing row of the runtime's own reads the
+same). `CreateBulk(...).BatchSize(n)` is the same call. testify's `Nil` and `NotNil` of a
 predicate become `True` and `False` of `orm.IsZero(p)`, like `p == nil`: a
 predicate was a function, nil when it was no condition, and is data now,
 which is never nil, so that `NotNil` left alone would pass for every
-predicate. A predicate that reaches a nil check as an `any` by another way
-is not seen. An edge query is given the handle its entity was read on
+predicate. A predicate that reaches a nil check by another way is not seen:
+as an `any`, as a type the application defined over a predicate type, or
+through `assert.NotNil` taken as a value. A predicate converted to a
+function keeps what it was to a nil check: `orm.Compile` of no condition is
+nil. An edge query is given the handle its entity was read on
 only when the text settles it: the entity's variable is given its value in
 one place, before the query; `Unwrap` is not called on it; when what is
 queried is an element or a field of it (`us[0]`), nothing is written through

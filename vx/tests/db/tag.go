@@ -48,7 +48,7 @@ func (c *TagClient) UpdateByID(ex orm.Executor, id int) *entity.TagUpdate {
 func (c *TagClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Tag")
+		err = entity.TagMeta.NotFound()
 	}
 	return err
 }
@@ -57,7 +57,7 @@ func (c *TagClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) err
 func (c *TagClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
-		return nil, orm.NotFound("Tag")
+		return nil, entity.TagMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

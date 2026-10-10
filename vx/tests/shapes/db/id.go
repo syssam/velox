@@ -48,7 +48,7 @@ func (c *IdClient) UpdateByID(ex orm.Executor, id int) *entity.IdUpdate {
 func (c *IdClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Id(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Id")
+		err = entity.IdMeta.NotFound()
 	}
 	return err
 }

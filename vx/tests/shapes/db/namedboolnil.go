@@ -56,7 +56,7 @@ func (c *NamedBoolNilClient) UpdateByID(ex orm.Executor, id int) *entity.NamedBo
 func (c *NamedBoolNilClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("NamedBoolNil")
+		err = entity.NamedBoolNilMeta.NotFound()
 	}
 	return err
 }

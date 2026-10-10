@@ -56,7 +56,7 @@ func (c *UserClientClient) UpdateByID(ex orm.Executor, id int) *entity.UserClien
 func (c *UserClientClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("UserClient")
+		err = entity.UserClientMeta.NotFound()
 	}
 	return err
 }

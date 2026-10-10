@@ -56,7 +56,7 @@ func (c *UserSetterClient) UpdateByID(ex orm.Executor, id int) *entity.UserSette
 func (c *UserSetterClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserSetter(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("UserSetter")
+		err = entity.UserSetterMeta.NotFound()
 	}
 	return err
 }

@@ -56,7 +56,7 @@ func (c *Int64KeyClient) UpdateByID(ex orm.Executor, id int64) *entity.Int64KeyU
 func (c *Int64KeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id int64) error {
 	n, err := c.Delete(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Int64Key")
+		err = entity.Int64KeyMeta.NotFound()
 	}
 	return err
 }

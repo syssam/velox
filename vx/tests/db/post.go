@@ -48,7 +48,7 @@ func (c *PostClient) UpdateByID(ex orm.Executor, id int) *entity.PostUpdate {
 func (c *PostClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Post(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Post")
+		err = entity.PostMeta.NotFound()
 	}
 	return err
 }
@@ -57,7 +57,7 @@ func (c *PostClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) er
 func (c *PostClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
-		return nil, orm.NotFound("Post")
+		return nil, entity.PostMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

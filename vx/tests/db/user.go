@@ -48,7 +48,7 @@ func (c *UserClient) UpdateByID(ex orm.Executor, id int) *entity.UserUpdate {
 func (c *UserClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.User(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("User")
+		err = entity.UserMeta.NotFound()
 	}
 	return err
 }
@@ -57,7 +57,7 @@ func (c *UserClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) er
 func (c *UserClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
-		return nil, orm.NotFound("User")
+		return nil, entity.UserMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

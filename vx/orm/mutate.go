@@ -874,7 +874,7 @@ func (m *MutCore) updateOne(ctx context.Context, c *conn) (any, error) {
 	}
 	switch len(ids) {
 	case 0:
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, meta.Name)
+		return nil, meta.NotFound()
 	case 1:
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrNotSingular, meta.Name)
@@ -931,7 +931,7 @@ func (m *MutCore) updateByID(ctx context.Context, c *conn, id any) (any, error) 
 	if err := sqlgraph.UpdateNode(ctx, drv, spec); err != nil {
 		var nf *sqlgraph.NotFoundError
 		if errors.As(err, &nf) {
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, meta.Name)
+			return nil, meta.NotFound()
 		}
 		return nil, wrapErr(err)
 	}

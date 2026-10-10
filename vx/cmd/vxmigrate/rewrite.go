@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -183,12 +184,17 @@ func (r *rewriter) run() {
 			case *ast.TypeAssertExpr:
 				if top.Type != nil {
 					r.assertion(top.Type)
+					r.mutationAsserted(top.X, top.Type)
 				}
 			case *ast.TypeSwitchStmt:
+				subject := switched(top)
 				for _, c := range top.Body.List {
 					if clause, ok := c.(*ast.CaseClause); ok {
 						for _, e := range clause.List {
 							r.assertion(e)
+							if subject != nil {
+								r.mutationAsserted(subject, e)
+							}
 						}
 					}
 				}
@@ -617,6 +623,77 @@ func (r *rewriter) assertion(e ast.Expr) {
 	case (where == "query" && kind == "Query") || (where == "entity" && kind == "Querier"):
 		r.note(e.Pos(), "a value is asserted to the query type of %s: an interceptor or a rule is handed *orm.Query whatever the entity, so this never holds there; test q.Type() == %q", ent.name, ent.name)
 	}
+}
+
+// switched returns x of `switch v := x.(type)` or `switch x.(type)`.
+func switched(s *ast.TypeSwitchStmt) ast.Expr {
+	var e ast.Expr
+	switch a := s.Assign.(type) {
+	case *ast.ExprStmt:
+		e = a.X
+	case *ast.AssignStmt:
+		if len(a.Rhs) == 1 {
+			e = a.Rhs[0]
+		}
+	}
+	if ta, ok := e.(*ast.TypeAssertExpr); ok {
+		return ta.X
+	}
+	return nil
+}
+
+// mutationAsserted reports a mutation asserted to an interface with a method
+// no mutation has now. velox generated a mutation type per entity with a
+// method per field (SetOwnerID, Where(...predicate.X), ...), and a hook
+// shared by many entities asserts the mutation to the ones it needs. Every
+// mutation is *orm.Mutation here: the assertion compiles and never holds,
+// and what the hook did for the entities that had the methods it does for
+// none.
+func (r *rewriter) mutationAsserted(x, typ ast.Expr) {
+	if !r.isMutation(r.info.TypeOf(x), 0) {
+		return
+	}
+	t := r.info.TypeOf(typ)
+	if t == nil {
+		return
+	}
+	iface, ok := t.Underlying().(*types.Interface)
+	if !ok {
+		return
+	}
+	have := reflect.TypeFor[*orm.Mutation]()
+	var missing []string
+	for i := range iface.NumMethods() {
+		if _, ok := have.MethodByName(iface.Method(i).Name()); !ok {
+			missing = append(missing, iface.Method(i).Name())
+		}
+	}
+	if len(missing) == 0 {
+		return
+	}
+	r.note(typ.Pos(), "a mutation is asserted to an interface with %s: velox generated that for each entity and no mutation has it now, so this never holds; every mutation is *orm.Mutation (Field and SetField by name, WhereP, PredicatesFuncs)", strings.Join(missing, ", "))
+}
+
+// isMutation reports whether t is the library's Mutation, or an interface
+// that embeds it.
+func (r *rewriter) isMutation(t types.Type, depth int) bool {
+	if t == nil || depth > 4 {
+		return false
+	}
+	if named, ok := types.Unalias(t).(*types.Named); ok && named.Obj().Pkg() != nil &&
+		named.Obj().Pkg().Path() == r.lib && named.Obj().Name() == "Mutation" {
+		return true
+	}
+	iface, ok := t.Underlying().(*types.Interface)
+	if !ok {
+		return false
+	}
+	for i := range iface.NumEmbeddeds() {
+		if r.isMutation(iface.EmbeddedType(i), depth+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // emptyList reports an Or (or a Not) of a list that may be empty: velox's

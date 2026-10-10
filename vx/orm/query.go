@@ -114,10 +114,13 @@ var _ privacy.Filterable = (*Query)(nil)
 // Type returns the name of the entity queried.
 func (q *Query) Type() string { return q.c.M.Name }
 
-// WhereP adds conditions every returned row must satisfy.
+// WhereP adds conditions every returned row must satisfy. A nil function is
+// no condition, as the zero predicate is in a query.
 func (q *Query) WhereP(ps ...func(*sql.Selector)) {
 	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, P{Op: opRaw, raw: p})
+		if p != nil {
+			q.c.Preds = append(q.c.Preds, P{Op: opRaw, raw: p})
+		}
 	}
 }
 
@@ -281,7 +284,7 @@ func (q *QueryCore) First(ctx context.Context) (any, error) {
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, q.M.Name)
+		return nil, q.M.NotFound()
 	}
 	return rows[0], nil
 }
@@ -299,7 +302,7 @@ func (q *QueryCore) Only(ctx context.Context) (any, error) {
 	}
 	switch len(rows) {
 	case 0:
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, q.M.Name)
+		return nil, q.M.NotFound()
 	case 1:
 		return rows[0], nil
 	default:

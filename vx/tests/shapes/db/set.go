@@ -48,7 +48,7 @@ func (c *SetClient) UpdateByID(ex orm.Executor, id int) *entity.SetUpdate {
 func (c *SetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Set(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Set")
+		err = entity.SetMeta.NotFound()
 	}
 	return err
 }

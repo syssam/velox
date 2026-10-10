@@ -48,7 +48,7 @@ func (c *OrClient) UpdateByID(ex orm.Executor, id int) *entity.OrUpdate {
 func (c *OrClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Or")
+		err = entity.OrMeta.NotFound()
 	}
 	return err
 }

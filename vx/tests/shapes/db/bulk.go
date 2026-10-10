@@ -48,7 +48,7 @@ func (c *BulkClient) UpdateByID(ex orm.Executor, id int) *entity.BulkUpdate {
 func (c *BulkClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Bulk")
+		err = entity.BulkMeta.NotFound()
 	}
 	return err
 }

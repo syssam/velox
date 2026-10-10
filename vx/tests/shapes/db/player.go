@@ -48,7 +48,7 @@ func (c *PlayerClient) UpdateByID(ex orm.Executor, id string) *entity.PlayerUpda
 func (c *PlayerClient) DeleteByID(ctx context.Context, ex orm.Executor, id string) error {
 	n, err := c.Delete(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Player")
+		err = entity.PlayerMeta.NotFound()
 	}
 	return err
 }

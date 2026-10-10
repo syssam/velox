@@ -56,7 +56,7 @@ func (c *StringKeyClient) UpdateByID(ex orm.Executor, id string) *entity.StringK
 func (c *StringKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id string) error {
 	n, err := c.Delete(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("StringKey")
+		err = entity.StringKeyMeta.NotFound()
 	}
 	return err
 }

@@ -56,7 +56,7 @@ func (c *ValidatedClient) UpdateByID(ex orm.Executor, id int) *entity.ValidatedU
 func (c *ValidatedClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Validated(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Validated")
+		err = entity.ValidatedMeta.NotFound()
 	}
 	return err
 }

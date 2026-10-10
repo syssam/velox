@@ -56,7 +56,7 @@ func (c *Uint16KeyClient) UpdateByID(ex orm.Executor, id uint16) *entity.Uint16K
 func (c *Uint16KeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id uint16) error {
 	n, err := c.Delete(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Uint16Key")
+		err = entity.Uint16KeyMeta.NotFound()
 	}
 	return err
 }

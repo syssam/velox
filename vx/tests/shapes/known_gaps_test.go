@@ -524,6 +524,45 @@ func (Thing) Fields() []velox.Field {
 func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
 		want: generateFails, wantSubstr: "ThingOrderField is defined twice"},
+	// A where input reads a value of an enum by its name in the schema or
+	// as it is stored. An enum where one text would be two values is
+	// refused: found by review, where OPEN written out was read back as new.
+	{name: "an enum with two values under one name in the schema", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.Enum("status").Values("x", "y").Default("x").
+		Annotations(graphql.WhereInput(), graphql.EnumValues(map[string]string{"x": "SAME", "y": "SAME"}))}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "are both called SAME in the schema"},
+	{name: "an enum value stored as what another is called", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.Enum("status").Values("new", "OPEN", "closed").Default("new").
+		Annotations(graphql.WhereInput(), graphql.EnumValues(map[string]string{"new": "OPEN", "OPEN": "REOPENED"}))}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "is called in the schema (OPEN)"},
+	// A field of a where input that would be called like a method of it.
+	{name: "a filterable field called p", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.String("p").Annotations(graphql.WhereInput())}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "ThingWhereInput: the field p would be called P, as a method of the input is"},
 	{name: "a node with a field is_node", graphql: true,
 		schema: `
 type Thing struct{ velox.Schema }

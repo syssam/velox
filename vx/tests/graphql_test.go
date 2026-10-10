@@ -177,7 +177,8 @@ func TestWhereInput_FromADocument(t *testing.T) {
 		assert.Contains(t, err.Error(), c.want, name)
 	}
 
-	// An input written out and read back is the same input.
+	// An input written out and read back is the same input, through the
+	// engine's methods and through encoding/json.
 	in := filter.UserWhereInput{
 		Role:         ptr(user.RoleAdmin),
 		Not:          &filter.UserWhereInput{NameIn: []string{"bob"}},
@@ -185,12 +186,47 @@ func TestWhereInput_FromADocument(t *testing.T) {
 	}
 	var b bytes.Buffer
 	in.MarshalGQL(&b)
+	assert.JSONEq(t, `{"not":{"nameIn":["bob"]},"role":"ADMIN","hasPostsWith":[{"statusIn":["PUBLISHED"]}]}`, b.String())
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(b.Bytes(), &doc))
 	var back filter.UserWhereInput
 	require.NoError(t, back.UnmarshalGQL(doc))
 	assert.Equal(t, in, back)
 	assert.Equal(t, in.P(), back.P())
+	text, err := json.Marshal(&in)
+	require.NoError(t, err)
+	assert.JSONEq(t, b.String(), string(text))
+	back = filter.UserWhereInput{}
+	require.NoError(t, json.Unmarshal(text, &back))
+	assert.Equal(t, in, back)
+
+	// Among no values nothing matches. A writer that left the empty list out
+	// would give back a filter that matches every row.
+	none := filter.UserWhereInput{NameIn: []string{}}
+	text, err = json.Marshal(none)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"nameIn":[]}`, string(text))
+	back = filter.UserWhereInput{}
+	require.NoError(t, json.Unmarshal(text, &back))
+	us, err := client.User.Query(db).Where(back.P()).All(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, us)
+
+	// json.Unmarshal refuses what UnmarshalGQL does: the struct's tags alone
+	// would let an unknown key pass, and the condition with it.
+	err = json.Unmarshal([]byte(`{"name": "ann", "age": 30}`), &back)
+	require.ErrorContains(t, err, `UserWhereInput has no field "age"`)
+
+	// Conditions added in Go have no form in a document. json.Marshal says
+	// so, and what MarshalGQL writes is refused when it is read.
+	scoped := filter.UserWhereInput{Name: ptr("ann"), Predicates: []predicate.User{user.Age.GT(35)}}
+	_, err = json.Marshal(scoped)
+	require.ErrorContains(t, err, "Predicates")
+	b.Reset()
+	scoped.MarshalGQL(&b)
+	require.NoError(t, json.Unmarshal(b.Bytes(), &doc))
+	require.ErrorContains(t, back.UnmarshalGQL(doc), "could not be written")
+	require.ErrorContains(t, json.Unmarshal(b.Bytes(), &back), "could not be written")
 }
 
 func must[T any](v T, err error) T {

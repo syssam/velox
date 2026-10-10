@@ -48,7 +48,7 @@ func (c *LikeClient) UpdateByID(ex orm.Executor, id int) *entity.LikeUpdate {
 func (c *LikeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Like")
+		err = entity.LikeMeta.NotFound()
 	}
 	return err
 }
@@ -57,7 +57,7 @@ func (c *LikeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) er
 func (c *LikeClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
-		return nil, orm.NotFound("Like")
+		return nil, entity.LikeMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

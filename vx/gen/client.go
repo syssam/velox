@@ -103,19 +103,19 @@ func (c *%[1]s) UpdateByID(ex orm.Executor, id %[15]s) *%[3]s.%[10]s {
 func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex orm.Executor, id %[15]s) error {
 	n, err := c.Delete(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound(%[18]q)
+		err = %[3]s.%[18]s.NotFound()
 	}
 	return err
 }
 
-`, t, e.Name, modelPkg, n.Query, n.NewQuery, n.Create, n.NewCreate, n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, n.Delete, n.NewDelete, ctxPkg, id, e.pred(), e.ID.Col, e.Name)
+`, t, e.Name, modelPkg, n.Query, n.NewQuery, n.Create, n.NewCreate, n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, n.Delete, n.NewDelete, ctxPkg, id, e.pred(), e.ID.Col, n.Meta)
 		if q := g.gql[e]; q != nil && q.Node {
 			nodes = append(nodes, e)
 			w(`// node is Get for an id of any type: see NodeTypes.
 func (c *%[1]s) node(ctx %[2]s.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[%[3]s](key)
 	if !ok {
-		return nil, orm.NotFound(%[4]q)
+		return nil, %[5]s.%[4]s.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {
@@ -124,7 +124,7 @@ func (c *%[1]s) node(ctx %[2]s.Context, ex orm.Executor, key any) (Noder, error)
 	return n, nil
 }
 
-`, t, ctxPkg, id, e.Name)
+`, t, ctxPkg, id, n.Meta, modelPkg)
 		}
 	}
 	var out bytes.Buffer

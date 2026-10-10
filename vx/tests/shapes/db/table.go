@@ -48,7 +48,7 @@ func (c *TableClient) UpdateByID(ex orm.Executor, id int) *entity.TableUpdate {
 func (c *TableClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Table")
+		err = entity.TableMeta.NotFound()
 	}
 	return err
 }

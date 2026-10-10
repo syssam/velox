@@ -54,7 +54,7 @@ func (c *StringsClient) UpdateByID(ex orm.Executor, id int) *entity.StringsUpdat
 func (c *StringsClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Strings")
+		err = entity.StringsMeta.NotFound()
 	}
 	return err
 }

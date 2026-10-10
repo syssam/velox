@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,6 +54,8 @@ func TestReviewed(t *testing.T) {
 	// An error a test makes for a missing row is one, wrapped as well.
 	eq(t, "a made-up missing row", Classify(Missing("user")), "not found")
 	eq(t, "by the library's names", ClassifyByLibrary(fmt.Errorf("loading: %w", Missing("user"))), "not found")
+	// Its words after the library's own prefix are the same.
+	eq(t, "the words of a made-up missing row", strings.HasSuffix(Missing("user").Error(), ": user not found"), true)
 
 	// A deferred update runs when the function returns.
 	eq(t, "the age before the deferred update", s.BumpLater(ctx, ann.ID), 30)

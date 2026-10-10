@@ -841,3 +841,109 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, before+2, n)
 }
+
+// The zero predicate is no condition, and compiles to no function: what a
+// predicate that was a function was when it was none. A query takes that for
+// no condition. A mutation refuses it: a rule that meant to narrow a
+// statement, and narrowed it by nothing, must not let it run on every row.
+func TestCompile_NoCondition(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	newUser(t, db, "ann", 30)
+	newUser(t, db, "bob", 40)
+	assert.Nil(t, orm.Compile(predicate.User{}))
+	assert.NotNil(t, orm.Compile(user.Age.GT(1)))
+
+	var scope predicate.User // what a caller who sees every row is given
+	db.Intercept(velox.TraverseFunc(func(_ context.Context, q velox.Query) error {
+		q.(*orm.Query).WhereP(orm.Compile(scope))
+		return nil
+	}))
+	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+	scope = user.Name.EQ("ann")
+	n, err = client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	var rule predicate.User
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			if m.Op().Is(velox.OpUpdate | velox.OpDelete) {
+				m.(*orm.Mutation).WhereP(orm.Compile(rule))
+			}
+			return next.Mutate(ctx, m)
+		})
+	})
+	scope = predicate.User{}
+	_, err = client.User.Update(db).Set(user.Age.Set(1)).Exec(ctx)
+	require.ErrorContains(t, err, "WhereP of the User mutation was given no function")
+	_, err = client.User.Delete(db).Where(user.Name.EQ("ann")).Exec(ctx)
+	require.ErrorContains(t, err, "was given no function")
+	n, err = client.User.Query(db).Where(user.Age.GT(1)).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n, "a statement the rule did not narrow ran")
+	rule = user.Name.EQ("bob")
+	changed, err := client.User.Update(db).Set(user.Age.Set(1)).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, changed)
+}
+
+// A hook reads which rows a statement is about to touch: the conditions of
+// the mutation, as functions a query of the entity takes.
+func TestMutation_PredicatesFuncs(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, bob := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40)
+	cat := newUser(t, db, "cat", 50)
+	var touched [][]int
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			om := m.(*orm.Mutation)
+			if !m.Op().Is(velox.OpUpdate | velox.OpUpdateOne | velox.OpDelete) {
+				return next.Mutate(ctx, m)
+			}
+			var ps []predicate.User
+			for _, f := range om.PredicatesFuncs() {
+				ps = append(ps, predicate.User(orm.Raw(f)))
+			}
+			ids, err := client.User.Query(om.Executor()).Where(ps...).OrderBy(user.ID.Asc()).IDs(ctx)
+			if err != nil {
+				return nil, err
+			}
+			touched = append(touched, ids)
+			return next.Mutate(ctx, m)
+		})
+	})
+	// Conditions of every kind a mutation has: typed, nested, through an
+	// edge, and one a rule added as a function.
+	newPost(t, db, bob, "b1")
+	_, err := client.User.Update(db).Set(user.Age.Add(1)).Where(user.Or(user.Age.GT(45), user.Posts.Has())).Exec(ctx)
+	require.NoError(t, err)
+	_, err = client.User.UpdateByID(db, ann.ID).Set(user.Age.Set(31)).SaveOne(ctx)
+	require.NoError(t, err)
+	_, err = client.User.Delete(db).Where(user.Name.EQ("cat"), user.Name.EQ("bob")).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, [][]int{{bob.ID, cat.ID}, {ann.ID}, {}}, touched)
+}
+
+// A missing row says what was missing, in the words velox's did after its
+// own prefix.
+func TestNotFound_Text(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	_, err := client.User.Get(ctx, db, 404)
+	require.ErrorIs(t, err, orm.ErrNotFound)
+	assert.EqualError(t, err, "orm: user not found")
+	_, err = client.User.Query(db).Where(user.Name.EQ("nobody")).Only(ctx)
+	assert.EqualError(t, err, "orm: user not found")
+	err = client.User.DeleteByID(ctx, db, 404)
+	require.ErrorIs(t, err, orm.ErrNotFound)
+	assert.EqualError(t, err, "orm: user not found")
+	_, err = client.User.UpdateByID(db, 404).Set(user.Age.Set(1)).SaveOne(ctx)
+	assert.EqualError(t, err, "orm: user not found")
+	made := fmt.Errorf("loading: %w", orm.NotFound("price list"))
+	assert.True(t, orm.IsNotFound(made))
+	assert.EqualError(t, made, "loading: orm: price list not found")
+}

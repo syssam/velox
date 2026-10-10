@@ -54,7 +54,7 @@ func (c *MigrateClient) UpdateByID(ex orm.Executor, id int) *entity.MigrateUpdat
 func (c *MigrateClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Migrate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Migrate")
+		err = entity.MigrateMeta.NotFound()
 	}
 	return err
 }

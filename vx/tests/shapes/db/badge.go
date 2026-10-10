@@ -48,7 +48,7 @@ func (c *BadgeClient) UpdateByID(ex orm.Executor, id uint16) *entity.BadgeUpdate
 func (c *BadgeClient) DeleteByID(ctx context.Context, ex orm.Executor, id uint16) error {
 	n, err := c.Delete(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Badge")
+		err = entity.BadgeMeta.NotFound()
 	}
 	return err
 }

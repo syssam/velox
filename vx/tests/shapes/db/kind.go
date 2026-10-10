@@ -48,7 +48,7 @@ func (c *KindClient) UpdateByID(ex orm.Executor, id int) *entity.KindUpdate {
 func (c *KindClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Kind(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Kind")
+		err = entity.KindMeta.NotFound()
 	}
 	return err
 }

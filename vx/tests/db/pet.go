@@ -48,7 +48,7 @@ func (c *PetClient) UpdateByID(ex orm.Executor, id int) *entity.PetUpdate {
 func (c *PetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Pet(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Pet")
+		err = entity.PetMeta.NotFound()
 	}
 	return err
 }
@@ -57,7 +57,7 @@ func (c *PetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) err
 func (c *PetClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
-		return nil, orm.NotFound("Pet")
+		return nil, entity.PetMeta.NotFound()
 	}
 	n, err := c.Get(ctx, ex, v)
 	if err != nil {

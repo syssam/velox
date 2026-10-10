@@ -492,6 +492,35 @@ func aliased(m velox.Mutation) bool {
 	return ok
 }
 
+// A hook shared by entities that asserts the mutation to the methods it
+// needs of them: typed accessors, and a Where of the entity's predicates.
+type ownerSetter interface{ SetOwnerID(int) }
+
+type narrowed[P any] interface{ Where(ps ...P) }
+
+type named interface {
+	velox.Mutation
+	Name() (string, bool)
+}
+
+func accessors(m velox.Mutation, in named) (found int) {
+	if _, ok := m.(ownerSetter); ok { // note: asserted to an interface with SetOwnerID
+		found++
+	}
+	if _, ok := m.(narrowed[predicate.User]); ok { // note: asserted to an interface with Where
+		found++
+	}
+	switch in.(type) {
+	case interface{ SetName(string) }: // note: asserted to an interface with SetName
+		found++
+	case interface {
+		Field(string) (velox.Value, bool)
+	}: // every mutation has it
+		found++
+	}
+	return found
+}
+
 func byName() map[string]predicate.User {
 	return map[string]predicate.User{"none": nil}
 }
@@ -534,4 +563,4 @@ func valid(r user.Role) bool { return r.IsValid() }
 var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
 	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, firstID, isRole, lockSkipping, nullsFirst, postsOf, noField, columnOf, validPointer, missingByWords, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
-	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}
+	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid, accessors}

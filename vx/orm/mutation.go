@@ -307,7 +307,7 @@ func (m *Mutation) OldField(ctx context.Context, name string) (velox.Value, erro
 		}
 		switch len(rows) {
 		case 0:
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, m.c.M.Name)
+			return nil, m.c.M.NotFound()
 		case 1:
 			m.old, m.oldLoaded = rows[0], true
 		default:
@@ -318,11 +318,29 @@ func (m *Mutation) OldField(ctx context.Context, name string) (velox.Value, erro
 }
 
 // WhereP restricts the rows an update or delete touches. It has no effect on
-// a create.
+// a create. A nil function fails the mutation: it is what the zero predicate
+// compiles to, and a rule that meant to narrow a statement and narrowed it by
+// nothing must not let it run over every row (see Compile).
 func (m *Mutation) WhereP(ps ...func(*sql.Selector)) {
 	for _, p := range ps {
+		if p == nil {
+			m.c.Preds = append(m.c.Preds, Invalid(fmt.Errorf("orm: WhereP of the %s mutation was given no function: a statement is not narrowed by no condition", m.c.M.Name)))
+			continue
+		}
 		m.c.Preds = append(m.c.Preds, P{Op: opRaw, raw: p})
 	}
+}
+
+// PredicatesFuncs returns the conditions of an update or delete as functions
+// on a selector of the entity's table: for a hook that has to know which
+// rows a statement is about to touch, and reads them with these before it
+// runs (a query of the entity takes them as orm.Raw).
+func (m *Mutation) PredicatesFuncs() []func(*sql.Selector) {
+	fs := make([]func(*sql.Selector), len(m.c.Preds))
+	for i := range m.c.Preds {
+		fs[i] = compile(&m.c.Preds[i])
+	}
+	return fs
 }
 
 // Filter returns the mutation as the target of privacy filter rules.

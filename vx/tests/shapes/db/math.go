@@ -48,7 +48,7 @@ func (c *MathClient) UpdateByID(ex orm.Executor, id int) *entity.MathUpdate {
 func (c *MathClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Math")
+		err = entity.MathMeta.NotFound()
 	}
 	return err
 }

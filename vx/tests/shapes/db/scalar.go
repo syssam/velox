@@ -48,7 +48,7 @@ func (c *ScalarClient) UpdateByID(ex orm.Executor, id int) *entity.ScalarUpdate 
 func (c *ScalarClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Scalar")
+		err = entity.ScalarMeta.NotFound()
 	}
 	return err
 }

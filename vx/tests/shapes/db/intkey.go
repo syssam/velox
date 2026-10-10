@@ -48,7 +48,7 @@ func (c *IntKeyClient) UpdateByID(ex orm.Executor, id int) *entity.IntKeyUpdate 
 func (c *IntKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("IntKey")
+		err = entity.IntKeyMeta.NotFound()
 	}
 	return err
 }

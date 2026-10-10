@@ -31,8 +31,16 @@ func RawOrder(f func(*sql.Selector)) O { return O{raw: f} }
 // Compile returns the predicate as a function on a selector of its entity's
 // table, for code that builds SQL itself or registers the same condition as a
 // privacy filter or interceptor: q.WhereP(orm.Compile(user.Age.GT(18))).
+//
+// The zero predicate, which is no condition, compiles to no function: nil.
+// That is what a predicate that was a function was when it was none, so code
+// that asks a function whether it is nil is told the same as before; a query
+// takes nil for no condition, and a mutation refuses it (see Mutation.WhereP).
 func Compile[T Predicate](p T) func(*sql.Selector) {
 	c := P(p)
+	if c.Op == 0 {
+		return nil
+	}
 	return compile(&c)
 }
 

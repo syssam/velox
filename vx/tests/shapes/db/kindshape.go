@@ -56,7 +56,7 @@ func (c *KindShapeClient) UpdateByID(ex orm.Executor, id int) *entity.KindShapeU
 func (c *KindShapeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.KindShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("KindShape")
+		err = entity.KindShapeMeta.NotFound()
 	}
 	return err
 }

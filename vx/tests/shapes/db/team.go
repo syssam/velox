@@ -49,7 +49,7 @@ func (c *TeamClient) UpdateByID(ex orm.Executor, id uuid.UUID) *entity.TeamUpdat
 func (c *TeamClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Team")
+		err = entity.TeamMeta.NotFound()
 	}
 	return err
 }

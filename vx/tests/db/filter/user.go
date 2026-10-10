@@ -77,13 +77,27 @@ func (i *UserWhereInput) P() predicate.User { return predicate.User(orm.Where(i,
 
 // UnmarshalGQL reads the input from the object given for it: the where argument
 // of a request as the engine hands it over, or a filter kept as a document. See
-// orm.DecodeWhere for what it accepts.
+// orm.DecodeWhere for what it accepts and what it refuses.
 //
 //go:noinline
 func (i *UserWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, userWhere, v) }
 
-// MarshalGQL writes the input as JSON. With UnmarshalGQL it tells an engine that
-// the type reads itself, so that it generates no decoder of its own for it.
+// MarshalGQL writes the input as the document UnmarshalGQL reads. With
+// UnmarshalGQL it tells an engine that the type reads itself, so that it
+// generates no decoder of its own for it.
 //
 //go:noinline
-func (i UserWhereInput) MarshalGQL(w io.Writer) { orm.EncodeWhere(w, i) }
+func (i UserWhereInput) MarshalGQL(w io.Writer) { orm.WriteWhere(w, &i, userWhere) }
+
+// UnmarshalJSON reads the input from the JSON text of its document, as
+// UnmarshalGQL reads the object: json.Unmarshal refuses a key the input does
+// not have, where the struct alone would let it pass.
+//
+//go:noinline
+func (i *UserWhereInput) UnmarshalJSON(b []byte) error { return orm.DecodeWhere(i, userWhere, b) }
+
+// MarshalJSON writes the document of the input: json.Marshal of an input is
+// what UnmarshalJSON reads back as the same conditions. See orm.EncodeWhere.
+//
+//go:noinline
+func (i UserWhereInput) MarshalJSON() ([]byte, error) { return orm.EncodeWhere(&i, userWhere) }

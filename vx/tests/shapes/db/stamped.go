@@ -54,7 +54,7 @@ func (c *StampedClient) UpdateByID(ex orm.Executor, id int) *entity.StampedUpdat
 func (c *StampedClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
-		err = orm.NotFound("Stamped")
+		err = entity.StampedMeta.NotFound()
 	}
 	return err
 }
