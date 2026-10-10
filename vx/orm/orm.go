@@ -113,6 +113,8 @@ type Tx struct {
 	c    conn
 	tx   dialect.Tx
 	done bool
+	// after are the functions to run once the transaction is committed.
+	after []func()
 }
 
 func (tx *Tx) conn() *conn {
@@ -223,8 +225,21 @@ func (tx *Tx) Commit() error {
 		return ErrTxDone
 	}
 	tx.done = true
-	return tx.tx.Commit()
+	if err := tx.tx.Commit(); err != nil {
+		return err
+	}
+	for _, fn := range tx.after {
+		fn()
+	}
+	return nil
 }
+
+// AfterCommit registers fn to run once the transaction has been committed:
+// not when it is rolled back, and not when the commit fails. It is for what
+// must follow a change only when the change is certain, such as publishing
+// an event. The functions run in the order they were registered, on the
+// goroutine that commits, after Commit has succeeded and before it returns.
+func (tx *Tx) AfterCommit(fn func()) { tx.after = append(tx.after, fn) }
 
 // Rollback rolls the transaction back. After Commit or a previous Rollback it
 // returns ErrTxDone and does nothing, so a deferred Rollback is safe.
@@ -431,6 +446,21 @@ func Must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// First returns the first of what a read of a list returned, or ErrNotFound
+// when it returned none: the id of the first row a query matches is
+//
+//	id, err := orm.First(q.Limit(1).IDs(ctx))
+func First[T any](vs []T, err error) (T, error) {
+	if err != nil || len(vs) == 0 {
+		var zero T
+		if err == nil {
+			err = ErrNotFound
+		}
+		return zero, err
+	}
+	return vs[0], nil
 }
 
 // Apply calls each function on q and returns q: for the parts of a query

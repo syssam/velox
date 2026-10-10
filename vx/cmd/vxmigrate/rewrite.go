@@ -32,8 +32,10 @@ type rewriter struct {
 	// a client only to query on it (by where they are declared): their type
 	// becomes orm.Executor, so that a transaction can be passed for them.
 	handles map[token.Pos]bool
-	// ownMethods are the names of the methods the application declares.
+	// ownMethods are the names of the methods the application declares,
+	// and ownPkgs the import paths of its packages.
 	ownMethods map[string]bool
+	ownPkgs    map[string]bool
 }
 
 // What the old API's packages are, seen from a reference into one.
@@ -537,6 +539,25 @@ func (r *rewriter) queryMethods(it *ast.InterfaceType) {
 	}
 }
 
+// ownInterfaceCall renames a call through an interface of the application's
+// whose method was renamed with the query's (see queryMethods): q.Exist(ctx)
+// on a value of a type parameter constrained by it.
+func (r *rewriter) ownInterfaceCall(sel *ast.SelectorExpr, obj types.Object) {
+	fn, ok := obj.(*types.Func)
+	if !ok || fn.Name() != "Exist" || r.ownMethods["Exist"] || fn.Pkg() == nil {
+		return
+	}
+	recv := fn.Signature().Recv()
+	if recv == nil || !types.IsInterface(recv.Type()) {
+		return
+	}
+	if !r.ownPkgs[fn.Pkg().Path()] {
+		return // an interface of a library's
+	}
+	r.replace(sel.Sel.Pos(), sel.Sel.End(), "Exists")
+	r.count("Exists")
+}
+
 // assertion reports a type assertion, or a case of a type switch, to the
 // query or mutation type of one entity. It goes by the type asserted, not
 // by how it is written: through an alias it is the same assertion.
@@ -798,10 +819,12 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 	}
 	selection := r.info.Selections[sel]
 	if selection == nil {
+		r.ownInterfaceCall(sel, r.info.Uses[sel.Sel])
 		r.function(call, sel, stack)
 		return
 	}
 	obj := selection.Obj()
+	r.ownInterfaceCall(sel, obj)
 	t, ok := r.targetOf(obj, declaring(selection))
 	if !ok {
 		return
@@ -1002,6 +1025,27 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			return
 		}
 		if f, ok := strings.CutSuffix(name, "Values"); ok && e.fields[f] {
+			return
+		}
+		if f, ok := strings.CutSuffix(name, "Validator"); ok && e.fields[f] && len(call.Args) == 1 {
+			// The validator of an enum field said whether a value is one
+			// of the field's: <F>Validator(v) != nil is "it is not".
+			if bin, ok := parent(stack, 1).(*ast.BinaryExpr); ok && (bin.Op == token.EQL || bin.Op == token.NEQ) {
+				other := bin.Y
+				if ast.Expr(call) == bin.Y {
+					other = bin.X
+				}
+				if id, isNil := other.(*ast.Ident); isNil && id.Name == "nil" {
+					text := r.ref("slices", "slices", call.Pos()) + ".Contains(" + r.render(sel.X) + "." + f + "Values(), " + r.render(call.Args[0]) + ")"
+					if bin.Op == token.NEQ {
+						text = "!" + text
+					}
+					r.replace(bin.Pos(), bin.End(), text)
+					r.count("enum validator")
+					return
+				}
+			}
+			r.note(call.Pos(), "%s: whether a value is one of the field's is slices.Contains(%s.%sValues(), v)", name, strings.ToLower(e.name), f)
 			return
 		}
 		if _, isType := obj.(*types.TypeName); isType && e.fields[name] {
@@ -1853,6 +1897,16 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 		rename(strings.TrimSuffix(name, "X"))
 		must()
 		r.count(name)
+	case "FirstID", "FirstIDX":
+		// The id of the first row: the first of the ids of a query of one.
+		rename("Limit(1).IDs")
+		r.open(call.Pos(), r.orm(call.Pos())+".First(")
+		r.insert(call.End(), ")")
+		r.wrapped[call] = true
+		if name == "FirstIDX" {
+			must()
+		}
+		r.count("FirstID")
 	case "Exist":
 		rename("Exists")
 		r.count("Exists")

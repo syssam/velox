@@ -153,6 +153,11 @@ err = db.User.DeleteByID(ctx, conn, id)
 - `tx.Driver()` and `db.Driver()` give the driver under a handle, for SQL of
   the caller's own inside the same transaction; `orm.TxFrom(ctx)` is the
   transaction a context carries (`orm.WithExecutor(ctx, tx)`), or nil.
+- `tx.AfterCommit(fn)` runs `fn` once the transaction has been committed,
+  and not when it is rolled back or the commit fails: for an event that must
+  follow a change only when the change is certain.
+- `orm.First(q.Limit(1).IDs(ctx))` is the first of what a list read
+  returned, or `orm.ErrNotFound`.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not

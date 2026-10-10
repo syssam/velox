@@ -291,6 +291,9 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
 		"func tables(ctx context.Context, c *orm.DB) error { return migrate.Create(ctx, c) }",
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
+		"return orm.First(db.User.Query(c).Limit(1).IDs(ctx))",
+		"func isRole(r user.RoleEnum) bool { return slicespkg.Contains(user.RoleValues(), r) }",
+		"func anyOfThem[Q exister](ctx context.Context, q Q) (bool, error) { return q.Exists(ctx) }",
 		`func opened(dsn string) (*orm.DB, error) { return orm.Open("sqlite", dsn) }`,
 		// The start of a query as a value.
 		"func starter(c *orm.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",

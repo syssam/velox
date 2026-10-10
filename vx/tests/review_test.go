@@ -463,3 +463,44 @@ func TestRawOrder(t *testing.T) {
 	_, err = client.User.Query(db).OrderBy(byNick).Paginate(ctx, nil, intp(1), nil, nil)
 	require.ErrorContains(t, err, "cannot be paged")
 }
+
+// What is registered with AfterCommit runs when the transaction is
+// committed, in order, and not when it is rolled back.
+func TestAfterCommit(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	var ran []string
+	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+		tx.AfterCommit(func() { ran = append(ran, "first") })
+		tx.AfterCommit(func() {
+			// The change is there for whoever reads after the commit.
+			n, err := client.User.Query(db).Count(ctx)
+			require.NoError(t, err)
+			ran = append(ran, "second sees "+strconv.Itoa(n))
+		})
+		newUser(t, tx, "ann", 30)
+		require.Empty(t, ran, "nothing runs before the commit")
+		return nil
+	}))
+	require.Equal(t, []string{"first", "second sees 1"}, ran)
+
+	ran = nil
+	require.Error(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+		tx.AfterCommit(func() { ran = append(ran, "rolled back") })
+		return errors.New("no")
+	}))
+	require.Empty(t, ran)
+}
+
+// orm.First: the first of a list read, or not found.
+func TestFirst(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	_, err := orm.First(client.User.Query(db).Limit(1).IDs(ctx))
+	require.ErrorIs(t, err, orm.ErrNotFound)
+	ann := newUser(t, db, "ann", 30)
+	newUser(t, db, "bob", 40)
+	id, err := orm.First(client.User.Query(db).OrderBy(user.Name.Asc()).Limit(1).IDs(ctx))
+	require.NoError(t, err)
+	require.Equal(t, ann.ID, id)
+}
