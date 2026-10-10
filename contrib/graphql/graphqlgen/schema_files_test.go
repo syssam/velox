@@ -263,3 +263,41 @@ func TestSchemaFiles_NothingToOrderBy(t *testing.T) {
 		}
 	}
 }
+
+// EnumValues is what the schema lists for an enum: a value's name is the one
+// the annotation gives it, or the value in upper case, and the two are
+// returned together so that nothing derives one from the other.
+func TestEnumValuesAreTheSchema(t *testing.T) {
+	status := &entgen.Field{
+		Name: "status", Type: &field.TypeInfo{Type: field.TypeEnum},
+		Enums: []entgen.Enum{{Name: "Draft", Value: "draft"}, {Name: "InReview", Value: "in-review"}, {Name: "Done", Value: "done"}},
+		Annotations: map[string]any{graphql.AnnotationName: &graphql.Annotation{
+			EnumValues: map[string]string{"in-review": "IN_REVIEW"},
+		}},
+	}
+	post := &entgen.Type{
+		Name:        "Post",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields:      []*entgen.Field{status},
+		Annotations: map[string]any{},
+	}
+	g := NewGenerator(&entgen.Graph{Config: &entgen.Config{Package: "example/ent"}, Nodes: []*entgen.Type{post}},
+		Config{Package: "graphql", ORMPackage: "example/ent"})
+
+	got := g.EnumValues(status)
+	if want := []EnumValue{{"DRAFT", "draft"}, {"IN_REVIEW", "in-review"}, {"DONE", "done"}}; !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+
+	var inSchema []string
+	for _, m := range regexp.MustCompile(`(?m)^  ([A-Z_0-9]+)$`).FindAllStringSubmatch(g.genEnumType(post, status), -1) {
+		inSchema = append(inSchema, m[1])
+	}
+	var names []string
+	for _, v := range got {
+		names = append(names, v.Name)
+	}
+	if !slices.Equal(inSchema, names) {
+		t.Errorf("the schema lists %v and EnumValues %v", inSchema, names)
+	}
+}

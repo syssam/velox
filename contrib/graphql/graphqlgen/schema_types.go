@@ -436,7 +436,6 @@ func (g *Generator) genEnumType(t *gen.Type, f *gen.Field) string {
 
 	// Get field annotation for custom type name and enum value mapping
 	ann := g.getFieldAnnotation(f)
-	enumMapping := ann.GetEnumValues()
 
 	// Check for custom GraphQL type name (for shared enums like schematype.ItemType)
 	enumName := t.Name + pascal(f.Name)
@@ -468,14 +467,33 @@ func (g *Generator) genEnumType(t *gen.Type, f *gen.Field) string {
 """
 `, enumName, f.Name)
 	fmt.Fprintf(&buf, "enum %s%s {\n", enumName, goModel)
-	for _, v := range f.EnumValues() {
-		// Use custom mapping if provided, otherwise auto-uppercase
-		gqlValue := g.graphqlEnumValue(v, enumMapping)
-		fmt.Fprintf(&buf, "  %s\n", gqlValue)
+	for _, v := range g.EnumValues(f) {
+		fmt.Fprintf(&buf, "  %s\n", v.Name)
 	}
 	buf.WriteString("}\n")
 
 	return buf.String()
+}
+
+// EnumValue is one value of an enum field: its name in the schema, and the
+// value the column stores.
+type EnumValue struct {
+	Name  string
+	Value string
+}
+
+// EnumValues returns the values of an enum field as the schema lists them:
+// the name the annotation gives a value, or the value in upper case. A
+// generator that reads a value of the schema back into Go takes the pairs
+// from here and does not derive one from the other.
+func (g *Generator) EnumValues(f *gen.Field) []EnumValue {
+	mapping := g.getFieldAnnotation(f).GetEnumValues()
+	values := f.EnumValues()
+	out := make([]EnumValue, len(values))
+	for i, v := range values {
+		out[i] = EnumValue{Name: g.graphqlEnumValue(v, mapping), Value: v}
+	}
+	return out
 }
 
 // graphqlEnumValue returns the GraphQL enum value for a database value.
