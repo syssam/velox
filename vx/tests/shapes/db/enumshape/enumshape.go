@@ -134,6 +134,16 @@ func (f *IntColumn) LTE(v int) predicate.EnumShape {
 	return predicate.EnumShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.EnumShapeSetter {
 	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -194,6 +204,16 @@ func (f *StateEnumColumn) NotIn(vs ...StateEnum) predicate.EnumShape {
 		a[i] = v
 	}
 	return predicate.EnumShape{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StateEnumColumn) IsNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StateEnumColumn) NotNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -325,6 +345,16 @@ func (f *PhaseEnumColumn) NotIn(vs ...PhaseEnum) predicate.EnumShape {
 	return predicate.EnumShape{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *PhaseEnumColumn) IsNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *PhaseEnumColumn) NotNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *PhaseEnumColumn) Set(v PhaseEnum) predicate.EnumShapeSetter {
 	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -382,6 +412,16 @@ func (f *SizeEnumColumn) NotIn(vs ...SizeEnum) predicate.EnumShape {
 	return predicate.EnumShape{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *SizeEnumColumn) IsNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *SizeEnumColumn) NotNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *SizeEnumColumn) Set(v SizeEnum) predicate.EnumShapeSetter {
 	return predicate.EnumShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -437,6 +477,16 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.EnumShape {
 		a[i] = v
 	}
 	return predicate.EnumShape{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *TierColumn) IsNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TierColumn) NotNil() predicate.EnumShape {
+	return predicate.EnumShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

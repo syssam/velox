@@ -69,6 +69,12 @@ func (f *IntColumn) LTE(v int) predicate.Bare {
 	return predicate.Bare{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Bare { return predicate.Bare{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Bare { return predicate.Bare{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.BareSetter {
 	return predicate.BareSetter{Kind: orm.SetValue, Col: string(*f), Val: v}

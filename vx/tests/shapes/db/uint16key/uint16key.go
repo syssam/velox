@@ -69,6 +69,16 @@ func (f *Uint16Column) LTE(v uint16) predicate.Uint16Key {
 	return predicate.Uint16Key{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint16Column) IsNil() predicate.Uint16Key {
+	return predicate.Uint16Key{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint16Column) NotNil() predicate.Uint16Key {
+	return predicate.Uint16Key{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint16Column) Set(v uint16) predicate.Uint16KeySetter {
 	return predicate.Uint16KeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -174,6 +184,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Uint16Key {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Uint16Key {
 	return predicate.Uint16Key{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Uint16Key {
+	return predicate.Uint16Key{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Uint16Key {
+	return predicate.Uint16Key{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

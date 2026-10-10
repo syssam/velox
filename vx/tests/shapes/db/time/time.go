@@ -70,6 +70,12 @@ func (f *IntColumn) LTE(v int) predicate.Time {
 	return predicate.Time{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Time { return predicate.Time{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Time { return predicate.Time{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.TimeSetter {
 	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -175,6 +181,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Time {
 	return predicate.Time{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Time {
+	return predicate.Time{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Time {
+	return predicate.Time{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.TimeSetter {
 	return predicate.TimeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -248,6 +264,14 @@ func (f *TimeColumn) LT(v time.Time) predicate.Time {
 // LTE matches the rows whose column is v or less.
 func (f *TimeColumn) LTE(v time.Time) predicate.Time {
 	return predicate.Time{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Time { return predicate.Time{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Time {
+	return predicate.Time{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

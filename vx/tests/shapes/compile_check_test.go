@@ -108,17 +108,14 @@ var compileCases = []compileCase{
 		body: `	_, _ = client.Article.Update(db).Set(article.Title.Add("x")).Exec(ctx)`},
 	{name: "substring predicate on an int field", want: "article.Words.Contains undefined",
 		body: `	_, _ = client.Article.Query(db).Where(article.Words.Contains("1")).All(ctx)`},
-	// Clear and IsNil exist only where the column can hold NULL.
+	// Clear exists only where the column can hold NULL. (IsNil and NotNil
+	// are on every column: see TestIsNilOnEveryColumn.)
 	{name: "Clear on an Optional field whose column is NOT NULL", want: "scalar.StringOpt.Clear undefined",
 		body: `	_, _ = client.Scalar.Update(db).Set(scalar.StringOpt.Clear()).Exec(ctx)`},
 	{name: "Clear on a required Nillable field", want: "scalar.StringPtr.Clear undefined",
 		body: `	_, _ = client.Scalar.Update(db).Set(scalar.StringPtr.Clear()).Exec(ctx)`},
 	{name: "Clear on an Optional bytes field", want: "scalar.BytesOpt.Clear undefined",
 		body: `	_, _ = client.Scalar.Create(db).Set(scalar.BytesOpt.Clear()).Save(ctx)`},
-	{name: "IsNil on a column that is NOT NULL", want: "scalar.IntOpt.IsNil undefined",
-		body: `	_, _ = client.Scalar.Query(db).Where(scalar.IntOpt.IsNil()).All(ctx)`},
-	{name: "NotNil on a required column", want: "article.Title.NotNil undefined",
-		body: `	_, _ = client.Article.Query(db).Where(article.Title.NotNil()).All(ctx)`},
 	{name: "a raw database/sql handle as the executor", want: "does not implement orm.Executor",
 		body: `	_, _ = client.Author.Query(db.SQL()).All(ctx)`},
 	{name: "an untyped runtime predicate", want: "cannot use",

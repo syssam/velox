@@ -68,6 +68,7 @@ type Column[T, P any] interface {
 	NEQ(T) P
 	In(...T) P
 	NotIn(...T) P
+	NullableColumn[P]
 }
 
 // OrderedColumn is a column whose values compare: numbers, times, strings.
@@ -89,7 +90,10 @@ type TextColumn[P any] interface {
 	ContainsFold(string) P
 }
 
-// NullableColumn is what a column that may be NULL has besides.
+// NullableColumn is the part of a column that asks whether it is NULL.
+// Every column has it, one that cannot be NULL too (it never is): Column
+// includes it. On its own it is the constraint for code that asks nothing
+// else, of a column of any type.
 type NullableColumn[P any] interface {
 	IsNil() P
 	NotNil() P

@@ -101,6 +101,12 @@ func (f *IntColumn) LTE(v int) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Wide { return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -204,6 +210,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Wide {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Wide {
 	return predicate.Wide{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -358,6 +374,14 @@ func (f *BoolColumn) EQ(v bool) predicate.Wide {
 // NEQ matches the rows whose column differs from v.
 func (f *BoolColumn) NEQ(v bool) predicate.Wide {
 	return predicate.Wide{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *BoolColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BoolColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -586,6 +610,14 @@ func (f *Int8Column) LTE(v int8) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int8Column) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int8Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int8Column) Set(v int8) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -664,6 +696,14 @@ func (f *Int16Column) LT(v int16) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *Int16Column) LTE(v int16) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int16Column) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int16Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -746,6 +786,14 @@ func (f *Int32Column) LTE(v int32) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int32Column) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int32Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int32Column) Set(v int32) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -824,6 +872,14 @@ func (f *Int64Column) LT(v int64) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *Int64Column) LTE(v int64) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int64Column) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int64Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -906,6 +962,14 @@ func (f *UintColumn) LTE(v uint) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UintColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UintColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UintColumn) Set(v uint) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -984,6 +1048,14 @@ func (f *Uint8Column) LT(v uint8) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *Uint8Column) LTE(v uint8) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Uint8Column) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint8Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1066,6 +1138,16 @@ func (f *Uint16Column) LTE(v uint16) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint16Column) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint16Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint16Column) Set(v uint16) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1144,6 +1226,16 @@ func (f *Uint32Column) LT(v uint32) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *Uint32Column) LTE(v uint32) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Uint32Column) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint32Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1226,6 +1318,16 @@ func (f *Uint64Column) LTE(v uint64) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint64Column) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint64Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint64Column) Set(v uint64) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1304,6 +1406,16 @@ func (f *Float64Column) LT(v float64) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *Float64Column) LTE(v float64) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Float64Column) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float64Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1386,6 +1498,16 @@ func (f *Float32Column) LT(v float32) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *Float32Column) LTE(v float32) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Float32Column) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float32Column) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1567,6 +1689,14 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1732,6 +1862,14 @@ func (f *UUIDColumn) LT(v uuid.UUID) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *UUIDColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UUIDColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1901,6 +2039,14 @@ func (f *BytesColumn) LTE(v []byte) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *BytesColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BytesColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *BytesColumn) Set(v []byte) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -2048,6 +2194,16 @@ func (f *KindEnumColumn) NotIn(vs ...KindEnum) predicate.Wide {
 	return predicate.Wide{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *KindEnumColumn) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *KindEnumColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *KindEnumColumn) Set(v KindEnum) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -2148,6 +2304,16 @@ func (f *NullableKind2EnumColumn) Desc() predicate.WideOrderTerm {
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
 type IntListColumn string
+
+// IsNil matches the rows whose column is NULL.
+func (f *IntListColumn) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntListColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
 
 // Set assigns v to the column.
 func (f *IntListColumn) Set(v []int) predicate.WideSetter {
@@ -2309,6 +2475,14 @@ func (f *LabelColumn) ContainsFold(v string) predicate.Wide {
 	return predicate.Wide{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *LabelColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *LabelColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *LabelColumn) Set(v types.Label) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -2382,6 +2556,16 @@ func (f *WeightColumn) LT(v types.Weight) predicate.Wide {
 // LTE matches the rows whose column is v or less.
 func (f *WeightColumn) LTE(v types.Weight) predicate.Wide {
 	return predicate.Wide{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *WeightColumn) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *WeightColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -2489,6 +2673,16 @@ func (f *DecimalColumn) ContainsFold(v string) predicate.Wide {
 	return predicate.Wide{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *DecimalColumn) IsNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *DecimalColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *DecimalColumn) Set(v types.Decimal) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -2544,6 +2738,14 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.Wide {
 		a[i] = v
 	}
 	return predicate.Wide{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *TierColumn) IsNil() predicate.Wide { return predicate.Wide{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TierColumn) NotNil() predicate.Wide {
+	return predicate.Wide{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

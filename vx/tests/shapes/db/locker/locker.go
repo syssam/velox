@@ -69,6 +69,16 @@ func (f *IntColumn) LTE(v int) predicate.Locker {
 	return predicate.Locker{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Locker {
+	return predicate.Locker{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Locker {
+	return predicate.Locker{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.LockerSetter {
 	return predicate.LockerSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -174,6 +184,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Locker {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Locker {
 	return predicate.Locker{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Locker {
+	return predicate.Locker{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Locker {
+	return predicate.Locker{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

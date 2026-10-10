@@ -71,6 +71,16 @@ func (f *IntColumn) LTE(v int) predicate.Stamped {
 	return predicate.Stamped{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Stamped {
+	return predicate.Stamped{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Stamped {
+	return predicate.Stamped{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.StampedSetter {
 	return predicate.StampedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -153,6 +163,16 @@ func (f *StampColumn) LTE(v types.Stamp) predicate.Stamped {
 	return predicate.Stamped{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StampColumn) IsNil() predicate.Stamped {
+	return predicate.Stamped{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StampColumn) NotNil() predicate.Stamped {
+	return predicate.Stamped{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StampColumn) Set(v types.Stamp) predicate.StampedSetter {
 	return predicate.StampedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -228,6 +248,16 @@ func (f *TimeColumn) LT(v time.Time) predicate.Stamped {
 // LTE matches the rows whose column is v or less.
 func (f *TimeColumn) LTE(v time.Time) predicate.Stamped {
 	return predicate.Stamped{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Stamped {
+	return predicate.Stamped{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Stamped {
+	return predicate.Stamped{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

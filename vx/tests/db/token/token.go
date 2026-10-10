@@ -85,6 +85,16 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Token {
 	return predicate.Token{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UUIDColumn) IsNil() predicate.Token {
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UUIDColumn) NotNil() predicate.Token {
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UUIDColumn) Set(v uuid.UUID) predicate.TokenSetter {
 	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -185,6 +195,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Token {
 	return predicate.Token{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Token {
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Token {
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.TokenSetter {
 	return predicate.TokenSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -240,6 +260,16 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.Token {
 		a[i] = v
 	}
 	return predicate.Token{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *TierColumn) IsNil() predicate.Token {
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TierColumn) NotNil() predicate.Token {
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -412,6 +442,16 @@ func (f *LabelColumn) EqualFold(v string) predicate.Token {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *LabelColumn) ContainsFold(v string) predicate.Token {
 	return predicate.Token{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *LabelColumn) IsNil() predicate.Token {
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *LabelColumn) NotNil() predicate.Token {
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -606,6 +646,16 @@ func (f *WeightColumn) LT(v types.Weight) predicate.Token {
 // LTE matches the rows whose column is v or less.
 func (f *WeightColumn) LTE(v types.Weight) predicate.Token {
 	return predicate.Token{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *WeightColumn) IsNil() predicate.Token {
+	return predicate.Token{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *WeightColumn) NotNil() predicate.Token {
+	return predicate.Token{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

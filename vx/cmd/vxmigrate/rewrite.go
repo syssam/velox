@@ -154,9 +154,9 @@ func (r *rewriter) run() {
 			case *ast.SelectorExpr:
 				r.selector(top, stack)
 			case *ast.IndexExpr:
-				r.columnType(top, top.X, []ast.Expr{top.Index}, stack)
+				r.columnType(top, top.X, []ast.Expr{top.Index})
 			case *ast.IndexListExpr:
-				r.columnType(top, top.X, top.Indices, stack)
+				r.columnType(top, top.X, top.Indices)
 			case *ast.UnaryExpr:
 				r.funcConstraint(top)
 			case *ast.BinaryExpr:
@@ -684,6 +684,16 @@ func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, sta
 		r.count("ValidationError.Field")
 		return
 	}
+	// o.Field.Column: the column an order input's field stands for.
+	if v, ok := obj.(*types.Var); ok && v.IsField() && v.Name() == "Column" && v.Pkg() != nil && v.Pkg().Path() == r.s.root+"/entity" {
+		if inner, ok := sel.X.(*ast.SelectorExpr); ok && inner.Sel.Name == "Field" {
+			if ent, kind := r.s.kindOf(typeName(r.info.TypeOf(sel.X))); ent != nil && kind == "OrderField" {
+				r.replace(inner.X.End(), sel.End(), ".Term().Col")
+				r.count("order field")
+				return
+			}
+		}
+	}
 	// x.RuntimeConfig().Driver: the driver under a client or a transaction.
 	if v, ok := obj.(*types.Var); ok && v.IsField() && v.Name() == "Driver" && v.Pkg() != nil && v.Pkg().Path() == r.lib+"/runtime" {
 		if inner, ok := sel.X.(*ast.CallExpr); ok {
@@ -920,7 +930,11 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 		case "IsValid":
 			recv := declaring(selection)
 			if t.ent != nil && t.ent.fields[recv] {
-				r.replace(call.Pos(), call.End(), r.ref("slices", "slices", call.Pos())+".Contains("+r.leaf(t.ent, call.Pos())+"."+recv+"Values(), "+r.render(sel.X)+")")
+				star := ""
+				if _, isPtr := types.Unalias(r.info.TypeOf(sel.X)).(*types.Pointer); isPtr {
+					star = "*" // the method was called through the pointer
+				}
+				r.replace(call.Pos(), call.End(), r.ref("slices", "slices", call.Pos())+".Contains("+r.leaf(t.ent, call.Pos())+"."+recv+"Values(), "+star+r.render(sel.X)+")")
 				r.count("enum IsValid")
 			} else {
 				r.note(call.Pos(), "IsValid of %s: rewrite by hand", recv)
@@ -1183,6 +1197,14 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 		}
 		r.note(call.Pos(), "%s that is not run at once: DeleteByID(ctx, handle, id) runs it", name)
 	default:
+		// c.Order.QueryItems(o): the items of o, queried on the handle the
+		// client held.
+		if edge, ok := strings.CutPrefix(name, "Query"); ok && t.ent.edges[edge] && len(call.Args) == 1 {
+			text := r.operand(call.Args[0]) + "." + name + "(" + r.render(ex) + via + ")"
+			r.replace(call.Pos(), call.End(), text)
+			r.count("edge query from a client")
+			break
+		}
 		r.note(call.Pos(), "%s.%s: rewrite by hand", t.ent.name, name)
 	}
 }
@@ -1892,7 +1914,22 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 		r.wrapped[call] = true
 	}
 	switch name {
-	case "Where", "All", "Only", "First", "Count", "IDs", "Limit", "Offset", "ForUpdate", "ForShare", "Clone":
+	case "ForUpdate", "ForShare":
+		// sql.WithLockAction(sql.SkipLocked) is orm.SkipLocked.
+		for _, a := range call.Args {
+			opt, ok := a.(*ast.CallExpr)
+			if ok {
+				if fn, isSel := opt.Fun.(*ast.SelectorExpr); isSel && fn.Sel.Name == "WithLockAction" && len(opt.Args) == 1 {
+					if v, isSel := opt.Args[0].(*ast.SelectorExpr); isSel && (v.Sel.Name == "SkipLocked" || v.Sel.Name == "NoWait") {
+						r.replace(a.Pos(), a.End(), r.orm(a.Pos())+"."+v.Sel.Name)
+						r.count("lock option")
+						continue
+					}
+				}
+			}
+			r.note(a.Pos(), "a lock option: %s takes orm.SkipLocked or orm.NoWait", name)
+		}
+	case "Where", "All", "Only", "First", "Count", "IDs", "Limit", "Offset", "Clone":
 	case "AllX", "OnlyX", "FirstX", "CountX", "IDsX":
 		rename(strings.TrimSuffix(name, "X"))
 		must()
@@ -2094,9 +2131,17 @@ func (r *rewriter) order(call *ast.CallExpr, sel *ast.SelectorExpr, e *entityInf
 					dir = "Desc"
 				case "OrderAsc":
 				default:
-					r.note(call.Pos(), "Order with an option other than a direction: rewrite by hand")
-					return
+					dir = "" // NULLS FIRST, a function of the column: the library's own term
 				}
+			}
+			if dir == "" {
+				sqlPkg := r.ref(r.lib+"/dialect/sql", "sql", call.Pos())
+				opts := ""
+				for _, opt := range c.Args {
+					opts += ", " + r.render(opt)
+				}
+				terms = append(terms, raw(sqlPkg+".OrderByField("+r.render(fn.X)+".Column"+strings.TrimPrefix(fn.Sel.Name, "By")+opts+").ToFunc()"))
+				continue
 			}
 			terms = append(terms, r.render(fn.X)+"."+strings.TrimPrefix(fn.Sel.Name, "By")+"."+dir+"()")
 		case known && t.where == "root" && (fn.Sel.Name == "Asc" || fn.Sel.Name == "Desc"):
@@ -2542,7 +2587,7 @@ func (r *rewriter) combinator(call *ast.CallExpr) bool {
 
 // columnType rewrites the library's generic column types where code generic
 // over entities names them: sql.Int64Field[P] is orm.OrderedColumn[int64, P].
-func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr, stack []ast.Node) {
+func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	sel, ok := x.(*ast.SelectorExpr)
 	if !ok {
 		return
@@ -2557,17 +2602,6 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr, stack []ast.Node) 
 	value := ""
 	if len(args) == 2 {
 		value = r.render(args[len(args)-1])
-	}
-	// A field of a struct that the code asks IsNil of holds columns that
-	// can be NULL. (Not a parameter: a function that asks every column it
-	// is given whether it is NULL says so in its body, once, and not at
-	// each of its calls.)
-	nullable := func(text string) string {
-		f, ok := parent(stack, 1).(*ast.Field)
-		if _, inStruct := parent(stack, 3).(*ast.StructType); !ok || !inStruct || !r.nilAsked(f) {
-			return text
-		}
-		return "interface {\n\t" + text + "\n\t" + orm + ".NullableColumn[" + p + "]\n}"
 	}
 	var text string
 	switch base := strings.TrimSuffix(obj.Name(), "Field"); {
@@ -2585,36 +2619,8 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr, stack []ast.Node) 
 		r.note(n.Pos(), "the column type sql.%s: declare what the code needs of a column with orm.Column or orm.OrderedColumn", obj.Name())
 		return
 	}
-	r.replace(n.Pos(), n.End(), nullable(text))
+	r.replace(n.Pos(), n.End(), text)
 	r.count("generic column")
-}
-
-// nilAsked reports whether the package calls IsNil or NotNil (IsNull,
-// NotNull) on the value of one of the fields the declaration names.
-func (r *rewriter) nilAsked(f *ast.Field) bool {
-	fields := map[types.Object]bool{}
-	for _, name := range f.Names {
-		if v, ok := r.info.Defs[name].(*types.Var); ok {
-			fields[v] = true
-		}
-	}
-	for sel := range r.info.Selections {
-		switch sel.Sel.Name {
-		case "IsNil", "NotNil", "IsNull", "NotNull":
-		default:
-			continue
-		}
-		recv, ok := ast.Unparen(sel.X).(*ast.SelectorExpr)
-		if !ok {
-			continue
-		}
-		if fs := r.info.Selections[recv]; fs != nil {
-			if v, isVar := fs.Obj().(*types.Var); isVar && fields[v.Origin()] {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // funcConstraint rewrites ~func(*sql.Selector) in a constraint: what
@@ -2657,6 +2663,18 @@ func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 		return
 	}
 	if r.predicateText(r.info.TypeOf(other), bin.Pos()) == "" {
+		// o.Field == nil: the field of an order input was a pointer, and
+		// is a name now, empty when none was asked for.
+		if ptr, ok := types.Unalias(r.info.TypeOf(other)).(*types.Pointer); ok {
+			if ent, kind := r.s.kindOf(typeName(ptr.Elem())); ent != nil && kind == "OrderField" {
+				nilSide := bin.Y
+				if isNil(bin.X) {
+					nilSide = bin.X
+				}
+				r.replace(nilSide.Pos(), nilSide.End(), `""`)
+				r.count("order field")
+			}
+		}
 		return
 	}
 	text := r.orm(bin.Pos()) + ".IsZero(" + r.render(other) + ")"

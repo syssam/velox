@@ -101,6 +101,12 @@ func (f *IntColumn) LTE(v int) predicate.Post {
 	return predicate.Post{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Post { return predicate.Post{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Post { return predicate.Post{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.PostSetter {
 	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -181,6 +187,14 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Post { return predicate.Post{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Post {
+	return predicate.Post{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.PostSetter {
 	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -254,6 +268,16 @@ func (f *AutoTimeColumn) LT(v time.Time) predicate.Post {
 // LTE matches the rows whose column is v or less.
 func (f *AutoTimeColumn) LTE(v time.Time) predicate.Post {
 	return predicate.Post{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoTimeColumn) IsNil() predicate.Post {
+	return predicate.Post{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoTimeColumn) NotNil() predicate.Post {
+	return predicate.Post{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -365,6 +389,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Post {
 	return predicate.Post{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Post {
+	return predicate.Post{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Post {
+	return predicate.Post{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.PostSetter {
 	return predicate.PostSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -418,6 +452,16 @@ func (f *StatusEnumColumn) NotIn(vs ...StatusEnum) predicate.Post {
 		a[i] = v
 	}
 	return predicate.Post{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StatusEnumColumn) IsNil() predicate.Post {
+	return predicate.Post{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StatusEnumColumn) NotNil() predicate.Post {
+	return predicate.Post{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

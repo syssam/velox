@@ -69,6 +69,12 @@ func (f *IntColumn) LTE(v int) predicate.Tx {
 	return predicate.Tx{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Tx { return predicate.Tx{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Tx { return predicate.Tx{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.TxSetter {
 	return predicate.TxSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -173,6 +179,12 @@ func (f *StringColumn) EqualFold(v string) predicate.Tx {
 func (f *StringColumn) ContainsFold(v string) predicate.Tx {
 	return predicate.Tx{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Tx { return predicate.Tx{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Tx { return predicate.Tx{Op: orm.OpNotNil, Col: string(*f)} }
 
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.TxSetter {

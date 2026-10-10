@@ -274,6 +274,14 @@ func (f *IntColumn) LTE(v int) predicate.Clash {
 	return predicate.Clash{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Clash { return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -379,6 +387,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Clash {
 	return predicate.Clash{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -434,6 +452,16 @@ func (f *OrderEnumColumn) NotIn(vs ...OrderEnum) predicate.Clash {
 		a[i] = v
 	}
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *OrderEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *OrderEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -493,6 +521,16 @@ func (f *SetEnumColumn) NotIn(vs ...SetEnum) predicate.Clash {
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *SetEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *SetEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *SetEnumColumn) Set(v SetEnum) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -548,6 +586,16 @@ func (f *QueryEnumColumn) NotIn(vs ...QueryEnum) predicate.Clash {
 		a[i] = v
 	}
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *QueryEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *QueryEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -607,6 +655,16 @@ func (f *CreateEnumColumn) NotIn(vs ...CreateEnum) predicate.Clash {
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *CreateEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *CreateEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *CreateEnumColumn) Set(v CreateEnum) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -662,6 +720,16 @@ func (f *UpdateEnumColumn) NotIn(vs ...UpdateEnum) predicate.Clash {
 		a[i] = v
 	}
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *UpdateEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UpdateEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -721,6 +789,16 @@ func (f *LoadEnumColumn) NotIn(vs ...LoadEnum) predicate.Clash {
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *LoadEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *LoadEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *LoadEnumColumn) Set(v LoadEnum) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -776,6 +854,16 @@ func (f *EdgeEnumColumn) NotIn(vs ...EdgeEnum) predicate.Clash {
 		a[i] = v
 	}
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *EdgeEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *EdgeEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -835,6 +923,16 @@ func (f *MetaEnumColumn) NotIn(vs ...MetaEnum) predicate.Clash {
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *MetaEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *MetaEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *MetaEnumColumn) Set(v MetaEnum) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -890,6 +988,16 @@ func (f *PredEnumColumn) NotIn(vs ...PredEnum) predicate.Clash {
 		a[i] = v
 	}
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *PredEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *PredEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -949,6 +1057,16 @@ func (f *KindEnumColumn) NotIn(vs ...KindEnum) predicate.Clash {
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *KindEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *KindEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *KindEnumColumn) Set(v KindEnum) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1006,6 +1124,16 @@ func (f *AEnumColumn) NotIn(vs ...AEnum) predicate.Clash {
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *AEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *AEnumColumn) Set(v AEnum) predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1061,6 +1189,16 @@ func (f *ABEnumColumn) NotIn(vs ...ABEnum) predicate.Clash {
 		a[i] = v
 	}
 	return predicate.Clash{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *ABEnumColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *ABEnumColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1163,6 +1301,16 @@ func (f *DecimalColumn) EqualFold(v string) predicate.Clash {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *DecimalColumn) ContainsFold(v string) predicate.Clash {
 	return predicate.Clash{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *DecimalColumn) IsNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *DecimalColumn) NotNil() predicate.Clash {
+	return predicate.Clash{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

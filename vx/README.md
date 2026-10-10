@@ -115,7 +115,7 @@ err = db.User.DeleteByID(ctx, conn, id)
   the order term.
 - A column's own type is named for what it holds and what it offers, so that
   an error message or an editor's hover says it: `StringColumn`,
-  `NullableStringColumn` (it has `IsNil` and `Clear`), `AutoTimeColumn` (an
+  `NullableStringColumn` (it has `Clear`), `AutoTimeColumn` (an
   update default: it has `Keep`), `IntKeyColumn` (the key of an edge: no
   `GT`), `StringIDColumn`. Application code has no reason to write these
   names.
@@ -148,6 +148,10 @@ err = db.User.DeleteByID(ctx, conn, id)
   fails the query); and for what neither says (NULLS LAST, an expression),
   `predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { ... }))`. A
   query ordered by a function cannot be paged: a cursor is made of columns.
+- Every column has `IsNil` and `NotNil`, one that cannot be NULL included
+  (it never is): a filter chosen at run time, or code written once for every
+  column of a type, asks without knowing which it has. `Clear` is only on a
+  column that can hold NULL.
 - The key of an edge (`comment.PostID`) compares like any column of its type,
   `GT` and `LT` included; it has no `Add`.
 - `tx.Driver()` and `db.Driver()` give the driver under a handle, for SQL of

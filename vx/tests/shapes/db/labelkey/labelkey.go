@@ -70,6 +70,16 @@ func (f *LabelIDColumn) LTE(v types.Label) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *LabelIDColumn) IsNil() predicate.LabelKey {
+	return predicate.LabelKey{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *LabelIDColumn) NotNil() predicate.LabelKey {
+	return predicate.LabelKey{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *LabelIDColumn) Set(v types.Label) predicate.LabelKeySetter {
 	return predicate.LabelKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -170,6 +180,16 @@ func (f *StringColumn) EqualFold(v string) predicate.LabelKey {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.LabelKey {
+	return predicate.LabelKey{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.LabelKey {
+	return predicate.LabelKey{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

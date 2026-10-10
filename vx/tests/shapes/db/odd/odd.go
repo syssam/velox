@@ -87,6 +87,12 @@ func (f *IntColumn) LTE(v int) predicate.Odd {
 	return predicate.Odd{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Odd { return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Odd { return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.OddSetter {
 	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -190,6 +196,14 @@ func (f *StringColumn) EqualFold(v string) predicate.Odd {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Odd {
 	return predicate.Odd{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Odd { return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Odd {
+	return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -349,6 +363,16 @@ func (f *RoleEnumColumn) NotIn(vs ...RoleEnum) predicate.Odd {
 	return predicate.Odd{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *RoleEnumColumn) IsNil() predicate.Odd {
+	return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *RoleEnumColumn) NotNil() predicate.Odd {
+	return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *RoleEnumColumn) Set(v RoleEnum) predicate.OddSetter {
 	return predicate.OddSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -403,6 +427,12 @@ func (f *TierColumn) NotIn(vs ...types.Tier) predicate.Odd {
 	}
 	return predicate.Odd{Op: orm.OpNotIn, Col: string(*f), Val: a}
 }
+
+// IsNil matches the rows whose column is NULL.
+func (f *TierColumn) IsNil() predicate.Odd { return predicate.Odd{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TierColumn) NotNil() predicate.Odd { return predicate.Odd{Op: orm.OpNotNil, Col: string(*f)} }
 
 // Set assigns v to the column.
 func (f *TierColumn) Set(v types.Tier) predicate.OddSetter {

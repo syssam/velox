@@ -69,6 +69,16 @@ func (f *IntColumn) LTE(v int) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -176,6 +186,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Validated {
 	return predicate.Validated{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -251,6 +271,16 @@ func (f *Float64Column) LT(v float64) predicate.Validated {
 // LTE matches the rows whose column is v or less.
 func (f *Float64Column) LTE(v float64) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Float64Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float64Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -335,6 +365,16 @@ func (f *Int8Column) LTE(v int8) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int8Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int8Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int8Column) Set(v int8) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -415,6 +455,16 @@ func (f *Int16Column) LT(v int16) predicate.Validated {
 // LTE matches the rows whose column is v or less.
 func (f *Int16Column) LTE(v int16) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int16Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int16Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -499,6 +549,16 @@ func (f *Int32Column) LTE(v int32) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int32Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int32Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int32Column) Set(v int32) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -579,6 +639,16 @@ func (f *Int64Column) LT(v int64) predicate.Validated {
 // LTE matches the rows whose column is v or less.
 func (f *Int64Column) LTE(v int64) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int64Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int64Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -663,6 +733,16 @@ func (f *UintColumn) LTE(v uint) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UintColumn) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UintColumn) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UintColumn) Set(v uint) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -743,6 +823,16 @@ func (f *Uint8Column) LT(v uint8) predicate.Validated {
 // LTE matches the rows whose column is v or less.
 func (f *Uint8Column) LTE(v uint8) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Uint8Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint8Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -827,6 +917,16 @@ func (f *Uint64Column) LTE(v uint64) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint64Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint64Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint64Column) Set(v uint64) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -909,6 +1009,16 @@ func (f *Float32Column) LTE(v float32) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Float32Column) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float32Column) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Float32Column) Set(v float32) predicate.ValidatedSetter {
 	return predicate.ValidatedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -989,6 +1099,16 @@ func (f *BytesColumn) LT(v []byte) predicate.Validated {
 // LTE matches the rows whose column is v or less.
 func (f *BytesColumn) LTE(v []byte) predicate.Validated {
 	return predicate.Validated{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *BytesColumn) IsNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BytesColumn) NotNil() predicate.Validated {
+	return predicate.Validated{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

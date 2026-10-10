@@ -69,6 +69,16 @@ func (f *StringIDColumn) LTE(v string) predicate.ManualKey {
 	return predicate.ManualKey{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringIDColumn) IsNil() predicate.ManualKey {
+	return predicate.ManualKey{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringIDColumn) NotNil() predicate.ManualKey {
+	return predicate.ManualKey{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringIDColumn) Set(v string) predicate.ManualKeySetter {
 	return predicate.ManualKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -169,6 +179,16 @@ func (f *StringColumn) EqualFold(v string) predicate.ManualKey {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.ManualKey {
 	return predicate.ManualKey{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.ManualKey {
+	return predicate.ManualKey{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.ManualKey {
+	return predicate.ManualKey{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

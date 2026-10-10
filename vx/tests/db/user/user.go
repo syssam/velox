@@ -104,6 +104,12 @@ func (f *IntColumn) LTE(v int) predicate.User {
 	return predicate.User{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.User { return predicate.User{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.User { return predicate.User{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.UserSetter {
 	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -184,6 +190,14 @@ func (f *TimeColumn) LTE(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.User { return predicate.User{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.User {
+	return predicate.User{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.UserSetter {
 	return predicate.UserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -257,6 +271,16 @@ func (f *AutoTimeColumn) LT(v time.Time) predicate.User {
 // LTE matches the rows whose column is v or less.
 func (f *AutoTimeColumn) LTE(v time.Time) predicate.User {
 	return predicate.User{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoTimeColumn) IsNil() predicate.User {
+	return predicate.User{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoTimeColumn) NotNil() predicate.User {
+	return predicate.User{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -366,6 +390,16 @@ func (f *StringColumn) EqualFold(v string) predicate.User {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.User {
 	return predicate.User{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.User {
+	return predicate.User{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.User {
+	return predicate.User{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -538,6 +572,16 @@ func (f *RoleEnumColumn) NotIn(vs ...RoleEnum) predicate.User {
 		a[i] = v
 	}
 	return predicate.User{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *RoleEnumColumn) IsNil() predicate.User {
+	return predicate.User{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *RoleEnumColumn) NotNil() predicate.User {
+	return predicate.User{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

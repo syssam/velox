@@ -69,6 +69,16 @@ func (f *IntColumn2) LTE(v int) predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn2) IsNil() predicate.Keywords {
+	return predicate.Keywords{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn2) NotNil() predicate.Keywords {
+	return predicate.Keywords{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn2) Set(v int) predicate.KeywordsSetter {
 	return predicate.KeywordsSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -174,6 +184,16 @@ func (f *StringColumn2) EqualFold(v string) predicate.Keywords {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn2) ContainsFold(v string) predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn2) IsNil() predicate.Keywords {
+	return predicate.Keywords{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn2) NotNil() predicate.Keywords {
+	return predicate.Keywords{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

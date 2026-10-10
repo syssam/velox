@@ -70,6 +70,12 @@ func (f *IntColumn) LTE(v int) predicate.Blob {
 	return predicate.Blob{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Blob { return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Blob { return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -148,6 +154,14 @@ func (f *BytesColumn) LT(v []byte) predicate.Blob {
 // LTE matches the rows whose column is v or less.
 func (f *BytesColumn) LTE(v []byte) predicate.Blob {
 	return predicate.Blob{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *BytesColumn) IsNil() predicate.Blob { return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BytesColumn) NotNil() predicate.Blob {
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -487,6 +501,16 @@ func (f *NullableMapColumn) Clear() predicate.BlobSetter {
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
 type AddressColumn string
+
+// IsNil matches the rows whose column is NULL.
+func (f *AddressColumn) IsNil() predicate.Blob {
+	return predicate.Blob{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AddressColumn) NotNil() predicate.Blob {
+	return predicate.Blob{Op: orm.OpNotNil, Col: string(*f)}
+}
 
 // Set assigns v to the column.
 func (f *AddressColumn) Set(v types.Address) predicate.BlobSetter {

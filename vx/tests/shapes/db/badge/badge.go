@@ -70,6 +70,16 @@ func (f *Uint16Column) LTE(v uint16) predicate.Badge {
 	return predicate.Badge{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint16Column) IsNil() predicate.Badge {
+	return predicate.Badge{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint16Column) NotNil() predicate.Badge {
+	return predicate.Badge{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint16Column) Set(v uint16) predicate.BadgeSetter {
 	return predicate.BadgeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -175,6 +185,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Badge {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Badge {
 	return predicate.Badge{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Badge {
+	return predicate.Badge{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Badge {
+	return predicate.Badge{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

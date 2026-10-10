@@ -69,6 +69,16 @@ func (f *Int64Column) LTE(v int64) predicate.Int64Key {
 	return predicate.Int64Key{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int64Column) IsNil() predicate.Int64Key {
+	return predicate.Int64Key{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int64Column) NotNil() predicate.Int64Key {
+	return predicate.Int64Key{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int64Column) Set(v int64) predicate.Int64KeySetter {
 	return predicate.Int64KeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -174,6 +184,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Int64Key {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Int64Key {
 	return predicate.Int64Key{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Int64Key {
+	return predicate.Int64Key{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Int64Key {
+	return predicate.Int64Key{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

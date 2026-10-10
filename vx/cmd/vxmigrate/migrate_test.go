@@ -287,11 +287,17 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// An option kept in a variable shapes the query it is given.
 		"func loadWith(ctx context.Context, c orm.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",
-		"Owner interface { orm.OrderedColumn[int, P] orm.NullableColumn[P] }",
+		"Owner orm.OrderedColumn[int, P]", // every column can be asked IsNil
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
 		"func tables(ctx context.Context, c *orm.DB) error { return migrate.Create(ctx, c) }",
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
 		"return orm.First(db.User.Query(c).Limit(1).IDs(ctx))",
+		"return db.User.Query(c).ForUpdate(orm.SkipLocked).All(ctx)",
+		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(sql.OrderByField(user.ColumnNickname, sql.OrderAsc(), sql.OrderNullsFirst()).ToFunc())), user.ID.Asc()).All(ctx)",
+		"return who.QueryPosts(c).All(ctx)",
+		`func noField(o *entity.PostOrder) bool { return o == nil || o.Field == "" }`,
+		"func columnOf(o *entity.PostOrder) string { return o.Term().Col }",
+		"func validPointer(r *user.RoleEnum) bool { return slicespkg.Contains(user.RoleValues(), *r) }",
 		"func isRole(r user.RoleEnum) bool { return slicespkg.Contains(user.RoleValues(), r) }",
 		"func anyOfThem[Q exister](ctx context.Context, q Q) (bool, error) { return q.Exists(ctx) }",
 		`func opened(dsn string) (*orm.DB, error) { return orm.Open("sqlite", dsn) }`,

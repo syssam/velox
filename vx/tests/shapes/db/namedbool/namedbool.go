@@ -70,6 +70,16 @@ func (f *IntColumn) LTE(v int) predicate.NamedBool {
 	return predicate.NamedBool{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.NamedBool {
+	return predicate.NamedBool{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.NamedBool {
+	return predicate.NamedBool{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.NamedBoolSetter {
 	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -177,6 +187,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.NamedBool {
 	return predicate.NamedBool{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.NamedBool {
+	return predicate.NamedBool{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.NamedBool {
+	return predicate.NamedBool{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.NamedBoolSetter {
 	return predicate.NamedBoolSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -214,6 +234,16 @@ func (f *FlagColumn) EQ(v types.Flag) predicate.NamedBool {
 // NEQ matches the rows whose column differs from v.
 func (f *FlagColumn) NEQ(v types.Flag) predicate.NamedBool {
 	return predicate.NamedBool{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *FlagColumn) IsNil() predicate.NamedBool {
+	return predicate.NamedBool{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *FlagColumn) NotNil() predicate.NamedBool {
+	return predicate.NamedBool{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

@@ -70,6 +70,16 @@ func (f *IntColumn) LTE(v int) predicate.NamedBytes {
 	return predicate.NamedBytes{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.NamedBytes {
+	return predicate.NamedBytes{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.NamedBytes {
+	return predicate.NamedBytes{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.NamedBytesSetter {
 	return predicate.NamedBytesSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -150,6 +160,16 @@ func (f *IPColumn) LT(v net.IP) predicate.NamedBytes {
 // LTE matches the rows whose column is v or less.
 func (f *IPColumn) LTE(v net.IP) predicate.NamedBytes {
 	return predicate.NamedBytes{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *IPColumn) IsNil() predicate.NamedBytes {
+	return predicate.NamedBytes{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IPColumn) NotNil() predicate.NamedBytes {
+	return predicate.NamedBytes{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

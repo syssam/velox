@@ -70,6 +70,16 @@ func (f *IntColumn) LTE(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.MixedInSetter {
 	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -152,6 +162,16 @@ func (f *TimeColumn) LTE(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.MixedInSetter {
 	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -227,6 +247,16 @@ func (f *AutoTimeColumn) LT(v time.Time) predicate.MixedIn {
 // LTE matches the rows whose column is v or less.
 func (f *AutoTimeColumn) LTE(v time.Time) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoTimeColumn) IsNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoTimeColumn) NotNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -338,6 +368,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.MixedInSetter {
 	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -415,6 +455,16 @@ func (f *AutoIntColumn) LTE(v int) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *AutoIntColumn) IsNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoIntColumn) NotNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *AutoIntColumn) Set(v int) predicate.MixedInSetter {
 	return predicate.MixedInSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -464,6 +514,16 @@ func (f *BoolColumn) EQ(v bool) predicate.MixedIn {
 // NEQ matches the rows whose column differs from v.
 func (f *BoolColumn) NEQ(v bool) predicate.MixedIn {
 	return predicate.MixedIn{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *BoolColumn) IsNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BoolColumn) NotNil() predicate.MixedIn {
+	return predicate.MixedIn{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

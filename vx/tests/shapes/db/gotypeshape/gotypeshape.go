@@ -70,6 +70,16 @@ func (f *IntColumn) LTE(v int) predicate.GoTypeShape {
 	return predicate.GoTypeShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.GoTypeShapeSetter {
 	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -175,6 +185,16 @@ func (f *LabelColumn) EqualFold(v string) predicate.GoTypeShape {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *LabelColumn) ContainsFold(v string) predicate.GoTypeShape {
 	return predicate.GoTypeShape{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *LabelColumn) IsNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *LabelColumn) NotNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -371,6 +391,16 @@ func (f *WeightColumn) LTE(v types.Weight) predicate.GoTypeShape {
 	return predicate.GoTypeShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *WeightColumn) IsNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *WeightColumn) NotNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *WeightColumn) Set(v types.Weight) predicate.GoTypeShapeSetter {
 	return predicate.GoTypeShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -451,6 +481,16 @@ func (f *RatioColumn) LT(v types.Ratio) predicate.GoTypeShape {
 // LTE matches the rows whose column is v or less.
 func (f *RatioColumn) LTE(v types.Ratio) predicate.GoTypeShape {
 	return predicate.GoTypeShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *RatioColumn) IsNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *RatioColumn) NotNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -558,6 +598,16 @@ func (f *DecimalColumn) EqualFold(v string) predicate.GoTypeShape {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *DecimalColumn) ContainsFold(v string) predicate.GoTypeShape {
 	return predicate.GoTypeShape{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *DecimalColumn) IsNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *DecimalColumn) NotNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -752,6 +802,16 @@ func (f *PairColumn) LT(v types.Pair) predicate.GoTypeShape {
 // LTE matches the rows whose column is v or less.
 func (f *PairColumn) LTE(v types.Pair) predicate.GoTypeShape {
 	return predicate.GoTypeShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *PairColumn) IsNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *PairColumn) NotNil() predicate.GoTypeShape {
+	return predicate.GoTypeShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

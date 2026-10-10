@@ -70,6 +70,16 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.UUIDKey {
 	return predicate.UUIDKey{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UUIDColumn) IsNil() predicate.UUIDKey {
+	return predicate.UUIDKey{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UUIDColumn) NotNil() predicate.UUIDKey {
+	return predicate.UUIDKey{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UUIDColumn) Set(v uuid.UUID) predicate.UUIDKeySetter {
 	return predicate.UUIDKeySetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -170,6 +180,16 @@ func (f *StringColumn) EqualFold(v string) predicate.UUIDKey {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.UUIDKey {
 	return predicate.UUIDKey{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.UUIDKey {
+	return predicate.UUIDKey{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.UUIDKey {
+	return predicate.UUIDKey{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

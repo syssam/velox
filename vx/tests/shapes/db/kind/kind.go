@@ -86,6 +86,12 @@ func (f *IntColumn) LTE(v int) predicate.Kind {
 	return predicate.Kind{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Kind { return predicate.Kind{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Kind { return predicate.Kind{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.KindSetter {
 	return predicate.KindSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -191,6 +197,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Kind {
 	return predicate.Kind{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Kind {
+	return predicate.Kind{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Kind {
+	return predicate.Kind{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.KindSetter {
 	return predicate.KindSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -244,6 +260,16 @@ func (f *ShapeEnumColumn) NotIn(vs ...ShapeEnum) predicate.Kind {
 		a[i] = v
 	}
 	return predicate.Kind{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *ShapeEnumColumn) IsNil() predicate.Kind {
+	return predicate.Kind{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *ShapeEnumColumn) NotNil() predicate.Kind {
+	return predicate.Kind{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

@@ -244,15 +244,15 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 				ordered = true
 			}
 		}
-		// Only a column that accepts NULL can be tested for it, and only
-		// an optional one can be cleared.
+		// Every column can be asked whether it is NULL, one that cannot be
+		// included (it never is): code written once for every column of a
+		// type, a filter chosen at run time, asks without knowing which it
+		// has, as it could of velox's columns. Measured on a schema of 455
+		// entities, the two methods on every column type cost nothing a
+		// build shows (91.0 and 91.2 CPU-s for the generated tree). Only a
+		// column that accepts NULL can be cleared.
 		nullable := f.Null
-		if !nullable {
-			ops = slices.DeleteFunc(slices.Clone(ops), func(o vgen.Op) bool { return o == vgen.IsNil || o == vgen.NotNil })
-			names = slices.DeleteFunc(names, func(n string) bool { return n == vgen.IsNil.Name() || n == vgen.NotNil.Name() })
-		}
-		if nullable && !slices.Contains(ops, vgen.IsNil) {
-			// Every column that can hold NULL can be tested for it.
+		if !slices.Contains(ops, vgen.IsNil) {
 			ops = append(ops[:len(ops):len(ops)], vgen.IsNil, vgen.NotNil)
 			names = append(names, vgen.IsNil.Name(), vgen.NotNil.Name())
 		}

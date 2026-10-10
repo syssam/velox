@@ -69,6 +69,16 @@ func (f *IntColumn) LTE(v int) predicate.QueryUser {
 	return predicate.QueryUser{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.QueryUser {
+	return predicate.QueryUser{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.QueryUser {
+	return predicate.QueryUser{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.QueryUserSetter {
 	return predicate.QueryUserSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -174,6 +184,16 @@ func (f *StringColumn) EqualFold(v string) predicate.QueryUser {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.QueryUser {
 	return predicate.QueryUser{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.QueryUser {
+	return predicate.QueryUser{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.QueryUser {
+	return predicate.QueryUser{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

@@ -87,6 +87,16 @@ func (f *IntColumn) LTE(v int) predicate.Enrollment {
 	return predicate.Enrollment{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.EnrollmentSetter {
 	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -169,6 +179,16 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Enrollment {
 	return predicate.Enrollment{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.EnrollmentSetter {
 	return predicate.EnrollmentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -224,6 +244,16 @@ func (f *StatusEnumColumn) NotIn(vs ...StatusEnum) predicate.Enrollment {
 		a[i] = v
 	}
 	return predicate.Enrollment{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StatusEnumColumn) IsNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StatusEnumColumn) NotNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -301,6 +331,16 @@ func (f *IntKeyColumn) LT(v int) predicate.Enrollment {
 // LTE matches the rows whose column is v or less.
 func (f *IntKeyColumn) LTE(v int) predicate.Enrollment {
 	return predicate.Enrollment{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *IntKeyColumn) IsNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntKeyColumn) NotNil() predicate.Enrollment {
+	return predicate.Enrollment{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

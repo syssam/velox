@@ -69,6 +69,16 @@ func (f *IntColumn) LTE(v int) predicate.Article {
 	return predicate.Article{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Article {
+	return predicate.Article{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Article {
+	return predicate.Article{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.ArticleSetter {
 	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -176,6 +186,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.Article {
 	return predicate.Article{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Article {
+	return predicate.Article{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Article {
+	return predicate.Article{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.ArticleSetter {
 	return predicate.ArticleSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -251,6 +271,16 @@ func (f *IntKeyColumn) LT(v int) predicate.Article {
 // LTE matches the rows whose column is v or less.
 func (f *IntKeyColumn) LTE(v int) predicate.Article {
 	return predicate.Article{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *IntKeyColumn) IsNil() predicate.Article {
+	return predicate.Article{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntKeyColumn) NotNil() predicate.Article {
+	return predicate.Article{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

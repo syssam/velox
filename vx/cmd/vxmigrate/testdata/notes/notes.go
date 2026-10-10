@@ -175,6 +175,26 @@ func isRole(r user.Role) bool { return user.RoleValidator(r) == nil }
 
 func anyOfThem[Q exister](ctx context.Context, q Q) (bool, error) { return q.Exist(ctx) }
 
+// A lock that skips, an order with NULLS FIRST, an edge queried from a
+// client, the field of an order input, and an enum asked through a pointer.
+func lockSkipping(ctx context.Context, c *integration.Client) ([]*entity.User, error) {
+	return c.User.Query().ForUpdate(sql.WithLockAction(sql.SkipLocked)).All(ctx)
+}
+
+func nullsFirst(ctx context.Context, c *integration.Client) ([]*entity.User, error) {
+	return c.User.Query().Order(user.ByNickname(sql.OrderAsc(), sql.OrderNullsFirst()), user.ByID()).All(ctx)
+}
+
+func postsOf(ctx context.Context, c *integration.Client, who *entity.User) ([]*entity.Post, error) {
+	return c.User.QueryPosts(who).All(ctx)
+}
+
+func noField(o *entity.PostOrder) bool { return o == nil || o.Field == nil }
+
+func columnOf(o *entity.PostOrder) string { return o.Field.Column }
+
+func validPointer(r *user.Role) bool { return r.IsValid() }
+
 // The default of an enum field, by name.
 func defaultRole() user.Role { return user.DefaultRole }
 
@@ -501,6 +521,6 @@ func like(ctx context.Context, c *integration.Client, userID int, likeIDs ...int
 func valid(r user.Role) bool { return r.IsValid() }
 
 var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
-	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, firstID, isRole, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
+	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, firstID, isRole, lockSkipping, nullsFirst, postsOf, noField, columnOf, validPointer, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
 	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}

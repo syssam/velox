@@ -71,6 +71,16 @@ func (f *IntColumn) LTE(v int) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -176,6 +186,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Scalar {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -673,6 +693,16 @@ func (f *Int8Column) LTE(v int8) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int8Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int8Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int8Column) Set(v int8) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -850,6 +880,16 @@ func (f *Int16Column) LT(v int16) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *Int16Column) LTE(v int16) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int16Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int16Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1031,6 +1071,16 @@ func (f *Int32Column) LTE(v int32) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int32Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int32Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int32Column) Set(v int32) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1208,6 +1258,16 @@ func (f *Int64Column) LT(v int64) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *Int64Column) LTE(v int64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int64Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int64Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1389,6 +1449,16 @@ func (f *UintColumn) LTE(v uint) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UintColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UintColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UintColumn) Set(v uint) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1566,6 +1636,16 @@ func (f *Uint8Column) LT(v uint8) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *Uint8Column) LTE(v uint8) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Uint8Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint8Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1747,6 +1827,16 @@ func (f *Uint16Column) LTE(v uint16) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint16Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint16Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint16Column) Set(v uint16) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1924,6 +2014,16 @@ func (f *Uint32Column) LT(v uint32) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *Uint32Column) LTE(v uint32) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Uint32Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint32Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -2105,6 +2205,16 @@ func (f *Uint64Column) LTE(v uint64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Uint64Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint64Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Uint64Column) Set(v uint64) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -2282,6 +2392,16 @@ func (f *Float64Column) LT(v float64) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *Float64Column) LTE(v float64) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Float64Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float64Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -2555,6 +2675,16 @@ func (f *Float32Column) LTE(v float32) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Float32Column) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float32Column) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Float32Column) Set(v float32) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -2694,6 +2824,16 @@ func (f *BoolColumn) EQ(v bool) predicate.Scalar {
 // NEQ matches the rows whose column differs from v.
 func (f *BoolColumn) NEQ(v bool) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpNEQ, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *BoolColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BoolColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -2874,6 +3014,16 @@ func (f *TimeColumn) LT(v time.Time) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *TimeColumn) LTE(v time.Time) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -3132,6 +3282,16 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UUIDColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UUIDColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UUIDColumn) Set(v uuid.UUID) predicate.ScalarSetter {
 	return predicate.ScalarSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -3386,6 +3546,16 @@ func (f *BytesColumn) LT(v []byte) predicate.Scalar {
 // LTE matches the rows whose column is v or less.
 func (f *BytesColumn) LTE(v []byte) predicate.Scalar {
 	return predicate.Scalar{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *BytesColumn) IsNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BytesColumn) NotNil() predicate.Scalar {
+	return predicate.Scalar{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

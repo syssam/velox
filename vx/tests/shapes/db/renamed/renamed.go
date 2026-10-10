@@ -87,6 +87,16 @@ func (f *IntColumn) LTE(v int) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.RenamedSetter {
 	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -192,6 +202,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Renamed {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -368,6 +388,16 @@ func (f *AutoTimeColumn) LTE(v time.Time) predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *AutoTimeColumn) IsNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoTimeColumn) NotNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *AutoTimeColumn) Set(v time.Time) predicate.RenamedSetter {
 	return predicate.RenamedSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -430,6 +460,16 @@ func (f *KindEnumColumn) NotIn(vs ...KindEnum) predicate.Renamed {
 		a[i] = v
 	}
 	return predicate.Renamed{Op: orm.OpNotIn, Col: string(*f), Val: a}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *KindEnumColumn) IsNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *KindEnumColumn) NotNil() predicate.Renamed {
+	return predicate.Renamed{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

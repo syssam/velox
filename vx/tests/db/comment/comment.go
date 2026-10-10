@@ -80,6 +80,16 @@ func (f *IntColumn) LTE(v int) predicate.Comment {
 	return predicate.Comment{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.CommentSetter {
 	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -162,6 +172,16 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.CommentSetter {
 	return predicate.CommentSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -237,6 +257,16 @@ func (f *AutoTimeColumn) LT(v time.Time) predicate.Comment {
 // LTE matches the rows whose column is v or less.
 func (f *AutoTimeColumn) LTE(v time.Time) predicate.Comment {
 	return predicate.Comment{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoTimeColumn) IsNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoTimeColumn) NotNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -346,6 +376,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Comment {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Comment {
 	return predicate.Comment{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Comment {
+	return predicate.Comment{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

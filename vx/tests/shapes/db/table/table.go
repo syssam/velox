@@ -69,6 +69,14 @@ func (f *IntColumn) LTE(v int) predicate.Table {
 	return predicate.Table{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Table { return predicate.Table{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Table {
+	return predicate.Table{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.TableSetter {
 	return predicate.TableSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -172,6 +180,16 @@ func (f *StringColumn) EqualFold(v string) predicate.Table {
 // ContainsFold matches the rows whose column contains v, whatever the case.
 func (f *StringColumn) ContainsFold(v string) predicate.Table {
 	return predicate.Table{Op: orm.OpContainsFold, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Table {
+	return predicate.Table{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Table {
+	return predicate.Table{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

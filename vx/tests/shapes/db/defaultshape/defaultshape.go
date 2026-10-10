@@ -71,6 +71,16 @@ func (f *IntColumn) LTE(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -178,6 +188,16 @@ func (f *StringColumn) ContainsFold(v string) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -255,6 +275,16 @@ func (f *TimeColumn) LTE(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -330,6 +360,16 @@ func (f *AutoTimeColumn) LT(v time.Time) predicate.DefaultShape {
 // LTE matches the rows whose column is v or less.
 func (f *AutoTimeColumn) LTE(v time.Time) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoTimeColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoTimeColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -414,6 +454,16 @@ func (f *AutoIntColumn) LT(v int) predicate.DefaultShape {
 // LTE matches the rows whose column is v or less.
 func (f *AutoIntColumn) LTE(v int) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoIntColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoIntColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -584,6 +634,16 @@ func (f *BoolColumn) NEQ(v bool) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpNEQ, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *BoolColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BoolColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *BoolColumn) Set(v bool) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -659,6 +719,16 @@ func (f *Float64Column) LT(v float64) predicate.DefaultShape {
 // LTE matches the rows whose column is v or less.
 func (f *Float64Column) LTE(v float64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Float64Column) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float64Column) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -743,6 +813,16 @@ func (f *Float32Column) LTE(v float32) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Float32Column) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Float32Column) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Float32Column) Set(v float32) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -823,6 +903,16 @@ func (f *Int8Column) LT(v int8) predicate.DefaultShape {
 // LTE matches the rows whose column is v or less.
 func (f *Int8Column) LTE(v int8) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Int8Column) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int8Column) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -907,6 +997,16 @@ func (f *Int64Column) LTE(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *Int64Column) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Int64Column) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *Int64Column) Set(v int64) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -987,6 +1087,16 @@ func (f *Uint32Column) LT(v uint32) predicate.DefaultShape {
 // LTE matches the rows whose column is v or less.
 func (f *Uint32Column) LTE(v uint32) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *Uint32Column) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *Uint32Column) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.
@@ -1071,6 +1181,16 @@ func (f *BytesColumn) LTE(v []byte) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *BytesColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *BytesColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *BytesColumn) Set(v []byte) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1148,6 +1268,16 @@ func (f *UUIDColumn) LTE(v uuid.UUID) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *UUIDColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *UUIDColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *UUIDColumn) Set(v uuid.UUID) predicate.DefaultShapeSetter {
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -1176,6 +1306,16 @@ func (f *UUIDColumn) Desc() predicate.DefaultShapeOrderTerm {
 // assignments and order terms of that column. They have pointer receivers so
 // that the compiler emits each once.
 type StringListColumn string
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringListColumn) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringListColumn) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
+}
 
 // Set assigns v to the column.
 func (f *StringListColumn) Set(v []string) predicate.DefaultShapeSetter {
@@ -1242,6 +1382,16 @@ func (f *AutoInt64Column) LT(v int64) predicate.DefaultShape {
 // LTE matches the rows whose column is v or less.
 func (f *AutoInt64Column) LTE(v int64) predicate.DefaultShape {
 	return predicate.DefaultShape{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *AutoInt64Column) IsNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *AutoInt64Column) NotNil() predicate.DefaultShape {
+	return predicate.DefaultShape{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

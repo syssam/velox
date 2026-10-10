@@ -903,3 +903,27 @@ func TestTimeOfItsOwnType(t *testing.T) {
 		assert.Equal(t, 1, n, "time %d, the plain column", i)
 	}
 }
+
+// Every column can be asked whether it is NULL. One that cannot be never
+// is: IsNil matches no row and NotNil every row, on tables this schema made.
+// On a table made by something else, where an Optional column holds NULL,
+// they tell the rows apart, which nothing else in the API could.
+func TestIsNilOnEveryColumn(t *testing.T) {
+	ctx := context.Background()
+	db := openDDL(t, ddlNullableOptional)
+	for n := 1; n <= 3; n++ {
+		must(client.Scalar.Create(db).Set(scalarRequired(n)...).Set(scalarFull(n)...).Save(ctx))
+	}
+	assert.Equal(t, 0, must(client.Scalar.Query(db).Where(scalar.Seq.IsNil()).Count(ctx)), "a required column")
+	assert.Equal(t, 3, must(client.Scalar.Query(db).Where(scalar.Seq.NotNil()).Count(ctx)))
+	assert.Equal(t, 0, must(client.Scalar.Query(db).Where(scalar.IntOpt.IsNil()).Count(ctx)), "an optional column this schema fills")
+	nullOptionals(t, db, 2)
+	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(scalar.IntOpt.IsNil()).Count(ctx)), "after NULL was stored by something else")
+	assert.Equal(t, 2, must(client.Scalar.Query(db).Where(scalar.IntOpt.NotNil(), scalar.StringOpt.NotNil()).Count(ctx)))
+	// And as code written once for any column sees it.
+	isNull := func(c orm.NullableColumn[predicate.Scalar]) predicate.Scalar { return c.IsNil() }
+	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(isNull(&scalar.IntOpt)).Count(ctx)))
+	assert.Equal(t, 0, must(client.Scalar.Query(db).Where(isNull(&scalar.ID)).Count(ctx)))
+	var ordered orm.OrderedColumn[int, predicate.Scalar] = &scalar.IntOpt
+	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(ordered.IsNil()).Count(ctx)))
+}

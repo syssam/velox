@@ -81,6 +81,12 @@ func (f *IntColumn) LTE(v int) predicate.Like {
 	return predicate.Like{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Like { return predicate.Like{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Like { return predicate.Like{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.LikeSetter {
 	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -161,6 +167,14 @@ func (f *TimeColumn) LTE(v time.Time) predicate.Like {
 	return predicate.Like{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *TimeColumn) IsNil() predicate.Like { return predicate.Like{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *TimeColumn) NotNil() predicate.Like {
+	return predicate.Like{Op: orm.OpNotNil, Col: string(*f)}
+}
+
 // Set assigns v to the column.
 func (f *TimeColumn) Set(v time.Time) predicate.LikeSetter {
 	return predicate.LikeSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -234,6 +248,16 @@ func (f *IntKeyColumn) LT(v int) predicate.Like {
 // LTE matches the rows whose column is v or less.
 func (f *IntKeyColumn) LTE(v int) predicate.Like {
 	return predicate.Like{Op: orm.OpLTE, Col: string(*f), Val: v}
+}
+
+// IsNil matches the rows whose column is NULL.
+func (f *IntKeyColumn) IsNil() predicate.Like {
+	return predicate.Like{Op: orm.OpIsNil, Col: string(*f)}
+}
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntKeyColumn) NotNil() predicate.Like {
+	return predicate.Like{Op: orm.OpNotNil, Col: string(*f)}
 }
 
 // Set assigns v to the column.

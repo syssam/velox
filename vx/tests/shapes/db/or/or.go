@@ -69,6 +69,12 @@ func (f *IntColumn) LTE(v int) predicate.Or {
 	return predicate.Or{Op: orm.OpLTE, Col: string(*f), Val: v}
 }
 
+// IsNil matches the rows whose column is NULL.
+func (f *IntColumn) IsNil() predicate.Or { return predicate.Or{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *IntColumn) NotNil() predicate.Or { return predicate.Or{Op: orm.OpNotNil, Col: string(*f)} }
+
 // Set assigns v to the column.
 func (f *IntColumn) Set(v int) predicate.OrSetter {
 	return predicate.OrSetter{Kind: orm.SetValue, Col: string(*f), Val: v}
@@ -173,6 +179,12 @@ func (f *StringColumn) EqualFold(v string) predicate.Or {
 func (f *StringColumn) ContainsFold(v string) predicate.Or {
 	return predicate.Or{Op: orm.OpContainsFold, Col: string(*f), Val: v}
 }
+
+// IsNil matches the rows whose column is NULL.
+func (f *StringColumn) IsNil() predicate.Or { return predicate.Or{Op: orm.OpIsNil, Col: string(*f)} }
+
+// NotNil matches the rows whose column is not NULL.
+func (f *StringColumn) NotNil() predicate.Or { return predicate.Or{Op: orm.OpNotNil, Col: string(*f)} }
 
 // Set assigns v to the column.
 func (f *StringColumn) Set(v string) predicate.OrSetter {
