@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox/tests/integration"
 	postclient "github.com/syssam/velox/tests/integration/client/post"
 	"github.com/syssam/velox/tests/integration/entity"
+	"github.com/syssam/velox/tests/integration/predicate"
 	"github.com/syssam/velox/tests/integration/user"
 )
 
@@ -51,6 +52,19 @@ func ClassifyByLibrary(err error) string {
 		return "constraint"
 	}
 	return "other"
+}
+
+// Missing is the error a stand-in for the store answers with: one the
+// code under test takes for a missing row.
+func Missing(what string) error { return velox.NewNotFoundError(what) }
+
+// Scope is the condition a caller's access adds to a list: none for one who
+// sees every row.
+func Scope(seesAll bool, name string) predicate.User {
+	if seesAll {
+		return nil
+	}
+	return user.NameField.EQ(name)
 }
 
 // FieldOf names the field a validation error is about.

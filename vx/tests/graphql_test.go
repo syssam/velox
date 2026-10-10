@@ -1,7 +1,9 @@
 package tests
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"reflect"
@@ -117,6 +119,78 @@ func TestWhereInput(t *testing.T) {
 	deep = &filter.UserWhereInput{Not: deep}
 	_, err = client.User.Query(db).Where(deep.P()).All(ctx)
 	require.ErrorIs(t, err, orm.ErrWhereDepth)
+}
+
+// A where input reads itself from what an engine hands over for the where
+// argument, and from a filter kept as a document: the generated UnmarshalGQL.
+// The same rows come back as for the input built in Go.
+func TestWhereInput_FromADocument(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	seedGraph(t, db)
+	find := func(doc map[string]any) []string {
+		t.Helper()
+		var w filter.UserWhereInput
+		require.NoError(t, w.UnmarshalGQL(doc), "%v", doc)
+		us, err := client.User.Query(db).Where(w.P()).OrderBy(user.Name.Asc()).All(ctx)
+		require.NoError(t, err, "%v", doc)
+		return names(us)
+	}
+	for name, c := range map[string]struct {
+		doc  map[string]any
+		want []string
+	}{
+		"nothing":  {map[string]any{}, []string{"ann", "bob", "cat"}},
+		"a string": {map[string]any{"nameNEQ": "bob"}, []string{"ann", "cat"}},
+		// An enum arrives by its name in the schema; the column holds "admin".
+		"an enum by name":       {map[string]any{"role": "ADMIN"}, []string{"ann"}},
+		"enums by name":         {map[string]any{"roleIn": []any{"USER"}}, []string{"bob", "cat"}},
+		"an enum as stored":     {map[string]any{"roleNEQ": "admin"}, []string{"bob", "cat"}},
+		"one value for a list":  {map[string]any{"nameIn": "cat"}, []string{"cat"}},
+		"null is not given":     {map[string]any{"name": nil, "hasPosts": true}, []string{"ann", "bob"}},
+		"a false that is given": {map[string]any{"hasPosts": false}, []string{"cat"}},
+		"through an edge": {map[string]any{"hasPostsWith": []any{
+			map[string]any{"status": "PUBLISHED"},
+		}}, []string{"ann"}},
+		"nested": {map[string]any{"or": []any{
+			map[string]any{"not": map[string]any{"hasPosts": true}},
+			map[string]any{"and": []any{map[string]any{"role": "USER"}, map[string]any{"nameContains": "o"}}},
+		}}, []string{"bob", "cat"}},
+	} {
+		assert.Equal(t, c.want, find(c.doc), name)
+	}
+
+	// What it cannot read it refuses: a condition dropped is a query widened.
+	for name, c := range map[string]struct {
+		doc  any
+		want string
+	}{
+		"a field the input does not have":   {map[string]any{"age": 30}, `UserWhereInput has no field "age"`},
+		"a name of no value of the enum":    {map[string]any{"role": "OWNER"}, `"OWNER" is not a value of user.RoleEnum`},
+		"a field of the neighbors' input":   {map[string]any{"hasPostsWith": map[string]any{"role": "ADMIN"}}, `hasPostsWith[0]: orm: PostWhereInput has no field "role"`},
+		"an enum of the neighbors, by name": {map[string]any{"hasPostsWith": map[string]any{"statusIn": []any{"DRAFT", "GONE"}}}, `statusIn[1]: "GONE" is not a value of post.StatusEnum`},
+		"not an object":                     {"name = 'ann'", "given as an object"},
+	} {
+		var w filter.UserWhereInput
+		err := w.UnmarshalGQL(c.doc)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), c.want, name)
+	}
+
+	// An input written out and read back is the same input.
+	in := filter.UserWhereInput{
+		Role:         ptr(user.RoleAdmin),
+		Not:          &filter.UserWhereInput{NameIn: []string{"bob"}},
+		HasPostsWith: []*filter.PostWhereInput{{StatusIn: []post.StatusEnum{post.StatusPublished}}},
+	}
+	var b bytes.Buffer
+	in.MarshalGQL(&b)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(b.Bytes(), &doc))
+	var back filter.UserWhereInput
+	require.NoError(t, back.UnmarshalGQL(doc))
+	assert.Equal(t, in, back)
+	assert.Equal(t, in.P(), back.P())
 }
 
 func must[T any](v T, err error) T {

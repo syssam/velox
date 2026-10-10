@@ -110,6 +110,9 @@ type WhereField struct {
 	// exists, so that the nesting of an input is counted through its
 	// edges and not from zero again on the other side of each.
 	Neighbor []WhereField
+	// Enum is, for a field of an enum, its stored values by their names
+	// in the schema: what DecodeWhere reads DRAFT as.
+	Enum map[string]string
 }
 
 // whereFixed is the number of fields every where input starts with.

@@ -6,6 +6,7 @@ import (
 	orm "github.com/syssam/velox/vx/orm"
 	predicate "github.com/syssam/velox/vx/tests/db/predicate"
 	user "github.com/syssam/velox/vx/tests/db/user"
+	io "io"
 )
 
 // UserWhereInput is the filter a request gives for a list of User: the where
@@ -38,6 +39,11 @@ type UserWhereInput struct {
 
 var userEdges = user.EdgeMetas()
 
+// userEnums are the values of the enums UserWhereInput filters on, by their names in the schema.
+var userEnums = [...]map[string]string{
+	{"ADMIN": "admin", "USER": "user", "GUEST": "guest"},
+}
+
 // userWhere says what each field of UserWhereInput means, in the order of the struct.
 var userWhere = []orm.WhereField{
 	{Col: "name", Op: orm.OpEQ},                         // name
@@ -50,10 +56,10 @@ var userWhere = []orm.WhereField{
 	{Col: "email", Op: orm.OpIn},                        // emailIn
 	{Col: "email", Op: orm.OpNotIn},                     // emailNotIn
 	{Col: "email", Op: orm.OpContains},                  // emailContains
-	{Col: "role", Op: orm.OpEQ},                         // role
-	{Col: "role", Op: orm.OpNEQ},                        // roleNEQ
-	{Col: "role", Op: orm.OpIn},                         // roleIn
-	{Col: "role", Op: orm.OpNotIn},                      // roleNotIn
+	{Col: "role", Op: orm.OpEQ, Enum: userEnums[0]},     // role
+	{Col: "role", Op: orm.OpNEQ, Enum: userEnums[0]},    // roleNEQ
+	{Col: "role", Op: orm.OpIn, Enum: userEnums[0]},     // roleIn
+	{Col: "role", Op: orm.OpNotIn, Enum: userEnums[0]},  // roleNotIn
 	{Op: orm.OpHasEdge, Edge: userEdges[0]},             // hasPosts
 	{Op: orm.OpHasEdge, Edge: userEdges[0], With: true}, // hasPostsWith
 }
@@ -68,3 +74,16 @@ func init() {
 //
 //go:noinline
 func (i *UserWhereInput) P() predicate.User { return predicate.User(orm.Where(i, userWhere)) }
+
+// UnmarshalGQL reads the input from the object given for it: the where argument
+// of a request as the engine hands it over, or a filter kept as a document. See
+// orm.DecodeWhere for what it accepts.
+//
+//go:noinline
+func (i *UserWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, userWhere, v) }
+
+// MarshalGQL writes the input as JSON. With UnmarshalGQL it tells an engine that
+// the type reads itself, so that it generates no decoder of its own for it.
+//
+//go:noinline
+func (i UserWhereInput) MarshalGQL(w io.Writer) { orm.EncodeWhere(w, i) }

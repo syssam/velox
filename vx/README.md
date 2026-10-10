@@ -390,6 +390,28 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
   nesting deeper than `orm.MaxWhereDepth`) gives a predicate that fails the
   query. Conditions the application adds go in `where.Predicates`, or in
   another `Where`.
+- **A where input reads itself**: `(*filter.PostWhereInput).UnmarshalGQL`
+  takes the object an engine hands over for the `where` argument, and with
+  `MarshalGQL` beside it an engine generates no decoder of its own for the
+  type (a where input of a wide entity has hundreds of fields, and there is
+  one per entity). The same method reads a filter kept as a document, such
+  as a saved view or a rule of an access policy:
+
+  ```go
+  var where filter.PostWhereInput
+  if err := where.UnmarshalGQL(doc); err != nil { // doc: map[string]any, as JSON decodes it
+      return err
+  }
+  posts, err := db.Post.Query(conn).Where(where.P()).All(ctx)
+  ```
+
+  A key the input does not have is an error, never a condition dropped. An
+  enum is given by its name in the schema (`DRAFT`) or as the value stored
+  (`draft`), an integer as a number or as a string of digits (how a 64-bit id
+  reaches a browser whole), one value where a list goes is a list of one, and
+  `null` is a key that was not given. A type with an `UnmarshalGQL` or an
+  `UnmarshalText` of its own reads itself. `orm.DecodeWhere` is the function
+  behind it.
 - `orderBy.Term()` of a nil input orders by nothing; an order without a
   `Field` orders by the id, in its direction.
 - **An edge method takes its filter as an interface**:
@@ -549,7 +571,7 @@ first:
 | `p, err := where.P()` | an input with no condition was an error and is no condition now |
 | `Limit` in the option of an eager load | it was over all neighbors read, and is for each parent now |
 | a method value (`b.SetName`, `c.User.Get`) whose receiver is not a variable assigned once, unless it is handed straight to a call from a variable | the function in its place evaluates the receiver when called |
-| a field or a constructor of velox's error types | the runtime's are `orm.ErrNotFound`, `orm.ErrNotSingular`, `*orm.ValidationError` (`Name` is `Field`, rewritten), `*orm.ConstraintError` |
+| a field or a constructor of velox's error types, other than `NewNotFoundError` | the runtime's are `orm.ErrNotFound`, `orm.ErrNotSingular`, `*orm.ValidationError` (`Name` is `Field`, rewritten), `*orm.ConstraintError` |
 | a package of the generated tree the new one does not have (`hook`, something of the application's own kept there) | once, at its first reference; the summary of the run counts the rest |
 | several orders or filters given to `Paginate` | velox used the last of each |
 | `tx.Client()` handed on as a value | it is the transaction; what takes it must take `orm.Executor` |
@@ -560,7 +582,13 @@ What it keeps without a word: `IsNotFound`, `IsNotSingular`,
 `IsConstraintError`, `IsValidationError` and `IsNotLoaded`, of the generated
 package or of the library, and the library's values `ErrNotFound` and
 `ErrNotSingular`, become the runtime's (velox's never hold for an error of
-the new code). An edge query is given the handle its entity was read on
+the new code), and `NewNotFoundError(x)`, which tests make for a stand-in of
+the store, becomes `orm.NotFound(x)`. testify's `Nil` and `NotNil` of a
+predicate become `True` and `False` of `orm.IsZero(p)`, like `p == nil`: a
+predicate was a function, nil when it was no condition, and is data now,
+which is never nil, so that `NotNil` left alone would pass for every
+predicate. A predicate that reaches a nil check as an `any` by another way
+is not seen. An edge query is given the handle its entity was read on
 only when the text settles it: the entity's variable is given its value in
 one place, before the query; `Unwrap` is not called on it; when what is
 queried is an element or a field of it (`us[0]`), nothing is written through

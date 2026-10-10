@@ -485,7 +485,13 @@ func (r *rewriter) failure(sel *ast.SelectorExpr, obj types.Object) bool {
 		r.note(sel.Pos(), "a missing row is the value orm.ErrNotFound now, not a type: errors.Is(err, orm.ErrNotFound)")
 	case isType && name == "NotSingularError":
 		r.note(sel.Pos(), "more than one row is the value orm.ErrNotSingular now, not a type: errors.Is(err, orm.ErrNotSingular)")
-	case !isType && (name == "NewNotFoundError" || name == "NewNotSingularError" || name == "NewNotLoadedError" || name == "NewConstraintError" || name == "NewValidationError"):
+	case !isType && name == "NewNotFoundError":
+		// The same argument, and an error IsNotFound holds for. Its type is
+		// error and no longer velox's, which the compiler says where it
+		// matters.
+		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".NotFound")
+		r.count("NewNotFoundError")
+	case !isType && (name == "NewNotSingularError" || name == "NewNotLoadedError" || name == "NewConstraintError" || name == "NewValidationError"):
 		r.note(sel.Pos(), "%s: the runtime's errors are orm.ErrNotFound, orm.ErrNotSingular, *orm.ValidationError, *orm.ConstraintError; return one of those", name)
 	default:
 		return false
@@ -824,6 +830,9 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 
 func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 	if r.combinator(call) {
+		return
+	}
+	if r.nilAsserted(call) {
 		return
 	}
 	if tv, ok := r.info.Types[call.Fun]; ok && !tv.IsType() && r.predicateOf(tv.Type) != "" {
@@ -2689,6 +2698,42 @@ func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 	}
 	r.replace(bin.Pos(), bin.End(), text)
 	r.count("zero predicate")
+}
+
+// nilAsserted rewrites testify's Nil and NotNil of a predicate. A predicate
+// was a function, and nil when it was no condition; it is data now, which
+// is never nil: left as it was, NotNil would pass for every predicate (and a
+// test that a denied scope still narrows would assert nothing), and Nil for
+// none.
+func (r *rewriter) nilAsserted(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	want, ok := map[string]string{"Nil": "True", "Nilf": "Truef", "NotNil": "False", "NotNilf": "Falsef"}[sel.Sel.Name]
+	if !ok {
+		return false
+	}
+	fn, ok := r.info.Uses[sel.Sel].(*types.Func)
+	if !ok || fn.Pkg() == nil || !strings.HasPrefix(fn.Pkg().Path(), "github.com/stretchr/testify/") {
+		return false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok {
+		return false
+	}
+	at := 0
+	if sig.Recv() == nil {
+		at = 1 // assert.Nil(t, object, ...); a.Nil(object, ...) on an Assertions
+	}
+	if len(call.Args) <= at || r.predicateText(r.info.TypeOf(call.Args[at]), call.Pos()) == "" {
+		return false
+	}
+	arg := call.Args[at]
+	r.replace(sel.Sel.Pos(), sel.Sel.End(), want)
+	r.replace(arg.Pos(), arg.End(), r.orm(arg.Pos())+".IsZero("+r.render(arg)+")")
+	r.count("zero predicate")
+	return true
 }
 
 // whereInput keeps a call of P compiling where its two results went: P

@@ -72,7 +72,10 @@ type gqlEnt struct {
 	Node      bool
 	HasWhere  bool
 	Where     []gqlWhere
-	HasOrder  bool
+	// Enums are the enum fields the where input filters on: the values of
+	// each by name in the schema, in the schema's order.
+	Enums    [][]graphqlgen.EnumValue
+	HasOrder bool
 	// OrderType and the Const of each Order are names of the entity's own
 	// package.
 	OrderType string
@@ -492,7 +495,8 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 	for _, w := range sdl.WhereFields(e.T) {
 		described[w.Name] = w
 	}
-	members := map[string]bool{"Predicates": true, "Not": true, "Or": true, "And": true}
+	members := map[string]bool{"Predicates": true, "Not": true, "Or": true, "And": true, "UnmarshalGQL": true, "MarshalGQL": true, "P": true}
+	enumAt := map[*fld]int{}
 	for i, f := range d.Fields {
 		if i < 3 {
 			if want := [...]string{"not", "and", "or"}[i]; f.Name != want {
@@ -543,7 +547,19 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 			default:
 				w.GoType = "bool"
 			}
-			w.Plan = fmt.Sprintf("{Col: %q, Op: %s}", c.Col, op.op)
+			w.Plan = fmt.Sprintf("{Col: %q, Op: %s", c.Col, op.op)
+			if src.Field.IsEnum() && op.shape != 'b' {
+				// What a name of the schema is in the column: the engine
+				// hands DRAFT over, and a stored filter holds it.
+				at, ok := enumAt[c]
+				if !ok {
+					at = len(q.Enums)
+					enumAt[c] = at
+					q.Enums = append(q.Enums, sdl.EnumValues(src.Field))
+				}
+				w.Plan += fmt.Sprintf(", Enum: %sEnums[%d]", lowerFirst(e.Name), at)
+			}
+			w.Plan += "}"
 		}
 		if members[w.GoName] {
 			return fmt.Errorf("vx: graphql: %sWhereInput: two fields would be called %s", e.Name, w.GoName)
@@ -623,6 +639,20 @@ func (g *generator) filters() (map[string][]byte, error) {
 		if hasEdge {
 			w("var %sEdges = %s.EdgeMetas()\n\n", lowerFirst(e.Name), im.use(g.cfg.Package+"/"+e.Pkg, g.filterAlias(e)))
 		}
+		if len(q.Enums) > 0 {
+			w("// %sEnums are the values of the enums %sWhereInput filters on, by their names in the schema.\nvar %sEnums = [...]map[string]string{\n", lowerFirst(e.Name), e.Name, lowerFirst(e.Name))
+			for _, values := range q.Enums {
+				w("\t{")
+				for i, v := range values {
+					if i > 0 {
+						w(", ")
+					}
+					w("%q: %q", v.Name, v.Value)
+				}
+				w("},\n")
+			}
+			w("}\n\n")
+		}
 		w("// %sWhere says what each field of %sWhereInput means, in the order of the struct.\nvar %sWhere = []orm.WhereField{\n", lowerFirst(e.Name), e.Name, lowerFirst(e.Name))
 		for _, f := range q.Where {
 			w("\t%s, // %s\n", f.Plan, f.Name)
@@ -638,6 +668,8 @@ func (g *generator) filters() (map[string][]byte, error) {
 			w("}\n\n")
 		}
 		w("// P returns the condition the input describes: none for a nil or an empty\n// input, and one that fails the query for an input that cannot be a condition\n// (an empty input nested in not, and, or; nesting deeper than orm.MaxWhereDepth).\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) P() %[2]s { return %[2]s(orm.Where(i, %[3]sWhere)) }\n\n", e.Name, e.pred(), lowerFirst(e.Name))
+		w("// UnmarshalGQL reads the input from the object given for it: the where argument\n// of a request as the engine hands it over, or a filter kept as a document. See\n// orm.DecodeWhere for what it accepts.\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, %[2]sWhere, v) }\n\n", e.Name, lowerFirst(e.Name))
+		w("// MarshalGQL writes the input as JSON. With UnmarshalGQL it tells an engine that\n// the type reads itself, so that it generates no decoder of its own for it.\n//\n//go:noinline\nfunc (i %[1]sWhereInput) MarshalGQL(w %[2]s.Writer) { orm.EncodeWhere(w, i) }\n\n", e.Name, im.use("io", "io"))
 	}
 	if inputs == 0 {
 		return nil, nil

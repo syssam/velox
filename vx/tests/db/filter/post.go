@@ -6,6 +6,7 @@ import (
 	orm "github.com/syssam/velox/vx/orm"
 	post "github.com/syssam/velox/vx/tests/db/post"
 	predicate "github.com/syssam/velox/vx/tests/db/predicate"
+	io "io"
 )
 
 // PostWhereInput is the filter a request gives for a list of Post: the where
@@ -29,17 +30,22 @@ type PostWhereInput struct {
 	StatusNotIn   []post.StatusEnum `json:"statusNotIn,omitempty"`
 }
 
+// postEnums are the values of the enums PostWhereInput filters on, by their names in the schema.
+var postEnums = [...]map[string]string{
+	{"DRAFT": "draft", "PUBLISHED": "published", "ARCHIVED": "archived"},
+}
+
 // postWhere says what each field of PostWhereInput means, in the order of the struct.
 var postWhere = []orm.WhereField{
-	{Col: "title", Op: orm.OpEQ},       // title
-	{Col: "title", Op: orm.OpNEQ},      // titleNEQ
-	{Col: "title", Op: orm.OpIn},       // titleIn
-	{Col: "title", Op: orm.OpNotIn},    // titleNotIn
-	{Col: "title", Op: orm.OpContains}, // titleContains
-	{Col: "status", Op: orm.OpEQ},      // status
-	{Col: "status", Op: orm.OpNEQ},     // statusNEQ
-	{Col: "status", Op: orm.OpIn},      // statusIn
-	{Col: "status", Op: orm.OpNotIn},   // statusNotIn
+	{Col: "title", Op: orm.OpEQ},                         // title
+	{Col: "title", Op: orm.OpNEQ},                        // titleNEQ
+	{Col: "title", Op: orm.OpIn},                         // titleIn
+	{Col: "title", Op: orm.OpNotIn},                      // titleNotIn
+	{Col: "title", Op: orm.OpContains},                   // titleContains
+	{Col: "status", Op: orm.OpEQ, Enum: postEnums[0]},    // status
+	{Col: "status", Op: orm.OpNEQ, Enum: postEnums[0]},   // statusNEQ
+	{Col: "status", Op: orm.OpIn, Enum: postEnums[0]},    // statusIn
+	{Col: "status", Op: orm.OpNotIn, Enum: postEnums[0]}, // statusNotIn
 }
 
 // P returns the condition the input describes: none for a nil or an empty
@@ -48,3 +54,16 @@ var postWhere = []orm.WhereField{
 //
 //go:noinline
 func (i *PostWhereInput) P() predicate.Post { return predicate.Post(orm.Where(i, postWhere)) }
+
+// UnmarshalGQL reads the input from the object given for it: the where argument
+// of a request as the engine hands it over, or a filter kept as a document. See
+// orm.DecodeWhere for what it accepts.
+//
+//go:noinline
+func (i *PostWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, postWhere, v) }
+
+// MarshalGQL writes the input as JSON. With UnmarshalGQL it tells an engine that
+// the type reads itself, so that it generates no decoder of its own for it.
+//
+//go:noinline
+func (i PostWhereInput) MarshalGQL(w io.Writer) { orm.EncodeWhere(w, i) }

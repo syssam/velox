@@ -170,6 +170,30 @@ next:
 	if t.Failed() {
 		t.Logf("migrated app.go:\n%s", migrated)
 	}
+	// And of the cases reviewers added, where the text is the point: an
+	// assertion left as it was would compile and assert nothing.
+	for file, wants := range map[string][]string{
+		"more.go": {
+			"func Missing(what string) error { return orm.NotFound(what) }",
+		},
+		"more_test.go": {
+			`require.True(t, orm.IsZero(Scope(true, "ann")))`,
+			`require.False(t, orm.IsZero(Scope(false, "ann")))`,
+			`checks.True(orm.IsZero(Scope(true, "ann")), "sees all")`,
+			`checks.Falsef(orm.IsZero(Scope(false, "ann")), "narrowed to %s", "ann")`,
+			`assert.False(unheard{}, orm.IsZero(Scope(true, "ann")))`,
+		},
+	} {
+		text, err := os.ReadFile(filepath.Join(app, file)) //nolint:gosec // written by the run above
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(string(text), want) {
+				t.Errorf("the migrated %s does not contain %q:\n%s", file, want, text)
+			}
+		}
+	}
 	gotest(app)
 }
 
@@ -398,7 +422,7 @@ func TestMigrateWithoutWriteChangesNothing(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Error("the application was rewritten without -write")
 	}
-	if !strings.Contains(log.String(), "references rewritten in 4 files") {
+	if !strings.Contains(log.String(), "references rewritten in 5 files") {
 		t.Errorf("the run does not say what it would do:\n%s", log.String())
 	}
 	if _, err := os.Stat(report); err != nil {

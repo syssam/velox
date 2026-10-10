@@ -34,8 +34,10 @@
 // and the things that follow from a client no longer holding a connection
 // and a predicate no longer being a function: a client passed as a value is
 // the handle it held (its type becomes orm.Executor), an embedded client
-// keeps its field name, a nil predicate is the zero predicate, a function on
-// a selector used as a predicate is wrapped in orm.Raw.
+// keeps its field name, a nil predicate is the zero predicate (p == nil is
+// orm.IsZero(p), and so is testify's Nil of one, which would otherwise never
+// hold, and NotNil always), a function on a selector used as a predicate is
+// wrapped in orm.Raw.
 //
 // A pagination option kept in a variable or a slice becomes a function of
 // the query, applied with orm.Apply; a setter passed as a value becomes a
@@ -60,7 +62,8 @@
 // Where the result compiles and would do something else, it keeps what the
 // code did or says so in the report; it does not leave that to be found in
 // production. The tests of an error (IsNotFound, IsNotSingular, ...) become
-// the runtime's, since velox's never hold for an error of the new code. A
+// the runtime's, since velox's never hold for an error of the new code, and
+// NewNotFoundError, which a test makes for a stand-in, orm.NotFound. A
 // deferred call that became the argument of orm.Must is put inside a
 // function, so that it still runs when the function returns. An edge query
 // is given the handle its entity was read on only when the variable has one

@@ -2,9 +2,19 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// unheard is a test whose failures are the result looked at, and not
+// reported.
+type unheard struct{}
+
+func (unheard) Errorf(string, ...any) {}
 
 func TestReviewed(t *testing.T) {
 	ctx := context.Background()
@@ -28,6 +38,19 @@ func TestReviewed(t *testing.T) {
 		eq(t, "ClassifyByLibrary", ClassifyByLibrary(err), what)
 	}
 	eq(t, "the field of a validation error", FieldOf(invalid), "name")
+	// A condition asked whether it is one: a test that a restricted caller
+	// is narrowed must not pass for every caller afterwards.
+	require.Nil(t, Scope(true, "ann"))
+	require.NotNil(t, Scope(false, "ann"))
+	checks := assert.New(t)
+	checks.Nil(Scope(true, "ann"), "sees all")
+	checks.NotNilf(Scope(false, "ann"), "narrowed to %s", "ann")
+	// And the opposite of each has to fail.
+	eq(t, "NotNil of no condition", assert.NotNil(unheard{}, Scope(true, "ann")), false)
+	eq(t, "Nil of a condition", assert.Nil(unheard{}, Scope(false, "ann")), false)
+	// An error a test makes for a missing row is one, wrapped as well.
+	eq(t, "a made-up missing row", Classify(Missing("user")), "not found")
+	eq(t, "by the library's names", ClassifyByLibrary(fmt.Errorf("loading: %w", Missing("user"))), "not found")
 
 	// A deferred update runs when the function returns.
 	eq(t, "the age before the deferred update", s.BumpLater(ctx, ann.ID), 30)
