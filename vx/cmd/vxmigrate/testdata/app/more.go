@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect/sql"
@@ -133,6 +134,17 @@ func (s *Store) Oldest(ctx context.Context) ([]*entity.User, error) {
 
 func (s *Store) ByColumn(ctx context.Context, column string) ([]*entity.User, error) {
 	return s.User.Query().Order(integration.Desc(column)).All(ctx)
+}
+
+// Backdate sets updated_at itself, and says that the update's own stamp is
+// not wanted.
+func (s *Store) Backdate(ctx context.Context, id int, at time.Time) error {
+	return s.User.UpdateOneID(id).SetUpdatedAt(at).SkipDefault(user.FieldUpdatedAt).Exec(ctx)
+}
+
+// Touch changes a field and keeps updated_at as it is.
+func (s *Store) Touch(ctx context.Context, id int) error {
+	return s.User.UpdateOneID(id).AddAge(1).SkipDefault(user.FieldUpdatedAt).Exec(ctx)
 }
 
 // countUsers only queries on the client it is given.

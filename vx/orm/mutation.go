@@ -72,13 +72,24 @@ func (m *Mutation) columns(kind SetKind) []string {
 }
 
 // last returns the setter that decides the value of column, or nil.
+// last returns what the mutation does with the column: its last write, and
+// a Keep only when there is no write (a value the column is given stands
+// next to a Keep, whichever came first).
 func (m *Mutation) last(column string) *S {
+	var keep *S
 	for i := len(m.c.Sets) - 1; i >= 0; i-- {
-		if s := &m.c.Sets[i]; s.Edge == nil && s.Col == column {
+		s := &m.c.Sets[i]
+		if s.Edge != nil || s.Col != column {
+			continue
+		}
+		if s.Kind != SetKeep {
 			return s
 		}
+		if keep == nil {
+			keep = s
+		}
 	}
-	return nil
+	return keep
 }
 
 func (m *Mutation) drop(column string) {

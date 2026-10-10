@@ -10,9 +10,11 @@ import (
 // tx.Client(), which was a *Client too. The two are different types now, a
 // *orm.DB and a *orm.Tx, and what both are is an orm.Executor. A parameter
 // can take that type when the function only queries on it: selects an
-// entity's client from it, compares it with nil, or hands it to another
-// function whose parameter is the same kind. One that begins a transaction
-// on it, closes it or keeps it needs the database, and stays a *orm.DB.
+// entity's client from it, or hands it to another function whose parameter
+// is the same kind. One that begins a transaction on it, closes it or keeps
+// it needs the database, and stays a *orm.DB. So does one that compares it
+// with nil: a nil *orm.DB handed over as an orm.Executor is an interface
+// that is not nil, and the comparison would quietly change its answer.
 
 // paramOf returns the parameter of the function a call calls that its i-th
 // argument is for, when the call names a function or a method declared in
@@ -182,10 +184,6 @@ func handleParams(p *program, s *schema) map[token.Pos]bool {
 					sel := u.info.Selections[parent]
 					if parent.X == ast.Expr(id) && sel != nil && sel.Kind() == types.FieldVal &&
 						sel.Obj().Pkg() != nil && sel.Obj().Pkg().Path() == s.root && s.entities[sel.Obj().Name()] != nil {
-						return true
-					}
-				case *ast.BinaryExpr:
-					if parent.Op == token.EQL || parent.Op == token.NEQ {
 						return true
 					}
 				case *ast.CallExpr:

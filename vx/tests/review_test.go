@@ -197,27 +197,45 @@ func TestUpdateWithNothingToWrite(t *testing.T) {
 	assert.Equal(t, 1, n, "the rows the conditions match")
 }
 
-// Keep after Set on one column: the last one wins, as between two Sets, and
-// what a hook is told agrees with what is written.
-func TestUpdate_KeepAfterSet(t *testing.T) {
+// Keep says that the update default is not to be applied. A value the same
+// mutation gives the column is written, whichever comes first, and a hook
+// is told what is written. (Keep after Set used to cancel the Set: code
+// moved from velox, SetUpdatedAt(t).SkipDefault("updated_at"), then wrote
+// nothing, which the application's own tests showed.)
+func TestUpdate_KeepNextToSet(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
 	u := newUser(t, db, "ann", 30)
-	past := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
-	_, err := client.User.UpdateByID(db, u.ID).Set(user.UpdatedAt.Set(past)).SaveOne(ctx)
-	require.NoError(t, err)
-	var told bool
+	var told velox.Value
 	db.Use(func(next velox.Mutator) velox.Mutator {
 		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
-			_, told = m.Field("updated_at")
+			told, _ = m.Field("updated_at")
 			return next.Mutate(ctx, m)
 		})
 	})
-	forged := past.Add(-time.Hour)
-	got, err := client.User.UpdateByID(db, u.ID).Set(user.Age.Set(31), user.UpdatedAt.Set(forged), user.UpdatedAt.Keep()).SaveOne(ctx)
+	pinned := time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
+	for name, sets := range map[string][]predicate.UserSetter{
+		"Set then Keep": {user.UpdatedAt.Set(pinned), user.UpdatedAt.Keep()},
+		"Keep then Set": {user.UpdatedAt.Keep(), user.UpdatedAt.Set(pinned.Add(time.Hour))},
+	} {
+		told = nil
+		got, err := client.User.UpdateByID(db, u.ID).Set(user.Age.Add(1)).Set(sets...).SaveOne(ctx)
+		require.NoError(t, err, name)
+		want := sets[0].Val
+		if sets[0].Kind == orm.SetKeep {
+			want = sets[1].Val
+		}
+		assert.True(t, got.UpdatedAt.Equal(want.(time.Time)), "%s: updated_at is %v, want %v", name, got.UpdatedAt, want)
+		assert.Equal(t, want, told, "%s: what the hook was told", name)
+	}
+	// Keep alone: nothing is written, and the hook is told nothing.
+	before, err := client.User.Get(ctx, db, u.ID)
 	require.NoError(t, err)
-	assert.False(t, told, "the hook was told updated_at is set")
-	assert.True(t, got.UpdatedAt.Equal(past), "updated_at is %v: kept would be %v, the value set before Keep %v", got.UpdatedAt, past, forged)
+	told = "unset"
+	got, err := client.User.UpdateByID(db, u.ID).Set(user.Age.Add(1), user.UpdatedAt.Keep()).SaveOne(ctx)
+	require.NoError(t, err)
+	assert.True(t, got.UpdatedAt.Equal(before.UpdatedAt))
+	assert.Nil(t, told)
 }
 
 // An interceptor that hands back something else than the rows is an error,

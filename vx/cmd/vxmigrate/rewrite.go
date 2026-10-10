@@ -189,6 +189,12 @@ func (r *rewriter) run() {
 						}
 					}
 				}
+			case *ast.BasicLit:
+				// "velox: ...": the text of an error of the old runtime,
+				// matched by its words. The new one's read "orm: ...".
+				if top.Kind == token.STRING && strings.HasPrefix(strings.Trim(top.Value, "`\""), "velox: ") {
+					r.note(top.Pos(), "the text of an error of velox's runtime is matched here: the errors of this one start with \"orm: \"; test the error itself (orm.IsNotFound, errors.Is) instead of its words")
+				}
 			case *ast.InterfaceType:
 				r.queryMethods(top)
 			case *ast.SwitchStmt:

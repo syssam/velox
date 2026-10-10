@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestReviewed(t *testing.T) {
@@ -85,6 +86,16 @@ func TestReviewed(t *testing.T) {
 	if _, err := s.ByColumn(ctx, "no_such_column"); err == nil {
 		t.Error("ordering by a column that does not exist did not fail")
 	}
+
+	// A value set next to "no stamp of the update's own" is written; without
+	// a value, the column stays as it was.
+	pinned := time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
+	eq(t, "backdate", s.Backdate(ctx, ann.ID, pinned), nil)
+	u, err = s.Find(ctx, ann.ID)
+	eq(t, "updated_at was set", show(u.UpdatedAt.Equal(pinned), err), "true <nil>")
+	eq(t, "touch", s.Touch(ctx, ann.ID), nil)
+	u, err = s.Find(ctx, ann.ID)
+	eq(t, "updated_at was kept", show(u.UpdatedAt.Equal(pinned), u.Age, err), "true 32 <nil>")
 
 	// A function that only queries, given a transaction.
 	inside, after, err := s.AddAndCount(ctx, "cy", "cy@example.com")

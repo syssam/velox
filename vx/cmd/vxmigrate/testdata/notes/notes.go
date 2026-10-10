@@ -122,10 +122,21 @@ func scoped(where *filter.UserWhereInput) (predicate.User, error) {
 
 // A client taken only to query on it takes a transaction as well.
 func countUsers(ctx context.Context, c *integration.Client) (int, error) {
+	return c.User.Query().Count(ctx)
+}
+
+// One that asks whether it was given a client keeps its type: a nil *orm.DB
+// handed over as an interface would no longer be nil.
+func countIfAny(ctx context.Context, c *integration.Client) (int, error) {
 	if c == nil {
 		return 0, nil
 	}
 	return c.User.Query().Count(ctx)
+}
+
+// An error of the old runtime matched by its words.
+func missingByWords(err error) bool {
+	return err != nil && len(err.Error()) > 7 && err.Error()[:7] == "velox: " // note: the text of an error of velox's runtime is matched here
 }
 
 func countIn(ctx context.Context, tx *integration.Tx) (int, error) {
@@ -521,6 +532,6 @@ func like(ctx context.Context, c *integration.Client, userID int, likeIDs ...int
 func valid(r user.Role) bool { return r.IsValid() }
 
 var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
-	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, firstID, isRole, lockSkipping, nullsFirst, postsOf, noField, columnOf, validPointer, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
+	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, firstID, isRole, lockSkipping, nullsFirst, postsOf, noField, columnOf, validPointer, missingByWords, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
 	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid}

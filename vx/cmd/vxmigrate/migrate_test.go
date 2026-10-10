@@ -284,6 +284,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func countUsers(ctx context.Context, c orm.Executor) (int, error) {",
 		"func countIn(ctx context.Context, tx *orm.Tx) (int, error) { return countUsers(ctx, tx) }",
 		"func begins(ctx context.Context, c *orm.DB) error {",
+		"func countIfAny(ctx context.Context, c *orm.DB) (int, error) {",
 		// An option kept in a variable shapes the query it is given.
 		"func loadWith(ctx context.Context, c orm.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",

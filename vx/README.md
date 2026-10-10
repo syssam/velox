@@ -165,7 +165,9 @@ err = db.User.DeleteByID(ctx, conn, id)
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
-  the user's and does not move `updated_at`.
+  the user's and does not move `updated_at`. It only says that the update's
+  own value is not wanted: a value the same update gives the column is
+  written, whichever of the two comes first.
 - An update ends in one of three: `Exec(ctx)` updates every matching row
   and returns how many; `SaveOne(ctx)` updates the one matching row and
   returns it; `ExecOne(ctx)` is `SaveOne` for a caller with no use for the

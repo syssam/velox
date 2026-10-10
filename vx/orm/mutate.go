@@ -667,7 +667,15 @@ func (m *MutCore) orderedSets() ([]S, error) {
 	out := make([]S, 0, len(m.Sets))
 	for _, s := range keyWrites(meta, m.Sets) {
 		if s.Edge == nil {
-			if s.Kind == SetValue || s.Kind == SetNull || s.Kind == SetKeep {
+			switch s.Kind {
+			case SetKeep:
+				// Keep only says that the update default is not to be
+				// applied. A value the column is given stands, whichever
+				// was said first (as SetX with SkipDefault did in velox).
+				if slices.ContainsFunc(out, func(o S) bool { return o.Edge == nil && o.Col == s.Col }) {
+					continue
+				}
+			case SetValue, SetNull:
 				out = slices.DeleteFunc(out, func(o S) bool { return o.Col == s.Col })
 			}
 			out = append(out, s)
