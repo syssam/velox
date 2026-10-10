@@ -1762,6 +1762,9 @@ func TestGenerator_GenEdgeField_WithOrderField(t *testing.T) {
 	postType := &entgen.Type{
 		Name: "Post",
 		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		// Something to order by: without any, there is no order to ask for
+		// (TestSchemaFiles_NothingToOrderBy).
+		Fields: []*entgen.Field{{Name: "title", Type: &field.TypeInfo{Type: field.TypeString}}},
 		Annotations: map[string]any{
 			graphql.AnnotationName: &graphql.Annotation{RelayConnection: true},
 		},

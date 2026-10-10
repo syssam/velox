@@ -220,3 +220,46 @@ func TestSchemaFiles_HiddenEntityEnumsAreDefined(t *testing.T) {
 		}
 	}
 }
+
+// An entity nothing can be ordered by (bytes and JSON fields only) has no
+// order in the schema: no <Type>Order, no <Type>OrderField, no orderBy
+// argument on its lists. The order enum was written without a value, and
+// the generator then refused its own schema.
+func TestSchemaFiles_NothingToOrderBy(t *testing.T) {
+	relay := map[string]any{graphql.AnnotationName: &graphql.Annotation{RelayConnection: true, QueryField: true}}
+	blob := &entgen.Type{
+		Name:        "Blob",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields:      []*entgen.Field{{Name: "data", Type: &field.TypeInfo{Type: field.TypeBytes}}},
+		Annotations: relay,
+	}
+	owner := &entgen.Type{
+		Name:        "Owner",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields:      []*entgen.Field{{Name: "name", Type: &field.TypeInfo{Type: field.TypeString}}},
+		Annotations: relay,
+	}
+	owner.Edges = []*entgen.Edge{{Name: "blobs", Type: blob}}
+	graph := &entgen.Graph{Config: &entgen.Config{Package: "example/ent"}, Nodes: []*entgen.Type{owner, blob}}
+	for _, mode := range []SchemaSplitMode{SchemaSplitNone, SchemaSplitByCategory, SchemaSplitPerEntity} {
+		g := NewGenerator(graph, Config{Package: "graphql", ORMPackage: "example/ent", RelayConnection: true, Ordering: true, SchemaSplitMode: mode})
+		files, err := g.SchemaFiles()
+		if err != nil {
+			t.Fatalf("mode %v: %v", mode, err)
+		}
+		var all string
+		for _, src := range files {
+			all += src + "\n"
+		}
+		for _, absent := range []string{"BlobOrder", "orderBy: BlobOrder"} {
+			if regexp.MustCompile(regexp.QuoteMeta(absent)).MatchString(all) {
+				t.Errorf("mode %v: the schema has %s, and Blob has nothing to order by", mode, absent)
+			}
+		}
+		for _, present := range []string{"enum OwnerOrderField", "orderBy: OwnerOrder", "type BlobConnection"} {
+			if !regexp.MustCompile(regexp.QuoteMeta(present)).MatchString(all) {
+				t.Errorf("mode %v: the schema lacks %q", mode, present)
+			}
+		}
+	}
+}

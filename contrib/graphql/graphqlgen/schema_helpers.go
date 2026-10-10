@@ -418,9 +418,13 @@ func (g *Generator) wantsWhereInput(t *gen.Type) bool {
 	return g.hasFilterableContent(t)
 }
 
+// wantsOrderField reports whether the schema has an order for t: the entity
+// has not opted out, and has something a list of it can be ordered by. An
+// entity of bytes and JSON fields only has not, and its order enum would
+// have no value, which no schema may contain.
 func (g *Generator) wantsOrderField(t *gen.Type) bool {
 	ann := g.getTypeAnnotation(t)
-	return ann.WantsOrderField()
+	return ann.WantsOrderField() && len(g.OrderFields(t)) > 0
 }
 
 // hasMultiOrder returns true if the entity supports multi-column ordering.
