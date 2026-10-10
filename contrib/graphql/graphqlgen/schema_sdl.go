@@ -185,20 +185,17 @@ enum OrderDirection {
 func (g *Generator) genSharedEnumTypes() string {
 	var buf bytes.Buffer
 	generated := make(map[string]bool)
-	nodes := g.filterNodes(g.graph.Nodes, graphql.SkipType)
-	for _, t := range nodes {
-		fields := g.filterFields(t.Fields, graphql.SkipEnumField)
-		for _, f := range fields {
-			if !f.IsEnum() {
-				continue
-			}
+	// From the first entity the schema has a part of that uses the enum:
+	// its owner, unless the owner is hidden (the enum was then not written
+	// at all, although a shown entity used it).
+	for _, t := range g.graph.Nodes {
+		for _, f := range g.enumFields(t) {
 			enumName := t.Name + pascal(f.Name)
 			ann := g.getFieldAnnotation(f)
 			if customType := ann.GetType(); customType != "" {
 				enumName = customType
 			}
-			owner, shared := g.sharedEnums[enumName]
-			if !shared || owner != t.Name || generated[enumName] {
+			if _, shared := g.sharedEnums[enumName]; !shared || generated[enumName] {
 				continue
 			}
 			generated[enumName] = true

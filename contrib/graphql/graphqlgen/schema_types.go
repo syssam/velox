@@ -368,11 +368,7 @@ func (g *Generator) genTypesSchema() string {
 // by the first entity and placed in the root schema file in per-entity mode.
 func (g *Generator) genEntityEnumTypes(t *gen.Type) string {
 	var buf bytes.Buffer
-	fields := g.filterFields(t.Fields, graphql.SkipEnumField)
-	for _, f := range fields {
-		if !f.IsEnum() {
-			continue
-		}
+	for _, f := range g.enumFields(t) {
 		enumName := t.Name + pascal(f.Name)
 		ann := g.getFieldAnnotation(f)
 		if customType := ann.GetType(); customType != "" {
@@ -388,20 +384,34 @@ func (g *Generator) genEntityEnumTypes(t *gen.Type) string {
 	return buf.String()
 }
 
+// enumFields returns the enum fields of t that the schema defines a type
+// for: all of them for an entity the schema shows, and for one hidden with
+// Skip(SkipType) that is still filtered through, the ones its where input
+// names. (Those were left out, and the where input of a hidden entity named
+// an enum type the schema did not have.) Nothing for an entity the schema
+// has no part of.
+func (g *Generator) enumFields(t *gen.Type) []*gen.Field {
+	shown := len(g.filterNodes([]*gen.Type{t}, graphql.SkipType)) == 1
+	filtered := !shown && g.config.WhereInputs && len(g.filterNodes([]*gen.Type{t}, graphql.SkipWhereInput)) == 1 && g.wantsWhereInput(t)
+	if !shown && !filtered {
+		return nil
+	}
+	var out []*gen.Field
+	for _, f := range g.filterFields(t.Fields, graphql.SkipEnumField) {
+		if f.IsEnum() && (shown || !g.skipFieldInWhereInput(t, f)) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // genEnumTypes generates GraphQL enum type definitions for all enum fields.
 func (g *Generator) genEnumTypes() string {
 	var buf bytes.Buffer
 	generatedEnums := make(map[string]bool)
 
-	// Use filterNodes helper (like Ent)
-	nodes := g.filterNodes(g.graph.Nodes, graphql.SkipType)
-	for _, t := range nodes {
-		// Use filterFields to exclude skipped fields
-		fields := g.filterFields(t.Fields, graphql.SkipEnumField)
-		for _, f := range fields {
-			if !f.IsEnum() {
-				continue
-			}
+	for _, t := range g.graph.Nodes {
+		for _, f := range g.enumFields(t) {
 			// Check for custom GraphQL type name (for shared enums like schematype.ItemType)
 			ann := g.getFieldAnnotation(f)
 			enumName := t.Name + pascal(f.Name)

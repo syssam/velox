@@ -159,3 +159,64 @@ func TestSchemaFiles_HiddenEntityKeepsItsWhereInput(t *testing.T) {
 		}
 	}
 }
+
+// The whole schema loads, in every split mode, when a hidden entity is
+// filtered by an enum field, and when it shares an enum with a shown one
+// and comes first: the enum types its where input names were not written
+// in two of the modes, and a shared enum owned by a hidden entity in none.
+func TestSchemaFiles_HiddenEntityEnumsAreDefined(t *testing.T) {
+	filterable := func(typ string) map[string]any {
+		return map[string]any{graphql.AnnotationName: &graphql.Annotation{WhereInputEnabled: true, Type: typ}}
+	}
+	enum := func(name, typ string) *entgen.Field {
+		return &entgen.Field{Name: name, Type: &field.TypeInfo{Type: field.TypeEnum}, Annotations: filterable(typ),
+			Enums: []entgen.Enum{{Name: "A", Value: "a"}, {Name: "B", Value: "b"}}}
+	}
+	secret := &entgen.Type{
+		Name: "Secret",
+		ID:   &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields: []*entgen.Field{
+			enum("status", ""), enum("kind", "Kind"),
+			// An enum the where input does not name is not the schema's business.
+			{Name: "inner", Type: &field.TypeInfo{Type: field.TypeEnum}, Enums: []entgen.Enum{{Name: "X", Value: "x"}}},
+		},
+		Annotations: map[string]any{graphql.AnnotationName: &graphql.Annotation{Skip: graphql.SkipType}},
+	}
+	user := &entgen.Type{
+		Name:        "User",
+		ID:          &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}},
+		Fields:      []*entgen.Field{enum("kind", "Kind")},
+		Annotations: map[string]any{},
+	}
+	user.Edges = []*entgen.Edge{{Name: "secrets", Type: secret, Annotations: filterable("")}}
+	// The hidden entity first: it is then the one a shared enum is "of".
+	graph := &entgen.Graph{Config: &entgen.Config{Package: "example/ent"}, Nodes: []*entgen.Type{secret, user}}
+	for _, mode := range []SchemaSplitMode{SchemaSplitNone, SchemaSplitByCategory, SchemaSplitPerEntity} {
+		g := NewGenerator(graph, Config{Package: "graphql", ORMPackage: "example/ent", WhereInputs: true, SchemaSplitMode: mode})
+		files, err := g.SchemaFiles()
+		if err != nil {
+			t.Fatalf("mode %v: %v", mode, err)
+		}
+		var all string
+		for _, src := range files {
+			all += src + "\n"
+		}
+		for name, want := range map[string]int{"enum SecretStatus": 1, "enum Kind": 1, "enum SecretInner": 0} {
+			if got := len(regexp.MustCompile(`(?m)^`+regexp.QuoteMeta(name)+`\b`).FindAllString(all, -1)); got != want {
+				t.Errorf("mode %v: %q is defined %d times, want %d", mode, name, got, want)
+			}
+		}
+		// Every type the where inputs name is defined.
+		defined := map[string]bool{"ID": true, "Boolean": true, "String": true, "Int": true}
+		for _, m := range regexp.MustCompile(`(?m)^(?:type|input|enum|scalar|interface) ([A-Za-z0-9_]+)`).FindAllStringSubmatch(all, -1) {
+			defined[m[1]] = true
+		}
+		for _, in := range regexp.MustCompile(`(?s)input [A-Za-z]+WhereInput[^{]*\{(.*?)\n\}`).FindAllStringSubmatch(all, -1) {
+			for _, m := range regexp.MustCompile(`(?m)^  [A-Za-z0-9_]+: \[?([A-Za-z0-9_]+)`).FindAllStringSubmatch(in[1], -1) {
+				if !defined[m[1]] {
+					t.Errorf("mode %v: a where input names the type %s, which the schema does not define", mode, m[1])
+				}
+			}
+		}
+	}
+}
