@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/syssam/velox/tests/integration/filter"
 )
 
 // unheard is a test whose failures are the result looked at, and not
@@ -123,4 +125,18 @@ func TestReviewed(t *testing.T) {
 	// A function that only queries, given a transaction.
 	inside, after, err := s.AddAndCount(ctx, "cy", "cy@example.com")
 	eq(t, "inside the transaction, and after it was rolled back", show(inside, after, err), "3 2 <nil>")
+
+	// A bulk create a few rows at a time: every row, in order.
+	batched, err := s.AddPostsInBatches(ctx, bob, 2, "c1", "c2", "c3")
+	if err != nil || len(batched) != 3 || batched[2].Title != "c3" {
+		t.Fatal(batched, err)
+	}
+	// A filter nested too deep is refused, by the name the code checks.
+	deep := &filter.PostWhereInput{TitleNEQ: ptr("x")}
+	for range 6 {
+		deep = &filter.PostWhereInput{Not: deep}
+	}
+	_, err = s.PostsMatching(ctx, deep)
+	refused, depth := TooDeep(err)
+	eq(t, "a filter nested too deep", show(refused, depth), "true 5")
 }

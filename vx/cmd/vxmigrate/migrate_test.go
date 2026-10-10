@@ -175,6 +175,8 @@ next:
 	for file, wants := range map[string][]string{
 		"more.go": {
 			"func Missing(what string) error { return orm.NotFound(what) }",
+			".BatchSize(size).Save(ctx)",
+			"return errors.Is(err, orm.ErrWhereDepth), orm.MaxWhereDepth",
 		},
 		"more_test.go": {
 			`require.True(t, orm.IsZero(Scope(true, "ann")))`,

@@ -755,3 +755,89 @@ func TestEnumDefaultConstant(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, post.DefaultStatus(), got.Status)
 }
+
+// BatchSize inserts the rows of a bulk create a few at a time. The entities
+// come back in the order of the builders whatever the size, each batch is a
+// bulk create of its own to the hooks, and the batches are one transaction
+// only inside one.
+func TestCreateBulk_BatchSize(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	mk := func(name string) *entity.UserCreate {
+		return client.User.Create(db).Set(user.Name.Set(name), user.Email.Set(name+"@example.com"), user.Age.Set(1))
+	}
+	rows := func(names ...string) []*entity.UserCreate {
+		bs := make([]*entity.UserCreate, len(names))
+		for i, n := range names {
+			bs[i] = mk(n)
+		}
+		return bs
+	}
+	var log []string
+	db.Use(func(next velox.Mutator) velox.Mutator {
+		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
+			name, _ := m.Field("name")
+			log = append(log, fmt.Sprint("before ", name))
+			v, err := next.Mutate(ctx, m)
+			log = append(log, fmt.Sprint("after ", name))
+			return v, err
+		})
+	})
+
+	// Five rows two at a time: three statements, the last of one row. Every
+	// batch's hooks have returned before the next batch's see their rows.
+	us, err := client.User.CreateBulk(db, rows("a", "b", "c", "d", "e")...).BatchSize(2).Save(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b", "c", "d", "e"}, names(us))
+	for _, u := range us {
+		assert.NotZero(t, u.ID)
+	}
+	assert.Equal(t, []string{
+		"before a", "before b", "after b", "after a",
+		"before c", "before d", "after d", "after c",
+		"before e", "after e",
+	}, log)
+
+	// A size that is not one, or that holds every row, is one statement.
+	for _, n := range []int{0, -1, 3, 4} {
+		log = nil
+		name := fmt.Sprintf("n%d", n+1)
+		us, err = client.User.CreateBulk(db, rows(name+"x", name+"y", name+"z")...).BatchSize(n).Save(ctx)
+		require.NoError(t, err, n)
+		assert.Len(t, us, 3, n)
+		assert.Equal(t, []string{"before " + name + "x", "before " + name + "y", "before " + name + "z"}, log[:3], n)
+	}
+	before, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+
+	// A batch that fails, on a database handle: the batches before it are in
+	// the table and are what Save returns with the error; the failed one and
+	// those after it are not. Here the fourth row repeats an address.
+	us, err = client.User.CreateBulk(db, rows("p", "q", "r", "a", "s", "t")...).BatchSize(2).Save(ctx)
+	require.True(t, orm.IsConstraintError(err), "%v", err)
+	assert.Equal(t, []string{"p", "q"}, names(us))
+	n, err := client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, before+2, n)
+	n, err = client.User.Query(db).Where(user.Name.In("r", "s", "t")).Count(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, n, "a row of the failed batch, or of one after it")
+
+	// The same in a transaction that is rolled back for the error: nothing.
+	err = db.RunTx(ctx, func(tx *orm.Tx) error {
+		return client.User.CreateBulk(tx, rows("v", "w", "x", "a")...).BatchSize(3).Exec(ctx)
+	})
+	require.True(t, orm.IsConstraintError(err), "%v", err)
+	n, err = client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, before+2, n)
+
+	// Without a size the whole create is one statement, and nothing of it
+	// stays.
+	us, err = client.User.CreateBulk(db, rows("y", "z", "a")...).Save(ctx)
+	require.True(t, orm.IsConstraintError(err), "%v", err)
+	assert.Nil(t, us)
+	n, err = client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, before+2, n)
+}

@@ -422,15 +422,38 @@ func (m *MutCore) insert(ctx context.Context, c *conn) (any, error) {
 	return built(m.M, spec, vals)
 }
 
-// InsertBulk creates one row per setter list with a single statement and
-// returns the entities in the same order.
+// InsertBulk creates one row per setter list and returns the entities in the
+// same order: with a single statement, or, when batch is positive and there
+// are more rows than that, with one statement for every batch rows.
 //
 // With hooks or a policy every row is a mutation of its own: each row's hooks
 // wrap the next row's, and the innermost runs the one statement. So all hooks
 // see their row before the insert, and return, last row first, after it.
+// Batches are bulk creates of their own in this: the hooks of one have
+// returned before those of the next see their rows.
+//
+// The statements of several batches are one transaction only when the handle
+// is one. On a database handle a batch that fails leaves the batches before
+// it in the table, and their entities are returned with the error.
 //
 //go:noinline
-func InsertBulk(ctx context.Context, ex Executor, m *Meta, rows [][]S) ([]any, error) {
+func InsertBulk(ctx context.Context, ex Executor, m *Meta, rows [][]S, batch int) ([]any, error) {
+	if batch <= 0 || batch >= len(rows) {
+		return insertRows(ctx, ex, m, rows)
+	}
+	out := make([]any, 0, len(rows))
+	for chunk := range slices.Chunk(rows, batch) {
+		done, err := insertRows(ctx, ex, m, chunk)
+		out = append(out, done...)
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// insertRows is a bulk create of one statement.
+func insertRows(ctx context.Context, ex Executor, m *Meta, rows [][]S) ([]any, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}

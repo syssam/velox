@@ -131,6 +131,13 @@ err = db.User.DeleteByID(ctx, conn, id)
   row (`orm.ErrNotFound`, `orm.ErrNotSingular`); `DeleteByID` reports a
   missing row. There is no `Update().Save`: in velox and Ent that spelling is
   the bulk update.
+- **`CreateBulk` is one statement** for all its rows, and all of them or
+  none. A statement has a limit on its parameters (65,535 on Postgres, and a
+  row takes one for each column), so a create of many rows says how many go
+  into one: `db.Log.CreateBulk(tx, rows...).BatchSize(500).Save(ctx)`. The
+  statements are then one transaction only when the handle is one. On a
+  database handle, a batch that fails leaves the batches before it in the
+  table, and `Save` returns their entities with the error.
 - `SaveOne` with further conditions is the optimistic lock:
   `UpdateByID(tx, id).Where(x.Version.EQ(v))` is one `UPDATE ... WHERE
   id = ? AND version = ?`, and a row that no longer matches is `ErrNotFound`,

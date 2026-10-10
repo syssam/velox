@@ -10,6 +10,7 @@ import (
 	"github.com/syssam/velox/tests/integration"
 	postclient "github.com/syssam/velox/tests/integration/client/post"
 	"github.com/syssam/velox/tests/integration/entity"
+	"github.com/syssam/velox/tests/integration/filter"
 	"github.com/syssam/velox/tests/integration/predicate"
 	"github.com/syssam/velox/tests/integration/user"
 )
@@ -116,6 +117,21 @@ func (s *Store) AddPostsLate(ctx context.Context, author *entity.User, titles ..
 		b.SetAuthor(author)
 	}
 	return bulk.Save(ctx)
+}
+
+// AddPostsInBatches inserts the posts size at a time.
+func (s *Store) AddPostsInBatches(ctx context.Context, author *entity.User, size int, titles ...string) ([]*entity.Post, error) {
+	bs := make([]*postclient.PostCreate, len(titles))
+	for i, title := range titles {
+		bs[i] = s.Post.Create().SetTitle(title).SetAuthor(author)
+	}
+	return s.Post.CreateBulk(bs...).BatchSize(size).Save(ctx)
+}
+
+// TooDeep reports whether an error is that of a filter nested too deep, and
+// how deep one may be.
+func TooDeep(err error) (bool, int) {
+	return errors.Is(err, filter.ErrFilterDepthExceeded), filter.DefaultMaxFilterDepth
 }
 
 // Adopt is given the author by value.

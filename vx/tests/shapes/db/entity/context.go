@@ -304,6 +304,7 @@ func (b *ContextCreate) Exec(ctx context.Context) error {
 type ContextCreateBulk struct {
 	ex orm.Executor
 	bs []*ContextCreate
+	n  int
 }
 
 // NewContextCreateBulk returns a builder that creates one row per given builder, as each
@@ -322,26 +323,39 @@ func (b *ContextCreateBulk) sets() [][]orm.S {
 	return rows
 }
 
+// BatchSize makes Save and Exec insert the rows n at a time, with a statement
+// for every n of them where they would use one for all: a statement has a
+// limit on its parameters, and a row takes one for each of its columns. The
+// statements are one transaction only when the handle is one. On a database
+// handle, one that fails leaves the rows of those before it in the table, and
+// Save returns them with the error.
+//
+//go:noinline
+func (b *ContextCreateBulk) BatchSize(n int) *ContextCreateBulk {
+	b.n = n
+	return b
+}
+
 // Save inserts the rows and returns them in order.
 //
 //go:noinline
 func (b *ContextCreateBulk) Save(ctx context.Context) ([]*Context, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &ContextMeta, b.sets())
-	if err != nil {
+	rows, err := orm.InsertBulk(ctx, b.ex, &ContextMeta, b.sets(), b.n)
+	if err != nil && len(rows) == 0 {
 		return nil, err
 	}
 	out := make([]*Context, len(rows))
 	for i, r := range rows {
 		out[i] = r.(*Context)
 	}
-	return out, nil
+	return out, err
 }
 
 // Exec inserts the rows.
 //
 //go:noinline
 func (b *ContextCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &ContextMeta, b.sets())
+	_, err := orm.InsertBulk(ctx, b.ex, &ContextMeta, b.sets(), b.n)
 	return err
 }
 

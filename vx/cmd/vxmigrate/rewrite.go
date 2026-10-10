@@ -4,7 +4,10 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strconv"
 	"strings"
+
+	"github.com/syssam/velox/vx/orm"
 )
 
 const ormPath = "github.com/syssam/velox/vx/orm"
@@ -441,8 +444,23 @@ func (r *rewriter) foreign(sel *ast.SelectorExpr, obj types.Object, where string
 	}
 	switch where {
 	case "filter":
-		if strings.HasPrefix(obj.Name(), "ErrEmpty") {
-			r.note(sel.Pos(), "%s: an input with no condition is not an error now: P() returns the zero predicate, which is no condition", obj.Name())
+		switch name := obj.Name(); {
+		case strings.HasPrefix(name, "ErrEmpty"):
+			r.note(sel.Pos(), "%s: an input with no condition is not an error now: P() returns the zero predicate, which is no condition", name)
+		case name == "ErrFilterDepthExceeded":
+			// The same failure, met where the query runs: P returns no
+			// error, and a predicate that fails the query with this one.
+			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".ErrWhereDepth")
+			r.count("where depth")
+		case name == "DefaultMaxFilterDepth":
+			// The depth was an option of the generator; it is the runtime's
+			// constant now.
+			if c, ok := obj.(*types.Const); ok && c.Val().ExactString() == strconv.Itoa(orm.MaxWhereDepth) {
+				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".MaxWhereDepth")
+				r.count("where depth")
+			} else {
+				r.note(sel.Pos(), "%s: a where input nests %d deep now (orm.MaxWhereDepth), whatever the generator was told", name, orm.MaxWhereDepth)
+			}
 		}
 	case "predicate", "migrate", "entity", "root", "<entity>", "client/<entity>", "query", "intercept", "privacy":
 	default:
@@ -1790,6 +1808,11 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 	switch name {
 	case "Where":
 		// Its arguments are looked at as any call's are: see arguments.
+	case "BatchSize":
+		// The same call, with the same meaning.
+		if t.kind != "CreateBulk" {
+			r.note(call.Pos(), "%s.%s: rewrite by hand", t.kind, name)
+		}
 	case "SkipDefault":
 		var keeps []string
 		for _, a := range call.Args {
@@ -2611,7 +2634,7 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	if !isType || obj.Pkg() == nil || obj.Pkg().Path() != r.lib+"/dialect/sql" || !strings.HasSuffix(obj.Name(), "Field") || len(args) == 0 {
 		return
 	}
-	orm := r.orm(n.Pos())
+	pkg := r.orm(n.Pos())
 	p := r.render(args[0])
 	// The second type argument, of the column types that have one.
 	value := ""
@@ -2621,15 +2644,15 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	var text string
 	switch base := strings.TrimSuffix(obj.Name(), "Field"); {
 	case base == "String":
-		text = orm + ".TextColumn[" + p + "]"
+		text = pkg + ".TextColumn[" + p + "]"
 	case base == "Bool":
-		text = orm + ".Column[bool, " + p + "]"
+		text = pkg + ".Column[bool, " + p + "]"
 	case base == "Enum" && value != "":
-		text = orm + ".Column[" + value + ", " + p + "]"
+		text = pkg + ".Column[" + value + ", " + p + "]"
 	case (base == "Time" || base == "Other" || base == "UUID") && value != "":
-		text = orm + ".OrderedColumn[" + value + ", " + p + "]"
+		text = pkg + ".OrderedColumn[" + value + ", " + p + "]"
 	case strings.HasPrefix(base, "Int") || strings.HasPrefix(base, "Uint") || strings.HasPrefix(base, "Float"):
-		text = orm + ".OrderedColumn[" + strings.ToLower(base) + ", " + p + "]"
+		text = pkg + ".OrderedColumn[" + strings.ToLower(base) + ", " + p + "]"
 	default:
 		r.note(n.Pos(), "the column type sql.%s: declare what the code needs of a column with orm.Column or orm.OrderedColumn", obj.Name())
 		return
