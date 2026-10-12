@@ -34,20 +34,6 @@ func StatusValues() []StatusEnum {
 	return []StatusEnum{StatusTodo, StatusInProgress, StatusDone}
 }
 
-// OrderField is a field a list of Todo can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.TodoOrder.
-type OrderField string
-
-// The fields a list of Todo can be ordered by.
-const (
-	OrderFieldCreatedAt OrderField = "CREATED_AT"
-	OrderFieldUpdatedAt OrderField = "UPDATED_AT"
-	OrderFieldTitle     OrderField = "TITLE"
-	OrderFieldStatus    OrderField = "STATUS"
-	OrderFieldPriority  OrderField = "PRIORITY"
-	OrderFieldDueDate   OrderField = "DUE_DATE"
-)
-
 // The column names of Todo.
 const (
 	ColumnID        = "id"

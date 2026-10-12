@@ -8,7 +8,6 @@ import (
 	"example.com/orm-graphql/velox/entity"
 	"example.com/orm-graphql/velox/predicate"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 )
 
@@ -54,17 +53,4 @@ func (c *UserClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) 
 		err = entity.UserMeta.NotFound()
 	}
 	return err
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *UserClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.UserMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
 }

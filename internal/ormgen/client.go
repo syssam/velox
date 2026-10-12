@@ -3,7 +3,6 @@ package ormgen
 import (
 	"bytes"
 	"fmt"
-	"sort"
 )
 
 // client generates the package at the root of the generated tree, the one
@@ -23,8 +22,8 @@ import (
 // The variable holds no state: what a query or mutation runs on, a database
 // handle or a transaction, is given where it starts and travels with the
 // builder, so a builder can be finished and run by another function.
-func (g *generator) client() (map[string][]byte, error) {
-	im := g.imports()
+func (g *Generator) client() (map[string][]byte, error) {
+	im := g.Imports()
 	im.use(ormPath, "orm")
 	im.use(veloxPath, "velox")
 	modelPkg := im.use(g.cfg.Package+"/entity", "entity")
@@ -39,25 +38,12 @@ func (g *generator) client() (map[string][]byte, error) {
 	var b bytes.Buffer
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
 
-	// A type per entity, named after it: UserClient for User. A schema may
-	// have an entity of that very name, and then the type gives way.
 	taken := map[string]bool{}
 	for _, e := range g.ents {
-		taken[e.Name] = true
+		taken[e.Name], taken[e.Client] = true, true
 	}
-	typeOf := map[*ent]string{}
 	for _, e := range g.ents {
-		name := e.Name + "Client"
-		for taken[name] {
-			name += "Type"
-		}
-		taken[name] = true
-		typeOf[e] = name
-	}
-
-	var nodes []*ent
-	for _, e := range g.ents {
-		n, t := g.names(e), typeOf[e]
+		n, t := g.names(e), e.Client
 		ref, err := goTypeOf(e.ID.F)
 		if err != nil {
 			return nil, fmt.Errorf("velox: %s: %w", e.Name, err)
@@ -110,30 +96,10 @@ func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex velox.Executor, id %[15]s) err
 }
 
 `, t, e.Name, modelPkg, n.Query, n.NewQuery, n.Create, n.NewCreate, n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, n.Delete, n.NewDelete, ctxPkg, id, e.pred(), e.ID.Col, n.Meta)
-		if q := g.gql[e]; q != nil && q.Node {
-			nodes = append(nodes, e)
-			im.use(gqlinputPath, "gqlinput")
-			w(`// node is Get for an id of any type: see NodeTypes.
-func (c *%[1]s) node(ctx %[2]s.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[%[3]s](key)
-	if !ok {
-		return nil, %[5]s.%[4]s.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-`, t, ctxPkg, id, n.Meta, modelPkg)
-		}
 	}
 	// What the package gives of the library under its own name.
-	if len(nodes) > 0 {
-		for _, n := range [...]string{"Noder", "NodeType", "NodeTypes"} {
-			taken[n] = true
-		}
+	for n := range g.rootTaken {
+		taken[n] = true
 	}
 	lib := reexports(taken, im.use(veloxPath, "velox"), ctxPkg, im.use("database/sql", "sql"))
 
@@ -144,37 +110,6 @@ func (c *%[1]s) node(ctx %[2]s.Context, ex velox.Executor, key any) (Noder, erro
 	out.WriteString(im.block())
 	out.WriteString("\n")
 	out.WriteString(lib)
-	if len(nodes) > 0 {
-		sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
-		fmt.Fprintf(&out, `// Noder is an entity that is a node of the GraphQL schema: what the schema's
-// Node interface is bound to.
-type Noder interface{ IsNode() }
-
-// NodeType is one type of node of the GraphQL schema.
-type NodeType struct {
-	// Name is the entity's, and the GraphQL type's.
-	Name  string
-	Table string
-	// Get returns the node of this type with the id, read like the Get of
-	// the entity (its policy and interceptors apply), or velox.ErrNotFound. An
-	// id that is not of the type's id type is the id of no node of it; an
-	// integer of another integer type is the same id.
-	Get func(ctx %[1]s.Context, ex velox.Executor, id any) (Noder, error)
-}
-
-// NodeTypes returns the types of node, ordered by name: what a node(id:)
-// field has to go by when an id does not say its type. To find a node, ask
-// each type in turn and take the first answer that is not velox.ErrNotFound;
-// that is a query per type, so an application with many types keeps what it
-// learns (a prefix in the id, or which type answered for a range of ids).
-func NodeTypes() []NodeType {
-	return []NodeType{
-`, ctxPkg)
-		for _, e := range nodes {
-			fmt.Fprintf(&out, "\t\t{Name: %q, Table: %q, Get: %s.node},\n", e.Name, e.T.Table(), e.Name)
-		}
-		out.WriteString("\t}\n}\n\n")
-	}
 	out.Write(b.Bytes())
 	return split(out.Bytes(), root)
 }

@@ -42,7 +42,7 @@ This writes, under `velox`:
 | `velox/migrate` | the tables, and `migrate.Create(ctx, conn)` |
 | `velox/predicate` | the types that keep one entity's conditions out of another's query |
 | `velox/schemainit` | the schema's defaults, validators, hooks and policies; `velox` links it |
-| `velox/filter` | with `-graphql`: the where inputs of the GraphQL schema |
+| `velox/filter`, `*_gql.go`, `gql.go` | with `-graphql`: the GraphQL layer, in files of its own (see [GraphQL](#graphql)) |
 
 The root package is named after the directory. `velox` is the default and
 what this guide writes: the generated package then has the library's name,
@@ -394,6 +394,31 @@ engine binds it to. The schema text is velox's, byte for byte apart from the
 Go types it names: on a real 454-entity application the 439 schema files that
 had not changed since were identical. The Go is derived from that text, so the
 two cannot disagree, and it imports no engine.
+
+The layer is not part of the ORM. The generator (`orm/ormgen`) knows no
+GraphQL; the layer is an extension of it, `contrib/graphql/ormgql`, which is
+what `-graphql` adds:
+
+```go
+ormgen.Generate(graph, ormgen.Config{
+    Target:  "./velox",
+    Package: "example.com/app/velox",
+    Extensions: []ormgen.Extension{ormgql.New(ormgql.Config{
+        Dir:    "./graphql",
+        Schema: graphqlgen.Config{SchemaFilename: "velox.graphql", WhereInputs: true},
+    })},
+})
+```
+
+Everything it writes is in files of its own, and it changes none of the
+others: the tree with the layer is the tree without it, plus these.
+
+| file | what is in it |
+|---|---|
+| `velox/filter/` | a where input per entity |
+| `velox/entity/<entity>_gql.go` | the order input, `IsNode`, and a method per edge an engine resolves it by |
+| `velox/<entity>/gql.go` | the fields a list of the entity can be ordered by |
+| `velox/node_gql.go` | `Noder`, `NodeTypes` |
 
 What this code calls at run time is `contrib/graphql/gqlinput`: the where
 input as a condition and as a document, the direction of an order input, the
@@ -760,7 +785,9 @@ VELOX_ORM_TEST_POSTGRES='postgres://...' go test ./tests/orm/     # Postgres
 `tests/orm/` compares against the current generator's code on the same
 schema (a randomized differential test, and the JSON of the same rows) and
 runs the examples above; `tests/orm/shapes/` runs 85 schema shapes, what must
-not compile, and the schemas the generator refuses; `orm/ormgen` regenerates
-both trees in-process and fails when the checked-in code is not what the
-generator writes; `tests/orm/bench_test.go` compares allocations between the
-two. The suites cover 94% of the statements of `orm` and 92% of `orm/ormgen`.
+not compile, and the schemas the generator refuses; the generator's own
+tests (`internal/ormgen`, `contrib/graphql/ormgql`) regenerate both trees
+in-process and fail when the checked-in code is not what the generator
+writes; `tests/orm/bench_test.go` compares allocations between the
+two. The suites cover 94% of the statements of `orm`, 85% of the generator
+(`internal/ormgen`) and 87% of its GraphQL extension.

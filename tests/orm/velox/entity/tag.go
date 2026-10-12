@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/tests/orm/velox/internal/slots"
@@ -596,70 +595,6 @@ func (q *TagQuery) WithChildren(opts ...*TagQuery) *TagQuery {
 	}
 	q.c.Load(TagMeta.Edges[2], o, len(opts))
 	return q
-}
-
-// IsNode marks Tag as a node of the GraphQL schema.
-//
-//go:noinline
-func (*Tag) IsNode() {}
-
-// tagOrderColumns maps each field a list of Tag can be ordered by, as the
-// schema names it (the constants of tag.OrderField), to its column.
-var tagOrderColumns = map[string]string{
-	"NAME": "name",
-}
-
-// TagOrder is the ordering a request asks for: the orderBy argument of a
-// GraphQL connection. Without a Field it orders by the id.
-type TagOrder struct {
-	Direction gqlinput.OrderDirection `json:"direction"`
-	Field     tag.OrderField          `json:"field"`
-}
-
-// Term returns the order term of the input, for OrderBy; the term of a nil
-// input orders by nothing.
-//
-//go:noinline
-func (o *TagOrder) Term() predicate.TagOrderTerm {
-	if o == nil {
-		return predicate.TagOrderTerm{}
-	}
-	return predicate.TagOrderTerm(orm.OrderTerm(&TagMeta, tagOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
-}
-
-// Posts resolves the "posts" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (velox.WithExecutor).
-// where is a *filter.PostWhereInput, or nil.
-//
-//go:noinline
-func (e *Tag) Posts(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *PostOrder, where interface{ P() predicate.Post }) (*PostConnection, error) {
-	q := e.QueryPosts(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
-	if where != nil {
-		q.Where(where.P())
-	}
-	return q.Paginate(ctx, after, first, before, last)
-}
-
-// Parent resolves the "parent" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Tag) Parent(ctx context.Context) (*Tag, error) {
-	v, err := e.Edges.ParentOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryParent(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
-}
-
-// Children resolves the "children" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (velox.WithExecutor).
-//
-//go:noinline
-func (e *Tag) Children(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *TagOrder) (*TagConnection, error) {
-	q := e.QueryChildren(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
-	return q.Paginate(ctx, after, first, before, last)
 }
 
 func init() { slots.Tag.Bind(&TagMeta) }

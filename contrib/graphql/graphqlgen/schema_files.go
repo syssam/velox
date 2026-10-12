@@ -153,7 +153,7 @@ func (g *Generator) jsonSliceSchemaOps(f *gen.Field) []whereInputFieldOp {
 // file path relative to the schema directory, and writes nothing: no schema
 // file and no Go code.
 //
-// It is for a generator that produces its own Go for the same schema (orm/ormgen):
+// It is for a generator that produces its own Go for the same schema (ormgql):
 // the SDL is the contract a GraphQL engine binds Go types against, and it
 // should not differ between the two. The schema is validated as Generate
 // validates it; schema hooks and the output writer, which belong to the files

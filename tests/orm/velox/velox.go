@@ -133,36 +133,3 @@ func NewConstraintError(msg string, wrap error) *velox.ConstraintError {
 func NewValidationError(name string, err error) *velox.ValidationError {
 	return velox.NewValidationError(name, err)
 }
-
-// Noder is an entity that is a node of the GraphQL schema: what the schema's
-// Node interface is bound to.
-type Noder interface{ IsNode() }
-
-// NodeType is one type of node of the GraphQL schema.
-type NodeType struct {
-	// Name is the entity's, and the GraphQL type's.
-	Name  string
-	Table string
-	// Get returns the node of this type with the id, read like the Get of
-	// the entity (its policy and interceptors apply), or velox.ErrNotFound. An
-	// id that is not of the type's id type is the id of no node of it; an
-	// integer of another integer type is the same id.
-	Get func(ctx context.Context, ex velox.Executor, id any) (Noder, error)
-}
-
-// NodeTypes returns the types of node, ordered by name: what a node(id:)
-// field has to go by when an id does not say its type. To find a node, ask
-// each type in turn and take the first answer that is not velox.ErrNotFound;
-// that is a query per type, so an application with many types keeps what it
-// learns (a prefix in the id, or which type answered for a range of ids).
-func NodeTypes() []NodeType {
-	return []NodeType{
-		{Name: "Comment", Table: "comments", Get: Comment.node},
-		{Name: "Like", Table: "likes", Get: Like.node},
-		{Name: "Pet", Table: "pets", Get: Pet.node},
-		{Name: "Post", Table: "posts", Get: Post.node},
-		{Name: "Tag", Table: "tags", Get: Tag.node},
-		{Name: "Token", Table: "tokens", Get: Token.node},
-		{Name: "User", Table: "users", Get: User.node},
-	}
-}

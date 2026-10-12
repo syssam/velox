@@ -34,19 +34,6 @@ func StatusValues() []StatusEnum {
 	return []StatusEnum{StatusDraft, StatusPublished, StatusArchived}
 }
 
-// OrderField is a field a list of Post can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.PostOrder.
-type OrderField string
-
-// The fields a list of Post can be ordered by.
-const (
-	OrderFieldCreatedAt OrderField = "CREATED_AT"
-	OrderFieldUpdatedAt OrderField = "UPDATED_AT"
-	OrderFieldTitle     OrderField = "TITLE"
-	OrderFieldStatus    OrderField = "STATUS"
-	OrderFieldViewCount OrderField = "VIEW_COUNT"
-)
-
 // The column names of Post.
 const (
 	ColumnID        = "id"

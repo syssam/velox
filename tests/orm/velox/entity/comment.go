@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/tests/orm/velox/comment"
@@ -575,62 +574,6 @@ func (q *CommentQuery) WithAuthor(opts ...*UserQuery) *CommentQuery {
 	}
 	q.c.Load(CommentMeta.Edges[1], o, len(opts))
 	return q
-}
-
-// IsNode marks Comment as a node of the GraphQL schema.
-//
-//go:noinline
-func (*Comment) IsNode() {}
-
-// commentOrderColumns maps each field a list of Comment can be ordered by, as the
-// schema names it (the constants of comment.OrderField), to its column.
-var commentOrderColumns = map[string]string{
-	"CREATED_AT": "created_at",
-	"UPDATED_AT": "updated_at",
-}
-
-// CommentOrder is the ordering a request asks for: the orderBy argument of a
-// GraphQL connection. Without a Field it orders by the id.
-type CommentOrder struct {
-	Direction gqlinput.OrderDirection `json:"direction"`
-	Field     comment.OrderField      `json:"field"`
-}
-
-// Term returns the order term of the input, for OrderBy; the term of a nil
-// input orders by nothing.
-//
-//go:noinline
-func (o *CommentOrder) Term() predicate.CommentOrderTerm {
-	if o == nil {
-		return predicate.CommentOrderTerm{}
-	}
-	return predicate.CommentOrderTerm(orm.OrderTerm(&CommentMeta, commentOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
-}
-
-// Post resolves the "post" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Comment) Post(ctx context.Context) (*Post, error) {
-	v, err := e.Edges.PostOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryPost(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
-}
-
-// Author resolves the "author" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Comment) Author(ctx context.Context) (*User, error) {
-	v, err := e.Edges.AuthorOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryAuthor(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
 }
 
 func init() { slots.Comment.Bind(&CommentMeta) }

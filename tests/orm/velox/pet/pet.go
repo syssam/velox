@@ -16,16 +16,6 @@ const (
 	ModelName = "Pet"
 )
 
-// OrderField is a field a list of Pet can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.PetOrder.
-type OrderField string
-
-// The fields a list of Pet can be ordered by.
-const (
-	OrderFieldName    OrderField = "NAME"
-	OrderFieldOwnerID OrderField = "OWNER_ID"
-)
-
 // The column names of Pet.
 const (
 	ColumnID      = "id"

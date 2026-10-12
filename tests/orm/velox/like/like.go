@@ -16,17 +16,6 @@ const (
 	ModelName = "Like"
 )
 
-// OrderField is a field a list of Like can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.LikeOrder.
-type OrderField string
-
-// The fields a list of Like can be ordered by.
-const (
-	OrderFieldLikedAt OrderField = "LIKED_AT"
-	OrderFieldUserID  OrderField = "USER_ID"
-	OrderFieldPostID  OrderField = "POST_ID"
-)
-
 // The column names of Like.
 const (
 	ColumnID      = "id"

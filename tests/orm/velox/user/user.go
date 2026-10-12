@@ -35,21 +35,6 @@ func RoleValues() []RoleEnum {
 	return []RoleEnum{RoleAdmin, RoleUser, RoleGuest}
 }
 
-// OrderField is a field a list of User can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.UserOrder.
-type OrderField string
-
-// The fields a list of User can be ordered by.
-const (
-	OrderFieldCreatedAt OrderField = "CREATED_AT"
-	OrderFieldUpdatedAt OrderField = "UPDATED_AT"
-	OrderFieldName      OrderField = "NAME"
-	OrderFieldEmail     OrderField = "EMAIL"
-	OrderFieldAge       OrderField = "AGE"
-	OrderFieldNickname  OrderField = "NICKNAME"
-	OrderFieldRole      OrderField = "ROLE"
-)
-
 // The column names of User.
 const (
 	ColumnID        = "id"

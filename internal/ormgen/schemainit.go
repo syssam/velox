@@ -33,8 +33,8 @@ func basicType(f *vgen.Field, full string) string {
 
 // runtimeFields are the fields of e whose defaults or validators schemainit
 // stitches.
-func runtimeFields(e *ent) []*fld {
-	var fields []*fld
+func runtimeFields(e *Entity) []*Field {
+	var fields []*Field
 	for _, f := range e.Fields {
 		if f.Hidden || (f.IsID && !e.T.ID.UserDefined) {
 			continue
@@ -50,7 +50,7 @@ func runtimeFields(e *ent) []*fld {
 // can provide. Package entity marks such an entity, and the runtime
 // refuses to run it until schemainit has: an entity without its policy would
 // answer every caller.
-func hasRuntime(e *ent) bool {
+func hasRuntime(e *Entity) bool {
 	return len(runtimeFields(e)) > 0 || len(e.T.PolicyPositions()) > 0 || len(e.T.HookPositions()) > 0
 }
 
@@ -80,12 +80,12 @@ func scansDefault(f *vgen.Field) bool {
 // package whose compiled object changed, and a schema package's object
 // changes on any edit to it; with the schema read from here, such an edit
 // rebuilds this package and nothing that imports the entities.
-func (g *generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
+func (g *Generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 	schemaPath := graph.Schema
 	if schemaPath == "" {
 		return nil, fmt.Errorf("velox: the graph has no schema package path")
 	}
-	im := g.imports()
+	im := g.Imports()
 	im.use(ormPath, "orm")
 	slotsPkg := im.use(g.cfg.Package+"/internal/slots", "slots")
 	schemaPkg := im.use(schemaPath, "schemapkg")
@@ -218,7 +218,7 @@ func (g *generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 	out.WriteString("// Package schemainit stitches the defaults, validators, hooks and policies of the schema\n// package into the runtime tables of the entities. The root package of the generated tree\n// imports it, so a program that starts its queries there has them; one that uses the\n// entity package alone imports it itself:\n//\n//\timport _ \"" + g.cfg.Package + "/schemainit\"\npackage schemainit\n\n")
 	// An import block is what split reads the file by, even an empty one.
 	if b.Len() == 0 {
-		im = g.imports()
+		im = g.Imports()
 	}
 	out.WriteString(im.block())
 	out.WriteString("\n")
@@ -229,7 +229,7 @@ func (g *generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 // slots generates the package that holds a slot per entity with schema
 // runtime: the one thing package entity and package schemainit share. It
 // changes when such an entity is added or removed, not when a field is.
-func (g *generator) slots() ([]byte, error) {
+func (g *Generator) slots() ([]byte, error) {
 	var b bytes.Buffer
 	for _, e := range g.ents {
 		if hasRuntime(e) {

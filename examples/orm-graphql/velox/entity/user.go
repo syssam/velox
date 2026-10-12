@@ -12,7 +12,6 @@ import (
 	"example.com/orm-graphql/velox/predicate"
 	"example.com/orm-graphql/velox/user"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 )
@@ -531,51 +530,6 @@ func (q *UserQuery) WithTodos(opts ...*TodoQuery) *UserQuery {
 	}
 	q.c.Load(UserMeta.Edges[0], o, len(opts))
 	return q
-}
-
-// IsNode marks User as a node of the GraphQL schema.
-//
-//go:noinline
-func (*User) IsNode() {}
-
-// userOrderColumns maps each field a list of User can be ordered by, as the
-// schema names it (the constants of user.OrderField), to its column.
-var userOrderColumns = map[string]string{
-	"CREATED_AT": "created_at",
-	"UPDATED_AT": "updated_at",
-	"NAME":       "name",
-	"EMAIL":      "email",
-}
-
-// UserOrder is the ordering a request asks for: the orderBy argument of a
-// GraphQL connection. Without a Field it orders by the id.
-type UserOrder struct {
-	Direction gqlinput.OrderDirection `json:"direction"`
-	Field     user.OrderField         `json:"field"`
-}
-
-// Term returns the order term of the input, for OrderBy; the term of a nil
-// input orders by nothing.
-//
-//go:noinline
-func (o *UserOrder) Term() predicate.UserOrderTerm {
-	if o == nil {
-		return predicate.UserOrderTerm{}
-	}
-	return predicate.UserOrderTerm(orm.OrderTerm(&UserMeta, userOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
-}
-
-// Todos resolves the "todos" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (velox.WithExecutor).
-// where is a *filter.TodoWhereInput, or nil.
-//
-//go:noinline
-func (e *User) Todos(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *TodoOrder, where interface{ P() predicate.Todo }) (*TodoConnection, error) {
-	q := e.QueryTodos(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
-	if where != nil {
-		q.Where(where.P())
-	}
-	return q.Paginate(ctx, after, first, before, last)
 }
 
 func init() { slots.User.Bind(&UserMeta) }

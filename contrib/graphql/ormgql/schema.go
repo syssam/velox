@@ -1,4 +1,4 @@
-package ormgen
+package ormgql
 
 import (
 	"bytes"
@@ -14,25 +14,8 @@ import (
 
 	vgen "github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/contrib/graphql/graphqlgen"
+	"github.com/syssam/velox/internal/ormgen"
 )
-
-// GraphQL asks Generate for the GraphQL layer of the schema as well: the
-// schema files, and the Go types a GraphQL engine binds them to.
-//
-// The schema text is velox's, unchanged: what a client of an application
-// sees does not depend on which generator wrote the Go. The Go is derived
-// from that text, type by type and field by field, so the two cannot
-// disagree: an order input and its field enum in package entity, a where
-// input per entity in package filter, and on each entity a method per edge
-// that the engine calls to resolve it.
-type GraphQL struct {
-	// Dir is the directory the .graphql files are written to.
-	Dir string
-	// Schema holds velox's schema options: the name of the root file
-	// (SchemaFilename), how the schema is split over files, where inputs.
-	// The package paths and what Generate itself decides are filled in.
-	Schema graphqlgen.Config
-}
 
 // gqlWhere is one field of a where input.
 type gqlWhere struct {
@@ -50,7 +33,7 @@ const (
 )
 
 type gqlEdge struct {
-	X      *edg
+	X      *ormgen.Edge
 	Method string
 	Kind   int
 	Order  int // 0: no orderBy argument, 1: one order, 2: a list of them
@@ -63,7 +46,7 @@ type gqlOrder struct{ Value, Const, Column string }
 // and the entity whose where input its elements are.
 type gqlNeighbor struct {
 	At     int
-	Target *ent
+	Target *ormgen.Entity
 }
 
 // gqlEnt is what the schema says of one entity.
@@ -109,9 +92,9 @@ func goModel(d *ast.Definition) (path, name string) {
 
 // graphql generates the schema text and reads from it what Go each entity
 // needs. It returns the schema files by name.
-func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
-	cfg := g.cfg.GraphQL.Schema
-	cfg.ORMPackage, cfg.OutDir = g.cfg.Package, g.cfg.Target
+func (ext *extension) read(graph *vgen.Graph) (map[string]string, error) {
+	cfg := ext.cfg.Schema
+	cfg.ORMPackage, cfg.OutDir = ext.g.Package(), ext.g.Target()
 	cfg.SchemaGenerator, cfg.WithoutGQLGen = true, true
 	cfg.RelayConnection, cfg.Ordering, cfg.RelaySpec = true, true, true
 	// Inputs of mutations are the application's own: it moves their fields
@@ -125,12 +108,12 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 
 	// The Go types of this tree, where the schema names velox's.
 	enumModel := map[string]string{} // velox's enum type -> this generator's
-	for _, e := range g.ents {
-		n, types, _, _ := g.enumNames(e)
+	for _, e := range ext.g.Entities() {
+		n, types := ext.g.LeafNames(e)
 		for f, t := range types {
-			enumModel[g.cfg.Package+"/"+strings.ToLower(e.Name)+"."+f.F.StructField()] = g.cfg.Package + "/" + e.Pkg + "." + t
+			enumModel[ext.g.Package()+"/"+strings.ToLower(e.Name)+"."+f.F.StructField()] = ext.g.Package() + "/" + e.Pkg + "." + t
 		}
-		enumModel[g.cfg.Package+"/entity."+e.Name+"OrderField"] = g.cfg.Package + "/" + e.Pkg + "." + n.orderType
+		enumModel[ext.g.Package()+"/entity."+e.Name+"OrderField"] = ext.g.Package() + "/" + e.Pkg + "." + n.Ext[orderTypeKey]
 	}
 	const relay = "github.com/syssam/velox/contrib/graphql/gqlrelay."
 	const bytesScalar = "github.com/syssam/velox/contrib/graphql/gqlgenrelay.Bytes"
@@ -139,9 +122,9 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			model := goModelRx.FindStringSubmatch(m)[1]
 			switch {
 			case model == relay+"Cursor":
-				model = veloxPath + ".Cursor"
+				model = ormgen.VeloxPath + ".Cursor"
 			case model == relay+"PageInfo":
-				model = veloxPath + ".PageInfo"
+				model = ormgen.VeloxPath + ".PageInfo"
 			case model == bytesScalar:
 				// velox binds the scalar of a bytes field to a type of its
 				// gqlgen runtime. Which type marshals []byte is the
@@ -185,30 +168,30 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			defs[d.Name] = d
 		}
 	}
-	g.gql = map[*ent]*gqlEnt{}
-	typeOf := map[string]*ent{} // GraphQL object type -> entity
-	entityPkg := g.cfg.Package + "/entity"
+	ext.ents = map[*ormgen.Entity]*gqlEnt{}
+	typeOf := map[string]*ormgen.Entity{} // GraphQL object type -> entity
+	entityPkg := ext.g.Package() + "/entity"
 	for _, d := range defs {
-		if path, name := goModel(d); d.Kind == ast.Object && path == entityPkg && g.by[name] != nil {
+		if path, name := goModel(d); d.Kind == ast.Object && path == entityPkg && ext.g.Entity(name) != nil {
 			if d.Name != name {
 				return nil, fmt.Errorf("velox: graphql: entity %s is the GraphQL type %s: a renamed type (graphql.Type on the entity) is not supported yet", name, d.Name)
 			}
-			typeOf[d.Name] = g.by[name]
+			typeOf[d.Name] = ext.g.Entity(name)
 		}
 	}
 	// The packages of the fields' Go types get their names in package
 	// filter before any entity's package does: an entity called Time must
 	// not take "time" from time.Time.
-	for _, e := range g.ents {
+	for _, e := range ext.g.Entities() {
 		for _, f := range e.Fields {
-			if ref, err := goTypeOf(f.F); err == nil && ref.PkgPath != "" && f.Enum == "" {
-				if got := g.filterIm.use(ref.PkgPath, ref.PkgName); got != ref.PkgName && ref.PkgName != "" {
+			if ref, err := ormgen.GoTypeOf(f.F); err == nil && ref.PkgPath != "" && f.Enum == "" {
+				if got := ext.filterIm.Use(ref.PkgPath, ref.PkgName); got != ref.PkgName && ref.PkgName != "" {
 					return nil, fmt.Errorf("velox: graphql: %s.%s: two packages named %q are used as field types", e.Name, f.F.Name, ref.PkgName)
 				}
 			}
 		}
 	}
-	for _, e := range g.ents {
+	for _, e := range ext.g.Entities() {
 		// An entity may have a where input without a type of its own: it
 		// is hidden from the schema and still filtered through.
 		d, wd := defs[e.Name], defs[e.Name+"WhereInput"]
@@ -222,7 +205,7 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			continue
 		}
 		q := &gqlEnt{HasWhere: wd != nil}
-		g.gql[e] = q
+		ext.ents[e] = q
 		if d == nil {
 			continue
 		}
@@ -234,25 +217,25 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 				}
 			}
 		}
-		if err := g.gqlEdges(e, q, d, typeOf); err != nil {
+		if err := ext.gqlEdges(e, q, d, typeOf); err != nil {
 			return nil, err
 		}
 		if od := defs[e.Name+"OrderField"]; od != nil && od.Kind == ast.Enum {
-			if err := g.gqlOrder(e, q, od, sdlGen); err != nil {
+			if err := ext.gqlOrder(e, q, od, sdlGen); err != nil {
 				return nil, err
 			}
 		}
 	}
 	// Where inputs after every entity is known to have one or not: a
 	// has...With field names its target's.
-	for _, e := range g.ents {
-		if q := g.gql[e]; q != nil && q.HasWhere {
-			if err := g.gqlWhere(e, q, defs[e.Name+"WhereInput"], sdlGen); err != nil {
+	for _, e := range ext.g.Entities() {
+		if q := ext.ents[e]; q != nil && q.HasWhere {
+			if err := ext.gqlWhere(e, q, defs[e.Name+"WhereInput"], sdlGen); err != nil {
 				return nil, err
 			}
 		}
 	}
-	if err := g.gqlBindings(defs, typeOf); err != nil {
+	if err := ext.gqlBindings(defs, typeOf); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -264,23 +247,23 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 // a scalar type for a typed JSON field, an OrNil accessor for nillable
 // bytes): left alone, the schema would name them, and the first to find out
 // would be an engine's build.
-func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[string]*ent) error {
-	pkg := g.cfg.Package
+func (ext *extension) gqlBindings(defs map[string]*ast.Definition, typeOf map[string]*ormgen.Entity) error {
+	pkg := ext.g.Package()
 	known := map[string]bool{}
 	nodes := false
-	for _, e := range g.ents {
+	for _, e := range ext.g.Entities() {
 		known[pkg+"/entity."+e.Name] = true
 		known[pkg+"/entity."+e.Name+"Connection"] = true
 		known[pkg+"/entity."+e.Name+"Edge"] = true
-		n, types, _, _ := g.enumNames(e)
+		n, types := ext.g.LeafNames(e)
 		for _, t := range types {
 			known[pkg+"/"+e.Pkg+"."+t] = true
 		}
-		if q := g.gql[e]; q != nil {
+		if q := ext.ents[e]; q != nil {
 			nodes = nodes || q.Node
 			if q.HasOrder {
 				known[pkg+"/entity."+e.Name+"Order"] = true
-				known[pkg+"/"+e.Pkg+"."+n.orderType] = true
+				known[pkg+"/"+e.Pkg+"."+n.Ext[orderTypeKey]] = true
 			}
 			if q.HasWhere {
 				known[pkg+"/filter."+e.Name+"WhereInput"] = true
@@ -290,7 +273,7 @@ func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[stri
 	if nodes {
 		known[pkg+".Noder"] = true
 		for _, name := range []string{"Noder", "NodeType", "NodeTypes"} {
-			if g.by[name] != nil {
+			if ext.g.Entity(name) != nil {
 				return fmt.Errorf("velox: graphql: the entity %s has the name of what the root package declares for the nodes of the schema", name)
 			}
 		}
@@ -299,7 +282,7 @@ func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[stri
 	// own under the same directory (the Go type of an enum field) is none
 	// of its business.
 	written := map[string]bool{pkg: true, pkg + "/entity": true, pkg + "/filter": true, pkg + "/predicate": true}
-	for _, e := range g.ents {
+	for _, e := range ext.g.Entities() {
 		written[pkg+"/"+e.Pkg] = true
 	}
 	names := make([]string, 0, len(defs))
@@ -326,7 +309,7 @@ func (g *generator) gqlBindings(defs map[string]*ast.Definition, typeOf map[stri
 				members[f.GoName] = true
 			}
 		}
-		if q := g.gql[e]; q != nil {
+		if q := ext.ents[e]; q != nil {
 			for _, x := range q.Edges {
 				members[x.Method] = true
 			}
@@ -354,8 +337,8 @@ func contains(list []string, s string) bool {
 }
 
 // gqlEdges reads which edges of e the schema exposes, and how.
-func (g *generator) gqlEdges(e *ent, q *gqlEnt, d *ast.Definition, typeOf map[string]*ent) error {
-	edges := map[string]*edg{}
+func (ext *extension) gqlEdges(e *ormgen.Entity, q *gqlEnt, d *ast.Definition, typeOf map[string]*ormgen.Entity) error {
+	edges := map[string]*ormgen.Edge{}
 	for _, x := range e.Edges {
 		edges[normalized(x.E.Name)] = x
 	}
@@ -433,14 +416,13 @@ func (g *generator) gqlEdges(e *ent, q *gqlEnt, d *ast.Definition, typeOf map[st
 // application imports package entity: on a 454-entity schema these were
 // 12,079 constants, and a fifth of what a package that only returns an entity
 // took to compile.
-func (g *generator) gqlOrder(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlgen.Generator) error {
-	if g.taken[e.Name+"Order"] {
+func (ext *extension) gqlOrder(e *ormgen.Entity, q *gqlEnt, d *ast.Definition, sdl *graphqlgen.Generator) error {
+	if !ext.g.Reserve(e.Name + "Order") {
 		return fmt.Errorf("velox: graphql: the order type %sOrder collides with another generated name", e.Name)
 	}
-	g.taken[e.Name+"Order"] = true
 	// The names the entity's package has given out so far: these come after.
-	n, _, _, _ := g.enumNames(e)
-	q.OrderType = n.orderType
+	n, _ := ext.g.LeafNames(e)
+	q.OrderType = n.Ext[orderTypeKey]
 	columns := map[string]string{}
 	for _, of := range sdl.OrderFields(e.T) {
 		if of.Field == nil {
@@ -454,7 +436,7 @@ func (g *generator) gqlOrder(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 		if !ok {
 			return fmt.Errorf("velox: graphql: %sOrderField has the value %s, which no field of %s is ordered by", e.Name, v.Name, e.Name)
 		}
-		order = append(order, gqlOrder{Value: v.Name, Const: n.unique("OrderField"+vgen.Pascal(strings.ToLower(v.Name)), "Value"), Column: col})
+		order = append(order, gqlOrder{Value: v.Name, Const: n.Unique("OrderField"+vgen.Pascal(strings.ToLower(v.Name)), "Value"), Column: col})
 	}
 	q.HasOrder, q.Order = true, order
 	return nil
@@ -481,15 +463,15 @@ var whereOps = map[string]struct {
 // with In, or a field called name_in; hasPosts is the edge, or a boolean
 // field. Read back from names, the input of one real shape filtered a
 // column the schema had not made filterable.
-func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlgen.Generator) error {
-	fields := map[*vgen.Field]*fld{}
+func (ext *extension) gqlWhere(e *ormgen.Entity, q *gqlEnt, d *ast.Definition, sdl *graphqlgen.Generator) error {
+	fields := map[*vgen.Field]*ormgen.Field{}
 	for _, f := range e.Fields {
 		fields[f.F] = f
 	}
 	if e.ID != nil {
 		fields[e.ID.F] = e.ID
 	}
-	edges := map[*vgen.Edge]*edg{}
+	edges := map[*vgen.Edge]*ormgen.Edge{}
 	for _, x := range e.Edges {
 		edges[x.E] = x
 	}
@@ -499,7 +481,7 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 	}
 	members := map[string]bool{"Predicates": true, "Not": true, "Or": true, "And": true}
 	methods := map[string]bool{"P": true, "UnmarshalGQL": true, "MarshalGQL": true, "UnmarshalJSON": true, "MarshalJSON": true}
-	enumAt := map[*fld]int{}
+	enumAt := map[*ormgen.Field]int{}
 	for i, f := range d.Fields {
 		if i < 3 {
 			if want := [...]string{"not", "and", "or"}[i]; f.Name != want {
@@ -523,7 +505,7 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 				w.Plan = fmt.Sprintf("{Op: orm.OpHasEdge, Edge: %sEdges[%d]}", lowerFirst(e.Name), x.Index)
 				break
 			}
-			if t := g.gql[x.Target]; t == nil || !t.HasWhere {
+			if t := ext.ents[x.Target]; t == nil || !t.HasWhere {
 				return fmt.Errorf("velox: graphql: %sWhereInput.%s filters %s, which has no where input", e.Name, f.Name, x.Target.Name)
 			}
 			w.GoName, w.GoType = "Has"+x.GoName+"With", "[]*"+x.Target.Name+"WhereInput"
@@ -544,9 +526,9 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 			}
 			switch op.shape {
 			case '1':
-				w.GoType = "*" + g.filterType(c)
+				w.GoType = "*" + ext.filterType(c)
 			case 'n':
-				w.GoType = "[]" + g.filterType(c)
+				w.GoType = "[]" + ext.filterType(c)
 			default:
 				w.GoType = "bool"
 			}
@@ -580,150 +562,10 @@ func (g *generator) gqlWhere(e *ent, q *gqlEnt, d *ast.Definition, sdl *graphqlg
 	return nil
 }
 
-func lowerFirst(s string) string { return strings.ToLower(s[:1]) + s[1:] }
-
-// filterType is the Go type of a column as package filter writes it; the
-// package it comes from is imported under filterImports.
-func (g *generator) filterType(c *fld) string {
-	if c.Enum != "" {
-		// The type's name is the same everywhere; the package's alias is
-		// this package's own.
-		owner := g.enumOwner[c]
-		return g.filterIm.use(g.cfg.Package+"/"+owner.Pkg, g.filterAlias(owner)) + "." + g.enumType[c]
-	}
-	ref, err := goTypeOf(c.F)
-	if err != nil {
-		return "any"
-	}
-	if ref.PkgPath != "" {
-		g.filterIm.use(ref.PkgPath, ref.PkgName)
-	}
-	return ref.Expr
-}
-
-// filterAlias is the name package filter imports an entity's package under:
-// its own, unless a name of the generated code already has it.
-func (g *generator) filterAlias(e *ent) string {
-	switch e.Pkg {
-	case "orm", "predicate", "filter", "i", "p":
-		return e.Pkg + "pkg"
-	}
-	return e.Pkg
-}
-
-// filters generates package filter: a where input per entity that has one in
-// the schema.
-//
-// A where input is a struct with a field per filter the schema offers,
-// because that is what a GraphQL engine fills in: it binds an input object
-// field by field. What the fields mean is data (an gqlinput.WhereField each), and
-// one function of the runtime turns any of them into a predicate, so the
-// package holds no code per field. As a type that only held a predicate it
-// would have cost the 312 services of the benchmark 5 to 8% less to compile,
-// and every application that reads or sets a filter in Go its code.
-func (g *generator) filters() (map[string][]byte, error) {
-	// The where fields were typed while the schema was read: the imports
-	// their types need are registered already.
-	im := g.filterIm
-	im.use(ormPath, "orm")
-	im.use(gqlinputPath, "gqlinput")
-	im.use(g.cfg.Package+"/predicate", "predicate")
-	var b bytes.Buffer
-	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
-	inputs := 0
-	for _, e := range g.ents {
-		q := g.gql[e]
-		if q == nil || !q.HasWhere {
-			continue
-		}
-		inputs++
-		w("\n%s%s\n\n", fileMarker, fileName(e))
-		w("// %[1]sWhereInput is the filter a request gives for a list of %[1]s: the where\n// argument of a GraphQL connection. A field that is nil, or false for a flag,\n// was not given.\ntype %[1]sWhereInput struct {\n", e.Name)
-		w("\t// Predicates are conditions the application adds in Go.\n\tPredicates []%s `json:\"-\"`\n", e.pred())
-		w("\tNot *%[1]sWhereInput `json:\"not,omitempty\"`\n\tOr []*%[1]sWhereInput `json:\"or,omitempty\"`\n\tAnd []*%[1]sWhereInput `json:\"and,omitempty\"`\n\n", e.Name)
-		hasEdge := false
-		for _, f := range q.Where {
-			w("\t%s %s `json:\"%s,omitempty\"`\n", f.GoName, f.GoType, f.Name)
-			hasEdge = hasEdge || strings.Contains(f.Plan, "Edges[")
-		}
-		w("}\n\n")
-		if hasEdge {
-			w("var %sEdges = %s.EdgeMetas()\n\n", lowerFirst(e.Name), im.use(g.cfg.Package+"/"+e.Pkg, g.filterAlias(e)))
-		}
-		if len(q.Enums) > 0 {
-			w("// %sEnums are the values of the enums %sWhereInput filters on, by their names in the schema.\nvar %sEnums = [...]map[string]string{\n", lowerFirst(e.Name), e.Name, lowerFirst(e.Name))
-			for _, values := range q.Enums {
-				w("\t{")
-				for i, v := range values {
-					if i > 0 {
-						w(", ")
-					}
-					w("%q: %q", v.Name, v.Value)
-				}
-				w("},\n")
-			}
-			w("}\n\n")
-		}
-		w("// %sWhere says what each field of %sWhereInput means, in the order of the struct.\nvar %sWhere = []gqlinput.WhereField{\n", lowerFirst(e.Name), e.Name, lowerFirst(e.Name))
-		for _, f := range q.Where {
-			w("\t%s, // %s\n", f.Plan, f.Name)
-		}
-		w("}\n\n")
-		if len(q.Neighbors) > 0 {
-			// After every plan exists: two inputs may filter through each
-			// other, which an initializer could not say.
-			w("func init() {\n")
-			for _, n := range q.Neighbors {
-				w("\t%sWhere[%d].Neighbor = %sWhere // %s\n", lowerFirst(e.Name), n.At, lowerFirst(n.Target.Name), q.Where[n.At].Name)
-			}
-			w("}\n\n")
-		}
-		w("// P returns the condition the input describes: none for a nil or an empty\n// input, and one that fails the query for an input that cannot be a condition\n// (an empty input nested in not, and, or; nesting deeper than gqlinput.MaxWhereDepth).\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) P() %[2]s { return %[2]s(gqlinput.Where(i, %[3]sWhere)) }\n\n", e.Name, e.pred(), lowerFirst(e.Name))
-		w(`// UnmarshalGQL reads the input from the object given for it: the where argument
-// of a request as the engine hands it over, or a filter kept as a document. See
-// gqlinput.DecodeWhere for what it accepts and what it refuses.
-//
-//go:noinline
-func (i *%[1]sWhereInput) UnmarshalGQL(v any) error { return gqlinput.DecodeWhere(i, %[2]sWhere, v) }
-
-// MarshalGQL writes the input as the document UnmarshalGQL reads. With
-// UnmarshalGQL it tells an engine that the type reads itself, so that it
-// generates no decoder of its own for it.
-//
-//go:noinline
-func (i %[1]sWhereInput) MarshalGQL(w %[3]s.Writer) { gqlinput.WriteWhere(w, &i, %[2]sWhere) }
-
-// UnmarshalJSON reads the input from the JSON text of its document, as
-// UnmarshalGQL reads the object: json.Unmarshal refuses a key the input does
-// not have, where the struct alone would let it pass.
-//
-//go:noinline
-func (i *%[1]sWhereInput) UnmarshalJSON(b []byte) error { return gqlinput.DecodeWhere(i, %[2]sWhere, b) }
-
-// MarshalJSON writes the document of the input: json.Marshal of an input is
-// what UnmarshalJSON reads back as the same conditions. See gqlinput.EncodeWhere.
-//
-//go:noinline
-func (i %[1]sWhereInput) MarshalJSON() ([]byte, error) { return gqlinput.EncodeWhere(&i, %[2]sWhere) }
-
-`, e.Name, lowerFirst(e.Name), im.use("io", "io"))
-	}
-	if inputs == 0 {
-		return nil, nil
-	}
-	var out bytes.Buffer
-	out.WriteString(header)
-	out.WriteString("// Package filter holds the where inputs of the GraphQL schema: the filter a request\n// gives for a list of an entity, and its conversion to a predicate.\npackage filter\n\n")
-	out.WriteString(im.block())
-	out.WriteString("\n")
-	out.Write(b.Bytes())
-	return split(out.Bytes(), "filter")
-}
-
 // writeSchema writes the schema files, and removes the ones an earlier
 // generation wrote for entities that are gone.
-func (g *generator) writeSchema(files map[string]string) error {
-	dir := g.cfg.GraphQL.Dir
+func (ext *extension) writeSchema(files map[string]string) error {
+	dir := ext.cfg.Dir
 	for name, src := range files {
 		path := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -746,26 +588,6 @@ func (g *generator) writeSchema(files map[string]string) error {
 			if err := os.Remove(path); err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// distinctEnum reports an enum the schema cannot tell the values of apart:
-// two values under one name, or a value stored as what another is called. A
-// where input reads a value by its name or as it is stored, and for such an
-// enum one text would be two values.
-func distinctEnum(values []graphqlgen.EnumValue) error {
-	byName := make(map[string]string, len(values))
-	for _, v := range values {
-		if other, taken := byName[v.Name]; taken {
-			return fmt.Errorf("the values %q and %q are both called %s in the schema", other, v.Value, v.Name)
-		}
-		byName[v.Name] = v.Value
-	}
-	for _, v := range values {
-		if other, named := byName[v.Value]; named && other != v.Value {
-			return fmt.Errorf("the value %q is what the value %q is called in the schema (%s)", v.Value, other, v.Value)
 		}
 	}
 	return nil

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/tests/orm/velox/internal/slots"
@@ -569,63 +568,6 @@ func (q *LikeQuery) WithPost(opts ...*PostQuery) *LikeQuery {
 	}
 	q.c.Load(LikeMeta.Edges[1], o, len(opts))
 	return q
-}
-
-// IsNode marks Like as a node of the GraphQL schema.
-//
-//go:noinline
-func (*Like) IsNode() {}
-
-// likeOrderColumns maps each field a list of Like can be ordered by, as the
-// schema names it (the constants of like.OrderField), to its column.
-var likeOrderColumns = map[string]string{
-	"LIKED_AT": "liked_at",
-	"USER_ID":  "user_id",
-	"POST_ID":  "post_id",
-}
-
-// LikeOrder is the ordering a request asks for: the orderBy argument of a
-// GraphQL connection. Without a Field it orders by the id.
-type LikeOrder struct {
-	Direction gqlinput.OrderDirection `json:"direction"`
-	Field     like.OrderField         `json:"field"`
-}
-
-// Term returns the order term of the input, for OrderBy; the term of a nil
-// input orders by nothing.
-//
-//go:noinline
-func (o *LikeOrder) Term() predicate.LikeOrderTerm {
-	if o == nil {
-		return predicate.LikeOrderTerm{}
-	}
-	return predicate.LikeOrderTerm(orm.OrderTerm(&LikeMeta, likeOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
-}
-
-// User resolves the "user" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Like) User(ctx context.Context) (*User, error) {
-	v, err := e.Edges.UserOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryUser(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
-}
-
-// Post resolves the "post" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Like) Post(ctx context.Context) (*Post, error) {
-	v, err := e.Edges.PostOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryPost(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
 }
 
 func init() { slots.Like.Bind(&LikeMeta) }

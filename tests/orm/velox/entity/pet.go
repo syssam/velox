@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/tests/orm/velox/pet"
@@ -522,49 +521,6 @@ func (q *PetQuery) WithOwner(opts ...*UserQuery) *PetQuery {
 	}
 	q.c.Load(PetMeta.Edges[0], o, len(opts))
 	return q
-}
-
-// IsNode marks Pet as a node of the GraphQL schema.
-//
-//go:noinline
-func (*Pet) IsNode() {}
-
-// petOrderColumns maps each field a list of Pet can be ordered by, as the
-// schema names it (the constants of pet.OrderField), to its column.
-var petOrderColumns = map[string]string{
-	"NAME":     "name",
-	"OWNER_ID": "owner_id",
-}
-
-// PetOrder is the ordering a request asks for: the orderBy argument of a
-// GraphQL connection. Without a Field it orders by the id.
-type PetOrder struct {
-	Direction gqlinput.OrderDirection `json:"direction"`
-	Field     pet.OrderField          `json:"field"`
-}
-
-// Term returns the order term of the input, for OrderBy; the term of a nil
-// input orders by nothing.
-//
-//go:noinline
-func (o *PetOrder) Term() predicate.PetOrderTerm {
-	if o == nil {
-		return predicate.PetOrderTerm{}
-	}
-	return predicate.PetOrderTerm(orm.OrderTerm(&PetMeta, petOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
-}
-
-// Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Pet) Owner(ctx context.Context) (*User, error) {
-	v, err := e.Edges.OwnerOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryOwner(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
 }
 
 func init() {

@@ -654,7 +654,7 @@ func (Owner) Edges() []velox.Edge { return []velox.Edge{edge.To("bares", Bare.Ty
 func (Owner) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
 		want: builds,
-		generated: map[string][]string{"entity/owner.go": {
+		generated: map[string][]string{"entity/owner_gql.go": {
 			"func (e *Owner) Bares(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*BareConnection, error)",
 		}}},
 	// Names velox's schema loader rejects before the generator runs.

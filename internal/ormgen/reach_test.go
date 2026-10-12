@@ -146,8 +146,9 @@ func TestPackageEntityExportsNoConstants(t *testing.T) {
 			}
 		}
 	}
-	// And the order fields are where they went.
-	src, err := parser.ParseFile(token.NewFileSet(), "../../tests/orm/velox/user/user.go", nil, parser.SkipObjectResolution)
+	// And the order fields are where they went: the file of the GraphQL
+	// layer in the entity's own package.
+	src, err := parser.ParseFile(token.NewFileSet(), "../../tests/orm/velox/user/gql.go", nil, parser.SkipObjectResolution)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,12 +160,13 @@ func TestPackageEntityExportsNoConstants(t *testing.T) {
 		return !found
 	})
 	if !found {
-		t.Error("tests/db/user does not declare OrderFieldCreatedAt")
+		t.Error("tests/orm/velox/user/gql.go does not declare OrderFieldCreatedAt")
 	}
 }
 
 // TestPackageEntityDoesNotImportTheFilters pins the reach of the where
-// inputs: an edge method takes its filter as an interface (see gqlModel), so
+// inputs: an edge method takes its filter as an interface (see the entity
+// method of contrib/graphql/ormgql), so
 // a package that works with entities does not compile against the where
 // input of every entity.
 func TestPackageEntityDoesNotImportTheFilters(t *testing.T) {
@@ -196,6 +198,6 @@ func TestPackageEntityDoesNotImportTheFilters(t *testing.T) {
 		}
 	}
 	if whereEdges == 0 {
-		t.Error("no edge method of tests/db/entity takes a filter: the test tree no longer covers this")
+		t.Error("no edge method of tests/orm/velox/entity takes a filter: the test tree no longer covers this")
 	}
 }

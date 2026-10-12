@@ -22,7 +22,7 @@ const fileMarker = "//velox:file "
 // and which is not the name of the package's common file. A name with an
 // underscore takes a suffix: user_linux.go and note_test.go would be left
 // out of the build by their names.
-func fileName(e *ent) string {
+func fileName(e *Entity) string {
 	if strings.Contains(e.Pkg, "_") {
 		return e.Pkg + "_gen"
 	}

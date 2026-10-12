@@ -16,7 +16,7 @@ import (
 // as up to date, column for column and constraint name for constraint name,
 // and two generators of the same DDL drift (velox's two did, on the action
 // and on the name of a foreign key).
-func (g *generator) migrate(graph *vgen.Graph, files map[string][]byte) error {
+func (g *Generator) migrate(graph *vgen.Graph, files map[string][]byte) error {
 	out, err := vsql.NewDialect(vgen.NewJenniferGenerator(graph, g.cfg.Target)).GenMigrate()
 	if err != nil {
 		return fmt.Errorf("velox: migrate: %w", err)

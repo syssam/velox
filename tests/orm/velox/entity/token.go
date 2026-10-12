@@ -9,7 +9,6 @@ import (
 
 	uuid "github.com/google/uuid"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/tests/orm/velox/internal/slots"
@@ -546,53 +545,6 @@ func (q *TokenQuery) WithOwner(opts ...*UserQuery) *TokenQuery {
 	}
 	q.c.Load(TokenMeta.Edges[0], o, len(opts))
 	return q
-}
-
-// IsNode marks Token as a node of the GraphQL schema.
-//
-//go:noinline
-func (*Token) IsNode() {}
-
-// tokenOrderColumns maps each field a list of Token can be ordered by, as the
-// schema names it (the constants of token.OrderField), to its column.
-var tokenOrderColumns = map[string]string{
-	"NAME":   "name",
-	"TIER":   "tier",
-	"GRADE":  "grade",
-	"LABEL":  "label",
-	"ALIAS":  "alias",
-	"WEIGHT": "weight",
-}
-
-// TokenOrder is the ordering a request asks for: the orderBy argument of a
-// GraphQL connection. Without a Field it orders by the id.
-type TokenOrder struct {
-	Direction gqlinput.OrderDirection `json:"direction"`
-	Field     token.OrderField        `json:"field"`
-}
-
-// Term returns the order term of the input, for OrderBy; the term of a nil
-// input orders by nothing.
-//
-//go:noinline
-func (o *TokenOrder) Term() predicate.TokenOrderTerm {
-	if o == nil {
-		return predicate.TokenOrderTerm{}
-	}
-	return predicate.TokenOrderTerm(orm.OrderTerm(&TokenMeta, tokenOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
-}
-
-// Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
-//
-//go:noinline
-func (e *Token) Owner(ctx context.Context) (*User, error) {
-	v, err := e.Edges.OwnerOrErr()
-	if velox.IsNotLoaded(err) {
-		v, err = e.QueryOwner(velox.ExecutorFrom(ctx)).Only(ctx)
-	}
-	return v, velox.MaskNotFound(err)
 }
 
 func init() { slots.Token.Bind(&TokenMeta) }

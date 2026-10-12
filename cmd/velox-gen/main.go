@@ -14,6 +14,7 @@ import (
 	"github.com/syssam/velox/compiler"
 	vgen "github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/contrib/graphql/graphqlgen"
+	"github.com/syssam/velox/contrib/graphql/ormgql"
 	"github.com/syssam/velox/orm/ormgen"
 )
 
@@ -39,9 +40,9 @@ func main() {
 	}
 	gcfg := ormgen.Config{Target: *target, Package: *pkg}
 	if *graphqlSchema != "" {
-		gcfg.GraphQL = &ormgen.GraphQL{Dir: filepath.Dir(*graphqlSchema), Schema: graphqlgen.Config{
+		gcfg.Extensions = append(gcfg.Extensions, ormgql.New(ormgql.Config{Dir: filepath.Dir(*graphqlSchema), Schema: graphqlgen.Config{
 			SchemaFilename: filepath.Base(*graphqlSchema), SchemaSplitMode: graphqlgen.SchemaSplitPerEntity, WhereInputs: true,
-		}}
+		}}))
 	}
 	if err := ormgen.Generate(graph, gcfg); err != nil {
 		slog.Error("velox-gen: generating", "error", err)

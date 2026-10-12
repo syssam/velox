@@ -51,7 +51,7 @@ const Late = 1
 	}
 	// The imports of a file are the standard library's, then the rest.
 	want := map[string]struct {
-		imports  []string
+		Imports  []string
 		contains []string
 		absent   []string
 	}{
@@ -77,12 +77,12 @@ const Late = 1
 		if f.Name.Name != "p" {
 			t.Errorf("%s is in package %s", name, f.Name.Name)
 		}
-		var imports []string
+		var Imports []string
 		for _, s := range f.Imports {
-			imports = append(imports, strings.Trim(s.Path.Value, `"`))
+			Imports = append(Imports, strings.Trim(s.Path.Value, `"`))
 		}
-		if strings.Join(imports, " ") != strings.Join(w.imports, " ") {
-			t.Errorf("%s imports %v, want %v", name, imports, w.imports)
+		if strings.Join(Imports, " ") != strings.Join(w.Imports, " ") {
+			t.Errorf("%s imports %v, want %v", name, Imports, w.Imports)
 		}
 		for _, s := range w.contains {
 			if !strings.Contains(string(got), s) {
@@ -100,7 +100,7 @@ const Late = 1
 // A file name must not be one the go command reads a build constraint from.
 func TestFileName(t *testing.T) {
 	for pkg, want := range map[string]string{"user": "user", "linux": "linux", "user_linux": "user_linux_gen", "note_test": "note_test_gen"} {
-		if got := fileName(&ent{Pkg: pkg}); got != want {
+		if got := fileName(&Entity{Pkg: pkg}); got != want {
 			t.Errorf("fileName(%q) = %q, want %q", pkg, got, want)
 		}
 	}

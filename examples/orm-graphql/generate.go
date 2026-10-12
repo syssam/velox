@@ -16,6 +16,7 @@ import (
 	"github.com/syssam/velox/compiler"
 	"github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/contrib/graphql/graphqlgen"
+	"github.com/syssam/velox/contrib/graphql/ormgql"
 	"github.com/syssam/velox/orm/ormgen"
 )
 
@@ -34,11 +35,13 @@ func main() {
 	err = ormgen.Generate(graph, ormgen.Config{
 		Target:  target,
 		Package: pkg,
-		GraphQL: &ormgen.GraphQL{Dir: "./graphql", Schema: graphqlgen.Config{
+		// The GraphQL layer is not the ORM's: it is an extension of the
+		// generator, in files of its own (*_gql.go, filter/).
+		Extensions: []ormgen.Extension{ormgql.New(ormgql.Config{Dir: "./graphql", Schema: graphqlgen.Config{
 			SchemaFilename:  "velox.graphql",
 			SchemaSplitMode: graphqlgen.SchemaSplitPerEntity,
 			WhereInputs:     true,
-		}},
+		}})},
 	})
 	if err != nil {
 		slog.Error("generating", "error", err)

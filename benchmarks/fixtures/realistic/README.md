@@ -274,7 +274,7 @@ real schema has at most 30 edges on an entity (median 3).
 The language server, cold `gopls check` of one service with the generated
 code in the workspace: 4.8-5.0 GB before, 2.8-3.4 GB after.
 
-Pinned by `orm/ormgen/reach_test.go::TestBuildersStayOutOfTheTypeGraph`.
+Pinned by `internal/ormgen/reach_test.go::TestBuildersStayOutOfTheTypeGraph`.
 
 ### Tried the same day, without effect
 
@@ -363,7 +363,7 @@ generic type's methods are compiled by every package that can reach one of
 its instantiations, called or not: a service that could reach 450 query
 types compiled `Page[*RecN].StartCursor` and `EndCursor` 450 times.
 `iter.Seq2` has no methods and costs nothing. `StartCursor` and `EndCursor`
-are now fields; `orm/ormgen/reach_test.go` pins which generic types a generated
+are now fields; `internal/ormgen/reach_test.go` pins which generic types a generated
 signature may name, `orm` that `Page` has no methods.
 
 What is left is the size of 450 query types, in proportion to their methods:

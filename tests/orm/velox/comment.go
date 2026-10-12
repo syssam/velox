@@ -6,7 +6,6 @@ import (
 	"context"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/entity"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
@@ -62,17 +61,4 @@ func (c *CommentClient) DeleteByID(ctx context.Context, ex velox.Executor, id in
 		err = entity.CommentMeta.NotFound()
 	}
 	return err
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *CommentClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.CommentMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
 }

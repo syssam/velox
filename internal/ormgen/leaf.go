@@ -93,16 +93,16 @@ var opDoc = map[string]string{
 // plain name to the constant.
 var leafReserved = []string{"And", "Or", "Not", "Table", "ModelName", "EdgeMetas"}
 
-// namer hands out the identifiers of one entity package: the first to ask for
+// Namer hands out the identifiers of one entity package: the first to ask for
 // a name gets it, the next gets the name with a suffix.
-type namer struct {
+type Namer struct {
 	taken map[string]bool
-	// orderType is the name of the type of the fields a list can be ordered
-	// by, in a tree with a GraphQL schema.
-	orderType string
+	// Ext holds what an extension notes of the names it was given, by a key
+	// of its own.
+	Ext map[string]string
 }
 
-func (n *namer) unique(name, suffix string) string {
+func (n *Namer) unique(name, suffix string) string {
 	if n.taken[name] {
 		name += suffix
 	}
@@ -120,20 +120,20 @@ func (n *namer) unique(name, suffix string) string {
 // enums, user.RoleAdmin, and their types, named after the field with Enum
 // (post.StatusEnum: post.Status is the column). A name that is taken gets a
 // suffix. Package entity and the entity package both need the result.
-func (g *generator) enumNames(e *ent) (*namer, map[*fld]string, map[*fld][]string, map[*fld]string) {
-	n := &namer{taken: map[string]bool{}}
+func (g *Generator) enumNames(e *Entity) (*Namer, map[*Field]string, map[*Field][]string, map[*Field]string) {
+	n := &Namer{taken: map[string]bool{}, Ext: map[string]string{}}
 	for _, s := range leafReserved {
 		n.taken[s] = true
 	}
-	columns := map[*fld]string{}
+	columns := map[*Field]string{}
 	for _, f := range e.Fields {
 		if !f.Hidden {
 			columns[f] = n.unique(f.GoName, "Field")
 		}
 	}
-	types := map[*fld]string{}
-	consts := map[*fld][]string{}
-	var enums []*fld
+	types := map[*Field]string{}
+	consts := map[*Field][]string{}
+	var enums []*Field
 	for _, f := range e.Fields {
 		if f.Enum == "" {
 			continue
@@ -146,21 +146,16 @@ func (g *generator) enumNames(e *ent) (*namer, map[*fld]string, map[*fld][]strin
 	for _, f := range enums {
 		types[f] = n.unique(f.F.StructField()+"Enum", "Type")
 	}
-	// With a GraphQL schema, the fields a list can be ordered by are named
-	// here too (see gqlOrder for why not in package entity).
-	if g.cfg.GraphQL != nil {
-		n.orderType = n.unique("OrderField", "Type")
-		if q := g.gql[e]; q != nil {
-			for _, o := range q.Order {
-				n.taken[o.Const] = true
-			}
-		}
+	// What an extension declares in the package is named here too, so that
+	// what the package names later gives way to it.
+	for _, x := range g.cfg.Extensions {
+		x.LeafNames(e, n)
 	}
 	return n, types, consts, columns
 }
 
 // columnsFile is the file of the column types in the package of e.
-func columnsFile(e *ent) string {
+func columnsFile(e *Entity) string {
 	if fileName(e) == "columns" {
 		return "columns_gen"
 	}
@@ -178,8 +173,8 @@ func columnsFile(e *ent) string {
 // It imports the predicate package and not package entity (nor another entity's package): a
 // change to one entity rebuilds its package, package entity and what uses them,
 // and not the other 453 per-entity packages.
-func (g *generator) leaf(e *ent) (map[string][]byte, error) {
-	im := g.imports()
+func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
+	im := g.Imports()
 	im.use(ormPath, "orm")
 	im.use(g.cfg.Package+"/predicate", "predicate")
 	var b bytes.Buffer
@@ -188,7 +183,7 @@ func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 	names, enumType, enumConsts, columns := g.enumNames(e)
 	unique := names.unique
 	taken := names.taken
-	var enums []*fld
+	var enums []*Field
 	for _, f := range e.Fields {
 		if f.Enum != "" {
 			enums = append(enums, f)
@@ -196,7 +191,7 @@ func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 	}
 
 	// localType is the Go type of a field in this package's terms.
-	localType := func(f *fld) (string, error) {
+	localType := func(f *Field) (string, error) {
 		if f.Enum != "" {
 			return enumType[f], nil
 		}
@@ -225,7 +220,7 @@ func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 	}
 	shapes := map[string]*shape{}
 	var order []*shape
-	desc := map[*fld]*shape{}
+	desc := map[*Field]*shape{}
 	for _, f := range e.Fields {
 		if f.Hidden {
 			continue
@@ -337,14 +332,6 @@ func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 		values := unique(f.F.StructField()+"Values", "List")
 		w("// %s returns the values of the %s field, in the order of the schema.\nfunc %s() []%s {\n\treturn []%s{%s}\n}\n\n", values, f.F.Name, values, enumType[f], enumType[f], strings.Join(enumConsts[f], ", "))
 	}
-	if q := g.gql[e]; q != nil && q.HasOrder {
-		w("// %[1]s is a field a list of %[2]s can be ordered by, as the GraphQL schema\n// names it: the Field of an entity.%[2]sOrder.\ntype %[1]s string\n\n// The fields a list of %[2]s can be ordered by.\nconst (\n", names.orderType, e.Name)
-		for _, o := range q.Order {
-			w("\t%s %s = %q\n", o.Const, names.orderType, o.Value)
-		}
-		w(")\n\n")
-	}
-
 	pred, set, ord := e.pred(), e.set(), e.order()
 	// The column types go to a file of their own: they are the same methods
 	// for every Go type a column has, most of the package and nothing a
@@ -388,7 +375,7 @@ func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 	// build conditions, assignments and order terms, and user.ColumnName is
 	// its name in the table, a string constant for the places that take one
 	// (Select, GroupBy, an aggregate, a hook's m.Field).
-	consts := map[*fld]string{}
+	consts := map[*Field]string{}
 	w("// The column names of %s.\nconst (\n", e.Name)
 	for _, f := range e.Fields {
 		if f.Hidden {
@@ -437,9 +424,9 @@ func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 // leafEdges writes the description and the descriptor of each edge of e. The
 // description (orm.EdgeMeta) is data; package entity, which can name both
 // ends, connects it to its owner and target in its init.
-func (g *generator) leafEdges(e *ent, im *imports, taken map[string]bool, b *bytes.Buffer) error {
+func (g *Generator) leafEdges(e *Entity, im *Imports, taken map[string]bool, b *bytes.Buffer) error {
 	w := func(format string, a ...any) { fmt.Fprintf(b, format, a...) }
-	n := &namer{taken: taken}
+	n := &Namer{taken: taken}
 	var metas []string
 	for _, x := range e.Edges {
 		x.Desc = n.unique(x.GoName, "Edge")

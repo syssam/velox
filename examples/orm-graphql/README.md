@@ -16,12 +16,16 @@ of the generated schema. `./velox` and `./graphql` are checked in.
 ## What `-graphql` adds
 
 ```
-graphql/velox*.graphql     the schema: types, enums, where and order inputs, connections
+graphql/velox*.graphql        the schema: types, enums, where and order inputs, connections
 velox/filter/                 TodoWhereInput, UserWhereInput
-velox/entity/                 TodoOrder, TodoConnection, and a method per edge for an engine to bind
-velox/todo/                   OrderField and its constants
-velox/velox.go                NodeTypes, for node(id:)
+velox/entity/todo_gql.go      TodoOrder, IsNode, and a method per edge for an engine to bind
+velox/todo/gql.go             OrderField and its constants
+velox/node_gql.go             NodeTypes, for node(id:)
 ```
+
+Nothing else in `./velox` differs from a tree generated without `-graphql`:
+the layer is an extension of the generator (`contrib/graphql/ormgql`, see
+`generate.go`), and writes files of its own.
 
 At run time this code calls
 [`contrib/graphql/gqlinput`](../../contrib/graphql/gqlinput), which is built

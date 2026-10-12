@@ -9,7 +9,7 @@ import (
 // for each entity the types of its predicates, setters and order terms. It
 // holds no field, so a schema change that adds or changes a field
 // leaves it, and with it every entity package but one, untouched.
-func (g *generator) predicates() ([]byte, error) {
+func (g *Generator) predicates() ([]byte, error) {
 	var b bytes.Buffer
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
 	for _, e := range g.ents {
