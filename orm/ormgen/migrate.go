@@ -50,8 +50,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/syssam/velox/dialect/sql/schema"
 	"` + veloxPath + `"
+	"github.com/syssam/velox/dialect/sql/schema"
 )
 
 var (

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/orm"
 	client "github.com/syssam/velox/tests/orm/db"
@@ -289,7 +290,7 @@ func TestMutation_ZeroPredicateInsideAnEdgeCondition(t *testing.T) {
 // the caller's: it must not read as "no condition".
 func TestWhereInput_ByValue(t *testing.T) {
 	db, _ := open(t)
-	p := orm.Where(filter.UserWhereInput{Name: ptr("ann")}, nil)
+	p := gqlinput.Where(filter.UserWhereInput{Name: ptr("ann")}, nil)
 	assert.False(t, p.IsZero())
 	_, err := client.User.Query(db).Where(predicate.User(p)).Count(context.Background())
 	require.ErrorContains(t, err, "given by its address")
@@ -321,7 +322,7 @@ func TestWhereInput_DepthThroughAnEdge(t *testing.T) {
 	// Four levels, the edge, and five more: each side alone is allowed.
 	deep := nestedUsers(4, &filter.UserWhereInput{HasPostsWith: []*filter.PostWhereInput{nestedPosts(5)}})
 	_, err = client.User.Query(db).Where(deep.P()).Count(ctx)
-	require.ErrorIs(t, err, orm.ErrWhereDepth)
+	require.ErrorIs(t, err, gqlinput.ErrWhereDepth)
 	// An empty input on the other side is still refused.
 	empty := &filter.UserWhereInput{HasPostsWith: []*filter.PostWhereInput{{}}}
 	_, err = client.User.Query(db).Where(empty.P()).Count(ctx)

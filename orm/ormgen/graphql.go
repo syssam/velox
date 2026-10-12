@@ -39,7 +39,7 @@ type gqlWhere struct {
 	Name   string // in the schema, and the json tag
 	GoName string
 	GoType string // as written in package filter
-	Plan   string // its orm.WhereField
+	Plan   string // its gqlinput.WhereField
 }
 
 // How an edge appears as a field of its entity's GraphQL type.
@@ -154,8 +154,10 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			return `@goModel(model: "` + model + `")`
 		})
 		src = strings.Replace(src, "scalar Bytes \n", "scalar Bytes\n", 1)
-		src = strings.Replace(src, "enum OrderDirection {", `enum OrderDirection @goModel(model: "`+veloxPath+`.OrderDirection") {`, 1)
-		if m := veloxRuntimeRx.FindStringSubmatch(src); m != nil {
+		src = strings.Replace(src, "enum OrderDirection {", `enum OrderDirection @goModel(model: "`+gqlinputPath+`.OrderDirection") {`, 1)
+		// A binding to the runtime of the other generator's GraphQL layer
+		// (gqlrelay, gqlgenrelay): gqlinput is this one's.
+		if m := veloxRuntimeRx.FindStringSubmatch(strings.ReplaceAll(src, gqlinputPath+".", "")); m != nil {
 			return nil, fmt.Errorf("velox: graphql schema: %s binds a type of velox's GraphQL runtime, %s, which this generator has no counterpart of yet", name, m[1])
 		}
 		files[name] = src
@@ -614,7 +616,7 @@ func (g *generator) filterAlias(e *ent) string {
 //
 // A where input is a struct with a field per filter the schema offers,
 // because that is what a GraphQL engine fills in: it binds an input object
-// field by field. What the fields mean is data (an orm.WhereField each), and
+// field by field. What the fields mean is data (an gqlinput.WhereField each), and
 // one function of the runtime turns any of them into a predicate, so the
 // package holds no code per field. As a type that only held a predicate it
 // would have cost the 312 services of the benchmark 5 to 8% less to compile,
@@ -624,6 +626,7 @@ func (g *generator) filters() (map[string][]byte, error) {
 	// their types need are registered already.
 	im := g.filterIm
 	im.use(ormPath, "orm")
+	im.use(gqlinputPath, "gqlinput")
 	im.use(g.cfg.Package+"/predicate", "predicate")
 	var b bytes.Buffer
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
@@ -661,7 +664,7 @@ func (g *generator) filters() (map[string][]byte, error) {
 			}
 			w("}\n\n")
 		}
-		w("// %sWhere says what each field of %sWhereInput means, in the order of the struct.\nvar %sWhere = []orm.WhereField{\n", lowerFirst(e.Name), e.Name, lowerFirst(e.Name))
+		w("// %sWhere says what each field of %sWhereInput means, in the order of the struct.\nvar %sWhere = []gqlinput.WhereField{\n", lowerFirst(e.Name), e.Name, lowerFirst(e.Name))
 		for _, f := range q.Where {
 			w("\t%s, // %s\n", f.Plan, f.Name)
 		}
@@ -675,33 +678,33 @@ func (g *generator) filters() (map[string][]byte, error) {
 			}
 			w("}\n\n")
 		}
-		w("// P returns the condition the input describes: none for a nil or an empty\n// input, and one that fails the query for an input that cannot be a condition\n// (an empty input nested in not, and, or; nesting deeper than orm.MaxWhereDepth).\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) P() %[2]s { return %[2]s(orm.Where(i, %[3]sWhere)) }\n\n", e.Name, e.pred(), lowerFirst(e.Name))
+		w("// P returns the condition the input describes: none for a nil or an empty\n// input, and one that fails the query for an input that cannot be a condition\n// (an empty input nested in not, and, or; nesting deeper than gqlinput.MaxWhereDepth).\n//\n//go:noinline\nfunc (i *%[1]sWhereInput) P() %[2]s { return %[2]s(gqlinput.Where(i, %[3]sWhere)) }\n\n", e.Name, e.pred(), lowerFirst(e.Name))
 		w(`// UnmarshalGQL reads the input from the object given for it: the where argument
 // of a request as the engine hands it over, or a filter kept as a document. See
-// orm.DecodeWhere for what it accepts and what it refuses.
+// gqlinput.DecodeWhere for what it accepts and what it refuses.
 //
 //go:noinline
-func (i *%[1]sWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, %[2]sWhere, v) }
+func (i *%[1]sWhereInput) UnmarshalGQL(v any) error { return gqlinput.DecodeWhere(i, %[2]sWhere, v) }
 
 // MarshalGQL writes the input as the document UnmarshalGQL reads. With
 // UnmarshalGQL it tells an engine that the type reads itself, so that it
 // generates no decoder of its own for it.
 //
 //go:noinline
-func (i %[1]sWhereInput) MarshalGQL(w %[3]s.Writer) { orm.WriteWhere(w, &i, %[2]sWhere) }
+func (i %[1]sWhereInput) MarshalGQL(w %[3]s.Writer) { gqlinput.WriteWhere(w, &i, %[2]sWhere) }
 
 // UnmarshalJSON reads the input from the JSON text of its document, as
 // UnmarshalGQL reads the object: json.Unmarshal refuses a key the input does
 // not have, where the struct alone would let it pass.
 //
 //go:noinline
-func (i *%[1]sWhereInput) UnmarshalJSON(b []byte) error { return orm.DecodeWhere(i, %[2]sWhere, b) }
+func (i *%[1]sWhereInput) UnmarshalJSON(b []byte) error { return gqlinput.DecodeWhere(i, %[2]sWhere, b) }
 
 // MarshalJSON writes the document of the input: json.Marshal of an input is
-// what UnmarshalJSON reads back as the same conditions. See orm.EncodeWhere.
+// what UnmarshalJSON reads back as the same conditions. See gqlinput.EncodeWhere.
 //
 //go:noinline
-func (i %[1]sWhereInput) MarshalJSON() ([]byte, error) { return orm.EncodeWhere(&i, %[2]sWhere) }
+func (i %[1]sWhereInput) MarshalJSON() ([]byte, error) { return gqlinput.EncodeWhere(&i, %[2]sWhere) }
 
 `, e.Name, lowerFirst(e.Name), im.use("io", "io"))
 	}

@@ -144,8 +144,6 @@ const OpQueryOnlyID untyped string
 const OpQuerySelect untyped string
 const OpUpdate Op
 const OpUpdateOne Op
-const OrderDirectionAsc OrderDirection
-const OrderDirectionDesc OrderDirection
 func Check(error)
 func ExecutorFrom(context.Context) Executor
 func First[T any]([]T, error) (T, error)
@@ -191,7 +189,6 @@ type NotFoundError struct
 type NotLoadedError struct
 type NotSingularError struct
 type Op uint
-type OrderDirection string
 type PageInfo struct
 type Policy interface
 type Querier interface

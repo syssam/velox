@@ -3,6 +3,7 @@
 package filter
 
 import (
+	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
 	orm "github.com/syssam/velox/orm"
 	predicate "github.com/syssam/velox/tests/orm/db/predicate"
 	user "github.com/syssam/velox/tests/orm/db/user"
@@ -45,7 +46,7 @@ var userEnums = [...]map[string]string{
 }
 
 // userWhere says what each field of UserWhereInput means, in the order of the struct.
-var userWhere = []orm.WhereField{
+var userWhere = []gqlinput.WhereField{
 	{Col: "name", Op: orm.OpEQ},                         // name
 	{Col: "name", Op: orm.OpNEQ},                        // nameNEQ
 	{Col: "name", Op: orm.OpIn},                         // nameIn
@@ -70,34 +71,34 @@ func init() {
 
 // P returns the condition the input describes: none for a nil or an empty
 // input, and one that fails the query for an input that cannot be a condition
-// (an empty input nested in not, and, or; nesting deeper than orm.MaxWhereDepth).
+// (an empty input nested in not, and, or; nesting deeper than gqlinput.MaxWhereDepth).
 //
 //go:noinline
-func (i *UserWhereInput) P() predicate.User { return predicate.User(orm.Where(i, userWhere)) }
+func (i *UserWhereInput) P() predicate.User { return predicate.User(gqlinput.Where(i, userWhere)) }
 
 // UnmarshalGQL reads the input from the object given for it: the where argument
 // of a request as the engine hands it over, or a filter kept as a document. See
-// orm.DecodeWhere for what it accepts and what it refuses.
+// gqlinput.DecodeWhere for what it accepts and what it refuses.
 //
 //go:noinline
-func (i *UserWhereInput) UnmarshalGQL(v any) error { return orm.DecodeWhere(i, userWhere, v) }
+func (i *UserWhereInput) UnmarshalGQL(v any) error { return gqlinput.DecodeWhere(i, userWhere, v) }
 
 // MarshalGQL writes the input as the document UnmarshalGQL reads. With
 // UnmarshalGQL it tells an engine that the type reads itself, so that it
 // generates no decoder of its own for it.
 //
 //go:noinline
-func (i UserWhereInput) MarshalGQL(w io.Writer) { orm.WriteWhere(w, &i, userWhere) }
+func (i UserWhereInput) MarshalGQL(w io.Writer) { gqlinput.WriteWhere(w, &i, userWhere) }
 
 // UnmarshalJSON reads the input from the JSON text of its document, as
 // UnmarshalGQL reads the object: json.Unmarshal refuses a key the input does
 // not have, where the struct alone would let it pass.
 //
 //go:noinline
-func (i *UserWhereInput) UnmarshalJSON(b []byte) error { return orm.DecodeWhere(i, userWhere, b) }
+func (i *UserWhereInput) UnmarshalJSON(b []byte) error { return gqlinput.DecodeWhere(i, userWhere, b) }
 
 // MarshalJSON writes the document of the input: json.Marshal of an input is
-// what UnmarshalJSON reads back as the same conditions. See orm.EncodeWhere.
+// what UnmarshalJSON reads back as the same conditions. See gqlinput.EncodeWhere.
 //
 //go:noinline
-func (i UserWhereInput) MarshalJSON() ([]byte, error) { return orm.EncodeWhere(&i, userWhere) }
+func (i UserWhereInput) MarshalJSON() ([]byte, error) { return gqlinput.EncodeWhere(&i, userWhere) }

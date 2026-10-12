@@ -6,6 +6,7 @@ import (
 	context "context"
 	uuid "github.com/google/uuid"
 	velox "github.com/syssam/velox"
+	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/db/internal/slots"
@@ -565,8 +566,8 @@ var tokenOrderColumns = map[string]string{
 // TokenOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type TokenOrder struct {
-	Direction velox.OrderDirection `json:"direction"`
-	Field     token.OrderField     `json:"field"`
+	Direction gqlinput.OrderDirection `json:"direction"`
+	Field     token.OrderField        `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -577,7 +578,7 @@ func (o *TokenOrder) Term() predicate.TokenOrderTerm {
 	if o == nil {
 		return predicate.TokenOrderTerm{}
 	}
-	return predicate.TokenOrderTerm(orm.OrderTerm(&TokenMeta, tokenOrderColumns, string(o.Field), o.Direction))
+	return predicate.TokenOrderTerm(orm.OrderTerm(&TokenMeta, tokenOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
 }
 
 // Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query

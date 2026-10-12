@@ -55,6 +55,9 @@ func (g *generator) model() (map[string][]byte, error) {
 	im.use(ormPath, "orm")
 	// The errors an edge accessor returns are package velox's.
 	veloxPkg := im.use(veloxPath, "velox")
+	if g.cfg.GraphQL != nil {
+		im.use(gqlinputPath, "gqlinput")
+	}
 	im.use("context", "context")
 	im.use("slices", "slices")
 	im.use("iter", "iter")
@@ -682,7 +685,7 @@ func (g *generator) gqlModel(w func(string, ...any), e *ent, q *gqlEnt, veloxPkg
 // %[1]sOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type %[1]sOrder struct {
-	Direction velox.OrderDirection `+"`json:\"direction\"`"+`
+	Direction gqlinput.OrderDirection `+"`json:\"direction\"`"+`
 	Field     %[5]s.%[6]s    `+"`json:\"field\"`"+`
 }
 
@@ -692,7 +695,7 @@ func (o *%[1]sOrder) Term() %[2]s {
 	if o == nil {
 		return %[2]s{}
 	}
-	return %[2]s(orm.OrderTerm(&%[3]s, %[4]sOrderColumns, string(o.Field), o.Direction))
+	return %[2]s(orm.OrderTerm(&%[3]s, %[4]sOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
 }
 
 `, e.Name, e.order(), n.Meta, lowerFirst(e.Name), e.alias, q.OrderType)

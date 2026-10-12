@@ -175,7 +175,7 @@ next:
 			// An error of the library is the same error from package orm.
 			"func Missing(what string) error { return velox.NewNotFoundError(what) }",
 			".BatchSize(size).Save(ctx)",
-			"return errors.Is(err, orm.ErrWhereDepth), orm.MaxWhereDepth",
+			"return errors.Is(err, gqlinput.ErrWhereDepth), gqlinput.MaxWhereDepth",
 		},
 		"more_test.go": {
 			`require.True(t, orm.IsZero(Scope(true, "ann")))`,

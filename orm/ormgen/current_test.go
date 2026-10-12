@@ -2,6 +2,7 @@ package ormgen
 
 import (
 	"bytes"
+	"go/format"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -71,6 +72,11 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 			want := files(t, out, ".go")
 			got := files(t, c.dir, ".go")
 			for rel, src := range want {
+				// What is written is what gofmt writes: a tree that gofmt
+				// would change fails the format check of whoever keeps it.
+				if clean, err := format.Source(src); err != nil || !bytes.Equal(clean, src) {
+					t.Errorf("%s is not gofmt's formatting of itself (%v)", rel, err)
+				}
 				switch have, ok := got[rel]; {
 				case !ok:
 					t.Errorf("%s is generated and missing from %s: regenerate", rel, c.dir)

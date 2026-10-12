@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	velox "github.com/syssam/velox"
+	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	comment "github.com/syssam/velox/tests/orm/db/comment"
@@ -590,8 +591,8 @@ var commentOrderColumns = map[string]string{
 // CommentOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type CommentOrder struct {
-	Direction velox.OrderDirection `json:"direction"`
-	Field     comment.OrderField   `json:"field"`
+	Direction gqlinput.OrderDirection `json:"direction"`
+	Field     comment.OrderField      `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -602,7 +603,7 @@ func (o *CommentOrder) Term() predicate.CommentOrderTerm {
 	if o == nil {
 		return predicate.CommentOrderTerm{}
 	}
-	return predicate.CommentOrderTerm(orm.OrderTerm(&CommentMeta, commentOrderColumns, string(o.Field), o.Direction))
+	return predicate.CommentOrderTerm(orm.OrderTerm(&CommentMeta, commentOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
 }
 
 // Post resolves the "post" edge for a GraphQL engine: the neighbor the query

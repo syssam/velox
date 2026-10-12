@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/syssam/velox/dialect/sql/schema"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql/schema"
 )
 
 var (

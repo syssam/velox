@@ -112,9 +112,10 @@ func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex velox.Executor, id %[15]s) err
 `, t, e.Name, modelPkg, n.Query, n.NewQuery, n.Create, n.NewCreate, n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, n.Delete, n.NewDelete, ctxPkg, id, e.pred(), e.ID.Col, n.Meta)
 		if q := g.gql[e]; q != nil && q.Node {
 			nodes = append(nodes, e)
+			im.use(gqlinputPath, "gqlinput")
 			w(`// node is Get for an id of any type: see NodeTypes.
 func (c *%[1]s) node(ctx %[2]s.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := orm.IDAs[%[3]s](key)
+	v, ok := gqlinput.IDAs[%[3]s](key)
 	if !ok {
 		return nil, %[5]s.%[4]s.NotFound()
 	}

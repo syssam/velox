@@ -37,15 +37,6 @@ type PageInfo struct {
 	EndCursor       *Cursor `json:"endCursor"`
 }
 
-// OrderDirection is the direction of an ordering that arrives in a request.
-type OrderDirection string
-
-// The two directions, spelled as GraphQL spells them.
-const (
-	OrderDirectionAsc  OrderDirection = "ASC"
-	OrderDirectionDesc OrderDirection = "DESC"
-)
-
 // ErrBadCursor is returned for a cursor that this query did not produce: it
 // is malformed, or it belongs to another ordering.
 var ErrBadCursor = errors.New("velox: invalid cursor")

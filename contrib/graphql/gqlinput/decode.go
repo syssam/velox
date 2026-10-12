@@ -1,4 +1,4 @@
-package orm
+package gqlinput
 
 import (
 	"bytes"

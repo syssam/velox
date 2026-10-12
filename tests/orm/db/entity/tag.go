@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	velox "github.com/syssam/velox"
+	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/db/internal/slots"
@@ -610,8 +611,8 @@ var tagOrderColumns = map[string]string{
 // TagOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type TagOrder struct {
-	Direction velox.OrderDirection `json:"direction"`
-	Field     tag.OrderField       `json:"field"`
+	Direction gqlinput.OrderDirection `json:"direction"`
+	Field     tag.OrderField          `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -622,7 +623,7 @@ func (o *TagOrder) Term() predicate.TagOrderTerm {
 	if o == nil {
 		return predicate.TagOrderTerm{}
 	}
-	return predicate.TagOrderTerm(orm.OrderTerm(&TagMeta, tagOrderColumns, string(o.Field), o.Direction))
+	return predicate.TagOrderTerm(orm.OrderTerm(&TagMeta, tagOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
 }
 
 // Posts resolves the "posts" edge for a GraphQL engine: one page of the

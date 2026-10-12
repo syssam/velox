@@ -1,4 +1,4 @@
-package orm
+package gqlinput
 
 import (
 	"bytes"
@@ -15,12 +15,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/syssam/velox/orm"
 )
 
 // A where input as the generator writes one, with a field of each kind of
 // Go type the decoder has a rule for.
 type (
-	decPred  P
+	decPred  orm.P
 	decColor string
 	// decSelf reads itself: its UnmarshalGQL is the rule, whatever the plan
 	// says of its names.
@@ -116,28 +118,28 @@ type decInput struct {
 
 var (
 	decColors    = map[string]string{"RED": "red", "DARK_BLUE": "dark-blue"}
-	decKids      = &EdgeMeta{}
-	decChildPlan = []WhereField{{Col: "title", Op: OpEQ}}
+	decKids      = &orm.EdgeMeta{}
+	decChildPlan = []WhereField{{Col: "title", Op: orm.OpEQ}}
 	decPlan      = []WhereField{
-		{Col: "id", Op: OpEQ},
-		{Col: "id", Op: OpIn},
-		{Col: "small", Op: OpEQ},
-		{Col: "big", Op: OpEQ},
-		{Col: "small", Op: OpIn},
-		{Col: "name", Op: OpEQ},
-		{Col: "name", Op: OpIsNil},
-		{Col: "color", Op: OpEQ, Enum: decColors},
-		{Col: "color", Op: OpIn, Enum: decColors},
-		{Col: "self", Op: OpEQ, Enum: decColors},
-		{Col: "at", Op: OpEQ},
-		{Col: "price", Op: OpEQ},
-		{Col: "price", Op: OpIn},
-		{Col: "ratio", Op: OpEQ},
-		{Col: "active", Op: OpEQ},
-		{Col: "data", Op: OpEQ},
-		{Col: "uid", Op: OpEQ},
-		{Op: OpHasEdge, Edge: decKids},
-		{Op: OpHasEdge, Edge: decKids, With: true, Neighbor: decChildPlan},
+		{Col: "id", Op: orm.OpEQ},
+		{Col: "id", Op: orm.OpIn},
+		{Col: "small", Op: orm.OpEQ},
+		{Col: "big", Op: orm.OpEQ},
+		{Col: "small", Op: orm.OpIn},
+		{Col: "name", Op: orm.OpEQ},
+		{Col: "name", Op: orm.OpIsNil},
+		{Col: "color", Op: orm.OpEQ, Enum: decColors},
+		{Col: "color", Op: orm.OpIn, Enum: decColors},
+		{Col: "self", Op: orm.OpEQ, Enum: decColors},
+		{Col: "at", Op: orm.OpEQ},
+		{Col: "price", Op: orm.OpEQ},
+		{Col: "price", Op: orm.OpIn},
+		{Col: "ratio", Op: orm.OpEQ},
+		{Col: "active", Op: orm.OpEQ},
+		{Col: "data", Op: orm.OpEQ},
+		{Col: "uid", Op: orm.OpEQ},
+		{Op: orm.OpHasEdge, Edge: decKids},
+		{Op: orm.OpHasEdge, Edge: decKids, With: true, Neighbor: decChildPlan},
 	}
 )
 
@@ -255,13 +257,13 @@ func TestDecodeWhere_Refuses(t *testing.T) {
 		{map[string]any{"idIn": []any{1, "b"}}, `idIn[1]: "b" is not a whole number`},
 		{map[string]any{"name": 5}, "name: expected a string, got int"},
 		// A name of another case is not that enum's: DRAFT is, Draft is not.
-		{map[string]any{"color": "Red"}, `color: "Red" is not a value of orm.decColor`},
+		{map[string]any{"color": "Red"}, `color: "Red" is not a value of gqlinput.decColor`},
 		{map[string]any{"colorIn": []any{"RED", "GREEN"}}, `colorIn[1]: "GREEN" is not a value`},
 		{map[string]any{"color": 1}, "color: expected a string, got int"},
 		{map[string]any{"at": "yesterday"}, `at: "yesterday" is not an RFC 3339 time`},
 		{map[string]any{"at": 5}, "at: a time is given as an RFC 3339 string"},
 		{map[string]any{"price": "ten"}, `price: "ten" is not an amount`},
-		{map[string]any{"price": true}, "price: cannot read a orm.decMoney from bool"},
+		{map[string]any{"price": true}, "price: cannot read a gqlinput.decMoney from bool"},
 		{map[string]any{"uid": "nope"}, "uid: "},
 		{map[string]any{"active": "yes"}, "active: expected a boolean, got string"},
 		{map[string]any{"nameIsNil": 1}, "nameIsNil: expected a boolean, got int"},
@@ -415,12 +417,12 @@ func TestEncodeWhere_Refuses(t *testing.T) {
 		in   *decInput
 		want string
 	}{
-		"conditions added in Go":    {&decInput{Name: &name, Predicates: []decPred{{Op: OpEQ, Col: "id", Val: 1}}}, "Predicates"},
-		"and inside":                {&decInput{Not: &decInput{Predicates: []decPred{{Op: OpEQ, Col: "id", Val: 1}}}}, "not: velox: decInput holds conditions added in Go"},
+		"conditions added in Go":    {&decInput{Name: &name, Predicates: []decPred{{Op: orm.OpEQ, Col: "id", Val: 1}}}, "Predicates"},
+		"and inside":                {&decInput{Not: &decInput{Predicates: []decPred{{Op: orm.OpEQ, Col: "id", Val: 1}}}}, "not: velox: decInput holds conditions added in Go"},
 		"a time with no form":       {&decInput{Name: &name, At: &late}, "at: a time in the year 10000"},
 		"a float that is no number": {&decInput{Name: &name, Ratio: &inf}, "ratio: +Inf is not a number"},
 		"NaN":                       {&decInput{Ratio: &nan}, "ratio: NaN is not a number"},
-		"a value of no enum":        {&decInput{Color: &bogus}, `color: "purple" is not a value of orm.decColor`},
+		"a value of no enum":        {&decInput{Color: &bogus}, `color: "purple" is not a value of gqlinput.decColor`},
 		"what JSON writes as null":  {&decInput{Name: &name, Data: &none}, "data: a []uint8 that JSON writes as null"},
 		"a nil input in a list":     {&decInput{Or: []*decInput{nil}}, "or[0]: nil where an input goes"},
 	} {
@@ -462,15 +464,15 @@ func TestDecodeWhere_Strict(t *testing.T) {
 		Named *decRatio `json:"named,omitempty"`
 		Level *decLevel `json:"level,omitempty"`
 	}
-	plan := []WhereField{{Col: "pair", Op: OpEQ}, {Col: "arr", Op: OpEQ}, {Col: "ratio", Op: OpEQ}, {Col: "named", Op: OpEQ}, {Col: "level", Op: OpEQ}}
+	plan := []WhereField{{Col: "pair", Op: orm.OpEQ}, {Col: "arr", Op: orm.OpEQ}, {Col: "ratio", Op: orm.OpEQ}, {Col: "named", Op: orm.OpEQ}, {Col: "level", Op: orm.OpEQ}}
 	var typedNil map[string]any
 	for _, c := range []struct {
 		doc  map[string]any
 		want string
 	}{
 		// A key the value's type does not have, as one the input does not.
-		{map[string]any{"pair": map[string]any{"a": 1, "c": 3}}, `pair: cannot read a orm.pair`},
-		{map[string]any{"pair": typedNil}, "pair: null where a orm.pair goes"},
+		{map[string]any{"pair": map[string]any{"a": 1, "c": 3}}, `pair: cannot read a gqlinput.pair`},
+		{map[string]any{"pair": typedNil}, "pair: null where a gqlinput.pair goes"},
 		{map[string]any{"arr": []any{1, 2, 3, 4, 5, 6}}, "arr: 6 values for a [4]uint8"},
 		{map[string]any{"arr": []any{1, 2}}, "arr: 2 values for a [4]uint8"},
 		{map[string]any{"ratio": 1e39}, "ratio: 1e+39 is not a number a float32 holds"},
@@ -557,7 +559,7 @@ func TestDecodeWhere_Misfit(t *testing.T) {
 		Name *string `json:"name,omitempty"`
 		Kids int     `json:"kids,omitempty"`
 	}
-	plan := []WhereField{{Col: "name", Op: OpIn}, {Op: OpHasEdge, Edge: decKids, With: true, Neighbor: decChildPlan}}
+	plan := []WhereField{{Col: "name", Op: orm.OpIn}, {Op: orm.OpHasEdge, Edge: decKids, With: true, Neighbor: decChildPlan}}
 	for _, doc := range []map[string]any{
 		{"not": map[string]any{}},
 		{"and": []any{map[string]any{}}},
@@ -573,17 +575,6 @@ func TestDecodeWhere_Misfit(t *testing.T) {
 	}
 	if _, err := EncodeWhere(42, plan); err == nil {
 		t.Error("a number was written as a where input")
-	}
-}
-
-func TestSnake(t *testing.T) {
-	for in, want := range map[string]string{
-		"User": "user", "SalesOrder": "sales_order", "HTTPLog": "http_log", "OAuth2Token": "o_auth2_token",
-		"user": "user", "A": "a", "": "", "PriceListItem": "price_list_item", "ID": "id",
-	} {
-		if got := snake(in); got != want {
-			t.Errorf("snake(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 
@@ -722,8 +713,8 @@ func TestEncodeWhere_AnyInput(t *testing.T) {
 }
 
 // tooDeep reports whether a predicate fails its query for its nesting.
-func tooDeep(p P) bool {
-	if err, ok := p.Val.(error); ok && p.Op == opInvalid && errors.Is(err, ErrWhereDepth) {
+func tooDeep(p orm.P) bool {
+	if err, ok := p.Val.(error); ok && errors.Is(err, ErrWhereDepth) {
 		return true
 	}
 	return slices.ContainsFunc(p.Subs, tooDeep)

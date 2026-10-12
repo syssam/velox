@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/orm"
 )
 
@@ -76,6 +77,22 @@ func (r *rewriter) orm(pos token.Pos) string  { return r.ref(ormPath, "orm", pos
 // velox is the library's root package, which has the database handle, the
 // errors and the types of a paged list.
 func (r *rewriter) velox(pos token.Pos) string { return r.ref(r.lib, "velox", pos) }
+
+// gqlinput is the runtime of the GraphQL layer of the new generated code:
+// the direction of an order input, the depth of a where input.
+func (r *rewriter) gqlinput(pos token.Pos) string {
+	return r.ref(r.lib+"/contrib/graphql/gqlinput", "gqlinput", pos)
+}
+
+// paging names a type of a paged list, or of an order input, where it is
+// now: the cursor and the page info in the library's root package, the
+// direction of an order with the GraphQL layer.
+func (r *rewriter) paging(name string, pos token.Pos) string {
+	if strings.HasPrefix(name, "OrderDirection") {
+		return r.gqlinput(pos) + "." + name
+	}
+	return r.velox(pos) + "." + name
+}
 func (r *rewriter) entity(pos token.Pos) string {
 	return r.ref(r.s.to+"/entity", "entity", pos)
 }
@@ -383,13 +400,13 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 					r.count("Paginatable")
 				}
 			} else if name == "Cursor" || name == "PageInfo" || name == "OrderDirection" {
-				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+"."+name)
+				r.replace(sel.Pos(), sel.End(), r.paging(name, sel.Pos()))
 				r.count("type " + name)
 			}
 			return
 		}
 		if name == "OrderDirectionAsc" || name == "OrderDirectionDesc" {
-			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+"."+name)
+			r.replace(sel.Pos(), sel.End(), r.paging(name, sel.Pos()))
 			r.count("type OrderDirection")
 			return
 		}
@@ -411,7 +428,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 		if obj.Pkg().Path() == r.lib+"/contrib/graphql/gqlrelay" {
 			switch name {
 			case "Cursor", "PageInfo", "OrderDirection", "OrderDirectionAsc", "OrderDirectionDesc":
-				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+"."+name)
+				r.replace(sel.Pos(), sel.End(), r.paging(name, sel.Pos()))
 				r.count("gqlrelay")
 			default:
 				r.note(sel.Pos(), "gqlrelay.%s: rewrite by hand", name)
@@ -455,16 +472,16 @@ func (r *rewriter) foreign(sel *ast.SelectorExpr, obj types.Object, where string
 		case name == "ErrFilterDepthExceeded":
 			// The same failure, met where the query runs: P returns no
 			// error, and a predicate that fails the query with this one.
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".ErrWhereDepth")
+			r.replace(sel.Pos(), sel.End(), r.gqlinput(sel.Pos())+".ErrWhereDepth")
 			r.count("where depth")
 		case name == "DefaultMaxFilterDepth":
 			// The depth was an option of the generator; it is the runtime's
 			// constant now.
-			if c, ok := obj.(*types.Const); ok && c.Val().ExactString() == strconv.Itoa(orm.MaxWhereDepth) {
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".MaxWhereDepth")
+			if c, ok := obj.(*types.Const); ok && c.Val().ExactString() == strconv.Itoa(gqlinput.MaxWhereDepth) {
+				r.replace(sel.Pos(), sel.End(), r.gqlinput(sel.Pos())+".MaxWhereDepth")
 				r.count("where depth")
 			} else {
-				r.note(sel.Pos(), "%s: a where input nests %d deep now (orm.MaxWhereDepth), whatever the generator was told", name, orm.MaxWhereDepth)
+				r.note(sel.Pos(), "%s: a where input nests %d deep now (gqlinput.MaxWhereDepth), whatever the generator was told", name, gqlinput.MaxWhereDepth)
 			}
 		}
 	case "predicate", "migrate", "entity", "root", "<entity>", "client/<entity>", "query", "intercept", "privacy":

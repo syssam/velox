@@ -211,7 +211,8 @@ err = db.User.DeleteByID(ctx, conn, id)
   `*velox.ConstraintError`, `*velox.NotLoadedError`. Code that tests an error
   does not change when the application moves. So are the errors of a handle
   and of a cursor: `velox.ErrNoExecutor`, `velox.ErrTxDone`,
-  `velox.ErrBadCursor`. Package `orm` has `orm.ErrWhereDepth`.
+  `velox.ErrBadCursor`. A where input nested too deep is
+  `gqlinput.ErrWhereDepth`, with the rest of the GraphQL layer's runtime.
 - A create that leaves out a required field, a required edge or an id the
   caller must supply is an `*velox.ValidationError` naming it, before any SQL.
   What the database refuses is an `*velox.ConstraintError` that says which kind
@@ -408,7 +409,7 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
 
 - `where.P()` of a nil or an empty input is no condition. An input that
   cannot be one (an empty input inside `not`, `and`, `or` or `has...With`;
-  nesting deeper than `orm.MaxWhereDepth`) gives a predicate that fails the
+  nesting deeper than `gqlinput.MaxWhereDepth`) gives a predicate that fails the
   query. Conditions the application adds go in `where.Predicates`, or in
   another `Where`.
 - **A where input reads and writes itself**, as the document a request
@@ -452,7 +453,7 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
   kept: **an empty list for `and`, `or` or `has...With` is no condition**,
   as an absent one is, which is what a client sends for an empty form. A
   rule that must match nothing when it has no alternatives has to say so
-  (`idIn: []`). `orm.DecodeWhere` and `orm.EncodeWhere` are the functions
+  (`idIn: []`). `gqlinput.DecodeWhere` and `gqlinput.EncodeWhere` are the functions
   behind all of this.
 - `orderBy.Term()` of a nil input orders by nothing; an order without a
   `Field` orders by the id, in its direction.
@@ -486,7 +487,7 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
   an `int` id). Ask each in turn and take the first that is not
   `velox.ErrNotFound`. That is a query per type, so an application with many
   types keeps what it learns.
-- A where input's nesting is limited (`orm.MaxWhereDepth`), counted through
+- A where input's nesting is limited (`gqlinput.MaxWhereDepth`), counted through
   `has...With` as well as `not`, `and` and `or`.
 - `scalar Bytes`, which the schema has when an entity has a bytes field, is
   left for the engine to bind, as `Time` is (velox binds it to a type of its

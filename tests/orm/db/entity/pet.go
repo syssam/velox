@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	velox "github.com/syssam/velox"
+	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	pet "github.com/syssam/velox/tests/orm/db/pet"
@@ -537,8 +538,8 @@ var petOrderColumns = map[string]string{
 // PetOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type PetOrder struct {
-	Direction velox.OrderDirection `json:"direction"`
-	Field     pet.OrderField       `json:"field"`
+	Direction gqlinput.OrderDirection `json:"direction"`
+	Field     pet.OrderField          `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -549,7 +550,7 @@ func (o *PetOrder) Term() predicate.PetOrderTerm {
 	if o == nil {
 		return predicate.PetOrderTerm{}
 	}
-	return predicate.PetOrderTerm(orm.OrderTerm(&PetMeta, petOrderColumns, string(o.Field), o.Direction))
+	return predicate.PetOrderTerm(orm.OrderTerm(&PetMeta, petOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
 }
 
 // Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query

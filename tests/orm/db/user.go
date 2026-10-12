@@ -5,6 +5,7 @@ package db
 import (
 	context "context"
 	velox "github.com/syssam/velox"
+	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/db/predicate"
@@ -56,7 +57,7 @@ func (c *UserClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) 
 
 // node is Get for an id of any type: see NodeTypes.
 func (c *UserClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := orm.IDAs[int](key)
+	v, ok := gqlinput.IDAs[int](key)
 	if !ok {
 		return nil, entity.UserMeta.NotFound()
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	reffilter "github.com/syssam/velox/tests/integration/filter"
 	client "github.com/syssam/velox/tests/orm/db"
 	"github.com/syssam/velox/tests/orm/db/entity"
@@ -112,14 +112,14 @@ func TestWhereInput(t *testing.T) {
 
 	// Nesting has a limit a request cannot exceed.
 	deep := &filter.UserWhereInput{Name: ptr("ann")}
-	for range orm.MaxWhereDepth {
+	for range gqlinput.MaxWhereDepth {
 		deep = &filter.UserWhereInput{Not: deep}
 	}
 	_, err := client.User.Query(db).Where(deep.P()).All(ctx)
 	require.NoError(t, err, "at the limit")
 	deep = &filter.UserWhereInput{Not: deep}
 	_, err = client.User.Query(db).Where(deep.P()).All(ctx)
-	require.ErrorIs(t, err, orm.ErrWhereDepth)
+	require.ErrorIs(t, err, gqlinput.ErrWhereDepth)
 }
 
 // A where input reads itself from what an engine hands over for the where
@@ -399,9 +399,9 @@ func TestOrderInput(t *testing.T) {
 		require.NoError(t, err)
 		return names(us)
 	}
-	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Field: user.OrderFieldName, Direction: velox.OrderDirectionDesc}))
+	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Field: user.OrderFieldName, Direction: gqlinput.OrderDirectionDesc}))
 	assert.Equal(t, []string{"ann", "bob", "cat"}, list(&entity.UserOrder{Field: user.OrderFieldName}), "no direction is ascending")
-	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Direction: velox.OrderDirectionDesc}), "no field is the id")
+	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Direction: gqlinput.OrderDirectionDesc}), "no field is the id")
 	assert.Equal(t, predicate.UserOrderTerm{}, (*entity.UserOrder)(nil).Term())
 	assert.Len(t, list(nil), 3, "no input orders by nothing")
 
@@ -416,7 +416,7 @@ func TestOrderInput(t *testing.T) {
 	where := &filter.UserWhereInput{HasPosts: ptr(true)}
 	page, err := client.User.Query(db).
 		Where(where.P()).
-		OrderBy((&entity.UserOrder{Field: user.OrderFieldName, Direction: velox.OrderDirectionDesc}).Term()).
+		OrderBy((&entity.UserOrder{Field: user.OrderFieldName, Direction: gqlinput.OrderDirectionDesc}).Term()).
 		Paginate(ctx, nil, intp(1), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"bob"}, names(nodes(page)))
@@ -451,13 +451,13 @@ func TestEdgeResolvers(t *testing.T) {
 	assert.Nil(t, owner)
 
 	// To many: a page, with the arguments of the field.
-	conn, err := ann.Posts(req, nil, intp(1), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: velox.OrderDirectionDesc}, nil)
+	conn, err := ann.Posts(req, nil, intp(1), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: gqlinput.OrderDirectionDesc}, nil)
 	require.NoError(t, err)
 	require.Len(t, conn.Edges, 1)
 	assert.Equal(t, "a2", conn.Edges[0].Node.Title)
 	assert.Equal(t, 2, conn.TotalCount)
 	assert.True(t, conn.PageInfo.HasNextPage)
-	conn, err = ann.Posts(req, conn.PageInfo.EndCursor, intp(5), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: velox.OrderDirectionDesc}, nil)
+	conn, err = ann.Posts(req, conn.PageInfo.EndCursor, intp(5), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: gqlinput.OrderDirectionDesc}, nil)
 	require.NoError(t, err)
 	require.Len(t, conn.Edges, 1)
 	assert.Equal(t, "a1", conn.Edges[0].Node.Title)
@@ -470,7 +470,7 @@ func TestEdgeResolvers(t *testing.T) {
 	assert.Empty(t, conn.Edges)
 	assert.Zero(t, conn.TotalCount)
 	// A list of orders, for an entity whose schema takes one.
-	comments, err := p.Comments(req, nil, nil, nil, nil, []*entity.CommentOrder{{Direction: velox.OrderDirectionDesc}})
+	comments, err := p.Comments(req, nil, nil, nil, nil, []*entity.CommentOrder{{Direction: gqlinput.OrderDirectionDesc}})
 	require.NoError(t, err)
 	assert.Empty(t, comments.Edges)
 	_, err = ann.Posts(ctx, nil, nil, nil, nil, nil, nil)

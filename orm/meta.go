@@ -18,9 +18,11 @@
 //
 // The rest is for generated code: Meta, FieldMeta and EdgeMeta describe an
 // entity; QueryCore and MutCore are what its query and mutation types wrap;
-// P, S and O are a condition, an assignment and an order term as data;
-// WhereField, Where, DecodeWhere and EncodeWhere are behind the where inputs
-// of the GraphQL layer.
+// P, S and O are a condition, an assignment and an order term as data.
+//
+// Nothing here knows GraphQL. What the generated GraphQL layer needs at run
+// time (its where and order inputs, the id of a node) is in
+// contrib/graphql/gqlinput, which is built on this package.
 //
 // The exported types here are deliberately small and mention no SQL-builder
 // type. Generated code names them in signatures, and the Go compiler writes
