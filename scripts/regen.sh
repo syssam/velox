@@ -56,6 +56,7 @@ DRIFT_CHECK_MODULES=(
     examples/json-field
     examples/multitenant
     examples/orm-basic
+    examples/orm-graphql
     examples/realworld
     examples/tree
     examples/versioned-migration

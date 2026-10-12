@@ -295,6 +295,7 @@ jobs:
           - { path: examples/json-field, mode: test }
           - { path: examples/multitenant, mode: test }
           - { path: examples/orm-basic, mode: test }
+          - { path: examples/orm-graphql, mode: test }
           - { path: examples/tree, mode: test }
           - { path: examples/versioned-migration, mode: test }
           - { path: tests/external-module, mode: test }
