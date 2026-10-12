@@ -41,7 +41,7 @@ func (*SchemainitClient) Delete(ex orm.Executor) *entity.SchemainitDelete {
 	return entity.NewSchemainitDelete(ex)
 }
 
-// Get returns the Schemainit with the given id, or orm.ErrNotFound.
+// Get returns the Schemainit with the given id, or velox.ErrNotFound.
 func (c *SchemainitClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Schemainit, error) {
 	return c.Query(ex).Where(predicate.Schemainit(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *SchemainitClient) UpdateByID(ex orm.Executor, id int) *entity.Schemaini
 	return c.Update(ex).Where(predicate.Schemainit(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Schemainit with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Schemainit with the given id, or returns velox.ErrNotFound.
 func (c *SchemainitClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Schemainit(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

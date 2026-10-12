@@ -171,7 +171,7 @@ func (q *UUIDKeyQuery) All(ctx context.Context) ([]*UUIDKey, error) {
 	return out, nil
 }
 
-// First returns the first matching UUIDKey, or orm.ErrNotFound.
+// First returns the first matching UUIDKey, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *UUIDKeyQuery) First(ctx context.Context) (*UUIDKey, error) {
@@ -182,7 +182,7 @@ func (q *UUIDKeyQuery) First(ctx context.Context) (*UUIDKey, error) {
 	return r.(*UUIDKey), nil
 }
 
-// Only returns the single matching UUIDKey: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching UUIDKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UUIDKeyQuery) Only(ctx context.Context) (*UUIDKey, error) {
@@ -409,15 +409,15 @@ func (b *UUIDKeyUpdate) Fill(in any, skip ...string) *UUIDKeyUpdate {
 //go:noinline
 func (b *UUIDKeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *UUIDKeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/db/internal/slots"
@@ -31,28 +32,28 @@ type LikeEdges struct {
 	loaded [2]bool
 }
 
-// UserOrErr returns the user edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// UserOrErr returns the user edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *LikeEdges) UserOrErr() (*User, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "user"}
+		return nil, velox.NewNotLoadedError("user")
 	}
 	if e.User == nil {
-		return nil, orm.ErrNotFound
+		return nil, UserMeta.NotFound()
 	}
 	return e.User, nil
 }
 
-// PostOrErr returns the post edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// PostOrErr returns the post edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *LikeEdges) PostOrErr() (*Post, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "post"}
+		return nil, velox.NewNotLoadedError("post")
 	}
 	if e.Post == nil {
-		return nil, orm.ErrNotFound
+		return nil, PostMeta.NotFound()
 	}
 	return e.Post, nil
 }
@@ -240,7 +241,7 @@ func (q *LikeQuery) All(ctx context.Context) ([]*Like, error) {
 	return out, nil
 }
 
-// First returns the first matching Like, or orm.ErrNotFound.
+// First returns the first matching Like, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *LikeQuery) First(ctx context.Context) (*Like, error) {
@@ -251,7 +252,7 @@ func (q *LikeQuery) First(ctx context.Context) (*Like, error) {
 	return r.(*Like), nil
 }
 
-// Only returns the single matching Like: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Like: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LikeQuery) Only(ctx context.Context) (*Like, error) {
@@ -478,15 +479,15 @@ func (b *LikeUpdate) Fill(in any, skip ...string) *LikeUpdate {
 //go:noinline
 func (b *LikeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *LikeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline
@@ -606,10 +607,10 @@ func (o *LikeOrder) Term() predicate.LikeOrderTerm {
 //go:noinline
 func (e *Like) User(ctx context.Context) (*User, error) {
 	v, err := e.Edges.UserOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryUser(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 // Post resolves the "post" edge for a GraphQL engine: the neighbor the query
@@ -619,10 +620,10 @@ func (e *Like) User(ctx context.Context) (*User, error) {
 //go:noinline
 func (e *Like) Post(ctx context.Context) (*Post, error) {
 	v, err := e.Edges.PostOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryPost(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 func init() { slots.Like.Bind(&LikeMeta) }

@@ -33,7 +33,7 @@ func (*UUIDClient) Update(ex orm.Executor) *entity.UUIDUpdate { return entity.Ne
 // Delete returns a builder that deletes the UUID rows its conditions match.
 func (*UUIDClient) Delete(ex orm.Executor) *entity.UUIDDelete { return entity.NewUUIDDelete(ex) }
 
-// Get returns the UUID with the given id, or orm.ErrNotFound.
+// Get returns the UUID with the given id, or velox.ErrNotFound.
 func (c *UUIDClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.UUID, error) {
 	return c.Query(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *UUIDClient) UpdateByID(ex orm.Executor, id int) *entity.UUIDUpdate {
 	return c.Update(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UUID with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the UUID with the given id, or returns velox.ErrNotFound.
 func (c *UUIDClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

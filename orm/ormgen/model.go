@@ -53,6 +53,8 @@ func relConst(r vgen.Rel) string {
 func (g *generator) model() (map[string][]byte, error) {
 	im := newImports()
 	im.use(ormPath, "orm")
+	// The errors an edge accessor returns are package velox's.
+	veloxPkg := im.use("github.com/syssam/velox", "velox")
 	im.use("context", "context")
 	im.use("slices", "slices")
 	im.use("iter", "iter")
@@ -144,11 +146,11 @@ func (g *generator) model() (map[string][]byte, error) {
 		w("\tloaded [%d]bool\n}\n\n", max(len(e.Edges), 1))
 		for _, x := range e.Edges {
 			if x.E.Unique {
-				w("// %sOrErr returns the %s edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.\nfunc (e *%s) %sOrErr() (*%s, error) {\n\tif !e.loaded[%d] {\n\t\treturn nil, &orm.NotLoadedError{Edge: %q}\n\t}\n\tif e.%s == nil {\n\t\treturn nil, orm.ErrNotFound\n\t}\n\treturn e.%s, nil\n}\n\n",
-					x.GoName, x.E.Name, n.Edges, x.GoName, x.Target.Name, x.Index, x.E.Name, x.GoName, x.GoName)
+				w("// %[1]sOrErr returns the %[2]s edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.\nfunc (e *%[3]s) %[1]sOrErr() (*%[4]s, error) {\n\tif !e.loaded[%[5]d] {\n\t\treturn nil, %[6]s.NewNotLoadedError(%[2]q)\n\t}\n\tif e.%[1]s == nil {\n\t\treturn nil, %[7]s.NotFound()\n\t}\n\treturn e.%[1]s, nil\n}\n\n",
+					x.GoName, x.E.Name, n.Edges, x.Target.Name, x.Index, veloxPkg, g.names(x.Target).Meta)
 			} else {
-				w("// %sOrErr returns the %s edge, or an error when it was not loaded.\nfunc (e *%s) %sOrErr() ([]*%s, error) {\n\tif !e.loaded[%d] {\n\t\treturn nil, &orm.NotLoadedError{Edge: %q}\n\t}\n\treturn e.%s, nil\n}\n\n",
-					x.GoName, x.E.Name, n.Edges, x.GoName, x.Target.Name, x.Index, x.E.Name, x.GoName)
+				w("// %[1]sOrErr returns the %[2]s edge, or an error when it was not loaded (velox.IsNotLoaded).\nfunc (e *%[3]s) %[1]sOrErr() ([]*%[4]s, error) {\n\tif !e.loaded[%[5]d] {\n\t\treturn nil, %[6]s.NewNotLoadedError(%[2]q)\n\t}\n\treturn e.%[1]s, nil\n}\n\n",
+					x.GoName, x.E.Name, n.Edges, x.Target.Name, x.Index, veloxPkg)
 			}
 		}
 
@@ -323,7 +325,7 @@ func (q *%[1]s) All(ctx context.Context) ([]*%[2]s, error) {
 	return out, nil
 }
 
-// First returns the first matching %[2]s, or orm.ErrNotFound.
+// First returns the first matching %[2]s, or velox.ErrNotFound.
 func (q *%[1]s) First(ctx context.Context) (*%[2]s, error) {
 	r, err := q.c.First(ctx)
 	if err != nil {
@@ -332,7 +334,7 @@ func (q *%[1]s) First(ctx context.Context) (*%[2]s, error) {
 	return r.(*%[2]s), nil
 }
 
-// Only returns the single matching %[2]s: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching %[2]s: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 func (q *%[1]s) Only(ctx context.Context) (*%[2]s, error) {
 	r, err := q.c.Only(ctx)
 	if err != nil {
@@ -523,13 +525,13 @@ func (b *%[8]s) Fill(in any, skip ...string) *%[8]s {
 // how many match.
 func (b *%[8]s) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 func (b *%[8]s) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 func (b *%[8]s) SaveOne(ctx context.Context) (*%[2]s, error) {
 	e, err := b.c.UpdateOne(ctx)
@@ -596,7 +598,7 @@ func (q *%[9]s) With%[1]s(opts ...*%[4]s) *%[9]s {
 		}
 
 		if q := g.gql[e]; q != nil {
-			g.gqlModel(w, e, q)
+			g.gqlModel(w, e, q, veloxPkg)
 		}
 
 		// An edge is described by data in its owner's package, which cannot
@@ -665,7 +667,7 @@ func noInline(src []byte) []byte {
 // where inputs) that was 0.07 of the 0.31 CPU-seconds such a package took.
 // The predicate type in the interface keeps the check: a filter of another
 // entity does not compile.
-func (g *generator) gqlModel(w func(string, ...any), e *ent, q *gqlEnt) {
+func (g *generator) gqlModel(w func(string, ...any), e *ent, q *gqlEnt, veloxPkg string) {
 	n := g.names(e)
 	if q.Node {
 		w("// IsNode marks %[1]s as a node of the GraphQL schema.\nfunc (*%[1]s) IsNode() {}\n\n", e.Name)
@@ -704,24 +706,24 @@ func (o *%[1]sOrder) Term() %[2]s {
 // An edge without a neighbor is nil, not an error.
 func (e *%[3]s) %[1]s(ctx context.Context) (*%[4]s, error) {
 	v, err := e.Edges.%[5]sOrErr()
-	if orm.IsNotLoaded(err) {
+	if %[6]s.IsNotLoaded(err) {
 		v, err = e.Query%[5]s(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, %[6]s.MaskNotFound(err)
 }
 
-`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName)
+`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, veloxPkg)
 		case gqlList:
 			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbors the query
 // loaded, or else a query on the handle of the context (orm.WithExecutor).
 func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
-	if v, err := e.Edges.%[5]sOrErr(); !orm.IsNotLoaded(err) {
+	if v, err := e.Edges.%[5]sOrErr(); !%[6]s.IsNotLoaded(err) {
 		return v, err
 	}
 	return e.Query%[5]s(orm.ExecutorFrom(ctx)).All(ctx)
 }
 
-`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName)
+`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, veloxPkg)
 		case gqlConnection:
 			params, chain := "", ""
 			switch x.Order {

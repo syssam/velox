@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
 	nand "github.com/syssam/velox/tests/orm/shapes/db/and"
 	nbulk "github.com/syssam/velox/tests/orm/shapes/db/bulk"
 	nclash "github.com/syssam/velox/tests/orm/shapes/db/clash"
@@ -638,7 +638,7 @@ func TestNames_PackageAndTypeCollisions(t *testing.T) {
 	k = must(client.Kind.Update(db).Set(nkind.Shape.Set(shapeType)).Where(nkind.ID.EQ(k.ID)).SaveOne(ctx))
 	assert.Equal(t, nkind.ShapeFlat, k.Shape)
 	_, err := client.Kind.Update(db).Set(nkind.Shape.Set("cube")).Where(nkind.ID.EQ(k.ID)).Exec(ctx)
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 	require.ErrorAs(t, err, &verr)
 	// ...and Kind.shapes is an edge to it.
 	var ks *entity.KindShape = must(client.KindShape.Create(db).Set(nkindshape.Label.Set("s1"), nkindshape.Kind.Set(k.ID)).Save(ctx))
@@ -729,7 +729,7 @@ func TestNames_KeywordFieldsAndEdges(t *testing.T) {
 	loaded = must(client.Keywords.Query(db).Where(keywords.ID.EQ(k.ID)).WithFields().WithColumns().WithWith().WithAll().Only(ctx))
 	require.Len(t, loaded.Edges.Fields, 1)
 	_, err := loaded.Edges.ColumnsOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Empty(t, loaded.Edges.With)
 	assert.Equal(t, "f2", loaded.Edges.All.Label)
 }
@@ -766,7 +766,7 @@ func TestNames_Odd(t *testing.T) {
 		assert.Empty(t, rows[i].Edges.ID)
 		assert.Empty(t, rows[i].Edges.Edges)
 		_, err := rows[i].Edges.TableOrErr()
-		assert.ErrorIs(t, err, orm.ErrNotFound)
+		assert.ErrorIs(t, err, velox.ErrNotFound)
 	}
 	r := rows[1]
 	assert.Equal(t, b.ID, r.ID)
@@ -874,7 +874,7 @@ func TestNames_ClashesAreRenamed(t *testing.T) {
 	assert.Equal(t, nclash.SetA, got.Set)
 	assert.Zero(t, must(b.QueryOthersOrErrEdge(db).Count(ctx)))
 	_, err = client.Clash.Update(db).Set(nclash.AB.Set("b_c")).Where(nclash.ID.EQ(b.ID)).Exec(ctx)
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 	require.ErrorAs(t, err, &verr, "b_c is a value of a, not of a_b")
 	assert.Equal(t, "a_b", verr.Field)
 

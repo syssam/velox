@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -28,12 +29,12 @@ type KindEdges struct {
 	loaded [1]bool
 }
 
-// ShapesOrErr returns the shapes edge, or an error when it was not loaded.
+// ShapesOrErr returns the shapes edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KindEdges) ShapesOrErr() ([]*KindShape, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "shapes"}
+		return nil, velox.NewNotLoadedError("shapes")
 	}
 	return e.Shapes, nil
 }
@@ -216,7 +217,7 @@ func (q *KindQuery) All(ctx context.Context) ([]*Kind, error) {
 	return out, nil
 }
 
-// First returns the first matching Kind, or orm.ErrNotFound.
+// First returns the first matching Kind, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *KindQuery) First(ctx context.Context) (*Kind, error) {
@@ -227,7 +228,7 @@ func (q *KindQuery) First(ctx context.Context) (*Kind, error) {
 	return r.(*Kind), nil
 }
 
-// Only returns the single matching Kind: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Kind: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *KindQuery) Only(ctx context.Context) (*Kind, error) {
@@ -454,15 +455,15 @@ func (b *KindUpdate) Fill(in any, skip ...string) *KindUpdate {
 //go:noinline
 func (b *KindUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *KindUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

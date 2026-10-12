@@ -33,7 +33,7 @@ func (*BulkClient) Update(ex orm.Executor) *entity.BulkUpdate { return entity.Ne
 // Delete returns a builder that deletes the Bulk rows its conditions match.
 func (*BulkClient) Delete(ex orm.Executor) *entity.BulkDelete { return entity.NewBulkDelete(ex) }
 
-// Get returns the Bulk with the given id, or orm.ErrNotFound.
+// Get returns the Bulk with the given id, or velox.ErrNotFound.
 func (c *BulkClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Bulk, error) {
 	return c.Query(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *BulkClient) UpdateByID(ex orm.Executor, id int) *entity.BulkUpdate {
 	return c.Update(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Bulk with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Bulk with the given id, or returns velox.ErrNotFound.
 func (c *BulkClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

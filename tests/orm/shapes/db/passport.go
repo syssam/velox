@@ -41,7 +41,7 @@ func (*PassportClient) Delete(ex orm.Executor) *entity.PassportDelete {
 	return entity.NewPassportDelete(ex)
 }
 
-// Get returns the Passport with the given id, or orm.ErrNotFound.
+// Get returns the Passport with the given id, or velox.ErrNotFound.
 func (c *PassportClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Passport, error) {
 	return c.Query(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *PassportClient) UpdateByID(ex orm.Executor, id int) *entity.PassportUpd
 	return c.Update(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Passport with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Passport with the given id, or returns velox.ErrNotFound.
 func (c *PassportClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

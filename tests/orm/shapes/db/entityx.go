@@ -39,7 +39,7 @@ func (*EntityxClient) Delete(ex orm.Executor) *entity.EntityxDelete {
 	return entity.NewEntityxDelete(ex)
 }
 
-// Get returns the Entityx with the given id, or orm.ErrNotFound.
+// Get returns the Entityx with the given id, or velox.ErrNotFound.
 func (c *EntityxClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Entityx, error) {
 	return c.Query(ex).Where(predicate.Entityx(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *EntityxClient) UpdateByID(ex orm.Executor, id int) *entity.EntityxUpdat
 	return c.Update(ex).Where(predicate.Entityx(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Entityx with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Entityx with the given id, or returns velox.ErrNotFound.
 func (c *EntityxClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Entityx(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

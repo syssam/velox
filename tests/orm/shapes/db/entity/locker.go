@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	locker "github.com/syssam/velox/tests/orm/shapes/db/locker"
@@ -27,15 +28,15 @@ type LockerEdges struct {
 	loaded [1]bool
 }
 
-// HolderOrErr returns the holder edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// HolderOrErr returns the holder edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *LockerEdges) HolderOrErr() (*Author, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "holder"}
+		return nil, velox.NewNotLoadedError("holder")
 	}
 	if e.Holder == nil {
-		return nil, orm.ErrNotFound
+		return nil, AuthorMeta.NotFound()
 	}
 	return e.Holder, nil
 }
@@ -216,7 +217,7 @@ func (q *LockerQuery) All(ctx context.Context) ([]*Locker, error) {
 	return out, nil
 }
 
-// First returns the first matching Locker, or orm.ErrNotFound.
+// First returns the first matching Locker, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *LockerQuery) First(ctx context.Context) (*Locker, error) {
@@ -227,7 +228,7 @@ func (q *LockerQuery) First(ctx context.Context) (*Locker, error) {
 	return r.(*Locker), nil
 }
 
-// Only returns the single matching Locker: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Locker: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LockerQuery) Only(ctx context.Context) (*Locker, error) {
@@ -454,15 +455,15 @@ func (b *LockerUpdate) Fill(in any, skip ...string) *LockerUpdate {
 //go:noinline
 func (b *LockerUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *LockerUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

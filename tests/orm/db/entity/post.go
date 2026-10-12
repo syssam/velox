@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/db/internal/slots"
@@ -39,55 +40,55 @@ type PostEdges struct {
 	loaded   [5]bool
 }
 
-// AuthorOrErr returns the author edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// AuthorOrErr returns the author edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PostEdges) AuthorOrErr() (*User, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "author"}
+		return nil, velox.NewNotLoadedError("author")
 	}
 	if e.Author == nil {
-		return nil, orm.ErrNotFound
+		return nil, UserMeta.NotFound()
 	}
 	return e.Author, nil
 }
 
-// CommentsOrErr returns the comments edge, or an error when it was not loaded.
+// CommentsOrErr returns the comments edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PostEdges) CommentsOrErr() ([]*Comment, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "comments"}
+		return nil, velox.NewNotLoadedError("comments")
 	}
 	return e.Comments, nil
 }
 
-// TagsOrErr returns the tags edge, or an error when it was not loaded.
+// TagsOrErr returns the tags edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PostEdges) TagsOrErr() ([]*Tag, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "tags"}
+		return nil, velox.NewNotLoadedError("tags")
 	}
 	return e.Tags, nil
 }
 
-// LikersOrErr returns the likers edge, or an error when it was not loaded.
+// LikersOrErr returns the likers edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PostEdges) LikersOrErr() ([]*User, error) {
 	if !e.loaded[3] {
-		return nil, &orm.NotLoadedError{Edge: "likers"}
+		return nil, velox.NewNotLoadedError("likers")
 	}
 	return e.Likers, nil
 }
 
-// LikesOrErr returns the likes edge, or an error when it was not loaded.
+// LikesOrErr returns the likes edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PostEdges) LikesOrErr() ([]*Like, error) {
 	if !e.loaded[4] {
-		return nil, &orm.NotLoadedError{Edge: "likes"}
+		return nil, velox.NewNotLoadedError("likes")
 	}
 	return e.Likes, nil
 }
@@ -295,7 +296,7 @@ func (q *PostQuery) All(ctx context.Context) ([]*Post, error) {
 	return out, nil
 }
 
-// First returns the first matching Post, or orm.ErrNotFound.
+// First returns the first matching Post, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *PostQuery) First(ctx context.Context) (*Post, error) {
@@ -306,7 +307,7 @@ func (q *PostQuery) First(ctx context.Context) (*Post, error) {
 	return r.(*Post), nil
 }
 
-// Only returns the single matching Post: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Post: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PostQuery) Only(ctx context.Context) (*Post, error) {
@@ -533,15 +534,15 @@ func (b *PostUpdate) Fill(in any, skip ...string) *PostUpdate {
 //go:noinline
 func (b *PostUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *PostUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline
@@ -732,10 +733,10 @@ func (o *PostOrder) Term() predicate.PostOrderTerm {
 //go:noinline
 func (e *Post) Author(ctx context.Context) (*User, error) {
 	v, err := e.Edges.AuthorOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryAuthor(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 // Comments resolves the "comments" edge for a GraphQL engine: one page of the

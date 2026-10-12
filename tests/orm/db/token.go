@@ -34,7 +34,7 @@ func (*TokenClient) Update(ex orm.Executor) *entity.TokenUpdate { return entity.
 // Delete returns a builder that deletes the Token rows its conditions match.
 func (*TokenClient) Delete(ex orm.Executor) *entity.TokenDelete { return entity.NewTokenDelete(ex) }
 
-// Get returns the Token with the given id, or orm.ErrNotFound.
+// Get returns the Token with the given id, or velox.ErrNotFound.
 func (c *TokenClient) Get(ctx context.Context, ex orm.Executor, id uuid.UUID) (*entity.Token, error) {
 	return c.Query(ex).Where(predicate.Token(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -45,7 +45,7 @@ func (c *TokenClient) UpdateByID(ex orm.Executor, id uuid.UUID) *entity.TokenUpd
 	return c.Update(ex).Where(predicate.Token(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Token with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Token with the given id, or returns velox.ErrNotFound.
 func (c *TokenClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.Token(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

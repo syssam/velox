@@ -77,7 +77,7 @@ count, err := alice.QueryPosts(conn).Where(post.Title.EQ("first")).Count(ctx)
 alice, err = db.User.UpdateByID(conn, alice.ID).Set(user.Age.Add(1)).SaveOne(ctx)
 n, err := db.Post.Update(conn).Set(post.ViewCount.Add(1)).Where(post.Author.HasWith(user.ID.EQ(alice.ID))).Exec(ctx)
 
-// By id; a missing row is orm.ErrNotFound.
+// By id; a missing row is velox.ErrNotFound.
 u, err := db.User.Get(ctx, conn, id)
 err = db.User.DeleteByID(ctx, conn, id)
 ```
@@ -131,7 +131,7 @@ err = db.User.DeleteByID(ctx, conn, id)
   query is not run, so it needs no handle (`db.Post.Query(nil)`).
 - **`Exec` on an update or delete touches every matching row and returns the
   count; it is not an error when that is zero.** `SaveOne` is for exactly one
-  row (`orm.ErrNotFound`, `orm.ErrNotSingular`); `DeleteByID` reports a
+  row (`velox.ErrNotFound`, `velox.ErrNotSingular`); `DeleteByID` reports a
   missing row. There is no `Update().Save`: in velox and Ent that spelling is
   the bulk update.
 - **`CreateBulk` is one statement** for all its rows, and all of them or
@@ -171,7 +171,7 @@ err = db.User.DeleteByID(ctx, conn, id)
   and not when it is rolled back or the commit fails: for an event that must
   follow a change only when the change is certain.
 - `orm.First(q.Limit(1).IDs(ctx))` is the first of what a list read
-  returned, or `orm.ErrNotFound`.
+  returned, or `velox.ErrNotFound`.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not
@@ -182,7 +182,7 @@ err = db.User.DeleteByID(ctx, conn, id)
   and returns how many; `SaveOne(ctx)` updates the one matching row and
   returns it; `ExecOne(ctx)` is `SaveOne` for a caller with no use for the
   row, without the read `SaveOne` makes. The last two return
-  `orm.ErrNotFound` when no row matches and `orm.ErrNotSingular`, with
+  `velox.ErrNotFound` when no row matches and `velox.ErrNotSingular`, with
   nothing written, when several do. An update with nothing to write (a patch
   that changed nothing) runs no `UPDATE`: it counts the rows its conditions
   match (one `SELECT COUNT`), so the row that is there is still found.
@@ -202,13 +202,20 @@ err = db.User.DeleteByID(ctx, conn, id)
   none: a condition built from a list of filters means the same when the
   list is empty, and a delete of "any of these" over no filter removes
   nothing.
+- **The errors are package `velox`'s**, the ones the current runtime
+  returns: `velox.ErrNotFound` and `velox.ErrNotSingular` (and their
+  `IsNotFound`, `IsNotSingular`), `*velox.ValidationError`,
+  `*velox.ConstraintError`, `*velox.NotLoadedError`. Code that tests an error
+  does not change when the application moves. Package `orm` has only the
+  errors of its own making (`orm.ErrNoExecutor`, `orm.ErrTxDone`,
+  `orm.ErrWhereDepth`, `orm.ErrBadCursor`).
 - A create that leaves out a required field, a required edge or an id the
-  caller must supply is an `*orm.ValidationError` naming it, before any SQL.
-  What the database refuses is an `*orm.ConstraintError` that says which kind
-  (`errors.Is(err, orm.ErrUnique)`, `ErrForeignKey`, `ErrCheck`) and what the
-  database named as violated. `orm.IsRetryable(err)` is true for a
-  serialization failure or a deadlock: the errors for which the transaction,
-  as a whole, may be run again.
+  caller must supply is an `*velox.ValidationError` naming it, before any SQL.
+  What the database refuses is an `*velox.ConstraintError` that says which kind
+  (`errors.Is(err, velox.ErrUnique)`, `ErrForeignKey`, `ErrCheck`) and, with
+  `Constraint()`, what the database named as violated.
+  `velox.IsRetryable(err)` is true for a serialization failure or a deadlock:
+  the errors for which the transaction, as a whole, may be run again.
 - The zero predicate (`var p predicate.User`) is no condition in a query,
   which is what a filter built only under some circumstance wants. In an
   update or a delete it is an error: a forgotten assignment must not become a
@@ -472,9 +479,9 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
 - `db.NodeTypes()` is what a `node(id:)` field goes by when an id does not
   say its type: each type's name, table, and a `Get(ctx, ex, id)` that takes
   an id of any type (an id of another type than the entity's is
-  `orm.ErrNotFound`, like an id no row has; an `int64` from an engine finds
+  `velox.ErrNotFound`, like an id no row has; an `int64` from an engine finds
   an `int` id). Ask each in turn and take the first that is not
-  `orm.ErrNotFound`. That is a query per type, so an application with many
+  `velox.ErrNotFound`. That is a query per type, so an application with many
   types keeps what it learns.
 - A where input's nesting is limited (`orm.MaxWhereDepth`), counted through
   `has...With` as well as `not`, `and` and `or`.
@@ -612,20 +619,19 @@ first:
 | `p, err := where.P()` | an input with no condition was an error and is no condition now |
 | `Limit` in the option of an eager load | it was over all neighbors read, and is for each parent now |
 | a method value (`b.SetName`, `c.User.Get`) whose receiver is not a variable assigned once, unless it is handed straight to a call from a variable | the function in its place evaluates the receiver when called |
-| a field or a constructor of velox's error types, other than `NewNotFoundError` | the runtime's are `orm.ErrNotFound`, `orm.ErrNotSingular`, `*orm.ValidationError` (`Name` is `Field`, rewritten), `*orm.ConstraintError` |
+| `velox.QueryFromContext(ctx)` in an interceptor | package `orm` puts no query context there: it reads nil. The interceptor is handed the query itself, a `*orm.Query` |
 | a package of the generated tree the new one does not have (`hook`, something of the application's own kept there) | once, at its first reference; the summary of the run counts the rest |
 | several orders or filters given to `Paginate` | velox used the last of each |
 | `tx.Client()` handed on as a value | it is the transaction; what takes it must take `orm.Executor` |
 | a GraphQL edge method called on an entity (`u.Posts(ctx, ...)`) | it reads on the handle of the context |
 | a deferred call that came to be wrapped (`defer q.ExecX(ctx)`) | it is put in a function so that it still runs later; its arguments are evaluated then |
 
-What it keeps without a word: `IsNotFound`, `IsNotSingular`,
-`IsConstraintError`, `IsValidationError` and `IsNotLoaded`, of the generated
-package or of the library, and the library's values `ErrNotFound` and
-`ErrNotSingular`, become the runtime's (velox's never hold for an error of
-the new code), and `NewNotFoundError(x)`, which tests make for a stand-in of
-the store, becomes `orm.NotFound(x)`, which reads the same (`velox: user not
-found`, as a missing row of the runtime's own does). `CreateBulk(...).BatchSize(n)` is the same call. testify's `Nil` and `NotNil` of a
+What it keeps without a word: the errors. Package `orm` returns the
+library's own (`velox.ErrNotFound`, `*velox.ValidationError`, ...), so a test
+of an error, a field read from one and an error made with
+`velox.NewNotFoundError(x)` hold as they are; one written with the name the
+generated package repeated (`IsNotFound`, `ValidationError`, `MaskNotFound`
+of the generated root) takes the library's. `CreateBulk(...).BatchSize(n)` is the same call. testify's `Nil` and `NotNil` of a
 predicate become `True` and `False` of `orm.IsZero(p)`, like `p == nil`: a
 predicate was a function, nil when it was no condition, and is data now,
 which is never nil, so that `NotNil` left alone would pass for every
@@ -652,7 +658,7 @@ the application's text shows it: `m.OldField` reads the row under the
 mutation's own conditions, where velox read it by its id. For an update
 whose guard the row fails (an optimistic lock), velox handed the hook the
 old value and then found no row to update; here the hook's `OldField` is
-already `orm.ErrNotFound`.
+already `velox.ErrNotFound`.
 
 What it does not see, and a person must: a query or mutation type of one
 entity given to a generic function as a type argument (`as[*UserMutation](m)`

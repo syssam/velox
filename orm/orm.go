@@ -5,8 +5,6 @@ import (
 	stdsql "database/sql"
 	"errors"
 	"fmt"
-	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -283,12 +281,12 @@ func (db *DB) RunTxOptions(ctx context.Context, opts *stdsql.TxOptions, fn func(
 	return nil
 }
 
-// Errors returned by the terminals of generated builders.
+// Errors of the runtime's own. The ones an application tests after a query
+// or a mutation are package velox's, whichever runtime ran it:
+// velox.ErrNotFound, velox.ErrNotSingular, *velox.ValidationError,
+// *velox.ConstraintError with velox.ErrUnique and its other kinds,
+// *velox.NotLoadedError, and velox.IsNotFound and the rest for each.
 var (
-	// ErrNotFound: First/Only/Save matched no row.
-	ErrNotFound = errors.New("velox: not found")
-	// ErrNotSingular: Only/Save matched more than one row.
-	ErrNotSingular = errors.New("velox: more than one row matched")
 	// ErrNoExecutor: a query or mutation was run that was not built from a
 	// database handle or transaction (db.User.Query(nil), or a nil *orm.Tx).
 	ErrNoExecutor = errors.New("velox: nothing to run on: build the query or mutation from a database handle or a transaction")
@@ -299,151 +297,22 @@ var (
 	ErrTxDone = errors.New("velox: transaction has already been committed or rolled back")
 )
 
-// ValidationError reports a value rejected before it reached the database.
-type ValidationError struct {
-	Entity string
-	Field  string
-	Err    error
+// NotFound returns the error of a query or mutation of the entity that
+// matched no row: a *velox.NotFoundError, which is velox.ErrNotFound and
+// reads "velox: sales_order not found".
+func (m *Meta) NotFound() error { return velox.NewNotFoundError(m.label()) }
+
+// notSingular is the error of a read or write of one row that matched more.
+func (m *Meta) notSingular() error { return velox.NewNotSingularError(m.label()) }
+
+// invalid is the error of a value of a field or an edge refused before it
+// reached the database.
+func (m *Meta) invalid(name string, err error) error {
+	return &velox.ValidationError{Entity: m.Name, Field: name, Name: name, Err: err}
 }
 
-func (e *ValidationError) Error() string {
-	return fmt.Sprintf("velox: validating %s.%s: %v", e.Entity, e.Field, e.Err)
-}
-
-func (e *ValidationError) Unwrap() error { return e.Err }
-
-// ConstraintKind is the kind of constraint a write was refused for.
-type ConstraintKind uint8
-
-// Constraint kinds.
-const (
-	ConstraintOther ConstraintKind = iota
-	ConstraintUnique
-	ConstraintForeignKey
-	ConstraintCheck
-)
-
-// The kinds of a ConstraintError, for errors.Is: a handler that turns a
-// duplicate into "already exists" tests errors.Is(err, orm.ErrUnique).
-var (
-	ErrUnique     = errors.New("velox: unique constraint violated")
-	ErrForeignKey = errors.New("velox: foreign key constraint violated")
-	ErrCheck      = errors.New("velox: check constraint violated")
-)
-
-// ConstraintError is a write the database refused for a constraint. Err is
-// the driver's error.
-type ConstraintError struct {
-	Kind ConstraintKind
-	// Constraint is what the database names as violated, when the driver
-	// says: the constraint on Postgres (users_email_key), the columns on
-	// SQLite (users.email), the key on MySQL. It is for messages and logs;
-	// its form differs by database.
-	Constraint string
-	Err        error
-}
-
-func (e *ConstraintError) Error() string { return "velox: constraint failed: " + e.Err.Error() }
-
-// Unwrap returns the driver's error.
-func (e *ConstraintError) Unwrap() error { return e.Err }
-
-// Is reports whether target is the sentinel of the error's kind.
-func (e *ConstraintError) Is(target error) bool {
-	switch target {
-	case ErrUnique:
-		return e.Kind == ConstraintUnique
-	case ErrForeignKey:
-		return e.Kind == ConstraintForeignKey
-	case ErrCheck:
-		return e.Kind == ConstraintCheck
-	}
-	return false
-}
-
-// IsRetryable reports whether err is a failure the database asks to be tried
-// again: a serialization failure or a deadlock (SQLSTATE 40001 and 40P01 on
-// Postgres, errors 1213 and 1205 on MySQL), or a database that was busy or
-// locked (SQLite). The whole transaction is what is tried again, from its
-// first statement, and only when running it twice is harmless; a constraint
-// violation or a validation error is never retryable.
-func IsRetryable(err error) bool {
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		switch x := e.(type) {
-		case interface{ SQLState() string }:
-			if state := x.SQLState(); state == "40001" || state == "40P01" {
-				return true
-			}
-		case interface{ Code() int }:
-			// SQLite's primary result code: SQLITE_BUSY, SQLITE_LOCKED.
-			if code := x.Code() & 0xff; code == 5 || code == 6 {
-				return true
-			}
-		}
-		// go-sql-driver/mysql carries the server's error number in a field.
-		if rv := reflect.Indirect(reflect.ValueOf(e)); rv.Kind() == reflect.Struct {
-			if f := rv.FieldByName("Number"); f.IsValid() && f.CanUint() && (f.Uint() == 1213 || f.Uint() == 1205) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-var (
-	sqliteConstraint = regexp.MustCompile(`constraint failed: ([^()]+?)\s*(?:\(|$)`)
-	mysqlKey         = regexp.MustCompile(`for key '([^']+)'`)
-)
-
-// constraintOf names what a constraint error says was violated.
-func constraintOf(err error) string {
-	// lib/pq and pgx carry the name in a field of their error.
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		rv := reflect.Indirect(reflect.ValueOf(e))
-		if rv.Kind() != reflect.Struct {
-			continue
-		}
-		for _, name := range [...]string{"Constraint", "ConstraintName"} {
-			if f := rv.FieldByName(name); f.IsValid() && f.Kind() == reflect.String && f.String() != "" {
-				return f.String()
-			}
-		}
-	}
-	msg := err.Error()
-	if m := sqliteConstraint.FindStringSubmatch(msg); m != nil {
-		return strings.TrimSpace(m[1])
-	}
-	if m := mysqlKey.FindStringSubmatch(msg); m != nil {
-		return m[1]
-	}
-	return ""
-}
-
-// notFoundError is ErrNotFound with what was not found.
-type notFoundError struct {
-	what string
-	m    *Meta
-}
-
-func (e *notFoundError) Error() string {
-	what := e.what
-	if e.m != nil {
-		what = snake(e.m.Name)
-	}
-	return "velox: " + what + " not found"
-}
-
-func (e *notFoundError) Unwrap() error { return ErrNotFound }
-
-// NotFound returns an error that is ErrNotFound and says what was not found:
-// NotFound("user") reads "velox: user not found". For a stand-in of the store
-// in a test, and for a lookup of the application's own that ends like one of
-// the runtime's.
-func NotFound(what string) error { return &notFoundError{what: what} }
-
-// NotFound returns ErrNotFound for a row of the entity, which is what the
-// runtime returns where no row matches: "velox: sales_order not found".
-func (m *Meta) NotFound() error { return &notFoundError{m: m} }
+// label is the entity as an error names it.
+func (m *Meta) label() string { return snake(m.Name) }
 
 // snake writes a name of the schema in lower case with underscores:
 // SalesOrder is sales_order, HTTPLog is http_log.
@@ -462,18 +331,6 @@ func snake(s string) string {
 	return b.String()
 }
 
-// IsNotFound reports whether err is ErrNotFound.
-func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
-
-// IsNotSingular reports whether err is ErrNotSingular.
-func IsNotSingular(err error) bool { return errors.Is(err, ErrNotSingular) }
-
-// IsValidationError reports whether err is a *ValidationError.
-func IsValidationError(err error) bool {
-	var v *ValidationError
-	return errors.As(err, &v)
-}
-
 // Must returns v, and panics when err is not nil: for a test, and for the
 // start of a program, where an error ends things either way.
 //
@@ -489,7 +346,7 @@ func Must[T any](v T, err error) T {
 	return v
 }
 
-// First returns the first of what a read of a list returned, or ErrNotFound
+// First returns the first of what a read of a list returned, or velox.ErrNotFound
 // when it returned none: the id of the first row a query matches is
 //
 //	id, err := orm.First(q.Limit(1).IDs(ctx))
@@ -497,7 +354,7 @@ func First[T any](vs []T, err error) (T, error) {
 	if err != nil || len(vs) == 0 {
 		var zero T
 		if err == nil {
-			err = ErrNotFound
+			err = velox.ErrNotFound
 		}
 		return zero, err
 	}
@@ -527,10 +384,4 @@ func Check(err error) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-// IsConstraintError reports whether err is a constraint violation.
-func IsConstraintError(err error) bool {
-	var c *ConstraintError
-	return errors.As(err, &c)
 }

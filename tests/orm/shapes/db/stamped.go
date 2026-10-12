@@ -39,7 +39,7 @@ func (*StampedClient) Delete(ex orm.Executor) *entity.StampedDelete {
 	return entity.NewStampedDelete(ex)
 }
 
-// Get returns the Stamped with the given id, or orm.ErrNotFound.
+// Get returns the Stamped with the given id, or velox.ErrNotFound.
 func (c *StampedClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Stamped, error) {
 	return c.Query(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *StampedClient) UpdateByID(ex orm.Executor, id int) *entity.StampedUpdat
 	return c.Update(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Stamped with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Stamped with the given id, or returns velox.ErrNotFound.
 func (c *StampedClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

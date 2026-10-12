@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -30,35 +31,35 @@ type WeightKeyEdges struct {
 	loaded [3]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *WeightKeyEdges) OwnerOrErr() (*LabelKey, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "owner"}
+		return nil, velox.NewNotLoadedError("owner")
 	}
 	if e.Owner == nil {
-		return nil, orm.ErrNotFound
+		return nil, LabelKeyMeta.NotFound()
 	}
 	return e.Owner, nil
 }
 
-// LabelsOrErr returns the labels edge, or an error when it was not loaded.
+// LabelsOrErr returns the labels edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *WeightKeyEdges) LabelsOrErr() ([]*LabelKey, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "labels"}
+		return nil, velox.NewNotLoadedError("labels")
 	}
 	return e.Labels, nil
 }
 
-// PeersOrErr returns the peers edge, or an error when it was not loaded.
+// PeersOrErr returns the peers edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *WeightKeyEdges) PeersOrErr() ([]*WeightKey, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "peers"}
+		return nil, velox.NewNotLoadedError("peers")
 	}
 	return e.Peers, nil
 }
@@ -245,7 +246,7 @@ func (q *WeightKeyQuery) All(ctx context.Context) ([]*WeightKey, error) {
 	return out, nil
 }
 
-// First returns the first matching WeightKey, or orm.ErrNotFound.
+// First returns the first matching WeightKey, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *WeightKeyQuery) First(ctx context.Context) (*WeightKey, error) {
@@ -256,7 +257,7 @@ func (q *WeightKeyQuery) First(ctx context.Context) (*WeightKey, error) {
 	return r.(*WeightKey), nil
 }
 
-// Only returns the single matching WeightKey: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching WeightKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *WeightKeyQuery) Only(ctx context.Context) (*WeightKey, error) {
@@ -483,15 +484,15 @@ func (b *WeightKeyUpdate) Fill(in any, skip ...string) *WeightKeyUpdate {
 //go:noinline
 func (b *WeightKeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *WeightKeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

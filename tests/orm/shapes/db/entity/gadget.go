@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	gadget "github.com/syssam/velox/tests/orm/shapes/db/gadget"
@@ -27,15 +28,15 @@ type GadgetEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *GadgetEdges) OwnerOrErr() (*Author, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "owner"}
+		return nil, velox.NewNotLoadedError("owner")
 	}
 	if e.Owner == nil {
-		return nil, orm.ErrNotFound
+		return nil, AuthorMeta.NotFound()
 	}
 	return e.Owner, nil
 }
@@ -216,7 +217,7 @@ func (q *GadgetQuery) All(ctx context.Context) ([]*Gadget, error) {
 	return out, nil
 }
 
-// First returns the first matching Gadget, or orm.ErrNotFound.
+// First returns the first matching Gadget, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *GadgetQuery) First(ctx context.Context) (*Gadget, error) {
@@ -227,7 +228,7 @@ func (q *GadgetQuery) First(ctx context.Context) (*Gadget, error) {
 	return r.(*Gadget), nil
 }
 
-// Only returns the single matching Gadget: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Gadget: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *GadgetQuery) Only(ctx context.Context) (*Gadget, error) {
@@ -454,15 +455,15 @@ func (b *GadgetUpdate) Fill(in any, skip ...string) *GadgetUpdate {
 //go:noinline
 func (b *GadgetUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *GadgetUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

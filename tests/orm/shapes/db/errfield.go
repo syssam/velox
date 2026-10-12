@@ -41,7 +41,7 @@ func (*ErrFieldClient) Delete(ex orm.Executor) *entity.ErrFieldDelete {
 	return entity.NewErrFieldDelete(ex)
 }
 
-// Get returns the ErrField with the given id, or orm.ErrNotFound.
+// Get returns the ErrField with the given id, or velox.ErrNotFound.
 func (c *ErrFieldClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.ErrField, error) {
 	return c.Query(ex).Where(predicate.ErrField(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *ErrFieldClient) UpdateByID(ex orm.Executor, id int) *entity.ErrFieldUpd
 	return c.Update(ex).Where(predicate.ErrField(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the ErrField with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the ErrField with the given id, or returns velox.ErrNotFound.
 func (c *ErrFieldClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.ErrField(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

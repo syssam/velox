@@ -33,7 +33,7 @@ func (*GadgetClient) Update(ex orm.Executor) *entity.GadgetUpdate { return entit
 // Delete returns a builder that deletes the Gadget rows its conditions match.
 func (*GadgetClient) Delete(ex orm.Executor) *entity.GadgetDelete { return entity.NewGadgetDelete(ex) }
 
-// Get returns the Gadget with the given id, or orm.ErrNotFound.
+// Get returns the Gadget with the given id, or velox.ErrNotFound.
 func (c *GadgetClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Gadget, error) {
 	return c.Query(ex).Where(predicate.Gadget(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *GadgetClient) UpdateByID(ex orm.Executor, id int) *entity.GadgetUpdate 
 	return c.Update(ex).Where(predicate.Gadget(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Gadget with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Gadget with the given id, or returns velox.ErrNotFound.
 func (c *GadgetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Gadget(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

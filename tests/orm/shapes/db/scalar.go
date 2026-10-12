@@ -33,7 +33,7 @@ func (*ScalarClient) Update(ex orm.Executor) *entity.ScalarUpdate { return entit
 // Delete returns a builder that deletes the Scalar rows its conditions match.
 func (*ScalarClient) Delete(ex orm.Executor) *entity.ScalarDelete { return entity.NewScalarDelete(ex) }
 
-// Get returns the Scalar with the given id, or orm.ErrNotFound.
+// Get returns the Scalar with the given id, or velox.ErrNotFound.
 func (c *ScalarClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Scalar, error) {
 	return c.Query(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *ScalarClient) UpdateByID(ex orm.Executor, id int) *entity.ScalarUpdate 
 	return c.Update(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Scalar with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Scalar with the given id, or returns velox.ErrNotFound.
 func (c *ScalarClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

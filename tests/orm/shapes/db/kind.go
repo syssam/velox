@@ -33,7 +33,7 @@ func (*KindClient) Update(ex orm.Executor) *entity.KindUpdate { return entity.Ne
 // Delete returns a builder that deletes the Kind rows its conditions match.
 func (*KindClient) Delete(ex orm.Executor) *entity.KindDelete { return entity.NewKindDelete(ex) }
 
-// Get returns the Kind with the given id, or orm.ErrNotFound.
+// Get returns the Kind with the given id, or velox.ErrNotFound.
 func (c *KindClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Kind, error) {
 	return c.Query(ex).Where(predicate.Kind(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *KindClient) UpdateByID(ex orm.Executor, id int) *entity.KindUpdate {
 	return c.Update(ex).Where(predicate.Kind(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Kind with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Kind with the given id, or returns velox.ErrNotFound.
 func (c *KindClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Kind(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

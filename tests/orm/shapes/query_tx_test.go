@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -46,10 +47,10 @@ func TestQuery_Terminals(t *testing.T) {
 	// On an empty table.
 	assert.Empty(t, must(client.IntKey.Query(db).All(ctx)))
 	_, err := client.IntKey.Query(db).First(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
-	assert.True(t, orm.IsNotFound(err))
+	assert.ErrorIs(t, err, velox.ErrNotFound)
+	assert.True(t, velox.IsNotFound(err))
 	_, err = client.IntKey.Query(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Zero(t, must(client.IntKey.Query(db).Count(ctx)))
 	assert.False(t, must(client.IntKey.Query(db).Exists(ctx)))
 	assert.Empty(t, must(client.IntKey.Query(db).IDs(ctx)))
@@ -62,17 +63,17 @@ func TestQuery_Terminals(t *testing.T) {
 
 	// Only: none, one, several.
 	_, err = client.IntKey.Query(db).Where(intkey.Name.EQ("zz")).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
-	assert.False(t, errors.Is(err, orm.ErrNotSingular))
+	assert.ErrorIs(t, err, velox.ErrNotFound)
+	assert.False(t, errors.Is(err, velox.ErrNotSingular))
 	assert.Equal(t, "e", must(client.IntKey.Query(db).Where(intkey.Name.EQ("e")).Only(ctx)).Name)
 	_, err = client.IntKey.Query(db).Where(intkey.Name.EQ("a")).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
-	assert.False(t, orm.IsNotFound(err))
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
+	assert.False(t, velox.IsNotFound(err))
 	_, err = client.IntKey.Query(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
 	// Only does not turn a caller's limit of one into "single".
 	_, err = client.IntKey.Query(db).Where(intkey.Name.EQ("a")).Limit(1).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular, "two rows match; Limit(1) must not hide the second from Only")
+	assert.ErrorIs(t, err, velox.ErrNotSingular, "two rows match; Limit(1) must not hide the second from Only")
 
 	// First honors the order.
 	assert.Equal(t, "e", must(client.IntKey.Query(db).OrderBy(intkey.Name.Desc()).First(ctx)).Name)
@@ -111,7 +112,7 @@ func TestQuery_Terminals(t *testing.T) {
 	// A query can be run more than once, and a terminal does not change it.
 	q := client.IntKey.Query(db).Where(intkey.Name.EQ("a")).OrderBy(intkey.ID.Asc())
 	_, err = q.Only(ctx)
-	require.ErrorIs(t, err, orm.ErrNotSingular)
+	require.ErrorIs(t, err, velox.ErrNotSingular)
 	assert.Equal(t, ids[1], must(q.First(ctx)).ID)
 	assert.True(t, must(q.Exists(ctx)))
 	assert.Len(t, must(q.All(ctx)), 2, "First, Only and Exist did not leave their limit behind")
@@ -173,21 +174,21 @@ func TestUpdate_SaveExecDeleteSemantics(t *testing.T) {
 	// By id, guarded by a second predicate that does not hold: not found, and
 	// nothing written.
 	_, err := client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.ID.EQ(rows[0].ID), intkey.Name.EQ("a2")).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.ID.EQ(rows[0].ID)).Where(intkey.Name.EQ("zz")).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	// None.
 	_, err = client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.ID.EQ(9999)).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.Name.EQ("zz")).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	// Several: an error, and nothing written.
 	_, err = client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.Name.EQ("b")).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
 	_, err = client.IntKey.Update(db).Set(intkey.Name.Set("never")).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
 	_, err = client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.ID.In(rows[1].ID, rows[2].ID)).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
 	assert.Zero(t, must(client.IntKey.Query(db).Where(intkey.Name.EQ("never")).Count(ctx)))
 	// No-op by value: the row exists, so Save returns it.
 	got = must(client.IntKey.Update(db).Set(intkey.Name.Set("a3")).Where(intkey.ID.EQ(rows[0].ID)).SaveOne(ctx))
@@ -234,7 +235,7 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 		assert.Equal(t, 4, count(tx), "the transaction sees its own writes")
 		must(client.IntKey.Update(tx).Set(intkey.Name.Set("b2")).Where(intkey.ID.EQ(rows[1].ID)).SaveOne(ctx))
 		_, err := client.IntKey.Update(tx).Set(intkey.Name.Set("never")).Where(intkey.ID.EQ(9999)).SaveOne(ctx)
-		assert.ErrorIs(t, err, orm.ErrNotFound, "a miss inside a transaction does not end it")
+		assert.ErrorIs(t, err, velox.ErrNotFound, "a miss inside a transaction does not end it")
 		assert.Equal(t, 1, must(client.IntKey.Update(tx).Set(intkey.Name.Set("c2")).Where(intkey.Name.EQ("c")).Exec(ctx)))
 		assert.Equal(t, 1, must(client.IntKey.Delete(tx).Where(intkey.Name.EQ("a")).Exec(ctx)))
 		assert.True(t, must(client.IntKey.Query(tx).Where(intkey.Name.EQ("b2")).Exists(ctx)))
@@ -258,7 +259,7 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 		_, err := client.IntKey.Query(tx).Where(intkey.Name.EQ("nope")).Only(ctx)
 		return err
 	})
-	require.ErrorIs(t, err, orm.ErrNotFound)
+	require.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, 3, count(db))
 
 	// A panic rolls back and propagates.
@@ -364,7 +365,7 @@ func TestTx_EdgesInsideATransaction(t *testing.T) {
 		assert.Zero(t, must(l.a1.QueryTopics(tx).Count(ctx)), "the transaction sees its own edge changes")
 		// A statement that fails does not end the transaction...
 		_, err := client.Article.Create(tx).Set(article.Title.Set("ghost"), article.Author.Set(l.ann.ID), article.Topics.Add(9999)).Save(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		assert.Equal(t, 3, must(y.QueryTopics(tx).Count(ctx)), "...and what came before it is still there")
 		return boom
 	})
@@ -399,7 +400,7 @@ func TestTx_Misuse(t *testing.T) {
 	tx := must(db.Begin(ctx))
 	intKeys(t, tx, "a")
 	_, err := client.IntKey.Create(tx).Set(intkey.ID.Set(1), intkey.Name.Set("dup")).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	require.NoError(t, tx.Commit())
 	assert.Equal(t, 1, count())
 

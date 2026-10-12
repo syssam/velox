@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	author "github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -32,58 +33,58 @@ type AuthorEdges struct {
 	loaded   [5]bool
 }
 
-// ArticlesOrErr returns the articles edge, or an error when it was not loaded.
+// ArticlesOrErr returns the articles edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *AuthorEdges) ArticlesOrErr() ([]*Article, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "articles"}
+		return nil, velox.NewNotLoadedError("articles")
 	}
 	return e.Articles, nil
 }
 
-// EditedOrErr returns the edited edge, or an error when it was not loaded.
+// EditedOrErr returns the edited edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *AuthorEdges) EditedOrErr() ([]*Article, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "edited"}
+		return nil, velox.NewNotLoadedError("edited")
 	}
 	return e.Edited, nil
 }
 
-// PassportOrErr returns the passport edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// PassportOrErr returns the passport edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AuthorEdges) PassportOrErr() (*Passport, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "passport"}
+		return nil, velox.NewNotLoadedError("passport")
 	}
 	if e.Passport == nil {
-		return nil, orm.ErrNotFound
+		return nil, PassportMeta.NotFound()
 	}
 	return e.Passport, nil
 }
 
-// LockerOrErr returns the locker edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// LockerOrErr returns the locker edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AuthorEdges) LockerOrErr() (*Locker, error) {
 	if !e.loaded[3] {
-		return nil, &orm.NotLoadedError{Edge: "locker"}
+		return nil, velox.NewNotLoadedError("locker")
 	}
 	if e.Locker == nil {
-		return nil, orm.ErrNotFound
+		return nil, LockerMeta.NotFound()
 	}
 	return e.Locker, nil
 }
 
-// GadgetsOrErr returns the gadgets edge, or an error when it was not loaded.
+// GadgetsOrErr returns the gadgets edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *AuthorEdges) GadgetsOrErr() ([]*Gadget, error) {
 	if !e.loaded[4] {
-		return nil, &orm.NotLoadedError{Edge: "gadgets"}
+		return nil, velox.NewNotLoadedError("gadgets")
 	}
 	return e.Gadgets, nil
 }
@@ -274,7 +275,7 @@ func (q *AuthorQuery) All(ctx context.Context) ([]*Author, error) {
 	return out, nil
 }
 
-// First returns the first matching Author, or orm.ErrNotFound.
+// First returns the first matching Author, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *AuthorQuery) First(ctx context.Context) (*Author, error) {
@@ -285,7 +286,7 @@ func (q *AuthorQuery) First(ctx context.Context) (*Author, error) {
 	return r.(*Author), nil
 }
 
-// Only returns the single matching Author: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Author: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *AuthorQuery) Only(ctx context.Context) (*Author, error) {
@@ -512,15 +513,15 @@ func (b *AuthorUpdate) Fill(in any, skip ...string) *AuthorUpdate {
 //go:noinline
 func (b *AuthorUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *AuthorUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

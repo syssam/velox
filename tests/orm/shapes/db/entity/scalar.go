@@ -341,7 +341,7 @@ func (q *ScalarQuery) All(ctx context.Context) ([]*Scalar, error) {
 	return out, nil
 }
 
-// First returns the first matching Scalar, or orm.ErrNotFound.
+// First returns the first matching Scalar, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *ScalarQuery) First(ctx context.Context) (*Scalar, error) {
@@ -352,7 +352,7 @@ func (q *ScalarQuery) First(ctx context.Context) (*Scalar, error) {
 	return r.(*Scalar), nil
 }
 
-// Only returns the single matching Scalar: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Scalar: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ScalarQuery) Only(ctx context.Context) (*Scalar, error) {
@@ -579,15 +579,15 @@ func (b *ScalarUpdate) Fill(in any, skip ...string) *ScalarUpdate {
 //go:noinline
 func (b *ScalarUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *ScalarUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

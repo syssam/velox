@@ -170,7 +170,7 @@ func (q *PredicateQuery) All(ctx context.Context) ([]*Predicate, error) {
 	return out, nil
 }
 
-// First returns the first matching Predicate, or orm.ErrNotFound.
+// First returns the first matching Predicate, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *PredicateQuery) First(ctx context.Context) (*Predicate, error) {
@@ -181,7 +181,7 @@ func (q *PredicateQuery) First(ctx context.Context) (*Predicate, error) {
 	return r.(*Predicate), nil
 }
 
-// Only returns the single matching Predicate: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Predicate: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PredicateQuery) Only(ctx context.Context) (*Predicate, error) {
@@ -408,15 +408,15 @@ func (b *PredicateUpdate) Fill(in any, skip ...string) *PredicateUpdate {
 //go:noinline
 func (b *PredicateUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *PredicateUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

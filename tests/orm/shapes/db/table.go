@@ -33,7 +33,7 @@ func (*TableClient) Update(ex orm.Executor) *entity.TableUpdate { return entity.
 // Delete returns a builder that deletes the Table rows its conditions match.
 func (*TableClient) Delete(ex orm.Executor) *entity.TableDelete { return entity.NewTableDelete(ex) }
 
-// Get returns the Table with the given id, or orm.ErrNotFound.
+// Get returns the Table with the given id, or velox.ErrNotFound.
 func (c *TableClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Table, error) {
 	return c.Query(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *TableClient) UpdateByID(ex orm.Executor, id int) *entity.TableUpdate {
 	return c.Update(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Table with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Table with the given id, or returns velox.ErrNotFound.
 func (c *TableClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

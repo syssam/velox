@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -76,58 +77,58 @@ type KeywordsEdges struct {
 	loaded  [5]bool
 }
 
-// FieldsOrErr returns the fields edge, or an error when it was not loaded.
+// FieldsOrErr returns the fields edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KeywordsEdges) FieldsOrErr() ([]*Field, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "fields"}
+		return nil, velox.NewNotLoadedError("fields")
 	}
 	return e.Fields, nil
 }
 
-// ColumnsOrErr returns the columns edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// ColumnsOrErr returns the columns edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *KeywordsEdges) ColumnsOrErr() (*Field, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "columns"}
+		return nil, velox.NewNotLoadedError("columns")
 	}
 	if e.Columns == nil {
-		return nil, orm.ErrNotFound
+		return nil, FieldMeta.NotFound()
 	}
 	return e.Columns, nil
 }
 
-// LoadedOrErr returns the loaded edge, or an error when it was not loaded.
+// LoadedOrErr returns the loaded edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KeywordsEdges) LoadedOrErr() ([]*Field, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "loaded"}
+		return nil, velox.NewNotLoadedError("loaded")
 	}
 	return e.Loaded, nil
 }
 
-// WithOrErr returns the with edge, or an error when it was not loaded.
+// WithOrErr returns the with edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KeywordsEdges) WithOrErr() ([]*Field, error) {
 	if !e.loaded[3] {
-		return nil, &orm.NotLoadedError{Edge: "with"}
+		return nil, velox.NewNotLoadedError("with")
 	}
 	return e.With, nil
 }
 
-// AllOrErr returns the all edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// AllOrErr returns the all edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *KeywordsEdges) AllOrErr() (*Field, error) {
 	if !e.loaded[4] {
-		return nil, &orm.NotLoadedError{Edge: "all"}
+		return nil, velox.NewNotLoadedError("all")
 	}
 	if e.All == nil {
-		return nil, orm.ErrNotFound
+		return nil, FieldMeta.NotFound()
 	}
 	return e.All, nil
 }
@@ -430,7 +431,7 @@ func (q *KeywordsQuery) All(ctx context.Context) ([]*Keywords, error) {
 	return out, nil
 }
 
-// First returns the first matching Keywords, or orm.ErrNotFound.
+// First returns the first matching Keywords, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *KeywordsQuery) First(ctx context.Context) (*Keywords, error) {
@@ -441,7 +442,7 @@ func (q *KeywordsQuery) First(ctx context.Context) (*Keywords, error) {
 	return r.(*Keywords), nil
 }
 
-// Only returns the single matching Keywords: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Keywords: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *KeywordsQuery) Only(ctx context.Context) (*Keywords, error) {
@@ -668,15 +669,15 @@ func (b *KeywordsUpdate) Fill(in any, skip ...string) *KeywordsUpdate {
 //go:noinline
 func (b *KeywordsUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *KeywordsUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

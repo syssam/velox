@@ -41,7 +41,7 @@ func (*NamedBytesClient) Delete(ex orm.Executor) *entity.NamedBytesDelete {
 	return entity.NewNamedBytesDelete(ex)
 }
 
-// Get returns the NamedBytes with the given id, or orm.ErrNotFound.
+// Get returns the NamedBytes with the given id, or velox.ErrNotFound.
 func (c *NamedBytesClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.NamedBytes, error) {
 	return c.Query(ex).Where(predicate.NamedBytes(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *NamedBytesClient) UpdateByID(ex orm.Executor, id int) *entity.NamedByte
 	return c.Update(ex).Where(predicate.NamedBytes(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the NamedBytes with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the NamedBytes with the given id, or returns velox.ErrNotFound.
 func (c *NamedBytesClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBytes(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

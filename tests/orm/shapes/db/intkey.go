@@ -33,7 +33,7 @@ func (*IntKeyClient) Update(ex orm.Executor) *entity.IntKeyUpdate { return entit
 // Delete returns a builder that deletes the IntKey rows its conditions match.
 func (*IntKeyClient) Delete(ex orm.Executor) *entity.IntKeyDelete { return entity.NewIntKeyDelete(ex) }
 
-// Get returns the IntKey with the given id, or orm.ErrNotFound.
+// Get returns the IntKey with the given id, or velox.ErrNotFound.
 func (c *IntKeyClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.IntKey, error) {
 	return c.Query(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *IntKeyClient) UpdateByID(ex orm.Executor, id int) *entity.IntKeyUpdate 
 	return c.Update(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the IntKey with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the IntKey with the given id, or returns velox.ErrNotFound.
 func (c *IntKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -238,3 +238,75 @@ func BenchmarkErrors(b *testing.B) {
 		}
 	})
 }
+
+type stateErr string
+
+func (e stateErr) Error() string    { return "state " + string(e) }
+func (e stateErr) SQLState() string { return string(e) }
+
+type codeErr int
+
+func (e codeErr) Error() string { return "code" }
+func (e codeErr) Code() int     { return int(e) }
+
+type numberErr struct{ Number uint16 }
+
+func (e *numberErr) Error() string { return "number" }
+
+// What a database asks to be tried again, by the three ways drivers say it.
+func TestIsRetryable(t *testing.T) {
+	wrap := func(err error) error { return fmt.Errorf("committing the transaction: %w", err) }
+	for _, err := range []error{stateErr("40001"), stateErr("40P01"), codeErr(5), codeErr(6), codeErr(5 | 1<<8), &numberErr{1213}, &numberErr{1205}} {
+		assert.True(t, velox.IsRetryable(err), "%#v", err)
+		assert.True(t, velox.IsRetryable(wrap(err)), "%#v, wrapped", err)
+	}
+	for _, err := range []error{nil, stateErr("23505"), stateErr("23503"), codeErr(19), &numberErr{1062}, velox.ErrNotFound,
+		velox.NewConstraintError("duplicate", stateErr("23505")), velox.NewValidationError("name", velox.ErrNotFound)} {
+		assert.False(t, velox.IsRetryable(err), "%#v", err)
+	}
+}
+
+// A missing row that is an answer: the error is dropped, any other is kept.
+func TestMaskNotFound(t *testing.T) {
+	require.NoError(t, velox.MaskNotFound(nil))
+	require.NoError(t, velox.MaskNotFound(velox.NewNotFoundError("user")))
+	require.NoError(t, velox.MaskNotFound(fmt.Errorf("loading: %w", velox.ErrNotFound)))
+	other := errors.New("connection refused")
+	require.ErrorIs(t, velox.MaskNotFound(other), other)
+	require.Error(t, velox.MaskNotFound(velox.NewNotSingularError("user")))
+}
+
+// The kind of a constraint error is read from the database's own error, and
+// so is what it names as violated.
+func TestConstraintError_KindAndName(t *testing.T) {
+	type pgError struct {
+		error
+		ConstraintName string
+	}
+	for _, c := range []struct {
+		driver error
+		kind   error
+		name   string
+	}{
+		{errors.New("UNIQUE constraint failed: users.email"), velox.ErrUnique, "users.email"},
+		{errors.New("FOREIGN KEY constraint failed"), velox.ErrForeignKey, ""},
+		{errors.New("Error 1062 (23000): Duplicate entry 'a' for key 'users.email'"), velox.ErrUnique, "users.email"},
+		{pgError{errors.New(`pq: duplicate key value violates unique constraint "users_email_key"`), "users_email_key"}, velox.ErrUnique, "users_email_key"},
+	} {
+		err := fmt.Errorf("saving: %w", velox.NewConstraintError(c.driver.Error(), c.driver))
+		assert.True(t, velox.IsConstraintError(err), "%v", c.driver)
+		assert.ErrorIs(t, err, c.kind, "%v", c.driver)
+		for _, other := range []error{velox.ErrUnique, velox.ErrForeignKey, velox.ErrCheck} {
+			if other != c.kind { //nolint:errorlint // sentinels compared as the values they are
+				assert.NotErrorIs(t, err, other, "%v", c.driver)
+			}
+		}
+		var ce *velox.ConstraintError
+		require.ErrorAs(t, err, &ce)
+		assert.Equal(t, c.name, ce.Constraint(), "%v", c.driver)
+	}
+	// One made without the database's error has no kind and names nothing.
+	bare := velox.NewConstraintError("x", nil)
+	assert.NotErrorIs(t, bare, velox.ErrUnique)
+	assert.Empty(t, bare.Constraint())
+}

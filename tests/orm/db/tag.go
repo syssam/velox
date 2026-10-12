@@ -33,7 +33,7 @@ func (*TagClient) Update(ex orm.Executor) *entity.TagUpdate { return entity.NewT
 // Delete returns a builder that deletes the Tag rows its conditions match.
 func (*TagClient) Delete(ex orm.Executor) *entity.TagDelete { return entity.NewTagDelete(ex) }
 
-// Get returns the Tag with the given id, or orm.ErrNotFound.
+// Get returns the Tag with the given id, or velox.ErrNotFound.
 func (c *TagClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Tag, error) {
 	return c.Query(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *TagClient) UpdateByID(ex orm.Executor, id int) *entity.TagUpdate {
 	return c.Update(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Tag with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Tag with the given id, or returns velox.ErrNotFound.
 func (c *TagClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

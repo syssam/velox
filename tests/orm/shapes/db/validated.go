@@ -41,7 +41,7 @@ func (*ValidatedClient) Delete(ex orm.Executor) *entity.ValidatedDelete {
 	return entity.NewValidatedDelete(ex)
 }
 
-// Get returns the Validated with the given id, or orm.ErrNotFound.
+// Get returns the Validated with the given id, or velox.ErrNotFound.
 func (c *ValidatedClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Validated, error) {
 	return c.Query(ex).Where(predicate.Validated(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *ValidatedClient) UpdateByID(ex orm.Executor, id int) *entity.ValidatedU
 	return c.Update(ex).Where(predicate.Validated(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Validated with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Validated with the given id, or returns velox.ErrNotFound.
 func (c *ValidatedClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Validated(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -41,7 +41,7 @@ func (*EnrollmentClient) Delete(ex orm.Executor) *entity.EnrollmentDelete {
 	return entity.NewEnrollmentDelete(ex)
 }
 
-// Get returns the Enrollment with the given id, or orm.ErrNotFound.
+// Get returns the Enrollment with the given id, or velox.ErrNotFound.
 func (c *EnrollmentClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Enrollment, error) {
 	return c.Query(ex).Where(predicate.Enrollment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *EnrollmentClient) UpdateByID(ex orm.Executor, id int) *entity.Enrollmen
 	return c.Update(ex).Where(predicate.Enrollment(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Enrollment with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Enrollment with the given id, or returns velox.ErrNotFound.
 func (c *EnrollmentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Enrollment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

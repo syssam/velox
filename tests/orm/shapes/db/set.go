@@ -33,7 +33,7 @@ func (*SetClient) Update(ex orm.Executor) *entity.SetUpdate { return entity.NewS
 // Delete returns a builder that deletes the Set rows its conditions match.
 func (*SetClient) Delete(ex orm.Executor) *entity.SetDelete { return entity.NewSetDelete(ex) }
 
-// Get returns the Set with the given id, or orm.ErrNotFound.
+// Get returns the Set with the given id, or velox.ErrNotFound.
 func (c *SetClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Set, error) {
 	return c.Query(ex).Where(predicate.Set(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *SetClient) UpdateByID(ex orm.Executor, id int) *entity.SetUpdate {
 	return c.Update(ex).Where(predicate.Set(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Set with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Set with the given id, or returns velox.ErrNotFound.
 func (c *SetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Set(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

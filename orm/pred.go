@@ -150,9 +150,3 @@ func NeighborOf(e *EdgeMeta, parent any) P {
 	}
 	return P{Op: OpEQ, Col: e.Columns[0], Val: id}
 }
-
-// NotLoadedError is returned by the OrErr method of an edge that the query
-// did not load.
-type NotLoadedError struct{ Edge string }
-
-func (e *NotLoadedError) Error() string { return "velox: edge " + e.Edge + " was not loaded" }

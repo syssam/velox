@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/db/internal/slots"
@@ -30,35 +31,35 @@ type TagEdges struct {
 	loaded   [3]bool
 }
 
-// PostsOrErr returns the posts edge, or an error when it was not loaded.
+// PostsOrErr returns the posts edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TagEdges) PostsOrErr() ([]*Post, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "posts"}
+		return nil, velox.NewNotLoadedError("posts")
 	}
 	return e.Posts, nil
 }
 
-// ParentOrErr returns the parent edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// ParentOrErr returns the parent edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *TagEdges) ParentOrErr() (*Tag, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "parent"}
+		return nil, velox.NewNotLoadedError("parent")
 	}
 	if e.Parent == nil {
-		return nil, orm.ErrNotFound
+		return nil, TagMeta.NotFound()
 	}
 	return e.Parent, nil
 }
 
-// ChildrenOrErr returns the children edge, or an error when it was not loaded.
+// ChildrenOrErr returns the children edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TagEdges) ChildrenOrErr() ([]*Tag, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "children"}
+		return nil, velox.NewNotLoadedError("children")
 	}
 	return e.Children, nil
 }
@@ -242,7 +243,7 @@ func (q *TagQuery) All(ctx context.Context) ([]*Tag, error) {
 	return out, nil
 }
 
-// First returns the first matching Tag, or orm.ErrNotFound.
+// First returns the first matching Tag, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *TagQuery) First(ctx context.Context) (*Tag, error) {
@@ -253,7 +254,7 @@ func (q *TagQuery) First(ctx context.Context) (*Tag, error) {
 	return r.(*Tag), nil
 }
 
-// Only returns the single matching Tag: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Tag: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TagQuery) Only(ctx context.Context) (*Tag, error) {
@@ -476,15 +477,15 @@ func (b *TagUpdate) Fill(in any, skip ...string) *TagUpdate {
 //go:noinline
 func (b *TagUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *TagUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline
@@ -636,10 +637,10 @@ func (e *Tag) Posts(ctx context.Context, after *orm.Cursor, first *int, before *
 //go:noinline
 func (e *Tag) Parent(ctx context.Context) (*Tag, error) {
 	v, err := e.Edges.ParentOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryParent(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 // Children resolves the "children" edge for a GraphQL engine: one page of the

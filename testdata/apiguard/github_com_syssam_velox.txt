@@ -11,7 +11,9 @@
   field ValidationError.Field string
   field ValidationError.Name string
   field View.Schema Schema
+  method ConstraintError.Constraint() string
   method ConstraintError.Error() string
+  method ConstraintError.Is(error) bool
   method ConstraintError.Message() string
   method ConstraintError.Unwrap() error
   method Edge.Descriptor() *github.com/syssam/velox/schema/edge.Descriptor
@@ -119,7 +121,9 @@ func IsConstraintError(error) bool
 func IsNotFound(error) bool
 func IsNotLoaded(error) bool
 func IsNotSingular(error) bool
+func IsRetryable(error) bool
 func IsValidationError(error) bool
+func MaskNotFound(error) error
 func NewConstraintError(string, error) *ConstraintError
 func NewNotFoundError(string) *NotFoundError
 func NewNotLoadedError(string) *NotLoadedError
@@ -158,6 +162,9 @@ type ValidationError struct
 type Value interface
 type View struct
 type Viewer interface
+var ErrCheck error
+var ErrForeignKey error
 var ErrNotFound error
 var ErrNotSingular error
 var ErrTxStarted error
+var ErrUnique error

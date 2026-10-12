@@ -33,7 +33,7 @@ func (*PredClient) Update(ex orm.Executor) *entity.PredUpdate { return entity.Ne
 // Delete returns a builder that deletes the Pred rows its conditions match.
 func (*PredClient) Delete(ex orm.Executor) *entity.PredDelete { return entity.NewPredDelete(ex) }
 
-// Get returns the Pred with the given id, or orm.ErrNotFound.
+// Get returns the Pred with the given id, or velox.ErrNotFound.
 func (c *PredClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Pred, error) {
 	return c.Query(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *PredClient) UpdateByID(ex orm.Executor, id int) *entity.PredUpdate {
 	return c.Update(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Pred with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Pred with the given id, or returns velox.ErrNotFound.
 func (c *PredClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

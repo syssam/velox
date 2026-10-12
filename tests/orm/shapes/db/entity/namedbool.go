@@ -178,7 +178,7 @@ func (q *NamedBoolQuery) All(ctx context.Context) ([]*NamedBool, error) {
 	return out, nil
 }
 
-// First returns the first matching NamedBool, or orm.ErrNotFound.
+// First returns the first matching NamedBool, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *NamedBoolQuery) First(ctx context.Context) (*NamedBool, error) {
@@ -189,7 +189,7 @@ func (q *NamedBoolQuery) First(ctx context.Context) (*NamedBool, error) {
 	return r.(*NamedBool), nil
 }
 
-// Only returns the single matching NamedBool: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching NamedBool: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NamedBoolQuery) Only(ctx context.Context) (*NamedBool, error) {
@@ -416,15 +416,15 @@ func (b *NamedBoolUpdate) Fill(in any, skip ...string) *NamedBoolUpdate {
 //go:noinline
 func (b *NamedBoolUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *NamedBoolUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

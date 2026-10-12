@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	badge "github.com/syssam/velox/tests/orm/shapes/db/badge"
@@ -27,22 +28,22 @@ type BadgeEdges struct {
 	loaded  [2]bool
 }
 
-// TeamsOrErr returns the teams edge, or an error when it was not loaded.
+// TeamsOrErr returns the teams edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *BadgeEdges) TeamsOrErr() ([]*Team, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "teams"}
+		return nil, velox.NewNotLoadedError("teams")
 	}
 	return e.Teams, nil
 }
 
-// HoldersOrErr returns the holders edge, or an error when it was not loaded.
+// HoldersOrErr returns the holders edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *BadgeEdges) HoldersOrErr() ([]*Person, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "holders"}
+		return nil, velox.NewNotLoadedError("holders")
 	}
 	return e.Holders, nil
 }
@@ -222,7 +223,7 @@ func (q *BadgeQuery) All(ctx context.Context) ([]*Badge, error) {
 	return out, nil
 }
 
-// First returns the first matching Badge, or orm.ErrNotFound.
+// First returns the first matching Badge, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *BadgeQuery) First(ctx context.Context) (*Badge, error) {
@@ -233,7 +234,7 @@ func (q *BadgeQuery) First(ctx context.Context) (*Badge, error) {
 	return r.(*Badge), nil
 }
 
-// Only returns the single matching Badge: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Badge: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *BadgeQuery) Only(ctx context.Context) (*Badge, error) {
@@ -460,15 +461,15 @@ func (b *BadgeUpdate) Fill(in any, skip ...string) *BadgeUpdate {
 //go:noinline
 func (b *BadgeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *BadgeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

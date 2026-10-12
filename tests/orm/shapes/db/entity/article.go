@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	article "github.com/syssam/velox/tests/orm/shapes/db/article"
@@ -35,58 +36,58 @@ type ArticleEdges struct {
 	loaded       [5]bool
 }
 
-// AuthorOrErr returns the author edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// AuthorOrErr returns the author edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *ArticleEdges) AuthorOrErr() (*Author, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "author"}
+		return nil, velox.NewNotLoadedError("author")
 	}
 	if e.Author == nil {
-		return nil, orm.ErrNotFound
+		return nil, AuthorMeta.NotFound()
 	}
 	return e.Author, nil
 }
 
-// EditorOrErr returns the editor edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// EditorOrErr returns the editor edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *ArticleEdges) EditorOrErr() (*Author, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "editor"}
+		return nil, velox.NewNotLoadedError("editor")
 	}
 	if e.Editor == nil {
-		return nil, orm.ErrNotFound
+		return nil, AuthorMeta.NotFound()
 	}
 	return e.Editor, nil
 }
 
-// TopicsOrErr returns the topics edge, or an error when it was not loaded.
+// TopicsOrErr returns the topics edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *ArticleEdges) TopicsOrErr() ([]*Topic, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "topics"}
+		return nil, velox.NewNotLoadedError("topics")
 	}
 	return e.Topics, nil
 }
 
-// BannedTopicsOrErr returns the banned_topics edge, or an error when it was not loaded.
+// BannedTopicsOrErr returns the banned_topics edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *ArticleEdges) BannedTopicsOrErr() ([]*Topic, error) {
 	if !e.loaded[3] {
-		return nil, &orm.NotLoadedError{Edge: "banned_topics"}
+		return nil, velox.NewNotLoadedError("banned_topics")
 	}
 	return e.BannedTopics, nil
 }
 
-// NotesOrErr returns the notes edge, or an error when it was not loaded.
+// NotesOrErr returns the notes edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *ArticleEdges) NotesOrErr() ([]*Note, error) {
 	if !e.loaded[4] {
-		return nil, &orm.NotLoadedError{Edge: "notes"}
+		return nil, velox.NewNotLoadedError("notes")
 	}
 	return e.Notes, nil
 }
@@ -286,7 +287,7 @@ func (q *ArticleQuery) All(ctx context.Context) ([]*Article, error) {
 	return out, nil
 }
 
-// First returns the first matching Article, or orm.ErrNotFound.
+// First returns the first matching Article, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *ArticleQuery) First(ctx context.Context) (*Article, error) {
@@ -297,7 +298,7 @@ func (q *ArticleQuery) First(ctx context.Context) (*Article, error) {
 	return r.(*Article), nil
 }
 
-// Only returns the single matching Article: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Article: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ArticleQuery) Only(ctx context.Context) (*Article, error) {
@@ -524,15 +525,15 @@ func (b *ArticleUpdate) Fill(in any, skip ...string) *ArticleUpdate {
 //go:noinline
 func (b *ArticleUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *ArticleUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

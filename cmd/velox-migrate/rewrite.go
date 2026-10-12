@@ -199,11 +199,11 @@ func (r *rewriter) run() {
 					}
 				}
 			case *ast.BasicLit:
-				// "velox: ...": the text of an error of the old runtime,
-				// matched by its words. A missing row reads the same from
-				// the new one; the other errors are worded otherwise.
+				// "velox: ...": the text of an error, matched by its words.
+				// The errors are the same types from package orm, but not
+				// every word inside one is the same.
 				if top.Kind == token.STRING && strings.HasPrefix(strings.Trim(top.Value, "`\""), "velox: ") {
-					r.note(top.Pos(), "the text of an error of the old runtime is matched here: a missing row reads the same from package orm (\"velox: user not found\"), its other errors are worded otherwise; test the error itself (orm.IsNotFound, errors.Is) instead of its words")
+					r.note(top.Pos(), "the text of an error is matched here: package orm returns the same errors, and one of a missing row reads the same (\"velox: user not found\"), but the words inside a validation error are its own; test the error itself (velox.IsNotFound, errors.Is) instead of its words")
 				}
 			case *ast.InterfaceType:
 				r.queryMethods(top)
@@ -264,7 +264,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 	if !ok {
 		return
 	}
-	if r.failure(sel, obj) {
+	if r.failure(sel, obj) || r.queryContext(sel, obj) {
 		return
 	}
 	name := obj.Name()
@@ -320,14 +320,8 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 				r.note(sel.Pos(), "the constant %s of the generated root package has no counterpart", name)
 			}
 		default:
-			switch name {
-			case "IsNotFound", "IsConstraintError", "IsNotLoaded":
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
-				r.count(name)
-			default:
-				if !r.repeated(sel, obj) {
-					r.note(sel.Pos(), "%s of the generated root package: rewrite by hand", name)
-				}
+			if !r.repeated(sel, obj) {
+				r.note(sel.Pos(), "%s of the generated root package: rewrite by hand", name)
 			}
 		}
 	case "client/<entity>", "query":
@@ -481,74 +475,50 @@ func (r *rewriter) foreign(sel *ast.SelectorExpr, obj types.Object, where string
 	}
 }
 
-// failure rewrites the names of velox's errors, which the generated root
-// package repeated, to the runtime's. An error of the new code is none of
-// velox's: left as it was (or moved to the library's name), IsNotSingular
-// and the others would compile and never hold.
-func (r *rewriter) failure(sel *ast.SelectorExpr, obj types.Object) bool {
+// queryContext reports the query context of the old runtime: what an
+// interceptor read from its context (the operation, the type, the limit).
+// Package orm puts none there, so the read would compile, return nil and
+// leave a rule that guarded on it doing nothing.
+func (r *rewriter) queryContext(sel *ast.SelectorExpr, obj types.Object) bool {
 	if obj.Pkg() == nil {
 		return false
 	}
-	// The library has them in its root package and in runtime, which the
-	// generated root package's names point to.
-	if path := obj.Pkg().Path(); path != r.s.root && path != r.lib && path != r.lib+"/runtime" {
+	if path := obj.Pkg().Path(); path != r.lib && path != r.s.root {
 		return false
 	}
-	name := obj.Name()
-	_, isType := obj.(*types.TypeName)
-	switch {
-	case !isType && (name == "IsNotFound" || name == "IsConstraintError" || name == "IsNotLoaded" || name == "IsNotSingular" || name == "IsValidationError" ||
-		name == "ErrNotFound" || name == "ErrNotSingular"):
-		// The values too: errors.Is(err, velox.ErrNotFound).
-		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
-		r.count(name)
-	case isType && (name == "ValidationError" || name == "ConstraintError" || name == "NotLoadedError"):
-		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
-		r.note(sel.Pos(), "%s is the runtime's type now: check the fields read from it (orm.%s)", name, name)
-		r.count("error type")
-	case isType && name == "NotFoundError":
-		r.note(sel.Pos(), "a missing row is the value orm.ErrNotFound now, not a type: errors.Is(err, orm.ErrNotFound)")
-	case isType && name == "NotSingularError":
-		r.note(sel.Pos(), "more than one row is the value orm.ErrNotSingular now, not a type: errors.Is(err, orm.ErrNotSingular)")
-	case !isType && name == "NewNotFoundError":
-		// The same argument, and an error IsNotFound holds for. Its type is
-		// error and no longer velox's, which the compiler says where it
-		// matters.
-		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".NotFound")
-		r.count("NewNotFoundError")
-	case !isType && (name == "NewNotSingularError" || name == "NewNotLoadedError" || name == "NewConstraintError" || name == "NewValidationError"):
-		r.note(sel.Pos(), "%s: the runtime's errors are orm.ErrNotFound, orm.ErrNotSingular, *orm.ValidationError, *orm.ConstraintError; return one of those", name)
-	default:
-		return false
+	switch obj.Name() {
+	case "QueryFromContext", "NewQueryContext", "QueryContext":
+		r.note(sel.Pos(), "%s: package orm puts no QueryContext in the context, so this reads nil. An interceptor is handed the query itself, a *orm.Query (Type, Limit, Offset, WhereP): read it there", obj.Name())
+		return true
 	}
-	return true
+	return false
 }
 
-// validationName reports whether obj is the field Name of velox's
-// ValidationError, which the runtime's calls Field (velox's has both, with
-// the same value).
-func (r *rewriter) validationName(obj types.Object) bool {
-	v, ok := obj.(*types.Var)
-	if !ok || !v.IsField() || v.Name() != "Name" || v.Pkg() == nil {
+// errorNames are the errors of the library's root package, and what tests
+// and makes them: package orm returns these very errors, so code that tests
+// one keeps holding for the new code as it is.
+var errorNames = map[string]bool{
+	"ErrNotFound": true, "ErrNotSingular": true,
+	"IsNotFound": true, "IsNotSingular": true, "IsNotLoaded": true, "IsConstraintError": true, "IsValidationError": true,
+	"NotFoundError": true, "NotSingularError": true, "NotLoadedError": true, "ConstraintError": true, "ValidationError": true,
+	"NewNotFoundError": true, "NewNotSingularError": true, "NewNotLoadedError": true, "NewConstraintError": true, "NewValidationError": true,
+	"MaskNotFound": true,
+}
+
+// failure moves the name of an error that the generated root package, or
+// package runtime, repeated from the library to the library's own. One
+// already written with the library's name is right as it is.
+func (r *rewriter) failure(sel *ast.SelectorExpr, obj types.Object) bool {
+	if obj.Pkg() == nil || !errorNames[obj.Name()] {
 		return false
 	}
-	if path := v.Pkg().Path(); path != r.lib && path != r.lib+"/runtime" {
-		return false
-	}
-	// The struct that declares it, by the position of its fields.
-	scope := v.Pkg().Scope()
-	tn, ok := scope.Lookup("ValidationError").(*types.TypeName)
-	if !ok {
-		return false
-	}
-	st, ok := tn.Type().Underlying().(*types.Struct)
-	if !ok {
-		return false
-	}
-	for i := range st.NumFields() {
-		if st.Field(i) == v {
-			return true
-		}
+	switch obj.Pkg().Path() {
+	case r.lib:
+		return true
+	case r.s.root, r.lib + "/runtime":
+		r.replace(sel.X.Pos(), sel.X.End(), r.ref(r.lib, "velox", sel.Pos()))
+		r.count("error of the library")
+		return true
 	}
 	return false
 }
@@ -787,11 +757,6 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 // member handles a field or a method value selected from a value.
 func (r *rewriter) member(sel *ast.SelectorExpr, selection *types.Selection, stack []ast.Node) {
 	obj := selection.Obj()
-	if r.validationName(obj) {
-		r.replace(sel.Sel.Pos(), sel.Sel.End(), "Field")
-		r.count("ValidationError.Field")
-		return
-	}
 	// o.Field.Column: the column an order input's field stands for.
 	if v, ok := obj.(*types.Var); ok && v.IsField() && v.Name() == "Column" && v.Pkg() != nil && v.Pkg().Path() == r.s.root+"/entity" {
 		if inner, ok := sel.X.(*ast.SelectorExpr); ok && inner.Sel.Name == "Field" {
@@ -1113,7 +1078,7 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 	if !ok {
 		return
 	}
-	if r.failure(sel, obj) {
+	if r.failure(sel, obj) || r.queryContext(sel, obj) {
 		return
 	}
 	name := obj.Name()
@@ -1182,9 +1147,6 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 		r.note(call.Pos(), "%s.%s: rewrite by hand", strings.ToLower(e.name), name)
 	case "root":
 		switch name {
-		case "IsNotFound", "IsConstraintError", "IsNotLoaded":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
-			r.count(name)
 		case "Asc", "Desc":
 			if r.inOrder(stack) {
 				break
@@ -2888,27 +2850,6 @@ func (r *rewriter) elements(lit *ast.CompositeLit) {
 				if id, ok := kv.Key.(*ast.Ident); ok {
 					if f, ok := r.info.Uses[id].(*types.Var); ok {
 						r.into(kv.Value, f.Type())
-						if r.validationName(f) {
-							// With Field given too (velox's has both, of
-							// one value), Name goes.
-							dup := false
-							for _, other := range lit.Elts {
-								if okv, isKV := other.(*ast.KeyValueExpr); isKV && other != e {
-									if oid, isIdent := okv.Key.(*ast.Ident); isIdent && oid.Name == "Field" {
-										dup = true
-									}
-								}
-							}
-							switch {
-							case !dup:
-								r.replace(id.Pos(), id.End(), "Field")
-							case i+1 < len(lit.Elts):
-								r.replace(e.Pos(), lit.Elts[i+1].Pos(), "")
-							default:
-								r.replace(lit.Elts[i-1].End(), e.End(), "")
-							}
-							r.count("ValidationError.Field")
-						}
 					}
 				}
 			} else if i < t.NumFields() {

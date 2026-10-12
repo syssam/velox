@@ -218,7 +218,7 @@ func TestHooks_MutationAPI(t *testing.T) {
 	})
 }
 
-// What the database refuses is a *orm.ConstraintError around the driver's
+// What the database refuses is a *velox.ConstraintError around the driver's
 // error; an edge that was not loaded says so by name.
 func TestErrors_ConstraintAndNotLoaded(t *testing.T) {
 	ctx := context.Background()
@@ -226,7 +226,7 @@ func TestErrors_ConstraintAndNotLoaded(t *testing.T) {
 	ann := newUser(t, db, "ann", 30)
 
 	_, err := client.User.Create(db).Set(user.Name.Set("dup"), user.Email.Set("ann@example.com"), user.Age.Set(1)).Save(ctx)
-	var cerr *orm.ConstraintError
+	var cerr *velox.ConstraintError
 	require.ErrorAs(t, err, &cerr, "a unique violation")
 	assert.Contains(t, err.Error(), "velox: constraint failed")
 	require.Error(t, errors.Unwrap(cerr))
@@ -245,10 +245,10 @@ func TestErrors_ConstraintAndNotLoaded(t *testing.T) {
 	got, err := client.User.Get(ctx, db, ann.ID)
 	require.NoError(t, err)
 	_, err = got.Edges.PostsOrErr()
-	var nl *orm.NotLoadedError
+	var nl *velox.NotLoadedError
 	require.ErrorAs(t, err, &nl)
-	assert.Equal(t, "posts", nl.Edge)
-	assert.Equal(t, "velox: edge posts was not loaded", err.Error())
+	assert.Equal(t, "posts", nl.Edge())
+	assert.Equal(t, `velox: edge "posts" was not loaded`, err.Error())
 	loaded, err := client.User.Query(db).WithPosts().Only(ctx)
 	require.NoError(t, err)
 	posts, err := loaded.Edges.PostsOrErr()
@@ -298,7 +298,7 @@ func TestTx_SavepointAroundAMutation(t *testing.T) {
 	tg, err := client.Tag.Create(db).Set(tag.Name.Set("go")).Save(ctx)
 	require.NoError(t, err)
 
-	var cerr *orm.ConstraintError
+	var cerr *velox.ConstraintError
 	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
 		// The post row is inserted, then the join row fails.
 		_, err := client.Post.Create(tx).Set(post.Title.Set("ghost"), post.Content.Set("c"), post.Author.Set(ann.ID), post.Tags.Add(9999)).Save(ctx)
@@ -389,18 +389,16 @@ func TestErrors_ConstraintKind(t *testing.T) {
 	ann := newUser(t, db, "ann", 30)
 
 	_, err := client.User.Create(db).Set(user.Name.Set("dup"), user.Email.Set("ann@example.com"), user.Age.Set(1)).Save(ctx)
-	var cerr *orm.ConstraintError
+	var cerr *velox.ConstraintError
 	require.ErrorAs(t, err, &cerr)
-	assert.Equal(t, orm.ConstraintUnique, cerr.Kind)
-	require.ErrorIs(t, err, orm.ErrUnique)
-	assert.NotErrorIs(t, err, orm.ErrForeignKey)
-	assert.Contains(t, cerr.Constraint, "email", "what the database named as violated")
+	require.ErrorIs(t, err, velox.ErrUnique)
+	assert.NotErrorIs(t, err, velox.ErrForeignKey)
+	assert.Contains(t, cerr.Constraint(), "email", "what the database named as violated")
 
 	_, err = client.Post.Create(db).Set(post.Title.Set("p"), post.Content.Set("c"), post.Author.Set(ann.ID+1000)).Save(ctx)
 	require.ErrorAs(t, err, &cerr)
-	assert.Equal(t, orm.ConstraintForeignKey, cerr.Kind)
-	require.ErrorIs(t, err, orm.ErrForeignKey)
-	assert.NotErrorIs(t, err, orm.ErrUnique)
+	require.ErrorIs(t, err, velox.ErrForeignKey)
+	assert.NotErrorIs(t, err, velox.ErrUnique)
 
 	// The same through an update and inside a transaction.
 	bob := newUser(t, db, "bob", 40)
@@ -408,13 +406,14 @@ func TestErrors_ConstraintKind(t *testing.T) {
 		_, err := client.User.UpdateByID(tx, bob.ID).Set(user.Email.Set("ann@example.com")).SaveOne(ctx)
 		return err
 	})
-	require.ErrorIs(t, err, orm.ErrUnique)
+	require.ErrorIs(t, err, velox.ErrUnique)
 
-	// The mapping of the kinds, and an error that is no constraint's.
-	assert.ErrorIs(t, &orm.ConstraintError{Kind: orm.ConstraintCheck, Err: errors.New("x")}, orm.ErrCheck)
-	assert.NotErrorIs(t, &orm.ConstraintError{Err: errors.New("x")}, orm.ErrCheck)
+	// The kind is read from the database's own error; one that is no
+	// constraint's has none.
+	assert.ErrorIs(t, velox.NewConstraintError("x", errors.New("CHECK constraint failed: age_positive")), velox.ErrCheck)
+	assert.NotErrorIs(t, velox.NewConstraintError("x", errors.New("x")), velox.ErrCheck)
 	_, err = client.User.Get(ctx, db, 404)
-	assert.NotErrorIs(t, err, orm.ErrUnique)
+	assert.NotErrorIs(t, err, velox.ErrUnique)
 }
 
 // Two serializable transactions that each read what the other writes: the
@@ -450,6 +449,6 @@ func TestIsRetryable_SerializationFailure(t *testing.T) {
 		}
 	}
 	require.Error(t, failed, "both serializable transactions committed")
-	assert.True(t, orm.IsRetryable(failed), "not retryable: %v", failed)
-	assert.False(t, orm.IsConstraintError(failed))
+	assert.True(t, velox.IsRetryable(failed), "not retryable: %v", failed)
+	assert.False(t, velox.IsConstraintError(failed))
 }

@@ -33,7 +33,7 @@ func (*OrClient) Update(ex orm.Executor) *entity.OrUpdate { return entity.NewOrU
 // Delete returns a builder that deletes the Or rows its conditions match.
 func (*OrClient) Delete(ex orm.Executor) *entity.OrDelete { return entity.NewOrDelete(ex) }
 
-// Get returns the Or with the given id, or orm.ErrNotFound.
+// Get returns the Or with the given id, or velox.ErrNotFound.
 func (c *OrClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Or, error) {
 	return c.Query(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *OrClient) UpdateByID(ex orm.Executor, id int) *entity.OrUpdate {
 	return c.Update(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Or with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Or with the given id, or returns velox.ErrNotFound.
 func (c *OrClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

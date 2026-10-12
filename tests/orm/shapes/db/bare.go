@@ -33,7 +33,7 @@ func (*BareClient) Update(ex orm.Executor) *entity.BareUpdate { return entity.Ne
 // Delete returns a builder that deletes the Bare rows its conditions match.
 func (*BareClient) Delete(ex orm.Executor) *entity.BareDelete { return entity.NewBareDelete(ex) }
 
-// Get returns the Bare with the given id, or orm.ErrNotFound.
+// Get returns the Bare with the given id, or velox.ErrNotFound.
 func (c *BareClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Bare, error) {
 	return c.Query(ex).Where(predicate.Bare(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *BareClient) UpdateByID(ex orm.Executor, id int) *entity.BareUpdate {
 	return c.Update(ex).Where(predicate.Bare(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Bare with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Bare with the given id, or returns velox.ErrNotFound.
 func (c *BareClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Bare(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

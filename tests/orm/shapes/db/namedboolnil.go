@@ -41,7 +41,7 @@ func (*NamedBoolNilClient) Delete(ex orm.Executor) *entity.NamedBoolNilDelete {
 	return entity.NewNamedBoolNilDelete(ex)
 }
 
-// Get returns the NamedBoolNil with the given id, or orm.ErrNotFound.
+// Get returns the NamedBoolNil with the given id, or velox.ErrNotFound.
 func (c *NamedBoolNilClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.NamedBoolNil, error) {
 	return c.Query(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *NamedBoolNilClient) UpdateByID(ex orm.Executor, id int) *entity.NamedBo
 	return c.Update(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the NamedBoolNil with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the NamedBoolNil with the given id, or returns velox.ErrNotFound.
 func (c *NamedBoolNilClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -40,7 +40,7 @@ func (*UUIDKeyClient) Delete(ex orm.Executor) *entity.UUIDKeyDelete {
 	return entity.NewUUIDKeyDelete(ex)
 }
 
-// Get returns the UUIDKey with the given id, or orm.ErrNotFound.
+// Get returns the UUIDKey with the given id, or velox.ErrNotFound.
 func (c *UUIDKeyClient) Get(ctx context.Context, ex orm.Executor, id uuid.UUID) (*entity.UUIDKey, error) {
 	return c.Query(ex).Where(predicate.UUIDKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -51,7 +51,7 @@ func (c *UUIDKeyClient) UpdateByID(ex orm.Executor, id uuid.UUID) *entity.UUIDKe
 	return c.Update(ex).Where(predicate.UUIDKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UUIDKey with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the UUIDKey with the given id, or returns velox.ErrNotFound.
 func (c *UUIDKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.UUIDKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

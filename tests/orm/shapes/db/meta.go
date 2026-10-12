@@ -33,7 +33,7 @@ func (*MetaClient) Update(ex orm.Executor) *entity.MetaUpdate { return entity.Ne
 // Delete returns a builder that deletes the Meta rows its conditions match.
 func (*MetaClient) Delete(ex orm.Executor) *entity.MetaDelete { return entity.NewMetaDelete(ex) }
 
-// Get returns the Meta with the given id, or orm.ErrNotFound.
+// Get returns the Meta with the given id, or velox.ErrNotFound.
 func (c *MetaClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Meta, error) {
 	return c.Query(ex).Where(predicate.Meta(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *MetaClient) UpdateByID(ex orm.Executor, id int) *entity.MetaUpdate {
 	return c.Update(ex).Where(predicate.Meta(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Meta with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Meta with the given id, or returns velox.ErrNotFound.
 func (c *MetaClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Meta(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

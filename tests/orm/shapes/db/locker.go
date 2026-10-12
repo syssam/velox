@@ -33,7 +33,7 @@ func (*LockerClient) Update(ex orm.Executor) *entity.LockerUpdate { return entit
 // Delete returns a builder that deletes the Locker rows its conditions match.
 func (*LockerClient) Delete(ex orm.Executor) *entity.LockerDelete { return entity.NewLockerDelete(ex) }
 
-// Get returns the Locker with the given id, or orm.ErrNotFound.
+// Get returns the Locker with the given id, or velox.ErrNotFound.
 func (c *LockerClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Locker, error) {
 	return c.Query(ex).Where(predicate.Locker(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *LockerClient) UpdateByID(ex orm.Executor, id int) *entity.LockerUpdate 
 	return c.Update(ex).Where(predicate.Locker(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Locker with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Locker with the given id, or returns velox.ErrNotFound.
 func (c *LockerClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Locker(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

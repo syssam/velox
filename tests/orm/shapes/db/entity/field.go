@@ -212,7 +212,7 @@ func (q *FieldQuery) All(ctx context.Context) ([]*Field, error) {
 	return out, nil
 }
 
-// First returns the first matching Field, or orm.ErrNotFound.
+// First returns the first matching Field, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *FieldQuery) First(ctx context.Context) (*Field, error) {
@@ -223,7 +223,7 @@ func (q *FieldQuery) First(ctx context.Context) (*Field, error) {
 	return r.(*Field), nil
 }
 
-// Only returns the single matching Field: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Field: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *FieldQuery) Only(ctx context.Context) (*Field, error) {
@@ -450,15 +450,15 @@ func (b *FieldUpdate) Fill(in any, skip ...string) *FieldUpdate {
 //go:noinline
 func (b *FieldUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *FieldUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

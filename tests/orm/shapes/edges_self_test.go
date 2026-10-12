@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/tests/orm/shapes/db/course"
 	"github.com/syssam/velox/tests/orm/shapes/db/enrollment"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
@@ -65,7 +65,7 @@ func TestSelfRef_Tree(t *testing.T) {
 	assert.Equal(t, []string{"c1", "c2"}, nodeNames(must(root.QueryChildren(db).OrderBy(node.Name.Asc()).All(ctx))))
 	assert.Equal(t, "root", must(c1.QueryParent(db).Only(ctx)).Name, "the key of the entity Create returned")
 	_, err := root.QueryParent(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Empty(t, must(g1.QueryChildren(db).All(ctx)))
 	qg1 := must(client.Node.Query(db).Where(node.Name.EQ("g1")).Only(ctx))
 	assert.Equal(t, "c1", must(qg1.QueryParent(db).Only(ctx)).Name)
@@ -80,11 +80,11 @@ func TestSelfRef_Tree(t *testing.T) {
 	assert.Equal(t, []string{"g1"}, nodeNames(qroot.Edges.Children[1].Edges.Children))
 	assert.Empty(t, qroot.Edges.Children[0].Edges.Children)
 	_, err = qroot.Edges.ParentOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, "root", qc1.Edges.Parent.Name)
 	assert.Equal(t, "root", qc2.Edges.Parent.Name)
 	_, err = qc1.Edges.Parent.Edges.ParentOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound, "root's parent: loaded, and absent")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "root's parent: loaded, and absent")
 	assert.Equal(t, "c1", qg.Edges.Parent.Name)
 	assert.Equal(t, "root", qg.Edges.Parent.Edges.Parent.Name)
 	assert.Equal(t, []string{"g1"}, nodeNames(qc1.Edges.Children))
@@ -123,7 +123,7 @@ func TestSelfRef_Tree(t *testing.T) {
 	assert.Equal(t, []string{"c2", "g1"}, nodeNames(must(c1.QueryChildren(db).OrderBy(node.Name.Asc()).All(ctx))))
 	got = must(client.Node.Update(db).Set(node.Parent.Clear()).Where(node.ID.EQ(g1.ID)).SaveOne(ctx))
 	_, err = got.QueryParent(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	must(client.Node.Update(db).Set(node.Children.Clear()).Where(node.ID.EQ(c1.ID)).Exec(ctx))
 	assert.Equal(t, []string{"c1"}, names(node.Parent.Has()), "only c1 still has a parent")
 }
@@ -147,9 +147,9 @@ func TestSelfRef_List(t *testing.T) {
 	assert.Equal(t, "n1", must(n2.QueryPrev(db).Only(ctx)).Name, "the key of the entity Create returned")
 	assert.Equal(t, "n3", must(n2.QueryNext(db).Only(ctx)).Name)
 	_, err := n3.QueryNext(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = n1.QueryPrev(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	q3 := must(client.Node.Query(db).Where(node.Name.EQ("n3")).Only(ctx))
 	assert.Equal(t, "n2", must(q3.QueryPrev(db).Only(ctx)).Name)
 
@@ -158,11 +158,11 @@ func TestSelfRef_List(t *testing.T) {
 	assert.Equal(t, "n2", rows[0].Edges.Next.Name)
 	assert.Equal(t, "n3", rows[0].Edges.Next.Edges.Next.Name)
 	_, err = rows[0].Edges.PrevOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, "n3", rows[1].Edges.Next.Name)
 	assert.Equal(t, "n1", rows[1].Edges.Prev.Name)
 	_, err = rows[2].Edges.NextOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, "n2", rows[2].Edges.Prev.Name)
 	assert.Equal(t, "n1", rows[2].Edges.Prev.Edges.Prev.Name)
 
@@ -182,7 +182,7 @@ func TestSelfRef_List(t *testing.T) {
 	must(client.Node.Update(db).Set(node.Next.Clear()).Where(node.ID.EQ(n1.ID)).Exec(ctx))
 	// n2 is the entity from before the update: the traversal asks the database.
 	_, err = n2.QueryPrev(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	must(client.Node.Update(db).Set(node.Prev.Set(n3.ID)).Where(node.ID.EQ(n1.ID)).Exec(ctx))
 	assert.Equal(t, "n1", must(n3.QueryNext(db).Only(ctx)).Name)
 	must(client.Node.Update(db).Set(node.Prev.Clear()).Where(node.ID.EQ(n1.ID)).Exec(ctx))
@@ -281,17 +281,17 @@ func TestSelfRef_Person(t *testing.T) {
 	assert.Equal(t, "bob", must(qann.QuerySpouse(db).Only(ctx)).Name)
 	assert.Equal(t, "ann", must(qbob.QuerySpouse(db).Only(ctx)).Name)
 	_, err = cid.QuerySpouse(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	rows = must(client.Person.Query(db).Where(person.Name.In("ann", "bob", "cid")).OrderBy(person.Name.Asc()).WithSpouse().All(ctx))
 	assert.Equal(t, "bob", rows[0].Edges.Spouse.Name)
 	assert.Equal(t, "ann", rows[1].Edges.Spouse.Name)
 	_, err = rows[2].Edges.SpouseOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, []string{"ann", "bob"}, names(person.Spouse.Has()))
 	assert.Equal(t, []string{"bob"}, names(person.Spouse.HasWith(person.Name.EQ("ann"))))
 	// A third person cannot marry one of them.
 	_, err = client.Person.Update(db).Set(person.Spouse.Set(ann.ID)).Where(person.ID.EQ(cid.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	// Divorce from one end frees both.
 	must(client.Person.Update(db).Set(person.Spouse.Clear()).Where(person.ID.EQ(bob.ID)).Exec(ctx))
 	assert.Empty(t, names(person.Spouse.Has()))

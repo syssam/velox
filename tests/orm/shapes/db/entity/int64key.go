@@ -167,7 +167,7 @@ func (q *Int64KeyQuery) All(ctx context.Context) ([]*Int64Key, error) {
 	return out, nil
 }
 
-// First returns the first matching Int64Key, or orm.ErrNotFound.
+// First returns the first matching Int64Key, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *Int64KeyQuery) First(ctx context.Context) (*Int64Key, error) {
@@ -178,7 +178,7 @@ func (q *Int64KeyQuery) First(ctx context.Context) (*Int64Key, error) {
 	return r.(*Int64Key), nil
 }
 
-// Only returns the single matching Int64Key: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Int64Key: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *Int64KeyQuery) Only(ctx context.Context) (*Int64Key, error) {
@@ -405,15 +405,15 @@ func (b *Int64KeyUpdate) Fill(in any, skip ...string) *Int64KeyUpdate {
 //go:noinline
 func (b *Int64KeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *Int64KeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

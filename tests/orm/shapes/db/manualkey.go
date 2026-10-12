@@ -41,7 +41,7 @@ func (*ManualKeyClient) Delete(ex orm.Executor) *entity.ManualKeyDelete {
 	return entity.NewManualKeyDelete(ex)
 }
 
-// Get returns the ManualKey with the given id, or orm.ErrNotFound.
+// Get returns the ManualKey with the given id, or velox.ErrNotFound.
 func (c *ManualKeyClient) Get(ctx context.Context, ex orm.Executor, id string) (*entity.ManualKey, error) {
 	return c.Query(ex).Where(predicate.ManualKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *ManualKeyClient) UpdateByID(ex orm.Executor, id string) *entity.ManualK
 	return c.Update(ex).Where(predicate.ManualKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the ManualKey with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the ManualKey with the given id, or returns velox.ErrNotFound.
 func (c *ManualKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id string) error {
 	n, err := c.Delete(ex).Where(predicate.ManualKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

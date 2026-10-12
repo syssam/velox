@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	person "github.com/syssam/velox/tests/orm/shapes/db/person"
@@ -31,45 +32,45 @@ type PersonEdges struct {
 	loaded    [4]bool
 }
 
-// SpouseOrErr returns the spouse edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// SpouseOrErr returns the spouse edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PersonEdges) SpouseOrErr() (*Person, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "spouse"}
+		return nil, velox.NewNotLoadedError("spouse")
 	}
 	if e.Spouse == nil {
-		return nil, orm.ErrNotFound
+		return nil, PersonMeta.NotFound()
 	}
 	return e.Spouse, nil
 }
 
-// FriendsOrErr returns the friends edge, or an error when it was not loaded.
+// FriendsOrErr returns the friends edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PersonEdges) FriendsOrErr() ([]*Person, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "friends"}
+		return nil, velox.NewNotLoadedError("friends")
 	}
 	return e.Friends, nil
 }
 
-// FollowersOrErr returns the followers edge, or an error when it was not loaded.
+// FollowersOrErr returns the followers edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PersonEdges) FollowersOrErr() ([]*Person, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "followers"}
+		return nil, velox.NewNotLoadedError("followers")
 	}
 	return e.Followers, nil
 }
 
-// FollowingOrErr returns the following edge, or an error when it was not loaded.
+// FollowingOrErr returns the following edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PersonEdges) FollowingOrErr() ([]*Person, error) {
 	if !e.loaded[3] {
-		return nil, &orm.NotLoadedError{Edge: "following"}
+		return nil, velox.NewNotLoadedError("following")
 	}
 	return e.Following, nil
 }
@@ -257,7 +258,7 @@ func (q *PersonQuery) All(ctx context.Context) ([]*Person, error) {
 	return out, nil
 }
 
-// First returns the first matching Person, or orm.ErrNotFound.
+// First returns the first matching Person, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *PersonQuery) First(ctx context.Context) (*Person, error) {
@@ -268,7 +269,7 @@ func (q *PersonQuery) First(ctx context.Context) (*Person, error) {
 	return r.(*Person), nil
 }
 
-// Only returns the single matching Person: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Person: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PersonQuery) Only(ctx context.Context) (*Person, error) {
@@ -495,15 +496,15 @@ func (b *PersonUpdate) Fill(in any, skip ...string) *PersonUpdate {
 //go:noinline
 func (b *PersonUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *PersonUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

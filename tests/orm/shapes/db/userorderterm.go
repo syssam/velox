@@ -41,7 +41,7 @@ func (*UserOrderTermClient) Delete(ex orm.Executor) *entity.UserOrderTermDelete 
 	return entity.NewUserOrderTermDelete(ex)
 }
 
-// Get returns the UserOrderTerm with the given id, or orm.ErrNotFound.
+// Get returns the UserOrderTerm with the given id, or velox.ErrNotFound.
 func (c *UserOrderTermClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.UserOrderTerm, error) {
 	return c.Query(ex).Where(predicate.UserOrderTerm(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *UserOrderTermClient) UpdateByID(ex orm.Executor, id int) *entity.UserOr
 	return c.Update(ex).Where(predicate.UserOrderTerm(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UserOrderTerm with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the UserOrderTerm with the given id, or returns velox.ErrNotFound.
 func (c *UserOrderTermClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserOrderTerm(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -54,9 +54,11 @@ func stamp() velox.Hook {
 	}
 }
 
-// The tests of an error: velox's would compile and never hold.
+// The tests of an error: package orm returns the library's errors, so they
+// hold as they are; the one the generated package repeats takes the
+// library's name.
 func classify(err error) string {
-	var missing *velox.NotFoundError // note: orm.ErrNotFound
+	var missing *velox.NotFoundError
 	switch {
 	case errors.As(err, &missing):
 		return "missing"
@@ -66,9 +68,9 @@ func classify(err error) string {
 	return ""
 }
 
-// The field of a validation error that the runtime names otherwise.
+// The field of a validation error.
 func fieldOf(err error) string {
-	var ve *velox.ValidationError // note: ValidationError is the runtime's type now
+	var ve *velox.ValidationError
 	if errors.As(err, &ve) {
 		return ve.Name
 	}
@@ -77,7 +79,7 @@ func fieldOf(err error) string {
 
 // A validation error written out, with the name under both of velox's keys.
 func refused() error {
-	return &velox.ValidationError{Entity: "User", Field: "name", Name: "name", Err: errors.New("x")} // note: ValidationError is the runtime's type now
+	return &velox.ValidationError{Entity: "User", Field: "name", Name: "name", Err: errors.New("x")}
 }
 
 // The driver under a handle, and the handle a context carries.
@@ -136,7 +138,7 @@ func countIfAny(ctx context.Context, c *integration.Client) (int, error) {
 
 // An error of the old runtime matched by its words.
 func missingByWords(err error) bool {
-	return err != nil && len(err.Error()) > 7 && err.Error()[:7] == "velox: " // note: the text of an error of the old runtime is matched here
+	return err != nil && len(err.Error()) > 7 && err.Error()[:7] == "velox: " // note: the text of an error is matched here
 }
 
 func countIn(ctx context.Context, tx *integration.Tx) (int, error) {
@@ -521,6 +523,12 @@ func accessors(m velox.Mutation, in named) (found int) {
 	return found
 }
 
+// What an interceptor read of the query from its context.
+func limited(ctx context.Context) bool {
+	qc := velox.QueryFromContext(ctx) // note: QueryFromContext: package orm puts no QueryContext in the context
+	return qc != nil && qc.Limit != nil
+}
+
 func byName() map[string]predicate.User {
 	return map[string]predicate.User{"none": nil}
 }
@@ -563,4 +571,4 @@ func valid(r user.Role) bool { return r.IsValid() }
 var _ = []any{scope, capped, stamp, classify, fieldOf, refused, lock, inContext, newest, youngest, starter, authorNames, plain,
 	nullsLast, inOrderOf, asFunction, scoped, countIn, begins, exister(nil), opened, firstOnly, (*cache).posts, keptDefault, later2, unowned[predicate.User], orderField, tables, defaultRole, firstID, isRole, lockSkipping, nullsFirst, postsOf, noField, columnOf, validPointer, missingByWords, later, around, handleParam, element, unwrappedInPlace, missing, noOrder, literalOrder,
 	none, either, asPredicate, lateParam, pointed, aliased, cleanup, reassigned, unwrapped, handleReused, twoOrders, defaultOrder, anyOf, noneOf, matching,
-	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid, accessors}
+	threeEach, resolved, lateBuilder, shadow, nested, handOn, rules, byName, applyTo, isSet, adopt, from, byNameAsc, onCreate, like, valid, accessors, limited}

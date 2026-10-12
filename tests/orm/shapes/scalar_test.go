@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
 	"github.com/syssam/velox/tests/orm/shapes/db/scalar"
@@ -381,7 +382,7 @@ func TestScalar_RequiredNillableMustBeSet(t *testing.T) {
 	for skip := 1; skip < len(all); skip++ {
 		sets := append(append([]predicate.ScalarSetter(nil), all[:skip]...), all[skip+1:]...)
 		_, err := client.Scalar.Create(db).Set(sets...).Save(ctx)
-		var verr *orm.ValidationError
+		var verr *velox.ValidationError
 		require.ErrorAs(t, err, &verr, "setter %d left out", skip)
 		assert.Equal(t, "Scalar", verr.Entity)
 	}

@@ -9,6 +9,7 @@ import (
 
 	db "github.com/syssam/velox/tests/orm/db"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/db/entity"
 	"github.com/syssam/velox/tests/orm/db/migrate"
@@ -88,9 +89,9 @@ func Example() {
 	}
 	fmt.Println(alice.Age, n)
 
-	// By id; a missing row is orm.ErrNotFound.
+	// By id; a missing row is velox.ErrNotFound.
 	_, err = db.User.Get(ctx, conn, 404)
-	fmt.Println(errors.Is(err, orm.ErrNotFound))
+	fmt.Println(errors.Is(err, velox.ErrNotFound))
 	// Output:
 	// alice 30 2 first
 	// 1

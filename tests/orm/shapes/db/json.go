@@ -33,7 +33,7 @@ func (*JsonClient) Update(ex orm.Executor) *entity.JsonUpdate { return entity.Ne
 // Delete returns a builder that deletes the Json rows its conditions match.
 func (*JsonClient) Delete(ex orm.Executor) *entity.JsonDelete { return entity.NewJsonDelete(ex) }
 
-// Get returns the Json with the given id, or orm.ErrNotFound.
+// Get returns the Json with the given id, or velox.ErrNotFound.
 func (c *JsonClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Json, error) {
 	return c.Query(ex).Where(predicate.Json(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *JsonClient) UpdateByID(ex orm.Executor, id int) *entity.JsonUpdate {
 	return c.Update(ex).Where(predicate.Json(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Json with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Json with the given id, or returns velox.ErrNotFound.
 func (c *JsonClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Json(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

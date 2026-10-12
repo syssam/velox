@@ -41,7 +41,7 @@ func (*GoTypeShapeClient) Delete(ex orm.Executor) *entity.GoTypeShapeDelete {
 	return entity.NewGoTypeShapeDelete(ex)
 }
 
-// Get returns the GoTypeShape with the given id, or orm.ErrNotFound.
+// Get returns the GoTypeShape with the given id, or velox.ErrNotFound.
 func (c *GoTypeShapeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.GoTypeShape, error) {
 	return c.Query(ex).Where(predicate.GoTypeShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *GoTypeShapeClient) UpdateByID(ex orm.Executor, id int) *entity.GoTypeSh
 	return c.Update(ex).Where(predicate.GoTypeShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the GoTypeShape with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the GoTypeShape with the given id, or returns velox.ErrNotFound.
 func (c *GoTypeShapeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.GoTypeShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -33,7 +33,7 @@ func (*TopicClient) Update(ex orm.Executor) *entity.TopicUpdate { return entity.
 // Delete returns a builder that deletes the Topic rows its conditions match.
 func (*TopicClient) Delete(ex orm.Executor) *entity.TopicDelete { return entity.NewTopicDelete(ex) }
 
-// Get returns the Topic with the given id, or orm.ErrNotFound.
+// Get returns the Topic with the given id, or velox.ErrNotFound.
 func (c *TopicClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Topic, error) {
 	return c.Query(ex).Where(predicate.Topic(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *TopicClient) UpdateByID(ex orm.Executor, id int) *entity.TopicUpdate {
 	return c.Update(ex).Where(predicate.Topic(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Topic with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Topic with the given id, or returns velox.ErrNotFound.
 func (c *TopicClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Topic(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

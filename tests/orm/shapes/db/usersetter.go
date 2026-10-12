@@ -41,7 +41,7 @@ func (*UserSetterClient) Delete(ex orm.Executor) *entity.UserSetterDelete {
 	return entity.NewUserSetterDelete(ex)
 }
 
-// Get returns the UserSetter with the given id, or orm.ErrNotFound.
+// Get returns the UserSetter with the given id, or velox.ErrNotFound.
 func (c *UserSetterClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.UserSetter, error) {
 	return c.Query(ex).Where(predicate.UserSetter(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *UserSetterClient) UpdateByID(ex orm.Executor, id int) *entity.UserSette
 	return c.Update(ex).Where(predicate.UserSetter(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UserSetter with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the UserSetter with the given id, or returns velox.ErrNotFound.
 func (c *UserSetterClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserSetter(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

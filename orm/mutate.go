@@ -27,20 +27,13 @@ type MutCore struct {
 	Preds []P
 }
 
+// wrapErr makes the database's refusal of a write for a constraint a
+// *velox.ConstraintError.
 func wrapErr(err error) error {
 	if err == nil || !sqlgraph.IsConstraintError(err) {
 		return err
 	}
-	c := &ConstraintError{Err: err, Constraint: constraintOf(err)}
-	switch {
-	case sqlgraph.IsUniqueConstraintError(err):
-		c.Kind = ConstraintUnique
-	case sqlgraph.IsForeignKeyConstraintError(err):
-		c.Kind = ConstraintForeignKey
-	case sqlgraph.IsCheckConstraintError(err):
-		c.Kind = ConstraintCheck
-	}
-	return c
+	return velox.NewConstraintError(err.Error(), err)
 }
 
 // validate runs the field's validator and enum check on v.
@@ -50,12 +43,12 @@ func validate(m *Meta, f *FieldMeta, v any) error {
 	}
 	if len(f.Enums) > 0 {
 		if s := fmt.Sprint(v); !slices.Contains(f.Enums, s) {
-			return &ValidationError{Entity: m.Name, Field: f.Name, Err: fmt.Errorf("invalid enum value %q", s)}
+			return m.invalid(f.Name, fmt.Errorf("invalid enum value %q", s))
 		}
 	}
 	if f.Validate != nil {
 		if err := f.Validate(v); err != nil {
-			return &ValidationError{Entity: m.Name, Field: f.Name, Err: err}
+			return m.invalid(f.Name, err)
 		}
 	}
 	return nil
@@ -196,7 +189,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 		v, ok := vals[f.Column]
 		if !ok && null[f.Column] {
 			if !f.Optional || f.NotNull {
-				return nil, nil, &ValidationError{Entity: m.Name, Field: f.Name, Err: errors.New("the field cannot be NULL")}
+				return nil, nil, m.invalid(f.Name, errors.New("the field cannot be NULL"))
 			}
 			// An explicit NULL, so that a column DEFAULT does not fill it. A
 			// JSON column is left out instead: the SQL layer would encode a
@@ -223,7 +216,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 			case writtenByEdge(edges, f.Column):
 				// A required column may be written by an edge setter.
 			default:
-				return nil, nil, &ValidationError{Entity: m.Name, Field: f.Name, Err: errors.New("missing required field")}
+				return nil, nil, m.invalid(f.Name, fmt.Errorf("missing required field %q", m.Name+"."+f.Name))
 			}
 			continue
 		}
@@ -247,7 +240,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 	for _, e := range m.Edges {
 		if e.Required && e.fkOnOwner() && m.Field(e.Columns[0]) == nil &&
 			!slices.ContainsFunc(edges, func(s S) bool { return s.Edge == e }) {
-			return nil, nil, &ValidationError{Entity: m.Name, Field: e.Name, Err: errors.New("missing required edge")}
+			return nil, nil, m.invalid(e.Name, fmt.Errorf("missing required edge %q", m.Name+"."+e.Name))
 		}
 	}
 	for _, s := range edges {
@@ -600,10 +593,10 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 				return nil, fmt.Errorf("velox: updating %s: unknown column %q", meta.Name, s.Col)
 			}
 			if f == meta.id() {
-				return nil, &ValidationError{Entity: meta.Name, Field: f.Name, Err: errors.New("the id cannot be changed")}
+				return nil, meta.invalid(f.Name, errors.New("the id cannot be changed"))
 			}
 			if f.Immutable {
-				return nil, &ValidationError{Entity: meta.Name, Field: f.Name, Err: errors.New("field is immutable")}
+				return nil, meta.invalid(f.Name, errors.New("field is immutable"))
 			}
 			touched[s.Col] = true
 			switch s.Kind {
@@ -616,7 +609,7 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 				spec.AddField(f.Column, f.Type, s.Val)
 			default:
 				if f.NotNull || !f.Optional {
-					return nil, &ValidationError{Entity: meta.Name, Field: f.Name, Err: errors.New("the field cannot be NULL")}
+					return nil, meta.invalid(f.Name, errors.New("the field cannot be NULL"))
 				}
 				spec.ClearField(f.Column, f.Type)
 			}
@@ -706,7 +699,7 @@ func (m *MutCore) orderedSets() ([]S, error) {
 		}
 		e := s.Edge
 		if e.Immutable {
-			return nil, &ValidationError{Entity: meta.Name, Field: e.Name, Err: errors.New("edge is immutable")}
+			return nil, meta.invalid(e.Name, errors.New("edge is immutable"))
 		}
 		c := of(e)
 		switch s.Kind {
@@ -733,7 +726,7 @@ func (m *MutCore) orderedSets() ([]S, error) {
 			// it would write the same column twice.
 		case c.cleared:
 			if c.e.Required && len(c.add) == 0 {
-				return nil, &ValidationError{Entity: meta.Name, Field: c.e.Name, Err: errors.New("a required edge cannot be cleared")}
+				return nil, meta.invalid(c.e.Name, errors.New("a required edge cannot be cleared"))
 			}
 			out = append(out, S{Kind: EdgeClear, Edge: c.e})
 		case len(c.remove) > 0:
@@ -834,16 +827,16 @@ func (m *MutCore) execOne(ctx context.Context, c *conn) error {
 		}
 		switch len(ids) {
 		case 0:
-			return NotFound(meta.Name)
+			return meta.NotFound()
 		case 1:
 		default:
-			return fmt.Errorf("%w: %s", ErrNotSingular, meta.Name)
+			return meta.notSingular()
 		}
 		preds = append(slices.Clone(preds), P{Op: OpEQ, Col: meta.id().Column, Val: ids[0]})
 	}
 	n, err := (&MutCore{M: meta, Sets: m.Sets, Preds: preds}).update(ctx, c)
 	if err == nil && n == 0 {
-		return NotFound(meta.Name)
+		return meta.NotFound()
 	}
 	return err
 }
@@ -877,7 +870,7 @@ func (m *MutCore) updateOne(ctx context.Context, c *conn) (any, error) {
 		return nil, meta.NotFound()
 	case 1:
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrNotSingular, meta.Name)
+		return nil, meta.notSingular()
 	}
 	// The conditions go with the id: a row another transaction changed
 	// between the probe and here is then not updated, and not reported as if
@@ -925,7 +918,7 @@ func (m *MutCore) updateByID(ctx context.Context, c *conn, id any) (any, error) 
 			return nil, err
 		}
 		if n == 0 {
-			return nil, NotFound(meta.Name)
+			return nil, meta.NotFound()
 		}
 	}
 	if err := sqlgraph.UpdateNode(ctx, drv, spec); err != nil {

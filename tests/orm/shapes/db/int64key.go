@@ -41,7 +41,7 @@ func (*Int64KeyClient) Delete(ex orm.Executor) *entity.Int64KeyDelete {
 	return entity.NewInt64KeyDelete(ex)
 }
 
-// Get returns the Int64Key with the given id, or orm.ErrNotFound.
+// Get returns the Int64Key with the given id, or velox.ErrNotFound.
 func (c *Int64KeyClient) Get(ctx context.Context, ex orm.Executor, id int64) (*entity.Int64Key, error) {
 	return c.Query(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *Int64KeyClient) UpdateByID(ex orm.Executor, id int64) *entity.Int64KeyU
 	return c.Update(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Int64Key with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Int64Key with the given id, or returns velox.ErrNotFound.
 func (c *Int64KeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id int64) error {
 	n, err := c.Delete(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

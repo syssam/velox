@@ -167,7 +167,7 @@ func (q *EdgeQuery) All(ctx context.Context) ([]*Edge, error) {
 	return out, nil
 }
 
-// First returns the first matching Edge, or orm.ErrNotFound.
+// First returns the first matching Edge, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *EdgeQuery) First(ctx context.Context) (*Edge, error) {
@@ -178,7 +178,7 @@ func (q *EdgeQuery) First(ctx context.Context) (*Edge, error) {
 	return r.(*Edge), nil
 }
 
-// Only returns the single matching Edge: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Edge: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EdgeQuery) Only(ctx context.Context) (*Edge, error) {
@@ -405,15 +405,15 @@ func (b *EdgeUpdate) Fill(in any, skip ...string) *EdgeUpdate {
 //go:noinline
 func (b *EdgeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *EdgeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

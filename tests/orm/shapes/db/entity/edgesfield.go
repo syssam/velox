@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	edgesfield "github.com/syssam/velox/tests/orm/shapes/db/edgesfield"
@@ -27,12 +28,12 @@ type EdgesFieldEdges struct {
 	loaded [1]bool
 }
 
-// FieldsOrErr returns the fields edge, or an error when it was not loaded.
+// FieldsOrErr returns the fields edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *EdgesFieldEdges) FieldsOrErr() ([]*Field, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "fields"}
+		return nil, velox.NewNotLoadedError("fields")
 	}
 	return e.Fields, nil
 }
@@ -197,7 +198,7 @@ func (q *EdgesFieldQuery) All(ctx context.Context) ([]*EdgesField, error) {
 	return out, nil
 }
 
-// First returns the first matching EdgesField, or orm.ErrNotFound.
+// First returns the first matching EdgesField, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *EdgesFieldQuery) First(ctx context.Context) (*EdgesField, error) {
@@ -208,7 +209,7 @@ func (q *EdgesFieldQuery) First(ctx context.Context) (*EdgesField, error) {
 	return r.(*EdgesField), nil
 }
 
-// Only returns the single matching EdgesField: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching EdgesField: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EdgesFieldQuery) Only(ctx context.Context) (*EdgesField, error) {
@@ -435,15 +436,15 @@ func (b *EdgesFieldUpdate) Fill(in any, skip ...string) *EdgesFieldUpdate {
 //go:noinline
 func (b *EdgesFieldUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *EdgesFieldUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

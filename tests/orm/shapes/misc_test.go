@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/bare"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
@@ -40,7 +41,7 @@ func TestBare_EntityWithoutFields(t *testing.T) {
 	got := must(client.Bare.Update(db).Where(bare.ID.EQ(40)).SaveOne(ctx))
 	assert.Equal(t, 40, got.ID)
 	_, err = client.Bare.Update(db).Where(bare.ID.EQ(9999)).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, 1, must(client.Bare.Delete(db).Where(bare.ID.EQ(40)).Exec(ctx)))
 	assert.Equal(t, 3, must(client.Bare.Delete(db).Exec(ctx)))
 	assert.Zero(t, must(client.Bare.Query(db).Count(ctx)))

@@ -39,7 +39,7 @@ func (*StringsClient) Delete(ex orm.Executor) *entity.StringsDelete {
 	return entity.NewStringsDelete(ex)
 }
 
-// Get returns the Strings with the given id, or orm.ErrNotFound.
+// Get returns the Strings with the given id, or velox.ErrNotFound.
 func (c *StringsClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Strings, error) {
 	return c.Query(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *StringsClient) UpdateByID(ex orm.Executor, id int) *entity.StringsUpdat
 	return c.Update(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Strings with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Strings with the given id, or returns velox.ErrNotFound.
 func (c *StringsClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

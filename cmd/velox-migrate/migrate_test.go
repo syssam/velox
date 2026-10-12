@@ -76,13 +76,11 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	}
 	// Rewritten and reported, each once: what the tool cannot see for
 	// itself (whether the context carries a handle), or does in another
-	// way than the text did (a deferred call, the last of two orders, the
-	// runtime's type of a validation error).
+	// way than the text did (a deferred call, the last of two orders).
 	reported := map[string]int{
 		"QueryPosts is given the handle of the context":    0,
 		"a deferred (or go) call is inside a function now": 0,
 		"more than one order or more than one filter":      0,
-		"ValidationError is the runtime's type now":        0,
 	}
 next:
 	for _, line := range strings.Split(strings.TrimSpace(string(notes)), "\n") {
@@ -174,7 +172,8 @@ next:
 	// assertion left as it was would compile and assert nothing.
 	for file, wants := range map[string][]string{
 		"more.go": {
-			"func Missing(what string) error { return orm.NotFound(what) }",
+			// An error of the library is the same error from package orm.
+			"func Missing(what string) error { return velox.NewNotFoundError(what) }",
 			".BatchSize(size).Save(ctx)",
 			"return errors.Is(err, orm.ErrWhereDepth), orm.MaxWhereDepth",
 		},
@@ -287,11 +286,14 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 	}
 	flat := strings.Join(strings.Fields(string(migrated)), " ")
 	for _, text := range []string{
-		// The tests of an error are the runtime's.
-		"case orm.IsNotSingular(err), orm.IsNotFound(err), orm.IsValidationError(err):",
-		"var ve *orm.ValidationError",
-		"return ve.Field",
-		`return &orm.ValidationError{Entity: "User", Field: "name", Err: errors.New("x")}`,
+		// The errors are the library's, which package orm returns: one
+		// the generated package repeated takes the library's name, the rest
+		// is as it was.
+		"var missing *velox.NotFoundError",
+		"case velox.IsNotSingular(err), velox.IsNotFound(err), velox.IsValidationError(err):",
+		"var ve *velox.ValidationError",
+		"return ve.Name",
+		`return &velox.ValidationError{Entity: "User", Field: "name", Name: "name", Err: errors.New("x")}`,
 		// The driver under a transaction; the handle of a context.
 		`return tx.Driver().Exec(ctx, "SELECT 1", []any{key}, nil)`,
 		"ctx = orm.WithExecutor(ctx, c) ctx = orm.WithExecutor(ctx, tx)",
@@ -353,7 +355,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"Set(postpkg.Title.Set(title), postpkg.Author.Set(author.ID)).Save(ctx)",
 		// (postpkg: the package's tests declare a name post.)
 		// The values of the errors.
-		"return errors.Is(err, orm.ErrNotFound) || errors.Is(err, orm.ErrNotSingular)",
+		"return errors.Is(err, velox.ErrNotFound) || errors.Is(err, velox.ErrNotSingular)",
 		// A last order that is nil is no order; an order written out.
 		"return db.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) // note: more than one order",
 		"OrderBy((&entity.PostOrder{Field: f}).Term()).Paginate(",

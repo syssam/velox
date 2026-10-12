@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	reffilter "github.com/syssam/velox/tests/integration/filter"
 	client "github.com/syssam/velox/tests/orm/db"
@@ -542,7 +543,7 @@ func TestNodeTypes(t *testing.T) {
 		{"Token", ann.ID}, {"Token", tok.ID.String()},
 	} {
 		n, err := byName[c.typ].Get(ctx, db, c.id)
-		assert.True(t, orm.IsNotFound(err), "%s %v (%T): %v", c.typ, c.id, c.id, err)
+		assert.True(t, velox.IsNotFound(err), "%s %v (%T): %v", c.typ, c.id, c.id, err)
 		assert.Nil(t, n, "%s %v", c.typ, c.id)
 	}
 
@@ -550,7 +551,7 @@ func TestNodeTypes(t *testing.T) {
 	find := func(id any) client.Noder {
 		for _, nt := range types {
 			n, err := nt.Get(ctx, db, id)
-			if orm.IsNotFound(err) {
+			if velox.IsNotFound(err) {
 				continue
 			}
 			require.NoError(t, err)

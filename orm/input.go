@@ -2,7 +2,6 @@ package orm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -37,22 +36,6 @@ func ExecutorFrom(ctx context.Context) Executor {
 func TxFrom(ctx context.Context) *Tx {
 	tx, _ := ctx.Value(executorKey{}).(*Tx)
 	return tx
-}
-
-// MaskNotFound returns nil for ErrNotFound and err for anything else: a
-// to-one edge without a neighbor resolves to null, not to an error.
-func MaskNotFound(err error) error {
-	if errors.Is(err, ErrNotFound) {
-		return nil
-	}
-	return err
-}
-
-// IsNotLoaded reports whether err is the one an edge's OrErr method returns
-// for an edge the query did not load.
-func IsNotLoaded(err error) bool {
-	var e *NotLoadedError
-	return errors.As(err, &e)
 }
 
 // opInvalid is a predicate that could not be built; Val is the error the

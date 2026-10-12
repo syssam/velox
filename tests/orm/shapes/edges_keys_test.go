@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -92,13 +93,13 @@ func TestKeys_EdgesO2M(t *testing.T) {
 	assert.Equal(t, "t1", players[1].Edges.Team.Name)
 	assert.Equal(t, "t2", players[2].Edges.Team.Name)
 	_, err := players[3].Edges.TeamOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	assert.Equal(t, []string{"p1", "p2"}, playerIDs(must(f.t1.QueryPlayers(db).OrderBy(player.ID.Asc()).All(ctx))))
 	assert.Equal(t, "t1", must(f.p1.QueryTeam(db).Only(ctx)).Name, "the key of the entity Create returned")
 	assert.Equal(t, "t2", must(players[2].QueryTeam(db).Only(ctx)).Name)
 	_, err = f.p4.QueryTeam(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	assert.Equal(t, []string{"t1", "t2"}, teamNames(must(client.Team.Query(db).Where(team.Players.Has()).OrderBy(team.Name.Asc()).All(ctx))))
 	assert.Equal(t, []string{"t2"}, teamNames(must(client.Team.Query(db).Where(team.Players.HasWith(player.Name.EQ("three"))).All(ctx))))
@@ -116,7 +117,7 @@ func TestKeys_EdgesO2M(t *testing.T) {
 	assert.Empty(t, must(f.t3.QueryPlayers(db).All(ctx)))
 	got := must(client.Player.Update(db).Set(player.Team.Clear()).Where(player.ID.EQ("p3")).SaveOne(ctx))
 	_, err = got.QueryTeam(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 }
 
 // M2M traversal, predicates and changes between non-int ids.

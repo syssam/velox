@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -30,25 +31,25 @@ type PlayerEdges struct {
 	loaded [2]bool
 }
 
-// TeamOrErr returns the team edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// TeamOrErr returns the team edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PlayerEdges) TeamOrErr() (*Team, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "team"}
+		return nil, velox.NewNotLoadedError("team")
 	}
 	if e.Team == nil {
-		return nil, orm.ErrNotFound
+		return nil, TeamMeta.NotFound()
 	}
 	return e.Team, nil
 }
 
-// FanOfOrErr returns the fan_of edge, or an error when it was not loaded.
+// FanOfOrErr returns the fan_of edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PlayerEdges) FanOfOrErr() ([]*Team, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "fan_of"}
+		return nil, velox.NewNotLoadedError("fan_of")
 	}
 	return e.FanOf, nil
 }
@@ -232,7 +233,7 @@ func (q *PlayerQuery) All(ctx context.Context) ([]*Player, error) {
 	return out, nil
 }
 
-// First returns the first matching Player, or orm.ErrNotFound.
+// First returns the first matching Player, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *PlayerQuery) First(ctx context.Context) (*Player, error) {
@@ -243,7 +244,7 @@ func (q *PlayerQuery) First(ctx context.Context) (*Player, error) {
 	return r.(*Player), nil
 }
 
-// Only returns the single matching Player: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Player: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PlayerQuery) Only(ctx context.Context) (*Player, error) {
@@ -470,15 +471,15 @@ func (b *PlayerUpdate) Fill(in any, skip ...string) *PlayerUpdate {
 //go:noinline
 func (b *PlayerUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *PlayerUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

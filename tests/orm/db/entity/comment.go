@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	comment "github.com/syssam/velox/tests/orm/db/comment"
@@ -33,28 +34,28 @@ type CommentEdges struct {
 	loaded [2]bool
 }
 
-// PostOrErr returns the post edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// PostOrErr returns the post edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *CommentEdges) PostOrErr() (*Post, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "post"}
+		return nil, velox.NewNotLoadedError("post")
 	}
 	if e.Post == nil {
-		return nil, orm.ErrNotFound
+		return nil, PostMeta.NotFound()
 	}
 	return e.Post, nil
 }
 
-// AuthorOrErr returns the author edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// AuthorOrErr returns the author edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *CommentEdges) AuthorOrErr() (*User, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "author"}
+		return nil, velox.NewNotLoadedError("author")
 	}
 	if e.Author == nil {
-		return nil, orm.ErrNotFound
+		return nil, UserMeta.NotFound()
 	}
 	return e.Author, nil
 }
@@ -246,7 +247,7 @@ func (q *CommentQuery) All(ctx context.Context) ([]*Comment, error) {
 	return out, nil
 }
 
-// First returns the first matching Comment, or orm.ErrNotFound.
+// First returns the first matching Comment, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *CommentQuery) First(ctx context.Context) (*Comment, error) {
@@ -257,7 +258,7 @@ func (q *CommentQuery) First(ctx context.Context) (*Comment, error) {
 	return r.(*Comment), nil
 }
 
-// Only returns the single matching Comment: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Comment: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *CommentQuery) Only(ctx context.Context) (*Comment, error) {
@@ -484,15 +485,15 @@ func (b *CommentUpdate) Fill(in any, skip ...string) *CommentUpdate {
 //go:noinline
 func (b *CommentUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *CommentUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline
@@ -611,10 +612,10 @@ func (o *CommentOrder) Term() predicate.CommentOrderTerm {
 //go:noinline
 func (e *Comment) Post(ctx context.Context) (*Post, error) {
 	v, err := e.Edges.PostOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryPost(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 // Author resolves the "author" edge for a GraphQL engine: the neighbor the query
@@ -624,10 +625,10 @@ func (e *Comment) Post(ctx context.Context) (*Post, error) {
 //go:noinline
 func (e *Comment) Author(ctx context.Context) (*User, error) {
 	v, err := e.Edges.AuthorOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryAuthor(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 func init() { slots.Comment.Bind(&CommentMeta) }

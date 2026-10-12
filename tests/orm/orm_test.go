@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/orm"
@@ -115,7 +116,7 @@ func TestCreate_DefaultsValidatorsAndRequired(t *testing.T) {
 
 	// A validator of the schema rejects the value before any SQL.
 	_, err := client.User.Create(db).Set(user.Name.Set(""), user.Email.Set("x@example.com"), user.Age.Set(1)).Save(ctx)
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 	require.ErrorAs(t, err, &verr)
 	assert.Equal(t, "name", verr.Field)
 
@@ -131,7 +132,7 @@ func TestCreate_DefaultsValidatorsAndRequired(t *testing.T) {
 
 	// A unique violation is a constraint error.
 	_, err = client.User.Create(db).Set(user.Name.Set("ann2"), user.Email.Set("ann@example.com"), user.Age.Set(1)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 
 	n, err := client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
@@ -161,11 +162,11 @@ func TestQuery_PredicatesOrderAndTerminals(t *testing.T) {
 	assert.Equal(t, "bob", users[0].Name)
 
 	_, err = client.User.Query(db).Where(user.Name.EQ("nobody")).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = client.User.Query(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
 	_, err = client.User.Query(db).Where(user.Name.EQ("nobody")).First(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	n, err := client.User.Query(db).Where(user.Age.LT(40)).Count(ctx)
 	require.NoError(t, err)
@@ -202,17 +203,17 @@ func TestUpdate_ExecSaveAndDelete(t *testing.T) {
 	assert.Nil(t, got.Nickname)
 
 	_, err = client.User.Update(db).Set(user.Name.Set("x")).Where(user.ID.EQ(a.ID + 1000)).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// Save on more than one row changes nothing.
 	_, err = client.User.Update(db).Set(user.Name.Set("same")).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotSingular)
+	assert.ErrorIs(t, err, velox.ErrNotSingular)
 	assert.Equal(t, "anna", ref.User.GetX(ctx, a.ID).Name)
 	assert.Equal(t, "bob", ref.User.GetX(ctx, b.ID).Name)
 
 	// Validators run on update too.
 	_, err = client.User.Update(db).Set(user.Name.Set("")).Where(user.ID.EQ(a.ID)).Exec(ctx)
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 	require.ErrorAs(t, err, &verr)
 
 	n, err = client.User.Delete(db).Where(user.ID.EQ(b.ID)).Exec(ctx)
@@ -245,7 +246,7 @@ func TestCreateBulk(t *testing.T) {
 		client.User.Create(db).Set(user.Name.Set("ok"), user.Email.Set("ok@example.com"), user.Age.Set(1)),
 		client.User.Create(db).Set(user.Name.Set(""), user.Email.Set("bad@example.com"), user.Age.Set(1)),
 	).Save(ctx)
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 	require.ErrorAs(t, err, &verr)
 	n, err := client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
@@ -276,7 +277,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 
 	// An edge that was not requested reports so.
 	_, err = users[0].Edges.PetsOrErr()
-	var nle *orm.NotLoadedError
+	var nle *velox.NotLoadedError
 	require.ErrorAs(t, err, &nle)
 
 	// M2O.
@@ -383,7 +384,7 @@ func TestEdges_TraversalAndPredicates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got.OwnerID)
 	_, err = got.QueryOwner(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 }
 
 func TestTx_CommitRollbackAndPanic(t *testing.T) {

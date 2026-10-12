@@ -41,7 +41,7 @@ func (*UserClientClient) Delete(ex orm.Executor) *entity.UserClientDelete {
 	return entity.NewUserClientDelete(ex)
 }
 
-// Get returns the UserClient with the given id, or orm.ErrNotFound.
+// Get returns the UserClient with the given id, or velox.ErrNotFound.
 func (c *UserClientClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.UserClient, error) {
 	return c.Query(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *UserClientClient) UpdateByID(ex orm.Executor, id int) *entity.UserClien
 	return c.Update(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UserClient with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the UserClient with the given id, or returns velox.ErrNotFound.
 func (c *UserClientClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

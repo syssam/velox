@@ -311,7 +311,7 @@ func (m *Mutation) OldField(ctx context.Context, name string) (velox.Value, erro
 		case 1:
 			m.old, m.oldLoaded = rows[0], true
 		default:
-			return nil, fmt.Errorf("%w: %s", ErrNotSingular, m.c.M.Name)
+			return nil, m.c.M.notSingular()
 		}
 	}
 	return m.c.M.get(m.old, f.Column), nil

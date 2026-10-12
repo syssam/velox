@@ -33,7 +33,7 @@ func (*AndClient) Update(ex orm.Executor) *entity.AndUpdate { return entity.NewA
 // Delete returns a builder that deletes the And rows its conditions match.
 func (*AndClient) Delete(ex orm.Executor) *entity.AndDelete { return entity.NewAndDelete(ex) }
 
-// Get returns the And with the given id, or orm.ErrNotFound.
+// Get returns the And with the given id, or velox.ErrNotFound.
 func (c *AndClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.And, error) {
 	return c.Query(ex).Where(predicate.And(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *AndClient) UpdateByID(ex orm.Executor, id int) *entity.AndUpdate {
 	return c.Update(ex).Where(predicate.And(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the And with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the And with the given id, or returns velox.ErrNotFound.
 func (c *AndClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.And(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

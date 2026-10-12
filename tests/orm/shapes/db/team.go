@@ -34,7 +34,7 @@ func (*TeamClient) Update(ex orm.Executor) *entity.TeamUpdate { return entity.Ne
 // Delete returns a builder that deletes the Team rows its conditions match.
 func (*TeamClient) Delete(ex orm.Executor) *entity.TeamDelete { return entity.NewTeamDelete(ex) }
 
-// Get returns the Team with the given id, or orm.ErrNotFound.
+// Get returns the Team with the given id, or velox.ErrNotFound.
 func (c *TeamClient) Get(ctx context.Context, ex orm.Executor, id uuid.UUID) (*entity.Team, error) {
 	return c.Query(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -45,7 +45,7 @@ func (c *TeamClient) UpdateByID(ex orm.Executor, id uuid.UUID) *entity.TeamUpdat
 	return c.Update(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Team with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Team with the given id, or returns velox.ErrNotFound.
 func (c *TeamClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

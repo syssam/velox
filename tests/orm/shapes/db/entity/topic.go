@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -28,22 +29,22 @@ type TopicEdges struct {
 	loaded   [2]bool
 }
 
-// ArticlesOrErr returns the articles edge, or an error when it was not loaded.
+// ArticlesOrErr returns the articles edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TopicEdges) ArticlesOrErr() ([]*Article, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "articles"}
+		return nil, velox.NewNotLoadedError("articles")
 	}
 	return e.Articles, nil
 }
 
-// BannedInOrErr returns the banned_in edge, or an error when it was not loaded.
+// BannedInOrErr returns the banned_in edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TopicEdges) BannedInOrErr() ([]*Article, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "banned_in"}
+		return nil, velox.NewNotLoadedError("banned_in")
 	}
 	return e.BannedIn, nil
 }
@@ -225,7 +226,7 @@ func (q *TopicQuery) All(ctx context.Context) ([]*Topic, error) {
 	return out, nil
 }
 
-// First returns the first matching Topic, or orm.ErrNotFound.
+// First returns the first matching Topic, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *TopicQuery) First(ctx context.Context) (*Topic, error) {
@@ -236,7 +237,7 @@ func (q *TopicQuery) First(ctx context.Context) (*Topic, error) {
 	return r.(*Topic), nil
 }
 
-// Only returns the single matching Topic: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Topic: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TopicQuery) Only(ctx context.Context) (*Topic, error) {
@@ -463,15 +464,15 @@ func (b *TopicUpdate) Fill(in any, skip ...string) *TopicUpdate {
 //go:noinline
 func (b *TopicUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *TopicUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

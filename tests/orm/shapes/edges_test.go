@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -109,9 +110,9 @@ func authorNames(as []*entity.Author) []string {
 
 func notLoaded(t *testing.T, err error, edge string) {
 	t.Helper()
-	var nle *orm.NotLoadedError
+	var nle *velox.NotLoadedError
 	require.ErrorAs(t, err, &nle)
-	assert.Equal(t, edge, nle.Edge)
+	assert.Equal(t, edge, nle.Edge())
 }
 
 func TestEdges_CreateReturnsKeysAndRejectsBadOnes(t *testing.T) {
@@ -137,22 +138,22 @@ func TestEdges_CreateReturnsKeysAndRejectsBadOnes(t *testing.T) {
 	invalid(t, err, "author_id")
 	// A key that references nothing is a constraint error.
 	_, err = client.Article.Create(db).Set(article.Title.Set("ghost"), article.Author.Set(9999)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	_, err = client.Article.Create(db).Set(article.Title.Set("ghost"), article.AuthorID.Set(l.ann.ID), article.Topics.Add(9999)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	assert.Zero(t, must(client.Article.Query(db).Where(article.Title.In("orphan", "ghost")).Count(ctx)), "a failed create wrote nothing, not even the row before its edges")
 	// O2O is unique: ann already has a passport and holds a locker.
 	_, err = client.Passport.Create(db).Set(passport.Number.Set("P-ann-2"), passport.Owner.Set(l.ann.ID)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	_, err = client.Locker.Create(db).Set(locker.Code.Set("l3"), locker.Holder.Set(l.ann.ID)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 
 	// O2M and O2O from the side that does not hold the key, on create. A row
 	// that already belongs to another parent cannot be taken over (the SQL
 	// layer's rule, as in velox and Ent): that is a constraint error and
 	// nothing is written.
 	_, err = client.Author.Create(db).Set(author.Name.Set("eve"), author.Articles.Add(l.a2.ID, l.d1.ID)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	assert.Zero(t, must(client.Author.Query(db).Where(author.Name.EQ("eve")).Count(ctx)))
 	eve := must(client.Author.Create(db).Set(author.Name.Set("eve"), author.Edited.Add(l.a2.ID), author.Locker.Set(l.l2.ID)).Save(ctx))
 	assert.Equal(t, []string{"a2"}, titles(must(eve.QueryEdited(db).All(ctx))))
@@ -199,13 +200,13 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "P-ann", p.Number)
 	_, err = cid.Edges.PassportOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound, "a to-one edge that was loaded and is empty")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "a to-one edge that was loaded and is empty")
 	assert.Nil(t, cid.Edges.Passport)
 	lk, err := ann.Edges.LockerOrErr()
 	require.NoError(t, err)
 	assert.Equal(t, "l1", lk.Code)
 	_, err = bob.Edges.LockerOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// Nothing requested: every OrErr says not loaded, whatever the row has.
 	plain := must(client.Author.Query(db).Where(author.Name.EQ("ann")).Only(ctx))
@@ -234,7 +235,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	assert.Equal(t, []string{"ann", "ann", "bob", "dee"}, []string{a1.Edges.Author.Name, a2.Edges.Author.Name, b1.Edges.Author.Name, d1.Edges.Author.Name})
 	assert.Equal(t, "bob", a1.Edges.Editor.Name)
 	_, err = a2.Edges.EditorOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound, "a NULL key between two set ones")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "a NULL key between two set ones")
 	assert.Equal(t, "bob", b1.Edges.Editor.Name)
 	assert.Equal(t, "ann", d1.Edges.Editor.Name)
 	assert.Equal(t, []string{"go", "sql"}, topicNames(a1.Edges.Topics))
@@ -269,7 +270,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	require.Len(t, lockers, 2)
 	assert.Equal(t, "ann", lockers[0].Edges.Holder.Name)
 	_, err = lockers[1].Edges.HolderOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// With on First and Only.
 	first := must(client.Article.Query(db).OrderBy(article.Words.Desc()).WithAuthor().WithTopics().First(ctx))
@@ -310,7 +311,7 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "P-bob", pp.Number)
 	_, err = a2.Edges.EditorOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = a1.Edges.AuthorOrErr()
 	notLoaded(t, err, "author")
 	// dee's article was edited by ann, whose passport is loaded there too.
@@ -332,11 +333,11 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 	articles := must(client.Article.Query(db).OrderBy(article.Title.Asc()).
 		WithAuthor(client.Author.Query(db).Where(author.Age.GT(35))).WithEditor(client.Author.Query(db).Where(author.Name.EQ("bob"))).All(ctx))
 	_, err = articles[0].Edges.AuthorOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound, "ann is 30")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "ann is 30")
 	assert.Equal(t, "bob", articles[2].Edges.Author.Name)
 	assert.Equal(t, "bob", articles[0].Edges.Editor.Name)
 	_, err = articles[3].Edges.EditorOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound, "d1 is edited by ann")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "d1 is edited by ann")
 	// ...and through an edge predicate of the neighbor.
 	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).
 		WithArticles(client.Article.Query(db).Where(article.Topics.HasWith(topic.Name.EQ("sql")))).All(ctx))
@@ -510,20 +511,20 @@ func TestEdges_QueryNeighbours(t *testing.T) {
 	assert.Empty(t, must(l.cid.QueryArticles(db).All(ctx)))
 	assert.Equal(t, "P-ann", must(l.ann.QueryPassport(db).Only(ctx)).Number)
 	_, err := l.cid.QueryPassport(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, "l1", must(l.ann.QueryLocker(db).Only(ctx)).Code)
 	assert.Equal(t, "ann", must(l.a1.QueryAuthor(db).Only(ctx)).Name)
 	assert.Equal(t, "ann", must(l.a2.QueryAuthor(db).Only(ctx)).Name, "the key was set through the field")
 	assert.Equal(t, "bob", must(l.a1.QueryEditor(db).Only(ctx)).Name)
 	assert.Equal(t, "bob", must(l.b1.QueryEditor(db).Only(ctx)).Name, "the key was set through the field")
 	_, err = l.a2.QueryEditor(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.False(t, must(l.a2.QueryEditor(db).Exists(ctx)))
 	// A key the schema does not name is held by the returned entity too.
 	assert.Equal(t, "ann", must(l.pAnn.QueryOwner(db).Only(ctx)).Name)
 	assert.Equal(t, "ann", must(l.l1.QueryHolder(db).Only(ctx)).Name)
 	_, err = l.l2.QueryHolder(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, []string{"go", "sql"}, topicNames(must(l.a1.QueryTopics(db).OrderBy(topic.Name.Asc()).All(ctx))))
 	assert.Equal(t, []string{"rust"}, topicNames(must(l.a1.QueryBannedTopics(db).All(ctx))))
 	assert.Empty(t, must(l.b1.QueryTopics(db).All(ctx)))
@@ -556,9 +557,9 @@ func TestEdges_QueryNeighbours(t *testing.T) {
 	fresh := &entity.Author{}
 	assert.Empty(t, must(fresh.QueryArticles(db).All(ctx)))
 	_, err = fresh.QueryPassport(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = (&entity.Article{}).QueryAuthor(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Empty(t, must((&entity.Article{}).QueryTopics(db).All(ctx)))
 }
 
@@ -603,7 +604,7 @@ func TestEdges_UpdateAddRemoveClearSet(t *testing.T) {
 	// An edge to a row that does not exist is a constraint error, and the
 	// update is not half applied.
 	_, err := client.Article.Update(db).Set(article.Title.Set("never"), article.Topics.Add(9999)).Where(article.ID.EQ(l.d1.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	assert.Equal(t, "d1", must(client.Article.Query(db).Where(article.ID.EQ(l.d1.ID)).Only(ctx)).Title, "the failed update is not half applied")
 
 	// M2O: reassign through the edge and through the field; clear the
@@ -622,14 +623,14 @@ func TestEdges_UpdateAddRemoveClearSet(t *testing.T) {
 	got = must(client.Article.Update(db).Set(article.EditorID.Clear()).Where(article.ID.EQ(l.a2.ID)).SaveOne(ctx))
 	assert.Nil(t, got.EditorID)
 	_, err = client.Article.Update(db).Set(article.Author.Set(9999)).Where(article.ID.EQ(l.a2.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 
 	// O2M from the one side: add takes free rows, remove and clear let go.
 	must(client.Author.Update(db).Set(author.Edited.Add(l.a2.ID)).Where(author.ID.EQ(l.cid.ID)).Exec(ctx))
 	assert.Equal(t, []string{"a2"}, titles(must(l.cid.QueryEdited(db).All(ctx))))
 	// A row that belongs to another parent is not taken over.
 	_, err = client.Author.Update(db).Set(author.Age.Set(99), author.Edited.Add(l.d1.ID)).Where(author.ID.EQ(l.cid.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	assert.Equal(t, 50, must(client.Author.Query(db).Where(author.ID.EQ(l.cid.ID)).Only(ctx)).Age, "the failed update is not half applied")
 	assert.Equal(t, "ann", must(l.d1.QueryEditor(db).Only(ctx)).Name)
 	// Removing a row that belongs to somebody else leaves it alone.
@@ -651,7 +652,7 @@ func TestEdges_UpdateAddRemoveClearSet(t *testing.T) {
 	assert.Equal(t, "l2", must(l.bob.QueryLocker(db).Only(ctx)).Code)
 	must(client.Author.Update(db).Set(author.Locker.Clear()).Where(author.ID.EQ(l.bob.ID)).Exec(ctx))
 	_, err = l.bob.QueryLocker(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, "l1", must(l.ann.QueryLocker(db).Only(ctx)).Code, "ann's locker is untouched")
 	lk := must(client.Locker.Update(db).Set(locker.Holder.Set(l.cid.ID)).Where(locker.ID.EQ(l.l2.ID)).SaveOne(ctx))
 	require.NotNil(t, lk.HolderID)
@@ -659,11 +660,11 @@ func TestEdges_UpdateAddRemoveClearSet(t *testing.T) {
 	lk = must(client.Locker.Update(db).Set(locker.Holder.Clear()).Where(locker.ID.EQ(l.l2.ID)).SaveOne(ctx))
 	assert.Nil(t, lk.HolderID)
 	_, err = client.Locker.Update(db).Set(locker.Holder.Set(l.ann.ID)).Where(locker.ID.EQ(l.l2.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "ann already holds l1; got %v", err)
+	require.True(t, velox.IsConstraintError(err), "ann already holds l1; got %v", err)
 	must(client.Passport.Update(db).Set(passport.Owner.Set(l.dee.ID)).Where(passport.ID.EQ(l.pAnn.ID)).Exec(ctx))
 	assert.Equal(t, "P-ann", must(l.dee.QueryPassport(db).Only(ctx)).Number)
 	_, err = l.ann.QueryPassport(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 }
 
 // Deleting a row other rows reference fails with a constraint error, inside
@@ -673,11 +674,11 @@ func TestEdges_DeleteRestricted(t *testing.T) {
 	db := open(t)
 	l := library(t, db)
 	_, err := client.Author.Delete(db).Where(author.ID.EQ(l.ann.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	assert.Equal(t, 4, must(client.Author.Query(db).Count(ctx)))
 	n := must(client.Author.Delete(db).Where(author.ID.EQ(l.cid.ID)).Exec(ctx))
 	assert.Equal(t, 1, n)
-	var target *orm.ConstraintError
+	var target *velox.ConstraintError
 	_, err = client.Author.Delete(db).Exec(ctx)
 	require.True(t, errors.As(err, &target))
 	assert.Equal(t, 3, must(client.Author.Query(db).Count(ctx)), "a failed delete deletes nothing")

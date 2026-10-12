@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/db/internal/slots"
@@ -35,15 +36,15 @@ type TokenEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *TokenEdges) OwnerOrErr() (*User, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "owner"}
+		return nil, velox.NewNotLoadedError("owner")
 	}
 	if e.Owner == nil {
-		return nil, orm.ErrNotFound
+		return nil, UserMeta.NotFound()
 	}
 	return e.Owner, nil
 }
@@ -240,7 +241,7 @@ func (q *TokenQuery) All(ctx context.Context) ([]*Token, error) {
 	return out, nil
 }
 
-// First returns the first matching Token, or orm.ErrNotFound.
+// First returns the first matching Token, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *TokenQuery) First(ctx context.Context) (*Token, error) {
@@ -251,7 +252,7 @@ func (q *TokenQuery) First(ctx context.Context) (*Token, error) {
 	return r.(*Token), nil
 }
 
-// Only returns the single matching Token: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Token: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TokenQuery) Only(ctx context.Context) (*Token, error) {
@@ -478,15 +479,15 @@ func (b *TokenUpdate) Fill(in any, skip ...string) *TokenUpdate {
 //go:noinline
 func (b *TokenUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *TokenUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline
@@ -586,10 +587,10 @@ func (o *TokenOrder) Term() predicate.TokenOrderTerm {
 //go:noinline
 func (e *Token) Owner(ctx context.Context) (*User, error) {
 	v, err := e.Edges.OwnerOrErr()
-	if orm.IsNotLoaded(err) {
+	if velox.IsNotLoaded(err) {
 		v, err = e.QueryOwner(orm.ExecutorFrom(ctx)).Only(ctx)
 	}
-	return v, orm.MaskNotFound(err)
+	return v, velox.MaskNotFound(err)
 }
 
 func init() { slots.Token.Bind(&TokenMeta) }

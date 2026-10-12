@@ -35,7 +35,7 @@ func TestByID_GetUpdateOneDeleteOne(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ann", got.Name)
 	_, err = client.User.Get(ctx, db, u.ID+99)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// Get is a plain function: it can be handed to a generic helper.
 	fetch := func(get func(context.Context, orm.Executor, int) (*entity.User, error)) (*entity.User, error) {
@@ -48,12 +48,12 @@ func TestByID_GetUpdateOneDeleteOne(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 31, up.Age)
 	_, err = client.User.UpdateByID(db, u.ID+99).Set(user.Age.Set(1)).SaveOne(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// A missing row is an error for DeleteOne; Delete().Exec reports a count.
-	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID+99), orm.ErrNotFound)
+	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID+99), velox.ErrNotFound)
 	require.NoError(t, client.User.DeleteByID(ctx, db, u.ID))
-	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID), orm.ErrNotFound)
+	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID), velox.ErrNotFound)
 }
 
 func TestSetNillable(t *testing.T) {
@@ -308,7 +308,7 @@ func TestSaveOne_GuardIsPartOfTheUpdate(t *testing.T) {
 		_, err := orm.ExecSQL(ctx, db, fmt.Sprintf("UPDATE users SET age = 30, name = 'ann' WHERE id = %d", u.ID))
 		require.NoError(t, err)
 		_, err = client.User.Update(db).Set(user.Name.Set("changed")).Where(guard...).SaveOne(ctx)
-		assert.ErrorIs(t, err, orm.ErrNotFound, "the guard no longer holds")
+		assert.ErrorIs(t, err, velox.ErrNotFound, "the guard no longer holds")
 		got, err := client.User.Get(ctx, db, u.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "ann", got.Name, "a row that failed its guard was written")
@@ -814,7 +814,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 	// the table and are what Save returns with the error; the failed one and
 	// those after it are not. Here the fourth row repeats an address.
 	us, err = client.User.CreateBulk(db, rows("p", "q", "r", "a", "s", "t")...).BatchSize(2).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "%v", err)
+	require.True(t, velox.IsConstraintError(err), "%v", err)
 	assert.Equal(t, []string{"p", "q"}, names(us))
 	n, err := client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
@@ -827,7 +827,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 	err = db.RunTx(ctx, func(tx *orm.Tx) error {
 		return client.User.CreateBulk(tx, rows("v", "w", "x", "a")...).BatchSize(3).Exec(ctx)
 	})
-	require.True(t, orm.IsConstraintError(err), "%v", err)
+	require.True(t, velox.IsConstraintError(err), "%v", err)
 	n, err = client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, before+2, n)
@@ -835,7 +835,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 	// Without a size the whole create is one statement, and nothing of it
 	// stays.
 	us, err = client.User.CreateBulk(db, rows("y", "z", "a")...).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "%v", err)
+	require.True(t, velox.IsConstraintError(err), "%v", err)
 	assert.Nil(t, us)
 	n, err = client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
@@ -934,16 +934,16 @@ func TestNotFound_Text(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
 	_, err := client.User.Get(ctx, db, 404)
-	require.ErrorIs(t, err, orm.ErrNotFound)
+	require.ErrorIs(t, err, velox.ErrNotFound)
 	assert.EqualError(t, err, "velox: user not found")
 	_, err = client.User.Query(db).Where(user.Name.EQ("nobody")).Only(ctx)
 	assert.EqualError(t, err, "velox: user not found")
 	err = client.User.DeleteByID(ctx, db, 404)
-	require.ErrorIs(t, err, orm.ErrNotFound)
+	require.ErrorIs(t, err, velox.ErrNotFound)
 	assert.EqualError(t, err, "velox: user not found")
 	_, err = client.User.UpdateByID(db, 404).Set(user.Age.Set(1)).SaveOne(ctx)
 	assert.EqualError(t, err, "velox: user not found")
-	made := fmt.Errorf("loading: %w", orm.NotFound("price list"))
-	assert.True(t, orm.IsNotFound(made))
+	made := fmt.Errorf("loading: %w", velox.NewNotFoundError("price list"))
+	assert.True(t, velox.IsNotFound(made))
 	assert.EqualError(t, made, "loading: velox: price list not found")
 }

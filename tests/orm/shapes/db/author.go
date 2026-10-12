@@ -33,7 +33,7 @@ func (*AuthorClient) Update(ex orm.Executor) *entity.AuthorUpdate { return entit
 // Delete returns a builder that deletes the Author rows its conditions match.
 func (*AuthorClient) Delete(ex orm.Executor) *entity.AuthorDelete { return entity.NewAuthorDelete(ex) }
 
-// Get returns the Author with the given id, or orm.ErrNotFound.
+// Get returns the Author with the given id, or velox.ErrNotFound.
 func (c *AuthorClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Author, error) {
 	return c.Query(ex).Where(predicate.Author(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *AuthorClient) UpdateByID(ex orm.Executor, id int) *entity.AuthorUpdate 
 	return c.Update(ex).Where(predicate.Author(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Author with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Author with the given id, or returns velox.ErrNotFound.
 func (c *AuthorClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Author(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

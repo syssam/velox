@@ -41,7 +41,7 @@ func (*InternalClient) Delete(ex orm.Executor) *entity.InternalDelete {
 	return entity.NewInternalDelete(ex)
 }
 
-// Get returns the Internal with the given id, or orm.ErrNotFound.
+// Get returns the Internal with the given id, or velox.ErrNotFound.
 func (c *InternalClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Internal, error) {
 	return c.Query(ex).Where(predicate.Internal(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *InternalClient) UpdateByID(ex orm.Executor, id int) *entity.InternalUpd
 	return c.Update(ex).Where(predicate.Internal(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Internal with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Internal with the given id, or returns velox.ErrNotFound.
 func (c *InternalClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Internal(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

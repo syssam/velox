@@ -42,7 +42,7 @@ func (*LabelKeyClient) Delete(ex orm.Executor) *entity.LabelKeyDelete {
 	return entity.NewLabelKeyDelete(ex)
 }
 
-// Get returns the LabelKey with the given id, or orm.ErrNotFound.
+// Get returns the LabelKey with the given id, or velox.ErrNotFound.
 func (c *LabelKeyClient) Get(ctx context.Context, ex orm.Executor, id types.Label) (*entity.LabelKey, error) {
 	return c.Query(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -53,7 +53,7 @@ func (c *LabelKeyClient) UpdateByID(ex orm.Executor, id types.Label) *entity.Lab
 	return c.Update(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the LabelKey with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the LabelKey with the given id, or returns velox.ErrNotFound.
 func (c *LabelKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id types.Label) error {
 	n, err := c.Delete(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

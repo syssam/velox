@@ -33,7 +33,7 @@ func (*PlayerClient) Update(ex orm.Executor) *entity.PlayerUpdate { return entit
 // Delete returns a builder that deletes the Player rows its conditions match.
 func (*PlayerClient) Delete(ex orm.Executor) *entity.PlayerDelete { return entity.NewPlayerDelete(ex) }
 
-// Get returns the Player with the given id, or orm.ErrNotFound.
+// Get returns the Player with the given id, or velox.ErrNotFound.
 func (c *PlayerClient) Get(ctx context.Context, ex orm.Executor, id string) (*entity.Player, error) {
 	return c.Query(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *PlayerClient) UpdateByID(ex orm.Executor, id string) *entity.PlayerUpda
 	return c.Update(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Player with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Player with the given id, or returns velox.ErrNotFound.
 func (c *PlayerClient) DeleteByID(ctx context.Context, ex orm.Executor, id string) error {
 	n, err := c.Delete(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

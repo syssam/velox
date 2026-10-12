@@ -33,7 +33,7 @@ func (*MathClient) Update(ex orm.Executor) *entity.MathUpdate { return entity.Ne
 // Delete returns a builder that deletes the Math rows its conditions match.
 func (*MathClient) Delete(ex orm.Executor) *entity.MathDelete { return entity.NewMathDelete(ex) }
 
-// Get returns the Math with the given id, or orm.ErrNotFound.
+// Get returns the Math with the given id, or velox.ErrNotFound.
 func (c *MathClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Math, error) {
 	return c.Query(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *MathClient) UpdateByID(ex orm.Executor, id int) *entity.MathUpdate {
 	return c.Update(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Math with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Math with the given id, or returns velox.ErrNotFound.
 func (c *MathClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

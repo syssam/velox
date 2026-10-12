@@ -33,7 +33,7 @@ func (*WideClient) Update(ex orm.Executor) *entity.WideUpdate { return entity.Ne
 // Delete returns a builder that deletes the Wide rows its conditions match.
 func (*WideClient) Delete(ex orm.Executor) *entity.WideDelete { return entity.NewWideDelete(ex) }
 
-// Get returns the Wide with the given id, or orm.ErrNotFound.
+// Get returns the Wide with the given id, or velox.ErrNotFound.
 func (c *WideClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Wide, error) {
 	return c.Query(ex).Where(predicate.Wide(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *WideClient) UpdateByID(ex orm.Executor, id int) *entity.WideUpdate {
 	return c.Update(ex).Where(predicate.Wide(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Wide with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Wide with the given id, or returns velox.ErrNotFound.
 func (c *WideClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Wide(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

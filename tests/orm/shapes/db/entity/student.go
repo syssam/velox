@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -27,22 +28,22 @@ type StudentEdges struct {
 	loaded      [2]bool
 }
 
-// CoursesOrErr returns the courses edge, or an error when it was not loaded.
+// CoursesOrErr returns the courses edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *StudentEdges) CoursesOrErr() ([]*Course, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "courses"}
+		return nil, velox.NewNotLoadedError("courses")
 	}
 	return e.Courses, nil
 }
 
-// EnrollmentsOrErr returns the enrollments edge, or an error when it was not loaded.
+// EnrollmentsOrErr returns the enrollments edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *StudentEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "enrollments"}
+		return nil, velox.NewNotLoadedError("enrollments")
 	}
 	return e.Enrollments, nil
 }
@@ -222,7 +223,7 @@ func (q *StudentQuery) All(ctx context.Context) ([]*Student, error) {
 	return out, nil
 }
 
-// First returns the first matching Student, or orm.ErrNotFound.
+// First returns the first matching Student, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *StudentQuery) First(ctx context.Context) (*Student, error) {
@@ -233,7 +234,7 @@ func (q *StudentQuery) First(ctx context.Context) (*Student, error) {
 	return r.(*Student), nil
 }
 
-// Only returns the single matching Student: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Student: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *StudentQuery) Only(ctx context.Context) (*Student, error) {
@@ -460,15 +461,15 @@ func (b *StudentUpdate) Fill(in any, skip ...string) *StudentUpdate {
 //go:noinline
 func (b *StudentUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *StudentUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

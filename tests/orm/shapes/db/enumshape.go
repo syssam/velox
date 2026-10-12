@@ -41,7 +41,7 @@ func (*EnumShapeClient) Delete(ex orm.Executor) *entity.EnumShapeDelete {
 	return entity.NewEnumShapeDelete(ex)
 }
 
-// Get returns the EnumShape with the given id, or orm.ErrNotFound.
+// Get returns the EnumShape with the given id, or velox.ErrNotFound.
 func (c *EnumShapeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.EnumShape, error) {
 	return c.Query(ex).Where(predicate.EnumShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *EnumShapeClient) UpdateByID(ex orm.Executor, id int) *entity.EnumShapeU
 	return c.Update(ex).Where(predicate.EnumShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the EnumShape with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the EnumShape with the given id, or returns velox.ErrNotFound.
 func (c *EnumShapeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.EnumShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -59,7 +59,7 @@ func TestPolicy_QueryFilterReachesEveryRead(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "Exist sees a row the policy filters out")
 	_, err = client.User.Query(db).Where(user.ID.EQ(bob.ID)).Only(only)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// Eager load: bob's post loads, its author does not.
 	ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).WithAuthor().All(only)
@@ -70,7 +70,7 @@ func TestPolicy_QueryFilterReachesEveryRead(t *testing.T) {
 
 	// Traversal from an entity.
 	_, err = pb.QueryAuthor(db).Only(only)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	a, err := pa.QueryAuthor(db).Only(only)
 	require.NoError(t, err)
 	assert.Equal(t, "ann", a.Name)
@@ -164,7 +164,7 @@ func TestPolicy_Mutation(t *testing.T) {
 	assert.Equal(t, 40, b.Age, "the filter did not reach the update")
 	// Update of one row by id, under a filter that excludes it: not found, not written.
 	_, err = client.User.Update(db).Set(user.Age.Set(77)).Where(user.ID.EQ(bob.ID)).SaveOne(onlyAnn)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	// The builder run again without the filter is not narrowed by the earlier run.
 	del := client.User.Delete(db).Where(user.Age.GT(0))
 	n, err = del.Exec(onlyAnn)

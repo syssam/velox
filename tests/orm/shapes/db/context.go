@@ -39,7 +39,7 @@ func (*ContextClient) Delete(ex orm.Executor) *entity.ContextDelete {
 	return entity.NewContextDelete(ex)
 }
 
-// Get returns the Context with the given id, or orm.ErrNotFound.
+// Get returns the Context with the given id, or velox.ErrNotFound.
 func (c *ContextClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Context, error) {
 	return c.Query(ex).Where(predicate.Context(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *ContextClient) UpdateByID(ex orm.Executor, id int) *entity.ContextUpdat
 	return c.Update(ex).Where(predicate.Context(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Context with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Context with the given id, or returns velox.ErrNotFound.
 func (c *ContextClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Context(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

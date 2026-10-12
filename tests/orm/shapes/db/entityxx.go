@@ -33,7 +33,7 @@ func (*EntityClient) Update(ex orm.Executor) *entity.EntityUpdate { return entit
 // Delete returns a builder that deletes the Entity rows its conditions match.
 func (*EntityClient) Delete(ex orm.Executor) *entity.EntityDelete { return entity.NewEntityDelete(ex) }
 
-// Get returns the Entity with the given id, or orm.ErrNotFound.
+// Get returns the Entity with the given id, or velox.ErrNotFound.
 func (c *EntityClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Entity, error) {
 	return c.Query(ex).Where(predicate.Entity(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *EntityClient) UpdateByID(ex orm.Executor, id int) *entity.EntityUpdate 
 	return c.Update(ex).Where(predicate.Entity(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Entity with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Entity with the given id, or returns velox.ErrNotFound.
 func (c *EntityClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Entity(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

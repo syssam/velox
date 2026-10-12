@@ -41,7 +41,7 @@ func (*PredicateClient) Delete(ex orm.Executor) *entity.PredicateDelete {
 	return entity.NewPredicateDelete(ex)
 }
 
-// Get returns the Predicate with the given id, or orm.ErrNotFound.
+// Get returns the Predicate with the given id, or velox.ErrNotFound.
 func (c *PredicateClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Predicate, error) {
 	return c.Query(ex).Where(predicate.Predicate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *PredicateClient) UpdateByID(ex orm.Executor, id int) *entity.PredicateU
 	return c.Update(ex).Where(predicate.Predicate(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Predicate with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Predicate with the given id, or returns velox.ErrNotFound.
 func (c *PredicateClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Predicate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

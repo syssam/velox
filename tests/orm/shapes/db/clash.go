@@ -33,7 +33,7 @@ func (*ClashClient) Update(ex orm.Executor) *entity.ClashUpdate { return entity.
 // Delete returns a builder that deletes the Clash rows its conditions match.
 func (*ClashClient) Delete(ex orm.Executor) *entity.ClashDelete { return entity.NewClashDelete(ex) }
 
-// Get returns the Clash with the given id, or orm.ErrNotFound.
+// Get returns the Clash with the given id, or velox.ErrNotFound.
 func (c *ClashClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Clash, error) {
 	return c.Query(ex).Where(predicate.Clash(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *ClashClient) UpdateByID(ex orm.Executor, id int) *entity.ClashUpdate {
 	return c.Update(ex).Where(predicate.Clash(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Clash with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Clash with the given id, or returns velox.ErrNotFound.
 func (c *ClashClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Clash(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

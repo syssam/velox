@@ -41,7 +41,7 @@ func (*StringKeyClient) Delete(ex orm.Executor) *entity.StringKeyDelete {
 	return entity.NewStringKeyDelete(ex)
 }
 
-// Get returns the StringKey with the given id, or orm.ErrNotFound.
+// Get returns the StringKey with the given id, or velox.ErrNotFound.
 func (c *StringKeyClient) Get(ctx context.Context, ex orm.Executor, id string) (*entity.StringKey, error) {
 	return c.Query(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *StringKeyClient) UpdateByID(ex orm.Executor, id string) *entity.StringK
 	return c.Update(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the StringKey with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the StringKey with the given id, or returns velox.ErrNotFound.
 func (c *StringKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id string) error {
 	n, err := c.Delete(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

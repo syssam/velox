@@ -41,7 +41,7 @@ func (*MixinOnlyClient) Delete(ex orm.Executor) *entity.MixinOnlyDelete {
 	return entity.NewMixinOnlyDelete(ex)
 }
 
-// Get returns the MixinOnly with the given id, or orm.ErrNotFound.
+// Get returns the MixinOnly with the given id, or velox.ErrNotFound.
 func (c *MixinOnlyClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.MixinOnly, error) {
 	return c.Query(ex).Where(predicate.MixinOnly(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *MixinOnlyClient) UpdateByID(ex orm.Executor, id int) *entity.MixinOnlyU
 	return c.Update(ex).Where(predicate.MixinOnly(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the MixinOnly with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the MixinOnly with the given id, or returns velox.ErrNotFound.
 func (c *MixinOnlyClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.MixinOnly(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

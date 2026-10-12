@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	labelkey "github.com/syssam/velox/tests/orm/shapes/db/labelkey"
@@ -28,22 +29,22 @@ type LabelKeyEdges struct {
 	loaded  [2]bool
 }
 
-// ItemsOrErr returns the items edge, or an error when it was not loaded.
+// ItemsOrErr returns the items edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *LabelKeyEdges) ItemsOrErr() ([]*WeightKey, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "items"}
+		return nil, velox.NewNotLoadedError("items")
 	}
 	return e.Items, nil
 }
 
-// WeightsOrErr returns the weights edge, or an error when it was not loaded.
+// WeightsOrErr returns the weights edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *LabelKeyEdges) WeightsOrErr() ([]*WeightKey, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "weights"}
+		return nil, velox.NewNotLoadedError("weights")
 	}
 	return e.Weights, nil
 }
@@ -223,7 +224,7 @@ func (q *LabelKeyQuery) All(ctx context.Context) ([]*LabelKey, error) {
 	return out, nil
 }
 
-// First returns the first matching LabelKey, or orm.ErrNotFound.
+// First returns the first matching LabelKey, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *LabelKeyQuery) First(ctx context.Context) (*LabelKey, error) {
@@ -234,7 +235,7 @@ func (q *LabelKeyQuery) First(ctx context.Context) (*LabelKey, error) {
 	return r.(*LabelKey), nil
 }
 
-// Only returns the single matching LabelKey: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching LabelKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LabelKeyQuery) Only(ctx context.Context) (*LabelKey, error) {
@@ -461,15 +462,15 @@ func (b *LabelKeyUpdate) Fill(in any, skip ...string) *LabelKeyUpdate {
 //go:noinline
 func (b *LabelKeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *LabelKeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

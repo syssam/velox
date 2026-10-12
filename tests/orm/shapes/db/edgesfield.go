@@ -41,7 +41,7 @@ func (*EdgesFieldClient) Delete(ex orm.Executor) *entity.EdgesFieldDelete {
 	return entity.NewEdgesFieldDelete(ex)
 }
 
-// Get returns the EdgesField with the given id, or orm.ErrNotFound.
+// Get returns the EdgesField with the given id, or velox.ErrNotFound.
 func (c *EdgesFieldClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.EdgesField, error) {
 	return c.Query(ex).Where(predicate.EdgesField(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *EdgesFieldClient) UpdateByID(ex orm.Executor, id int) *entity.EdgesFiel
 	return c.Update(ex).Where(predicate.EdgesField(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the EdgesField with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the EdgesField with the given id, or returns velox.ErrNotFound.
 func (c *EdgesFieldClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.EdgesField(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -61,10 +61,11 @@
 //
 // Where the result compiles and would do something else, it keeps what the
 // code did or says so in the report; it does not leave that to be found in
-// production. The tests of an error (IsNotFound, IsNotSingular, ...) become
-// the runtime's, since velox's never hold for an error of the new code, and
-// NewNotFoundError, which a test makes for a stand-in, orm.NotFound. A
-// mutation asserted to an interface with a method velox generated per
+// production. The errors need nothing: package orm returns the library's
+// own, so what tests one holds as it is, and a name the generated package
+// repeated (IsNotFound, ValidationError) takes the library's. A read of the
+// old runtime's query context (velox.QueryFromContext) is reported, since
+// package orm puts none there. A mutation asserted to an interface with a method velox generated per
 // entity is reported: no mutation has such a method now, and the assertion
 // would compile and never hold. A
 // deferred call that became the argument of orm.Must is put inside a

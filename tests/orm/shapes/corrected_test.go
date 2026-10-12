@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -158,7 +159,7 @@ func TestEdges_ImmutableAndRequiredOnUpdate(t *testing.T) {
 		"m2m add": renamed.FrozenTopics.Add(l.rust.ID), "m2m remove": renamed.FrozenTopics.Remove(l.tgo.ID), "m2m clear": renamed.FrozenTopics.Clear(),
 	} {
 		_, err := client.Renamed.Update(db).Set(renamed.Title.Set("never"), set).Where(renamed.ID.EQ(r.ID)).Exec(ctx)
-		var verr *orm.ValidationError
+		var verr *velox.ValidationError
 		require.ErrorAs(t, err, &verr, name)
 		assert.Contains(t, []string{"frozen", "frozen_topics"}, verr.Field, name)
 	}
@@ -294,7 +295,7 @@ func TestEdges_QueryNeighbourIsCurrent(t *testing.T) {
 	require.Equal(t, l.ann.ID, l.a1.AuthorID)
 	assert.Equal(t, "bob", must(l.a1.QueryAuthor(db).Only(ctx)).Name)
 	_, err := l.a1.QueryEditor(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Equal(t, 1, must(l.a1.QueryAuthor(db).Where(author.Age.GT(35)).Count(ctx)), "the target's own predicates on top")
 	// O2O with a hidden key and with a bound key.
 	must(client.Passport.Update(db).Set(passport.Owner.Set(l.cid.ID)).Where(passport.ID.EQ(l.pAnn.ID)).Exec(ctx))
@@ -302,9 +303,9 @@ func TestEdges_QueryNeighbourIsCurrent(t *testing.T) {
 	// A row that is gone has no neighbor; neither has an entity never saved.
 	must(client.Article.Delete(db).Where(article.ID.EQ(l.a2.ID)).Exec(ctx))
 	_, err = l.a2.QueryAuthor(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	_, err = (&entity.Article{AuthorID: l.ann.ID}).QueryAuthor(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound, "the key in the struct is not consulted")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "the key in the struct is not consulted")
 	// Inside a transaction it sees the transaction's write.
 	_ = db.RunTx(ctx, func(tx *orm.Tx) error {
 		must(client.Article.Update(tx).Set(article.Author.Set(l.dee.ID)).Where(article.ID.EQ(l.a1.ID)).Exec(ctx))
@@ -333,7 +334,7 @@ func TestKeys_EdgesM2MEagerLoad(t *testing.T) {
 	assert.Equal(t, []string{"t1"}, teamNames(teams[0].Edges.Fans[0].Edges.FanOf), "nested: string owner, UUID target")
 	assert.Equal(t, "t2", teams[0].Edges.Fans[1].Edges.Team.Name)
 	_, err = teams[0].Edges.Fans[0].Edges.TeamOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound, "p4 has no team")
+	assert.ErrorIs(t, err, velox.ErrNotFound, "p4 has no team")
 	assert.Equal(t, []string{"t2"}, teamNames(teams[0].Edges.Rivals), "UUID on both sides")
 	assert.Equal(t, []string{"t1"}, teamNames(teams[1].Edges.Rivals))
 	require.Len(t, teams[1].Edges.Rivals[0].Edges.Badges, 2, "nested: t1's badges, through t2's rival")
@@ -506,12 +507,12 @@ func TestEdges_OptionalNonNillableKey(t *testing.T) {
 	require.Len(t, loaded, 3)
 	assert.Equal(t, "ann", loaded[0].Edges.Owner.Name)
 	_, err := loaded[1].Edges.OwnerOrErr()
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	assert.Zero(t, loaded[1].OwnerID)
 	assert.Equal(t, "bob", loaded[2].Edges.Owner.Name)
 	assert.Equal(t, "ann", must(g1.QueryOwner(db).Only(ctx)).Name)
 	_, err = g2.QueryOwner(db).Only(ctx)
-	assert.ErrorIs(t, err, orm.ErrNotFound)
+	assert.ErrorIs(t, err, velox.ErrNotFound)
 	authors := must(client.Author.Query(db).OrderBy(author.Name.Asc()).WithGadgets(client.Gadget.Query(db).OrderBy(gadget.Name.Asc())).All(ctx))
 	assert.Len(t, authors[0].Edges.Gadgets, 2)
 	assert.Len(t, authors[1].Edges.Gadgets, 2)
@@ -534,7 +535,7 @@ func TestEdges_OptionalNonNillableKey(t *testing.T) {
 	assert.Equal(t, 1, rawValue[int](t, db, "SELECT owner_id IS NULL FROM gadgets WHERE id = ?", g2.ID))
 	// A key that references nothing is still a constraint error.
 	_, err = client.Gadget.Create(db).Set(gadget.Name.Set("x"), gadget.OwnerID.Set(0)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 }
 
 // NULL can only be written where the column allows it. The generated API has
@@ -632,7 +633,7 @@ func TestUpdate_SettersApplyInOrder(t *testing.T) {
 	// field's validators see it (author_id has none; the immutable case is
 	// TestEdges_ImmutableAndRequiredOnUpdate).
 	_, err := client.Article.Update(db).Set(article.Author.Set(9999)).Where(article.ID.EQ(a.ID)).Exec(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 }
 
 // Count counts the matching rows, whatever the query's limit, offset, order
@@ -750,7 +751,7 @@ func TestBytes_NilSlice(t *testing.T) {
 func TestCreate_MissingRequiredEdgeOrID(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 
 	_, err := client.Passport.Create(db).Set(passport.Number.Set("nobody")).Save(ctx)
 	require.ErrorAs(t, err, &verr)
@@ -782,16 +783,16 @@ func TestTx_FailedMutationLeavesNothingBehind(t *testing.T) {
 	l := library(t, db)
 	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
 		_, err := client.Article.Create(tx).Set(article.Title.Set("ghost"), article.Author.Set(l.ann.ID), article.Topics.Add(9999)).Save(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		_, err = client.Article.Update(tx).Set(article.Title.Set("half"), article.Topics.Add(9999)).Where(article.ID.EQ(l.a2.ID)).Exec(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		_, err = client.Article.UpdateByID(tx, l.a2.ID).Set(article.Title.Set("half one"), article.Topics.Add(9999)).SaveOne(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		_, err = client.Article.CreateBulk(tx,
 			client.Article.Create(nil).Set(article.Title.Set("ghost 1"), article.Author.Set(l.ann.ID)),
 			client.Article.Create(nil).Set(article.Title.Set("ghost 2"), article.Author.Set(l.ann.ID), article.Topics.Add(9999)),
 		).Save(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		// The transaction is intact: what it does next is committed.
 		_, err = client.Article.Create(tx).Set(article.Title.Set("kept"), article.Author.Set(l.ann.ID), article.Topics.Add(l.tgo.ID)).Save(ctx)
 		return err

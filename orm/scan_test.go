@@ -1,7 +1,6 @@
 package orm
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -226,35 +225,5 @@ func TestFreshDefault(t *testing.T) {
 	}
 	if fresh(&FieldMeta{Type: field.TypeString}, "s") != "s" || fresh(js, 3) != 3 {
 		t.Error("a scalar default was changed")
-	}
-}
-
-type stateErr string
-
-func (e stateErr) Error() string    { return "state " + string(e) }
-func (e stateErr) SQLState() string { return string(e) }
-
-type codeErr int
-
-func (e codeErr) Error() string { return "code" }
-func (e codeErr) Code() int     { return int(e) }
-
-type numberErr struct{ Number uint16 }
-
-func (e *numberErr) Error() string { return "number" }
-
-// What a database asks to be tried again, by the three ways drivers say it.
-func TestIsRetryable(t *testing.T) {
-	wrap := func(err error) error { return fmt.Errorf("velox: committing the transaction: %w", err) }
-	for _, err := range []error{stateErr("40001"), stateErr("40P01"), codeErr(5), codeErr(6), codeErr(5 | 1<<8), &numberErr{1213}, &numberErr{1205}} {
-		if !IsRetryable(err) || !IsRetryable(wrap(err)) {
-			t.Errorf("%#v is not retryable", err)
-		}
-	}
-	for _, err := range []error{nil, stateErr("23505"), stateErr("23503"), codeErr(19), &numberErr{1062}, ErrNotFound,
-		&ConstraintError{Kind: ConstraintUnique, Err: stateErr("23505")}, &ValidationError{Entity: "User", Field: "name", Err: ErrNotFound}} {
-		if IsRetryable(err) {
-			t.Errorf("%#v is retryable", err)
-		}
 	}
 }

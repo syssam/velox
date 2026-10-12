@@ -39,7 +39,7 @@ func (*RenamedClient) Delete(ex orm.Executor) *entity.RenamedDelete {
 	return entity.NewRenamedDelete(ex)
 }
 
-// Get returns the Renamed with the given id, or orm.ErrNotFound.
+// Get returns the Renamed with the given id, or velox.ErrNotFound.
 func (c *RenamedClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Renamed, error) {
 	return c.Query(ex).Where(predicate.Renamed(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *RenamedClient) UpdateByID(ex orm.Executor, id int) *entity.RenamedUpdat
 	return c.Update(ex).Where(predicate.Renamed(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Renamed with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Renamed with the given id, or returns velox.ErrNotFound.
 func (c *RenamedClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Renamed(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

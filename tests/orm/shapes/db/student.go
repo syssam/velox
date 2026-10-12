@@ -39,7 +39,7 @@ func (*StudentClient) Delete(ex orm.Executor) *entity.StudentDelete {
 	return entity.NewStudentDelete(ex)
 }
 
-// Get returns the Student with the given id, or orm.ErrNotFound.
+// Get returns the Student with the given id, or velox.ErrNotFound.
 func (c *StudentClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Student, error) {
 	return c.Query(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *StudentClient) UpdateByID(ex orm.Executor, id int) *entity.StudentUpdat
 	return c.Update(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Student with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Student with the given id, or returns velox.ErrNotFound.
 func (c *StudentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

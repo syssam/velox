@@ -33,7 +33,7 @@ func (*OddClient) Update(ex orm.Executor) *entity.OddUpdate { return entity.NewO
 // Delete returns a builder that deletes the Odd rows its conditions match.
 func (*OddClient) Delete(ex orm.Executor) *entity.OddDelete { return entity.NewOddDelete(ex) }
 
-// Get returns the Odd with the given id, or orm.ErrNotFound.
+// Get returns the Odd with the given id, or velox.ErrNotFound.
 func (c *OddClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Odd, error) {
 	return c.Query(ex).Where(predicate.Odd(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *OddClient) UpdateByID(ex orm.Executor, id int) *entity.OddUpdate {
 	return c.Update(ex).Where(predicate.Odd(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Odd with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Odd with the given id, or returns velox.ErrNotFound.
 func (c *OddClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Odd(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

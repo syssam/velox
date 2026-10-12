@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/blob"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
@@ -309,7 +310,7 @@ func TestWide_SingleAndBulkAlignment(t *testing.T) {
 
 	// A constraint violation in the middle of a bulk fails the whole batch.
 	_, err := client.Wide.CreateBulk(db, wideRow(db, 20, false), wideRow(db, 10, false), wideRow(db, 21, true)).Save(ctx)
-	require.True(t, orm.IsConstraintError(err), "got %v", err)
+	require.True(t, velox.IsConstraintError(err), "got %v", err)
 	assert.Equal(t, 6, must(client.Wide.Query(db).Count(ctx)))
 
 	// Exec, and the empty bulk.
@@ -351,7 +352,7 @@ func TestKeys_EveryIDKind(t *testing.T) {
 		assert.Equal(t, 100, c.ID)
 		assert.Equal(t, []int{a.ID, b.ID, 100}, must(client.IntKey.Query(db).OrderBy(intkey.ID.Asc()).IDs(ctx)))
 		_, err := client.IntKey.Create(db).Set(intkey.ID.Set(100), intkey.Name.Set("dup")).Save(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		got := must(client.IntKey.Query(db).Where(intkey.ID.In(a.ID, 100)).OrderBy(intkey.ID.Desc()).All(ctx))
 		require.Len(t, got, 2)
 		assert.Equal(t, "c", got[0].Name)
@@ -400,7 +401,7 @@ func TestKeys_EveryIDKind(t *testing.T) {
 		_, err = client.StringKey.Create(db).Set(stringkey.ID.Set(""), stringkey.Name.Set("x")).Save(ctx)
 		invalid(t, err, "id")
 		_, err = client.StringKey.Create(db).Set(stringkey.ID.Set("mine"), stringkey.Name.Set("dup")).Save(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		got := must(client.StringKey.Update(db).Set(stringkey.Name.Set("c2")).Where(stringkey.ID.EQ("mine")).SaveOne(ctx))
 		assert.Equal(t, "c2", got.Name)
 		assert.Equal(t, "mine", got.ID)
@@ -428,7 +429,7 @@ func TestKeys_EveryIDKind(t *testing.T) {
 		got = must(client.UUIDKey.Update(db).Set(uuidkey.Name.Set("b3")).Where(uuidkey.Name.EQ("b2")).SaveOne(ctx))
 		assert.Equal(t, u1, got.ID)
 		_, err := client.UUIDKey.Create(db).Set(uuidkey.ID.Set(u1), uuidkey.Name.Set("dup")).Save(ctx)
-		require.True(t, orm.IsConstraintError(err), "got %v", err)
+		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		rows := must(client.UUIDKey.CreateBulk(db, client.UUIDKey.Create(db).Set(uuidkey.Name.Set("x")), client.UUIDKey.Create(db).Set(uuidkey.ID.Set(u3), uuidkey.Name.Set("y")), client.UUIDKey.Create(db).Set(uuidkey.Name.Set("z"))).Save(ctx))
 		require.Len(t, rows, 3)
 		assert.NotEqual(t, uuid.Nil, rows[0].ID)

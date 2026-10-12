@@ -3,6 +3,8 @@ package orm
 import (
 	"math"
 	"testing"
+
+	"github.com/syssam/velox"
 )
 
 func TestIDAs(t *testing.T) {
@@ -59,12 +61,12 @@ func TestMustAndCheck(t *testing.T) {
 	}
 	Check(nil)
 	for name, f := range map[string]func(){
-		"Must":  func() { Must(0, ErrNotFound) },
-		"Check": func() { Check(ErrNotFound) },
+		"Must":  func() { Must(0, velox.ErrNotFound) },
+		"Check": func() { Check(velox.ErrNotFound) },
 	} {
 		func() {
 			defer func() {
-				if r := recover(); r != ErrNotFound { //nolint:errorlint // the very value that was passed
+				if r := recover(); r != velox.ErrNotFound { //nolint:errorlint // the very value that was passed
 					t.Errorf("%s panicked with %v", name, r)
 				}
 			}()

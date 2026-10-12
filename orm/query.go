@@ -306,7 +306,7 @@ func (q *QueryCore) Only(ctx context.Context) (any, error) {
 	case 1:
 		return rows[0], nil
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrNotSingular, q.M.Name)
+		return nil, q.M.notSingular()
 	}
 }
 

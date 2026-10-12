@@ -21,7 +21,7 @@ type NodeType struct {
 	Name  string
 	Table string
 	// Get returns the node of this type with the id, read like the Get of
-	// the entity (its policy and interceptors apply), or orm.ErrNotFound. An
+	// the entity (its policy and interceptors apply), or velox.ErrNotFound. An
 	// id that is not of the type's id type is the id of no node of it; an
 	// integer of another integer type is the same id.
 	Get func(ctx context.Context, ex orm.Executor, id any) (Noder, error)
@@ -29,7 +29,7 @@ type NodeType struct {
 
 // NodeTypes returns the types of node, ordered by name: what a node(id:)
 // field has to go by when an id does not say its type. To find a node, ask
-// each type in turn and take the first answer that is not orm.ErrNotFound;
+// each type in turn and take the first answer that is not velox.ErrNotFound;
 // that is a query per type, so an application with many types keeps what it
 // learns (a prefix in the id, or which type answered for a range of ids).
 func NodeTypes() []NodeType {

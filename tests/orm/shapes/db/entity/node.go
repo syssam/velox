@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	node "github.com/syssam/velox/tests/orm/shapes/db/node"
@@ -31,51 +32,51 @@ type NodeEdges struct {
 	loaded   [4]bool
 }
 
-// ParentOrErr returns the parent edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// ParentOrErr returns the parent edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *NodeEdges) ParentOrErr() (*Node, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "parent"}
+		return nil, velox.NewNotLoadedError("parent")
 	}
 	if e.Parent == nil {
-		return nil, orm.ErrNotFound
+		return nil, NodeMeta.NotFound()
 	}
 	return e.Parent, nil
 }
 
-// ChildrenOrErr returns the children edge, or an error when it was not loaded.
+// ChildrenOrErr returns the children edge, or an error when it was not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *NodeEdges) ChildrenOrErr() ([]*Node, error) {
 	if !e.loaded[1] {
-		return nil, &orm.NotLoadedError{Edge: "children"}
+		return nil, velox.NewNotLoadedError("children")
 	}
 	return e.Children, nil
 }
 
-// PrevOrErr returns the prev edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// PrevOrErr returns the prev edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *NodeEdges) PrevOrErr() (*Node, error) {
 	if !e.loaded[2] {
-		return nil, &orm.NotLoadedError{Edge: "prev"}
+		return nil, velox.NewNotLoadedError("prev")
 	}
 	if e.Prev == nil {
-		return nil, orm.ErrNotFound
+		return nil, NodeMeta.NotFound()
 	}
 	return e.Prev, nil
 }
 
-// NextOrErr returns the next edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// NextOrErr returns the next edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *NodeEdges) NextOrErr() (*Node, error) {
 	if !e.loaded[3] {
-		return nil, &orm.NotLoadedError{Edge: "next"}
+		return nil, velox.NewNotLoadedError("next")
 	}
 	if e.Next == nil {
-		return nil, orm.ErrNotFound
+		return nil, NodeMeta.NotFound()
 	}
 	return e.Next, nil
 }
@@ -263,7 +264,7 @@ func (q *NodeQuery) All(ctx context.Context) ([]*Node, error) {
 	return out, nil
 }
 
-// First returns the first matching Node, or orm.ErrNotFound.
+// First returns the first matching Node, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *NodeQuery) First(ctx context.Context) (*Node, error) {
@@ -274,7 +275,7 @@ func (q *NodeQuery) First(ctx context.Context) (*Node, error) {
 	return r.(*Node), nil
 }
 
-// Only returns the single matching Node: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Node: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NodeQuery) Only(ctx context.Context) (*Node, error) {
@@ -501,15 +502,15 @@ func (b *NodeUpdate) Fill(in any, skip ...string) *NodeUpdate {
 //go:noinline
 func (b *NodeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *NodeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

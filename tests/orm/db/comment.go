@@ -39,7 +39,7 @@ func (*CommentClient) Delete(ex orm.Executor) *entity.CommentDelete {
 	return entity.NewCommentDelete(ex)
 }
 
-// Get returns the Comment with the given id, or orm.ErrNotFound.
+// Get returns the Comment with the given id, or velox.ErrNotFound.
 func (c *CommentClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Comment, error) {
 	return c.Query(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -50,7 +50,7 @@ func (c *CommentClient) UpdateByID(ex orm.Executor, id int) *entity.CommentUpdat
 	return c.Update(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Comment with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Comment with the given id, or returns velox.ErrNotFound.
 func (c *CommentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

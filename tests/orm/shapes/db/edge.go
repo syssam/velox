@@ -33,7 +33,7 @@ func (*EdgeClient) Update(ex orm.Executor) *entity.EdgeUpdate { return entity.Ne
 // Delete returns a builder that deletes the Edge rows its conditions match.
 func (*EdgeClient) Delete(ex orm.Executor) *entity.EdgeDelete { return entity.NewEdgeDelete(ex) }
 
-// Get returns the Edge with the given id, or orm.ErrNotFound.
+// Get returns the Edge with the given id, or velox.ErrNotFound.
 func (c *EdgeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Edge, error) {
 	return c.Query(ex).Where(predicate.Edge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *EdgeClient) UpdateByID(ex orm.Executor, id int) *entity.EdgeUpdate {
 	return c.Update(ex).Where(predicate.Edge(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Edge with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Edge with the given id, or returns velox.ErrNotFound.
 func (c *EdgeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Edge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

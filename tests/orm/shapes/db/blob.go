@@ -33,7 +33,7 @@ func (*BlobClient) Update(ex orm.Executor) *entity.BlobUpdate { return entity.Ne
 // Delete returns a builder that deletes the Blob rows its conditions match.
 func (*BlobClient) Delete(ex orm.Executor) *entity.BlobDelete { return entity.NewBlobDelete(ex) }
 
-// Get returns the Blob with the given id, or orm.ErrNotFound.
+// Get returns the Blob with the given id, or velox.ErrNotFound.
 func (c *BlobClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Blob, error) {
 	return c.Query(ex).Where(predicate.Blob(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *BlobClient) UpdateByID(ex orm.Executor, id int) *entity.BlobUpdate {
 	return c.Update(ex).Where(predicate.Blob(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Blob with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Blob with the given id, or returns velox.ErrNotFound.
 func (c *BlobClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Blob(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

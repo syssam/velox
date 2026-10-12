@@ -41,7 +41,7 @@ func (*EdgesEnumClient) Delete(ex orm.Executor) *entity.EdgesEnumDelete {
 	return entity.NewEdgesEnumDelete(ex)
 }
 
-// Get returns the EdgesEnum with the given id, or orm.ErrNotFound.
+// Get returns the EdgesEnum with the given id, or velox.ErrNotFound.
 func (c *EdgesEnumClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.EdgesEnum, error) {
 	return c.Query(ex).Where(predicate.EdgesEnum(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *EdgesEnumClient) UpdateByID(ex orm.Executor, id int) *entity.EdgesEnumU
 	return c.Update(ex).Where(predicate.EdgesEnum(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the EdgesEnum with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the EdgesEnum with the given id, or returns velox.ErrNotFound.
 func (c *EdgesEnumClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.EdgesEnum(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

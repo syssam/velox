@@ -167,7 +167,7 @@ func (q *EntityQuery) All(ctx context.Context) ([]*Entity, error) {
 	return out, nil
 }
 
-// First returns the first matching Entity, or orm.ErrNotFound.
+// First returns the first matching Entity, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *EntityQuery) First(ctx context.Context) (*Entity, error) {
@@ -178,7 +178,7 @@ func (q *EntityQuery) First(ctx context.Context) (*Entity, error) {
 	return r.(*Entity), nil
 }
 
-// Only returns the single matching Entity: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Entity: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EntityQuery) Only(ctx context.Context) (*Entity, error) {
@@ -405,15 +405,15 @@ func (b *EntityUpdate) Fill(in any, skip ...string) *EntityUpdate {
 //go:noinline
 func (b *EntityUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *EntityUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

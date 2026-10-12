@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	passport "github.com/syssam/velox/tests/orm/shapes/db/passport"
@@ -27,15 +28,15 @@ type PassportEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded, orm.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PassportEdges) OwnerOrErr() (*Author, error) {
 	if !e.loaded[0] {
-		return nil, &orm.NotLoadedError{Edge: "owner"}
+		return nil, velox.NewNotLoadedError("owner")
 	}
 	if e.Owner == nil {
-		return nil, orm.ErrNotFound
+		return nil, AuthorMeta.NotFound()
 	}
 	return e.Owner, nil
 }
@@ -215,7 +216,7 @@ func (q *PassportQuery) All(ctx context.Context) ([]*Passport, error) {
 	return out, nil
 }
 
-// First returns the first matching Passport, or orm.ErrNotFound.
+// First returns the first matching Passport, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *PassportQuery) First(ctx context.Context) (*Passport, error) {
@@ -226,7 +227,7 @@ func (q *PassportQuery) First(ctx context.Context) (*Passport, error) {
 	return r.(*Passport), nil
 }
 
-// Only returns the single matching Passport: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Passport: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PassportQuery) Only(ctx context.Context) (*Passport, error) {
@@ -453,15 +454,15 @@ func (b *PassportUpdate) Fill(in any, skip ...string) *PassportUpdate {
 //go:noinline
 func (b *PassportUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *PassportUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

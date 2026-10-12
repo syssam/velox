@@ -175,7 +175,7 @@ func (q *TimeQuery) All(ctx context.Context) ([]*Time, error) {
 	return out, nil
 }
 
-// First returns the first matching Time, or orm.ErrNotFound.
+// First returns the first matching Time, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *TimeQuery) First(ctx context.Context) (*Time, error) {
@@ -186,7 +186,7 @@ func (q *TimeQuery) First(ctx context.Context) (*Time, error) {
 	return r.(*Time), nil
 }
 
-// Only returns the single matching Time: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Time: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TimeQuery) Only(ctx context.Context) (*Time, error) {
@@ -413,15 +413,15 @@ func (b *TimeUpdate) Fill(in any, skip ...string) *TimeUpdate {
 //go:noinline
 func (b *TimeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *TimeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

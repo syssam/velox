@@ -33,7 +33,7 @@ func (*LikeClient) Update(ex orm.Executor) *entity.LikeUpdate { return entity.Ne
 // Delete returns a builder that deletes the Like rows its conditions match.
 func (*LikeClient) Delete(ex orm.Executor) *entity.LikeDelete { return entity.NewLikeDelete(ex) }
 
-// Get returns the Like with the given id, or orm.ErrNotFound.
+// Get returns the Like with the given id, or velox.ErrNotFound.
 func (c *LikeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Like, error) {
 	return c.Query(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *LikeClient) UpdateByID(ex orm.Executor, id int) *entity.LikeUpdate {
 	return c.Update(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Like with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Like with the given id, or returns velox.ErrNotFound.
 func (c *LikeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

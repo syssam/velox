@@ -173,7 +173,7 @@ func (q *StringKeyQuery) All(ctx context.Context) ([]*StringKey, error) {
 	return out, nil
 }
 
-// First returns the first matching StringKey, or orm.ErrNotFound.
+// First returns the first matching StringKey, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *StringKeyQuery) First(ctx context.Context) (*StringKey, error) {
@@ -184,7 +184,7 @@ func (q *StringKeyQuery) First(ctx context.Context) (*StringKey, error) {
 	return r.(*StringKey), nil
 }
 
-// Only returns the single matching StringKey: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching StringKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *StringKeyQuery) Only(ctx context.Context) (*StringKey, error) {
@@ -411,15 +411,15 @@ func (b *StringKeyUpdate) Fill(in any, skip ...string) *StringKeyUpdate {
 //go:noinline
 func (b *StringKeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *StringKeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

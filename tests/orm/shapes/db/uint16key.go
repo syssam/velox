@@ -41,7 +41,7 @@ func (*Uint16KeyClient) Delete(ex orm.Executor) *entity.Uint16KeyDelete {
 	return entity.NewUint16KeyDelete(ex)
 }
 
-// Get returns the Uint16Key with the given id, or orm.ErrNotFound.
+// Get returns the Uint16Key with the given id, or velox.ErrNotFound.
 func (c *Uint16KeyClient) Get(ctx context.Context, ex orm.Executor, id uint16) (*entity.Uint16Key, error) {
 	return c.Query(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -52,7 +52,7 @@ func (c *Uint16KeyClient) UpdateByID(ex orm.Executor, id uint16) *entity.Uint16K
 	return c.Update(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Uint16Key with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Uint16Key with the given id, or returns velox.ErrNotFound.
 func (c *Uint16KeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id uint16) error {
 	n, err := c.Delete(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

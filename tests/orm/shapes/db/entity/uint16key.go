@@ -170,7 +170,7 @@ func (q *Uint16KeyQuery) All(ctx context.Context) ([]*Uint16Key, error) {
 	return out, nil
 }
 
-// First returns the first matching Uint16Key, or orm.ErrNotFound.
+// First returns the first matching Uint16Key, or velox.ErrNotFound.
 //
 //go:noinline
 func (q *Uint16KeyQuery) First(ctx context.Context) (*Uint16Key, error) {
@@ -181,7 +181,7 @@ func (q *Uint16KeyQuery) First(ctx context.Context) (*Uint16Key, error) {
 	return r.(*Uint16Key), nil
 }
 
-// Only returns the single matching Uint16Key: orm.ErrNotFound for none, orm.ErrNotSingular for more.
+// Only returns the single matching Uint16Key: velox.ErrNotFound for none, velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *Uint16KeyQuery) Only(ctx context.Context) (*Uint16Key, error) {
@@ -408,15 +408,15 @@ func (b *Uint16KeyUpdate) Fill(in any, skip ...string) *Uint16KeyUpdate {
 //go:noinline
 func (b *Uint16KeyUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
 
-// ExecOne updates the single matching row: orm.ErrNotFound when no row
-// matches, orm.ErrNotSingular (and nothing written) when several do. It is
+// ExecOne updates the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing written) when several do. It is
 // SaveOne for a caller that has no use for the row.
 //
 //go:noinline
 func (b *Uint16KeyUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
 
-// SaveOne updates the single matching row and returns it: orm.ErrNotFound
-// when no row matches, orm.ErrNotSingular (and nothing written) when several
+// SaveOne updates the single matching row and returns it: velox.ErrNotFound
+// when no row matches, velox.ErrNotSingular (and nothing written) when several
 // do. Updating any number of rows is Exec.
 //
 //go:noinline

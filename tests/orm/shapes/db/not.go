@@ -33,7 +33,7 @@ func (*NotClient) Update(ex orm.Executor) *entity.NotUpdate { return entity.NewN
 // Delete returns a builder that deletes the Not rows its conditions match.
 func (*NotClient) Delete(ex orm.Executor) *entity.NotDelete { return entity.NewNotDelete(ex) }
 
-// Get returns the Not with the given id, or orm.ErrNotFound.
+// Get returns the Not with the given id, or velox.ErrNotFound.
 func (c *NotClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Not, error) {
 	return c.Query(ex).Where(predicate.Not(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *NotClient) UpdateByID(ex orm.Executor, id int) *entity.NotUpdate {
 	return c.Update(ex).Where(predicate.Not(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Not with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Not with the given id, or returns velox.ErrNotFound.
 func (c *NotClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Not(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

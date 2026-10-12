@@ -33,7 +33,7 @@ func (*BadgeClient) Update(ex orm.Executor) *entity.BadgeUpdate { return entity.
 // Delete returns a builder that deletes the Badge rows its conditions match.
 func (*BadgeClient) Delete(ex orm.Executor) *entity.BadgeDelete { return entity.NewBadgeDelete(ex) }
 
-// Get returns the Badge with the given id, or orm.ErrNotFound.
+// Get returns the Badge with the given id, or velox.ErrNotFound.
 func (c *BadgeClient) Get(ctx context.Context, ex orm.Executor, id uint16) (*entity.Badge, error) {
 	return c.Query(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
@@ -44,7 +44,7 @@ func (c *BadgeClient) UpdateByID(ex orm.Executor, id uint16) *entity.BadgeUpdate
 	return c.Update(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Badge with the given id, or returns orm.ErrNotFound.
+// DeleteByID deletes the Badge with the given id, or returns velox.ErrNotFound.
 func (c *BadgeClient) DeleteByID(ctx context.Context, ex orm.Executor, id uint16) error {
 	n, err := c.Delete(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

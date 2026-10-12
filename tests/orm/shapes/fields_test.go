@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/tests/orm/shapes/db/defaultshape"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
 	"github.com/syssam/velox/tests/orm/shapes/db/enumshape"
@@ -30,9 +30,9 @@ import (
 )
 
 // invalid asserts err is a validation error of the given schema field.
-func invalid(t *testing.T, err error, field string, msgAndArgs ...any) *orm.ValidationError {
+func invalid(t *testing.T, err error, field string, msgAndArgs ...any) *velox.ValidationError {
 	t.Helper()
-	var verr *orm.ValidationError
+	var verr *velox.ValidationError
 	require.ErrorAs(t, err, &verr, msgAndArgs...)
 	assert.Equal(t, field, verr.Field, msgAndArgs...)
 	return verr
