@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,41 +18,43 @@ type MigrateClient struct{}
 
 // Query returns a query of every Migrate, to run on ex: a database handle or a
 // transaction.
-func (*MigrateClient) Query(ex orm.Executor) *entity.MigrateQuery { return entity.NewMigrateQuery(ex) }
+func (*MigrateClient) Query(ex velox.Executor) *entity.MigrateQuery {
+	return entity.NewMigrateQuery(ex)
+}
 
 // Create returns a builder that creates a Migrate.
-func (*MigrateClient) Create(ex orm.Executor) *entity.MigrateCreate {
+func (*MigrateClient) Create(ex velox.Executor) *entity.MigrateCreate {
 	return entity.NewMigrateCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*MigrateClient) CreateBulk(ex orm.Executor, bs ...*entity.MigrateCreate) *entity.MigrateCreateBulk {
+func (*MigrateClient) CreateBulk(ex velox.Executor, bs ...*entity.MigrateCreate) *entity.MigrateCreateBulk {
 	return entity.NewMigrateCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Migrate rows its conditions match.
-func (*MigrateClient) Update(ex orm.Executor) *entity.MigrateUpdate {
+func (*MigrateClient) Update(ex velox.Executor) *entity.MigrateUpdate {
 	return entity.NewMigrateUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Migrate rows its conditions match.
-func (*MigrateClient) Delete(ex orm.Executor) *entity.MigrateDelete {
+func (*MigrateClient) Delete(ex velox.Executor) *entity.MigrateDelete {
 	return entity.NewMigrateDelete(ex)
 }
 
 // Get returns the Migrate with the given id, or velox.ErrNotFound.
-func (c *MigrateClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Migrate, error) {
+func (c *MigrateClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Migrate, error) {
 	return c.Query(ex).Where(predicate.Migrate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Migrate with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *MigrateClient) UpdateByID(ex orm.Executor, id int) *entity.MigrateUpdate {
+func (c *MigrateClient) UpdateByID(ex velox.Executor, id int) *entity.MigrateUpdate {
 	return c.Update(ex).Where(predicate.Migrate(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Migrate with the given id, or returns velox.ErrNotFound.
-func (c *MigrateClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *MigrateClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Migrate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.MigrateMeta.NotFound()

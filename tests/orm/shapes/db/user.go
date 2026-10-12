@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type UserClientType struct{}
 
 // Query returns a query of every User, to run on ex: a database handle or a
 // transaction.
-func (*UserClientType) Query(ex orm.Executor) *entity.UserQuery { return entity.NewUserQuery(ex) }
+func (*UserClientType) Query(ex velox.Executor) *entity.UserQuery { return entity.NewUserQuery(ex) }
 
 // Create returns a builder that creates a User.
-func (*UserClientType) Create(ex orm.Executor) *entity.UserCreate { return entity.NewUserCreate(ex) }
+func (*UserClientType) Create(ex velox.Executor) *entity.UserCreate { return entity.NewUserCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*UserClientType) CreateBulk(ex orm.Executor, bs ...*entity.UserCreate) *entity.UserCreateBulk {
+func (*UserClientType) CreateBulk(ex velox.Executor, bs ...*entity.UserCreate) *entity.UserCreateBulk {
 	return entity.NewUserCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the User rows its conditions match.
-func (*UserClientType) Update(ex orm.Executor) *entity.UserUpdate { return entity.NewUserUpdate(ex) }
+func (*UserClientType) Update(ex velox.Executor) *entity.UserUpdate { return entity.NewUserUpdate(ex) }
 
 // Delete returns a builder that deletes the User rows its conditions match.
-func (*UserClientType) Delete(ex orm.Executor) *entity.UserDelete { return entity.NewUserDelete(ex) }
+func (*UserClientType) Delete(ex velox.Executor) *entity.UserDelete { return entity.NewUserDelete(ex) }
 
 // Get returns the User with the given id, or velox.ErrNotFound.
-func (c *UserClientType) Get(ctx context.Context, ex orm.Executor, id int) (*entity.User, error) {
+func (c *UserClientType) Get(ctx context.Context, ex velox.Executor, id int) (*entity.User, error) {
 	return c.Query(ex).Where(predicate.User(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the User with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *UserClientType) UpdateByID(ex orm.Executor, id int) *entity.UserUpdate {
+func (c *UserClientType) UpdateByID(ex velox.Executor, id int) *entity.UserUpdate {
 	return c.Update(ex).Where(predicate.User(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the User with the given id, or returns velox.ErrNotFound.
-func (c *UserClientType) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *UserClientType) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.User(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.UserMeta.NotFound()

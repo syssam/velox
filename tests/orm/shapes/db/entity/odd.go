@@ -149,14 +149,14 @@ func edgeOdd(v any, i int) any {
 
 // OddEdge is a row of a page of Odd, with its cursor.
 type OddEdge struct {
-	Node   *Odd       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Odd         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // OddConnection is one page of Odd.
 type OddConnection struct {
-	Edges    []*OddEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*OddEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -189,7 +189,9 @@ var OddMeta = orm.Meta{
 type OddQuery struct{ c orm.QueryCore }
 
 // NewOddQuery returns a query of every Odd.
-func NewOddQuery(ex orm.Executor) *OddQuery { return &OddQuery{c: orm.QueryCore{M: &OddMeta, Ex: ex}} }
+func NewOddQuery(ex velox.Executor) *OddQuery {
+	return &OddQuery{c: orm.QueryCore{M: &OddMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -332,7 +334,7 @@ func (q *OddQuery) Iter(ctx context.Context) iter.Seq2[*Odd, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *OddQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*OddConnection, error) {
+func (q *OddQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*OddConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -373,7 +375,9 @@ func (q *OddQuery) IDs(ctx context.Context) ([]int, error) {
 type OddCreate struct{ c orm.MutCore }
 
 // NewOddCreate returns a builder that creates a Odd.
-func NewOddCreate(ex orm.Executor) *OddCreate { return &OddCreate{c: orm.MutCore{M: &OddMeta, Ex: ex}} }
+func NewOddCreate(ex velox.Executor) *OddCreate {
+	return &OddCreate{c: orm.MutCore{M: &OddMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -419,7 +423,7 @@ func (b *OddCreate) Exec(ctx context.Context) error {
 
 // OddCreateBulk creates several Odd rows with one statement.
 type OddCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*OddCreate
 	n  int
 }
@@ -427,7 +431,7 @@ type OddCreateBulk struct {
 // NewOddCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewOddCreateBulk(ex orm.Executor, bs ...*OddCreate) *OddCreateBulk {
+func NewOddCreateBulk(ex velox.Executor, bs ...*OddCreate) *OddCreateBulk {
 	return &OddCreateBulk{ex: ex, bs: bs}
 }
 
@@ -480,7 +484,9 @@ func (b *OddCreateBulk) Exec(ctx context.Context) error {
 type OddUpdate struct{ c orm.MutCore }
 
 // NewOddUpdate returns a builder that updates the rows its predicates match.
-func NewOddUpdate(ex orm.Executor) *OddUpdate { return &OddUpdate{c: orm.MutCore{M: &OddMeta, Ex: ex}} }
+func NewOddUpdate(ex velox.Executor) *OddUpdate {
+	return &OddUpdate{c: orm.MutCore{M: &OddMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -544,7 +550,9 @@ func (b *OddUpdate) SaveOne(ctx context.Context) (*Odd, error) {
 type OddDelete struct{ c orm.MutCore }
 
 // NewOddDelete returns a builder that deletes the rows its predicates match.
-func NewOddDelete(ex orm.Executor) *OddDelete { return &OddDelete{c: orm.MutCore{M: &OddMeta, Ex: ex}} }
+func NewOddDelete(ex velox.Executor) *OddDelete {
+	return &OddDelete{c: orm.MutCore{M: &OddMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //
@@ -565,7 +573,7 @@ func (b *OddDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(c
 // QueryID queries the "id" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Odd) QueryID(ex orm.Executor) *FieldQuery {
+func (e *Odd) QueryID(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(OddMeta.Edges[0], e))
 	return q
@@ -588,7 +596,7 @@ func (q *OddQuery) WithID(opts ...*FieldQuery) *OddQuery {
 // QueryQuery queries the "query" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Odd) QueryQuery(ex orm.Executor) *FieldQuery {
+func (e *Odd) QueryQuery(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(OddMeta.Edges[1], e))
 	return q
@@ -611,7 +619,7 @@ func (q *OddQuery) WithQuery(opts ...*FieldQuery) *OddQuery {
 // QueryEdges queries the "edges" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Odd) QueryEdges(ex orm.Executor) *FieldQuery {
+func (e *Odd) QueryEdges(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(OddMeta.Edges[2], e))
 	return q
@@ -634,7 +642,7 @@ func (q *OddQuery) WithEdges(opts ...*FieldQuery) *OddQuery {
 // QueryTable queries the "table" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Odd) QueryTable(ex orm.Executor) *FieldQuery {
+func (e *Odd) QueryTable(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(OddMeta.Edges[3], e))
 	return q
@@ -657,7 +665,7 @@ func (q *OddQuery) WithTable(opts ...*FieldQuery) *OddQuery {
 // QueryModel queries the "model" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Odd) QueryModel(ex orm.Executor) *FieldQuery {
+func (e *Odd) QueryModel(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(OddMeta.Edges[4], e))
 	return q

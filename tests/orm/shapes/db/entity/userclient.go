@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrUserClient(v any, i int) any {
 
 // UserClientEdge is a row of a page of UserClient, with its cursor.
 type UserClientEdge struct {
-	Node   *UserClient `json:"node"`
-	Cursor orm.Cursor  `json:"cursor"`
+	Node   *UserClient  `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // UserClientConnection is one page of UserClient.
 type UserClientConnection struct {
 	Edges    []*UserClientEdge `json:"edges"`
-	PageInfo orm.PageInfo      `json:"pageInfo"`
+	PageInfo velox.PageInfo    `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var UserClientMeta = orm.Meta{
 type UserClientQuery struct{ c orm.QueryCore }
 
 // NewUserClientQuery returns a query of every UserClient.
-func NewUserClientQuery(ex orm.Executor) *UserClientQuery {
+func NewUserClientQuery(ex velox.Executor) *UserClientQuery {
 	return &UserClientQuery{c: orm.QueryCore{M: &UserClientMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *UserClientQuery) Iter(ctx context.Context) iter.Seq2[*UserClient, error
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UserClientQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UserClientConnection, error) {
+func (q *UserClientQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*UserClientConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *UserClientQuery) IDs(ctx context.Context) ([]int, error) {
 type UserClientCreate struct{ c orm.MutCore }
 
 // NewUserClientCreate returns a builder that creates a UserClient.
-func NewUserClientCreate(ex orm.Executor) *UserClientCreate {
+func NewUserClientCreate(ex velox.Executor) *UserClientCreate {
 	return &UserClientCreate{c: orm.MutCore{M: &UserClientMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *UserClientCreate) Exec(ctx context.Context) error {
 
 // UserClientCreateBulk creates several UserClient rows with one statement.
 type UserClientCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*UserClientCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type UserClientCreateBulk struct {
 // NewUserClientCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewUserClientCreateBulk(ex orm.Executor, bs ...*UserClientCreate) *UserClientCreateBulk {
+func NewUserClientCreateBulk(ex velox.Executor, bs ...*UserClientCreate) *UserClientCreateBulk {
 	return &UserClientCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *UserClientCreateBulk) Exec(ctx context.Context) error {
 type UserClientUpdate struct{ c orm.MutCore }
 
 // NewUserClientUpdate returns a builder that updates the rows its predicates match.
-func NewUserClientUpdate(ex orm.Executor) *UserClientUpdate {
+func NewUserClientUpdate(ex velox.Executor) *UserClientUpdate {
 	return &UserClientUpdate{c: orm.MutCore{M: &UserClientMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *UserClientUpdate) SaveOne(ctx context.Context) (*UserClient, error) {
 type UserClientDelete struct{ c orm.MutCore }
 
 // NewUserClientDelete returns a builder that deletes the rows its predicates match.
-func NewUserClientDelete(ex orm.Executor) *UserClientDelete {
+func NewUserClientDelete(ex velox.Executor) *UserClientDelete {
 	return &UserClientDelete{c: orm.MutCore{M: &UserClientMeta, Ex: ex}}
 }
 

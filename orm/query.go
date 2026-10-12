@@ -29,7 +29,7 @@ type QueryCore struct {
 	// Ex is what the query runs on: the database handle or transaction it
 	// was built from. A query without one (the description of an eager load)
 	// cannot be run.
-	Ex       Executor
+	Ex       velox.Executor
 	Preds    []P
 	Orders   []O
 	With     []*EdgeLoad
@@ -187,11 +187,11 @@ func (q *Query) Offset(n int) { q.c.Offset = n }
 // guarded runs exec for the query inside the policy of the entity and the
 // interceptors of the database handle. They work on a copy of the query, so
 // what they add belongs to this execution and not to the builder.
-func (q *QueryCore) guarded(ctx context.Context, c *conn, exec func(context.Context, *QueryCore) (any, error)) (any, error) {
+func (q *QueryCore) guarded(ctx context.Context, c *velox.ExecutorState, exec func(context.Context, *QueryCore) (any, error)) (any, error) {
 	if err := q.M.ready(); err != nil {
 		return nil, err
 	}
-	inters := c.inters()
+	inters := c.Interceptors()
 	if q.M.Policy == nil && len(inters) == 0 {
 		return exec(ctx, q)
 	}
@@ -224,20 +224,20 @@ func (q *QueryCore) guarded(ctx context.Context, c *conn, exec func(context.Cont
 }
 
 // conn returns the connection the query runs on.
-func (q *QueryCore) conn() (*conn, error) { return connOf(q.Ex, q.M) }
+func (q *QueryCore) conn() (*velox.ExecutorState, error) { return connOf(q.Ex, q.M) }
 
 // connOf returns the connection of ex, or the error of running something of
 // entity m that was not built from a handle.
-func connOf(ex Executor, m *Meta) (*conn, error) {
+func connOf(ex velox.Executor, m *Meta) (*velox.ExecutorState, error) {
 	if m == nil {
 		return nil, ErrNoEntity
 	}
 	if ex != nil {
-		if c := ex.conn(); c != nil {
+		if c := ex.State(); c != nil && c.Driver() != nil {
 			return c, nil
 		}
 	}
-	return nil, fmt.Errorf("%w: %s", ErrNoExecutor, m.Name)
+	return nil, fmt.Errorf("%w: %s", velox.ErrNoExecutor, m.Name)
 }
 
 // All runs the query and returns the entities, each a *Entity of q.M.
@@ -335,7 +335,7 @@ func (q *QueryCore) Each(ctx context.Context, fn func(any) bool) error {
 			return nil, err
 		}
 		rows := &sql.Rows{}
-		if err := c.drv.Query(ctx, query, args, rows); err != nil {
+		if err := c.Driver().Query(ctx, query, args, rows); err != nil {
 			return nil, err
 		}
 		defer func() { _ = rows.Close() }()
@@ -393,7 +393,7 @@ func (q *QueryCore) Count(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (q *QueryCore) count(ctx context.Context, c *conn) (int, error) {
+func (q *QueryCore) count(ctx context.Context, c *velox.ExecutorState) (int, error) {
 	all := *q
 	all.Limit, all.Offset, all.Orders, all.Lock = 0, 0, nil, LockNone
 	s := all.selector(ctx, c, nil)
@@ -403,7 +403,7 @@ func (q *QueryCore) count(ctx context.Context, c *conn) (int, error) {
 		return 0, err
 	}
 	rows := &sql.Rows{}
-	if err := c.drv.Query(ctx, query, args, rows); err != nil {
+	if err := c.Driver().Query(ctx, query, args, rows); err != nil {
 		return 0, err
 	}
 	defer func() { _ = rows.Close() }()
@@ -440,7 +440,7 @@ func (q *QueryCore) IDs(ctx context.Context) ([]any, error) {
 	return rowsOf(q.M, v, err)
 }
 
-func (q *QueryCore) ids(ctx context.Context, c *conn) ([]any, error) {
+func (q *QueryCore) ids(ctx context.Context, c *velox.ExecutorState) ([]any, error) {
 	if q.M.id() == nil {
 		return nil, fmt.Errorf("velox: %s has no single-column id", q.M.Name)
 	}
@@ -456,7 +456,7 @@ func (q *QueryCore) ids(ctx context.Context, c *conn) ([]any, error) {
 		return nil, err
 	}
 	rows := &sql.Rows{}
-	if err := c.drv.Query(ctx, query, args, rows); err != nil {
+	if err := c.Driver().Query(ctx, query, args, rows); err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
@@ -488,11 +488,11 @@ func loadErr(ls []*EdgeLoad) error {
 
 // selector renders the query without its eager loads. cols nil selects every
 // column of the entity.
-func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.Selector {
+func (q *QueryCore) selector(ctx context.Context, c *velox.ExecutorState, cols []string) *sql.Selector {
 	if cols == nil {
 		cols = q.M.Columns
 	}
-	b := sql.Dialect(c.drv.Dialect())
+	b := sql.Dialect(c.Driver().Dialect())
 	t := b.Table(q.M.Table)
 	// Predicates read the request context from the selector (the policy of
 	// an edge predicate's target is evaluated with it).
@@ -533,7 +533,7 @@ func (q *QueryCore) selector(ctx context.Context, c *conn, cols []string) *sql.S
 		s.Offset(q.Offset)
 	}
 	// Postgres rejects a row lock on SELECT DISTINCT; the lock wins.
-	if q.Distinct && (q.Lock == LockNone || dialect.GetCapabilities(c.drv.Dialect()).Has(dialect.CapLockWithDistinct)) {
+	if q.Distinct && (q.Lock == LockNone || dialect.GetCapabilities(c.Driver().Dialect()).Has(dialect.CapLockWithDistinct)) {
 		s.Distinct()
 	}
 	q.lock(s)
@@ -547,7 +547,7 @@ func (discard) Scan(any) error { return nil }
 
 // all runs the query, scans every row into a new entity and loads the
 // requested edges.
-func (q *QueryCore) all(ctx context.Context, c *conn) ([]any, error) {
+func (q *QueryCore) all(ctx context.Context, c *velox.ExecutorState) ([]any, error) {
 	if err := loadErr(q.With); err != nil {
 		return nil, err
 	}
@@ -561,7 +561,7 @@ func (q *QueryCore) all(ctx context.Context, c *conn) ([]any, error) {
 		return nil, err
 	}
 	rows := &sql.Rows{}
-	if err := c.drv.Query(ctx, query, args, rows); err != nil {
+	if err := c.Driver().Query(ctx, query, args, rows); err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
@@ -965,14 +965,14 @@ func has(m map[any]struct{}, k any) bool {
 
 // load runs the query of an eager load: the neighbors are read as a query of
 // their entity would read them, under its policy and the interceptors.
-func (q *QueryCore) load(ctx context.Context, c *conn) ([]any, error) {
+func (q *QueryCore) load(ctx context.Context, c *velox.ExecutorState) ([]any, error) {
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) { return q.all(ctx, c) })
 	return rowsOf(q.M, v, err)
 }
 
 // loadEdge loads one edge for all parents with one query (two for M2M) and
 // assigns the neighbors through the edge's generated setter.
-func loadEdge(ctx context.Context, c *conn, l *EdgeLoad, parents []any) error {
+func loadEdge(ctx context.Context, c *velox.ExecutorState, l *EdgeLoad, parents []any) error {
 	if l.Err != nil {
 		return l.Err
 	}
@@ -1009,13 +1009,13 @@ func loadEdge(ctx context.Context, c *conn, l *EdgeLoad, parents []any) error {
 		for i, p := range parents {
 			ids[i] = e.Owner.get(p, e.Owner.id().Column)
 		}
-		b := sql.Dialect(c.drv.Dialect())
+		b := sql.Dialect(c.Driver().Dialect())
 		jt := b.Table(e.Table)
 		js := b.Select(jt.C(ownerCol), jt.C(targetCol)).From(jt)
 		sql.FieldInValues(ownerCol, ids...)(js)
 		query, args := js.Query()
 		rows := &sql.Rows{}
-		if err := c.drv.Query(ctx, query, args, rows); err != nil {
+		if err := c.Driver().Query(ctx, query, args, rows); err != nil {
 			return err
 		}
 		// owners lists, per target, the parents it is joined to, in join order.

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	enumshape "github.com/syssam/velox/tests/orm/shapes/db/enumshape"
@@ -56,14 +57,14 @@ func ptrEnumShape(v any, i int) any {
 
 // EnumShapeEdge is a row of a page of EnumShape, with its cursor.
 type EnumShapeEdge struct {
-	Node   *EnumShape `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *EnumShape   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // EnumShapeConnection is one page of EnumShape.
 type EnumShapeConnection struct {
 	Edges    []*EnumShapeEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -93,7 +94,7 @@ var EnumShapeMeta = orm.Meta{
 type EnumShapeQuery struct{ c orm.QueryCore }
 
 // NewEnumShapeQuery returns a query of every EnumShape.
-func NewEnumShapeQuery(ex orm.Executor) *EnumShapeQuery {
+func NewEnumShapeQuery(ex velox.Executor) *EnumShapeQuery {
 	return &EnumShapeQuery{c: orm.QueryCore{M: &EnumShapeMeta, Ex: ex}}
 }
 
@@ -241,7 +242,7 @@ func (q *EnumShapeQuery) Iter(ctx context.Context) iter.Seq2[*EnumShape, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EnumShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EnumShapeConnection, error) {
+func (q *EnumShapeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*EnumShapeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -282,7 +283,7 @@ func (q *EnumShapeQuery) IDs(ctx context.Context) ([]int, error) {
 type EnumShapeCreate struct{ c orm.MutCore }
 
 // NewEnumShapeCreate returns a builder that creates a EnumShape.
-func NewEnumShapeCreate(ex orm.Executor) *EnumShapeCreate {
+func NewEnumShapeCreate(ex velox.Executor) *EnumShapeCreate {
 	return &EnumShapeCreate{c: orm.MutCore{M: &EnumShapeMeta, Ex: ex}}
 }
 
@@ -330,7 +331,7 @@ func (b *EnumShapeCreate) Exec(ctx context.Context) error {
 
 // EnumShapeCreateBulk creates several EnumShape rows with one statement.
 type EnumShapeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*EnumShapeCreate
 	n  int
 }
@@ -338,7 +339,7 @@ type EnumShapeCreateBulk struct {
 // NewEnumShapeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewEnumShapeCreateBulk(ex orm.Executor, bs ...*EnumShapeCreate) *EnumShapeCreateBulk {
+func NewEnumShapeCreateBulk(ex velox.Executor, bs ...*EnumShapeCreate) *EnumShapeCreateBulk {
 	return &EnumShapeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -391,7 +392,7 @@ func (b *EnumShapeCreateBulk) Exec(ctx context.Context) error {
 type EnumShapeUpdate struct{ c orm.MutCore }
 
 // NewEnumShapeUpdate returns a builder that updates the rows its predicates match.
-func NewEnumShapeUpdate(ex orm.Executor) *EnumShapeUpdate {
+func NewEnumShapeUpdate(ex velox.Executor) *EnumShapeUpdate {
 	return &EnumShapeUpdate{c: orm.MutCore{M: &EnumShapeMeta, Ex: ex}}
 }
 
@@ -457,7 +458,7 @@ func (b *EnumShapeUpdate) SaveOne(ctx context.Context) (*EnumShape, error) {
 type EnumShapeDelete struct{ c orm.MutCore }
 
 // NewEnumShapeDelete returns a builder that deletes the rows its predicates match.
-func NewEnumShapeDelete(ex orm.Executor) *EnumShapeDelete {
+func NewEnumShapeDelete(ex velox.Executor) *EnumShapeDelete {
 	return &EnumShapeDelete{c: orm.MutCore{M: &EnumShapeMeta, Ex: ex}}
 }
 

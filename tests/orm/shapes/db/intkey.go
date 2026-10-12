@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,41 @@ type IntKeyClient struct{}
 
 // Query returns a query of every IntKey, to run on ex: a database handle or a
 // transaction.
-func (*IntKeyClient) Query(ex orm.Executor) *entity.IntKeyQuery { return entity.NewIntKeyQuery(ex) }
+func (*IntKeyClient) Query(ex velox.Executor) *entity.IntKeyQuery { return entity.NewIntKeyQuery(ex) }
 
 // Create returns a builder that creates a IntKey.
-func (*IntKeyClient) Create(ex orm.Executor) *entity.IntKeyCreate { return entity.NewIntKeyCreate(ex) }
+func (*IntKeyClient) Create(ex velox.Executor) *entity.IntKeyCreate {
+	return entity.NewIntKeyCreate(ex)
+}
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*IntKeyClient) CreateBulk(ex orm.Executor, bs ...*entity.IntKeyCreate) *entity.IntKeyCreateBulk {
+func (*IntKeyClient) CreateBulk(ex velox.Executor, bs ...*entity.IntKeyCreate) *entity.IntKeyCreateBulk {
 	return entity.NewIntKeyCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the IntKey rows its conditions match.
-func (*IntKeyClient) Update(ex orm.Executor) *entity.IntKeyUpdate { return entity.NewIntKeyUpdate(ex) }
+func (*IntKeyClient) Update(ex velox.Executor) *entity.IntKeyUpdate {
+	return entity.NewIntKeyUpdate(ex)
+}
 
 // Delete returns a builder that deletes the IntKey rows its conditions match.
-func (*IntKeyClient) Delete(ex orm.Executor) *entity.IntKeyDelete { return entity.NewIntKeyDelete(ex) }
+func (*IntKeyClient) Delete(ex velox.Executor) *entity.IntKeyDelete {
+	return entity.NewIntKeyDelete(ex)
+}
 
 // Get returns the IntKey with the given id, or velox.ErrNotFound.
-func (c *IntKeyClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.IntKey, error) {
+func (c *IntKeyClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.IntKey, error) {
 	return c.Query(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the IntKey with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *IntKeyClient) UpdateByID(ex orm.Executor, id int) *entity.IntKeyUpdate {
+func (c *IntKeyClient) UpdateByID(ex velox.Executor, id int) *entity.IntKeyUpdate {
 	return c.Update(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the IntKey with the given id, or returns velox.ErrNotFound.
-func (c *IntKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *IntKeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.IntKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.IntKeyMeta.NotFound()

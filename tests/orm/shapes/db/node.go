@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type NodeClient struct{}
 
 // Query returns a query of every Node, to run on ex: a database handle or a
 // transaction.
-func (*NodeClient) Query(ex orm.Executor) *entity.NodeQuery { return entity.NewNodeQuery(ex) }
+func (*NodeClient) Query(ex velox.Executor) *entity.NodeQuery { return entity.NewNodeQuery(ex) }
 
 // Create returns a builder that creates a Node.
-func (*NodeClient) Create(ex orm.Executor) *entity.NodeCreate { return entity.NewNodeCreate(ex) }
+func (*NodeClient) Create(ex velox.Executor) *entity.NodeCreate { return entity.NewNodeCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*NodeClient) CreateBulk(ex orm.Executor, bs ...*entity.NodeCreate) *entity.NodeCreateBulk {
+func (*NodeClient) CreateBulk(ex velox.Executor, bs ...*entity.NodeCreate) *entity.NodeCreateBulk {
 	return entity.NewNodeCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Node rows its conditions match.
-func (*NodeClient) Update(ex orm.Executor) *entity.NodeUpdate { return entity.NewNodeUpdate(ex) }
+func (*NodeClient) Update(ex velox.Executor) *entity.NodeUpdate { return entity.NewNodeUpdate(ex) }
 
 // Delete returns a builder that deletes the Node rows its conditions match.
-func (*NodeClient) Delete(ex orm.Executor) *entity.NodeDelete { return entity.NewNodeDelete(ex) }
+func (*NodeClient) Delete(ex velox.Executor) *entity.NodeDelete { return entity.NewNodeDelete(ex) }
 
 // Get returns the Node with the given id, or velox.ErrNotFound.
-func (c *NodeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Node, error) {
+func (c *NodeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Node, error) {
 	return c.Query(ex).Where(predicate.Node(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Node with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *NodeClient) UpdateByID(ex orm.Executor, id int) *entity.NodeUpdate {
+func (c *NodeClient) UpdateByID(ex velox.Executor, id int) *entity.NodeUpdate {
 	return c.Update(ex).Where(predicate.Node(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Node with the given id, or returns velox.ErrNotFound.
-func (c *NodeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *NodeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Node(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.NodeMeta.NotFound()

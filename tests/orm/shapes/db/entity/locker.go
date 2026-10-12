@@ -85,14 +85,14 @@ func linkLocker(dst any, es []any) {
 
 // LockerEdge is a row of a page of Locker, with its cursor.
 type LockerEdge struct {
-	Node   *Locker    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Locker      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // LockerConnection is one page of Locker.
 type LockerConnection struct {
-	Edges    []*LockerEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*LockerEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -118,7 +118,7 @@ var LockerMeta = orm.Meta{
 type LockerQuery struct{ c orm.QueryCore }
 
 // NewLockerQuery returns a query of every Locker.
-func NewLockerQuery(ex orm.Executor) *LockerQuery {
+func NewLockerQuery(ex velox.Executor) *LockerQuery {
 	return &LockerQuery{c: orm.QueryCore{M: &LockerMeta, Ex: ex}}
 }
 
@@ -263,7 +263,7 @@ func (q *LockerQuery) Iter(ctx context.Context) iter.Seq2[*Locker, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *LockerQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*LockerConnection, error) {
+func (q *LockerQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*LockerConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,7 @@ func (q *LockerQuery) IDs(ctx context.Context) ([]int, error) {
 type LockerCreate struct{ c orm.MutCore }
 
 // NewLockerCreate returns a builder that creates a Locker.
-func NewLockerCreate(ex orm.Executor) *LockerCreate {
+func NewLockerCreate(ex velox.Executor) *LockerCreate {
 	return &LockerCreate{c: orm.MutCore{M: &LockerMeta, Ex: ex}}
 }
 
@@ -352,7 +352,7 @@ func (b *LockerCreate) Exec(ctx context.Context) error {
 
 // LockerCreateBulk creates several Locker rows with one statement.
 type LockerCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*LockerCreate
 	n  int
 }
@@ -360,7 +360,7 @@ type LockerCreateBulk struct {
 // NewLockerCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewLockerCreateBulk(ex orm.Executor, bs ...*LockerCreate) *LockerCreateBulk {
+func NewLockerCreateBulk(ex velox.Executor, bs ...*LockerCreate) *LockerCreateBulk {
 	return &LockerCreateBulk{ex: ex, bs: bs}
 }
 
@@ -413,7 +413,7 @@ func (b *LockerCreateBulk) Exec(ctx context.Context) error {
 type LockerUpdate struct{ c orm.MutCore }
 
 // NewLockerUpdate returns a builder that updates the rows its predicates match.
-func NewLockerUpdate(ex orm.Executor) *LockerUpdate {
+func NewLockerUpdate(ex velox.Executor) *LockerUpdate {
 	return &LockerUpdate{c: orm.MutCore{M: &LockerMeta, Ex: ex}}
 }
 
@@ -479,7 +479,7 @@ func (b *LockerUpdate) SaveOne(ctx context.Context) (*Locker, error) {
 type LockerDelete struct{ c orm.MutCore }
 
 // NewLockerDelete returns a builder that deletes the rows its predicates match.
-func NewLockerDelete(ex orm.Executor) *LockerDelete {
+func NewLockerDelete(ex velox.Executor) *LockerDelete {
 	return &LockerDelete{c: orm.MutCore{M: &LockerMeta, Ex: ex}}
 }
 
@@ -502,7 +502,7 @@ func (b *LockerDelete) Exec(ctx context.Context) (int, error) { return b.c.Delet
 // QueryHolder queries the "holder" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Locker) QueryHolder(ex orm.Executor) *AuthorQuery {
+func (e *Locker) QueryHolder(ex velox.Executor) *AuthorQuery {
 	q := NewAuthorQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(LockerMeta.Edges[0], e))
 	return q

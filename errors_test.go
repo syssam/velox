@@ -1,8 +1,10 @@
 package velox_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -309,4 +311,46 @@ func TestConstraintError_KindAndName(t *testing.T) {
 	bare := velox.NewConstraintError("x", nil)
 	assert.NotErrorIs(t, bare, velox.ErrUnique)
 	assert.Empty(t, bare.Constraint())
+}
+
+// Must and Check return what they are given, or panic with the error itself.
+func TestMustAndCheck(t *testing.T) {
+	assert.Equal(t, 7, velox.Must(7, nil))
+	velox.Check(nil)
+	assert.PanicsWithValue(t, velox.ErrNotFound, func() { velox.Must(0, velox.ErrNotFound) })
+	assert.PanicsWithValue(t, velox.ErrNotFound, func() { velox.Check(velox.ErrNotFound) })
+}
+
+// First is the first of a list, the error it came with, or ErrNotFound.
+func TestFirst(t *testing.T) {
+	v, err := velox.First([]int{3, 4}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 3, v)
+	_, err = velox.First([]int(nil), nil)
+	require.ErrorIs(t, err, velox.ErrNotFound)
+	other := errors.New("connection refused")
+	_, err = velox.First([]int{3}, other)
+	require.ErrorIs(t, err, other)
+}
+
+// A cursor travels as a string, and a value that is none is ErrBadCursor.
+func TestCursor_GraphQL(t *testing.T) {
+	var c velox.Cursor
+	require.NoError(t, c.UnmarshalGQL("abc"))
+	assert.Equal(t, velox.Cursor("abc"), c)
+	require.ErrorIs(t, c.UnmarshalGQL(42), velox.ErrBadCursor)
+	var b strings.Builder
+	velox.Cursor(`a"b`).MarshalGQL(&b)
+	assert.Equal(t, `"a\"b"`, b.String())
+}
+
+// A nil handle has no state, and a handle carries what was registered on its
+// database into the transactions started from it.
+func TestExecutorState(t *testing.T) {
+	var db *velox.DB
+	var tx *velox.Tx
+	assert.Nil(t, db.State())
+	assert.Nil(t, tx.State())
+	assert.Nil(t, velox.ExecutorFrom(context.Background()))
+	assert.Nil(t, velox.TxFrom(context.Background()))
 }

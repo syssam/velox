@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/db/entity"
 	"github.com/syssam/velox/tests/orm/db/user"
@@ -59,7 +60,7 @@ func TestPaginate_WalkEqualsQuery(t *testing.T) {
 
 			for _, size := range []int{1, 4, 7, 100} {
 				var got []int
-				var after *orm.Cursor
+				var after *velox.Cursor
 				for pages := 0; ; pages++ {
 					require.Less(t, pages, 50, "pagination does not end")
 					p, err := q().Paginate(ctx, after, intp(size), nil, nil)
@@ -80,7 +81,7 @@ func TestPaginate_WalkEqualsQuery(t *testing.T) {
 				assert.Equal(t, want, got, "forward, page size %d", size)
 
 				got = nil
-				var before *orm.Cursor
+				var before *velox.Cursor
 				for pages := 0; ; pages++ {
 					require.Less(t, pages, 50, "pagination does not end")
 					p, err := q().Paginate(orm.WithoutTotal(ctx), nil, nil, before, intp(size))
@@ -141,7 +142,7 @@ func TestPaginate_NullableOrderColumn(t *testing.T) {
 			require.Len(t, want, 17)
 			for _, size := range []int{1, 3, 5} {
 				var got []int
-				var after *orm.Cursor
+				var after *velox.Cursor
 				for pages := 0; ; pages++ {
 					require.Less(t, pages, 40, "pagination does not end")
 					p, err := q().Paginate(ctx, after, intp(size), nil, nil)
@@ -157,7 +158,7 @@ func TestPaginate_NullableOrderColumn(t *testing.T) {
 				assert.Equal(t, want, got, "forward, page size %d", size)
 
 				got = nil
-				var before *orm.Cursor
+				var before *velox.Cursor
 				for pages := 0; ; pages++ {
 					require.Less(t, pages, 40, "pagination does not end")
 					p, err := q().Paginate(ctx, nil, nil, before, intp(size))
@@ -189,15 +190,15 @@ func TestPaginate_ArgsCursorsAndPolicy(t *testing.T) {
 	require.Error(t, err)
 	_, err = client.User.Query(db).Paginate(ctx, nil, intp(-1), nil, nil)
 	require.Error(t, err)
-	bad := orm.Cursor("not a cursor")
+	bad := velox.Cursor("not a cursor")
 	_, err = client.User.Query(db).Paginate(ctx, &bad, nil, nil, nil)
-	assert.ErrorIs(t, err, orm.ErrBadCursor)
+	assert.ErrorIs(t, err, velox.ErrBadCursor)
 
 	// A cursor is only good for the ordering that made it.
 	byAge, err := client.User.Query(db).OrderBy(user.Age.Asc()).Paginate(ctx, nil, intp(1), nil, nil)
 	require.NoError(t, err)
 	_, err = client.User.Query(db).OrderBy(user.Name.Asc()).Paginate(ctx, byAge.PageInfo.EndCursor, nil, nil, nil)
-	assert.ErrorIs(t, err, orm.ErrBadCursor)
+	assert.ErrorIs(t, err, velox.ErrBadCursor)
 
 	// first: 0 asks for no rows, and still answers the total.
 	p, err := client.User.Query(db).Paginate(ctx, nil, intp(0), nil, nil)
@@ -225,10 +226,10 @@ func TestPaginate_ArgsCursorsAndPolicy(t *testing.T) {
 	// A cursor as a GraphQL engine reads and writes it.
 	var buf strings.Builder
 	p.Edges[0].Cursor.MarshalGQL(&buf)
-	var back orm.Cursor
+	var back velox.Cursor
 	require.NoError(t, back.UnmarshalGQL(strings.Trim(buf.String(), `"`)))
 	assert.Equal(t, p.Edges[0].Cursor, back)
-	assert.ErrorIs(t, back.UnmarshalGQL(7), orm.ErrBadCursor)
+	assert.ErrorIs(t, back.UnmarshalGQL(7), velox.ErrBadCursor)
 }
 
 // A list endpoint that takes its filter and order as field names: nothing

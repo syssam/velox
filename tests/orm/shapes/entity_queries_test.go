@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
 	client "github.com/syssam/velox/tests/orm/shapes/db"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -34,7 +34,7 @@ func TestEntityQueries(t *testing.T) {
 	assert.Equal(t, 1, must(go1.QueryArticles(db).Where(article.Title.EQ("a1")).Count(ctx)))
 
 	// The entity holds no connection: the method runs on what it is given.
-	rolledBack := db.RunTx(ctx, func(tx *orm.Tx) error {
+	rolledBack := db.RunTx(ctx, func(tx *velox.Tx) error {
 		must(client.Article.Create(tx).Set(article.Title.Set("a3"), article.Author.Set(ann.ID)).Save(ctx))
 		assert.Equal(t, 3, must(ann.QueryArticles(tx).Count(ctx)))
 		return assert.AnError
@@ -42,7 +42,7 @@ func TestEntityQueries(t *testing.T) {
 	require.ErrorIs(t, rolledBack, assert.AnError)
 	assert.Equal(t, 2, must(ann.QueryArticles(db).Count(ctx)))
 	_, err := ann.QueryArticles(nil).All(ctx)
-	require.ErrorIs(t, err, orm.ErrNoExecutor)
+	require.ErrorIs(t, err, velox.ErrNoExecutor)
 	// The row it starts from needs only its key.
 	assert.Equal(t, 2, must((&entity.Author{ID: ann.ID}).QueryArticles(db).Count(ctx)))
 }

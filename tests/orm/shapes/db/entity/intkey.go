@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrIntKey(v any, i int) any {
 
 // IntKeyEdge is a row of a page of IntKey, with its cursor.
 type IntKeyEdge struct {
-	Node   *IntKey    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *IntKey      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // IntKeyConnection is one page of IntKey.
 type IntKeyConnection struct {
-	Edges    []*IntKeyEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*IntKeyEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var IntKeyMeta = orm.Meta{
 type IntKeyQuery struct{ c orm.QueryCore }
 
 // NewIntKeyQuery returns a query of every IntKey.
-func NewIntKeyQuery(ex orm.Executor) *IntKeyQuery {
+func NewIntKeyQuery(ex velox.Executor) *IntKeyQuery {
 	return &IntKeyQuery{c: orm.QueryCore{M: &IntKeyMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *IntKeyQuery) Iter(ctx context.Context) iter.Seq2[*IntKey, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *IntKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*IntKeyConnection, error) {
+func (q *IntKeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*IntKeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *IntKeyQuery) IDs(ctx context.Context) ([]int, error) {
 type IntKeyCreate struct{ c orm.MutCore }
 
 // NewIntKeyCreate returns a builder that creates a IntKey.
-func NewIntKeyCreate(ex orm.Executor) *IntKeyCreate {
+func NewIntKeyCreate(ex velox.Executor) *IntKeyCreate {
 	return &IntKeyCreate{c: orm.MutCore{M: &IntKeyMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *IntKeyCreate) Exec(ctx context.Context) error {
 
 // IntKeyCreateBulk creates several IntKey rows with one statement.
 type IntKeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*IntKeyCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type IntKeyCreateBulk struct {
 // NewIntKeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewIntKeyCreateBulk(ex orm.Executor, bs ...*IntKeyCreate) *IntKeyCreateBulk {
+func NewIntKeyCreateBulk(ex velox.Executor, bs ...*IntKeyCreate) *IntKeyCreateBulk {
 	return &IntKeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *IntKeyCreateBulk) Exec(ctx context.Context) error {
 type IntKeyUpdate struct{ c orm.MutCore }
 
 // NewIntKeyUpdate returns a builder that updates the rows its predicates match.
-func NewIntKeyUpdate(ex orm.Executor) *IntKeyUpdate {
+func NewIntKeyUpdate(ex velox.Executor) *IntKeyUpdate {
 	return &IntKeyUpdate{c: orm.MutCore{M: &IntKeyMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *IntKeyUpdate) SaveOne(ctx context.Context) (*IntKey, error) {
 type IntKeyDelete struct{ c orm.MutCore }
 
 // NewIntKeyDelete returns a builder that deletes the rows its predicates match.
-func NewIntKeyDelete(ex orm.Executor) *IntKeyDelete {
+func NewIntKeyDelete(ex velox.Executor) *IntKeyDelete {
 	return &IntKeyDelete{c: orm.MutCore{M: &IntKeyMeta, Ex: ex}}
 }
 

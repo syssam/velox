@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -102,13 +103,13 @@ func ptrDefaultShape(v any, i int) any {
 // DefaultShapeEdge is a row of a page of DefaultShape, with its cursor.
 type DefaultShapeEdge struct {
 	Node   *DefaultShape `json:"node"`
-	Cursor orm.Cursor    `json:"cursor"`
+	Cursor velox.Cursor  `json:"cursor"`
 }
 
 // DefaultShapeConnection is one page of DefaultShape.
 type DefaultShapeConnection struct {
 	Edges    []*DefaultShapeEdge `json:"edges"`
-	PageInfo orm.PageInfo        `json:"pageInfo"`
+	PageInfo velox.PageInfo      `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -153,7 +154,7 @@ var DefaultShapeMeta = orm.Meta{
 type DefaultShapeQuery struct{ c orm.QueryCore }
 
 // NewDefaultShapeQuery returns a query of every DefaultShape.
-func NewDefaultShapeQuery(ex orm.Executor) *DefaultShapeQuery {
+func NewDefaultShapeQuery(ex velox.Executor) *DefaultShapeQuery {
 	return &DefaultShapeQuery{c: orm.QueryCore{M: &DefaultShapeMeta, Ex: ex}}
 }
 
@@ -301,7 +302,7 @@ func (q *DefaultShapeQuery) Iter(ctx context.Context) iter.Seq2[*DefaultShape, e
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *DefaultShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*DefaultShapeConnection, error) {
+func (q *DefaultShapeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*DefaultShapeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -342,7 +343,7 @@ func (q *DefaultShapeQuery) IDs(ctx context.Context) ([]int, error) {
 type DefaultShapeCreate struct{ c orm.MutCore }
 
 // NewDefaultShapeCreate returns a builder that creates a DefaultShape.
-func NewDefaultShapeCreate(ex orm.Executor) *DefaultShapeCreate {
+func NewDefaultShapeCreate(ex velox.Executor) *DefaultShapeCreate {
 	return &DefaultShapeCreate{c: orm.MutCore{M: &DefaultShapeMeta, Ex: ex}}
 }
 
@@ -390,7 +391,7 @@ func (b *DefaultShapeCreate) Exec(ctx context.Context) error {
 
 // DefaultShapeCreateBulk creates several DefaultShape rows with one statement.
 type DefaultShapeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*DefaultShapeCreate
 	n  int
 }
@@ -398,7 +399,7 @@ type DefaultShapeCreateBulk struct {
 // NewDefaultShapeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewDefaultShapeCreateBulk(ex orm.Executor, bs ...*DefaultShapeCreate) *DefaultShapeCreateBulk {
+func NewDefaultShapeCreateBulk(ex velox.Executor, bs ...*DefaultShapeCreate) *DefaultShapeCreateBulk {
 	return &DefaultShapeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -451,7 +452,7 @@ func (b *DefaultShapeCreateBulk) Exec(ctx context.Context) error {
 type DefaultShapeUpdate struct{ c orm.MutCore }
 
 // NewDefaultShapeUpdate returns a builder that updates the rows its predicates match.
-func NewDefaultShapeUpdate(ex orm.Executor) *DefaultShapeUpdate {
+func NewDefaultShapeUpdate(ex velox.Executor) *DefaultShapeUpdate {
 	return &DefaultShapeUpdate{c: orm.MutCore{M: &DefaultShapeMeta, Ex: ex}}
 }
 
@@ -517,7 +518,7 @@ func (b *DefaultShapeUpdate) SaveOne(ctx context.Context) (*DefaultShape, error)
 type DefaultShapeDelete struct{ c orm.MutCore }
 
 // NewDefaultShapeDelete returns a builder that deletes the rows its predicates match.
-func NewDefaultShapeDelete(ex orm.Executor) *DefaultShapeDelete {
+func NewDefaultShapeDelete(ex velox.Executor) *DefaultShapeDelete {
 	return &DefaultShapeDelete{c: orm.MutCore{M: &DefaultShapeMeta, Ex: ex}}
 }
 

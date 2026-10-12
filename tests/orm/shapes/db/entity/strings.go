@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrStrings(v any, i int) any {
 
 // StringsEdge is a row of a page of Strings, with its cursor.
 type StringsEdge struct {
-	Node   *Strings   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Strings     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // StringsConnection is one page of Strings.
 type StringsConnection struct {
 	Edges    []*StringsEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var StringsMeta = orm.Meta{
 type StringsQuery struct{ c orm.QueryCore }
 
 // NewStringsQuery returns a query of every Strings.
-func NewStringsQuery(ex orm.Executor) *StringsQuery {
+func NewStringsQuery(ex velox.Executor) *StringsQuery {
 	return &StringsQuery{c: orm.QueryCore{M: &StringsMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *StringsQuery) Iter(ctx context.Context) iter.Seq2[*Strings, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *StringsQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*StringsConnection, error) {
+func (q *StringsQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*StringsConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *StringsQuery) IDs(ctx context.Context) ([]int, error) {
 type StringsCreate struct{ c orm.MutCore }
 
 // NewStringsCreate returns a builder that creates a Strings.
-func NewStringsCreate(ex orm.Executor) *StringsCreate {
+func NewStringsCreate(ex velox.Executor) *StringsCreate {
 	return &StringsCreate{c: orm.MutCore{M: &StringsMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *StringsCreate) Exec(ctx context.Context) error {
 
 // StringsCreateBulk creates several Strings rows with one statement.
 type StringsCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*StringsCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type StringsCreateBulk struct {
 // NewStringsCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewStringsCreateBulk(ex orm.Executor, bs ...*StringsCreate) *StringsCreateBulk {
+func NewStringsCreateBulk(ex velox.Executor, bs ...*StringsCreate) *StringsCreateBulk {
 	return &StringsCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *StringsCreateBulk) Exec(ctx context.Context) error {
 type StringsUpdate struct{ c orm.MutCore }
 
 // NewStringsUpdate returns a builder that updates the rows its predicates match.
-func NewStringsUpdate(ex orm.Executor) *StringsUpdate {
+func NewStringsUpdate(ex velox.Executor) *StringsUpdate {
 	return &StringsUpdate{c: orm.MutCore{M: &StringsMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *StringsUpdate) SaveOne(ctx context.Context) (*Strings, error) {
 type StringsDelete struct{ c orm.MutCore }
 
 // NewStringsDelete returns a builder that deletes the rows its predicates match.
-func NewStringsDelete(ex orm.Executor) *StringsDelete {
+func NewStringsDelete(ex velox.Executor) *StringsDelete {
 	return &StringsDelete{c: orm.MutCore{M: &StringsMeta, Ex: ex}}
 }
 

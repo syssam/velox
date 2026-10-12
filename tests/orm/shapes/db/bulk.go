@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type BulkClient struct{}
 
 // Query returns a query of every Bulk, to run on ex: a database handle or a
 // transaction.
-func (*BulkClient) Query(ex orm.Executor) *entity.BulkQuery { return entity.NewBulkQuery(ex) }
+func (*BulkClient) Query(ex velox.Executor) *entity.BulkQuery { return entity.NewBulkQuery(ex) }
 
 // Create returns a builder that creates a Bulk.
-func (*BulkClient) Create(ex orm.Executor) *entity.BulkCreate { return entity.NewBulkCreate(ex) }
+func (*BulkClient) Create(ex velox.Executor) *entity.BulkCreate { return entity.NewBulkCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*BulkClient) CreateBulk(ex orm.Executor, bs ...*entity.BulkCreate) *entity.BulkCreateBulk {
+func (*BulkClient) CreateBulk(ex velox.Executor, bs ...*entity.BulkCreate) *entity.BulkCreateBulk {
 	return entity.NewBulkCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Bulk rows its conditions match.
-func (*BulkClient) Update(ex orm.Executor) *entity.BulkUpdate { return entity.NewBulkUpdate(ex) }
+func (*BulkClient) Update(ex velox.Executor) *entity.BulkUpdate { return entity.NewBulkUpdate(ex) }
 
 // Delete returns a builder that deletes the Bulk rows its conditions match.
-func (*BulkClient) Delete(ex orm.Executor) *entity.BulkDelete { return entity.NewBulkDelete(ex) }
+func (*BulkClient) Delete(ex velox.Executor) *entity.BulkDelete { return entity.NewBulkDelete(ex) }
 
 // Get returns the Bulk with the given id, or velox.ErrNotFound.
-func (c *BulkClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Bulk, error) {
+func (c *BulkClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Bulk, error) {
 	return c.Query(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Bulk with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *BulkClient) UpdateByID(ex orm.Executor, id int) *entity.BulkUpdate {
+func (c *BulkClient) UpdateByID(ex velox.Executor, id int) *entity.BulkUpdate {
 	return c.Update(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Bulk with the given id, or returns velox.ErrNotFound.
-func (c *BulkClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *BulkClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Bulk(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.BulkMeta.NotFound()

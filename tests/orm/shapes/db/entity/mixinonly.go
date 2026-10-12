@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -42,14 +43,14 @@ func ptrMixinOnly(v any, i int) any {
 
 // MixinOnlyEdge is a row of a page of MixinOnly, with its cursor.
 type MixinOnlyEdge struct {
-	Node   *MixinOnly `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *MixinOnly   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // MixinOnlyConnection is one page of MixinOnly.
 type MixinOnlyConnection struct {
 	Edges    []*MixinOnlyEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -75,7 +76,7 @@ var MixinOnlyMeta = orm.Meta{
 type MixinOnlyQuery struct{ c orm.QueryCore }
 
 // NewMixinOnlyQuery returns a query of every MixinOnly.
-func NewMixinOnlyQuery(ex orm.Executor) *MixinOnlyQuery {
+func NewMixinOnlyQuery(ex velox.Executor) *MixinOnlyQuery {
 	return &MixinOnlyQuery{c: orm.QueryCore{M: &MixinOnlyMeta, Ex: ex}}
 }
 
@@ -223,7 +224,7 @@ func (q *MixinOnlyQuery) Iter(ctx context.Context) iter.Seq2[*MixinOnly, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MixinOnlyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MixinOnlyConnection, error) {
+func (q *MixinOnlyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*MixinOnlyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -264,7 +265,7 @@ func (q *MixinOnlyQuery) IDs(ctx context.Context) ([]int, error) {
 type MixinOnlyCreate struct{ c orm.MutCore }
 
 // NewMixinOnlyCreate returns a builder that creates a MixinOnly.
-func NewMixinOnlyCreate(ex orm.Executor) *MixinOnlyCreate {
+func NewMixinOnlyCreate(ex velox.Executor) *MixinOnlyCreate {
 	return &MixinOnlyCreate{c: orm.MutCore{M: &MixinOnlyMeta, Ex: ex}}
 }
 
@@ -312,7 +313,7 @@ func (b *MixinOnlyCreate) Exec(ctx context.Context) error {
 
 // MixinOnlyCreateBulk creates several MixinOnly rows with one statement.
 type MixinOnlyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*MixinOnlyCreate
 	n  int
 }
@@ -320,7 +321,7 @@ type MixinOnlyCreateBulk struct {
 // NewMixinOnlyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewMixinOnlyCreateBulk(ex orm.Executor, bs ...*MixinOnlyCreate) *MixinOnlyCreateBulk {
+func NewMixinOnlyCreateBulk(ex velox.Executor, bs ...*MixinOnlyCreate) *MixinOnlyCreateBulk {
 	return &MixinOnlyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -373,7 +374,7 @@ func (b *MixinOnlyCreateBulk) Exec(ctx context.Context) error {
 type MixinOnlyUpdate struct{ c orm.MutCore }
 
 // NewMixinOnlyUpdate returns a builder that updates the rows its predicates match.
-func NewMixinOnlyUpdate(ex orm.Executor) *MixinOnlyUpdate {
+func NewMixinOnlyUpdate(ex velox.Executor) *MixinOnlyUpdate {
 	return &MixinOnlyUpdate{c: orm.MutCore{M: &MixinOnlyMeta, Ex: ex}}
 }
 
@@ -439,7 +440,7 @@ func (b *MixinOnlyUpdate) SaveOne(ctx context.Context) (*MixinOnly, error) {
 type MixinOnlyDelete struct{ c orm.MutCore }
 
 // NewMixinOnlyDelete returns a builder that deletes the rows its predicates match.
-func NewMixinOnlyDelete(ex orm.Executor) *MixinOnlyDelete {
+func NewMixinOnlyDelete(ex velox.Executor) *MixinOnlyDelete {
 	return &MixinOnlyDelete{c: orm.MutCore{M: &MixinOnlyMeta, Ex: ex}}
 }
 

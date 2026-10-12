@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -35,14 +36,14 @@ func ptrBare(v any, i int) any {
 
 // BareEdge is a row of a page of Bare, with its cursor.
 type BareEdge struct {
-	Node   *Bare      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Bare        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // BareConnection is one page of Bare.
 type BareConnection struct {
-	Edges    []*BareEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*BareEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -64,7 +65,7 @@ var BareMeta = orm.Meta{
 type BareQuery struct{ c orm.QueryCore }
 
 // NewBareQuery returns a query of every Bare.
-func NewBareQuery(ex orm.Executor) *BareQuery {
+func NewBareQuery(ex velox.Executor) *BareQuery {
 	return &BareQuery{c: orm.QueryCore{M: &BareMeta, Ex: ex}}
 }
 
@@ -209,7 +210,7 @@ func (q *BareQuery) Iter(ctx context.Context) iter.Seq2[*Bare, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *BareQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BareConnection, error) {
+func (q *BareQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*BareConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -250,7 +251,7 @@ func (q *BareQuery) IDs(ctx context.Context) ([]int, error) {
 type BareCreate struct{ c orm.MutCore }
 
 // NewBareCreate returns a builder that creates a Bare.
-func NewBareCreate(ex orm.Executor) *BareCreate {
+func NewBareCreate(ex velox.Executor) *BareCreate {
 	return &BareCreate{c: orm.MutCore{M: &BareMeta, Ex: ex}}
 }
 
@@ -298,7 +299,7 @@ func (b *BareCreate) Exec(ctx context.Context) error {
 
 // BareCreateBulk creates several Bare rows with one statement.
 type BareCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*BareCreate
 	n  int
 }
@@ -306,7 +307,7 @@ type BareCreateBulk struct {
 // NewBareCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewBareCreateBulk(ex orm.Executor, bs ...*BareCreate) *BareCreateBulk {
+func NewBareCreateBulk(ex velox.Executor, bs ...*BareCreate) *BareCreateBulk {
 	return &BareCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +360,7 @@ func (b *BareCreateBulk) Exec(ctx context.Context) error {
 type BareUpdate struct{ c orm.MutCore }
 
 // NewBareUpdate returns a builder that updates the rows its predicates match.
-func NewBareUpdate(ex orm.Executor) *BareUpdate {
+func NewBareUpdate(ex velox.Executor) *BareUpdate {
 	return &BareUpdate{c: orm.MutCore{M: &BareMeta, Ex: ex}}
 }
 
@@ -425,7 +426,7 @@ func (b *BareUpdate) SaveOne(ctx context.Context) (*Bare, error) {
 type BareDelete struct{ c orm.MutCore }
 
 // NewBareDelete returns a builder that deletes the rows its predicates match.
-func NewBareDelete(ex orm.Executor) *BareDelete {
+func NewBareDelete(ex velox.Executor) *BareDelete {
 	return &BareDelete{c: orm.MutCore{M: &BareMeta, Ex: ex}}
 }
 

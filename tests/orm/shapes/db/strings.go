@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,41 +18,43 @@ type StringsClient struct{}
 
 // Query returns a query of every Strings, to run on ex: a database handle or a
 // transaction.
-func (*StringsClient) Query(ex orm.Executor) *entity.StringsQuery { return entity.NewStringsQuery(ex) }
+func (*StringsClient) Query(ex velox.Executor) *entity.StringsQuery {
+	return entity.NewStringsQuery(ex)
+}
 
 // Create returns a builder that creates a Strings.
-func (*StringsClient) Create(ex orm.Executor) *entity.StringsCreate {
+func (*StringsClient) Create(ex velox.Executor) *entity.StringsCreate {
 	return entity.NewStringsCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*StringsClient) CreateBulk(ex orm.Executor, bs ...*entity.StringsCreate) *entity.StringsCreateBulk {
+func (*StringsClient) CreateBulk(ex velox.Executor, bs ...*entity.StringsCreate) *entity.StringsCreateBulk {
 	return entity.NewStringsCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Strings rows its conditions match.
-func (*StringsClient) Update(ex orm.Executor) *entity.StringsUpdate {
+func (*StringsClient) Update(ex velox.Executor) *entity.StringsUpdate {
 	return entity.NewStringsUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Strings rows its conditions match.
-func (*StringsClient) Delete(ex orm.Executor) *entity.StringsDelete {
+func (*StringsClient) Delete(ex velox.Executor) *entity.StringsDelete {
 	return entity.NewStringsDelete(ex)
 }
 
 // Get returns the Strings with the given id, or velox.ErrNotFound.
-func (c *StringsClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Strings, error) {
+func (c *StringsClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Strings, error) {
 	return c.Query(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Strings with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *StringsClient) UpdateByID(ex orm.Executor, id int) *entity.StringsUpdate {
+func (c *StringsClient) UpdateByID(ex velox.Executor, id int) *entity.StringsUpdate {
 	return c.Update(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Strings with the given id, or returns velox.ErrNotFound.
-func (c *StringsClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *StringsClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.StringsMeta.NotFound()

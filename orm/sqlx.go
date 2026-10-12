@@ -5,6 +5,7 @@ import (
 	stdsql "database/sql"
 	"fmt"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect/sql"
 )
 
@@ -47,12 +48,12 @@ func Compile[T Predicate](p T) func(*sql.Selector) {
 // ExecSQL runs a statement that returns no rows on the executor: on the
 // transaction when ex is one, which is what a lock statement such as
 // pg_advisory_xact_lock needs.
-func ExecSQL(ctx context.Context, ex Executor, query string, args ...any) (stdsql.Result, error) {
+func ExecSQL(ctx context.Context, ex velox.Executor, query string, args ...any) (stdsql.Result, error) {
 	var res stdsql.Result
-	if ex == nil || ex.conn() == nil {
-		return nil, ErrNoExecutor
+	if ex == nil || ex.State() == nil {
+		return nil, velox.ErrNoExecutor
 	}
-	if err := ex.conn().drv.Exec(ctx, query, args, &res); err != nil {
+	if err := ex.State().Driver().Exec(ctx, query, args, &res); err != nil {
 		return nil, err
 	}
 	return res, nil
@@ -60,12 +61,12 @@ func ExecSQL(ctx context.Context, ex Executor, query string, args ...any) (stdsq
 
 // QuerySQL runs a statement that returns rows on the executor. The caller
 // closes the rows.
-func QuerySQL(ctx context.Context, ex Executor, query string, args ...any) (*stdsql.Rows, error) {
+func QuerySQL(ctx context.Context, ex velox.Executor, query string, args ...any) (*stdsql.Rows, error) {
 	rows := &sql.Rows{}
-	if ex == nil || ex.conn() == nil {
-		return nil, ErrNoExecutor
+	if ex == nil || ex.State() == nil {
+		return nil, velox.ErrNoExecutor
 	}
-	if err := ex.conn().drv.Query(ctx, query, args, rows); err != nil {
+	if err := ex.State().Driver().Query(ctx, query, args, rows); err != nil {
 		return nil, err
 	}
 	r, ok := rows.ColumnScanner.(*stdsql.Rows)
@@ -207,7 +208,7 @@ func (s *Selection) Int(ctx context.Context) (int, error) {
 
 // statement renders the read of q, the query as the policy and the
 // interceptors left it.
-func (s *Selection) statement(ctx context.Context, c *conn, q *QueryCore) (string, []any, error) {
+func (s *Selection) statement(ctx context.Context, c *velox.ExecutorState, q *QueryCore) (string, []any, error) {
 	cols := append(append([]string(nil), s.group...), s.cols...)
 	for _, col := range cols {
 		if q.M.col(col) < 0 {
@@ -258,7 +259,7 @@ func (s *Selection) run(ctx context.Context, scan func(*sql.Rows) error) error {
 			return nil, err
 		}
 		rows := &sql.Rows{}
-		if err := c.drv.Query(ctx, query, args, rows); err != nil {
+		if err := c.Driver().Query(ctx, query, args, rows); err != nil {
 			return nil, err
 		}
 		defer func() { _ = rows.Close() }()

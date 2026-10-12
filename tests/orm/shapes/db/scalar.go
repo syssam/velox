@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,41 @@ type ScalarClient struct{}
 
 // Query returns a query of every Scalar, to run on ex: a database handle or a
 // transaction.
-func (*ScalarClient) Query(ex orm.Executor) *entity.ScalarQuery { return entity.NewScalarQuery(ex) }
+func (*ScalarClient) Query(ex velox.Executor) *entity.ScalarQuery { return entity.NewScalarQuery(ex) }
 
 // Create returns a builder that creates a Scalar.
-func (*ScalarClient) Create(ex orm.Executor) *entity.ScalarCreate { return entity.NewScalarCreate(ex) }
+func (*ScalarClient) Create(ex velox.Executor) *entity.ScalarCreate {
+	return entity.NewScalarCreate(ex)
+}
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*ScalarClient) CreateBulk(ex orm.Executor, bs ...*entity.ScalarCreate) *entity.ScalarCreateBulk {
+func (*ScalarClient) CreateBulk(ex velox.Executor, bs ...*entity.ScalarCreate) *entity.ScalarCreateBulk {
 	return entity.NewScalarCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Scalar rows its conditions match.
-func (*ScalarClient) Update(ex orm.Executor) *entity.ScalarUpdate { return entity.NewScalarUpdate(ex) }
+func (*ScalarClient) Update(ex velox.Executor) *entity.ScalarUpdate {
+	return entity.NewScalarUpdate(ex)
+}
 
 // Delete returns a builder that deletes the Scalar rows its conditions match.
-func (*ScalarClient) Delete(ex orm.Executor) *entity.ScalarDelete { return entity.NewScalarDelete(ex) }
+func (*ScalarClient) Delete(ex velox.Executor) *entity.ScalarDelete {
+	return entity.NewScalarDelete(ex)
+}
 
 // Get returns the Scalar with the given id, or velox.ErrNotFound.
-func (c *ScalarClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Scalar, error) {
+func (c *ScalarClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Scalar, error) {
 	return c.Query(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Scalar with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *ScalarClient) UpdateByID(ex orm.Executor, id int) *entity.ScalarUpdate {
+func (c *ScalarClient) UpdateByID(ex velox.Executor, id int) *entity.ScalarUpdate {
 	return c.Update(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Scalar with the given id, or returns velox.ErrNotFound.
-func (c *ScalarClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *ScalarClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.ScalarMeta.NotFound()

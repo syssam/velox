@@ -30,9 +30,9 @@ import (
 // A cursor that says NULL for a key that cannot be NULL was not made here.
 func TestPaginate_NullCursorForAKeyThatCannotBeNull(t *testing.T) {
 	db, _ := open(t)
-	bad := orm.Cursor(base64.RawURLEncoding.EncodeToString([]byte(`{"k":["id"],"v":[null]}`)))
+	bad := velox.Cursor(base64.RawURLEncoding.EncodeToString([]byte(`{"k":["id"],"v":[null]}`)))
 	_, err := client.User.Query(db).Paginate(context.Background(), &bad, intp(1), nil, nil)
-	require.ErrorIs(t, err, orm.ErrBadCursor)
+	require.ErrorIs(t, err, velox.ErrBadCursor)
 }
 
 // The default of a join row's column is written like any other value: a
@@ -46,7 +46,7 @@ func TestJoinRowDefaultIsStoredLikeAnyOtherValue(t *testing.T) {
 	_, err := client.User.UpdateByID(db, ann.ID).Set(user.LikedPosts.Add(p1.ID, p2.ID, p3.ID)).SaveOne(ctx)
 	require.NoError(t, err)
 	var seen []int
-	var after *orm.Cursor
+	var after *velox.Cursor
 	for page := 0; page < 6; page++ {
 		conn, err := client.Like.Query(db).OrderBy(like.LikedAt.Asc()).Paginate(ctx, after, intp(1), nil, nil)
 		require.NoError(t, err)
@@ -262,11 +262,11 @@ func TestInterceptorReturningSomethingElse(t *testing.T) {
 
 func TestRawSQLWithoutAHandle(t *testing.T) {
 	ctx := context.Background()
-	_, err := orm.ExecSQL(ctx, orm.ExecutorFrom(ctx), "SELECT 1")
-	require.ErrorIs(t, err, orm.ErrNoExecutor)
-	var tx *orm.Tx
+	_, err := orm.ExecSQL(ctx, velox.ExecutorFrom(ctx), "SELECT 1")
+	require.ErrorIs(t, err, velox.ErrNoExecutor)
+	var tx *velox.Tx
 	_, err = orm.QuerySQL(ctx, tx, "SELECT 1")
-	require.ErrorIs(t, err, orm.ErrNoExecutor)
+	require.ErrorIs(t, err, velox.ErrNoExecutor)
 }
 
 // The zero predicate inside an edge condition of a delete or an update is a
@@ -353,7 +353,7 @@ func TestPaginate_KeepsTheLock(t *testing.T) {
 	mdb, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = mdb.Close() })
-	db := orm.OpenDB("postgres", mdb)
+	db := velox.OpenDB("postgres", mdb)
 	mock.ExpectQuery(`FROM "users".*FOR UPDATE`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	_, err = client.User.Query(db).ForUpdate().Paginate(orm.WithoutTotal(context.Background()), nil, intp(2), nil, nil)
 	require.NoError(t, err)
@@ -435,12 +435,12 @@ func TestKeyColumn_Comparisons(t *testing.T) {
 func TestTxFromAndDriver(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
-	require.Nil(t, orm.TxFrom(ctx))
-	require.Nil(t, orm.TxFrom(orm.WithExecutor(ctx, db)), "a handle that is not a transaction")
-	require.ErrorContains(t, db.RunTx(ctx, func(tx *orm.Tx) error {
-		in := orm.WithExecutor(ctx, tx)
-		require.Same(t, tx, orm.TxFrom(in))
-		require.Equal(t, orm.Executor(tx), orm.ExecutorFrom(in))
+	require.Nil(t, velox.TxFrom(ctx))
+	require.Nil(t, velox.TxFrom(velox.WithExecutor(ctx, db)), "a handle that is not a transaction")
+	require.ErrorContains(t, db.RunTx(ctx, func(tx *velox.Tx) error {
+		in := velox.WithExecutor(ctx, tx)
+		require.Same(t, tx, velox.TxFrom(in))
+		require.Equal(t, velox.Executor(tx), velox.ExecutorFrom(in))
 		// What is written through the transaction's driver is the
 		// transaction's: gone with it.
 		u := newUser(t, tx, "ann", 30)
@@ -488,7 +488,7 @@ func TestAfterCommit(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
 	var ran []string
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		tx.AfterCommit(func() { ran = append(ran, "first") })
 		tx.AfterCommit(func() {
 			// The change is there for whoever reads after the commit.
@@ -503,22 +503,22 @@ func TestAfterCommit(t *testing.T) {
 	require.Equal(t, []string{"first", "second sees 1"}, ran)
 
 	ran = nil
-	require.Error(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.Error(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		tx.AfterCommit(func() { ran = append(ran, "rolled back") })
 		return errors.New("no")
 	}))
 	require.Empty(t, ran)
 }
 
-// orm.First: the first of a list read, or not found.
+// velox.First: the first of a list read, or not found.
 func TestFirst(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
-	_, err := orm.First(client.User.Query(db).Limit(1).IDs(ctx))
+	_, err := velox.First(client.User.Query(db).Limit(1).IDs(ctx))
 	require.ErrorIs(t, err, velox.ErrNotFound)
 	ann := newUser(t, db, "ann", 30)
 	newUser(t, db, "bob", 40)
-	id, err := orm.First(client.User.Query(db).OrderBy(user.Name.Asc()).Limit(1).IDs(ctx))
+	id, err := velox.First(client.User.Query(db).OrderBy(user.Name.Asc()).Limit(1).IDs(ctx))
 	require.NoError(t, err)
 	require.Equal(t, ann.ID, id)
 }

@@ -92,14 +92,14 @@ func linkBadge(dst any, es []any) {
 
 // BadgeEdge is a row of a page of Badge, with its cursor.
 type BadgeEdge struct {
-	Node   *Badge     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Badge       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // BadgeConnection is one page of Badge.
 type BadgeConnection struct {
-	Edges    []*BadgeEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*BadgeEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -124,7 +124,7 @@ var BadgeMeta = orm.Meta{
 type BadgeQuery struct{ c orm.QueryCore }
 
 // NewBadgeQuery returns a query of every Badge.
-func NewBadgeQuery(ex orm.Executor) *BadgeQuery {
+func NewBadgeQuery(ex velox.Executor) *BadgeQuery {
 	return &BadgeQuery{c: orm.QueryCore{M: &BadgeMeta, Ex: ex}}
 }
 
@@ -269,7 +269,7 @@ func (q *BadgeQuery) Iter(ctx context.Context) iter.Seq2[*Badge, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *BadgeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BadgeConnection, error) {
+func (q *BadgeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*BadgeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -310,7 +310,7 @@ func (q *BadgeQuery) IDs(ctx context.Context) ([]uint16, error) {
 type BadgeCreate struct{ c orm.MutCore }
 
 // NewBadgeCreate returns a builder that creates a Badge.
-func NewBadgeCreate(ex orm.Executor) *BadgeCreate {
+func NewBadgeCreate(ex velox.Executor) *BadgeCreate {
 	return &BadgeCreate{c: orm.MutCore{M: &BadgeMeta, Ex: ex}}
 }
 
@@ -358,7 +358,7 @@ func (b *BadgeCreate) Exec(ctx context.Context) error {
 
 // BadgeCreateBulk creates several Badge rows with one statement.
 type BadgeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*BadgeCreate
 	n  int
 }
@@ -366,7 +366,7 @@ type BadgeCreateBulk struct {
 // NewBadgeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewBadgeCreateBulk(ex orm.Executor, bs ...*BadgeCreate) *BadgeCreateBulk {
+func NewBadgeCreateBulk(ex velox.Executor, bs ...*BadgeCreate) *BadgeCreateBulk {
 	return &BadgeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -419,7 +419,7 @@ func (b *BadgeCreateBulk) Exec(ctx context.Context) error {
 type BadgeUpdate struct{ c orm.MutCore }
 
 // NewBadgeUpdate returns a builder that updates the rows its predicates match.
-func NewBadgeUpdate(ex orm.Executor) *BadgeUpdate {
+func NewBadgeUpdate(ex velox.Executor) *BadgeUpdate {
 	return &BadgeUpdate{c: orm.MutCore{M: &BadgeMeta, Ex: ex}}
 }
 
@@ -485,7 +485,7 @@ func (b *BadgeUpdate) SaveOne(ctx context.Context) (*Badge, error) {
 type BadgeDelete struct{ c orm.MutCore }
 
 // NewBadgeDelete returns a builder that deletes the rows its predicates match.
-func NewBadgeDelete(ex orm.Executor) *BadgeDelete {
+func NewBadgeDelete(ex velox.Executor) *BadgeDelete {
 	return &BadgeDelete{c: orm.MutCore{M: &BadgeMeta, Ex: ex}}
 }
 
@@ -508,7 +508,7 @@ func (b *BadgeDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete
 // QueryTeams queries the "teams" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Badge) QueryTeams(ex orm.Executor) *TeamQuery {
+func (e *Badge) QueryTeams(ex velox.Executor) *TeamQuery {
 	q := NewTeamQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(BadgeMeta.Edges[0], e))
 	return q
@@ -531,7 +531,7 @@ func (q *BadgeQuery) WithTeams(opts ...*TeamQuery) *BadgeQuery {
 // QueryHolders queries the "holders" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Badge) QueryHolders(ex orm.Executor) *PersonQuery {
+func (e *Badge) QueryHolders(ex velox.Executor) *PersonQuery {
 	q := NewPersonQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(BadgeMeta.Edges[1], e))
 	return q

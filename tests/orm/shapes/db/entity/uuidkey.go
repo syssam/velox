@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -40,14 +41,14 @@ func ptrUUIDKey(v any, i int) any {
 
 // UUIDKeyEdge is a row of a page of UUIDKey, with its cursor.
 type UUIDKeyEdge struct {
-	Node   *UUIDKey   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *UUIDKey     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // UUIDKeyConnection is one page of UUIDKey.
 type UUIDKeyConnection struct {
 	Edges    []*UUIDKeyEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -72,7 +73,7 @@ var UUIDKeyMeta = orm.Meta{
 type UUIDKeyQuery struct{ c orm.QueryCore }
 
 // NewUUIDKeyQuery returns a query of every UUIDKey.
-func NewUUIDKeyQuery(ex orm.Executor) *UUIDKeyQuery {
+func NewUUIDKeyQuery(ex velox.Executor) *UUIDKeyQuery {
 	return &UUIDKeyQuery{c: orm.QueryCore{M: &UUIDKeyMeta, Ex: ex}}
 }
 
@@ -217,7 +218,7 @@ func (q *UUIDKeyQuery) Iter(ctx context.Context) iter.Seq2[*UUIDKey, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UUIDKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UUIDKeyConnection, error) {
+func (q *UUIDKeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*UUIDKeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -258,7 +259,7 @@ func (q *UUIDKeyQuery) IDs(ctx context.Context) ([]uuid.UUID, error) {
 type UUIDKeyCreate struct{ c orm.MutCore }
 
 // NewUUIDKeyCreate returns a builder that creates a UUIDKey.
-func NewUUIDKeyCreate(ex orm.Executor) *UUIDKeyCreate {
+func NewUUIDKeyCreate(ex velox.Executor) *UUIDKeyCreate {
 	return &UUIDKeyCreate{c: orm.MutCore{M: &UUIDKeyMeta, Ex: ex}}
 }
 
@@ -306,7 +307,7 @@ func (b *UUIDKeyCreate) Exec(ctx context.Context) error {
 
 // UUIDKeyCreateBulk creates several UUIDKey rows with one statement.
 type UUIDKeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*UUIDKeyCreate
 	n  int
 }
@@ -314,7 +315,7 @@ type UUIDKeyCreateBulk struct {
 // NewUUIDKeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewUUIDKeyCreateBulk(ex orm.Executor, bs ...*UUIDKeyCreate) *UUIDKeyCreateBulk {
+func NewUUIDKeyCreateBulk(ex velox.Executor, bs ...*UUIDKeyCreate) *UUIDKeyCreateBulk {
 	return &UUIDKeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -367,7 +368,7 @@ func (b *UUIDKeyCreateBulk) Exec(ctx context.Context) error {
 type UUIDKeyUpdate struct{ c orm.MutCore }
 
 // NewUUIDKeyUpdate returns a builder that updates the rows its predicates match.
-func NewUUIDKeyUpdate(ex orm.Executor) *UUIDKeyUpdate {
+func NewUUIDKeyUpdate(ex velox.Executor) *UUIDKeyUpdate {
 	return &UUIDKeyUpdate{c: orm.MutCore{M: &UUIDKeyMeta, Ex: ex}}
 }
 
@@ -433,7 +434,7 @@ func (b *UUIDKeyUpdate) SaveOne(ctx context.Context) (*UUIDKey, error) {
 type UUIDKeyDelete struct{ c orm.MutCore }
 
 // NewUUIDKeyDelete returns a builder that deletes the rows its predicates match.
-func NewUUIDKeyDelete(ex orm.Executor) *UUIDKeyDelete {
+func NewUUIDKeyDelete(ex velox.Executor) *UUIDKeyDelete {
 	return &UUIDKeyDelete{c: orm.MutCore{M: &UUIDKeyMeta, Ex: ex}}
 }
 

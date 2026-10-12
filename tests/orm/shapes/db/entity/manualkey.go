@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -39,14 +40,14 @@ func ptrManualKey(v any, i int) any {
 
 // ManualKeyEdge is a row of a page of ManualKey, with its cursor.
 type ManualKeyEdge struct {
-	Node   *ManualKey `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *ManualKey   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ManualKeyConnection is one page of ManualKey.
 type ManualKeyConnection struct {
 	Edges    []*ManualKeyEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -71,7 +72,7 @@ var ManualKeyMeta = orm.Meta{
 type ManualKeyQuery struct{ c orm.QueryCore }
 
 // NewManualKeyQuery returns a query of every ManualKey.
-func NewManualKeyQuery(ex orm.Executor) *ManualKeyQuery {
+func NewManualKeyQuery(ex velox.Executor) *ManualKeyQuery {
 	return &ManualKeyQuery{c: orm.QueryCore{M: &ManualKeyMeta, Ex: ex}}
 }
 
@@ -219,7 +220,7 @@ func (q *ManualKeyQuery) Iter(ctx context.Context) iter.Seq2[*ManualKey, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ManualKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ManualKeyConnection, error) {
+func (q *ManualKeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ManualKeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -260,7 +261,7 @@ func (q *ManualKeyQuery) IDs(ctx context.Context) ([]string, error) {
 type ManualKeyCreate struct{ c orm.MutCore }
 
 // NewManualKeyCreate returns a builder that creates a ManualKey.
-func NewManualKeyCreate(ex orm.Executor) *ManualKeyCreate {
+func NewManualKeyCreate(ex velox.Executor) *ManualKeyCreate {
 	return &ManualKeyCreate{c: orm.MutCore{M: &ManualKeyMeta, Ex: ex}}
 }
 
@@ -308,7 +309,7 @@ func (b *ManualKeyCreate) Exec(ctx context.Context) error {
 
 // ManualKeyCreateBulk creates several ManualKey rows with one statement.
 type ManualKeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ManualKeyCreate
 	n  int
 }
@@ -316,7 +317,7 @@ type ManualKeyCreateBulk struct {
 // NewManualKeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewManualKeyCreateBulk(ex orm.Executor, bs ...*ManualKeyCreate) *ManualKeyCreateBulk {
+func NewManualKeyCreateBulk(ex velox.Executor, bs ...*ManualKeyCreate) *ManualKeyCreateBulk {
 	return &ManualKeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -369,7 +370,7 @@ func (b *ManualKeyCreateBulk) Exec(ctx context.Context) error {
 type ManualKeyUpdate struct{ c orm.MutCore }
 
 // NewManualKeyUpdate returns a builder that updates the rows its predicates match.
-func NewManualKeyUpdate(ex orm.Executor) *ManualKeyUpdate {
+func NewManualKeyUpdate(ex velox.Executor) *ManualKeyUpdate {
 	return &ManualKeyUpdate{c: orm.MutCore{M: &ManualKeyMeta, Ex: ex}}
 }
 
@@ -435,7 +436,7 @@ func (b *ManualKeyUpdate) SaveOne(ctx context.Context) (*ManualKey, error) {
 type ManualKeyDelete struct{ c orm.MutCore }
 
 // NewManualKeyDelete returns a builder that deletes the rows its predicates match.
-func NewManualKeyDelete(ex orm.Executor) *ManualKeyDelete {
+func NewManualKeyDelete(ex velox.Executor) *ManualKeyDelete {
 	return &ManualKeyDelete{c: orm.MutCore{M: &ManualKeyMeta, Ex: ex}}
 }
 

@@ -27,13 +27,13 @@
 //	q.Paginate(ctx, after, first, before, last, entity.WithUserOrder(o), entity.WithUserFilter(w.Filter))
 //	    q.OrderBy(o.Term()).Where(w.P()).Paginate(ctx, after, first, before, last)
 //	c.User.DeleteOneID(id).Exec(ctx)        db.User.DeleteByID(ctx, c, id)
-//	c.User.GetX(ctx, id)                    orm.Must(db.User.Get(ctx, c, id))
+//	c.User.GetX(ctx, id)                    velox.Must(db.User.Get(ctx, c, id))
 //	user.HasPostsWith(p)                    user.Posts.HasWith(p)
-//	velox.TypeUser, user.Role, *velox.Tx    user.ModelName, user.RoleEnum, *orm.Tx
+//	velox.TypeUser, user.Role, *velox.Tx    user.ModelName, user.RoleEnum, *velox.Tx
 //
 // and the things that follow from a client no longer holding a connection
 // and a predicate no longer being a function: a client passed as a value is
-// the handle it held (its type becomes orm.Executor), an embedded client
+// the handle it held (its type becomes velox.Executor), an embedded client
 // keeps its field name, a nil predicate is the zero predicate (p == nil is
 // orm.IsZero(p), and so is testify's Nil of one, which would otherwise never
 // hold, and NotNil always), a function on a selector used as a predicate is
@@ -46,7 +46,7 @@
 //
 // Select followed by All becomes Columns. An edge query from an entity that
 // was handed to the function is given the handle of the context
-// (orm.ExecutorFrom(ctx)) and reported: whether every caller's context
+// (velox.ExecutorFrom(ctx)) and reported: whether every caller's context
 // carries one is not something the tool can see.
 //
 // Code generic over entities is rewritten with it: the constraint
@@ -68,7 +68,7 @@
 // package orm puts none there. A mutation asserted to an interface with a method velox generated per
 // entity is reported: no mutation has such a method now, and the assertion
 // would compile and never hold. A
-// deferred call that became the argument of orm.Must is put inside a
+// deferred call that became the argument of velox.Must is put inside a
 // function, so that it still runs when the function returns. An edge query
 // is given the handle its entity was read on only when the variable has one
 // assignment and the handle is not reassigned; otherwise the context's, and

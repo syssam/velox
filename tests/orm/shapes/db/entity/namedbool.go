@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -43,14 +44,14 @@ func ptrNamedBool(v any, i int) any {
 
 // NamedBoolEdge is a row of a page of NamedBool, with its cursor.
 type NamedBoolEdge struct {
-	Node   *NamedBool `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *NamedBool   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // NamedBoolConnection is one page of NamedBool.
 type NamedBoolConnection struct {
 	Edges    []*NamedBoolEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -76,7 +77,7 @@ var NamedBoolMeta = orm.Meta{
 type NamedBoolQuery struct{ c orm.QueryCore }
 
 // NewNamedBoolQuery returns a query of every NamedBool.
-func NewNamedBoolQuery(ex orm.Executor) *NamedBoolQuery {
+func NewNamedBoolQuery(ex velox.Executor) *NamedBoolQuery {
 	return &NamedBoolQuery{c: orm.QueryCore{M: &NamedBoolMeta, Ex: ex}}
 }
 
@@ -224,7 +225,7 @@ func (q *NamedBoolQuery) Iter(ctx context.Context) iter.Seq2[*NamedBool, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *NamedBoolQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*NamedBoolConnection, error) {
+func (q *NamedBoolQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NamedBoolConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -265,7 +266,7 @@ func (q *NamedBoolQuery) IDs(ctx context.Context) ([]int, error) {
 type NamedBoolCreate struct{ c orm.MutCore }
 
 // NewNamedBoolCreate returns a builder that creates a NamedBool.
-func NewNamedBoolCreate(ex orm.Executor) *NamedBoolCreate {
+func NewNamedBoolCreate(ex velox.Executor) *NamedBoolCreate {
 	return &NamedBoolCreate{c: orm.MutCore{M: &NamedBoolMeta, Ex: ex}}
 }
 
@@ -313,7 +314,7 @@ func (b *NamedBoolCreate) Exec(ctx context.Context) error {
 
 // NamedBoolCreateBulk creates several NamedBool rows with one statement.
 type NamedBoolCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*NamedBoolCreate
 	n  int
 }
@@ -321,7 +322,7 @@ type NamedBoolCreateBulk struct {
 // NewNamedBoolCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewNamedBoolCreateBulk(ex orm.Executor, bs ...*NamedBoolCreate) *NamedBoolCreateBulk {
+func NewNamedBoolCreateBulk(ex velox.Executor, bs ...*NamedBoolCreate) *NamedBoolCreateBulk {
 	return &NamedBoolCreateBulk{ex: ex, bs: bs}
 }
 
@@ -374,7 +375,7 @@ func (b *NamedBoolCreateBulk) Exec(ctx context.Context) error {
 type NamedBoolUpdate struct{ c orm.MutCore }
 
 // NewNamedBoolUpdate returns a builder that updates the rows its predicates match.
-func NewNamedBoolUpdate(ex orm.Executor) *NamedBoolUpdate {
+func NewNamedBoolUpdate(ex velox.Executor) *NamedBoolUpdate {
 	return &NamedBoolUpdate{c: orm.MutCore{M: &NamedBoolMeta, Ex: ex}}
 }
 
@@ -440,7 +441,7 @@ func (b *NamedBoolUpdate) SaveOne(ctx context.Context) (*NamedBool, error) {
 type NamedBoolDelete struct{ c orm.MutCore }
 
 // NewNamedBoolDelete returns a builder that deletes the rows its predicates match.
-func NewNamedBoolDelete(ex orm.Executor) *NamedBoolDelete {
+func NewNamedBoolDelete(ex velox.Executor) *NamedBoolDelete {
 	return &NamedBoolDelete{c: orm.MutCore{M: &NamedBoolMeta, Ex: ex}}
 }
 

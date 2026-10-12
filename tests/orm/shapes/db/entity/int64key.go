@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrInt64Key(v any, i int) any {
 
 // Int64KeyEdge is a row of a page of Int64Key, with its cursor.
 type Int64KeyEdge struct {
-	Node   *Int64Key  `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Int64Key    `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // Int64KeyConnection is one page of Int64Key.
 type Int64KeyConnection struct {
 	Edges    []*Int64KeyEdge `json:"edges"`
-	PageInfo orm.PageInfo    `json:"pageInfo"`
+	PageInfo velox.PageInfo  `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var Int64KeyMeta = orm.Meta{
 type Int64KeyQuery struct{ c orm.QueryCore }
 
 // NewInt64KeyQuery returns a query of every Int64Key.
-func NewInt64KeyQuery(ex orm.Executor) *Int64KeyQuery {
+func NewInt64KeyQuery(ex velox.Executor) *Int64KeyQuery {
 	return &Int64KeyQuery{c: orm.QueryCore{M: &Int64KeyMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *Int64KeyQuery) Iter(ctx context.Context) iter.Seq2[*Int64Key, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *Int64KeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*Int64KeyConnection, error) {
+func (q *Int64KeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*Int64KeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *Int64KeyQuery) IDs(ctx context.Context) ([]int64, error) {
 type Int64KeyCreate struct{ c orm.MutCore }
 
 // NewInt64KeyCreate returns a builder that creates a Int64Key.
-func NewInt64KeyCreate(ex orm.Executor) *Int64KeyCreate {
+func NewInt64KeyCreate(ex velox.Executor) *Int64KeyCreate {
 	return &Int64KeyCreate{c: orm.MutCore{M: &Int64KeyMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *Int64KeyCreate) Exec(ctx context.Context) error {
 
 // Int64KeyCreateBulk creates several Int64Key rows with one statement.
 type Int64KeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*Int64KeyCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type Int64KeyCreateBulk struct {
 // NewInt64KeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewInt64KeyCreateBulk(ex orm.Executor, bs ...*Int64KeyCreate) *Int64KeyCreateBulk {
+func NewInt64KeyCreateBulk(ex velox.Executor, bs ...*Int64KeyCreate) *Int64KeyCreateBulk {
 	return &Int64KeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *Int64KeyCreateBulk) Exec(ctx context.Context) error {
 type Int64KeyUpdate struct{ c orm.MutCore }
 
 // NewInt64KeyUpdate returns a builder that updates the rows its predicates match.
-func NewInt64KeyUpdate(ex orm.Executor) *Int64KeyUpdate {
+func NewInt64KeyUpdate(ex velox.Executor) *Int64KeyUpdate {
 	return &Int64KeyUpdate{c: orm.MutCore{M: &Int64KeyMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *Int64KeyUpdate) SaveOne(ctx context.Context) (*Int64Key, error) {
 type Int64KeyDelete struct{ c orm.MutCore }
 
 // NewInt64KeyDelete returns a builder that deletes the rows its predicates match.
-func NewInt64KeyDelete(ex orm.Executor) *Int64KeyDelete {
+func NewInt64KeyDelete(ex velox.Executor) *Int64KeyDelete {
 	return &Int64KeyDelete{c: orm.MutCore{M: &Int64KeyMeta, Ex: ex}}
 }
 

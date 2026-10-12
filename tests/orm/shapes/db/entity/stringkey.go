@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -39,14 +40,14 @@ func ptrStringKey(v any, i int) any {
 
 // StringKeyEdge is a row of a page of StringKey, with its cursor.
 type StringKeyEdge struct {
-	Node   *StringKey `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *StringKey   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // StringKeyConnection is one page of StringKey.
 type StringKeyConnection struct {
 	Edges    []*StringKeyEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -71,7 +72,7 @@ var StringKeyMeta = orm.Meta{
 type StringKeyQuery struct{ c orm.QueryCore }
 
 // NewStringKeyQuery returns a query of every StringKey.
-func NewStringKeyQuery(ex orm.Executor) *StringKeyQuery {
+func NewStringKeyQuery(ex velox.Executor) *StringKeyQuery {
 	return &StringKeyQuery{c: orm.QueryCore{M: &StringKeyMeta, Ex: ex}}
 }
 
@@ -219,7 +220,7 @@ func (q *StringKeyQuery) Iter(ctx context.Context) iter.Seq2[*StringKey, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *StringKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*StringKeyConnection, error) {
+func (q *StringKeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*StringKeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -260,7 +261,7 @@ func (q *StringKeyQuery) IDs(ctx context.Context) ([]string, error) {
 type StringKeyCreate struct{ c orm.MutCore }
 
 // NewStringKeyCreate returns a builder that creates a StringKey.
-func NewStringKeyCreate(ex orm.Executor) *StringKeyCreate {
+func NewStringKeyCreate(ex velox.Executor) *StringKeyCreate {
 	return &StringKeyCreate{c: orm.MutCore{M: &StringKeyMeta, Ex: ex}}
 }
 
@@ -308,7 +309,7 @@ func (b *StringKeyCreate) Exec(ctx context.Context) error {
 
 // StringKeyCreateBulk creates several StringKey rows with one statement.
 type StringKeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*StringKeyCreate
 	n  int
 }
@@ -316,7 +317,7 @@ type StringKeyCreateBulk struct {
 // NewStringKeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewStringKeyCreateBulk(ex orm.Executor, bs ...*StringKeyCreate) *StringKeyCreateBulk {
+func NewStringKeyCreateBulk(ex velox.Executor, bs ...*StringKeyCreate) *StringKeyCreateBulk {
 	return &StringKeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -369,7 +370,7 @@ func (b *StringKeyCreateBulk) Exec(ctx context.Context) error {
 type StringKeyUpdate struct{ c orm.MutCore }
 
 // NewStringKeyUpdate returns a builder that updates the rows its predicates match.
-func NewStringKeyUpdate(ex orm.Executor) *StringKeyUpdate {
+func NewStringKeyUpdate(ex velox.Executor) *StringKeyUpdate {
 	return &StringKeyUpdate{c: orm.MutCore{M: &StringKeyMeta, Ex: ex}}
 }
 
@@ -435,7 +436,7 @@ func (b *StringKeyUpdate) SaveOne(ctx context.Context) (*StringKey, error) {
 type StringKeyDelete struct{ c orm.MutCore }
 
 // NewStringKeyDelete returns a builder that deletes the rows its predicates match.
-func NewStringKeyDelete(ex orm.Executor) *StringKeyDelete {
+func NewStringKeyDelete(ex velox.Executor) *StringKeyDelete {
 	return &StringKeyDelete{c: orm.MutCore{M: &StringKeyMeta, Ex: ex}}
 }
 

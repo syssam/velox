@@ -63,6 +63,7 @@ import (
 	nuserorder "github.com/syssam/velox/tests/orm/shapes/db/userorderterm"
 	nuserset "github.com/syssam/velox/tests/orm/shapes/db/usersetter"
 	nuuid "github.com/syssam/velox/tests/orm/shapes/db/uuid"
+	nveloxx "github.com/syssam/velox/tests/orm/shapes/db/veloxx"
 	"github.com/syssam/velox/tests/orm/shapes/types"
 )
 
@@ -338,6 +339,19 @@ func TestNames_EveryAwkwardEntityWorks(t *testing.T) {
 		assert.Equal(t, 2, n)
 		assert.Equal(t, []int{a.ID}, must(client.Orm.Query(db).OrderBy(normx.Label.Desc()).IDs(ctx)))
 		assert.Equal(t, 1, rawValue[int](t, db, "SELECT COUNT(*) FROM \""+normx.Table+"\""))
+	})
+
+	t.Run("Velox", func(t *testing.T) {
+		use(t)
+		// The entity's package takes a suffix: generated code and this test
+		// import the library as velox.
+		a := must(client.Velox.Create(db).Set(nveloxx.Label.Set("a")).Save(ctx))
+		var typed *entity.Velox = must(client.Velox.Query(db).Where(nveloxx.Label.EQ("a"), nveloxx.ID.EQ(a.ID)).Only(ctx))
+		assert.Equal(t, "a", typed.Label)
+		_, err := client.Velox.Get(ctx, db, a.ID+1)
+		require.ErrorIs(t, err, velox.ErrNotFound)
+		assert.EqualError(t, err, "velox: velox not found")
+		assert.Equal(t, 1, rawValue[int](t, db, "SELECT COUNT(*) FROM \""+nveloxx.Table+"\""))
 	})
 
 	t.Run("Order", func(t *testing.T) {

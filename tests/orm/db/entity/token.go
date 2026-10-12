@@ -103,14 +103,14 @@ func linkToken(dst any, es []any) {
 
 // TokenEdge is a row of a page of Token, with its cursor.
 type TokenEdge struct {
-	Node   *Token     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Token       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // TokenConnection is one page of Token.
 type TokenConnection struct {
-	Edges    []*TokenEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*TokenEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -142,7 +142,7 @@ var TokenMeta = orm.Meta{
 type TokenQuery struct{ c orm.QueryCore }
 
 // NewTokenQuery returns a query of every Token.
-func NewTokenQuery(ex orm.Executor) *TokenQuery {
+func NewTokenQuery(ex velox.Executor) *TokenQuery {
 	return &TokenQuery{c: orm.QueryCore{M: &TokenMeta, Ex: ex}}
 }
 
@@ -287,7 +287,7 @@ func (q *TokenQuery) Iter(ctx context.Context) iter.Seq2[*Token, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TokenQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TokenConnection, error) {
+func (q *TokenQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TokenConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (q *TokenQuery) IDs(ctx context.Context) ([]uuid.UUID, error) {
 type TokenCreate struct{ c orm.MutCore }
 
 // NewTokenCreate returns a builder that creates a Token.
-func NewTokenCreate(ex orm.Executor) *TokenCreate {
+func NewTokenCreate(ex velox.Executor) *TokenCreate {
 	return &TokenCreate{c: orm.MutCore{M: &TokenMeta, Ex: ex}}
 }
 
@@ -376,7 +376,7 @@ func (b *TokenCreate) Exec(ctx context.Context) error {
 
 // TokenCreateBulk creates several Token rows with one statement.
 type TokenCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*TokenCreate
 	n  int
 }
@@ -384,7 +384,7 @@ type TokenCreateBulk struct {
 // NewTokenCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewTokenCreateBulk(ex orm.Executor, bs ...*TokenCreate) *TokenCreateBulk {
+func NewTokenCreateBulk(ex velox.Executor, bs ...*TokenCreate) *TokenCreateBulk {
 	return &TokenCreateBulk{ex: ex, bs: bs}
 }
 
@@ -437,7 +437,7 @@ func (b *TokenCreateBulk) Exec(ctx context.Context) error {
 type TokenUpdate struct{ c orm.MutCore }
 
 // NewTokenUpdate returns a builder that updates the rows its predicates match.
-func NewTokenUpdate(ex orm.Executor) *TokenUpdate {
+func NewTokenUpdate(ex velox.Executor) *TokenUpdate {
 	return &TokenUpdate{c: orm.MutCore{M: &TokenMeta, Ex: ex}}
 }
 
@@ -503,7 +503,7 @@ func (b *TokenUpdate) SaveOne(ctx context.Context) (*Token, error) {
 type TokenDelete struct{ c orm.MutCore }
 
 // NewTokenDelete returns a builder that deletes the rows its predicates match.
-func NewTokenDelete(ex orm.Executor) *TokenDelete {
+func NewTokenDelete(ex velox.Executor) *TokenDelete {
 	return &TokenDelete{c: orm.MutCore{M: &TokenMeta, Ex: ex}}
 }
 
@@ -526,7 +526,7 @@ func (b *TokenDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete
 // QueryOwner queries the "owner" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Token) QueryOwner(ex orm.Executor) *UserQuery {
+func (e *Token) QueryOwner(ex velox.Executor) *UserQuery {
 	q := NewUserQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TokenMeta.Edges[0], e))
 	return q
@@ -565,8 +565,8 @@ var tokenOrderColumns = map[string]string{
 // TokenOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type TokenOrder struct {
-	Direction orm.OrderDirection `json:"direction"`
-	Field     token.OrderField   `json:"field"`
+	Direction velox.OrderDirection `json:"direction"`
+	Field     token.OrderField     `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -581,14 +581,14 @@ func (o *TokenOrder) Term() predicate.TokenOrderTerm {
 }
 
 // Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Token) Owner(ctx context.Context) (*User, error) {
 	v, err := e.Edges.OwnerOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryOwner(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryOwner(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }

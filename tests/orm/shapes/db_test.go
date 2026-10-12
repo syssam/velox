@@ -11,12 +11,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/compiler"
 	vgen "github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/dialect/sql/schema"
-	"github.com/syssam/velox/orm"
 
 	_ "modernc.org/sqlite"
 )
@@ -62,7 +62,7 @@ var dbSeq atomic.Int64
 // openDDL returns a handle over a fresh in-memory SQLite database with
 // every table of the schema created. Every call gets its own database, so
 // tests do not depend on each other or on -count.
-func openDDL(t *testing.T, mode ddl) *orm.DB {
+func openDDL(t *testing.T, mode ddl) *velox.DB {
 	t.Helper()
 	use(t)
 	name := strings.NewReplacer("/", "_", " ", "_", "#", "_").Replace(t.Name())
@@ -96,11 +96,11 @@ func openDDL(t *testing.T, mode ddl) *orm.DB {
 	m, err := schema.NewMigrate(drv)
 	require.NoError(t, err)
 	require.NoError(t, m.Create(context.Background(), tables...))
-	return orm.OpenDB(dialect.SQLite, drv.DB())
+	return velox.OpenDB(dialect.SQLite, drv.DB())
 }
 
 // open is openDDL with velox's own tables.
-func open(t *testing.T) *orm.DB {
+func open(t *testing.T) *velox.DB {
 	t.Helper()
 	return openDDL(t, ddlVelox)
 }
@@ -128,14 +128,14 @@ func ptr[T any](v T) *T { return &v }
 
 // rawExec runs a statement on the database behind db, for fixtures the ORM
 // cannot or must not write (a NULL in a column it would not leave NULL).
-func rawExec(t *testing.T, db *orm.DB, query string, args ...any) {
+func rawExec(t *testing.T, db *velox.DB, query string, args ...any) {
 	t.Helper()
 	_, err := db.SQL().ExecContext(context.Background(), query, args...)
 	require.NoError(t, err)
 }
 
 // rawValue reads one value straight from the database.
-func rawValue[T any](t *testing.T, db *orm.DB, query string, args ...any) T {
+func rawValue[T any](t *testing.T, db *velox.DB, query string, args ...any) T {
 	t.Helper()
 	var v T
 	require.NoError(t, db.SQL().QueryRowContext(context.Background(), query, args...).Scan(&v))

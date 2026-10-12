@@ -127,14 +127,14 @@ func linkPerson(dst any, es []any) {
 
 // PersonEdge is a row of a page of Person, with its cursor.
 type PersonEdge struct {
-	Node   *Person    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Person      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PersonConnection is one page of Person.
 type PersonConnection struct {
-	Edges    []*PersonEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*PersonEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -159,7 +159,7 @@ var PersonMeta = orm.Meta{
 type PersonQuery struct{ c orm.QueryCore }
 
 // NewPersonQuery returns a query of every Person.
-func NewPersonQuery(ex orm.Executor) *PersonQuery {
+func NewPersonQuery(ex velox.Executor) *PersonQuery {
 	return &PersonQuery{c: orm.QueryCore{M: &PersonMeta, Ex: ex}}
 }
 
@@ -304,7 +304,7 @@ func (q *PersonQuery) Iter(ctx context.Context) iter.Seq2[*Person, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PersonQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PersonConnection, error) {
+func (q *PersonQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PersonConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -345,7 +345,7 @@ func (q *PersonQuery) IDs(ctx context.Context) ([]int, error) {
 type PersonCreate struct{ c orm.MutCore }
 
 // NewPersonCreate returns a builder that creates a Person.
-func NewPersonCreate(ex orm.Executor) *PersonCreate {
+func NewPersonCreate(ex velox.Executor) *PersonCreate {
 	return &PersonCreate{c: orm.MutCore{M: &PersonMeta, Ex: ex}}
 }
 
@@ -393,7 +393,7 @@ func (b *PersonCreate) Exec(ctx context.Context) error {
 
 // PersonCreateBulk creates several Person rows with one statement.
 type PersonCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PersonCreate
 	n  int
 }
@@ -401,7 +401,7 @@ type PersonCreateBulk struct {
 // NewPersonCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPersonCreateBulk(ex orm.Executor, bs ...*PersonCreate) *PersonCreateBulk {
+func NewPersonCreateBulk(ex velox.Executor, bs ...*PersonCreate) *PersonCreateBulk {
 	return &PersonCreateBulk{ex: ex, bs: bs}
 }
 
@@ -454,7 +454,7 @@ func (b *PersonCreateBulk) Exec(ctx context.Context) error {
 type PersonUpdate struct{ c orm.MutCore }
 
 // NewPersonUpdate returns a builder that updates the rows its predicates match.
-func NewPersonUpdate(ex orm.Executor) *PersonUpdate {
+func NewPersonUpdate(ex velox.Executor) *PersonUpdate {
 	return &PersonUpdate{c: orm.MutCore{M: &PersonMeta, Ex: ex}}
 }
 
@@ -520,7 +520,7 @@ func (b *PersonUpdate) SaveOne(ctx context.Context) (*Person, error) {
 type PersonDelete struct{ c orm.MutCore }
 
 // NewPersonDelete returns a builder that deletes the rows its predicates match.
-func NewPersonDelete(ex orm.Executor) *PersonDelete {
+func NewPersonDelete(ex velox.Executor) *PersonDelete {
 	return &PersonDelete{c: orm.MutCore{M: &PersonMeta, Ex: ex}}
 }
 
@@ -543,7 +543,7 @@ func (b *PersonDelete) Exec(ctx context.Context) (int, error) { return b.c.Delet
 // QuerySpouse queries the "spouse" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Person) QuerySpouse(ex orm.Executor) *PersonQuery {
+func (e *Person) QuerySpouse(ex velox.Executor) *PersonQuery {
 	q := NewPersonQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PersonMeta.Edges[0], e))
 	return q
@@ -566,7 +566,7 @@ func (q *PersonQuery) WithSpouse(opts ...*PersonQuery) *PersonQuery {
 // QueryFriends queries the "friends" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Person) QueryFriends(ex orm.Executor) *PersonQuery {
+func (e *Person) QueryFriends(ex velox.Executor) *PersonQuery {
 	q := NewPersonQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PersonMeta.Edges[1], e))
 	return q
@@ -589,7 +589,7 @@ func (q *PersonQuery) WithFriends(opts ...*PersonQuery) *PersonQuery {
 // QueryFollowers queries the "followers" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Person) QueryFollowers(ex orm.Executor) *PersonQuery {
+func (e *Person) QueryFollowers(ex velox.Executor) *PersonQuery {
 	q := NewPersonQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PersonMeta.Edges[2], e))
 	return q
@@ -612,7 +612,7 @@ func (q *PersonQuery) WithFollowers(opts ...*PersonQuery) *PersonQuery {
 // QueryFollowing queries the "following" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Person) QueryFollowing(ex orm.Executor) *PersonQuery {
+func (e *Person) QueryFollowing(ex velox.Executor) *PersonQuery {
 	q := NewPersonQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PersonMeta.Edges[3], e))
 	return q

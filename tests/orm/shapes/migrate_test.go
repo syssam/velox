@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/migrate"
 )
 
@@ -43,7 +43,7 @@ func TestGeneratedMigrate(t *testing.T) {
 	raw, err := stdsql.Open("sqlite", fmt.Sprintf("file:migrate_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", dbSeq.Add(1)))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
-	db := orm.OpenDB(dialect.SQLite, raw)
+	db := velox.OpenDB(dialect.SQLite, raw)
 
 	// WriteTo prints the statements and runs none.
 	var plan bytes.Buffer

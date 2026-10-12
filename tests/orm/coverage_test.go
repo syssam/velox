@@ -299,7 +299,7 @@ func TestTx_SavepointAroundAMutation(t *testing.T) {
 	require.NoError(t, err)
 
 	var cerr *velox.ConstraintError
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		// The post row is inserted, then the join row fails.
 		_, err := client.Post.Create(tx).Set(post.Title.Set("ghost"), post.Content.Set("c"), post.Author.Set(ann.ID), post.Tags.Add(9999)).Save(ctx)
 		require.ErrorAs(t, err, &cerr)
@@ -322,7 +322,7 @@ func TestTx_SavepointAroundAMutation(t *testing.T) {
 	assert.Len(t, got[0].Edges.Tags, 1)
 
 	// A single-statement mutation opens no savepoint: nothing to undo.
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		_, err := client.User.UpdateByID(tx, ann.ID).Set(user.Age.Set(31)).SaveOne(ctx)
 		return err
 	}))
@@ -368,11 +368,11 @@ func TestQuerySQL(t *testing.T) {
 	_, _, err = client.User.Query(db).Select("no_such_column").SQL(ctx)
 	require.ErrorContains(t, err, `no column "no_such_column"`)
 	_, _, err = client.User.Query(nil).Select().SQL(ctx)
-	require.ErrorIs(t, err, orm.ErrNoExecutor)
+	require.ErrorIs(t, err, velox.ErrNoExecutor)
 
 	// Nothing ran: a handle whose database has no tables renders the
 	// statement all the same.
-	empty, err := orm.Open("sqlite", "file:sqlonly?mode=memory&_pragma=foreign_keys(1)")
+	empty, err := velox.Open("sqlite", "file:sqlonly?mode=memory&_pragma=foreign_keys(1)")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = empty.Close() })
 	query, _, err = client.User.Query(empty).Where(user.Age.GT(1)).Select().SQL(ctx)
@@ -402,7 +402,7 @@ func TestErrors_ConstraintKind(t *testing.T) {
 
 	// The same through an update and inside a transaction.
 	bob := newUser(t, db, "bob", 40)
-	err = db.RunTx(ctx, func(tx *orm.Tx) error {
+	err = db.RunTx(ctx, func(tx *velox.Tx) error {
 		_, err := client.User.UpdateByID(tx, bob.ID).Set(user.Email.Set("ann@example.com")).SaveOne(ctx)
 		return err
 	})
@@ -433,7 +433,7 @@ func TestIsRetryable_SerializationFailure(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = t2.Rollback() }()
 	var errs []error
-	for i, tx := range []*orm.Tx{t1, t2} {
+	for i, tx := range []*velox.Tx{t1, t2} {
 		_, err := client.User.Query(tx).Count(ctx)
 		require.NoError(t, err)
 		name := fmt.Sprintf("u%d", i)

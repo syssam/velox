@@ -26,6 +26,7 @@ import (
 func (g *generator) client() (map[string][]byte, error) {
 	im := newImports()
 	im.use(ormPath, "orm")
+	im.use(veloxPath, "velox")
 	modelPkg := im.use(g.cfg.Package+"/entity", "entity")
 	im.use(g.cfg.Package+"/predicate", "predicate")
 	ctxPkg := im.use("context", "context")
@@ -74,33 +75,33 @@ type %[1]s struct{}
 
 // Query returns a query of every %[2]s, to run on ex: a database handle or a
 // transaction.
-func (*%[1]s) Query(ex orm.Executor) *%[3]s.%[4]s { return %[3]s.%[5]s(ex) }
+func (*%[1]s) Query(ex velox.Executor) *%[3]s.%[4]s { return %[3]s.%[5]s(ex) }
 
 // Create returns a builder that creates a %[2]s.
-func (*%[1]s) Create(ex orm.Executor) *%[3]s.%[6]s { return %[3]s.%[7]s(ex) }
+func (*%[1]s) Create(ex velox.Executor) *%[3]s.%[6]s { return %[3]s.%[7]s(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*%[1]s) CreateBulk(ex orm.Executor, bs ...*%[3]s.%[6]s) *%[3]s.%[8]s { return %[3]s.%[9]s(ex, bs...) }
+func (*%[1]s) CreateBulk(ex velox.Executor, bs ...*%[3]s.%[6]s) *%[3]s.%[8]s { return %[3]s.%[9]s(ex, bs...) }
 
 // Update returns a builder that updates the %[2]s rows its conditions match.
-func (*%[1]s) Update(ex orm.Executor) *%[3]s.%[10]s { return %[3]s.%[11]s(ex) }
+func (*%[1]s) Update(ex velox.Executor) *%[3]s.%[10]s { return %[3]s.%[11]s(ex) }
 
 // Delete returns a builder that deletes the %[2]s rows its conditions match.
-func (*%[1]s) Delete(ex orm.Executor) *%[3]s.%[12]s { return %[3]s.%[13]s(ex) }
+func (*%[1]s) Delete(ex velox.Executor) *%[3]s.%[12]s { return %[3]s.%[13]s(ex) }
 
 // Get returns the %[2]s with the given id, or velox.ErrNotFound.
-func (c *%[1]s) Get(ctx %[14]s.Context, ex orm.Executor, id %[15]s) (*%[3]s.%[2]s, error) {
+func (c *%[1]s) Get(ctx %[14]s.Context, ex velox.Executor, id %[15]s) (*%[3]s.%[2]s, error) {
 	return c.Query(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the %[2]s with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *%[1]s) UpdateByID(ex orm.Executor, id %[15]s) *%[3]s.%[10]s {
+func (c *%[1]s) UpdateByID(ex velox.Executor, id %[15]s) *%[3]s.%[10]s {
 	return c.Update(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id}))
 }
 
 // DeleteByID deletes the %[2]s with the given id, or returns velox.ErrNotFound.
-func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex orm.Executor, id %[15]s) error {
+func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex velox.Executor, id %[15]s) error {
 	n, err := c.Delete(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = %[3]s.%[18]s.NotFound()
@@ -112,7 +113,7 @@ func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex orm.Executor, id %[15]s) error
 		if q := g.gql[e]; q != nil && q.Node {
 			nodes = append(nodes, e)
 			w(`// node is Get for an id of any type: see NodeTypes.
-func (c *%[1]s) node(ctx %[2]s.Context, ex orm.Executor, key any) (Noder, error) {
+func (c *%[1]s) node(ctx %[2]s.Context, ex velox.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[%[3]s](key)
 	if !ok {
 		return nil, %[5]s.%[4]s.NotFound()
@@ -148,7 +149,7 @@ type NodeType struct {
 	// the entity (its policy and interceptors apply), or velox.ErrNotFound. An
 	// id that is not of the type's id type is the id of no node of it; an
 	// integer of another integer type is the same id.
-	Get func(ctx %[1]s.Context, ex orm.Executor, id any) (Noder, error)
+	Get func(ctx %[1]s.Context, ex velox.Executor, id any) (Noder, error)
 }
 
 // NodeTypes returns the types of node, ordered by name: what a node(id:)

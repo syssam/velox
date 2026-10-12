@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -39,13 +40,13 @@ func ptrUserOrderTerm(v any, i int) any {
 // UserOrderTermEdge is a row of a page of UserOrderTerm, with its cursor.
 type UserOrderTermEdge struct {
 	Node   *UserOrderTerm `json:"node"`
-	Cursor orm.Cursor     `json:"cursor"`
+	Cursor velox.Cursor   `json:"cursor"`
 }
 
 // UserOrderTermConnection is one page of UserOrderTerm.
 type UserOrderTermConnection struct {
 	Edges    []*UserOrderTermEdge `json:"edges"`
-	PageInfo orm.PageInfo         `json:"pageInfo"`
+	PageInfo velox.PageInfo       `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var UserOrderTermMeta = orm.Meta{
 type UserOrderTermQuery struct{ c orm.QueryCore }
 
 // NewUserOrderTermQuery returns a query of every UserOrderTerm.
-func NewUserOrderTermQuery(ex orm.Executor) *UserOrderTermQuery {
+func NewUserOrderTermQuery(ex velox.Executor) *UserOrderTermQuery {
 	return &UserOrderTermQuery{c: orm.QueryCore{M: &UserOrderTermMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *UserOrderTermQuery) Iter(ctx context.Context) iter.Seq2[*UserOrderTerm,
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UserOrderTermQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UserOrderTermConnection, error) {
+func (q *UserOrderTermQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*UserOrderTermConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *UserOrderTermQuery) IDs(ctx context.Context) ([]int, error) {
 type UserOrderTermCreate struct{ c orm.MutCore }
 
 // NewUserOrderTermCreate returns a builder that creates a UserOrderTerm.
-func NewUserOrderTermCreate(ex orm.Executor) *UserOrderTermCreate {
+func NewUserOrderTermCreate(ex velox.Executor) *UserOrderTermCreate {
 	return &UserOrderTermCreate{c: orm.MutCore{M: &UserOrderTermMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *UserOrderTermCreate) Exec(ctx context.Context) error {
 
 // UserOrderTermCreateBulk creates several UserOrderTerm rows with one statement.
 type UserOrderTermCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*UserOrderTermCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type UserOrderTermCreateBulk struct {
 // NewUserOrderTermCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewUserOrderTermCreateBulk(ex orm.Executor, bs ...*UserOrderTermCreate) *UserOrderTermCreateBulk {
+func NewUserOrderTermCreateBulk(ex velox.Executor, bs ...*UserOrderTermCreate) *UserOrderTermCreateBulk {
 	return &UserOrderTermCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *UserOrderTermCreateBulk) Exec(ctx context.Context) error {
 type UserOrderTermUpdate struct{ c orm.MutCore }
 
 // NewUserOrderTermUpdate returns a builder that updates the rows its predicates match.
-func NewUserOrderTermUpdate(ex orm.Executor) *UserOrderTermUpdate {
+func NewUserOrderTermUpdate(ex velox.Executor) *UserOrderTermUpdate {
 	return &UserOrderTermUpdate{c: orm.MutCore{M: &UserOrderTermMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *UserOrderTermUpdate) SaveOne(ctx context.Context) (*UserOrderTerm, erro
 type UserOrderTermDelete struct{ c orm.MutCore }
 
 // NewUserOrderTermDelete returns a builder that deletes the rows its predicates match.
-func NewUserOrderTermDelete(ex orm.Executor) *UserOrderTermDelete {
+func NewUserOrderTermDelete(ex velox.Executor) *UserOrderTermDelete {
 	return &UserOrderTermDelete{c: orm.MutCore{M: &UserOrderTermMeta, Ex: ex}}
 }
 

@@ -133,14 +133,14 @@ func linkNode(dst any, es []any) {
 
 // NodeEdge is a row of a page of Node, with its cursor.
 type NodeEdge struct {
-	Node   *Node      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Node        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // NodeConnection is one page of Node.
 type NodeConnection struct {
-	Edges    []*NodeEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*NodeEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -165,7 +165,7 @@ var NodeMeta = orm.Meta{
 type NodeQuery struct{ c orm.QueryCore }
 
 // NewNodeQuery returns a query of every Node.
-func NewNodeQuery(ex orm.Executor) *NodeQuery {
+func NewNodeQuery(ex velox.Executor) *NodeQuery {
 	return &NodeQuery{c: orm.QueryCore{M: &NodeMeta, Ex: ex}}
 }
 
@@ -310,7 +310,7 @@ func (q *NodeQuery) Iter(ctx context.Context) iter.Seq2[*Node, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *NodeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*NodeConnection, error) {
+func (q *NodeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NodeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -351,7 +351,7 @@ func (q *NodeQuery) IDs(ctx context.Context) ([]int, error) {
 type NodeCreate struct{ c orm.MutCore }
 
 // NewNodeCreate returns a builder that creates a Node.
-func NewNodeCreate(ex orm.Executor) *NodeCreate {
+func NewNodeCreate(ex velox.Executor) *NodeCreate {
 	return &NodeCreate{c: orm.MutCore{M: &NodeMeta, Ex: ex}}
 }
 
@@ -399,7 +399,7 @@ func (b *NodeCreate) Exec(ctx context.Context) error {
 
 // NodeCreateBulk creates several Node rows with one statement.
 type NodeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*NodeCreate
 	n  int
 }
@@ -407,7 +407,7 @@ type NodeCreateBulk struct {
 // NewNodeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewNodeCreateBulk(ex orm.Executor, bs ...*NodeCreate) *NodeCreateBulk {
+func NewNodeCreateBulk(ex velox.Executor, bs ...*NodeCreate) *NodeCreateBulk {
 	return &NodeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -460,7 +460,7 @@ func (b *NodeCreateBulk) Exec(ctx context.Context) error {
 type NodeUpdate struct{ c orm.MutCore }
 
 // NewNodeUpdate returns a builder that updates the rows its predicates match.
-func NewNodeUpdate(ex orm.Executor) *NodeUpdate {
+func NewNodeUpdate(ex velox.Executor) *NodeUpdate {
 	return &NodeUpdate{c: orm.MutCore{M: &NodeMeta, Ex: ex}}
 }
 
@@ -526,7 +526,7 @@ func (b *NodeUpdate) SaveOne(ctx context.Context) (*Node, error) {
 type NodeDelete struct{ c orm.MutCore }
 
 // NewNodeDelete returns a builder that deletes the rows its predicates match.
-func NewNodeDelete(ex orm.Executor) *NodeDelete {
+func NewNodeDelete(ex velox.Executor) *NodeDelete {
 	return &NodeDelete{c: orm.MutCore{M: &NodeMeta, Ex: ex}}
 }
 
@@ -549,7 +549,7 @@ func (b *NodeDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(
 // QueryParent queries the "parent" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Node) QueryParent(ex orm.Executor) *NodeQuery {
+func (e *Node) QueryParent(ex velox.Executor) *NodeQuery {
 	q := NewNodeQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[0], e))
 	return q
@@ -572,7 +572,7 @@ func (q *NodeQuery) WithParent(opts ...*NodeQuery) *NodeQuery {
 // QueryChildren queries the "children" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Node) QueryChildren(ex orm.Executor) *NodeQuery {
+func (e *Node) QueryChildren(ex velox.Executor) *NodeQuery {
 	q := NewNodeQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[1], e))
 	return q
@@ -595,7 +595,7 @@ func (q *NodeQuery) WithChildren(opts ...*NodeQuery) *NodeQuery {
 // QueryPrev queries the "prev" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Node) QueryPrev(ex orm.Executor) *NodeQuery {
+func (e *Node) QueryPrev(ex velox.Executor) *NodeQuery {
 	q := NewNodeQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[2], e))
 	return q
@@ -618,7 +618,7 @@ func (q *NodeQuery) WithPrev(opts ...*NodeQuery) *NodeQuery {
 // QueryNext queries the "next" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Node) QueryNext(ex orm.Executor) *NodeQuery {
+func (e *Node) QueryNext(ex velox.Executor) *NodeQuery {
 	q := NewNodeQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[3], e))
 	return q

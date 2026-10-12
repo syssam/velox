@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrMigrate(v any, i int) any {
 
 // MigrateEdge is a row of a page of Migrate, with its cursor.
 type MigrateEdge struct {
-	Node   *Migrate   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Migrate     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // MigrateConnection is one page of Migrate.
 type MigrateConnection struct {
 	Edges    []*MigrateEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var MigrateMeta = orm.Meta{
 type MigrateQuery struct{ c orm.QueryCore }
 
 // NewMigrateQuery returns a query of every Migrate.
-func NewMigrateQuery(ex orm.Executor) *MigrateQuery {
+func NewMigrateQuery(ex velox.Executor) *MigrateQuery {
 	return &MigrateQuery{c: orm.QueryCore{M: &MigrateMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *MigrateQuery) Iter(ctx context.Context) iter.Seq2[*Migrate, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MigrateQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MigrateConnection, error) {
+func (q *MigrateQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*MigrateConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *MigrateQuery) IDs(ctx context.Context) ([]int, error) {
 type MigrateCreate struct{ c orm.MutCore }
 
 // NewMigrateCreate returns a builder that creates a Migrate.
-func NewMigrateCreate(ex orm.Executor) *MigrateCreate {
+func NewMigrateCreate(ex velox.Executor) *MigrateCreate {
 	return &MigrateCreate{c: orm.MutCore{M: &MigrateMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *MigrateCreate) Exec(ctx context.Context) error {
 
 // MigrateCreateBulk creates several Migrate rows with one statement.
 type MigrateCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*MigrateCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type MigrateCreateBulk struct {
 // NewMigrateCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewMigrateCreateBulk(ex orm.Executor, bs ...*MigrateCreate) *MigrateCreateBulk {
+func NewMigrateCreateBulk(ex velox.Executor, bs ...*MigrateCreate) *MigrateCreateBulk {
 	return &MigrateCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *MigrateCreateBulk) Exec(ctx context.Context) error {
 type MigrateUpdate struct{ c orm.MutCore }
 
 // NewMigrateUpdate returns a builder that updates the rows its predicates match.
-func NewMigrateUpdate(ex orm.Executor) *MigrateUpdate {
+func NewMigrateUpdate(ex velox.Executor) *MigrateUpdate {
 	return &MigrateUpdate{c: orm.MutCore{M: &MigrateMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *MigrateUpdate) SaveOne(ctx context.Context) (*Migrate, error) {
 type MigrateDelete struct{ c orm.MutCore }
 
 // NewMigrateDelete returns a builder that deletes the rows its predicates match.
-func NewMigrateDelete(ex orm.Executor) *MigrateDelete {
+func NewMigrateDelete(ex velox.Executor) *MigrateDelete {
 	return &MigrateDelete{c: orm.MutCore{M: &MigrateMeta, Ex: ex}}
 }
 

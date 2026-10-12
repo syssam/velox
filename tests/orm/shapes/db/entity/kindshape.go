@@ -85,14 +85,14 @@ func linkKindShape(dst any, es []any) {
 
 // KindShapeEdge is a row of a page of KindShape, with its cursor.
 type KindShapeEdge struct {
-	Node   *KindShape `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *KindShape   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // KindShapeConnection is one page of KindShape.
 type KindShapeConnection struct {
 	Edges    []*KindShapeEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -117,7 +117,7 @@ var KindShapeMeta = orm.Meta{
 type KindShapeQuery struct{ c orm.QueryCore }
 
 // NewKindShapeQuery returns a query of every KindShape.
-func NewKindShapeQuery(ex orm.Executor) *KindShapeQuery {
+func NewKindShapeQuery(ex velox.Executor) *KindShapeQuery {
 	return &KindShapeQuery{c: orm.QueryCore{M: &KindShapeMeta, Ex: ex}}
 }
 
@@ -265,7 +265,7 @@ func (q *KindShapeQuery) Iter(ctx context.Context) iter.Seq2[*KindShape, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *KindShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*KindShapeConnection, error) {
+func (q *KindShapeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*KindShapeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -306,7 +306,7 @@ func (q *KindShapeQuery) IDs(ctx context.Context) ([]int, error) {
 type KindShapeCreate struct{ c orm.MutCore }
 
 // NewKindShapeCreate returns a builder that creates a KindShape.
-func NewKindShapeCreate(ex orm.Executor) *KindShapeCreate {
+func NewKindShapeCreate(ex velox.Executor) *KindShapeCreate {
 	return &KindShapeCreate{c: orm.MutCore{M: &KindShapeMeta, Ex: ex}}
 }
 
@@ -354,7 +354,7 @@ func (b *KindShapeCreate) Exec(ctx context.Context) error {
 
 // KindShapeCreateBulk creates several KindShape rows with one statement.
 type KindShapeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*KindShapeCreate
 	n  int
 }
@@ -362,7 +362,7 @@ type KindShapeCreateBulk struct {
 // NewKindShapeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewKindShapeCreateBulk(ex orm.Executor, bs ...*KindShapeCreate) *KindShapeCreateBulk {
+func NewKindShapeCreateBulk(ex velox.Executor, bs ...*KindShapeCreate) *KindShapeCreateBulk {
 	return &KindShapeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -415,7 +415,7 @@ func (b *KindShapeCreateBulk) Exec(ctx context.Context) error {
 type KindShapeUpdate struct{ c orm.MutCore }
 
 // NewKindShapeUpdate returns a builder that updates the rows its predicates match.
-func NewKindShapeUpdate(ex orm.Executor) *KindShapeUpdate {
+func NewKindShapeUpdate(ex velox.Executor) *KindShapeUpdate {
 	return &KindShapeUpdate{c: orm.MutCore{M: &KindShapeMeta, Ex: ex}}
 }
 
@@ -481,7 +481,7 @@ func (b *KindShapeUpdate) SaveOne(ctx context.Context) (*KindShape, error) {
 type KindShapeDelete struct{ c orm.MutCore }
 
 // NewKindShapeDelete returns a builder that deletes the rows its predicates match.
-func NewKindShapeDelete(ex orm.Executor) *KindShapeDelete {
+func NewKindShapeDelete(ex velox.Executor) *KindShapeDelete {
 	return &KindShapeDelete{c: orm.MutCore{M: &KindShapeMeta, Ex: ex}}
 }
 
@@ -504,7 +504,7 @@ func (b *KindShapeDelete) Exec(ctx context.Context) (int, error) { return b.c.De
 // QueryKind queries the "kind" neighbors of e, on ex.
 //
 //go:noinline
-func (e *KindShape) QueryKind(ex orm.Executor) *KindQuery {
+func (e *KindShape) QueryKind(ex velox.Executor) *KindQuery {
 	q := NewKindQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KindShapeMeta.Edges[0], e))
 	return q

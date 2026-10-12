@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrEdge(v any, i int) any {
 
 // EdgeEdge is a row of a page of Edge, with its cursor.
 type EdgeEdge struct {
-	Node   *Edge      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Edge        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // EdgeConnection is one page of Edge.
 type EdgeConnection struct {
-	Edges    []*EdgeEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*EdgeEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var EdgeMeta = orm.Meta{
 type EdgeQuery struct{ c orm.QueryCore }
 
 // NewEdgeQuery returns a query of every Edge.
-func NewEdgeQuery(ex orm.Executor) *EdgeQuery {
+func NewEdgeQuery(ex velox.Executor) *EdgeQuery {
 	return &EdgeQuery{c: orm.QueryCore{M: &EdgeMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *EdgeQuery) Iter(ctx context.Context) iter.Seq2[*Edge, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EdgeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EdgeConnection, error) {
+func (q *EdgeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*EdgeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *EdgeQuery) IDs(ctx context.Context) ([]int, error) {
 type EdgeCreate struct{ c orm.MutCore }
 
 // NewEdgeCreate returns a builder that creates a Edge.
-func NewEdgeCreate(ex orm.Executor) *EdgeCreate {
+func NewEdgeCreate(ex velox.Executor) *EdgeCreate {
 	return &EdgeCreate{c: orm.MutCore{M: &EdgeMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *EdgeCreate) Exec(ctx context.Context) error {
 
 // EdgeCreateBulk creates several Edge rows with one statement.
 type EdgeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*EdgeCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type EdgeCreateBulk struct {
 // NewEdgeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewEdgeCreateBulk(ex orm.Executor, bs ...*EdgeCreate) *EdgeCreateBulk {
+func NewEdgeCreateBulk(ex velox.Executor, bs ...*EdgeCreate) *EdgeCreateBulk {
 	return &EdgeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *EdgeCreateBulk) Exec(ctx context.Context) error {
 type EdgeUpdate struct{ c orm.MutCore }
 
 // NewEdgeUpdate returns a builder that updates the rows its predicates match.
-func NewEdgeUpdate(ex orm.Executor) *EdgeUpdate {
+func NewEdgeUpdate(ex velox.Executor) *EdgeUpdate {
 	return &EdgeUpdate{c: orm.MutCore{M: &EdgeMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *EdgeUpdate) SaveOne(ctx context.Context) (*Edge, error) {
 type EdgeDelete struct{ c orm.MutCore }
 
 // NewEdgeDelete returns a builder that deletes the rows its predicates match.
-func NewEdgeDelete(ex orm.Executor) *EdgeDelete {
+func NewEdgeDelete(ex velox.Executor) *EdgeDelete {
 	return &EdgeDelete{c: orm.MutCore{M: &EdgeMeta, Ex: ex}}
 }
 

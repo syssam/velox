@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type DefaultShapeClient struct{}
 
 // Query returns a query of every DefaultShape, to run on ex: a database handle or a
 // transaction.
-func (*DefaultShapeClient) Query(ex orm.Executor) *entity.DefaultShapeQuery {
+func (*DefaultShapeClient) Query(ex velox.Executor) *entity.DefaultShapeQuery {
 	return entity.NewDefaultShapeQuery(ex)
 }
 
 // Create returns a builder that creates a DefaultShape.
-func (*DefaultShapeClient) Create(ex orm.Executor) *entity.DefaultShapeCreate {
+func (*DefaultShapeClient) Create(ex velox.Executor) *entity.DefaultShapeCreate {
 	return entity.NewDefaultShapeCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*DefaultShapeClient) CreateBulk(ex orm.Executor, bs ...*entity.DefaultShapeCreate) *entity.DefaultShapeCreateBulk {
+func (*DefaultShapeClient) CreateBulk(ex velox.Executor, bs ...*entity.DefaultShapeCreate) *entity.DefaultShapeCreateBulk {
 	return entity.NewDefaultShapeCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the DefaultShape rows its conditions match.
-func (*DefaultShapeClient) Update(ex orm.Executor) *entity.DefaultShapeUpdate {
+func (*DefaultShapeClient) Update(ex velox.Executor) *entity.DefaultShapeUpdate {
 	return entity.NewDefaultShapeUpdate(ex)
 }
 
 // Delete returns a builder that deletes the DefaultShape rows its conditions match.
-func (*DefaultShapeClient) Delete(ex orm.Executor) *entity.DefaultShapeDelete {
+func (*DefaultShapeClient) Delete(ex velox.Executor) *entity.DefaultShapeDelete {
 	return entity.NewDefaultShapeDelete(ex)
 }
 
 // Get returns the DefaultShape with the given id, or velox.ErrNotFound.
-func (c *DefaultShapeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.DefaultShape, error) {
+func (c *DefaultShapeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.DefaultShape, error) {
 	return c.Query(ex).Where(predicate.DefaultShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the DefaultShape with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *DefaultShapeClient) UpdateByID(ex orm.Executor, id int) *entity.DefaultShapeUpdate {
+func (c *DefaultShapeClient) UpdateByID(ex velox.Executor, id int) *entity.DefaultShapeUpdate {
 	return c.Update(ex).Where(predicate.DefaultShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the DefaultShape with the given id, or returns velox.ErrNotFound.
-func (c *DefaultShapeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *DefaultShapeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.DefaultShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.DefaultShapeMeta.NotFound()

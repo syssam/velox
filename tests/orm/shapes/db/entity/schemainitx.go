@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrSchemainit(v any, i int) any {
 
 // SchemainitEdge is a row of a page of Schemainit, with its cursor.
 type SchemainitEdge struct {
-	Node   *Schemainit `json:"node"`
-	Cursor orm.Cursor  `json:"cursor"`
+	Node   *Schemainit  `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // SchemainitConnection is one page of Schemainit.
 type SchemainitConnection struct {
 	Edges    []*SchemainitEdge `json:"edges"`
-	PageInfo orm.PageInfo      `json:"pageInfo"`
+	PageInfo velox.PageInfo    `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var SchemainitMeta = orm.Meta{
 type SchemainitQuery struct{ c orm.QueryCore }
 
 // NewSchemainitQuery returns a query of every Schemainit.
-func NewSchemainitQuery(ex orm.Executor) *SchemainitQuery {
+func NewSchemainitQuery(ex velox.Executor) *SchemainitQuery {
 	return &SchemainitQuery{c: orm.QueryCore{M: &SchemainitMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *SchemainitQuery) Iter(ctx context.Context) iter.Seq2[*Schemainit, error
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *SchemainitQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*SchemainitConnection, error) {
+func (q *SchemainitQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*SchemainitConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *SchemainitQuery) IDs(ctx context.Context) ([]int, error) {
 type SchemainitCreate struct{ c orm.MutCore }
 
 // NewSchemainitCreate returns a builder that creates a Schemainit.
-func NewSchemainitCreate(ex orm.Executor) *SchemainitCreate {
+func NewSchemainitCreate(ex velox.Executor) *SchemainitCreate {
 	return &SchemainitCreate{c: orm.MutCore{M: &SchemainitMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *SchemainitCreate) Exec(ctx context.Context) error {
 
 // SchemainitCreateBulk creates several Schemainit rows with one statement.
 type SchemainitCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*SchemainitCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type SchemainitCreateBulk struct {
 // NewSchemainitCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewSchemainitCreateBulk(ex orm.Executor, bs ...*SchemainitCreate) *SchemainitCreateBulk {
+func NewSchemainitCreateBulk(ex velox.Executor, bs ...*SchemainitCreate) *SchemainitCreateBulk {
 	return &SchemainitCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *SchemainitCreateBulk) Exec(ctx context.Context) error {
 type SchemainitUpdate struct{ c orm.MutCore }
 
 // NewSchemainitUpdate returns a builder that updates the rows its predicates match.
-func NewSchemainitUpdate(ex orm.Executor) *SchemainitUpdate {
+func NewSchemainitUpdate(ex velox.Executor) *SchemainitUpdate {
 	return &SchemainitUpdate{c: orm.MutCore{M: &SchemainitMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *SchemainitUpdate) SaveOne(ctx context.Context) (*Schemainit, error) {
 type SchemainitDelete struct{ c orm.MutCore }
 
 // NewSchemainitDelete returns a builder that deletes the rows its predicates match.
-func NewSchemainitDelete(ex orm.Executor) *SchemainitDelete {
+func NewSchemainitDelete(ex velox.Executor) *SchemainitDelete {
 	return &SchemainitDelete{c: orm.MutCore{M: &SchemainitMeta, Ex: ex}}
 }
 

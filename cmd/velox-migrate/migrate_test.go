@@ -118,7 +118,7 @@ next:
 	}
 	// A few shapes worth pinning: they are what a reader of the result sees.
 	for _, want := range []string{
-		"Client *orm.DB", // the embedded client keeps its field name
+		"Client *velox.DB", // the embedded client keeps its field name
 		"db.User.Create(s.Client).",
 		"user.Nickname.SetNillable(nick),", // setters joined into one Set
 		"return predicate.User{}",          // a nil predicate
@@ -131,7 +131,7 @@ next:
 		".OrderBy(orderBy.Term()).Where(where.P()).Paginate(ctx, after, first, nil, nil)",
 		"s.Client.Begin(ctx)",
 		"moveAll(ctx, tx, from, to)", // a client passed as a value is the handle
-		"posts orm.Executor",
+		"posts velox.Executor",
 		"WithPosts(db.Post.Query(nil).Where(post.Title.HasPrefix(prefix)))",
 		"func roleOf(s string) user.RoleEnum { return user.RoleEnum(s) }",
 		`user.ModelName + ":" + string(u.Role)`,
@@ -158,7 +158,7 @@ next:
 		"if p := idIn(&user.ID, ids...); !orm.IsZero(p) {", // a column passed as a value
 		"titled[predicate.Post]{Text: &post.Title}",
 		"var rename = func(b *entity.UserUpdate, v string) *entity.UserUpdate {", // a method expression
-		"return u.QueryPosts(orm.ExecutorFrom(ctx)).Count(ctx)",                  // an entity handed over: the context's handle
+		"return u.QueryPosts(velox.ExecutorFrom(ctx)).Count(ctx)",                // an entity handed over: the context's handle
 		".OrderBy(user.Name.Asc()).Columns(user.ColumnName).All(ctx)",            // entities with some columns
 	} {
 		if !strings.Contains(string(migrated), want) {
@@ -296,8 +296,8 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		`return &velox.ValidationError{Entity: "User", Field: "name", Name: "name", Err: errors.New("x")}`,
 		// The driver under a transaction; the handle of a context.
 		`return tx.Driver().Exec(ctx, "SELECT 1", []any{key}, nil)`,
-		"ctx = orm.WithExecutor(ctx, c) ctx = orm.WithExecutor(ctx, tx)",
-		"return orm.TxFrom(ctx) != nil && orm.ExecutorFrom(ctx) != nil",
+		"ctx = velox.WithExecutor(ctx, c) ctx = velox.WithExecutor(ctx, tx)",
+		"return velox.TxFrom(ctx) != nil && velox.ExecutorFrom(ctx) != nil",
 		// Order terms in a variable.
 		"order := func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnCreatedAt)), sql.Desc(s.C(user.ColumnName))) } return db.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(order))).First(ctx)",
 		"byAge := func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C(user.ColumnAge))) } return db.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(byAge))).First(ctx)",
@@ -309,18 +309,18 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// The where input's own additions, and Filter.
 		"where.Predicates = append(where.Predicates, user.Age.GT(1)) return where.P(), error(nil)",
 		// A client that is only queried on.
-		"func countUsers(ctx context.Context, c orm.Executor) (int, error) {",
-		"func countIn(ctx context.Context, tx *orm.Tx) (int, error) { return countUsers(ctx, tx) }",
-		"func begins(ctx context.Context, c *orm.DB) error {",
-		"func countIfAny(ctx context.Context, c *orm.DB) (int, error) {",
+		"func countUsers(ctx context.Context, c velox.Executor) (int, error) {",
+		"func countIn(ctx context.Context, tx *velox.Tx) (int, error) { return countUsers(ctx, tx) }",
+		"func begins(ctx context.Context, c *velox.DB) error {",
+		"func countIfAny(ctx context.Context, c *velox.DB) (int, error) {",
 		// An option kept in a variable shapes the query it is given.
-		"func loadWith(ctx context.Context, c orm.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
+		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",
 		"Owner orm.OrderedColumn[int, P]", // every column can be asked IsNil
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
-		"func tables(ctx context.Context, c *orm.DB) error { return migrate.Create(ctx, c) }",
+		"func tables(ctx context.Context, c *velox.DB) error { return migrate.Create(ctx, c) }",
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
-		"return orm.First(db.User.Query(c).Limit(1).IDs(ctx))",
+		"return velox.First(db.User.Query(c).Limit(1).IDs(ctx))",
 		"return db.User.Query(c).ForUpdate(orm.SkipLocked).All(ctx)",
 		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(sql.OrderByField(user.ColumnNickname, sql.OrderAsc(), sql.OrderNullsFirst()).ToFunc())), user.ID.Asc()).All(ctx)",
 		"return who.QueryPosts(c).All(ctx)",
@@ -329,16 +329,16 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func validPointer(r *user.RoleEnum) bool { return slicespkg.Contains(user.RoleValues(), *r) }",
 		"func isRole(r user.RoleEnum) bool { return slicespkg.Contains(user.RoleValues(), r) }",
 		"func anyOfThem[Q exister](ctx context.Context, q Q) (bool, error) { return q.Exists(ctx) }",
-		`func opened(dsn string) (*orm.DB, error) { return orm.Open("sqlite", dsn) }`,
+		`func opened(dsn string) (*velox.DB, error) { return velox.Open("sqlite", dsn) }`,
 		// The start of a query as a value.
-		"func starter(c *orm.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",
+		"func starter(c *velox.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",
 		// Some columns of an eager load's neighbors.
 		"WithAuthor(db.User.Query(nil).Columns(user.ColumnName)).All(ctx)",
 		// Conditions that are not predicate types keep the library's combinator.
 		"func plain(fs ...func(*sql.Selector)) func(*sql.Selector) { return sql.AndPredicates(fs...) }",
 		// Deferred: still later.
-		"defer func() { orm.Must(db.User.Update(c).Set(user.Age.Set(0)).Exec(ctx)) }()",
-		`go func() { orm.Must(db.User.Create(c).Set(user.Name.Set("x")).Save(ctx)) }()`,
+		"defer func() { velox.Must(db.User.Update(c).Set(user.Age.Set(0)).Exec(ctx)) }()",
+		`go func() { velox.Must(db.User.Create(c).Set(user.Name.Set("x")).Save(ctx)) }()`,
 		// The last order; no order.
 		"return db.Post.Query(c).OrderBy(b.Term()).Paginate(ctx, nil, nil, nil, nil) //",
 		"return db.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) }",
@@ -383,7 +383,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 			t.Errorf("the migrated file contains %q: a handle the text does not settle", text)
 		}
 	}
-	if n := strings.Count(flat, ".QueryPosts(orm.ExecutorFrom(ctx))"); n != 9 {
+	if n := strings.Count(flat, ".QueryPosts(velox.ExecutorFrom(ctx))"); n != 9 {
 		t.Errorf("%d edge queries were given the context's handle, want 9", n)
 	}
 	// And one the text does settle: read on a field of the receiver, kept

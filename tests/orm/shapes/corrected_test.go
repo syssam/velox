@@ -307,7 +307,7 @@ func TestEdges_QueryNeighbourIsCurrent(t *testing.T) {
 	_, err = (&entity.Article{AuthorID: l.ann.ID}).QueryAuthor(db).Only(ctx)
 	assert.ErrorIs(t, err, velox.ErrNotFound, "the key in the struct is not consulted")
 	// Inside a transaction it sees the transaction's write.
-	_ = db.RunTx(ctx, func(tx *orm.Tx) error {
+	_ = db.RunTx(ctx, func(tx *velox.Tx) error {
 		must(client.Article.Update(tx).Set(article.Author.Set(l.dee.ID)).Where(article.ID.EQ(l.a1.ID)).Exec(ctx))
 		assert.Equal(t, "dee", must(l.a1.QueryAuthor(tx).Only(ctx)).Name)
 		return errors.New("roll back")
@@ -439,7 +439,7 @@ func TestThrough_AddAppliesJoinEntityDefaults(t *testing.T) {
 	must(client.Course.Update(db).Set(course.Students.Clear()).Where(course.ID.EQ(c3.ID)).Exec(ctx))
 	assert.Equal(t, 4, must(client.Enrollment.Query(db).Count(ctx)))
 	// Inside a transaction that rolls back.
-	_ = db.RunTx(ctx, func(tx *orm.Tx) error {
+	_ = db.RunTx(ctx, func(tx *velox.Tx) error {
 		must(client.Student.Update(tx).Set(student.Courses.Add(c3.ID)).Where(student.ID.EQ(s.ID)).Exec(ctx))
 		assert.Equal(t, 5, must(client.Enrollment.Query(tx).Count(ctx)))
 		return errors.New("roll back")
@@ -459,7 +459,7 @@ func TestBare_BulkCreateInsertsEveryRow(t *testing.T) {
 	require.NoError(t, client.Bare.CreateBulk(db, client.Bare.Create(db), client.Bare.Create(db)).Exec(ctx))
 	assert.Equal(t, 5, must(client.Bare.Query(db).Count(ctx)))
 	// All or nothing inside a transaction.
-	_ = db.RunTx(ctx, func(tx *orm.Tx) error {
+	_ = db.RunTx(ctx, func(tx *velox.Tx) error {
 		must(client.Bare.CreateBulk(tx, client.Bare.Create(tx), client.Bare.Create(tx)).Save(ctx))
 		return errors.New("roll back")
 	})
@@ -781,7 +781,7 @@ func TestTx_FailedMutationLeavesNothingBehind(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
 	l := library(t, db)
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		_, err := client.Article.Create(tx).Set(article.Title.Set("ghost"), article.Author.Set(l.ann.ID), article.Topics.Add(9999)).Save(ctx)
 		require.True(t, velox.IsConstraintError(err), "got %v", err)
 		_, err = client.Article.Update(tx).Set(article.Title.Set("half"), article.Topics.Add(9999)).Where(article.ID.EQ(l.a2.ID)).Exec(ctx)
@@ -823,7 +823,7 @@ func TestPaginate_NullInAFieldThatIsNotAPointer(t *testing.T) {
 	two := 2
 	for _, term := range []predicate.GadgetOrderTerm{gadget.OwnerID.Asc(), gadget.OwnerID.Desc()} {
 		var got []int
-		var after *orm.Cursor
+		var after *velox.Cursor
 		for page := 0; page < 10; page++ {
 			conn := must(client.Gadget.Query(db).OrderBy(term).Paginate(ctx, after, &two, nil, nil))
 			for _, e := range conn.Edges {
@@ -836,7 +836,7 @@ func TestPaginate_NullInAFieldThatIsNotAPointer(t *testing.T) {
 		}
 		assert.ElementsMatch(t, want, got, "forward, descending=%v: the walk must serve every row once", term.Desc)
 		got = nil
-		var before *orm.Cursor
+		var before *velox.Cursor
 		for page := 0; page < 10; page++ {
 			conn := must(client.Gadget.Query(db).OrderBy(term).Paginate(ctx, nil, nil, before, &two))
 			for _, e := range conn.Edges {
@@ -868,7 +868,7 @@ func TestPaginate_NullWhereTheSchemaHasNone(t *testing.T) {
 	one := 1
 	for _, term := range []predicate.ScalarOrderTerm{scalar.IntOpt.Asc(), scalar.IntOpt.Desc(), scalar.StringOpt.Asc(), scalar.TimeOpt.Desc()} {
 		var got []int
-		var after *orm.Cursor
+		var after *velox.Cursor
 		for page := 0; page < 10; page++ {
 			conn, err := client.Scalar.Query(db).OrderBy(term).Paginate(ctx, after, &one, nil, nil)
 			require.NoError(t, err, "page %d of %+v", page, term)

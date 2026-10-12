@@ -112,14 +112,14 @@ func linkTag(dst any, es []any) {
 
 // TagEdge is a row of a page of Tag, with its cursor.
 type TagEdge struct {
-	Node   *Tag       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Tag         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // TagConnection is one page of Tag.
 type TagConnection struct {
-	Edges    []*TagEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*TagEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -146,7 +146,9 @@ var TagMeta = orm.Meta{
 type TagQuery struct{ c orm.QueryCore }
 
 // NewTagQuery returns a query of every Tag.
-func NewTagQuery(ex orm.Executor) *TagQuery { return &TagQuery{c: orm.QueryCore{M: &TagMeta, Ex: ex}} }
+func NewTagQuery(ex velox.Executor) *TagQuery {
+	return &TagQuery{c: orm.QueryCore{M: &TagMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -289,7 +291,7 @@ func (q *TagQuery) Iter(ctx context.Context) iter.Seq2[*Tag, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TagQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TagConnection, error) {
+func (q *TagQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TagConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -330,7 +332,9 @@ func (q *TagQuery) IDs(ctx context.Context) ([]int, error) {
 type TagCreate struct{ c orm.MutCore }
 
 // NewTagCreate returns a builder that creates a Tag.
-func NewTagCreate(ex orm.Executor) *TagCreate { return &TagCreate{c: orm.MutCore{M: &TagMeta, Ex: ex}} }
+func NewTagCreate(ex velox.Executor) *TagCreate {
+	return &TagCreate{c: orm.MutCore{M: &TagMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -376,7 +380,7 @@ func (b *TagCreate) Exec(ctx context.Context) error {
 
 // TagCreateBulk creates several Tag rows with one statement.
 type TagCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*TagCreate
 	n  int
 }
@@ -384,7 +388,7 @@ type TagCreateBulk struct {
 // NewTagCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewTagCreateBulk(ex orm.Executor, bs ...*TagCreate) *TagCreateBulk {
+func NewTagCreateBulk(ex velox.Executor, bs ...*TagCreate) *TagCreateBulk {
 	return &TagCreateBulk{ex: ex, bs: bs}
 }
 
@@ -437,7 +441,9 @@ func (b *TagCreateBulk) Exec(ctx context.Context) error {
 type TagUpdate struct{ c orm.MutCore }
 
 // NewTagUpdate returns a builder that updates the rows its predicates match.
-func NewTagUpdate(ex orm.Executor) *TagUpdate { return &TagUpdate{c: orm.MutCore{M: &TagMeta, Ex: ex}} }
+func NewTagUpdate(ex velox.Executor) *TagUpdate {
+	return &TagUpdate{c: orm.MutCore{M: &TagMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -501,7 +507,9 @@ func (b *TagUpdate) SaveOne(ctx context.Context) (*Tag, error) {
 type TagDelete struct{ c orm.MutCore }
 
 // NewTagDelete returns a builder that deletes the rows its predicates match.
-func NewTagDelete(ex orm.Executor) *TagDelete { return &TagDelete{c: orm.MutCore{M: &TagMeta, Ex: ex}} }
+func NewTagDelete(ex velox.Executor) *TagDelete {
+	return &TagDelete{c: orm.MutCore{M: &TagMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //
@@ -522,7 +530,7 @@ func (b *TagDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(c
 // QueryPosts queries the "posts" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Tag) QueryPosts(ex orm.Executor) *PostQuery {
+func (e *Tag) QueryPosts(ex velox.Executor) *PostQuery {
 	q := NewPostQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TagMeta.Edges[0], e))
 	return q
@@ -545,7 +553,7 @@ func (q *TagQuery) WithPosts(opts ...*PostQuery) *TagQuery {
 // QueryParent queries the "parent" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Tag) QueryParent(ex orm.Executor) *TagQuery {
+func (e *Tag) QueryParent(ex velox.Executor) *TagQuery {
 	q := NewTagQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TagMeta.Edges[1], e))
 	return q
@@ -568,7 +576,7 @@ func (q *TagQuery) WithParent(opts ...*TagQuery) *TagQuery {
 // QueryChildren queries the "children" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Tag) QueryChildren(ex orm.Executor) *TagQuery {
+func (e *Tag) QueryChildren(ex velox.Executor) *TagQuery {
 	q := NewTagQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TagMeta.Edges[2], e))
 	return q
@@ -602,8 +610,8 @@ var tagOrderColumns = map[string]string{
 // TagOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type TagOrder struct {
-	Direction orm.OrderDirection `json:"direction"`
-	Field     tag.OrderField     `json:"field"`
+	Direction velox.OrderDirection `json:"direction"`
+	Field     tag.OrderField       `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -618,12 +626,12 @@ func (o *TagOrder) Term() predicate.TagOrderTerm {
 }
 
 // Posts resolves the "posts" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).
+// neighbors, queried on the handle of the context (velox.WithExecutor).
 // where is a *filter.PostWhereInput, or nil.
 //
 //go:noinline
-func (e *Tag) Posts(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *PostOrder, where interface{ P() predicate.Post }) (*PostConnection, error) {
-	q := e.QueryPosts(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+func (e *Tag) Posts(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *PostOrder, where interface{ P() predicate.Post }) (*PostConnection, error) {
+	q := e.QueryPosts(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
 	if where != nil {
 		q.Where(where.P())
 	}
@@ -631,24 +639,24 @@ func (e *Tag) Posts(ctx context.Context, after *orm.Cursor, first *int, before *
 }
 
 // Parent resolves the "parent" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Tag) Parent(ctx context.Context) (*Tag, error) {
 	v, err := e.Edges.ParentOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryParent(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryParent(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }
 
 // Children resolves the "children" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).
+// neighbors, queried on the handle of the context (velox.WithExecutor).
 //
 //go:noinline
-func (e *Tag) Children(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *TagOrder) (*TagConnection, error) {
-	q := e.QueryChildren(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+func (e *Tag) Children(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *TagOrder) (*TagConnection, error) {
+	q := e.QueryChildren(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
 	return q.Paginate(ctx, after, first, before, last)
 }
 

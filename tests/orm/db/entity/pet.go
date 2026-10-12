@@ -85,14 +85,14 @@ func linkPet(dst any, es []any) {
 
 // PetEdge is a row of a page of Pet, with its cursor.
 type PetEdge struct {
-	Node   *Pet       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Pet         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PetConnection is one page of Pet.
 type PetConnection struct {
-	Edges    []*PetEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*PetEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -118,7 +118,9 @@ var PetMeta = orm.Meta{
 type PetQuery struct{ c orm.QueryCore }
 
 // NewPetQuery returns a query of every Pet.
-func NewPetQuery(ex orm.Executor) *PetQuery { return &PetQuery{c: orm.QueryCore{M: &PetMeta, Ex: ex}} }
+func NewPetQuery(ex velox.Executor) *PetQuery {
+	return &PetQuery{c: orm.QueryCore{M: &PetMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -261,7 +263,7 @@ func (q *PetQuery) Iter(ctx context.Context) iter.Seq2[*Pet, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PetQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PetConnection, error) {
+func (q *PetQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PetConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -302,7 +304,9 @@ func (q *PetQuery) IDs(ctx context.Context) ([]int, error) {
 type PetCreate struct{ c orm.MutCore }
 
 // NewPetCreate returns a builder that creates a Pet.
-func NewPetCreate(ex orm.Executor) *PetCreate { return &PetCreate{c: orm.MutCore{M: &PetMeta, Ex: ex}} }
+func NewPetCreate(ex velox.Executor) *PetCreate {
+	return &PetCreate{c: orm.MutCore{M: &PetMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -348,7 +352,7 @@ func (b *PetCreate) Exec(ctx context.Context) error {
 
 // PetCreateBulk creates several Pet rows with one statement.
 type PetCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PetCreate
 	n  int
 }
@@ -356,7 +360,7 @@ type PetCreateBulk struct {
 // NewPetCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPetCreateBulk(ex orm.Executor, bs ...*PetCreate) *PetCreateBulk {
+func NewPetCreateBulk(ex velox.Executor, bs ...*PetCreate) *PetCreateBulk {
 	return &PetCreateBulk{ex: ex, bs: bs}
 }
 
@@ -409,7 +413,9 @@ func (b *PetCreateBulk) Exec(ctx context.Context) error {
 type PetUpdate struct{ c orm.MutCore }
 
 // NewPetUpdate returns a builder that updates the rows its predicates match.
-func NewPetUpdate(ex orm.Executor) *PetUpdate { return &PetUpdate{c: orm.MutCore{M: &PetMeta, Ex: ex}} }
+func NewPetUpdate(ex velox.Executor) *PetUpdate {
+	return &PetUpdate{c: orm.MutCore{M: &PetMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -473,7 +479,9 @@ func (b *PetUpdate) SaveOne(ctx context.Context) (*Pet, error) {
 type PetDelete struct{ c orm.MutCore }
 
 // NewPetDelete returns a builder that deletes the rows its predicates match.
-func NewPetDelete(ex orm.Executor) *PetDelete { return &PetDelete{c: orm.MutCore{M: &PetMeta, Ex: ex}} }
+func NewPetDelete(ex velox.Executor) *PetDelete {
+	return &PetDelete{c: orm.MutCore{M: &PetMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //
@@ -494,7 +502,7 @@ func (b *PetDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(c
 // QueryOwner queries the "owner" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Pet) QueryOwner(ex orm.Executor) *UserQuery {
+func (e *Pet) QueryOwner(ex velox.Executor) *UserQuery {
 	q := NewUserQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PetMeta.Edges[0], e))
 	return q
@@ -529,8 +537,8 @@ var petOrderColumns = map[string]string{
 // PetOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type PetOrder struct {
-	Direction orm.OrderDirection `json:"direction"`
-	Field     pet.OrderField     `json:"field"`
+	Direction velox.OrderDirection `json:"direction"`
+	Field     pet.OrderField       `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -545,14 +553,14 @@ func (o *PetOrder) Term() predicate.PetOrderTerm {
 }
 
 // Owner resolves the "owner" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Pet) Owner(ctx context.Context) (*User, error) {
 	v, err := e.Edges.OwnerOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryOwner(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryOwner(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }

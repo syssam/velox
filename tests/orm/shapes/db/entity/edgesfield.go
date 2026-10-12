@@ -63,14 +63,14 @@ func edgeEdgesField(v any, i int) any {
 
 // EdgesFieldEdge is a row of a page of EdgesField, with its cursor.
 type EdgesFieldEdge struct {
-	Node   *EdgesField `json:"node"`
-	Cursor orm.Cursor  `json:"cursor"`
+	Node   *EdgesField  `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // EdgesFieldConnection is one page of EdgesField.
 type EdgesFieldConnection struct {
 	Edges    []*EdgesFieldEdge `json:"edges"`
-	PageInfo orm.PageInfo      `json:"pageInfo"`
+	PageInfo velox.PageInfo    `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -96,7 +96,7 @@ var EdgesFieldMeta = orm.Meta{
 type EdgesFieldQuery struct{ c orm.QueryCore }
 
 // NewEdgesFieldQuery returns a query of every EdgesField.
-func NewEdgesFieldQuery(ex orm.Executor) *EdgesFieldQuery {
+func NewEdgesFieldQuery(ex velox.Executor) *EdgesFieldQuery {
 	return &EdgesFieldQuery{c: orm.QueryCore{M: &EdgesFieldMeta, Ex: ex}}
 }
 
@@ -244,7 +244,7 @@ func (q *EdgesFieldQuery) Iter(ctx context.Context) iter.Seq2[*EdgesField, error
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EdgesFieldQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EdgesFieldConnection, error) {
+func (q *EdgesFieldQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*EdgesFieldConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -285,7 +285,7 @@ func (q *EdgesFieldQuery) IDs(ctx context.Context) ([]int, error) {
 type EdgesFieldCreate struct{ c orm.MutCore }
 
 // NewEdgesFieldCreate returns a builder that creates a EdgesField.
-func NewEdgesFieldCreate(ex orm.Executor) *EdgesFieldCreate {
+func NewEdgesFieldCreate(ex velox.Executor) *EdgesFieldCreate {
 	return &EdgesFieldCreate{c: orm.MutCore{M: &EdgesFieldMeta, Ex: ex}}
 }
 
@@ -333,7 +333,7 @@ func (b *EdgesFieldCreate) Exec(ctx context.Context) error {
 
 // EdgesFieldCreateBulk creates several EdgesField rows with one statement.
 type EdgesFieldCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*EdgesFieldCreate
 	n  int
 }
@@ -341,7 +341,7 @@ type EdgesFieldCreateBulk struct {
 // NewEdgesFieldCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewEdgesFieldCreateBulk(ex orm.Executor, bs ...*EdgesFieldCreate) *EdgesFieldCreateBulk {
+func NewEdgesFieldCreateBulk(ex velox.Executor, bs ...*EdgesFieldCreate) *EdgesFieldCreateBulk {
 	return &EdgesFieldCreateBulk{ex: ex, bs: bs}
 }
 
@@ -394,7 +394,7 @@ func (b *EdgesFieldCreateBulk) Exec(ctx context.Context) error {
 type EdgesFieldUpdate struct{ c orm.MutCore }
 
 // NewEdgesFieldUpdate returns a builder that updates the rows its predicates match.
-func NewEdgesFieldUpdate(ex orm.Executor) *EdgesFieldUpdate {
+func NewEdgesFieldUpdate(ex velox.Executor) *EdgesFieldUpdate {
 	return &EdgesFieldUpdate{c: orm.MutCore{M: &EdgesFieldMeta, Ex: ex}}
 }
 
@@ -460,7 +460,7 @@ func (b *EdgesFieldUpdate) SaveOne(ctx context.Context) (*EdgesField, error) {
 type EdgesFieldDelete struct{ c orm.MutCore }
 
 // NewEdgesFieldDelete returns a builder that deletes the rows its predicates match.
-func NewEdgesFieldDelete(ex orm.Executor) *EdgesFieldDelete {
+func NewEdgesFieldDelete(ex velox.Executor) *EdgesFieldDelete {
 	return &EdgesFieldDelete{c: orm.MutCore{M: &EdgesFieldMeta, Ex: ex}}
 }
 
@@ -483,7 +483,7 @@ func (b *EdgesFieldDelete) Exec(ctx context.Context) (int, error) { return b.c.D
 // QueryFields queries the "fields" neighbors of e, on ex.
 //
 //go:noinline
-func (e *EdgesField) QueryFields(ex orm.Executor) *FieldQuery {
+func (e *EdgesField) QueryFields(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(EdgesFieldMeta.Edges[0], e))
 	return q

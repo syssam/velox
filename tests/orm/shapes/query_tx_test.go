@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
@@ -23,7 +22,7 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/db/topic"
 )
 
-func intKeys(t *testing.T, db orm.Executor, names ...string) []*entity.IntKey {
+func intKeys(t *testing.T, db velox.Executor, names ...string) []*entity.IntKey {
 	t.Helper()
 	bs := make([]*entity.IntKeyCreate, len(names))
 	for i, n := range names {
@@ -225,10 +224,10 @@ func TestUpdate_SaveExecDeleteSemantics(t *testing.T) {
 func TestTx_CommitRollbackPanic(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
-	count := func(ex orm.Executor) int { return must(client.IntKey.Query(ex).Count(ctx)) }
+	count := func(ex velox.Executor) int { return must(client.IntKey.Query(ex).Count(ctx)) }
 
 	// Commit: every kind of statement inside one transaction.
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		use(t)
 		rows := intKeys(t, tx, "a", "b", "c")
 		must(client.IntKey.Create(tx).Set(intkey.Name.Set("d")).Save(ctx))
@@ -245,7 +244,7 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 
 	// An error rolls everything back and is returned as it is.
 	boom := errors.New("boom")
-	err := db.RunTx(ctx, func(tx *orm.Tx) error {
+	err := db.RunTx(ctx, func(tx *velox.Tx) error {
 		intKeys(t, tx, "x", "y")
 		must(client.IntKey.Delete(tx).Where(intkey.Name.EQ("d")).Exec(ctx))
 		must(client.IntKey.Update(tx).Set(intkey.Name.Set("gone")).Exec(ctx))
@@ -254,7 +253,7 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 	require.ErrorIs(t, err, boom)
 	assert.Equal(t, []string{"b2", "c2", "d"}, keyNames(must(client.IntKey.Query(db).OrderBy(intkey.Name.Asc()).All(ctx))))
 	// An ORM error returned from fn keeps its identity.
-	err = db.RunTx(ctx, func(tx *orm.Tx) error {
+	err = db.RunTx(ctx, func(tx *velox.Tx) error {
 		intKeys(t, tx, "x")
 		_, err := client.IntKey.Query(tx).Where(intkey.Name.EQ("nope")).Only(ctx)
 		return err
@@ -264,7 +263,7 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 
 	// A panic rolls back and propagates.
 	require.PanicsWithValue(t, "bang", func() {
-		_ = db.RunTx(ctx, func(tx *orm.Tx) error {
+		_ = db.RunTx(ctx, func(tx *velox.Tx) error {
 			intKeys(t, tx, "x")
 			panic("bang")
 		})
@@ -278,14 +277,14 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 	tx := must(db.Begin(ctx))
 	intKeys(t, tx, "f")
 	require.NoError(t, tx.Commit())
-	assert.ErrorIs(t, tx.Rollback(), orm.ErrTxDone, "a deferred Rollback after Commit is harmless")
-	assert.ErrorIs(t, tx.Commit(), orm.ErrTxDone)
+	assert.ErrorIs(t, tx.Rollback(), velox.ErrTxDone, "a deferred Rollback after Commit is harmless")
+	assert.ErrorIs(t, tx.Commit(), velox.ErrTxDone)
 	assert.Equal(t, 5, count(db))
 	tx = must(db.Begin(ctx))
 	intKeys(t, tx, "g")
 	require.NoError(t, tx.Rollback())
-	assert.ErrorIs(t, tx.Rollback(), orm.ErrTxDone)
-	assert.ErrorIs(t, tx.Commit(), orm.ErrTxDone)
+	assert.ErrorIs(t, tx.Rollback(), velox.ErrTxDone)
+	assert.ErrorIs(t, tx.Commit(), velox.ErrTxDone)
 	assert.Equal(t, 5, count(db))
 	// A finished transaction runs nothing.
 	_, err = client.IntKey.Query(tx).All(ctx)
@@ -295,12 +294,12 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 	assert.Equal(t, 5, count(db))
 
 	// fn may end the transaction itself.
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		intKeys(t, tx, "h")
 		return tx.Commit()
 	}))
 	assert.Equal(t, 6, count(db))
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		intKeys(t, tx, "i")
 		return tx.Rollback()
 	}))
@@ -309,7 +308,7 @@ func TestTx_CommitRollbackPanic(t *testing.T) {
 	// A canceled context cannot begin.
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
-	require.Error(t, db.RunTx(cctx, func(*orm.Tx) error { return nil }))
+	require.Error(t, db.RunTx(cctx, func(*velox.Tx) error { return nil }))
 }
 
 // Everything the edge tests do, inside one transaction: the SQL layer wraps a
@@ -319,7 +318,7 @@ func TestTx_EdgesInsideATransaction(t *testing.T) {
 	ctx := context.Background()
 	db := open(t)
 	var l *lib
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		// Creates with M2M, O2M and O2O edges; updates that add and remove.
 		l = library(t, tx)
 		got := must(client.Article.Update(tx).Set(article.Topics.Remove(l.tgo.ID), article.Topics.Add(l.rust.ID), article.Title.Set("a1!")).Where(article.ID.EQ(l.a1.ID)).SaveOne(ctx))
@@ -356,7 +355,7 @@ func TestTx_EdgesInsideATransaction(t *testing.T) {
 	// Rolled back: rows, join rows and keys on other tables alike, after an
 	// error half-way through.
 	boom := errors.New("boom")
-	err := db.RunTx(ctx, func(tx *orm.Tx) error {
+	err := db.RunTx(ctx, func(tx *velox.Tx) error {
 		y := must(client.Article.Create(tx).Set(article.Title.Set("y"), article.Author.Set(l.ann.ID), article.Topics.Add(l.tgo.ID, l.sql.ID, l.rust.ID), article.BannedTopics.Add(l.sql.ID)).Save(ctx))
 		must(client.Article.Update(tx).Set(article.Topics.Clear(), article.Notes.Clear()).Where(article.ID.EQ(l.a1.ID)).Exec(ctx))
 		must(client.Article.Update(tx).Set(article.Notes.Add(l.n1.ID)).Where(article.ID.EQ(y.ID)).Exec(ctx))
@@ -379,7 +378,7 @@ func TestTx_EdgesInsideATransaction(t *testing.T) {
 
 	// A panic half-way rolls the edge changes back too.
 	require.Panics(t, func() {
-		_ = db.RunTx(ctx, func(tx *orm.Tx) error {
+		_ = db.RunTx(ctx, func(tx *velox.Tx) error {
 			must(client.Article.Update(tx).Set(article.Topics.Clear()).Exec(ctx))
 			panic("bang")
 		})
@@ -405,8 +404,8 @@ func TestTx_Misuse(t *testing.T) {
 	assert.Equal(t, 1, count())
 
 	// The transaction handle outlives RunTx only as a dead handle.
-	var leaked *orm.Tx
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error { leaked = tx; return nil }))
+	var leaked *velox.Tx
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error { leaked = tx; return nil }))
 	_, err = client.IntKey.Create(leaked).Set(intkey.Name.Set("late")).Save(ctx)
 	require.Error(t, err)
 	_, err = client.IntKey.CreateBulk(leaked, client.IntKey.Create(leaked).Set(intkey.Name.Set("late"))).Save(ctx)
@@ -417,12 +416,12 @@ func TestTx_Misuse(t *testing.T) {
 	require.Error(t, err)
 	_, err = client.IntKey.Query(leaked).Count(ctx)
 	require.Error(t, err)
-	assert.ErrorIs(t, leaked.Commit(), orm.ErrTxDone)
+	assert.ErrorIs(t, leaked.Commit(), velox.ErrTxDone)
 	assert.Equal(t, 1, count())
 
 	// fn commits and then reports an error: the error comes back, the commit stands.
 	boom := errors.New("boom")
-	err = db.RunTx(ctx, func(tx *orm.Tx) error {
+	err = db.RunTx(ctx, func(tx *velox.Tx) error {
 		intKeys(t, tx, "b")
 		require.NoError(t, tx.Commit())
 		return boom
@@ -430,7 +429,7 @@ func TestTx_Misuse(t *testing.T) {
 	require.ErrorIs(t, err, boom)
 	assert.Equal(t, 2, count())
 	// fn rolls back and returns nil: no error, nothing written.
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		intKeys(t, tx, "c")
 		return tx.Rollback()
 	}))
@@ -439,7 +438,7 @@ func TestTx_Misuse(t *testing.T) {
 	// A context canceled during the transaction: the statement fails, RunTx
 	// returns an error and nothing is written.
 	cctx, cancel := context.WithCancel(ctx)
-	err = db.RunTx(cctx, func(tx *orm.Tx) error {
+	err = db.RunTx(cctx, func(tx *velox.Tx) error {
 		if _, err := client.IntKey.Create(tx).Set(intkey.Name.Set("d")).Save(cctx); err != nil {
 			return err
 		}
@@ -452,11 +451,11 @@ func TestTx_Misuse(t *testing.T) {
 
 	// Many sequential transactions do not leak connections.
 	for i := range 50 {
-		require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+		require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 			_, err := client.IntKey.Update(tx).Set(intkey.Name.Set(fmt.Sprint("n", i))).Where(intkey.Name.NEQ("zz")).Exec(ctx)
 			return err
 		}))
-		_ = db.RunTx(ctx, func(tx *orm.Tx) error { return boom })
+		_ = db.RunTx(ctx, func(tx *velox.Tx) error { return boom })
 	}
 	assert.Equal(t, 2, must(client.IntKey.Query(db).Where(intkey.Name.EQ("n49")).Count(ctx)))
 }

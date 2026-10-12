@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,41 +18,43 @@ type StudentClient struct{}
 
 // Query returns a query of every Student, to run on ex: a database handle or a
 // transaction.
-func (*StudentClient) Query(ex orm.Executor) *entity.StudentQuery { return entity.NewStudentQuery(ex) }
+func (*StudentClient) Query(ex velox.Executor) *entity.StudentQuery {
+	return entity.NewStudentQuery(ex)
+}
 
 // Create returns a builder that creates a Student.
-func (*StudentClient) Create(ex orm.Executor) *entity.StudentCreate {
+func (*StudentClient) Create(ex velox.Executor) *entity.StudentCreate {
 	return entity.NewStudentCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*StudentClient) CreateBulk(ex orm.Executor, bs ...*entity.StudentCreate) *entity.StudentCreateBulk {
+func (*StudentClient) CreateBulk(ex velox.Executor, bs ...*entity.StudentCreate) *entity.StudentCreateBulk {
 	return entity.NewStudentCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Student rows its conditions match.
-func (*StudentClient) Update(ex orm.Executor) *entity.StudentUpdate {
+func (*StudentClient) Update(ex velox.Executor) *entity.StudentUpdate {
 	return entity.NewStudentUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Student rows its conditions match.
-func (*StudentClient) Delete(ex orm.Executor) *entity.StudentDelete {
+func (*StudentClient) Delete(ex velox.Executor) *entity.StudentDelete {
 	return entity.NewStudentDelete(ex)
 }
 
 // Get returns the Student with the given id, or velox.ErrNotFound.
-func (c *StudentClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Student, error) {
+func (c *StudentClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Student, error) {
 	return c.Query(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Student with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *StudentClient) UpdateByID(ex orm.Executor, id int) *entity.StudentUpdate {
+func (c *StudentClient) UpdateByID(ex velox.Executor, id int) *entity.StudentUpdate {
 	return c.Update(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Student with the given id, or returns velox.ErrNotFound.
-func (c *StudentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *StudentClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.StudentMeta.NotFound()

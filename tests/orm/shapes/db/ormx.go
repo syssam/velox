@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type OrmClient struct{}
 
 // Query returns a query of every Orm, to run on ex: a database handle or a
 // transaction.
-func (*OrmClient) Query(ex orm.Executor) *entity.OrmQuery { return entity.NewOrmQuery(ex) }
+func (*OrmClient) Query(ex velox.Executor) *entity.OrmQuery { return entity.NewOrmQuery(ex) }
 
 // Create returns a builder that creates a Orm.
-func (*OrmClient) Create(ex orm.Executor) *entity.OrmCreate { return entity.NewOrmCreate(ex) }
+func (*OrmClient) Create(ex velox.Executor) *entity.OrmCreate { return entity.NewOrmCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*OrmClient) CreateBulk(ex orm.Executor, bs ...*entity.OrmCreate) *entity.OrmCreateBulk {
+func (*OrmClient) CreateBulk(ex velox.Executor, bs ...*entity.OrmCreate) *entity.OrmCreateBulk {
 	return entity.NewOrmCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Orm rows its conditions match.
-func (*OrmClient) Update(ex orm.Executor) *entity.OrmUpdate { return entity.NewOrmUpdate(ex) }
+func (*OrmClient) Update(ex velox.Executor) *entity.OrmUpdate { return entity.NewOrmUpdate(ex) }
 
 // Delete returns a builder that deletes the Orm rows its conditions match.
-func (*OrmClient) Delete(ex orm.Executor) *entity.OrmDelete { return entity.NewOrmDelete(ex) }
+func (*OrmClient) Delete(ex velox.Executor) *entity.OrmDelete { return entity.NewOrmDelete(ex) }
 
 // Get returns the Orm with the given id, or velox.ErrNotFound.
-func (c *OrmClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Orm, error) {
+func (c *OrmClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Orm, error) {
 	return c.Query(ex).Where(predicate.Orm(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Orm with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *OrmClient) UpdateByID(ex orm.Executor, id int) *entity.OrmUpdate {
+func (c *OrmClient) UpdateByID(ex velox.Executor, id int) *entity.OrmUpdate {
 	return c.Update(ex).Where(predicate.Orm(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Orm with the given id, or returns velox.ErrNotFound.
-func (c *OrmClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *OrmClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Orm(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.OrmMeta.NotFound()

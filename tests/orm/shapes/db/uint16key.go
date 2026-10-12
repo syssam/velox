@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type Uint16KeyClient struct{}
 
 // Query returns a query of every Uint16Key, to run on ex: a database handle or a
 // transaction.
-func (*Uint16KeyClient) Query(ex orm.Executor) *entity.Uint16KeyQuery {
+func (*Uint16KeyClient) Query(ex velox.Executor) *entity.Uint16KeyQuery {
 	return entity.NewUint16KeyQuery(ex)
 }
 
 // Create returns a builder that creates a Uint16Key.
-func (*Uint16KeyClient) Create(ex orm.Executor) *entity.Uint16KeyCreate {
+func (*Uint16KeyClient) Create(ex velox.Executor) *entity.Uint16KeyCreate {
 	return entity.NewUint16KeyCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*Uint16KeyClient) CreateBulk(ex orm.Executor, bs ...*entity.Uint16KeyCreate) *entity.Uint16KeyCreateBulk {
+func (*Uint16KeyClient) CreateBulk(ex velox.Executor, bs ...*entity.Uint16KeyCreate) *entity.Uint16KeyCreateBulk {
 	return entity.NewUint16KeyCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Uint16Key rows its conditions match.
-func (*Uint16KeyClient) Update(ex orm.Executor) *entity.Uint16KeyUpdate {
+func (*Uint16KeyClient) Update(ex velox.Executor) *entity.Uint16KeyUpdate {
 	return entity.NewUint16KeyUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Uint16Key rows its conditions match.
-func (*Uint16KeyClient) Delete(ex orm.Executor) *entity.Uint16KeyDelete {
+func (*Uint16KeyClient) Delete(ex velox.Executor) *entity.Uint16KeyDelete {
 	return entity.NewUint16KeyDelete(ex)
 }
 
 // Get returns the Uint16Key with the given id, or velox.ErrNotFound.
-func (c *Uint16KeyClient) Get(ctx context.Context, ex orm.Executor, id uint16) (*entity.Uint16Key, error) {
+func (c *Uint16KeyClient) Get(ctx context.Context, ex velox.Executor, id uint16) (*entity.Uint16Key, error) {
 	return c.Query(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Uint16Key with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *Uint16KeyClient) UpdateByID(ex orm.Executor, id uint16) *entity.Uint16KeyUpdate {
+func (c *Uint16KeyClient) UpdateByID(ex velox.Executor, id uint16) *entity.Uint16KeyUpdate {
 	return c.Update(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Uint16Key with the given id, or returns velox.ErrNotFound.
-func (c *Uint16KeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id uint16) error {
+func (c *Uint16KeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id uint16) error {
 	n, err := c.Delete(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.Uint16KeyMeta.NotFound()

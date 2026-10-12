@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrPred(v any, i int) any {
 
 // PredEdge is a row of a page of Pred, with its cursor.
 type PredEdge struct {
-	Node   *Pred      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Pred        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PredConnection is one page of Pred.
 type PredConnection struct {
-	Edges    []*PredEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*PredEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var PredMeta = orm.Meta{
 type PredQuery struct{ c orm.QueryCore }
 
 // NewPredQuery returns a query of every Pred.
-func NewPredQuery(ex orm.Executor) *PredQuery {
+func NewPredQuery(ex velox.Executor) *PredQuery {
 	return &PredQuery{c: orm.QueryCore{M: &PredMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *PredQuery) Iter(ctx context.Context) iter.Seq2[*Pred, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PredQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PredConnection, error) {
+func (q *PredQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PredConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *PredQuery) IDs(ctx context.Context) ([]int, error) {
 type PredCreate struct{ c orm.MutCore }
 
 // NewPredCreate returns a builder that creates a Pred.
-func NewPredCreate(ex orm.Executor) *PredCreate {
+func NewPredCreate(ex velox.Executor) *PredCreate {
 	return &PredCreate{c: orm.MutCore{M: &PredMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *PredCreate) Exec(ctx context.Context) error {
 
 // PredCreateBulk creates several Pred rows with one statement.
 type PredCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PredCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type PredCreateBulk struct {
 // NewPredCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPredCreateBulk(ex orm.Executor, bs ...*PredCreate) *PredCreateBulk {
+func NewPredCreateBulk(ex velox.Executor, bs ...*PredCreate) *PredCreateBulk {
 	return &PredCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *PredCreateBulk) Exec(ctx context.Context) error {
 type PredUpdate struct{ c orm.MutCore }
 
 // NewPredUpdate returns a builder that updates the rows its predicates match.
-func NewPredUpdate(ex orm.Executor) *PredUpdate {
+func NewPredUpdate(ex velox.Executor) *PredUpdate {
 	return &PredUpdate{c: orm.MutCore{M: &PredMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *PredUpdate) SaveOne(ctx context.Context) (*Pred, error) {
 type PredDelete struct{ c orm.MutCore }
 
 // NewPredDelete returns a builder that deletes the rows its predicates match.
-func NewPredDelete(ex orm.Executor) *PredDelete {
+func NewPredDelete(ex velox.Executor) *PredDelete {
 	return &PredDelete{c: orm.MutCore{M: &PredMeta, Ex: ex}}
 }
 

@@ -1,7 +1,10 @@
-# Package orm and velox-gen
+# velox-gen and its runtime
 
 The next generator and runtime of velox, for large schemas: `cmd/velox-gen`
-writes the code, package `orm` runs it. They read velox schemas unchanged and
+writes the code, package `orm` runs it. An application names package `velox`
+for nearly everything (`velox.DB`, `velox.Tx`, `velox.Executor`,
+`velox.IsNotFound`, `velox.Cursor`, `velox.Must`) and package `orm` only for
+what the typed API cannot say (`orm.Raw`, `orm.And`, `orm.Sum`). They read velox schemas unchanged and
 generate far less code for the Go compiler to chew on: on a 450-entity schema
 the generated packages compile in about a tenth of the CPU time and a quarter
 of the memory of those the current generator (`cmd/velox`, package `runtime`)
@@ -54,7 +57,7 @@ The snippets of this section are `tests/orm/example_test.go`, which `go test`
 runs: they compile and print what is shown.
 
 ```go
-conn, err := orm.Open("postgres", dsn)
+conn, err := velox.Open("postgres", dsn)
 err = migrate.Create(ctx, conn) // create or update the tables
 
 // Create, with setters.
@@ -85,7 +88,7 @@ err = db.User.DeleteByID(ctx, conn, id)
 - **What a query or mutation runs on is given where it starts and travels
   with the builder**: a database handle or a transaction. A function can build
   a query and another run it. A builder made from `nil` or from a nil
-  `*orm.Tx` returns `orm.ErrNoExecutor` when run; the zero value of a builder
+  `*velox.Tx` returns `velox.ErrNoExecutor` when run; the zero value of a builder
   returns `orm.ErrNoEntity`.
 - **An entity holds no connection.** `u.QueryPosts(tx)` queries its
   neighbors on what it is given, `WithPosts(...)` loads them with the query
@@ -165,12 +168,12 @@ err = db.User.DeleteByID(ctx, conn, id)
 - The key of an edge (`comment.PostID`) compares like any column of its type,
   `GT` and `LT` included; it has no `Add`.
 - `tx.Driver()` and `db.Driver()` give the driver under a handle, for SQL of
-  the caller's own inside the same transaction; `orm.TxFrom(ctx)` is the
-  transaction a context carries (`orm.WithExecutor(ctx, tx)`), or nil.
+  the caller's own inside the same transaction; `velox.TxFrom(ctx)` is the
+  transaction a context carries (`velox.WithExecutor(ctx, tx)`), or nil.
 - `tx.AfterCommit(fn)` runs `fn` once the transaction has been committed,
   and not when it is rolled back or the commit fails: for an event that must
   follow a change only when the change is certain.
-- `orm.First(q.Limit(1).IDs(ctx))` is the first of what a list read
+- `velox.First(q.Limit(1).IDs(ctx))` is the first of what a list read
   returned, or `velox.ErrNotFound`.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
@@ -194,8 +197,8 @@ err = db.User.DeleteByID(ctx, conn, id)
   returns when it has nothing to add (`orm.IsZero(p)` tells). An update
   or a delete refuses it, so that a forgotten condition is not a statement
   over every row.
-- There is no `SaveX`, `GetX` or `ExecX`. In a test, `orm.Must(q.Save(ctx))`
-  and `orm.Check(q.Exec(ctx))` panic on an error. As methods they would be on
+- There is no `SaveX`, `GetX` or `ExecX`. In a test, `velox.Must(q.Save(ctx))`
+  and `velox.Check(q.Exec(ctx))` panic on an error. As methods they would be on
   every builder, and a package pays for the methods of every type it can
   reach.
 - `And()` of nothing holds for every row, `Or()` and `Not()` of nothing for
@@ -206,9 +209,9 @@ err = db.User.DeleteByID(ctx, conn, id)
   returns: `velox.ErrNotFound` and `velox.ErrNotSingular` (and their
   `IsNotFound`, `IsNotSingular`), `*velox.ValidationError`,
   `*velox.ConstraintError`, `*velox.NotLoadedError`. Code that tests an error
-  does not change when the application moves. Package `orm` has only the
-  errors of its own making (`orm.ErrNoExecutor`, `orm.ErrTxDone`,
-  `orm.ErrWhereDepth`, `orm.ErrBadCursor`).
+  does not change when the application moves. So are the errors of a handle
+  and of a cursor: `velox.ErrNoExecutor`, `velox.ErrTxDone`,
+  `velox.ErrBadCursor`. Package `orm` has `orm.ErrWhereDepth`.
 - A create that leaves out a required field, a required edge or an id the
   caller must supply is an `*velox.ValidationError` naming it, before any SQL.
   What the database refuses is an `*velox.ConstraintError` that says which kind
@@ -226,7 +229,7 @@ err = db.User.DeleteByID(ctx, conn, id)
 ### Transactions
 
 ```go
-err := conn.RunTx(ctx, func(tx *orm.Tx) error {
+err := conn.RunTx(ctx, func(tx *velox.Tx) error {
     u, err := db.User.Create(tx).
         Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40)).
         Save(ctx)
@@ -382,7 +385,7 @@ two cannot disagree, and it imports no engine.
 | `type User`, its scalar fields | `entity.User` and its fields |
 | `author: User`, `tags: [Tag!]!` | a method of the entity: `(*Post).Author(ctx)` |
 | `posts(after, first, before, last, orderBy, where): PostConnection!` | `(*User).Posts(ctx, after, first, before, last, orderBy, where)` |
-| `PostConnection`, `PostEdge`, `PageInfo`, `Cursor` | `entity.PostConnection`, `entity.PostEdge`, `orm.PageInfo`, `orm.Cursor`: what `Paginate` returns |
+| `PostConnection`, `PostEdge`, `PageInfo`, `Cursor` | `entity.PostConnection`, `entity.PostEdge`, `velox.PageInfo`, `velox.Cursor`: what `Paginate` returns |
 | `input PostOrder` | `entity.PostOrder` |
 | `enum PostOrderField` | `post.OrderField` and its constants, `post.OrderFieldCreatedAt` |
 | `input PostWhereInput` | `filter.PostWhereInput` |
@@ -393,7 +396,7 @@ A list resolver is a query like any other; the inputs turn into what `Where`
 and `OrderBy` take:
 
 ```go
-func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int,
+func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int,
     orderBy *entity.PostOrder, where *filter.PostWhereInput,
 ) (*entity.PostConnection, error) {
     return db.Post.Query(s.db).
@@ -470,8 +473,8 @@ func (s *service) List(ctx context.Context, after *orm.Cursor, first *int, befor
 - **The edge methods take the handle from the context.** An engine calls
   `post.Author(ctx)` with the request's context and nothing else, and an
   entity holds no connection, so a server puts the request's handle there
-  once: `ctx = orm.WithExecutor(ctx, conn)` (a transaction for a mutation's
-  response). Without it they return `orm.ErrNoExecutor`. A to-one edge the
+  once: `ctx = velox.WithExecutor(ctx, conn)` (a transaction for a mutation's
+  response). Without it they return `velox.ErrNoExecutor`. A to-one edge the
   query already loaded is returned without a query.
 - `Paginate` counts the rows of the whole query for `TotalCount`.
   `orm.WithoutTotal(ctx)` skips the count (it is then -1): for a request that
@@ -622,7 +625,7 @@ first:
 | `velox.QueryFromContext(ctx)` in an interceptor | package `orm` puts no query context there: it reads nil. The interceptor is handed the query itself, a `*orm.Query` |
 | a package of the generated tree the new one does not have (`hook`, something of the application's own kept there) | once, at its first reference; the summary of the run counts the rest |
 | several orders or filters given to `Paginate` | velox used the last of each |
-| `tx.Client()` handed on as a value | it is the transaction; what takes it must take `orm.Executor` |
+| `tx.Client()` handed on as a value | it is the transaction; what takes it must take `velox.Executor` |
 | a GraphQL edge method called on an entity (`u.Posts(ctx, ...)`) | it reads on the handle of the context |
 | a deferred call that came to be wrapped (`defer q.ExecX(ctx)`) | it is put in a function so that it still runs later; its arguments are evaluated then |
 
@@ -649,9 +652,9 @@ Otherwise it gets the context's handle and a line in the report, or, where
 no `ctx` is in sight, only the line.
 
 A parameter of type `*Client` that a function only queries on (and hands to
-functions that only query on it) becomes an `orm.Executor`, so that
+functions that only query on it) becomes a `velox.Executor`, so that
 `tx.Client()`, which is the transaction now, can be passed for it. One the
-function begins a transaction on, or closes, stays a `*orm.DB`.
+function begins a transaction on, or closes, stays a `*velox.DB`.
 
 One difference in a hook is not rewritten or reported, because nothing in
 the application's text shows it: `m.OldField` reads the row under the

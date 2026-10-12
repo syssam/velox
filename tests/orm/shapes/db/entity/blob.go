@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -85,14 +86,14 @@ func ptrBlob(v any, i int) any {
 
 // BlobEdge is a row of a page of Blob, with its cursor.
 type BlobEdge struct {
-	Node   *Blob      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Blob        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // BlobConnection is one page of Blob.
 type BlobConnection struct {
-	Edges    []*BlobEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*BlobEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -132,7 +133,7 @@ var BlobMeta = orm.Meta{
 type BlobQuery struct{ c orm.QueryCore }
 
 // NewBlobQuery returns a query of every Blob.
-func NewBlobQuery(ex orm.Executor) *BlobQuery {
+func NewBlobQuery(ex velox.Executor) *BlobQuery {
 	return &BlobQuery{c: orm.QueryCore{M: &BlobMeta, Ex: ex}}
 }
 
@@ -277,7 +278,7 @@ func (q *BlobQuery) Iter(ctx context.Context) iter.Seq2[*Blob, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *BlobQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BlobConnection, error) {
+func (q *BlobQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*BlobConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -318,7 +319,7 @@ func (q *BlobQuery) IDs(ctx context.Context) ([]int, error) {
 type BlobCreate struct{ c orm.MutCore }
 
 // NewBlobCreate returns a builder that creates a Blob.
-func NewBlobCreate(ex orm.Executor) *BlobCreate {
+func NewBlobCreate(ex velox.Executor) *BlobCreate {
 	return &BlobCreate{c: orm.MutCore{M: &BlobMeta, Ex: ex}}
 }
 
@@ -366,7 +367,7 @@ func (b *BlobCreate) Exec(ctx context.Context) error {
 
 // BlobCreateBulk creates several Blob rows with one statement.
 type BlobCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*BlobCreate
 	n  int
 }
@@ -374,7 +375,7 @@ type BlobCreateBulk struct {
 // NewBlobCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewBlobCreateBulk(ex orm.Executor, bs ...*BlobCreate) *BlobCreateBulk {
+func NewBlobCreateBulk(ex velox.Executor, bs ...*BlobCreate) *BlobCreateBulk {
 	return &BlobCreateBulk{ex: ex, bs: bs}
 }
 
@@ -427,7 +428,7 @@ func (b *BlobCreateBulk) Exec(ctx context.Context) error {
 type BlobUpdate struct{ c orm.MutCore }
 
 // NewBlobUpdate returns a builder that updates the rows its predicates match.
-func NewBlobUpdate(ex orm.Executor) *BlobUpdate {
+func NewBlobUpdate(ex velox.Executor) *BlobUpdate {
 	return &BlobUpdate{c: orm.MutCore{M: &BlobMeta, Ex: ex}}
 }
 
@@ -493,7 +494,7 @@ func (b *BlobUpdate) SaveOne(ctx context.Context) (*Blob, error) {
 type BlobDelete struct{ c orm.MutCore }
 
 // NewBlobDelete returns a builder that deletes the rows its predicates match.
-func NewBlobDelete(ex orm.Executor) *BlobDelete {
+func NewBlobDelete(ex velox.Executor) *BlobDelete {
 	return &BlobDelete{c: orm.MutCore{M: &BlobMeta, Ex: ex}}
 }
 

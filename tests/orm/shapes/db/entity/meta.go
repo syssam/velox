@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrMeta(v any, i int) any {
 
 // MetaEdge is a row of a page of Meta, with its cursor.
 type MetaEdge struct {
-	Node   *Meta      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Meta        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // MetaConnection is one page of Meta.
 type MetaConnection struct {
-	Edges    []*MetaEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*MetaEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var MetaMeta = orm.Meta{
 type MetaQuery struct{ c orm.QueryCore }
 
 // NewMetaQuery returns a query of every Meta.
-func NewMetaQuery(ex orm.Executor) *MetaQuery {
+func NewMetaQuery(ex velox.Executor) *MetaQuery {
 	return &MetaQuery{c: orm.QueryCore{M: &MetaMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *MetaQuery) Iter(ctx context.Context) iter.Seq2[*Meta, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MetaQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MetaConnection, error) {
+func (q *MetaQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*MetaConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *MetaQuery) IDs(ctx context.Context) ([]int, error) {
 type MetaCreate struct{ c orm.MutCore }
 
 // NewMetaCreate returns a builder that creates a Meta.
-func NewMetaCreate(ex orm.Executor) *MetaCreate {
+func NewMetaCreate(ex velox.Executor) *MetaCreate {
 	return &MetaCreate{c: orm.MutCore{M: &MetaMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *MetaCreate) Exec(ctx context.Context) error {
 
 // MetaCreateBulk creates several Meta rows with one statement.
 type MetaCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*MetaCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type MetaCreateBulk struct {
 // NewMetaCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewMetaCreateBulk(ex orm.Executor, bs ...*MetaCreate) *MetaCreateBulk {
+func NewMetaCreateBulk(ex velox.Executor, bs ...*MetaCreate) *MetaCreateBulk {
 	return &MetaCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *MetaCreateBulk) Exec(ctx context.Context) error {
 type MetaUpdate struct{ c orm.MutCore }
 
 // NewMetaUpdate returns a builder that updates the rows its predicates match.
-func NewMetaUpdate(ex orm.Executor) *MetaUpdate {
+func NewMetaUpdate(ex velox.Executor) *MetaUpdate {
 	return &MetaUpdate{c: orm.MutCore{M: &MetaMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *MetaUpdate) SaveOne(ctx context.Context) (*Meta, error) {
 type MetaDelete struct{ c orm.MutCore }
 
 // NewMetaDelete returns a builder that deletes the rows its predicates match.
-func NewMetaDelete(ex orm.Executor) *MetaDelete {
+func NewMetaDelete(ex velox.Executor) *MetaDelete {
 	return &MetaDelete{c: orm.MutCore{M: &MetaMeta, Ex: ex}}
 }
 

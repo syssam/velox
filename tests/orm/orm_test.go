@@ -18,7 +18,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
-	"github.com/syssam/velox/orm"
 	integration "github.com/syssam/velox/tests/integration"
 	"github.com/syssam/velox/tests/orm/db/entity"
 	"github.com/syssam/velox/tests/orm/db/migrate"
@@ -39,7 +38,7 @@ var dbSeq atomic.Int64
 // against: it runs on tables it did not create. The database is SQLite
 // in memory, or a new database on the Postgres server VELOX_ORM_TEST_POSTGRES names
 // (e.g. postgres://postgres:pass@localhost:5544/postgres?sslmode=disable).
-func open(t *testing.T) (*orm.DB, *integration.Client) {
+func open(t *testing.T) (*velox.DB, *integration.Client) {
 	t.Helper()
 	ctx := context.Background()
 	var drv *velsql.Driver
@@ -52,7 +51,7 @@ func open(t *testing.T) (*orm.DB, *integration.Client) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = drv.Close() })
 	}
-	db := orm.OpenDB(drv.Dialect(), drv.DB())
+	db := velox.OpenDB(drv.Dialect(), drv.DB())
 	require.NoError(t, migrate.Create(ctx, db))
 	return db, integration.NewClient(integration.Driver(drv))
 }
@@ -79,7 +78,7 @@ func openPostgres(t *testing.T, admin string) *velsql.Driver {
 	return drv
 }
 
-func newUser(t *testing.T, db orm.Executor, name string, age int) *entity.User {
+func newUser(t *testing.T, db velox.Executor, name string, age int) *entity.User {
 	t.Helper()
 	u, err := client.User.Create(db).
 		Set(user.Name.Set(name), user.Email.Set(name+"@example.com"), user.Age.Set(age)).
@@ -88,7 +87,7 @@ func newUser(t *testing.T, db orm.Executor, name string, age int) *entity.User {
 	return u
 }
 
-func newPost(t *testing.T, db orm.Executor, author *entity.User, title string) *entity.Post {
+func newPost(t *testing.T, db velox.Executor, author *entity.User, title string) *entity.Post {
 	t.Helper()
 	p, err := client.Post.Create(db).
 		Set(post.Title.Set(title), post.Content.Set("body of "+title), post.Author.Set(author.ID)).
@@ -391,7 +390,7 @@ func TestTx_CommitRollbackAndPanic(t *testing.T) {
 	ctx := context.Background()
 	db, ref := open(t)
 
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		u := newUser(t, tx, "ann", 30)
 		newPost(t, tx, u, "in tx")
 		// The transaction sees its own writes.
@@ -406,7 +405,7 @@ func TestTx_CommitRollbackAndPanic(t *testing.T) {
 	assert.Equal(t, 1, posts)
 
 	boom := errors.New("boom")
-	err = db.RunTx(ctx, func(tx *orm.Tx) error {
+	err = db.RunTx(ctx, func(tx *velox.Tx) error {
 		newUser(t, tx, "bob", 40)
 		return boom
 	})
@@ -414,7 +413,7 @@ func TestTx_CommitRollbackAndPanic(t *testing.T) {
 	assert.Equal(t, 1, refCount(t, ref), "an error rolls the transaction back")
 
 	require.PanicsWithValue(t, "bang", func() {
-		_ = db.RunTx(ctx, func(tx *orm.Tx) error {
+		_ = db.RunTx(ctx, func(tx *velox.Tx) error {
 			newUser(t, tx, "cid", 50)
 			panic("bang")
 		})
@@ -425,7 +424,7 @@ func TestTx_CommitRollbackAndPanic(t *testing.T) {
 	require.NoError(t, err)
 	newUser(t, tx, "dee", 60)
 	require.NoError(t, tx.Commit())
-	assert.ErrorIs(t, tx.Rollback(), orm.ErrTxDone, "a deferred Rollback after Commit is harmless")
+	assert.ErrorIs(t, tx.Rollback(), velox.ErrTxDone, "a deferred Rollback after Commit is harmless")
 	assert.Equal(t, 2, refCount(t, ref))
 }
 

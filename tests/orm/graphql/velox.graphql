@@ -7,7 +7,7 @@ directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on 
 Define a Relay Cursor type:
 https://relay.dev/graphql/connections.htm#sec-Cursor
 """
-scalar Cursor @goModel(model: "github.com/syssam/velox/orm.Cursor")
+scalar Cursor @goModel(model: "github.com/syssam/velox.Cursor")
 """
 The builtin Time type
 """
@@ -27,7 +27,7 @@ interface Node @goModel(model: "github.com/syssam/velox/tests/orm/db.Noder") {
 """
 Possible directions in which to order a list of items when provided an `orderBy` argument.
 """
-enum OrderDirection @goModel(model: "github.com/syssam/velox/orm.OrderDirection") {
+enum OrderDirection @goModel(model: "github.com/syssam/velox.OrderDirection") {
   """
   Specifies an ascending order for a given `orderBy` argument.
   """
@@ -42,7 +42,7 @@ enum OrderDirection @goModel(model: "github.com/syssam/velox/orm.OrderDirection"
 Information about pagination in a connection.
 https://relay.dev/graphql/connections.htm#sec-undefined.PageInfo
 """
-type PageInfo @goModel(model: "github.com/syssam/velox/orm.PageInfo") {
+type PageInfo @goModel(model: "github.com/syssam/velox.PageInfo") {
   """
   When paginating forwards, are there more items?
   """

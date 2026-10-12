@@ -256,14 +256,14 @@ func edgeKeywords(v any, i int) any {
 
 // KeywordsEdge is a row of a page of Keywords, with its cursor.
 type KeywordsEdge struct {
-	Node   *Keywords  `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Keywords    `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // KeywordsConnection is one page of Keywords.
 type KeywordsConnection struct {
 	Edges    []*KeywordsEdge `json:"edges"`
-	PageInfo orm.PageInfo    `json:"pageInfo"`
+	PageInfo velox.PageInfo  `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -332,7 +332,7 @@ var KeywordsMeta = orm.Meta{
 type KeywordsQuery struct{ c orm.QueryCore }
 
 // NewKeywordsQuery returns a query of every Keywords.
-func NewKeywordsQuery(ex orm.Executor) *KeywordsQuery {
+func NewKeywordsQuery(ex velox.Executor) *KeywordsQuery {
 	return &KeywordsQuery{c: orm.QueryCore{M: &KeywordsMeta, Ex: ex}}
 }
 
@@ -477,7 +477,7 @@ func (q *KeywordsQuery) Iter(ctx context.Context) iter.Seq2[*Keywords, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *KeywordsQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*KeywordsConnection, error) {
+func (q *KeywordsQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*KeywordsConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -518,7 +518,7 @@ func (q *KeywordsQuery) IDs(ctx context.Context) ([]int, error) {
 type KeywordsCreate struct{ c orm.MutCore }
 
 // NewKeywordsCreate returns a builder that creates a Keywords.
-func NewKeywordsCreate(ex orm.Executor) *KeywordsCreate {
+func NewKeywordsCreate(ex velox.Executor) *KeywordsCreate {
 	return &KeywordsCreate{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
 }
 
@@ -566,7 +566,7 @@ func (b *KeywordsCreate) Exec(ctx context.Context) error {
 
 // KeywordsCreateBulk creates several Keywords rows with one statement.
 type KeywordsCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*KeywordsCreate
 	n  int
 }
@@ -574,7 +574,7 @@ type KeywordsCreateBulk struct {
 // NewKeywordsCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewKeywordsCreateBulk(ex orm.Executor, bs ...*KeywordsCreate) *KeywordsCreateBulk {
+func NewKeywordsCreateBulk(ex velox.Executor, bs ...*KeywordsCreate) *KeywordsCreateBulk {
 	return &KeywordsCreateBulk{ex: ex, bs: bs}
 }
 
@@ -627,7 +627,7 @@ func (b *KeywordsCreateBulk) Exec(ctx context.Context) error {
 type KeywordsUpdate struct{ c orm.MutCore }
 
 // NewKeywordsUpdate returns a builder that updates the rows its predicates match.
-func NewKeywordsUpdate(ex orm.Executor) *KeywordsUpdate {
+func NewKeywordsUpdate(ex velox.Executor) *KeywordsUpdate {
 	return &KeywordsUpdate{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
 }
 
@@ -693,7 +693,7 @@ func (b *KeywordsUpdate) SaveOne(ctx context.Context) (*Keywords, error) {
 type KeywordsDelete struct{ c orm.MutCore }
 
 // NewKeywordsDelete returns a builder that deletes the rows its predicates match.
-func NewKeywordsDelete(ex orm.Executor) *KeywordsDelete {
+func NewKeywordsDelete(ex velox.Executor) *KeywordsDelete {
 	return &KeywordsDelete{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
 }
 
@@ -716,7 +716,7 @@ func (b *KeywordsDelete) Exec(ctx context.Context) (int, error) { return b.c.Del
 // QueryFields queries the "fields" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Keywords) QueryFields(ex orm.Executor) *FieldQuery {
+func (e *Keywords) QueryFields(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[0], e))
 	return q
@@ -739,7 +739,7 @@ func (q *KeywordsQuery) WithFields(opts ...*FieldQuery) *KeywordsQuery {
 // QueryColumns queries the "columns" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Keywords) QueryColumns(ex orm.Executor) *FieldQuery {
+func (e *Keywords) QueryColumns(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[1], e))
 	return q
@@ -762,7 +762,7 @@ func (q *KeywordsQuery) WithColumns(opts ...*FieldQuery) *KeywordsQuery {
 // QueryLoaded queries the "loaded" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Keywords) QueryLoaded(ex orm.Executor) *FieldQuery {
+func (e *Keywords) QueryLoaded(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[2], e))
 	return q
@@ -785,7 +785,7 @@ func (q *KeywordsQuery) WithLoaded(opts ...*FieldQuery) *KeywordsQuery {
 // QueryWith queries the "with" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Keywords) QueryWith(ex orm.Executor) *FieldQuery {
+func (e *Keywords) QueryWith(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[3], e))
 	return q
@@ -808,7 +808,7 @@ func (q *KeywordsQuery) WithWith(opts ...*FieldQuery) *KeywordsQuery {
 // QueryAll queries the "all" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Keywords) QueryAll(ex orm.Executor) *FieldQuery {
+func (e *Keywords) QueryAll(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[4], e))
 	return q

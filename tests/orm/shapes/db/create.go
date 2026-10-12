@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,41 @@ type CreateClient struct{}
 
 // Query returns a query of every Create, to run on ex: a database handle or a
 // transaction.
-func (*CreateClient) Query(ex orm.Executor) *entity.CreateQuery { return entity.NewCreateQuery(ex) }
+func (*CreateClient) Query(ex velox.Executor) *entity.CreateQuery { return entity.NewCreateQuery(ex) }
 
 // Create returns a builder that creates a Create.
-func (*CreateClient) Create(ex orm.Executor) *entity.CreateCreate { return entity.NewCreateCreate(ex) }
+func (*CreateClient) Create(ex velox.Executor) *entity.CreateCreate {
+	return entity.NewCreateCreate(ex)
+}
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*CreateClient) CreateBulk(ex orm.Executor, bs ...*entity.CreateCreate) *entity.CreateCreateBulk {
+func (*CreateClient) CreateBulk(ex velox.Executor, bs ...*entity.CreateCreate) *entity.CreateCreateBulk {
 	return entity.NewCreateCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Create rows its conditions match.
-func (*CreateClient) Update(ex orm.Executor) *entity.CreateUpdate { return entity.NewCreateUpdate(ex) }
+func (*CreateClient) Update(ex velox.Executor) *entity.CreateUpdate {
+	return entity.NewCreateUpdate(ex)
+}
 
 // Delete returns a builder that deletes the Create rows its conditions match.
-func (*CreateClient) Delete(ex orm.Executor) *entity.CreateDelete { return entity.NewCreateDelete(ex) }
+func (*CreateClient) Delete(ex velox.Executor) *entity.CreateDelete {
+	return entity.NewCreateDelete(ex)
+}
 
 // Get returns the Create with the given id, or velox.ErrNotFound.
-func (c *CreateClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Create, error) {
+func (c *CreateClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Create, error) {
 	return c.Query(ex).Where(predicate.Create(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Create with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *CreateClient) UpdateByID(ex orm.Executor, id int) *entity.CreateUpdate {
+func (c *CreateClient) UpdateByID(ex velox.Executor, id int) *entity.CreateUpdate {
 	return c.Update(ex).Where(predicate.Create(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Create with the given id, or returns velox.ErrNotFound.
-func (c *CreateClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *CreateClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Create(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.CreateMeta.NotFound()

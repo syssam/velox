@@ -7,7 +7,7 @@ package db
 
 import (
 	context "context"
-	orm "github.com/syssam/velox/orm"
+	velox "github.com/syssam/velox"
 	_ "github.com/syssam/velox/tests/orm/db/schemainit"
 )
 
@@ -24,7 +24,7 @@ type NodeType struct {
 	// the entity (its policy and interceptors apply), or velox.ErrNotFound. An
 	// id that is not of the type's id type is the id of no node of it; an
 	// integer of another integer type is the same id.
-	Get func(ctx context.Context, ex orm.Executor, id any) (Noder, error)
+	Get func(ctx context.Context, ex velox.Executor, id any) (Noder, error)
 }
 
 // NodeTypes returns the types of node, ordered by name: what a node(id:)

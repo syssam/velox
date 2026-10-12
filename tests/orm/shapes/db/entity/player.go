@@ -100,14 +100,14 @@ func linkPlayer(dst any, es []any) {
 
 // PlayerEdge is a row of a page of Player, with its cursor.
 type PlayerEdge struct {
-	Node   *Player    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Player      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PlayerConnection is one page of Player.
 type PlayerConnection struct {
-	Edges    []*PlayerEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*PlayerEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -134,7 +134,7 @@ var PlayerMeta = orm.Meta{
 type PlayerQuery struct{ c orm.QueryCore }
 
 // NewPlayerQuery returns a query of every Player.
-func NewPlayerQuery(ex orm.Executor) *PlayerQuery {
+func NewPlayerQuery(ex velox.Executor) *PlayerQuery {
 	return &PlayerQuery{c: orm.QueryCore{M: &PlayerMeta, Ex: ex}}
 }
 
@@ -279,7 +279,7 @@ func (q *PlayerQuery) Iter(ctx context.Context) iter.Seq2[*Player, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PlayerQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PlayerConnection, error) {
+func (q *PlayerQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PlayerConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -320,7 +320,7 @@ func (q *PlayerQuery) IDs(ctx context.Context) ([]string, error) {
 type PlayerCreate struct{ c orm.MutCore }
 
 // NewPlayerCreate returns a builder that creates a Player.
-func NewPlayerCreate(ex orm.Executor) *PlayerCreate {
+func NewPlayerCreate(ex velox.Executor) *PlayerCreate {
 	return &PlayerCreate{c: orm.MutCore{M: &PlayerMeta, Ex: ex}}
 }
 
@@ -368,7 +368,7 @@ func (b *PlayerCreate) Exec(ctx context.Context) error {
 
 // PlayerCreateBulk creates several Player rows with one statement.
 type PlayerCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PlayerCreate
 	n  int
 }
@@ -376,7 +376,7 @@ type PlayerCreateBulk struct {
 // NewPlayerCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPlayerCreateBulk(ex orm.Executor, bs ...*PlayerCreate) *PlayerCreateBulk {
+func NewPlayerCreateBulk(ex velox.Executor, bs ...*PlayerCreate) *PlayerCreateBulk {
 	return &PlayerCreateBulk{ex: ex, bs: bs}
 }
 
@@ -429,7 +429,7 @@ func (b *PlayerCreateBulk) Exec(ctx context.Context) error {
 type PlayerUpdate struct{ c orm.MutCore }
 
 // NewPlayerUpdate returns a builder that updates the rows its predicates match.
-func NewPlayerUpdate(ex orm.Executor) *PlayerUpdate {
+func NewPlayerUpdate(ex velox.Executor) *PlayerUpdate {
 	return &PlayerUpdate{c: orm.MutCore{M: &PlayerMeta, Ex: ex}}
 }
 
@@ -495,7 +495,7 @@ func (b *PlayerUpdate) SaveOne(ctx context.Context) (*Player, error) {
 type PlayerDelete struct{ c orm.MutCore }
 
 // NewPlayerDelete returns a builder that deletes the rows its predicates match.
-func NewPlayerDelete(ex orm.Executor) *PlayerDelete {
+func NewPlayerDelete(ex velox.Executor) *PlayerDelete {
 	return &PlayerDelete{c: orm.MutCore{M: &PlayerMeta, Ex: ex}}
 }
 
@@ -518,7 +518,7 @@ func (b *PlayerDelete) Exec(ctx context.Context) (int, error) { return b.c.Delet
 // QueryTeam queries the "team" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Player) QueryTeam(ex orm.Executor) *TeamQuery {
+func (e *Player) QueryTeam(ex velox.Executor) *TeamQuery {
 	q := NewTeamQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PlayerMeta.Edges[0], e))
 	return q
@@ -541,7 +541,7 @@ func (q *PlayerQuery) WithTeam(opts ...*TeamQuery) *PlayerQuery {
 // QueryFanOf queries the "fan_of" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Player) QueryFanOf(ex orm.Executor) *TeamQuery {
+func (e *Player) QueryFanOf(ex velox.Executor) *TeamQuery {
 	q := NewTeamQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PlayerMeta.Edges[1], e))
 	return q

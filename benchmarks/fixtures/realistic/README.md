@@ -325,7 +325,7 @@ writes (which the packages importing it read back):
 | the package | front end | export data |
 |---|---|---|
 | uses `context` only | 7 ms | 12 KB |
-| holds a `*orm.DB` | 12 ms | 82 KB |
+| holds a `*velox.DB` (then `*orm.DB`) | 12 ms | 82 KB |
 | builds one predicate | 27 ms | 92 KB |
 | runs one query, returns a count | 65 ms | 118 KB |
 | runs one query, returns the entities | 97 ms | 773 KB |

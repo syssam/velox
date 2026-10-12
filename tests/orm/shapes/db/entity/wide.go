@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -160,14 +161,14 @@ func ptrWide(v any, i int) any {
 
 // WideEdge is a row of a page of Wide, with its cursor.
 type WideEdge struct {
-	Node   *Wide      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Wide        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // WideConnection is one page of Wide.
 type WideConnection struct {
-	Edges    []*WideEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*WideEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -231,7 +232,7 @@ var WideMeta = orm.Meta{
 type WideQuery struct{ c orm.QueryCore }
 
 // NewWideQuery returns a query of every Wide.
-func NewWideQuery(ex orm.Executor) *WideQuery {
+func NewWideQuery(ex velox.Executor) *WideQuery {
 	return &WideQuery{c: orm.QueryCore{M: &WideMeta, Ex: ex}}
 }
 
@@ -376,7 +377,7 @@ func (q *WideQuery) Iter(ctx context.Context) iter.Seq2[*Wide, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *WideQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*WideConnection, error) {
+func (q *WideQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*WideConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -417,7 +418,7 @@ func (q *WideQuery) IDs(ctx context.Context) ([]int, error) {
 type WideCreate struct{ c orm.MutCore }
 
 // NewWideCreate returns a builder that creates a Wide.
-func NewWideCreate(ex orm.Executor) *WideCreate {
+func NewWideCreate(ex velox.Executor) *WideCreate {
 	return &WideCreate{c: orm.MutCore{M: &WideMeta, Ex: ex}}
 }
 
@@ -465,7 +466,7 @@ func (b *WideCreate) Exec(ctx context.Context) error {
 
 // WideCreateBulk creates several Wide rows with one statement.
 type WideCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*WideCreate
 	n  int
 }
@@ -473,7 +474,7 @@ type WideCreateBulk struct {
 // NewWideCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewWideCreateBulk(ex orm.Executor, bs ...*WideCreate) *WideCreateBulk {
+func NewWideCreateBulk(ex velox.Executor, bs ...*WideCreate) *WideCreateBulk {
 	return &WideCreateBulk{ex: ex, bs: bs}
 }
 
@@ -526,7 +527,7 @@ func (b *WideCreateBulk) Exec(ctx context.Context) error {
 type WideUpdate struct{ c orm.MutCore }
 
 // NewWideUpdate returns a builder that updates the rows its predicates match.
-func NewWideUpdate(ex orm.Executor) *WideUpdate {
+func NewWideUpdate(ex velox.Executor) *WideUpdate {
 	return &WideUpdate{c: orm.MutCore{M: &WideMeta, Ex: ex}}
 }
 
@@ -592,7 +593,7 @@ func (b *WideUpdate) SaveOne(ctx context.Context) (*Wide, error) {
 type WideDelete struct{ c orm.MutCore }
 
 // NewWideDelete returns a builder that deletes the rows its predicates match.
-func NewWideDelete(ex orm.Executor) *WideDelete {
+func NewWideDelete(ex velox.Executor) *WideDelete {
 	return &WideDelete{c: orm.MutCore{M: &WideMeta, Ex: ex}}
 }
 

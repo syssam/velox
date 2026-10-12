@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrNot(v any, i int) any {
 
 // NotEdge is a row of a page of Not, with its cursor.
 type NotEdge struct {
-	Node   *Not       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Not         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // NotConnection is one page of Not.
 type NotConnection struct {
-	Edges    []*NotEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*NotEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,9 @@ var NotMeta = orm.Meta{
 type NotQuery struct{ c orm.QueryCore }
 
 // NewNotQuery returns a query of every Not.
-func NewNotQuery(ex orm.Executor) *NotQuery { return &NotQuery{c: orm.QueryCore{M: &NotMeta, Ex: ex}} }
+func NewNotQuery(ex velox.Executor) *NotQuery {
+	return &NotQuery{c: orm.QueryCore{M: &NotMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +214,7 @@ func (q *NotQuery) Iter(ctx context.Context) iter.Seq2[*Not, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *NotQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*NotConnection, error) {
+func (q *NotQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NotConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +255,9 @@ func (q *NotQuery) IDs(ctx context.Context) ([]int, error) {
 type NotCreate struct{ c orm.MutCore }
 
 // NewNotCreate returns a builder that creates a Not.
-func NewNotCreate(ex orm.Executor) *NotCreate { return &NotCreate{c: orm.MutCore{M: &NotMeta, Ex: ex}} }
+func NewNotCreate(ex velox.Executor) *NotCreate {
+	return &NotCreate{c: orm.MutCore{M: &NotMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +303,7 @@ func (b *NotCreate) Exec(ctx context.Context) error {
 
 // NotCreateBulk creates several Not rows with one statement.
 type NotCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*NotCreate
 	n  int
 }
@@ -306,7 +311,7 @@ type NotCreateBulk struct {
 // NewNotCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewNotCreateBulk(ex orm.Executor, bs ...*NotCreate) *NotCreateBulk {
+func NewNotCreateBulk(ex velox.Executor, bs ...*NotCreate) *NotCreateBulk {
 	return &NotCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +364,9 @@ func (b *NotCreateBulk) Exec(ctx context.Context) error {
 type NotUpdate struct{ c orm.MutCore }
 
 // NewNotUpdate returns a builder that updates the rows its predicates match.
-func NewNotUpdate(ex orm.Executor) *NotUpdate { return &NotUpdate{c: orm.MutCore{M: &NotMeta, Ex: ex}} }
+func NewNotUpdate(ex velox.Executor) *NotUpdate {
+	return &NotUpdate{c: orm.MutCore{M: &NotMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +430,9 @@ func (b *NotUpdate) SaveOne(ctx context.Context) (*Not, error) {
 type NotDelete struct{ c orm.MutCore }
 
 // NewNotDelete returns a builder that deletes the rows its predicates match.
-func NewNotDelete(ex orm.Executor) *NotDelete { return &NotDelete{c: orm.MutCore{M: &NotMeta, Ex: ex}} }
+func NewNotDelete(ex velox.Executor) *NotDelete {
+	return &NotDelete{c: orm.MutCore{M: &NotMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/bare"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
 	"github.com/syssam/velox/tests/orm/shapes/db/labelkey"
@@ -50,7 +49,7 @@ func TestBare_EntityWithoutFields(t *testing.T) {
 // namedKeys: label keys la, lb (string kind); weight keys w1 (id assigned by
 // the database), w2 = 50; both items of la; w2 has labels la+lb; w1 and w2
 // are peers.
-func namedKeys(t *testing.T, db orm.Executor) (la, lb *entity.LabelKey, w1, w2 *entity.WeightKey) {
+func namedKeys(t *testing.T, db velox.Executor) (la, lb *entity.LabelKey, w1, w2 *entity.WeightKey) {
 	t.Helper()
 	ctx := context.Background()
 	la = must(client.LabelKey.Create(db).Set(labelkey.ID.Set("la"), labelkey.Name.Set("a")).Save(ctx))

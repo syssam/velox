@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrEntity(v any, i int) any {
 
 // EntityEdge is a row of a page of Entity, with its cursor.
 type EntityEdge struct {
-	Node   *Entity    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Entity      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // EntityConnection is one page of Entity.
 type EntityConnection struct {
-	Edges    []*EntityEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*EntityEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var EntityMeta = orm.Meta{
 type EntityQuery struct{ c orm.QueryCore }
 
 // NewEntityQuery returns a query of every Entity.
-func NewEntityQuery(ex orm.Executor) *EntityQuery {
+func NewEntityQuery(ex velox.Executor) *EntityQuery {
 	return &EntityQuery{c: orm.QueryCore{M: &EntityMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *EntityQuery) Iter(ctx context.Context) iter.Seq2[*Entity, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EntityQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EntityConnection, error) {
+func (q *EntityQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*EntityConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *EntityQuery) IDs(ctx context.Context) ([]int, error) {
 type EntityCreate struct{ c orm.MutCore }
 
 // NewEntityCreate returns a builder that creates a Entity.
-func NewEntityCreate(ex orm.Executor) *EntityCreate {
+func NewEntityCreate(ex velox.Executor) *EntityCreate {
 	return &EntityCreate{c: orm.MutCore{M: &EntityMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *EntityCreate) Exec(ctx context.Context) error {
 
 // EntityCreateBulk creates several Entity rows with one statement.
 type EntityCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*EntityCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type EntityCreateBulk struct {
 // NewEntityCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewEntityCreateBulk(ex orm.Executor, bs ...*EntityCreate) *EntityCreateBulk {
+func NewEntityCreateBulk(ex velox.Executor, bs ...*EntityCreate) *EntityCreateBulk {
 	return &EntityCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *EntityCreateBulk) Exec(ctx context.Context) error {
 type EntityUpdate struct{ c orm.MutCore }
 
 // NewEntityUpdate returns a builder that updates the rows its predicates match.
-func NewEntityUpdate(ex orm.Executor) *EntityUpdate {
+func NewEntityUpdate(ex velox.Executor) *EntityUpdate {
 	return &EntityUpdate{c: orm.MutCore{M: &EntityMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *EntityUpdate) SaveOne(ctx context.Context) (*Entity, error) {
 type EntityDelete struct{ c orm.MutCore }
 
 // NewEntityDelete returns a builder that deletes the rows its predicates match.
-func NewEntityDelete(ex orm.Executor) *EntityDelete {
+func NewEntityDelete(ex velox.Executor) *EntityDelete {
 	return &EntityDelete{c: orm.MutCore{M: &EntityMeta, Ex: ex}}
 }
 

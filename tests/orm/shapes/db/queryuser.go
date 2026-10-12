@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type QueryUserClient struct{}
 
 // Query returns a query of every QueryUser, to run on ex: a database handle or a
 // transaction.
-func (*QueryUserClient) Query(ex orm.Executor) *entity.QueryUserQuery {
+func (*QueryUserClient) Query(ex velox.Executor) *entity.QueryUserQuery {
 	return entity.NewQueryUserQuery(ex)
 }
 
 // Create returns a builder that creates a QueryUser.
-func (*QueryUserClient) Create(ex orm.Executor) *entity.QueryUserCreate {
+func (*QueryUserClient) Create(ex velox.Executor) *entity.QueryUserCreate {
 	return entity.NewQueryUserCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*QueryUserClient) CreateBulk(ex orm.Executor, bs ...*entity.QueryUserCreate) *entity.QueryUserCreateBulk {
+func (*QueryUserClient) CreateBulk(ex velox.Executor, bs ...*entity.QueryUserCreate) *entity.QueryUserCreateBulk {
 	return entity.NewQueryUserCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the QueryUser rows its conditions match.
-func (*QueryUserClient) Update(ex orm.Executor) *entity.QueryUserUpdate {
+func (*QueryUserClient) Update(ex velox.Executor) *entity.QueryUserUpdate {
 	return entity.NewQueryUserUpdate(ex)
 }
 
 // Delete returns a builder that deletes the QueryUser rows its conditions match.
-func (*QueryUserClient) Delete(ex orm.Executor) *entity.QueryUserDelete {
+func (*QueryUserClient) Delete(ex velox.Executor) *entity.QueryUserDelete {
 	return entity.NewQueryUserDelete(ex)
 }
 
 // Get returns the QueryUser with the given id, or velox.ErrNotFound.
-func (c *QueryUserClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.QueryUser, error) {
+func (c *QueryUserClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.QueryUser, error) {
 	return c.Query(ex).Where(predicate.QueryUser(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the QueryUser with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *QueryUserClient) UpdateByID(ex orm.Executor, id int) *entity.QueryUserUpdate {
+func (c *QueryUserClient) UpdateByID(ex velox.Executor, id int) *entity.QueryUserUpdate {
 	return c.Update(ex).Where(predicate.QueryUser(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the QueryUser with the given id, or returns velox.ErrNotFound.
-func (c *QueryUserClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *QueryUserClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.QueryUser(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.QueryUserMeta.NotFound()

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	edgesenum "github.com/syssam/velox/tests/orm/shapes/db/edgesenum"
@@ -40,14 +41,14 @@ func ptrEdgesEnum(v any, i int) any {
 
 // EdgesEnumEdge is a row of a page of EdgesEnum, with its cursor.
 type EdgesEnumEdge struct {
-	Node   *EdgesEnum `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *EdgesEnum   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // EdgesEnumConnection is one page of EdgesEnum.
 type EdgesEnumConnection struct {
 	Edges    []*EdgesEnumEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -72,7 +73,7 @@ var EdgesEnumMeta = orm.Meta{
 type EdgesEnumQuery struct{ c orm.QueryCore }
 
 // NewEdgesEnumQuery returns a query of every EdgesEnum.
-func NewEdgesEnumQuery(ex orm.Executor) *EdgesEnumQuery {
+func NewEdgesEnumQuery(ex velox.Executor) *EdgesEnumQuery {
 	return &EdgesEnumQuery{c: orm.QueryCore{M: &EdgesEnumMeta, Ex: ex}}
 }
 
@@ -220,7 +221,7 @@ func (q *EdgesEnumQuery) Iter(ctx context.Context) iter.Seq2[*EdgesEnum, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EdgesEnumQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EdgesEnumConnection, error) {
+func (q *EdgesEnumQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*EdgesEnumConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -261,7 +262,7 @@ func (q *EdgesEnumQuery) IDs(ctx context.Context) ([]int, error) {
 type EdgesEnumCreate struct{ c orm.MutCore }
 
 // NewEdgesEnumCreate returns a builder that creates a EdgesEnum.
-func NewEdgesEnumCreate(ex orm.Executor) *EdgesEnumCreate {
+func NewEdgesEnumCreate(ex velox.Executor) *EdgesEnumCreate {
 	return &EdgesEnumCreate{c: orm.MutCore{M: &EdgesEnumMeta, Ex: ex}}
 }
 
@@ -309,7 +310,7 @@ func (b *EdgesEnumCreate) Exec(ctx context.Context) error {
 
 // EdgesEnumCreateBulk creates several EdgesEnum rows with one statement.
 type EdgesEnumCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*EdgesEnumCreate
 	n  int
 }
@@ -317,7 +318,7 @@ type EdgesEnumCreateBulk struct {
 // NewEdgesEnumCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewEdgesEnumCreateBulk(ex orm.Executor, bs ...*EdgesEnumCreate) *EdgesEnumCreateBulk {
+func NewEdgesEnumCreateBulk(ex velox.Executor, bs ...*EdgesEnumCreate) *EdgesEnumCreateBulk {
 	return &EdgesEnumCreateBulk{ex: ex, bs: bs}
 }
 
@@ -370,7 +371,7 @@ func (b *EdgesEnumCreateBulk) Exec(ctx context.Context) error {
 type EdgesEnumUpdate struct{ c orm.MutCore }
 
 // NewEdgesEnumUpdate returns a builder that updates the rows its predicates match.
-func NewEdgesEnumUpdate(ex orm.Executor) *EdgesEnumUpdate {
+func NewEdgesEnumUpdate(ex velox.Executor) *EdgesEnumUpdate {
 	return &EdgesEnumUpdate{c: orm.MutCore{M: &EdgesEnumMeta, Ex: ex}}
 }
 
@@ -436,7 +437,7 @@ func (b *EdgesEnumUpdate) SaveOne(ctx context.Context) (*EdgesEnum, error) {
 type EdgesEnumDelete struct{ c orm.MutCore }
 
 // NewEdgesEnumDelete returns a builder that deletes the rows its predicates match.
-func NewEdgesEnumDelete(ex orm.Executor) *EdgesEnumDelete {
+func NewEdgesEnumDelete(ex velox.Executor) *EdgesEnumDelete {
 	return &EdgesEnumDelete{c: orm.MutCore{M: &EdgesEnumMeta, Ex: ex}}
 }
 

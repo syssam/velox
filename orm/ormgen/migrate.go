@@ -51,7 +51,7 @@ import (
 	"io"
 
 	"github.com/syssam/velox/dialect/sql/schema"
-	"` + ormPath + `"
+	"` + veloxPath + `"
 )
 
 var (
@@ -66,7 +66,7 @@ var (
 )
 
 // Create brings the tables of db up to date with the schema.
-func Create(ctx context.Context, db *orm.DB, opts ...schema.MigrateOption) error {
+func Create(ctx context.Context, db *velox.DB, opts ...schema.MigrateOption) error {
 	m, err := schema.NewMigrate(db.Driver(), opts...)
 	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -75,7 +75,7 @@ func Create(ctx context.Context, db *orm.DB, opts ...schema.MigrateOption) error
 }
 
 // WriteTo writes the statements Create would run to w, and runs none.
-func WriteTo(ctx context.Context, db *orm.DB, w io.Writer, opts ...schema.MigrateOption) error {
+func WriteTo(ctx context.Context, db *velox.DB, w io.Writer, opts ...schema.MigrateOption) error {
 	m, err := schema.NewMigrate(&schema.WriteDriver{Driver: db.Driver(), Writer: w}, opts...)
 	if err != nil {
 		return fmt.Errorf("migrate: %w", err)

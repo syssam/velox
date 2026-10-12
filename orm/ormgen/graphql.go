@@ -139,9 +139,9 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			model := goModelRx.FindStringSubmatch(m)[1]
 			switch {
 			case model == relay+"Cursor":
-				model = ormPath + ".Cursor"
+				model = veloxPath + ".Cursor"
 			case model == relay+"PageInfo":
-				model = ormPath + ".PageInfo"
+				model = veloxPath + ".PageInfo"
 			case model == bytesScalar:
 				// velox binds the scalar of a bytes field to a type of its
 				// gqlgen runtime. Which type marshals []byte is the
@@ -154,7 +154,7 @@ func (g *generator) graphql(graph *vgen.Graph) (map[string]string, error) {
 			return `@goModel(model: "` + model + `")`
 		})
 		src = strings.Replace(src, "scalar Bytes \n", "scalar Bytes\n", 1)
-		src = strings.Replace(src, "enum OrderDirection {", `enum OrderDirection @goModel(model: "`+ormPath+`.OrderDirection") {`, 1)
+		src = strings.Replace(src, "enum OrderDirection {", `enum OrderDirection @goModel(model: "`+veloxPath+`.OrderDirection") {`, 1)
 		if m := veloxRuntimeRx.FindStringSubmatch(src); m != nil {
 			return nil, fmt.Errorf("velox: graphql schema: %s binds a type of velox's GraphQL runtime, %s, which this generator has no counterpart of yet", name, m[1])
 		}

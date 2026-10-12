@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/db/entity"
 	"github.com/syssam/velox/tests/orm/db/migrate"
 	"github.com/syssam/velox/tests/orm/db/tag"
@@ -28,7 +28,7 @@ func TestEntityWithoutSchemainitRefusesToRun(t *testing.T) {
 	drv, err := velsql.Open(dialect.SQLite, "file:nostitch?mode=memory&cache=shared&_pragma=foreign_keys(1)")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = drv.Close() })
-	db := orm.OpenDB(dialect.SQLite, drv.DB())
+	db := velox.OpenDB(dialect.SQLite, drv.DB())
 	require.NoError(t, migrate.Create(ctx, db))
 
 	const want = `import _ "github.com/syssam/velox/tests/orm/db/schemainit"`

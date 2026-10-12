@@ -20,7 +20,7 @@ import (
 type Mutation struct {
 	op velox.Op
 	c  *MutCore
-	ex Executor
+	ex velox.Executor
 
 	old       any
 	oldLoaded bool
@@ -39,7 +39,7 @@ func (m *Mutation) Type() string { return m.c.M.Name }
 
 // Executor returns the database or transaction the mutation runs on, for a
 // hook that reads or writes other rows as part of it.
-func (m *Mutation) Executor() Executor { return m.ex }
+func (m *Mutation) Executor() velox.Executor { return m.ex }
 
 func (m *Mutation) field(name string) (*FieldMeta, error) {
 	meta := m.c.M
@@ -301,7 +301,11 @@ func (m *Mutation) OldField(ctx context.Context, name string) (velox.Value, erro
 		// The row as the mutation's own conditions select it, without the
 		// policy or interceptors of a user-facing read.
 		q := &QueryCore{M: m.c.M, Preds: m.c.Preds, Limit: 2}
-		rows, err := q.all(ctx, m.ex.conn())
+		c, err := connOf(m.ex, m.c.M)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := q.all(ctx, c)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +359,7 @@ func (m *Mutation) HasColumn(column string) bool { return m.c.M.col(column) >= 0
 // The policy runs before the hooks, so that a denied request reaches none of
 // them, and again after them when there are any, so that it sees what they
 // changed.
-func (m *MutCore) mutate(ctx context.Context, c *conn, op velox.Op, exec func(context.Context, *MutCore) (any, error)) (any, error) {
+func (m *MutCore) mutate(ctx context.Context, c *velox.ExecutorState, op velox.Op, exec func(context.Context, *MutCore) (any, error)) (any, error) {
 	meta := m.M
 	if err := meta.ready(); err != nil {
 		return nil, err
@@ -365,7 +369,7 @@ func (m *MutCore) mutate(ctx context.Context, c *conn, op velox.Op, exec func(co
 	if err := invalid(m.Sets); err != nil {
 		return nil, err
 	}
-	hooks := c.hooks()
+	hooks := c.Hooks()
 	if meta.Policy == nil && len(hooks) == 0 && len(meta.Hooks) == 0 {
 		return exec(ctx, m)
 	}

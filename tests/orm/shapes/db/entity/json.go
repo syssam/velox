@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrJson(v any, i int) any {
 
 // JsonEdge is a row of a page of Json, with its cursor.
 type JsonEdge struct {
-	Node   *Json      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Json        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // JsonConnection is one page of Json.
 type JsonConnection struct {
-	Edges    []*JsonEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*JsonEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var JsonMeta = orm.Meta{
 type JsonQuery struct{ c orm.QueryCore }
 
 // NewJsonQuery returns a query of every Json.
-func NewJsonQuery(ex orm.Executor) *JsonQuery {
+func NewJsonQuery(ex velox.Executor) *JsonQuery {
 	return &JsonQuery{c: orm.QueryCore{M: &JsonMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *JsonQuery) Iter(ctx context.Context) iter.Seq2[*Json, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *JsonQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*JsonConnection, error) {
+func (q *JsonQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*JsonConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *JsonQuery) IDs(ctx context.Context) ([]int, error) {
 type JsonCreate struct{ c orm.MutCore }
 
 // NewJsonCreate returns a builder that creates a Json.
-func NewJsonCreate(ex orm.Executor) *JsonCreate {
+func NewJsonCreate(ex velox.Executor) *JsonCreate {
 	return &JsonCreate{c: orm.MutCore{M: &JsonMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *JsonCreate) Exec(ctx context.Context) error {
 
 // JsonCreateBulk creates several Json rows with one statement.
 type JsonCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*JsonCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type JsonCreateBulk struct {
 // NewJsonCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewJsonCreateBulk(ex orm.Executor, bs ...*JsonCreate) *JsonCreateBulk {
+func NewJsonCreateBulk(ex velox.Executor, bs ...*JsonCreate) *JsonCreateBulk {
 	return &JsonCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *JsonCreateBulk) Exec(ctx context.Context) error {
 type JsonUpdate struct{ c orm.MutCore }
 
 // NewJsonUpdate returns a builder that updates the rows its predicates match.
-func NewJsonUpdate(ex orm.Executor) *JsonUpdate {
+func NewJsonUpdate(ex velox.Executor) *JsonUpdate {
 	return &JsonUpdate{c: orm.MutCore{M: &JsonMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *JsonUpdate) SaveOne(ctx context.Context) (*Json, error) {
 type JsonDelete struct{ c orm.MutCore }
 
 // NewJsonDelete returns a builder that deletes the rows its predicates match.
-func NewJsonDelete(ex orm.Executor) *JsonDelete {
+func NewJsonDelete(ex velox.Executor) *JsonDelete {
 	return &JsonDelete{c: orm.MutCore{M: &JsonMeta, Ex: ex}}
 }
 

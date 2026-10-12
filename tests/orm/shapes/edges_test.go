@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
@@ -41,7 +40,7 @@ type lib struct {
 	l1, l2             *entity.Locker
 }
 
-func library(t *testing.T, db orm.Executor) *lib {
+func library(t *testing.T, db velox.Executor) *lib {
 	t.Helper()
 	ctx := context.Background()
 	l := &lib{}

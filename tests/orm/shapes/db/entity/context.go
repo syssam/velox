@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrContext(v any, i int) any {
 
 // ContextEdge is a row of a page of Context, with its cursor.
 type ContextEdge struct {
-	Node   *Context   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Context     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ContextConnection is one page of Context.
 type ContextConnection struct {
 	Edges    []*ContextEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var ContextMeta = orm.Meta{
 type ContextQuery struct{ c orm.QueryCore }
 
 // NewContextQuery returns a query of every Context.
-func NewContextQuery(ex orm.Executor) *ContextQuery {
+func NewContextQuery(ex velox.Executor) *ContextQuery {
 	return &ContextQuery{c: orm.QueryCore{M: &ContextMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *ContextQuery) Iter(ctx context.Context) iter.Seq2[*Context, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ContextQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ContextConnection, error) {
+func (q *ContextQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ContextConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *ContextQuery) IDs(ctx context.Context) ([]int, error) {
 type ContextCreate struct{ c orm.MutCore }
 
 // NewContextCreate returns a builder that creates a Context.
-func NewContextCreate(ex orm.Executor) *ContextCreate {
+func NewContextCreate(ex velox.Executor) *ContextCreate {
 	return &ContextCreate{c: orm.MutCore{M: &ContextMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *ContextCreate) Exec(ctx context.Context) error {
 
 // ContextCreateBulk creates several Context rows with one statement.
 type ContextCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ContextCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type ContextCreateBulk struct {
 // NewContextCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewContextCreateBulk(ex orm.Executor, bs ...*ContextCreate) *ContextCreateBulk {
+func NewContextCreateBulk(ex velox.Executor, bs ...*ContextCreate) *ContextCreateBulk {
 	return &ContextCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *ContextCreateBulk) Exec(ctx context.Context) error {
 type ContextUpdate struct{ c orm.MutCore }
 
 // NewContextUpdate returns a builder that updates the rows its predicates match.
-func NewContextUpdate(ex orm.Executor) *ContextUpdate {
+func NewContextUpdate(ex velox.Executor) *ContextUpdate {
 	return &ContextUpdate{c: orm.MutCore{M: &ContextMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *ContextUpdate) SaveOne(ctx context.Context) (*Context, error) {
 type ContextDelete struct{ c orm.MutCore }
 
 // NewContextDelete returns a builder that deletes the rows its predicates match.
-func NewContextDelete(ex orm.Executor) *ContextDelete {
+func NewContextDelete(ex velox.Executor) *ContextDelete {
 	return &ContextDelete{c: orm.MutCore{M: &ContextMeta, Ex: ex}}
 }
 

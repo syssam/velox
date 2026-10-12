@@ -31,7 +31,7 @@ import (
 
 // seedGraph makes users with posts: ann (admin) with two, bob with one, cat
 // with none.
-func seedGraph(t *testing.T, db *orm.DB) (ann, bob, cat *entity.User) {
+func seedGraph(t *testing.T, db *velox.DB) (ann, bob, cat *entity.User) {
 	t.Helper()
 	ctx := context.Background()
 	ann, bob, cat = newUser(t, db, "ann", 30), newUser(t, db, "bob", 40), newUser(t, db, "cat", 50)
@@ -399,9 +399,9 @@ func TestOrderInput(t *testing.T) {
 		require.NoError(t, err)
 		return names(us)
 	}
-	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Field: user.OrderFieldName, Direction: orm.OrderDirectionDesc}))
+	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Field: user.OrderFieldName, Direction: velox.OrderDirectionDesc}))
 	assert.Equal(t, []string{"ann", "bob", "cat"}, list(&entity.UserOrder{Field: user.OrderFieldName}), "no direction is ascending")
-	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Direction: orm.OrderDirectionDesc}), "no field is the id")
+	assert.Equal(t, []string{"cat", "bob", "ann"}, list(&entity.UserOrder{Direction: velox.OrderDirectionDesc}), "no field is the id")
 	assert.Equal(t, predicate.UserOrderTerm{}, (*entity.UserOrder)(nil).Term())
 	assert.Len(t, list(nil), 3, "no input orders by nothing")
 
@@ -416,7 +416,7 @@ func TestOrderInput(t *testing.T) {
 	where := &filter.UserWhereInput{HasPosts: ptr(true)}
 	page, err := client.User.Query(db).
 		Where(where.P()).
-		OrderBy((&entity.UserOrder{Field: user.OrderFieldName, Direction: orm.OrderDirectionDesc}).Term()).
+		OrderBy((&entity.UserOrder{Field: user.OrderFieldName, Direction: velox.OrderDirectionDesc}).Term()).
 		Paginate(ctx, nil, intp(1), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"bob"}, names(nodes(page)))
@@ -429,7 +429,7 @@ func TestEdgeResolvers(t *testing.T) {
 	ctx := context.Background()
 	db, _ := open(t)
 	ann, _, cat := seedGraph(t, db)
-	req := orm.WithExecutor(ctx, db) // what a server puts in the context of a request
+	req := velox.WithExecutor(ctx, db) // what a server puts in the context of a request
 
 	// To one: queried on the handle of the context.
 	p := must(client.Post.Query(db).Where(post.Title.EQ("a1")).Only(ctx))
@@ -438,7 +438,7 @@ func TestEdgeResolvers(t *testing.T) {
 	assert.Equal(t, "ann", author.Name)
 	// Without a handle in the context there is nothing to run on.
 	_, err = p.Author(ctx)
-	require.ErrorIs(t, err, orm.ErrNoExecutor)
+	require.ErrorIs(t, err, velox.ErrNoExecutor)
 	// A neighbor the query loaded is returned as it is: no handle, no query.
 	loaded := must(client.Post.Query(db).Where(post.Title.EQ("a1")).WithAuthor().Only(ctx))
 	author, err = loaded.Author(ctx)
@@ -451,13 +451,13 @@ func TestEdgeResolvers(t *testing.T) {
 	assert.Nil(t, owner)
 
 	// To many: a page, with the arguments of the field.
-	conn, err := ann.Posts(req, nil, intp(1), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: orm.OrderDirectionDesc}, nil)
+	conn, err := ann.Posts(req, nil, intp(1), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: velox.OrderDirectionDesc}, nil)
 	require.NoError(t, err)
 	require.Len(t, conn.Edges, 1)
 	assert.Equal(t, "a2", conn.Edges[0].Node.Title)
 	assert.Equal(t, 2, conn.TotalCount)
 	assert.True(t, conn.PageInfo.HasNextPage)
-	conn, err = ann.Posts(req, conn.PageInfo.EndCursor, intp(5), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: orm.OrderDirectionDesc}, nil)
+	conn, err = ann.Posts(req, conn.PageInfo.EndCursor, intp(5), nil, nil, &entity.PostOrder{Field: post.OrderFieldTitle, Direction: velox.OrderDirectionDesc}, nil)
 	require.NoError(t, err)
 	require.Len(t, conn.Edges, 1)
 	assert.Equal(t, "a1", conn.Edges[0].Node.Title)
@@ -470,16 +470,16 @@ func TestEdgeResolvers(t *testing.T) {
 	assert.Empty(t, conn.Edges)
 	assert.Zero(t, conn.TotalCount)
 	// A list of orders, for an entity whose schema takes one.
-	comments, err := p.Comments(req, nil, nil, nil, nil, []*entity.CommentOrder{{Direction: orm.OrderDirectionDesc}})
+	comments, err := p.Comments(req, nil, nil, nil, nil, []*entity.CommentOrder{{Direction: velox.OrderDirectionDesc}})
 	require.NoError(t, err)
 	assert.Empty(t, comments.Edges)
 	_, err = ann.Posts(ctx, nil, nil, nil, nil, nil, nil)
-	require.ErrorIs(t, err, orm.ErrNoExecutor)
+	require.ErrorIs(t, err, velox.ErrNoExecutor)
 
 	// On a transaction: the resolver sees what the transaction wrote.
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		newPost(t, tx, cat, "c1")
-		conn, err := cat.Posts(orm.WithExecutor(ctx, tx), nil, nil, nil, nil, nil, nil)
+		conn, err := cat.Posts(velox.WithExecutor(ctx, tx), nil, nil, nil, nil, nil, nil)
 		require.NoError(t, err)
 		assert.Len(t, conn.Edges, 1)
 		return nil

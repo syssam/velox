@@ -93,14 +93,14 @@ func linkLabelKey(dst any, es []any) {
 
 // LabelKeyEdge is a row of a page of LabelKey, with its cursor.
 type LabelKeyEdge struct {
-	Node   *LabelKey  `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *LabelKey    `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // LabelKeyConnection is one page of LabelKey.
 type LabelKeyConnection struct {
 	Edges    []*LabelKeyEdge `json:"edges"`
-	PageInfo orm.PageInfo    `json:"pageInfo"`
+	PageInfo velox.PageInfo  `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -125,7 +125,7 @@ var LabelKeyMeta = orm.Meta{
 type LabelKeyQuery struct{ c orm.QueryCore }
 
 // NewLabelKeyQuery returns a query of every LabelKey.
-func NewLabelKeyQuery(ex orm.Executor) *LabelKeyQuery {
+func NewLabelKeyQuery(ex velox.Executor) *LabelKeyQuery {
 	return &LabelKeyQuery{c: orm.QueryCore{M: &LabelKeyMeta, Ex: ex}}
 }
 
@@ -270,7 +270,7 @@ func (q *LabelKeyQuery) Iter(ctx context.Context) iter.Seq2[*LabelKey, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *LabelKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*LabelKeyConnection, error) {
+func (q *LabelKeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*LabelKeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -311,7 +311,7 @@ func (q *LabelKeyQuery) IDs(ctx context.Context) ([]types.Label, error) {
 type LabelKeyCreate struct{ c orm.MutCore }
 
 // NewLabelKeyCreate returns a builder that creates a LabelKey.
-func NewLabelKeyCreate(ex orm.Executor) *LabelKeyCreate {
+func NewLabelKeyCreate(ex velox.Executor) *LabelKeyCreate {
 	return &LabelKeyCreate{c: orm.MutCore{M: &LabelKeyMeta, Ex: ex}}
 }
 
@@ -359,7 +359,7 @@ func (b *LabelKeyCreate) Exec(ctx context.Context) error {
 
 // LabelKeyCreateBulk creates several LabelKey rows with one statement.
 type LabelKeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*LabelKeyCreate
 	n  int
 }
@@ -367,7 +367,7 @@ type LabelKeyCreateBulk struct {
 // NewLabelKeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewLabelKeyCreateBulk(ex orm.Executor, bs ...*LabelKeyCreate) *LabelKeyCreateBulk {
+func NewLabelKeyCreateBulk(ex velox.Executor, bs ...*LabelKeyCreate) *LabelKeyCreateBulk {
 	return &LabelKeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -420,7 +420,7 @@ func (b *LabelKeyCreateBulk) Exec(ctx context.Context) error {
 type LabelKeyUpdate struct{ c orm.MutCore }
 
 // NewLabelKeyUpdate returns a builder that updates the rows its predicates match.
-func NewLabelKeyUpdate(ex orm.Executor) *LabelKeyUpdate {
+func NewLabelKeyUpdate(ex velox.Executor) *LabelKeyUpdate {
 	return &LabelKeyUpdate{c: orm.MutCore{M: &LabelKeyMeta, Ex: ex}}
 }
 
@@ -486,7 +486,7 @@ func (b *LabelKeyUpdate) SaveOne(ctx context.Context) (*LabelKey, error) {
 type LabelKeyDelete struct{ c orm.MutCore }
 
 // NewLabelKeyDelete returns a builder that deletes the rows its predicates match.
-func NewLabelKeyDelete(ex orm.Executor) *LabelKeyDelete {
+func NewLabelKeyDelete(ex velox.Executor) *LabelKeyDelete {
 	return &LabelKeyDelete{c: orm.MutCore{M: &LabelKeyMeta, Ex: ex}}
 }
 
@@ -509,7 +509,7 @@ func (b *LabelKeyDelete) Exec(ctx context.Context) (int, error) { return b.c.Del
 // QueryItems queries the "items" neighbors of e, on ex.
 //
 //go:noinline
-func (e *LabelKey) QueryItems(ex orm.Executor) *WeightKeyQuery {
+func (e *LabelKey) QueryItems(ex velox.Executor) *WeightKeyQuery {
 	q := NewWeightKeyQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(LabelKeyMeta.Edges[0], e))
 	return q
@@ -532,7 +532,7 @@ func (q *LabelKeyQuery) WithItems(opts ...*WeightKeyQuery) *LabelKeyQuery {
 // QueryWeights queries the "weights" neighbors of e, on ex.
 //
 //go:noinline
-func (e *LabelKey) QueryWeights(ex orm.Executor) *WeightKeyQuery {
+func (e *LabelKey) QueryWeights(ex velox.Executor) *WeightKeyQuery {
 	q := NewWeightKeyQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(LabelKeyMeta.Edges[1], e))
 	return q

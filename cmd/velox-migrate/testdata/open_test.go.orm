@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/tests/orm/db/entity"
 	"github.com/syssam/velox/tests/orm/db/migrate"
 	"github.com/syssam/velox/tests/orm/db/post"
@@ -18,17 +18,17 @@ import (
 // byNameDesc is the order input "by name, descending", of an entity that
 // takes a list of orders.
 func byNameDesc(*testing.T) []*entity.UserOrder {
-	return []*entity.UserOrder{{Field: user.OrderFieldName, Direction: orm.OrderDirectionDesc}}
+	return []*entity.UserOrder{{Field: user.OrderFieldName, Direction: velox.OrderDirectionDesc}}
 }
 
 // withHandle is what a server does once per request where edges are resolved
 // from entities: it puts the handle in the context.
 func withHandle(ctx context.Context, s *Store) context.Context {
-	return orm.WithExecutor(ctx, s.Client)
+	return velox.WithExecutor(ctx, s.Client)
 }
 
 // descending is the direction of an order input.
-const descending = orm.OrderDirectionDesc
+const descending = velox.OrderDirectionDesc
 
 var seq atomic.Int64
 
@@ -38,12 +38,12 @@ var seq atomic.Int64
 
 // byTitle is the order input "by title, ascending".
 func byTitle(*testing.T) *entity.PostOrder {
-	return &entity.PostOrder{Field: post.OrderFieldTitle, Direction: orm.OrderDirectionAsc}
+	return &entity.PostOrder{Field: post.OrderFieldTitle, Direction: velox.OrderDirectionAsc}
 }
 
 func open(t *testing.T) *Store {
 	t.Helper()
-	conn, err := orm.Open("sqlite", fmt.Sprintf("file:apporm%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", seq.Add(1)))
+	conn, err := velox.Open("sqlite", fmt.Sprintf("file:apporm%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", seq.Add(1)))
 	if err != nil {
 		t.Fatal(err)
 	}

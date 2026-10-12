@@ -54,7 +54,7 @@ func (g *generator) model() (map[string][]byte, error) {
 	im := newImports()
 	im.use(ormPath, "orm")
 	// The errors an edge accessor returns are package velox's.
-	veloxPkg := im.use("github.com/syssam/velox", "velox")
+	veloxPkg := im.use(veloxPath, "velox")
 	im.use("context", "context")
 	im.use("slices", "slices")
 	im.use("iter", "iter")
@@ -177,13 +177,13 @@ func (g *generator) model() (map[string][]byte, error) {
 		w(`// %[1]sEdge is a row of a page of %[1]s, with its cursor.
 type %[1]sEdge struct {
 	Node   *%[1]s     `+"`json:\"node\"`"+`
-	Cursor orm.Cursor `+"`json:\"cursor\"`"+`
+	Cursor velox.Cursor `+"`json:\"cursor\"`"+`
 }
 
 // %[1]sConnection is one page of %[1]s.
 type %[1]sConnection struct {
 	Edges    []*%[1]sEdge `+"`json:\"edges\"`"+`
-	PageInfo orm.PageInfo `+"`json:\"pageInfo\"`"+`
+	PageInfo velox.PageInfo `+"`json:\"pageInfo\"`"+`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `+"`json:\"totalCount\"`"+`
@@ -256,7 +256,7 @@ type %[1]sConnection struct {
 type %[1]s struct{ c orm.QueryCore }
 
 // %[3]s returns a query of every %[2]s.
-func %[3]s(ex orm.Executor) *%[1]s { return &%[1]s{c: orm.QueryCore{M: &%[4]s, Ex: ex}} }
+func %[3]s(ex velox.Executor) *%[1]s { return &%[1]s{c: orm.QueryCore{M: &%[4]s, Ex: ex}} }
 
 // Where adds predicates; all must hold.
 func (q *%[1]s) Where(ps ...%[5]s) *%[1]s {
@@ -363,7 +363,7 @@ func (q *%[1]s) Iter(ctx context.Context) iter.Seq2[*%[2]s, error] {
 // a cursor per row: the first rows after the cursor after, or the last rows
 // before the cursor before. It is keyset pagination in the shape of a Relay
 // connection, for any kind of list endpoint.
-func (q *%[1]s) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*%[2]sConnection, error) {
+func (q *%[1]s) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*%[2]sConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -401,7 +401,7 @@ func (q *%[1]s) IDs(ctx context.Context) ([]%[8]s, error) {
 type %[1]s struct{ c orm.MutCore }
 
 // %[3]s returns a builder that creates a %[2]s.
-func %[3]s(ex orm.Executor) *%[1]s { return &%[1]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
+func %[3]s(ex velox.Executor) *%[1]s { return &%[1]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
 
 // Set adds field values and edges of the new row.
 func (b *%[1]s) Set(ss ...%[5]s) *%[1]s {
@@ -439,7 +439,7 @@ func (b *%[1]s) Exec(ctx context.Context) error {
 
 // %[6]s creates several %[2]s rows with one statement.
 type %[6]s struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*%[1]s
 	n  int
 }
@@ -447,7 +447,7 @@ type %[6]s struct {
 // %[7]s returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func %[7]s(ex orm.Executor, bs ...*%[1]s) *%[6]s {
+func %[7]s(ex velox.Executor, bs ...*%[1]s) *%[6]s {
 	return &%[6]s{ex: ex, bs: bs}
 }
 
@@ -493,7 +493,7 @@ func (b *%[6]s) Exec(ctx context.Context) error {
 type %[8]s struct{ c orm.MutCore }
 
 // %[9]s returns a builder that updates the rows its predicates match.
-func %[9]s(ex orm.Executor) *%[8]s { return &%[8]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
+func %[9]s(ex velox.Executor) *%[8]s { return &%[8]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
 
 // Set adds assignments and edge changes.
 func (b *%[8]s) Set(ss ...%[5]s) *%[8]s {
@@ -545,7 +545,7 @@ func (b *%[8]s) SaveOne(ctx context.Context) (*%[2]s, error) {
 type %[11]s struct{ c orm.MutCore }
 
 // %[12]s returns a builder that deletes the rows its predicates match.
-func %[12]s(ex orm.Executor) *%[11]s { return &%[11]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
+func %[12]s(ex velox.Executor) *%[11]s { return &%[11]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
 
 // Where restricts the rows deleted; all predicates must hold.
 func (b *%[11]s) Where(ps ...%[10]s) *%[11]s {
@@ -576,7 +576,7 @@ func (b *%[11]s) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx)
 		for _, x := range e.Edges {
 			t := g.names(x.Target)
 			w(`// Query%[1]s queries the %[2]q neighbors of e, on ex.
-func (e *%[3]s) Query%[1]s(ex orm.Executor) *%[4]s {
+func (e *%[3]s) Query%[1]s(ex velox.Executor) *%[4]s {
 	q := %[5]s(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(%[6]s.Edges[%[7]d], e))
 	return q
@@ -654,7 +654,7 @@ func noInline(src []byte) []byte {
 // its order input, and a method per edge the schema exposes, by which a
 // GraphQL engine resolves the edge (it binds a field to the method of the
 // same name). The methods take what they run on from the context
-// (orm.WithExecutor): an entity holds no connection, and an engine passes
+// (velox.WithExecutor): an entity holds no connection, and an engine passes
 // only the arguments of the field.
 //
 // An edge that takes a filter declares it as what it needs of one,
@@ -682,7 +682,7 @@ func (g *generator) gqlModel(w func(string, ...any), e *ent, q *gqlEnt, veloxPkg
 // %[1]sOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type %[1]sOrder struct {
-	Direction orm.OrderDirection `+"`json:\"direction\"`"+`
+	Direction velox.OrderDirection `+"`json:\"direction\"`"+`
 	Field     %[5]s.%[6]s    `+"`json:\"field\"`"+`
 }
 
@@ -702,12 +702,12 @@ func (o *%[1]sOrder) Term() %[2]s {
 		switch x.Kind {
 		case gqlOne:
 			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 func (e *%[3]s) %[1]s(ctx context.Context) (*%[4]s, error) {
 	v, err := e.Edges.%[5]sOrErr()
 	if %[6]s.IsNotLoaded(err) {
-		v, err = e.Query%[5]s(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.Query%[5]s(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, %[6]s.MaskNotFound(err)
 }
@@ -715,12 +715,12 @@ func (e *%[3]s) %[1]s(ctx context.Context) (*%[4]s, error) {
 `, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, veloxPkg)
 		case gqlList:
 			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbors the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
 	if v, err := e.Edges.%[5]sOrErr(); !%[6]s.IsNotLoaded(err) {
 		return v, err
 	}
-	return e.Query%[5]s(orm.ExecutorFrom(ctx)).All(ctx)
+	return e.Query%[5]s(velox.ExecutorFrom(ctx)).All(ctx)
 }
 
 `, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, veloxPkg)
@@ -741,9 +741,9 @@ func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
 				doc = fmt.Sprintf("\n// where is a *filter.%sWhereInput, or nil.", t.Name)
 			}
 			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).%[8]s
-func (e *%[3]s) %[1]s(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int%[6]s) (*%[4]sConnection, error) {
-	q := e.Query%[5]s(orm.ExecutorFrom(ctx))%[7]s
+// neighbors, queried on the handle of the context (velox.WithExecutor).%[8]s
+func (e *%[3]s) %[1]s(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int%[6]s) (*%[4]sConnection, error) {
+	q := e.Query%[5]s(velox.ExecutorFrom(ctx))%[7]s
 `, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, params, chain, doc)
 			if x.Where {
 				w("\tif where != nil {\n\t\tq.Where(where.P())\n\t}\n")

@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type GoTypeShapeClient struct{}
 
 // Query returns a query of every GoTypeShape, to run on ex: a database handle or a
 // transaction.
-func (*GoTypeShapeClient) Query(ex orm.Executor) *entity.GoTypeShapeQuery {
+func (*GoTypeShapeClient) Query(ex velox.Executor) *entity.GoTypeShapeQuery {
 	return entity.NewGoTypeShapeQuery(ex)
 }
 
 // Create returns a builder that creates a GoTypeShape.
-func (*GoTypeShapeClient) Create(ex orm.Executor) *entity.GoTypeShapeCreate {
+func (*GoTypeShapeClient) Create(ex velox.Executor) *entity.GoTypeShapeCreate {
 	return entity.NewGoTypeShapeCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*GoTypeShapeClient) CreateBulk(ex orm.Executor, bs ...*entity.GoTypeShapeCreate) *entity.GoTypeShapeCreateBulk {
+func (*GoTypeShapeClient) CreateBulk(ex velox.Executor, bs ...*entity.GoTypeShapeCreate) *entity.GoTypeShapeCreateBulk {
 	return entity.NewGoTypeShapeCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the GoTypeShape rows its conditions match.
-func (*GoTypeShapeClient) Update(ex orm.Executor) *entity.GoTypeShapeUpdate {
+func (*GoTypeShapeClient) Update(ex velox.Executor) *entity.GoTypeShapeUpdate {
 	return entity.NewGoTypeShapeUpdate(ex)
 }
 
 // Delete returns a builder that deletes the GoTypeShape rows its conditions match.
-func (*GoTypeShapeClient) Delete(ex orm.Executor) *entity.GoTypeShapeDelete {
+func (*GoTypeShapeClient) Delete(ex velox.Executor) *entity.GoTypeShapeDelete {
 	return entity.NewGoTypeShapeDelete(ex)
 }
 
 // Get returns the GoTypeShape with the given id, or velox.ErrNotFound.
-func (c *GoTypeShapeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.GoTypeShape, error) {
+func (c *GoTypeShapeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.GoTypeShape, error) {
 	return c.Query(ex).Where(predicate.GoTypeShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the GoTypeShape with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *GoTypeShapeClient) UpdateByID(ex orm.Executor, id int) *entity.GoTypeShapeUpdate {
+func (c *GoTypeShapeClient) UpdateByID(ex velox.Executor, id int) *entity.GoTypeShapeUpdate {
 	return c.Update(ex).Where(predicate.GoTypeShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the GoTypeShape with the given id, or returns velox.ErrNotFound.
-func (c *GoTypeShapeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *GoTypeShapeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.GoTypeShape(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.GoTypeShapeMeta.NotFound()

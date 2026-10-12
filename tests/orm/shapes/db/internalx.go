@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type InternalClient struct{}
 
 // Query returns a query of every Internal, to run on ex: a database handle or a
 // transaction.
-func (*InternalClient) Query(ex orm.Executor) *entity.InternalQuery {
+func (*InternalClient) Query(ex velox.Executor) *entity.InternalQuery {
 	return entity.NewInternalQuery(ex)
 }
 
 // Create returns a builder that creates a Internal.
-func (*InternalClient) Create(ex orm.Executor) *entity.InternalCreate {
+func (*InternalClient) Create(ex velox.Executor) *entity.InternalCreate {
 	return entity.NewInternalCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*InternalClient) CreateBulk(ex orm.Executor, bs ...*entity.InternalCreate) *entity.InternalCreateBulk {
+func (*InternalClient) CreateBulk(ex velox.Executor, bs ...*entity.InternalCreate) *entity.InternalCreateBulk {
 	return entity.NewInternalCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Internal rows its conditions match.
-func (*InternalClient) Update(ex orm.Executor) *entity.InternalUpdate {
+func (*InternalClient) Update(ex velox.Executor) *entity.InternalUpdate {
 	return entity.NewInternalUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Internal rows its conditions match.
-func (*InternalClient) Delete(ex orm.Executor) *entity.InternalDelete {
+func (*InternalClient) Delete(ex velox.Executor) *entity.InternalDelete {
 	return entity.NewInternalDelete(ex)
 }
 
 // Get returns the Internal with the given id, or velox.ErrNotFound.
-func (c *InternalClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Internal, error) {
+func (c *InternalClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Internal, error) {
 	return c.Query(ex).Where(predicate.Internal(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Internal with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *InternalClient) UpdateByID(ex orm.Executor, id int) *entity.InternalUpdate {
+func (c *InternalClient) UpdateByID(ex velox.Executor, id int) *entity.InternalUpdate {
 	return c.Update(ex).Where(predicate.Internal(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Internal with the given id, or returns velox.ErrNotFound.
-func (c *InternalClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *InternalClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Internal(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.InternalMeta.NotFound()

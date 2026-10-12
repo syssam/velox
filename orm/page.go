@@ -6,12 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"slices"
-	"strconv"
 	"time"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 )
 
@@ -19,49 +18,13 @@ import (
 // RPC): keyset pagination with opaque cursors, and predicates and order terms
 // built from field names that arrive in a request.
 
-// Cursor is the position of a row in an ordering: an opaque string a page
-// returns with each row and takes back as After or Before. A cursor made for
-// one ordering is refused under another.
-type Cursor string
-
-// MarshalGQL and UnmarshalGQL are the methods a GraphQL engine binds a
-// scalar by (gqlgen's and graphql-go's Marshaler); nothing here imports one.
-func (c Cursor) MarshalGQL(w io.Writer) { _, _ = io.WriteString(w, strconv.Quote(string(c))) }
-
-// UnmarshalGQL takes the cursor a client sent back.
-func (c *Cursor) UnmarshalGQL(v any) error {
-	s, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("%w: it is a %T, not a string", ErrBadCursor, v)
-	}
-	*c = Cursor(s)
-	return nil
-}
-
-// PageInfo says where a page lies in the whole: Relay's PageInfo.
-type PageInfo struct {
-	HasNextPage     bool    `json:"hasNextPage"`
-	HasPreviousPage bool    `json:"hasPreviousPage"`
-	StartCursor     *Cursor `json:"startCursor"`
-	EndCursor       *Cursor `json:"endCursor"`
-}
-
-// OrderDirection is the direction of an ordering that arrives in a request.
-type OrderDirection string
-
-// The two directions, spelled as GraphQL spells them.
-const (
-	OrderDirectionAsc  OrderDirection = "ASC"
-	OrderDirectionDesc OrderDirection = "DESC"
-)
-
 // Page is one page as the runtime returns it; the generated Paginate of an
 // entity turns it into that entity's connection.
 type Page struct {
 	Rows []any
 	// Cursors[i] is the cursor of Rows[i].
-	Cursors []Cursor
-	Info    PageInfo
+	Cursors []velox.Cursor
+	Info    velox.PageInfo
 	// Total is the number of rows the query matches, or -1 when the caller
 	// said it does not want it (WithoutTotal).
 	Total int
@@ -77,10 +40,6 @@ func WithoutTotal(ctx context.Context) context.Context {
 	return context.WithValue(ctx, noTotalKey{}, true)
 }
 
-// ErrBadCursor is returned for a cursor that this query did not produce: it
-// is malformed, or it belongs to another ordering.
-var ErrBadCursor = errors.New("velox: invalid cursor")
-
 // Paginate returns one page of the query, in the query's order with the id
 // as the final tie-break: first rows after the cursor after, or last rows
 // before the cursor before, as Relay's connections take them; with neither
@@ -92,7 +51,7 @@ var ErrBadCursor = errors.New("velox: invalid cursor")
 // interceptors apply as to any read.
 //
 //go:noinline
-func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, before *Cursor, last *int) (*Page, error) {
+func (q *QueryCore) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*Page, error) {
 	var args struct {
 		First, Last   *int
 		After, Before string
@@ -139,7 +98,7 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 	if cerr != nil {
 		return nil, cerr
 	}
-	nullsFirst := dialect.GetCapabilities(c.drv.Dialect()).Has(dialect.CapNullsFirst)
+	nullsFirst := dialect.GetCapabilities(c.Driver().Dialect()).Has(dialect.CapNullsFirst)
 	v, err := q.guarded(ctx, c, func(ctx context.Context, q *QueryCore) (any, error) {
 		page := &Page{Total: -1}
 		if ctx.Value(noTotalKey{}) == nil {
@@ -214,13 +173,13 @@ func (q *QueryCore) Paginate(ctx context.Context, after *Cursor, first *int, bef
 			page.Info.HasNextPage, page.Info.HasPreviousPage = more, args.After != ""
 		}
 		page.Rows = rows
-		page.Cursors = make([]Cursor, len(rows))
+		page.Cursors = make([]velox.Cursor, len(rows))
 		for i, e := range rows {
 			cur, err := m.encodeCursor(keys, e, null[i])
 			if err != nil {
 				return nil, err
 			}
-			page.Cursors[i] = Cursor(cur)
+			page.Cursors[i] = velox.Cursor(cur)
 		}
 		if n := len(rows); n > 0 {
 			page.Info.StartCursor, page.Info.EndCursor = &page.Cursors[0], &page.Cursors[n-1]
@@ -333,16 +292,16 @@ func (m *Meta) encodeCursor(keys []O, e any, null []bool) (string, error) {
 func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return nil, ErrBadCursor
+		return nil, velox.ErrBadCursor
 	}
 	var c cursor
 	if err := json.Unmarshal(raw, &c); err != nil || len(c.K) != len(keys) || len(c.V) != len(keys) {
-		return nil, ErrBadCursor
+		return nil, velox.ErrBadCursor
 	}
 	vals := make([]any, len(keys))
 	for i, k := range keys {
 		if c.K[i] != k.Col {
-			return nil, fmt.Errorf("%w: it was made for another ordering", ErrBadCursor)
+			return nil, fmt.Errorf("%w: it was made for another ordering", velox.ErrBadCursor)
 		}
 		if string(c.V[i]) == "null" {
 			// The row's value was NULL. An id never is. Any other column
@@ -350,7 +309,7 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 			// something else can hold NULL where this schema would have
 			// written a zero value, and its rows are paged through too.
 			if m.Field(k.Col) == m.id() {
-				return nil, ErrBadCursor
+				return nil, velox.ErrBadCursor
 			}
 			continue
 		}
@@ -358,7 +317,7 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 		if t == reflect.TypeFor[time.Time]() {
 			var z zonedTime
 			if err := json.Unmarshal(c.V[i], &z); err != nil {
-				return nil, ErrBadCursor
+				return nil, velox.ErrBadCursor
 			}
 			_, offset := z.T.Zone()
 			vals[i] = z.T.In(time.FixedZone(z.Zone, offset))
@@ -366,7 +325,7 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 		}
 		p := reflect.New(t)
 		if err := json.Unmarshal(c.V[i], p.Interface()); err != nil {
-			return nil, ErrBadCursor
+			return nil, velox.ErrBadCursor
 		}
 		vals[i] = p.Elem().Interface()
 	}

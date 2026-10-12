@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type LoadClient struct{}
 
 // Query returns a query of every Load, to run on ex: a database handle or a
 // transaction.
-func (*LoadClient) Query(ex orm.Executor) *entity.LoadQuery { return entity.NewLoadQuery(ex) }
+func (*LoadClient) Query(ex velox.Executor) *entity.LoadQuery { return entity.NewLoadQuery(ex) }
 
 // Create returns a builder that creates a Load.
-func (*LoadClient) Create(ex orm.Executor) *entity.LoadCreate { return entity.NewLoadCreate(ex) }
+func (*LoadClient) Create(ex velox.Executor) *entity.LoadCreate { return entity.NewLoadCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*LoadClient) CreateBulk(ex orm.Executor, bs ...*entity.LoadCreate) *entity.LoadCreateBulk {
+func (*LoadClient) CreateBulk(ex velox.Executor, bs ...*entity.LoadCreate) *entity.LoadCreateBulk {
 	return entity.NewLoadCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Load rows its conditions match.
-func (*LoadClient) Update(ex orm.Executor) *entity.LoadUpdate { return entity.NewLoadUpdate(ex) }
+func (*LoadClient) Update(ex velox.Executor) *entity.LoadUpdate { return entity.NewLoadUpdate(ex) }
 
 // Delete returns a builder that deletes the Load rows its conditions match.
-func (*LoadClient) Delete(ex orm.Executor) *entity.LoadDelete { return entity.NewLoadDelete(ex) }
+func (*LoadClient) Delete(ex velox.Executor) *entity.LoadDelete { return entity.NewLoadDelete(ex) }
 
 // Get returns the Load with the given id, or velox.ErrNotFound.
-func (c *LoadClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Load, error) {
+func (c *LoadClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Load, error) {
 	return c.Query(ex).Where(predicate.Load(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Load with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *LoadClient) UpdateByID(ex orm.Executor, id int) *entity.LoadUpdate {
+func (c *LoadClient) UpdateByID(ex velox.Executor, id int) *entity.LoadUpdate {
 	return c.Update(ex).Where(predicate.Load(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Load with the given id, or returns velox.ErrNotFound.
-func (c *LoadClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *LoadClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Load(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.LoadMeta.NotFound()

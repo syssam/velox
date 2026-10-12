@@ -90,7 +90,7 @@ func lock(ctx context.Context, tx *integration.Tx, key int64) error {
 func inContext(ctx context.Context, c *integration.Client, tx *integration.Tx) bool {
 	ctx = integration.NewContext(ctx, c)
 	ctx = integration.NewTxContext(ctx, tx)
-	return integration.TxFromContext(ctx) != nil && integration.FromContext(ctx) != nil // note: FromContext is orm.ExecutorFrom
+	return integration.TxFromContext(ctx) != nil && integration.FromContext(ctx) != nil // note: FromContext is velox.ExecutorFrom
 }
 
 // Order terms held in a variable: one, and several.
@@ -127,7 +127,7 @@ func countUsers(ctx context.Context, c *integration.Client) (int, error) {
 	return c.User.Query().Count(ctx)
 }
 
-// One that asks whether it was given a client keeps its type: a nil *orm.DB
+// One that asks whether it was given a client keeps its type: a nil *velox.DB
 // handed over as an interface would no longer be nil.
 func countIfAny(ctx context.Context, c *integration.Client) (int, error) {
 	if c == nil {

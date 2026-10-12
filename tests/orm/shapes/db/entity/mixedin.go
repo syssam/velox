@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -67,14 +68,14 @@ func ptrMixedIn(v any, i int) any {
 
 // MixedInEdge is a row of a page of MixedIn, with its cursor.
 type MixedInEdge struct {
-	Node   *MixedIn   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *MixedIn     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // MixedInConnection is one page of MixedIn.
 type MixedInConnection struct {
 	Edges    []*MixedInEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -108,7 +109,7 @@ var MixedInMeta = orm.Meta{
 type MixedInQuery struct{ c orm.QueryCore }
 
 // NewMixedInQuery returns a query of every MixedIn.
-func NewMixedInQuery(ex orm.Executor) *MixedInQuery {
+func NewMixedInQuery(ex velox.Executor) *MixedInQuery {
 	return &MixedInQuery{c: orm.QueryCore{M: &MixedInMeta, Ex: ex}}
 }
 
@@ -253,7 +254,7 @@ func (q *MixedInQuery) Iter(ctx context.Context) iter.Seq2[*MixedIn, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MixedInQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MixedInConnection, error) {
+func (q *MixedInQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*MixedInConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -294,7 +295,7 @@ func (q *MixedInQuery) IDs(ctx context.Context) ([]int, error) {
 type MixedInCreate struct{ c orm.MutCore }
 
 // NewMixedInCreate returns a builder that creates a MixedIn.
-func NewMixedInCreate(ex orm.Executor) *MixedInCreate {
+func NewMixedInCreate(ex velox.Executor) *MixedInCreate {
 	return &MixedInCreate{c: orm.MutCore{M: &MixedInMeta, Ex: ex}}
 }
 
@@ -342,7 +343,7 @@ func (b *MixedInCreate) Exec(ctx context.Context) error {
 
 // MixedInCreateBulk creates several MixedIn rows with one statement.
 type MixedInCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*MixedInCreate
 	n  int
 }
@@ -350,7 +351,7 @@ type MixedInCreateBulk struct {
 // NewMixedInCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewMixedInCreateBulk(ex orm.Executor, bs ...*MixedInCreate) *MixedInCreateBulk {
+func NewMixedInCreateBulk(ex velox.Executor, bs ...*MixedInCreate) *MixedInCreateBulk {
 	return &MixedInCreateBulk{ex: ex, bs: bs}
 }
 
@@ -403,7 +404,7 @@ func (b *MixedInCreateBulk) Exec(ctx context.Context) error {
 type MixedInUpdate struct{ c orm.MutCore }
 
 // NewMixedInUpdate returns a builder that updates the rows its predicates match.
-func NewMixedInUpdate(ex orm.Executor) *MixedInUpdate {
+func NewMixedInUpdate(ex velox.Executor) *MixedInUpdate {
 	return &MixedInUpdate{c: orm.MutCore{M: &MixedInMeta, Ex: ex}}
 }
 
@@ -469,7 +470,7 @@ func (b *MixedInUpdate) SaveOne(ctx context.Context) (*MixedIn, error) {
 type MixedInDelete struct{ c orm.MutCore }
 
 // NewMixedInDelete returns a builder that deletes the rows its predicates match.
-func NewMixedInDelete(ex orm.Executor) *MixedInDelete {
+func NewMixedInDelete(ex velox.Executor) *MixedInDelete {
 	return &MixedInDelete{c: orm.MutCore{M: &MixedInMeta, Ex: ex}}
 }
 

@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,41 +18,43 @@ type EntityxClient struct{}
 
 // Query returns a query of every Entityx, to run on ex: a database handle or a
 // transaction.
-func (*EntityxClient) Query(ex orm.Executor) *entity.EntityxQuery { return entity.NewEntityxQuery(ex) }
+func (*EntityxClient) Query(ex velox.Executor) *entity.EntityxQuery {
+	return entity.NewEntityxQuery(ex)
+}
 
 // Create returns a builder that creates a Entityx.
-func (*EntityxClient) Create(ex orm.Executor) *entity.EntityxCreate {
+func (*EntityxClient) Create(ex velox.Executor) *entity.EntityxCreate {
 	return entity.NewEntityxCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*EntityxClient) CreateBulk(ex orm.Executor, bs ...*entity.EntityxCreate) *entity.EntityxCreateBulk {
+func (*EntityxClient) CreateBulk(ex velox.Executor, bs ...*entity.EntityxCreate) *entity.EntityxCreateBulk {
 	return entity.NewEntityxCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Entityx rows its conditions match.
-func (*EntityxClient) Update(ex orm.Executor) *entity.EntityxUpdate {
+func (*EntityxClient) Update(ex velox.Executor) *entity.EntityxUpdate {
 	return entity.NewEntityxUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Entityx rows its conditions match.
-func (*EntityxClient) Delete(ex orm.Executor) *entity.EntityxDelete {
+func (*EntityxClient) Delete(ex velox.Executor) *entity.EntityxDelete {
 	return entity.NewEntityxDelete(ex)
 }
 
 // Get returns the Entityx with the given id, or velox.ErrNotFound.
-func (c *EntityxClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Entityx, error) {
+func (c *EntityxClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Entityx, error) {
 	return c.Query(ex).Where(predicate.Entityx(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Entityx with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *EntityxClient) UpdateByID(ex orm.Executor, id int) *entity.EntityxUpdate {
+func (c *EntityxClient) UpdateByID(ex velox.Executor, id int) *entity.EntityxUpdate {
 	return c.Update(ex).Where(predicate.Entityx(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Entityx with the given id, or returns velox.ErrNotFound.
-func (c *EntityxClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *EntityxClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Entityx(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.EntityxMeta.NotFound()

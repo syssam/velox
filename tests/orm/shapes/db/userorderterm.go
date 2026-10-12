@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type UserOrderTermClient struct{}
 
 // Query returns a query of every UserOrderTerm, to run on ex: a database handle or a
 // transaction.
-func (*UserOrderTermClient) Query(ex orm.Executor) *entity.UserOrderTermQuery {
+func (*UserOrderTermClient) Query(ex velox.Executor) *entity.UserOrderTermQuery {
 	return entity.NewUserOrderTermQuery(ex)
 }
 
 // Create returns a builder that creates a UserOrderTerm.
-func (*UserOrderTermClient) Create(ex orm.Executor) *entity.UserOrderTermCreate {
+func (*UserOrderTermClient) Create(ex velox.Executor) *entity.UserOrderTermCreate {
 	return entity.NewUserOrderTermCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*UserOrderTermClient) CreateBulk(ex orm.Executor, bs ...*entity.UserOrderTermCreate) *entity.UserOrderTermCreateBulk {
+func (*UserOrderTermClient) CreateBulk(ex velox.Executor, bs ...*entity.UserOrderTermCreate) *entity.UserOrderTermCreateBulk {
 	return entity.NewUserOrderTermCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the UserOrderTerm rows its conditions match.
-func (*UserOrderTermClient) Update(ex orm.Executor) *entity.UserOrderTermUpdate {
+func (*UserOrderTermClient) Update(ex velox.Executor) *entity.UserOrderTermUpdate {
 	return entity.NewUserOrderTermUpdate(ex)
 }
 
 // Delete returns a builder that deletes the UserOrderTerm rows its conditions match.
-func (*UserOrderTermClient) Delete(ex orm.Executor) *entity.UserOrderTermDelete {
+func (*UserOrderTermClient) Delete(ex velox.Executor) *entity.UserOrderTermDelete {
 	return entity.NewUserOrderTermDelete(ex)
 }
 
 // Get returns the UserOrderTerm with the given id, or velox.ErrNotFound.
-func (c *UserOrderTermClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.UserOrderTerm, error) {
+func (c *UserOrderTermClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.UserOrderTerm, error) {
 	return c.Query(ex).Where(predicate.UserOrderTerm(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the UserOrderTerm with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *UserOrderTermClient) UpdateByID(ex orm.Executor, id int) *entity.UserOrderTermUpdate {
+func (c *UserOrderTermClient) UpdateByID(ex velox.Executor, id int) *entity.UserOrderTermUpdate {
 	return c.Update(ex).Where(predicate.UserOrderTerm(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the UserOrderTerm with the given id, or returns velox.ErrNotFound.
-func (c *UserOrderTermClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *UserOrderTermClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserOrderTerm(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.UserOrderTermMeta.NotFound()

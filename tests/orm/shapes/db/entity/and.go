@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrAnd(v any, i int) any {
 
 // AndEdge is a row of a page of And, with its cursor.
 type AndEdge struct {
-	Node   *And       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *And         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // AndConnection is one page of And.
 type AndConnection struct {
-	Edges    []*AndEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*AndEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,9 @@ var AndMeta = orm.Meta{
 type AndQuery struct{ c orm.QueryCore }
 
 // NewAndQuery returns a query of every And.
-func NewAndQuery(ex orm.Executor) *AndQuery { return &AndQuery{c: orm.QueryCore{M: &AndMeta, Ex: ex}} }
+func NewAndQuery(ex velox.Executor) *AndQuery {
+	return &AndQuery{c: orm.QueryCore{M: &AndMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +214,7 @@ func (q *AndQuery) Iter(ctx context.Context) iter.Seq2[*And, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *AndQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*AndConnection, error) {
+func (q *AndQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*AndConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +255,9 @@ func (q *AndQuery) IDs(ctx context.Context) ([]int, error) {
 type AndCreate struct{ c orm.MutCore }
 
 // NewAndCreate returns a builder that creates a And.
-func NewAndCreate(ex orm.Executor) *AndCreate { return &AndCreate{c: orm.MutCore{M: &AndMeta, Ex: ex}} }
+func NewAndCreate(ex velox.Executor) *AndCreate {
+	return &AndCreate{c: orm.MutCore{M: &AndMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +303,7 @@ func (b *AndCreate) Exec(ctx context.Context) error {
 
 // AndCreateBulk creates several And rows with one statement.
 type AndCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*AndCreate
 	n  int
 }
@@ -306,7 +311,7 @@ type AndCreateBulk struct {
 // NewAndCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewAndCreateBulk(ex orm.Executor, bs ...*AndCreate) *AndCreateBulk {
+func NewAndCreateBulk(ex velox.Executor, bs ...*AndCreate) *AndCreateBulk {
 	return &AndCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +364,9 @@ func (b *AndCreateBulk) Exec(ctx context.Context) error {
 type AndUpdate struct{ c orm.MutCore }
 
 // NewAndUpdate returns a builder that updates the rows its predicates match.
-func NewAndUpdate(ex orm.Executor) *AndUpdate { return &AndUpdate{c: orm.MutCore{M: &AndMeta, Ex: ex}} }
+func NewAndUpdate(ex velox.Executor) *AndUpdate {
+	return &AndUpdate{c: orm.MutCore{M: &AndMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +430,9 @@ func (b *AndUpdate) SaveOne(ctx context.Context) (*And, error) {
 type AndDelete struct{ c orm.MutCore }
 
 // NewAndDelete returns a builder that deletes the rows its predicates match.
-func NewAndDelete(ex orm.Executor) *AndDelete { return &AndDelete{c: orm.MutCore{M: &AndMeta, Ex: ex}} }
+func NewAndDelete(ex velox.Executor) *AndDelete {
+	return &AndDelete{c: orm.MutCore{M: &AndMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //

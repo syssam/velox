@@ -106,14 +106,14 @@ func linkLike(dst any, es []any) {
 
 // LikeEdge is a row of a page of Like, with its cursor.
 type LikeEdge struct {
-	Node   *Like      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Like        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // LikeConnection is one page of Like.
 type LikeConnection struct {
-	Edges    []*LikeEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*LikeEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -142,7 +142,7 @@ var LikeMeta = orm.Meta{
 type LikeQuery struct{ c orm.QueryCore }
 
 // NewLikeQuery returns a query of every Like.
-func NewLikeQuery(ex orm.Executor) *LikeQuery {
+func NewLikeQuery(ex velox.Executor) *LikeQuery {
 	return &LikeQuery{c: orm.QueryCore{M: &LikeMeta, Ex: ex}}
 }
 
@@ -287,7 +287,7 @@ func (q *LikeQuery) Iter(ctx context.Context) iter.Seq2[*Like, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *LikeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*LikeConnection, error) {
+func (q *LikeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*LikeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (q *LikeQuery) IDs(ctx context.Context) ([]int, error) {
 type LikeCreate struct{ c orm.MutCore }
 
 // NewLikeCreate returns a builder that creates a Like.
-func NewLikeCreate(ex orm.Executor) *LikeCreate {
+func NewLikeCreate(ex velox.Executor) *LikeCreate {
 	return &LikeCreate{c: orm.MutCore{M: &LikeMeta, Ex: ex}}
 }
 
@@ -376,7 +376,7 @@ func (b *LikeCreate) Exec(ctx context.Context) error {
 
 // LikeCreateBulk creates several Like rows with one statement.
 type LikeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*LikeCreate
 	n  int
 }
@@ -384,7 +384,7 @@ type LikeCreateBulk struct {
 // NewLikeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewLikeCreateBulk(ex orm.Executor, bs ...*LikeCreate) *LikeCreateBulk {
+func NewLikeCreateBulk(ex velox.Executor, bs ...*LikeCreate) *LikeCreateBulk {
 	return &LikeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -437,7 +437,7 @@ func (b *LikeCreateBulk) Exec(ctx context.Context) error {
 type LikeUpdate struct{ c orm.MutCore }
 
 // NewLikeUpdate returns a builder that updates the rows its predicates match.
-func NewLikeUpdate(ex orm.Executor) *LikeUpdate {
+func NewLikeUpdate(ex velox.Executor) *LikeUpdate {
 	return &LikeUpdate{c: orm.MutCore{M: &LikeMeta, Ex: ex}}
 }
 
@@ -503,7 +503,7 @@ func (b *LikeUpdate) SaveOne(ctx context.Context) (*Like, error) {
 type LikeDelete struct{ c orm.MutCore }
 
 // NewLikeDelete returns a builder that deletes the rows its predicates match.
-func NewLikeDelete(ex orm.Executor) *LikeDelete {
+func NewLikeDelete(ex velox.Executor) *LikeDelete {
 	return &LikeDelete{c: orm.MutCore{M: &LikeMeta, Ex: ex}}
 }
 
@@ -526,7 +526,7 @@ func (b *LikeDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(
 // QueryUser queries the "user" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Like) QueryUser(ex orm.Executor) *UserQuery {
+func (e *Like) QueryUser(ex velox.Executor) *UserQuery {
 	q := NewUserQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(LikeMeta.Edges[0], e))
 	return q
@@ -549,7 +549,7 @@ func (q *LikeQuery) WithUser(opts ...*UserQuery) *LikeQuery {
 // QueryPost queries the "post" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Like) QueryPost(ex orm.Executor) *PostQuery {
+func (e *Like) QueryPost(ex velox.Executor) *PostQuery {
 	q := NewPostQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(LikeMeta.Edges[1], e))
 	return q
@@ -585,8 +585,8 @@ var likeOrderColumns = map[string]string{
 // LikeOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type LikeOrder struct {
-	Direction orm.OrderDirection `json:"direction"`
-	Field     like.OrderField    `json:"field"`
+	Direction velox.OrderDirection `json:"direction"`
+	Field     like.OrderField      `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -601,27 +601,27 @@ func (o *LikeOrder) Term() predicate.LikeOrderTerm {
 }
 
 // User resolves the "user" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Like) User(ctx context.Context) (*User, error) {
 	v, err := e.Edges.UserOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryUser(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryUser(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }
 
 // Post resolves the "post" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Like) Post(ctx context.Context) (*Post, error) {
 	v, err := e.Edges.PostOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryPost(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryPost(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }

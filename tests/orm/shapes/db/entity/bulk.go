@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrBulk(v any, i int) any {
 
 // BulkEdge is a row of a page of Bulk, with its cursor.
 type BulkEdge struct {
-	Node   *Bulk      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Bulk        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // BulkConnection is one page of Bulk.
 type BulkConnection struct {
-	Edges    []*BulkEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*BulkEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var BulkMeta = orm.Meta{
 type BulkQuery struct{ c orm.QueryCore }
 
 // NewBulkQuery returns a query of every Bulk.
-func NewBulkQuery(ex orm.Executor) *BulkQuery {
+func NewBulkQuery(ex velox.Executor) *BulkQuery {
 	return &BulkQuery{c: orm.QueryCore{M: &BulkMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *BulkQuery) Iter(ctx context.Context) iter.Seq2[*Bulk, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *BulkQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BulkConnection, error) {
+func (q *BulkQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*BulkConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *BulkQuery) IDs(ctx context.Context) ([]int, error) {
 type BulkCreate struct{ c orm.MutCore }
 
 // NewBulkCreate returns a builder that creates a Bulk.
-func NewBulkCreate(ex orm.Executor) *BulkCreate {
+func NewBulkCreate(ex velox.Executor) *BulkCreate {
 	return &BulkCreate{c: orm.MutCore{M: &BulkMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *BulkCreate) Exec(ctx context.Context) error {
 
 // BulkCreateBulk creates several Bulk rows with one statement.
 type BulkCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*BulkCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type BulkCreateBulk struct {
 // NewBulkCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewBulkCreateBulk(ex orm.Executor, bs ...*BulkCreate) *BulkCreateBulk {
+func NewBulkCreateBulk(ex velox.Executor, bs ...*BulkCreate) *BulkCreateBulk {
 	return &BulkCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *BulkCreateBulk) Exec(ctx context.Context) error {
 type BulkUpdate struct{ c orm.MutCore }
 
 // NewBulkUpdate returns a builder that updates the rows its predicates match.
-func NewBulkUpdate(ex orm.Executor) *BulkUpdate {
+func NewBulkUpdate(ex velox.Executor) *BulkUpdate {
 	return &BulkUpdate{c: orm.MutCore{M: &BulkMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *BulkUpdate) SaveOne(ctx context.Context) (*Bulk, error) {
 type BulkDelete struct{ c orm.MutCore }
 
 // NewBulkDelete returns a builder that deletes the rows its predicates match.
-func NewBulkDelete(ex orm.Executor) *BulkDelete {
+func NewBulkDelete(ex velox.Executor) *BulkDelete {
 	return &BulkDelete{c: orm.MutCore{M: &BulkMeta, Ex: ex}}
 }
 

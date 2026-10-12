@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type PredClient struct{}
 
 // Query returns a query of every Pred, to run on ex: a database handle or a
 // transaction.
-func (*PredClient) Query(ex orm.Executor) *entity.PredQuery { return entity.NewPredQuery(ex) }
+func (*PredClient) Query(ex velox.Executor) *entity.PredQuery { return entity.NewPredQuery(ex) }
 
 // Create returns a builder that creates a Pred.
-func (*PredClient) Create(ex orm.Executor) *entity.PredCreate { return entity.NewPredCreate(ex) }
+func (*PredClient) Create(ex velox.Executor) *entity.PredCreate { return entity.NewPredCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*PredClient) CreateBulk(ex orm.Executor, bs ...*entity.PredCreate) *entity.PredCreateBulk {
+func (*PredClient) CreateBulk(ex velox.Executor, bs ...*entity.PredCreate) *entity.PredCreateBulk {
 	return entity.NewPredCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Pred rows its conditions match.
-func (*PredClient) Update(ex orm.Executor) *entity.PredUpdate { return entity.NewPredUpdate(ex) }
+func (*PredClient) Update(ex velox.Executor) *entity.PredUpdate { return entity.NewPredUpdate(ex) }
 
 // Delete returns a builder that deletes the Pred rows its conditions match.
-func (*PredClient) Delete(ex orm.Executor) *entity.PredDelete { return entity.NewPredDelete(ex) }
+func (*PredClient) Delete(ex velox.Executor) *entity.PredDelete { return entity.NewPredDelete(ex) }
 
 // Get returns the Pred with the given id, or velox.ErrNotFound.
-func (c *PredClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Pred, error) {
+func (c *PredClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Pred, error) {
 	return c.Query(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Pred with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *PredClient) UpdateByID(ex orm.Executor, id int) *entity.PredUpdate {
+func (c *PredClient) UpdateByID(ex velox.Executor, id int) *entity.PredUpdate {
 	return c.Update(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Pred with the given id, or returns velox.ErrNotFound.
-func (c *PredClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *PredClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.PredMeta.NotFound()

@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -18,43 +19,43 @@ type WeightKeyClient struct{}
 
 // Query returns a query of every WeightKey, to run on ex: a database handle or a
 // transaction.
-func (*WeightKeyClient) Query(ex orm.Executor) *entity.WeightKeyQuery {
+func (*WeightKeyClient) Query(ex velox.Executor) *entity.WeightKeyQuery {
 	return entity.NewWeightKeyQuery(ex)
 }
 
 // Create returns a builder that creates a WeightKey.
-func (*WeightKeyClient) Create(ex orm.Executor) *entity.WeightKeyCreate {
+func (*WeightKeyClient) Create(ex velox.Executor) *entity.WeightKeyCreate {
 	return entity.NewWeightKeyCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*WeightKeyClient) CreateBulk(ex orm.Executor, bs ...*entity.WeightKeyCreate) *entity.WeightKeyCreateBulk {
+func (*WeightKeyClient) CreateBulk(ex velox.Executor, bs ...*entity.WeightKeyCreate) *entity.WeightKeyCreateBulk {
 	return entity.NewWeightKeyCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the WeightKey rows its conditions match.
-func (*WeightKeyClient) Update(ex orm.Executor) *entity.WeightKeyUpdate {
+func (*WeightKeyClient) Update(ex velox.Executor) *entity.WeightKeyUpdate {
 	return entity.NewWeightKeyUpdate(ex)
 }
 
 // Delete returns a builder that deletes the WeightKey rows its conditions match.
-func (*WeightKeyClient) Delete(ex orm.Executor) *entity.WeightKeyDelete {
+func (*WeightKeyClient) Delete(ex velox.Executor) *entity.WeightKeyDelete {
 	return entity.NewWeightKeyDelete(ex)
 }
 
 // Get returns the WeightKey with the given id, or velox.ErrNotFound.
-func (c *WeightKeyClient) Get(ctx context.Context, ex orm.Executor, id types.Weight) (*entity.WeightKey, error) {
+func (c *WeightKeyClient) Get(ctx context.Context, ex velox.Executor, id types.Weight) (*entity.WeightKey, error) {
 	return c.Query(ex).Where(predicate.WeightKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the WeightKey with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *WeightKeyClient) UpdateByID(ex orm.Executor, id types.Weight) *entity.WeightKeyUpdate {
+func (c *WeightKeyClient) UpdateByID(ex velox.Executor, id types.Weight) *entity.WeightKeyUpdate {
 	return c.Update(ex).Where(predicate.WeightKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the WeightKey with the given id, or returns velox.ErrNotFound.
-func (c *WeightKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id types.Weight) error {
+func (c *WeightKeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id types.Weight) error {
 	n, err := c.Delete(ex).Where(predicate.WeightKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.WeightKeyMeta.NotFound()

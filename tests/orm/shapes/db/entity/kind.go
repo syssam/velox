@@ -83,14 +83,14 @@ func linkKind(dst any, es []any) {
 
 // KindEdge is a row of a page of Kind, with its cursor.
 type KindEdge struct {
-	Node   *Kind      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Kind        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // KindConnection is one page of Kind.
 type KindConnection struct {
-	Edges    []*KindEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*KindEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -118,7 +118,7 @@ var KindMeta = orm.Meta{
 type KindQuery struct{ c orm.QueryCore }
 
 // NewKindQuery returns a query of every Kind.
-func NewKindQuery(ex orm.Executor) *KindQuery {
+func NewKindQuery(ex velox.Executor) *KindQuery {
 	return &KindQuery{c: orm.QueryCore{M: &KindMeta, Ex: ex}}
 }
 
@@ -263,7 +263,7 @@ func (q *KindQuery) Iter(ctx context.Context) iter.Seq2[*Kind, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *KindQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*KindConnection, error) {
+func (q *KindQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*KindConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,7 @@ func (q *KindQuery) IDs(ctx context.Context) ([]int, error) {
 type KindCreate struct{ c orm.MutCore }
 
 // NewKindCreate returns a builder that creates a Kind.
-func NewKindCreate(ex orm.Executor) *KindCreate {
+func NewKindCreate(ex velox.Executor) *KindCreate {
 	return &KindCreate{c: orm.MutCore{M: &KindMeta, Ex: ex}}
 }
 
@@ -352,7 +352,7 @@ func (b *KindCreate) Exec(ctx context.Context) error {
 
 // KindCreateBulk creates several Kind rows with one statement.
 type KindCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*KindCreate
 	n  int
 }
@@ -360,7 +360,7 @@ type KindCreateBulk struct {
 // NewKindCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewKindCreateBulk(ex orm.Executor, bs ...*KindCreate) *KindCreateBulk {
+func NewKindCreateBulk(ex velox.Executor, bs ...*KindCreate) *KindCreateBulk {
 	return &KindCreateBulk{ex: ex, bs: bs}
 }
 
@@ -413,7 +413,7 @@ func (b *KindCreateBulk) Exec(ctx context.Context) error {
 type KindUpdate struct{ c orm.MutCore }
 
 // NewKindUpdate returns a builder that updates the rows its predicates match.
-func NewKindUpdate(ex orm.Executor) *KindUpdate {
+func NewKindUpdate(ex velox.Executor) *KindUpdate {
 	return &KindUpdate{c: orm.MutCore{M: &KindMeta, Ex: ex}}
 }
 
@@ -479,7 +479,7 @@ func (b *KindUpdate) SaveOne(ctx context.Context) (*Kind, error) {
 type KindDelete struct{ c orm.MutCore }
 
 // NewKindDelete returns a builder that deletes the rows its predicates match.
-func NewKindDelete(ex orm.Executor) *KindDelete {
+func NewKindDelete(ex velox.Executor) *KindDelete {
 	return &KindDelete{c: orm.MutCore{M: &KindMeta, Ex: ex}}
 }
 
@@ -502,7 +502,7 @@ func (b *KindDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(
 // QueryShapes queries the "shapes" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Kind) QueryShapes(ex orm.Executor) *KindShapeQuery {
+func (e *Kind) QueryShapes(ex velox.Executor) *KindShapeQuery {
 	q := NewKindShapeQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KindMeta.Edges[0], e))
 	return q

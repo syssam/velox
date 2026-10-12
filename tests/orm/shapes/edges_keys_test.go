@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
 	"github.com/syssam/velox/tests/orm/shapes/db/badge"
@@ -22,7 +21,7 @@ import (
 )
 
 // createTeam saves b; name is for the reader.
-func createTeam(t *testing.T, db orm.Executor, b *entity.TeamCreate, name string) *entity.Team {
+func createTeam(t *testing.T, db velox.Executor, b *entity.TeamCreate, name string) *entity.Team {
 	t.Helper()
 	tm := must(b.Save(context.Background()))
 	require.Equal(t, name, tm.Name)
@@ -57,7 +56,7 @@ type keysFixture struct {
 	b1, b2         *entity.Badge
 }
 
-func keysData(t *testing.T, db orm.Executor) *keysFixture {
+func keysData(t *testing.T, db velox.Executor) *keysFixture {
 	t.Helper()
 	ctx := context.Background()
 	f := &keysFixture{}

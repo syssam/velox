@@ -242,7 +242,7 @@ func renderList(flavor string, p *service) string {
 		if flavor == "velox" {
 			w("\nfunc (s *Service) List%[1]s(ctx context.Context, after *gqlrelay.Cursor, first *int, before *gqlrelay.Cursor, last *int, orderBy *entity.%[1]sOrder, where *filter.%[1]sWhereInput) (*entity.%[1]sConnection, error) {\n\treturn s.client.%[1]s.Query().Paginate(ctx, after, first, before, last,\n\t\tentity.With%[1]sOrder(orderBy),\n\t\tentity.With%[1]sFilter(where.Filter))\n}\n", e.name)
 		} else {
-			w("\nfunc (s *Service) List%[1]s(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *entity.%[1]sOrder, where *filter.%[1]sWhereInput) (*entity.%[1]sConnection, error) {\n\treturn client.%[1]s.Query(s.db).\n\t\tWhere(where.P()).\n\t\tOrderBy(orderBy.Term()).\n\t\tPaginate(ctx, after, first, before, last)\n}\n", e.name)
+			w("\nfunc (s *Service) List%[1]s(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *entity.%[1]sOrder, where *filter.%[1]sWhereInput) (*entity.%[1]sConnection, error) {\n\treturn client.%[1]s.Query(s.db).\n\t\tWhere(where.P()).\n\t\tOrderBy(orderBy.Term()).\n\t\tPaginate(ctx, after, first, before, last)\n}\n", e.name)
 		}
 	}
 	return b.String()
@@ -267,7 +267,7 @@ func render(flavor string, p *service) string {
 	if flavor == "velox" {
 		w("\tclient *velox.Client\n}\n\nfunc New(c *velox.Client) *Service { return &Service{client: c} }\n\n")
 	} else {
-		w("\tdb *orm.DB\n}\n\nfunc New(db *orm.DB) *Service { return &Service{db: db} }\n\n")
+		w("\tdb *velox.DB\n}\n\nfunc New(db *velox.DB) *Service { return &Service{db: db} }\n\n")
 	}
 	w("var (\n\t_ = errors.New\n\t_ = fmt.Sprint\n\t_ = strings.ToUpper\n\t_ time.Time\n")
 	for _, e := range p.used {
@@ -384,7 +384,7 @@ func ormCall(w func(string, ...any), i int, c call) {
 	case "update1":
 		head("error")
 		if c.inTx {
-			w("\treturn s.db.RunTx(ctx, func(tx *orm.Tx) error {\n\t\t_, err := client.%s.UpdateByID(tx, id)%s.SaveOne(ctx)\n\t\treturn err\n\t})\n}\n", e.name, ormSets(c))
+			w("\treturn s.db.RunTx(ctx, func(tx *velox.Tx) error {\n\t\t_, err := client.%s.UpdateByID(tx, id)%s.SaveOne(ctx)\n\t\treturn err\n\t})\n}\n", e.name, ormSets(c))
 		} else {
 			w("\t_, err := client.%s.UpdateByID(s.db, id)%s.SaveOne(ctx)\n\treturn err\n}\n", e.name, ormSets(c))
 		}

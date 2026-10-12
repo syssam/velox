@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type NamedBoolClient struct{}
 
 // Query returns a query of every NamedBool, to run on ex: a database handle or a
 // transaction.
-func (*NamedBoolClient) Query(ex orm.Executor) *entity.NamedBoolQuery {
+func (*NamedBoolClient) Query(ex velox.Executor) *entity.NamedBoolQuery {
 	return entity.NewNamedBoolQuery(ex)
 }
 
 // Create returns a builder that creates a NamedBool.
-func (*NamedBoolClient) Create(ex orm.Executor) *entity.NamedBoolCreate {
+func (*NamedBoolClient) Create(ex velox.Executor) *entity.NamedBoolCreate {
 	return entity.NewNamedBoolCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*NamedBoolClient) CreateBulk(ex orm.Executor, bs ...*entity.NamedBoolCreate) *entity.NamedBoolCreateBulk {
+func (*NamedBoolClient) CreateBulk(ex velox.Executor, bs ...*entity.NamedBoolCreate) *entity.NamedBoolCreateBulk {
 	return entity.NewNamedBoolCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the NamedBool rows its conditions match.
-func (*NamedBoolClient) Update(ex orm.Executor) *entity.NamedBoolUpdate {
+func (*NamedBoolClient) Update(ex velox.Executor) *entity.NamedBoolUpdate {
 	return entity.NewNamedBoolUpdate(ex)
 }
 
 // Delete returns a builder that deletes the NamedBool rows its conditions match.
-func (*NamedBoolClient) Delete(ex orm.Executor) *entity.NamedBoolDelete {
+func (*NamedBoolClient) Delete(ex velox.Executor) *entity.NamedBoolDelete {
 	return entity.NewNamedBoolDelete(ex)
 }
 
 // Get returns the NamedBool with the given id, or velox.ErrNotFound.
-func (c *NamedBoolClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.NamedBool, error) {
+func (c *NamedBoolClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.NamedBool, error) {
 	return c.Query(ex).Where(predicate.NamedBool(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the NamedBool with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *NamedBoolClient) UpdateByID(ex orm.Executor, id int) *entity.NamedBoolUpdate {
+func (c *NamedBoolClient) UpdateByID(ex velox.Executor, id int) *entity.NamedBoolUpdate {
 	return c.Update(ex).Where(predicate.NamedBool(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the NamedBool with the given id, or returns velox.ErrNotFound.
-func (c *NamedBoolClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *NamedBoolClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBool(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.NamedBoolMeta.NotFound()

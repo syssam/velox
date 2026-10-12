@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/db/predicate"
@@ -17,41 +18,43 @@ type CommentClient struct{}
 
 // Query returns a query of every Comment, to run on ex: a database handle or a
 // transaction.
-func (*CommentClient) Query(ex orm.Executor) *entity.CommentQuery { return entity.NewCommentQuery(ex) }
+func (*CommentClient) Query(ex velox.Executor) *entity.CommentQuery {
+	return entity.NewCommentQuery(ex)
+}
 
 // Create returns a builder that creates a Comment.
-func (*CommentClient) Create(ex orm.Executor) *entity.CommentCreate {
+func (*CommentClient) Create(ex velox.Executor) *entity.CommentCreate {
 	return entity.NewCommentCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*CommentClient) CreateBulk(ex orm.Executor, bs ...*entity.CommentCreate) *entity.CommentCreateBulk {
+func (*CommentClient) CreateBulk(ex velox.Executor, bs ...*entity.CommentCreate) *entity.CommentCreateBulk {
 	return entity.NewCommentCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Comment rows its conditions match.
-func (*CommentClient) Update(ex orm.Executor) *entity.CommentUpdate {
+func (*CommentClient) Update(ex velox.Executor) *entity.CommentUpdate {
 	return entity.NewCommentUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Comment rows its conditions match.
-func (*CommentClient) Delete(ex orm.Executor) *entity.CommentDelete {
+func (*CommentClient) Delete(ex velox.Executor) *entity.CommentDelete {
 	return entity.NewCommentDelete(ex)
 }
 
 // Get returns the Comment with the given id, or velox.ErrNotFound.
-func (c *CommentClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Comment, error) {
+func (c *CommentClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Comment, error) {
 	return c.Query(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Comment with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *CommentClient) UpdateByID(ex orm.Executor, id int) *entity.CommentUpdate {
+func (c *CommentClient) UpdateByID(ex velox.Executor, id int) *entity.CommentUpdate {
 	return c.Update(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Comment with the given id, or returns velox.ErrNotFound.
-func (c *CommentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *CommentClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.CommentMeta.NotFound()
@@ -60,7 +63,7 @@ func (c *CommentClient) DeleteByID(ctx context.Context, ex orm.Executor, id int)
 }
 
 // node is Get for an id of any type: see NodeTypes.
-func (c *CommentClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
+func (c *CommentClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
 		return nil, entity.CommentMeta.NotFound()

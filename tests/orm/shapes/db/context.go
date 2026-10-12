@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,41 +18,43 @@ type ContextClient struct{}
 
 // Query returns a query of every Context, to run on ex: a database handle or a
 // transaction.
-func (*ContextClient) Query(ex orm.Executor) *entity.ContextQuery { return entity.NewContextQuery(ex) }
+func (*ContextClient) Query(ex velox.Executor) *entity.ContextQuery {
+	return entity.NewContextQuery(ex)
+}
 
 // Create returns a builder that creates a Context.
-func (*ContextClient) Create(ex orm.Executor) *entity.ContextCreate {
+func (*ContextClient) Create(ex velox.Executor) *entity.ContextCreate {
 	return entity.NewContextCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*ContextClient) CreateBulk(ex orm.Executor, bs ...*entity.ContextCreate) *entity.ContextCreateBulk {
+func (*ContextClient) CreateBulk(ex velox.Executor, bs ...*entity.ContextCreate) *entity.ContextCreateBulk {
 	return entity.NewContextCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Context rows its conditions match.
-func (*ContextClient) Update(ex orm.Executor) *entity.ContextUpdate {
+func (*ContextClient) Update(ex velox.Executor) *entity.ContextUpdate {
 	return entity.NewContextUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Context rows its conditions match.
-func (*ContextClient) Delete(ex orm.Executor) *entity.ContextDelete {
+func (*ContextClient) Delete(ex velox.Executor) *entity.ContextDelete {
 	return entity.NewContextDelete(ex)
 }
 
 // Get returns the Context with the given id, or velox.ErrNotFound.
-func (c *ContextClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Context, error) {
+func (c *ContextClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Context, error) {
 	return c.Query(ex).Where(predicate.Context(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Context with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *ContextClient) UpdateByID(ex orm.Executor, id int) *entity.ContextUpdate {
+func (c *ContextClient) UpdateByID(ex velox.Executor, id int) *entity.ContextUpdate {
 	return c.Update(ex).Where(predicate.Context(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Context with the given id, or returns velox.ErrNotFound.
-func (c *ContextClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *ContextClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Context(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.ContextMeta.NotFound()

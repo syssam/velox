@@ -92,14 +92,14 @@ func edgeRenamed(v any, i int) any {
 
 // RenamedEdge is a row of a page of Renamed, with its cursor.
 type RenamedEdge struct {
-	Node   *Renamed   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Renamed     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // RenamedConnection is one page of Renamed.
 type RenamedConnection struct {
 	Edges    []*RenamedEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -136,7 +136,7 @@ func (e *Renamed) String() string { return orm.Describe(&RenamedMeta, e) }
 type RenamedQuery struct{ c orm.QueryCore }
 
 // NewRenamedQuery returns a query of every Renamed.
-func NewRenamedQuery(ex orm.Executor) *RenamedQuery {
+func NewRenamedQuery(ex velox.Executor) *RenamedQuery {
 	return &RenamedQuery{c: orm.QueryCore{M: &RenamedMeta, Ex: ex}}
 }
 
@@ -281,7 +281,7 @@ func (q *RenamedQuery) Iter(ctx context.Context) iter.Seq2[*Renamed, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *RenamedQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*RenamedConnection, error) {
+func (q *RenamedQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*RenamedConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -322,7 +322,7 @@ func (q *RenamedQuery) IDs(ctx context.Context) ([]int, error) {
 type RenamedCreate struct{ c orm.MutCore }
 
 // NewRenamedCreate returns a builder that creates a Renamed.
-func NewRenamedCreate(ex orm.Executor) *RenamedCreate {
+func NewRenamedCreate(ex velox.Executor) *RenamedCreate {
 	return &RenamedCreate{c: orm.MutCore{M: &RenamedMeta, Ex: ex}}
 }
 
@@ -370,7 +370,7 @@ func (b *RenamedCreate) Exec(ctx context.Context) error {
 
 // RenamedCreateBulk creates several Renamed rows with one statement.
 type RenamedCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*RenamedCreate
 	n  int
 }
@@ -378,7 +378,7 @@ type RenamedCreateBulk struct {
 // NewRenamedCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewRenamedCreateBulk(ex orm.Executor, bs ...*RenamedCreate) *RenamedCreateBulk {
+func NewRenamedCreateBulk(ex velox.Executor, bs ...*RenamedCreate) *RenamedCreateBulk {
 	return &RenamedCreateBulk{ex: ex, bs: bs}
 }
 
@@ -431,7 +431,7 @@ func (b *RenamedCreateBulk) Exec(ctx context.Context) error {
 type RenamedUpdate struct{ c orm.MutCore }
 
 // NewRenamedUpdate returns a builder that updates the rows its predicates match.
-func NewRenamedUpdate(ex orm.Executor) *RenamedUpdate {
+func NewRenamedUpdate(ex velox.Executor) *RenamedUpdate {
 	return &RenamedUpdate{c: orm.MutCore{M: &RenamedMeta, Ex: ex}}
 }
 
@@ -497,7 +497,7 @@ func (b *RenamedUpdate) SaveOne(ctx context.Context) (*Renamed, error) {
 type RenamedDelete struct{ c orm.MutCore }
 
 // NewRenamedDelete returns a builder that deletes the rows its predicates match.
-func NewRenamedDelete(ex orm.Executor) *RenamedDelete {
+func NewRenamedDelete(ex velox.Executor) *RenamedDelete {
 	return &RenamedDelete{c: orm.MutCore{M: &RenamedMeta, Ex: ex}}
 }
 
@@ -520,7 +520,7 @@ func (b *RenamedDelete) Exec(ctx context.Context) (int, error) { return b.c.Dele
 // QueryFrozen queries the "frozen" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Renamed) QueryFrozen(ex orm.Executor) *NoteQuery {
+func (e *Renamed) QueryFrozen(ex velox.Executor) *NoteQuery {
 	q := NewNoteQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(RenamedMeta.Edges[0], e))
 	return q
@@ -543,7 +543,7 @@ func (q *RenamedQuery) WithFrozen(opts ...*NoteQuery) *RenamedQuery {
 // QueryFrozenTopics queries the "frozen_topics" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Renamed) QueryFrozenTopics(ex orm.Executor) *TopicQuery {
+func (e *Renamed) QueryFrozenTopics(ex velox.Executor) *TopicQuery {
 	q := NewTopicQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(RenamedMeta.Edges[1], e))
 	return q

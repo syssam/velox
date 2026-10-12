@@ -19,6 +19,7 @@ const compileHeader = `package main
 import (
 	"context"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/article"
 	"github.com/syssam/velox/tests/orm/shapes/db/author"
@@ -30,12 +31,13 @@ import (
 
 var (
 	ctx = context.Background()
-	db  *orm.DB
+	db  *velox.DB
 	_   = article.Table
 	_   = author.Table
 	_   = topic.Table
 	_   = scalar.Table
 	_   entity.Author
+	_   orm.P
 )
 
 func main() {
@@ -59,7 +61,7 @@ var compileCases = []compileCase{
 	_, _ = client.Author.CreateBulk(db, client.Author.Create(db), client.Author.Create(db)).Save(ctx)
 	_, _ = client.Article.Update(db).Set(article.Words.Add(1), article.Author.Set(1), article.Topics.Remove(2)).Where(article.Author.Has()).Exec(ctx)
 	_, _ = client.Article.Delete(db).Where(article.Or(article.Title.EQ("x"), article.Not(article.Editor.Has()))).Exec(ctx)
-	_ = db.RunTx(ctx, func(tx *orm.Tx) error { _, err := client.Author.Query(tx).Count(ctx); return err })
+	_ = db.RunTx(ctx, func(tx *velox.Tx) error { _, err := client.Author.Query(tx).Count(ctx); return err })
 	_, _ = client.Scalar.Update(db).Set(scalar.StringNil.Clear(), scalar.BytesNil.Clear()).Where(scalar.StringNil.IsNil(), scalar.StringPtr.NotNil()).Exec(ctx)
 `},
 	// One way to give a value: Set with the column's own assignment. The
@@ -116,7 +118,7 @@ var compileCases = []compileCase{
 		body: `	_, _ = client.Scalar.Update(db).Set(scalar.StringPtr.Clear()).Exec(ctx)`},
 	{name: "Clear on an Optional bytes field", want: "scalar.BytesOpt.Clear undefined",
 		body: `	_, _ = client.Scalar.Create(db).Set(scalar.BytesOpt.Clear()).Save(ctx)`},
-	{name: "a raw database/sql handle as the executor", want: "does not implement orm.Executor",
+	{name: "a raw database/sql handle as the executor", want: "does not implement velox.Executor",
 		body: `	_, _ = client.Author.Query(db.SQL()).All(ctx)`},
 	{name: "an untyped runtime predicate", want: "cannot use",
 		body: `	_, _ = client.Author.Query(db).Where(orm.P{Op: orm.OpEQ, Col: "name", Val: "x"}).All(ctx)`},

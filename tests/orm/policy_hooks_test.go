@@ -269,7 +269,7 @@ func TestHooks(t *testing.T) {
 
 	// Hooks registered on the handle run inside its transactions too.
 	log = nil
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		_, err := client.User.Create(tx).Set(user.Name.Set("tx"), user.Email.Set("tx@example.com"), user.Age.Set(3)).Save(ctx)
 		return err
 	}))

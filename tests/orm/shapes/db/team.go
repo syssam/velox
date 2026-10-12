@@ -5,6 +5,7 @@ package db
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -18,35 +19,35 @@ type TeamClient struct{}
 
 // Query returns a query of every Team, to run on ex: a database handle or a
 // transaction.
-func (*TeamClient) Query(ex orm.Executor) *entity.TeamQuery { return entity.NewTeamQuery(ex) }
+func (*TeamClient) Query(ex velox.Executor) *entity.TeamQuery { return entity.NewTeamQuery(ex) }
 
 // Create returns a builder that creates a Team.
-func (*TeamClient) Create(ex orm.Executor) *entity.TeamCreate { return entity.NewTeamCreate(ex) }
+func (*TeamClient) Create(ex velox.Executor) *entity.TeamCreate { return entity.NewTeamCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*TeamClient) CreateBulk(ex orm.Executor, bs ...*entity.TeamCreate) *entity.TeamCreateBulk {
+func (*TeamClient) CreateBulk(ex velox.Executor, bs ...*entity.TeamCreate) *entity.TeamCreateBulk {
 	return entity.NewTeamCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Team rows its conditions match.
-func (*TeamClient) Update(ex orm.Executor) *entity.TeamUpdate { return entity.NewTeamUpdate(ex) }
+func (*TeamClient) Update(ex velox.Executor) *entity.TeamUpdate { return entity.NewTeamUpdate(ex) }
 
 // Delete returns a builder that deletes the Team rows its conditions match.
-func (*TeamClient) Delete(ex orm.Executor) *entity.TeamDelete { return entity.NewTeamDelete(ex) }
+func (*TeamClient) Delete(ex velox.Executor) *entity.TeamDelete { return entity.NewTeamDelete(ex) }
 
 // Get returns the Team with the given id, or velox.ErrNotFound.
-func (c *TeamClient) Get(ctx context.Context, ex orm.Executor, id uuid.UUID) (*entity.Team, error) {
+func (c *TeamClient) Get(ctx context.Context, ex velox.Executor, id uuid.UUID) (*entity.Team, error) {
 	return c.Query(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Team with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *TeamClient) UpdateByID(ex orm.Executor, id uuid.UUID) *entity.TeamUpdate {
+func (c *TeamClient) UpdateByID(ex velox.Executor, id uuid.UUID) *entity.TeamUpdate {
 	return c.Update(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Team with the given id, or returns velox.ErrNotFound.
-func (c *TeamClient) DeleteByID(ctx context.Context, ex orm.Executor, id uuid.UUID) error {
+func (c *TeamClient) DeleteByID(ctx context.Context, ex velox.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.Team(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.TeamMeta.NotFound()

@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type NoteClient struct{}
 
 // Query returns a query of every Note, to run on ex: a database handle or a
 // transaction.
-func (*NoteClient) Query(ex orm.Executor) *entity.NoteQuery { return entity.NewNoteQuery(ex) }
+func (*NoteClient) Query(ex velox.Executor) *entity.NoteQuery { return entity.NewNoteQuery(ex) }
 
 // Create returns a builder that creates a Note.
-func (*NoteClient) Create(ex orm.Executor) *entity.NoteCreate { return entity.NewNoteCreate(ex) }
+func (*NoteClient) Create(ex velox.Executor) *entity.NoteCreate { return entity.NewNoteCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*NoteClient) CreateBulk(ex orm.Executor, bs ...*entity.NoteCreate) *entity.NoteCreateBulk {
+func (*NoteClient) CreateBulk(ex velox.Executor, bs ...*entity.NoteCreate) *entity.NoteCreateBulk {
 	return entity.NewNoteCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Note rows its conditions match.
-func (*NoteClient) Update(ex orm.Executor) *entity.NoteUpdate { return entity.NewNoteUpdate(ex) }
+func (*NoteClient) Update(ex velox.Executor) *entity.NoteUpdate { return entity.NewNoteUpdate(ex) }
 
 // Delete returns a builder that deletes the Note rows its conditions match.
-func (*NoteClient) Delete(ex orm.Executor) *entity.NoteDelete { return entity.NewNoteDelete(ex) }
+func (*NoteClient) Delete(ex velox.Executor) *entity.NoteDelete { return entity.NewNoteDelete(ex) }
 
 // Get returns the Note with the given id, or velox.ErrNotFound.
-func (c *NoteClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Note, error) {
+func (c *NoteClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Note, error) {
 	return c.Query(ex).Where(predicate.Note(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Note with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *NoteClient) UpdateByID(ex orm.Executor, id int) *entity.NoteUpdate {
+func (c *NoteClient) UpdateByID(ex velox.Executor, id int) *entity.NoteUpdate {
 	return c.Update(ex).Where(predicate.Note(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Note with the given id, or returns velox.ErrNotFound.
-func (c *NoteClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *NoteClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Note(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.NoteMeta.NotFound()

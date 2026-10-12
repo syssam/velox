@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrLoad(v any, i int) any {
 
 // LoadEdge is a row of a page of Load, with its cursor.
 type LoadEdge struct {
-	Node   *Load      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Load        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // LoadConnection is one page of Load.
 type LoadConnection struct {
-	Edges    []*LoadEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*LoadEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var LoadMeta = orm.Meta{
 type LoadQuery struct{ c orm.QueryCore }
 
 // NewLoadQuery returns a query of every Load.
-func NewLoadQuery(ex orm.Executor) *LoadQuery {
+func NewLoadQuery(ex velox.Executor) *LoadQuery {
 	return &LoadQuery{c: orm.QueryCore{M: &LoadMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *LoadQuery) Iter(ctx context.Context) iter.Seq2[*Load, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *LoadQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*LoadConnection, error) {
+func (q *LoadQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*LoadConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *LoadQuery) IDs(ctx context.Context) ([]int, error) {
 type LoadCreate struct{ c orm.MutCore }
 
 // NewLoadCreate returns a builder that creates a Load.
-func NewLoadCreate(ex orm.Executor) *LoadCreate {
+func NewLoadCreate(ex velox.Executor) *LoadCreate {
 	return &LoadCreate{c: orm.MutCore{M: &LoadMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *LoadCreate) Exec(ctx context.Context) error {
 
 // LoadCreateBulk creates several Load rows with one statement.
 type LoadCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*LoadCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type LoadCreateBulk struct {
 // NewLoadCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewLoadCreateBulk(ex orm.Executor, bs ...*LoadCreate) *LoadCreateBulk {
+func NewLoadCreateBulk(ex velox.Executor, bs ...*LoadCreate) *LoadCreateBulk {
 	return &LoadCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *LoadCreateBulk) Exec(ctx context.Context) error {
 type LoadUpdate struct{ c orm.MutCore }
 
 // NewLoadUpdate returns a builder that updates the rows its predicates match.
-func NewLoadUpdate(ex orm.Executor) *LoadUpdate {
+func NewLoadUpdate(ex velox.Executor) *LoadUpdate {
 	return &LoadUpdate{c: orm.MutCore{M: &LoadMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *LoadUpdate) SaveOne(ctx context.Context) (*Load, error) {
 type LoadDelete struct{ c orm.MutCore }
 
 // NewLoadDelete returns a builder that deletes the rows its predicates match.
-func NewLoadDelete(ex orm.Executor) *LoadDelete {
+func NewLoadDelete(ex velox.Executor) *LoadDelete {
 	return &LoadDelete{c: orm.MutCore{M: &LoadMeta, Ex: ex}}
 }
 

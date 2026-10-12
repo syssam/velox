@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -43,14 +44,14 @@ func ptrTime(v any, i int) any {
 
 // TimeEdge is a row of a page of Time, with its cursor.
 type TimeEdge struct {
-	Node   *Time      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Time        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // TimeConnection is one page of Time.
 type TimeConnection struct {
-	Edges    []*TimeEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*TimeEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -76,7 +77,7 @@ var TimeMeta = orm.Meta{
 type TimeQuery struct{ c orm.QueryCore }
 
 // NewTimeQuery returns a query of every Time.
-func NewTimeQuery(ex orm.Executor) *TimeQuery {
+func NewTimeQuery(ex velox.Executor) *TimeQuery {
 	return &TimeQuery{c: orm.QueryCore{M: &TimeMeta, Ex: ex}}
 }
 
@@ -221,7 +222,7 @@ func (q *TimeQuery) Iter(ctx context.Context) iter.Seq2[*Time, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TimeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TimeConnection, error) {
+func (q *TimeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TimeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -262,7 +263,7 @@ func (q *TimeQuery) IDs(ctx context.Context) ([]int, error) {
 type TimeCreate struct{ c orm.MutCore }
 
 // NewTimeCreate returns a builder that creates a Time.
-func NewTimeCreate(ex orm.Executor) *TimeCreate {
+func NewTimeCreate(ex velox.Executor) *TimeCreate {
 	return &TimeCreate{c: orm.MutCore{M: &TimeMeta, Ex: ex}}
 }
 
@@ -310,7 +311,7 @@ func (b *TimeCreate) Exec(ctx context.Context) error {
 
 // TimeCreateBulk creates several Time rows with one statement.
 type TimeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*TimeCreate
 	n  int
 }
@@ -318,7 +319,7 @@ type TimeCreateBulk struct {
 // NewTimeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewTimeCreateBulk(ex orm.Executor, bs ...*TimeCreate) *TimeCreateBulk {
+func NewTimeCreateBulk(ex velox.Executor, bs ...*TimeCreate) *TimeCreateBulk {
 	return &TimeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -371,7 +372,7 @@ func (b *TimeCreateBulk) Exec(ctx context.Context) error {
 type TimeUpdate struct{ c orm.MutCore }
 
 // NewTimeUpdate returns a builder that updates the rows its predicates match.
-func NewTimeUpdate(ex orm.Executor) *TimeUpdate {
+func NewTimeUpdate(ex velox.Executor) *TimeUpdate {
 	return &TimeUpdate{c: orm.MutCore{M: &TimeMeta, Ex: ex}}
 }
 
@@ -437,7 +438,7 @@ func (b *TimeUpdate) SaveOne(ctx context.Context) (*Time, error) {
 type TimeDelete struct{ c orm.MutCore }
 
 // NewTimeDelete returns a builder that deletes the rows its predicates match.
-func NewTimeDelete(ex orm.Executor) *TimeDelete {
+func NewTimeDelete(ex velox.Executor) *TimeDelete {
 	return &TimeDelete{c: orm.MutCore{M: &TimeMeta, Ex: ex}}
 }
 

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrMath(v any, i int) any {
 
 // MathEdge is a row of a page of Math, with its cursor.
 type MathEdge struct {
-	Node   *Math      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Math        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // MathConnection is one page of Math.
 type MathConnection struct {
-	Edges    []*MathEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*MathEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var MathMeta = orm.Meta{
 type MathQuery struct{ c orm.QueryCore }
 
 // NewMathQuery returns a query of every Math.
-func NewMathQuery(ex orm.Executor) *MathQuery {
+func NewMathQuery(ex velox.Executor) *MathQuery {
 	return &MathQuery{c: orm.QueryCore{M: &MathMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *MathQuery) Iter(ctx context.Context) iter.Seq2[*Math, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *MathQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*MathConnection, error) {
+func (q *MathQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*MathConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *MathQuery) IDs(ctx context.Context) ([]int, error) {
 type MathCreate struct{ c orm.MutCore }
 
 // NewMathCreate returns a builder that creates a Math.
-func NewMathCreate(ex orm.Executor) *MathCreate {
+func NewMathCreate(ex velox.Executor) *MathCreate {
 	return &MathCreate{c: orm.MutCore{M: &MathMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *MathCreate) Exec(ctx context.Context) error {
 
 // MathCreateBulk creates several Math rows with one statement.
 type MathCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*MathCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type MathCreateBulk struct {
 // NewMathCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewMathCreateBulk(ex orm.Executor, bs ...*MathCreate) *MathCreateBulk {
+func NewMathCreateBulk(ex velox.Executor, bs ...*MathCreate) *MathCreateBulk {
 	return &MathCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *MathCreateBulk) Exec(ctx context.Context) error {
 type MathUpdate struct{ c orm.MutCore }
 
 // NewMathUpdate returns a builder that updates the rows its predicates match.
-func NewMathUpdate(ex orm.Executor) *MathUpdate {
+func NewMathUpdate(ex velox.Executor) *MathUpdate {
 	return &MathUpdate{c: orm.MutCore{M: &MathMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *MathUpdate) SaveOne(ctx context.Context) (*Math, error) {
 type MathDelete struct{ c orm.MutCore }
 
 // NewMathDelete returns a builder that deletes the rows its predicates match.
-func NewMathDelete(ex orm.Executor) *MathDelete {
+func NewMathDelete(ex velox.Executor) *MathDelete {
 	return &MathDelete{c: orm.MutCore{M: &MathMeta, Ex: ex}}
 }
 

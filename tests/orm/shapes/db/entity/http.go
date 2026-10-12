@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrHttp(v any, i int) any {
 
 // HttpEdge is a row of a page of Http, with its cursor.
 type HttpEdge struct {
-	Node   *Http      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Http        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // HttpConnection is one page of Http.
 type HttpConnection struct {
-	Edges    []*HttpEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*HttpEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var HttpMeta = orm.Meta{
 type HttpQuery struct{ c orm.QueryCore }
 
 // NewHttpQuery returns a query of every Http.
-func NewHttpQuery(ex orm.Executor) *HttpQuery {
+func NewHttpQuery(ex velox.Executor) *HttpQuery {
 	return &HttpQuery{c: orm.QueryCore{M: &HttpMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *HttpQuery) Iter(ctx context.Context) iter.Seq2[*Http, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *HttpQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*HttpConnection, error) {
+func (q *HttpQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*HttpConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *HttpQuery) IDs(ctx context.Context) ([]int, error) {
 type HttpCreate struct{ c orm.MutCore }
 
 // NewHttpCreate returns a builder that creates a Http.
-func NewHttpCreate(ex orm.Executor) *HttpCreate {
+func NewHttpCreate(ex velox.Executor) *HttpCreate {
 	return &HttpCreate{c: orm.MutCore{M: &HttpMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *HttpCreate) Exec(ctx context.Context) error {
 
 // HttpCreateBulk creates several Http rows with one statement.
 type HttpCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*HttpCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type HttpCreateBulk struct {
 // NewHttpCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewHttpCreateBulk(ex orm.Executor, bs ...*HttpCreate) *HttpCreateBulk {
+func NewHttpCreateBulk(ex velox.Executor, bs ...*HttpCreate) *HttpCreateBulk {
 	return &HttpCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *HttpCreateBulk) Exec(ctx context.Context) error {
 type HttpUpdate struct{ c orm.MutCore }
 
 // NewHttpUpdate returns a builder that updates the rows its predicates match.
-func NewHttpUpdate(ex orm.Executor) *HttpUpdate {
+func NewHttpUpdate(ex velox.Executor) *HttpUpdate {
 	return &HttpUpdate{c: orm.MutCore{M: &HttpMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *HttpUpdate) SaveOne(ctx context.Context) (*Http, error) {
 type HttpDelete struct{ c orm.MutCore }
 
 // NewHttpDelete returns a builder that deletes the rows its predicates match.
-func NewHttpDelete(ex orm.Executor) *HttpDelete {
+func NewHttpDelete(ex velox.Executor) *HttpDelete {
 	return &HttpDelete{c: orm.MutCore{M: &HttpMeta, Ex: ex}}
 }
 

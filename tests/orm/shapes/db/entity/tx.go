@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrTx(v any, i int) any {
 
 // TxEdge is a row of a page of Tx, with its cursor.
 type TxEdge struct {
-	Node   *Tx        `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Tx          `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // TxConnection is one page of Tx.
 type TxConnection struct {
-	Edges    []*TxEdge    `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*TxEdge      `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var TxMeta = orm.Meta{
 type TxQuery struct{ c orm.QueryCore }
 
 // NewTxQuery returns a query of every Tx.
-func NewTxQuery(ex orm.Executor) *TxQuery { return &TxQuery{c: orm.QueryCore{M: &TxMeta, Ex: ex}} }
+func NewTxQuery(ex velox.Executor) *TxQuery { return &TxQuery{c: orm.QueryCore{M: &TxMeta, Ex: ex}} }
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +212,7 @@ func (q *TxQuery) Iter(ctx context.Context) iter.Seq2[*Tx, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TxQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TxConnection, error) {
+func (q *TxQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TxConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +253,7 @@ func (q *TxQuery) IDs(ctx context.Context) ([]int, error) {
 type TxCreate struct{ c orm.MutCore }
 
 // NewTxCreate returns a builder that creates a Tx.
-func NewTxCreate(ex orm.Executor) *TxCreate { return &TxCreate{c: orm.MutCore{M: &TxMeta, Ex: ex}} }
+func NewTxCreate(ex velox.Executor) *TxCreate { return &TxCreate{c: orm.MutCore{M: &TxMeta, Ex: ex}} }
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +299,7 @@ func (b *TxCreate) Exec(ctx context.Context) error {
 
 // TxCreateBulk creates several Tx rows with one statement.
 type TxCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*TxCreate
 	n  int
 }
@@ -306,7 +307,7 @@ type TxCreateBulk struct {
 // NewTxCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewTxCreateBulk(ex orm.Executor, bs ...*TxCreate) *TxCreateBulk {
+func NewTxCreateBulk(ex velox.Executor, bs ...*TxCreate) *TxCreateBulk {
 	return &TxCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +360,7 @@ func (b *TxCreateBulk) Exec(ctx context.Context) error {
 type TxUpdate struct{ c orm.MutCore }
 
 // NewTxUpdate returns a builder that updates the rows its predicates match.
-func NewTxUpdate(ex orm.Executor) *TxUpdate { return &TxUpdate{c: orm.MutCore{M: &TxMeta, Ex: ex}} }
+func NewTxUpdate(ex velox.Executor) *TxUpdate { return &TxUpdate{c: orm.MutCore{M: &TxMeta, Ex: ex}} }
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +424,7 @@ func (b *TxUpdate) SaveOne(ctx context.Context) (*Tx, error) {
 type TxDelete struct{ c orm.MutCore }
 
 // NewTxDelete returns a builder that deletes the rows its predicates match.
-func NewTxDelete(ex orm.Executor) *TxDelete { return &TxDelete{c: orm.MutCore{M: &TxMeta, Ex: ex}} }
+func NewTxDelete(ex velox.Executor) *TxDelete { return &TxDelete{c: orm.MutCore{M: &TxMeta, Ex: ex}} }
 
 // Where restricts the rows deleted; all predicates must hold.
 //

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrTable(v any, i int) any {
 
 // TableEdge is a row of a page of Table, with its cursor.
 type TableEdge struct {
-	Node   *Table     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Table       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // TableConnection is one page of Table.
 type TableConnection struct {
-	Edges    []*TableEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*TableEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var TableMeta = orm.Meta{
 type TableQuery struct{ c orm.QueryCore }
 
 // NewTableQuery returns a query of every Table.
-func NewTableQuery(ex orm.Executor) *TableQuery {
+func NewTableQuery(ex velox.Executor) *TableQuery {
 	return &TableQuery{c: orm.QueryCore{M: &TableMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *TableQuery) Iter(ctx context.Context) iter.Seq2[*Table, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TableQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TableConnection, error) {
+func (q *TableQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TableConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *TableQuery) IDs(ctx context.Context) ([]int, error) {
 type TableCreate struct{ c orm.MutCore }
 
 // NewTableCreate returns a builder that creates a Table.
-func NewTableCreate(ex orm.Executor) *TableCreate {
+func NewTableCreate(ex velox.Executor) *TableCreate {
 	return &TableCreate{c: orm.MutCore{M: &TableMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *TableCreate) Exec(ctx context.Context) error {
 
 // TableCreateBulk creates several Table rows with one statement.
 type TableCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*TableCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type TableCreateBulk struct {
 // NewTableCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewTableCreateBulk(ex orm.Executor, bs ...*TableCreate) *TableCreateBulk {
+func NewTableCreateBulk(ex velox.Executor, bs ...*TableCreate) *TableCreateBulk {
 	return &TableCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *TableCreateBulk) Exec(ctx context.Context) error {
 type TableUpdate struct{ c orm.MutCore }
 
 // NewTableUpdate returns a builder that updates the rows its predicates match.
-func NewTableUpdate(ex orm.Executor) *TableUpdate {
+func NewTableUpdate(ex velox.Executor) *TableUpdate {
 	return &TableUpdate{c: orm.MutCore{M: &TableMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *TableUpdate) SaveOne(ctx context.Context) (*Table, error) {
 type TableDelete struct{ c orm.MutCore }
 
 // NewTableDelete returns a builder that deletes the rows its predicates match.
-func NewTableDelete(ex orm.Executor) *TableDelete {
+func NewTableDelete(ex velox.Executor) *TableDelete {
 	return &TableDelete{c: orm.MutCore{M: &TableMeta, Ex: ex}}
 }
 

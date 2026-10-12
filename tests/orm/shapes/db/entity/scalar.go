@@ -5,6 +5,7 @@ package entity
 import (
 	context "context"
 	uuid "github.com/google/uuid"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -169,14 +170,14 @@ func ptrScalar(v any, i int) any {
 
 // ScalarEdge is a row of a page of Scalar, with its cursor.
 type ScalarEdge struct {
-	Node   *Scalar    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Scalar      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ScalarConnection is one page of Scalar.
 type ScalarConnection struct {
-	Edges    []*ScalarEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*ScalarEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -242,7 +243,7 @@ var ScalarMeta = orm.Meta{
 type ScalarQuery struct{ c orm.QueryCore }
 
 // NewScalarQuery returns a query of every Scalar.
-func NewScalarQuery(ex orm.Executor) *ScalarQuery {
+func NewScalarQuery(ex velox.Executor) *ScalarQuery {
 	return &ScalarQuery{c: orm.QueryCore{M: &ScalarMeta, Ex: ex}}
 }
 
@@ -387,7 +388,7 @@ func (q *ScalarQuery) Iter(ctx context.Context) iter.Seq2[*Scalar, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ScalarQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ScalarConnection, error) {
+func (q *ScalarQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ScalarConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -428,7 +429,7 @@ func (q *ScalarQuery) IDs(ctx context.Context) ([]int, error) {
 type ScalarCreate struct{ c orm.MutCore }
 
 // NewScalarCreate returns a builder that creates a Scalar.
-func NewScalarCreate(ex orm.Executor) *ScalarCreate {
+func NewScalarCreate(ex velox.Executor) *ScalarCreate {
 	return &ScalarCreate{c: orm.MutCore{M: &ScalarMeta, Ex: ex}}
 }
 
@@ -476,7 +477,7 @@ func (b *ScalarCreate) Exec(ctx context.Context) error {
 
 // ScalarCreateBulk creates several Scalar rows with one statement.
 type ScalarCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ScalarCreate
 	n  int
 }
@@ -484,7 +485,7 @@ type ScalarCreateBulk struct {
 // NewScalarCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewScalarCreateBulk(ex orm.Executor, bs ...*ScalarCreate) *ScalarCreateBulk {
+func NewScalarCreateBulk(ex velox.Executor, bs ...*ScalarCreate) *ScalarCreateBulk {
 	return &ScalarCreateBulk{ex: ex, bs: bs}
 }
 
@@ -537,7 +538,7 @@ func (b *ScalarCreateBulk) Exec(ctx context.Context) error {
 type ScalarUpdate struct{ c orm.MutCore }
 
 // NewScalarUpdate returns a builder that updates the rows its predicates match.
-func NewScalarUpdate(ex orm.Executor) *ScalarUpdate {
+func NewScalarUpdate(ex velox.Executor) *ScalarUpdate {
 	return &ScalarUpdate{c: orm.MutCore{M: &ScalarMeta, Ex: ex}}
 }
 
@@ -603,7 +604,7 @@ func (b *ScalarUpdate) SaveOne(ctx context.Context) (*Scalar, error) {
 type ScalarDelete struct{ c orm.MutCore }
 
 // NewScalarDelete returns a builder that deletes the rows its predicates match.
-func NewScalarDelete(ex orm.Executor) *ScalarDelete {
+func NewScalarDelete(ex velox.Executor) *ScalarDelete {
 	return &ScalarDelete{c: orm.MutCore{M: &ScalarMeta, Ex: ex}}
 }
 

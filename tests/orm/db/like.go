@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/db/predicate"
@@ -17,35 +18,35 @@ type LikeClient struct{}
 
 // Query returns a query of every Like, to run on ex: a database handle or a
 // transaction.
-func (*LikeClient) Query(ex orm.Executor) *entity.LikeQuery { return entity.NewLikeQuery(ex) }
+func (*LikeClient) Query(ex velox.Executor) *entity.LikeQuery { return entity.NewLikeQuery(ex) }
 
 // Create returns a builder that creates a Like.
-func (*LikeClient) Create(ex orm.Executor) *entity.LikeCreate { return entity.NewLikeCreate(ex) }
+func (*LikeClient) Create(ex velox.Executor) *entity.LikeCreate { return entity.NewLikeCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*LikeClient) CreateBulk(ex orm.Executor, bs ...*entity.LikeCreate) *entity.LikeCreateBulk {
+func (*LikeClient) CreateBulk(ex velox.Executor, bs ...*entity.LikeCreate) *entity.LikeCreateBulk {
 	return entity.NewLikeCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Like rows its conditions match.
-func (*LikeClient) Update(ex orm.Executor) *entity.LikeUpdate { return entity.NewLikeUpdate(ex) }
+func (*LikeClient) Update(ex velox.Executor) *entity.LikeUpdate { return entity.NewLikeUpdate(ex) }
 
 // Delete returns a builder that deletes the Like rows its conditions match.
-func (*LikeClient) Delete(ex orm.Executor) *entity.LikeDelete { return entity.NewLikeDelete(ex) }
+func (*LikeClient) Delete(ex velox.Executor) *entity.LikeDelete { return entity.NewLikeDelete(ex) }
 
 // Get returns the Like with the given id, or velox.ErrNotFound.
-func (c *LikeClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Like, error) {
+func (c *LikeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Like, error) {
 	return c.Query(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Like with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *LikeClient) UpdateByID(ex orm.Executor, id int) *entity.LikeUpdate {
+func (c *LikeClient) UpdateByID(ex velox.Executor, id int) *entity.LikeUpdate {
 	return c.Update(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Like with the given id, or returns velox.ErrNotFound.
-func (c *LikeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *LikeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.LikeMeta.NotFound()
@@ -54,7 +55,7 @@ func (c *LikeClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) er
 }
 
 // node is Get for an id of any type: see NodeTypes.
-func (c *LikeClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
+func (c *LikeClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
 		return nil, entity.LikeMeta.NotFound()

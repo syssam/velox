@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -43,14 +44,14 @@ func ptrStamped(v any, i int) any {
 
 // StampedEdge is a row of a page of Stamped, with its cursor.
 type StampedEdge struct {
-	Node   *Stamped   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Stamped     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // StampedConnection is one page of Stamped.
 type StampedConnection struct {
 	Edges    []*StampedEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -74,7 +75,7 @@ var StampedMeta = orm.Meta{
 type StampedQuery struct{ c orm.QueryCore }
 
 // NewStampedQuery returns a query of every Stamped.
-func NewStampedQuery(ex orm.Executor) *StampedQuery {
+func NewStampedQuery(ex velox.Executor) *StampedQuery {
 	return &StampedQuery{c: orm.QueryCore{M: &StampedMeta, Ex: ex}}
 }
 
@@ -219,7 +220,7 @@ func (q *StampedQuery) Iter(ctx context.Context) iter.Seq2[*Stamped, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *StampedQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*StampedConnection, error) {
+func (q *StampedQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*StampedConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -260,7 +261,7 @@ func (q *StampedQuery) IDs(ctx context.Context) ([]int, error) {
 type StampedCreate struct{ c orm.MutCore }
 
 // NewStampedCreate returns a builder that creates a Stamped.
-func NewStampedCreate(ex orm.Executor) *StampedCreate {
+func NewStampedCreate(ex velox.Executor) *StampedCreate {
 	return &StampedCreate{c: orm.MutCore{M: &StampedMeta, Ex: ex}}
 }
 
@@ -308,7 +309,7 @@ func (b *StampedCreate) Exec(ctx context.Context) error {
 
 // StampedCreateBulk creates several Stamped rows with one statement.
 type StampedCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*StampedCreate
 	n  int
 }
@@ -316,7 +317,7 @@ type StampedCreateBulk struct {
 // NewStampedCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewStampedCreateBulk(ex orm.Executor, bs ...*StampedCreate) *StampedCreateBulk {
+func NewStampedCreateBulk(ex velox.Executor, bs ...*StampedCreate) *StampedCreateBulk {
 	return &StampedCreateBulk{ex: ex, bs: bs}
 }
 
@@ -369,7 +370,7 @@ func (b *StampedCreateBulk) Exec(ctx context.Context) error {
 type StampedUpdate struct{ c orm.MutCore }
 
 // NewStampedUpdate returns a builder that updates the rows its predicates match.
-func NewStampedUpdate(ex orm.Executor) *StampedUpdate {
+func NewStampedUpdate(ex velox.Executor) *StampedUpdate {
 	return &StampedUpdate{c: orm.MutCore{M: &StampedMeta, Ex: ex}}
 }
 
@@ -435,7 +436,7 @@ func (b *StampedUpdate) SaveOne(ctx context.Context) (*Stamped, error) {
 type StampedDelete struct{ c orm.MutCore }
 
 // NewStampedDelete returns a builder that deletes the rows its predicates match.
-func NewStampedDelete(ex orm.Executor) *StampedDelete {
+func NewStampedDelete(ex velox.Executor) *StampedDelete {
 	return &StampedDelete{c: orm.MutCore{M: &StampedMeta, Ex: ex}}
 }
 

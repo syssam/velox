@@ -95,14 +95,14 @@ func linkTopic(dst any, es []any) {
 
 // TopicEdge is a row of a page of Topic, with its cursor.
 type TopicEdge struct {
-	Node   *Topic     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Topic       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // TopicConnection is one page of Topic.
 type TopicConnection struct {
-	Edges    []*TopicEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*TopicEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -127,7 +127,7 @@ var TopicMeta = orm.Meta{
 type TopicQuery struct{ c orm.QueryCore }
 
 // NewTopicQuery returns a query of every Topic.
-func NewTopicQuery(ex orm.Executor) *TopicQuery {
+func NewTopicQuery(ex velox.Executor) *TopicQuery {
 	return &TopicQuery{c: orm.QueryCore{M: &TopicMeta, Ex: ex}}
 }
 
@@ -272,7 +272,7 @@ func (q *TopicQuery) Iter(ctx context.Context) iter.Seq2[*Topic, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *TopicQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*TopicConnection, error) {
+func (q *TopicQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TopicConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -313,7 +313,7 @@ func (q *TopicQuery) IDs(ctx context.Context) ([]int, error) {
 type TopicCreate struct{ c orm.MutCore }
 
 // NewTopicCreate returns a builder that creates a Topic.
-func NewTopicCreate(ex orm.Executor) *TopicCreate {
+func NewTopicCreate(ex velox.Executor) *TopicCreate {
 	return &TopicCreate{c: orm.MutCore{M: &TopicMeta, Ex: ex}}
 }
 
@@ -361,7 +361,7 @@ func (b *TopicCreate) Exec(ctx context.Context) error {
 
 // TopicCreateBulk creates several Topic rows with one statement.
 type TopicCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*TopicCreate
 	n  int
 }
@@ -369,7 +369,7 @@ type TopicCreateBulk struct {
 // NewTopicCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewTopicCreateBulk(ex orm.Executor, bs ...*TopicCreate) *TopicCreateBulk {
+func NewTopicCreateBulk(ex velox.Executor, bs ...*TopicCreate) *TopicCreateBulk {
 	return &TopicCreateBulk{ex: ex, bs: bs}
 }
 
@@ -422,7 +422,7 @@ func (b *TopicCreateBulk) Exec(ctx context.Context) error {
 type TopicUpdate struct{ c orm.MutCore }
 
 // NewTopicUpdate returns a builder that updates the rows its predicates match.
-func NewTopicUpdate(ex orm.Executor) *TopicUpdate {
+func NewTopicUpdate(ex velox.Executor) *TopicUpdate {
 	return &TopicUpdate{c: orm.MutCore{M: &TopicMeta, Ex: ex}}
 }
 
@@ -488,7 +488,7 @@ func (b *TopicUpdate) SaveOne(ctx context.Context) (*Topic, error) {
 type TopicDelete struct{ c orm.MutCore }
 
 // NewTopicDelete returns a builder that deletes the rows its predicates match.
-func NewTopicDelete(ex orm.Executor) *TopicDelete {
+func NewTopicDelete(ex velox.Executor) *TopicDelete {
 	return &TopicDelete{c: orm.MutCore{M: &TopicMeta, Ex: ex}}
 }
 
@@ -511,7 +511,7 @@ func (b *TopicDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete
 // QueryArticles queries the "articles" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Topic) QueryArticles(ex orm.Executor) *ArticleQuery {
+func (e *Topic) QueryArticles(ex velox.Executor) *ArticleQuery {
 	q := NewArticleQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TopicMeta.Edges[0], e))
 	return q
@@ -534,7 +534,7 @@ func (q *TopicQuery) WithArticles(opts ...*ArticleQuery) *TopicQuery {
 // QueryBannedIn queries the "banned_in" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Topic) QueryBannedIn(ex orm.Executor) *ArticleQuery {
+func (e *Topic) QueryBannedIn(ex velox.Executor) *ArticleQuery {
 	q := NewArticleQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TopicMeta.Edges[1], e))
 	return q

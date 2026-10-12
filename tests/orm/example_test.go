@@ -24,10 +24,10 @@ import (
 var exampleSeq int
 
 // exampleDB opens an empty database with the tables of the schema.
-func exampleDB() (*orm.DB, context.Context) {
+func exampleDB() (*velox.DB, context.Context) {
 	ctx := context.Background()
 	exampleSeq++
-	conn, err := orm.Open("sqlite", fmt.Sprintf("file:example%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", exampleSeq))
+	conn, err := velox.Open("sqlite", fmt.Sprintf("file:example%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", exampleSeq))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func Example_transaction() {
 
 	// What a query or mutation runs on is given where it starts: the
 	// transaction here. An error returned from the function rolls it back.
-	err := conn.RunTx(ctx, func(tx *orm.Tx) error {
+	err := conn.RunTx(ctx, func(tx *velox.Tx) error {
 		u, err := db.User.Create(tx).
 			Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40)).
 			Save(ctx)

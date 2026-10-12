@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -77,13 +78,13 @@ func ptrGoTypeShape(v any, i int) any {
 // GoTypeShapeEdge is a row of a page of GoTypeShape, with its cursor.
 type GoTypeShapeEdge struct {
 	Node   *GoTypeShape `json:"node"`
-	Cursor orm.Cursor   `json:"cursor"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // GoTypeShapeConnection is one page of GoTypeShape.
 type GoTypeShapeConnection struct {
 	Edges    []*GoTypeShapeEdge `json:"edges"`
-	PageInfo orm.PageInfo       `json:"pageInfo"`
+	PageInfo velox.PageInfo     `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -120,7 +121,7 @@ var GoTypeShapeMeta = orm.Meta{
 type GoTypeShapeQuery struct{ c orm.QueryCore }
 
 // NewGoTypeShapeQuery returns a query of every GoTypeShape.
-func NewGoTypeShapeQuery(ex orm.Executor) *GoTypeShapeQuery {
+func NewGoTypeShapeQuery(ex velox.Executor) *GoTypeShapeQuery {
 	return &GoTypeShapeQuery{c: orm.QueryCore{M: &GoTypeShapeMeta, Ex: ex}}
 }
 
@@ -268,7 +269,7 @@ func (q *GoTypeShapeQuery) Iter(ctx context.Context) iter.Seq2[*GoTypeShape, err
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *GoTypeShapeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*GoTypeShapeConnection, error) {
+func (q *GoTypeShapeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*GoTypeShapeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -309,7 +310,7 @@ func (q *GoTypeShapeQuery) IDs(ctx context.Context) ([]int, error) {
 type GoTypeShapeCreate struct{ c orm.MutCore }
 
 // NewGoTypeShapeCreate returns a builder that creates a GoTypeShape.
-func NewGoTypeShapeCreate(ex orm.Executor) *GoTypeShapeCreate {
+func NewGoTypeShapeCreate(ex velox.Executor) *GoTypeShapeCreate {
 	return &GoTypeShapeCreate{c: orm.MutCore{M: &GoTypeShapeMeta, Ex: ex}}
 }
 
@@ -357,7 +358,7 @@ func (b *GoTypeShapeCreate) Exec(ctx context.Context) error {
 
 // GoTypeShapeCreateBulk creates several GoTypeShape rows with one statement.
 type GoTypeShapeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*GoTypeShapeCreate
 	n  int
 }
@@ -365,7 +366,7 @@ type GoTypeShapeCreateBulk struct {
 // NewGoTypeShapeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewGoTypeShapeCreateBulk(ex orm.Executor, bs ...*GoTypeShapeCreate) *GoTypeShapeCreateBulk {
+func NewGoTypeShapeCreateBulk(ex velox.Executor, bs ...*GoTypeShapeCreate) *GoTypeShapeCreateBulk {
 	return &GoTypeShapeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -418,7 +419,7 @@ func (b *GoTypeShapeCreateBulk) Exec(ctx context.Context) error {
 type GoTypeShapeUpdate struct{ c orm.MutCore }
 
 // NewGoTypeShapeUpdate returns a builder that updates the rows its predicates match.
-func NewGoTypeShapeUpdate(ex orm.Executor) *GoTypeShapeUpdate {
+func NewGoTypeShapeUpdate(ex velox.Executor) *GoTypeShapeUpdate {
 	return &GoTypeShapeUpdate{c: orm.MutCore{M: &GoTypeShapeMeta, Ex: ex}}
 }
 
@@ -484,7 +485,7 @@ func (b *GoTypeShapeUpdate) SaveOne(ctx context.Context) (*GoTypeShape, error) {
 type GoTypeShapeDelete struct{ c orm.MutCore }
 
 // NewGoTypeShapeDelete returns a builder that deletes the rows its predicates match.
-func NewGoTypeShapeDelete(ex orm.Executor) *GoTypeShapeDelete {
+func NewGoTypeShapeDelete(ex velox.Executor) *GoTypeShapeDelete {
 	return &GoTypeShapeDelete{c: orm.MutCore{M: &GoTypeShapeMeta, Ex: ex}}
 }
 

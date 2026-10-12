@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type MathClient struct{}
 
 // Query returns a query of every Math, to run on ex: a database handle or a
 // transaction.
-func (*MathClient) Query(ex orm.Executor) *entity.MathQuery { return entity.NewMathQuery(ex) }
+func (*MathClient) Query(ex velox.Executor) *entity.MathQuery { return entity.NewMathQuery(ex) }
 
 // Create returns a builder that creates a Math.
-func (*MathClient) Create(ex orm.Executor) *entity.MathCreate { return entity.NewMathCreate(ex) }
+func (*MathClient) Create(ex velox.Executor) *entity.MathCreate { return entity.NewMathCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*MathClient) CreateBulk(ex orm.Executor, bs ...*entity.MathCreate) *entity.MathCreateBulk {
+func (*MathClient) CreateBulk(ex velox.Executor, bs ...*entity.MathCreate) *entity.MathCreateBulk {
 	return entity.NewMathCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Math rows its conditions match.
-func (*MathClient) Update(ex orm.Executor) *entity.MathUpdate { return entity.NewMathUpdate(ex) }
+func (*MathClient) Update(ex velox.Executor) *entity.MathUpdate { return entity.NewMathUpdate(ex) }
 
 // Delete returns a builder that deletes the Math rows its conditions match.
-func (*MathClient) Delete(ex orm.Executor) *entity.MathDelete { return entity.NewMathDelete(ex) }
+func (*MathClient) Delete(ex velox.Executor) *entity.MathDelete { return entity.NewMathDelete(ex) }
 
 // Get returns the Math with the given id, or velox.ErrNotFound.
-func (c *MathClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Math, error) {
+func (c *MathClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Math, error) {
 	return c.Query(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Math with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *MathClient) UpdateByID(ex orm.Executor, id int) *entity.MathUpdate {
+func (c *MathClient) UpdateByID(ex velox.Executor, id int) *entity.MathUpdate {
 	return c.Update(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Math with the given id, or returns velox.ErrNotFound.
-func (c *MathClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *MathClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Math(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.MathMeta.NotFound()

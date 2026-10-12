@@ -8,12 +8,12 @@ import (
 
 // A function that took a *Client could be given a transaction's client,
 // tx.Client(), which was a *Client too. The two are different types now, a
-// *orm.DB and a *orm.Tx, and what both are is an orm.Executor. A parameter
+// *velox.DB and a *velox.Tx, and what both are is a velox.Executor. A parameter
 // can take that type when the function only queries on it: selects an
 // entity's client from it, or hands it to another function whose parameter
 // is the same kind. One that begins a transaction on it, closes it or keeps
-// it needs the database, and stays a *orm.DB. So does one that compares it
-// with nil: a nil *orm.DB handed over as an orm.Executor is an interface
+// it needs the database, and stays a *velox.DB. So does one that compares it
+// with nil: a nil *velox.DB handed over as a velox.Executor is an interface
 // that is not nil, and the comparison would quietly change its answer.
 
 // paramOf returns the parameter of the function a call calls that its i-th

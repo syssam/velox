@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrErrors(v any, i int) any {
 
 // ErrorsEdge is a row of a page of Errors, with its cursor.
 type ErrorsEdge struct {
-	Node   *Errors    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Errors      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ErrorsConnection is one page of Errors.
 type ErrorsConnection struct {
-	Edges    []*ErrorsEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*ErrorsEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var ErrorsMeta = orm.Meta{
 type ErrorsQuery struct{ c orm.QueryCore }
 
 // NewErrorsQuery returns a query of every Errors.
-func NewErrorsQuery(ex orm.Executor) *ErrorsQuery {
+func NewErrorsQuery(ex velox.Executor) *ErrorsQuery {
 	return &ErrorsQuery{c: orm.QueryCore{M: &ErrorsMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *ErrorsQuery) Iter(ctx context.Context) iter.Seq2[*Errors, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ErrorsQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ErrorsConnection, error) {
+func (q *ErrorsQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ErrorsConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *ErrorsQuery) IDs(ctx context.Context) ([]int, error) {
 type ErrorsCreate struct{ c orm.MutCore }
 
 // NewErrorsCreate returns a builder that creates a Errors.
-func NewErrorsCreate(ex orm.Executor) *ErrorsCreate {
+func NewErrorsCreate(ex velox.Executor) *ErrorsCreate {
 	return &ErrorsCreate{c: orm.MutCore{M: &ErrorsMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *ErrorsCreate) Exec(ctx context.Context) error {
 
 // ErrorsCreateBulk creates several Errors rows with one statement.
 type ErrorsCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ErrorsCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type ErrorsCreateBulk struct {
 // NewErrorsCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewErrorsCreateBulk(ex orm.Executor, bs ...*ErrorsCreate) *ErrorsCreateBulk {
+func NewErrorsCreateBulk(ex velox.Executor, bs ...*ErrorsCreate) *ErrorsCreateBulk {
 	return &ErrorsCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *ErrorsCreateBulk) Exec(ctx context.Context) error {
 type ErrorsUpdate struct{ c orm.MutCore }
 
 // NewErrorsUpdate returns a builder that updates the rows its predicates match.
-func NewErrorsUpdate(ex orm.Executor) *ErrorsUpdate {
+func NewErrorsUpdate(ex velox.Executor) *ErrorsUpdate {
 	return &ErrorsUpdate{c: orm.MutCore{M: &ErrorsMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *ErrorsUpdate) SaveOne(ctx context.Context) (*Errors, error) {
 type ErrorsDelete struct{ c orm.MutCore }
 
 // NewErrorsDelete returns a builder that deletes the rows its predicates match.
-func NewErrorsDelete(ex orm.Executor) *ErrorsDelete {
+func NewErrorsDelete(ex velox.Executor) *ErrorsDelete {
 	return &ErrorsDelete{c: orm.MutCore{M: &ErrorsMeta, Ex: ex}}
 }
 

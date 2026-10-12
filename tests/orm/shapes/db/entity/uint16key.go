@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrUint16Key(v any, i int) any {
 
 // Uint16KeyEdge is a row of a page of Uint16Key, with its cursor.
 type Uint16KeyEdge struct {
-	Node   *Uint16Key `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Uint16Key   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // Uint16KeyConnection is one page of Uint16Key.
 type Uint16KeyConnection struct {
 	Edges    []*Uint16KeyEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var Uint16KeyMeta = orm.Meta{
 type Uint16KeyQuery struct{ c orm.QueryCore }
 
 // NewUint16KeyQuery returns a query of every Uint16Key.
-func NewUint16KeyQuery(ex orm.Executor) *Uint16KeyQuery {
+func NewUint16KeyQuery(ex velox.Executor) *Uint16KeyQuery {
 	return &Uint16KeyQuery{c: orm.QueryCore{M: &Uint16KeyMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *Uint16KeyQuery) Iter(ctx context.Context) iter.Seq2[*Uint16Key, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *Uint16KeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*Uint16KeyConnection, error) {
+func (q *Uint16KeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*Uint16KeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *Uint16KeyQuery) IDs(ctx context.Context) ([]uint16, error) {
 type Uint16KeyCreate struct{ c orm.MutCore }
 
 // NewUint16KeyCreate returns a builder that creates a Uint16Key.
-func NewUint16KeyCreate(ex orm.Executor) *Uint16KeyCreate {
+func NewUint16KeyCreate(ex velox.Executor) *Uint16KeyCreate {
 	return &Uint16KeyCreate{c: orm.MutCore{M: &Uint16KeyMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *Uint16KeyCreate) Exec(ctx context.Context) error {
 
 // Uint16KeyCreateBulk creates several Uint16Key rows with one statement.
 type Uint16KeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*Uint16KeyCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type Uint16KeyCreateBulk struct {
 // NewUint16KeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewUint16KeyCreateBulk(ex orm.Executor, bs ...*Uint16KeyCreate) *Uint16KeyCreateBulk {
+func NewUint16KeyCreateBulk(ex velox.Executor, bs ...*Uint16KeyCreate) *Uint16KeyCreateBulk {
 	return &Uint16KeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *Uint16KeyCreateBulk) Exec(ctx context.Context) error {
 type Uint16KeyUpdate struct{ c orm.MutCore }
 
 // NewUint16KeyUpdate returns a builder that updates the rows its predicates match.
-func NewUint16KeyUpdate(ex orm.Executor) *Uint16KeyUpdate {
+func NewUint16KeyUpdate(ex velox.Executor) *Uint16KeyUpdate {
 	return &Uint16KeyUpdate{c: orm.MutCore{M: &Uint16KeyMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *Uint16KeyUpdate) SaveOne(ctx context.Context) (*Uint16Key, error) {
 type Uint16KeyDelete struct{ c orm.MutCore }
 
 // NewUint16KeyDelete returns a builder that deletes the rows its predicates match.
-func NewUint16KeyDelete(ex orm.Executor) *Uint16KeyDelete {
+func NewUint16KeyDelete(ex velox.Executor) *Uint16KeyDelete {
 	return &Uint16KeyDelete{c: orm.MutCore{M: &Uint16KeyMeta, Ex: ex}}
 }
 

@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type UUIDClient struct{}
 
 // Query returns a query of every UUID, to run on ex: a database handle or a
 // transaction.
-func (*UUIDClient) Query(ex orm.Executor) *entity.UUIDQuery { return entity.NewUUIDQuery(ex) }
+func (*UUIDClient) Query(ex velox.Executor) *entity.UUIDQuery { return entity.NewUUIDQuery(ex) }
 
 // Create returns a builder that creates a UUID.
-func (*UUIDClient) Create(ex orm.Executor) *entity.UUIDCreate { return entity.NewUUIDCreate(ex) }
+func (*UUIDClient) Create(ex velox.Executor) *entity.UUIDCreate { return entity.NewUUIDCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*UUIDClient) CreateBulk(ex orm.Executor, bs ...*entity.UUIDCreate) *entity.UUIDCreateBulk {
+func (*UUIDClient) CreateBulk(ex velox.Executor, bs ...*entity.UUIDCreate) *entity.UUIDCreateBulk {
 	return entity.NewUUIDCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the UUID rows its conditions match.
-func (*UUIDClient) Update(ex orm.Executor) *entity.UUIDUpdate { return entity.NewUUIDUpdate(ex) }
+func (*UUIDClient) Update(ex velox.Executor) *entity.UUIDUpdate { return entity.NewUUIDUpdate(ex) }
 
 // Delete returns a builder that deletes the UUID rows its conditions match.
-func (*UUIDClient) Delete(ex orm.Executor) *entity.UUIDDelete { return entity.NewUUIDDelete(ex) }
+func (*UUIDClient) Delete(ex velox.Executor) *entity.UUIDDelete { return entity.NewUUIDDelete(ex) }
 
 // Get returns the UUID with the given id, or velox.ErrNotFound.
-func (c *UUIDClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.UUID, error) {
+func (c *UUIDClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.UUID, error) {
 	return c.Query(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the UUID with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *UUIDClient) UpdateByID(ex orm.Executor, id int) *entity.UUIDUpdate {
+func (c *UUIDClient) UpdateByID(ex velox.Executor, id int) *entity.UUIDUpdate {
 	return c.Update(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the UUID with the given id, or returns velox.ErrNotFound.
-func (c *UUIDClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *UUIDClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.UUIDMeta.NotFound()

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -72,14 +73,14 @@ func ptrErrField(v any, i int) any {
 
 // ErrFieldEdge is a row of a page of ErrField, with its cursor.
 type ErrFieldEdge struct {
-	Node   *ErrField  `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *ErrField    `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ErrFieldConnection is one page of ErrField.
 type ErrFieldConnection struct {
 	Edges    []*ErrFieldEdge `json:"edges"`
-	PageInfo orm.PageInfo    `json:"pageInfo"`
+	PageInfo velox.PageInfo  `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -115,7 +116,7 @@ var ErrFieldMeta = orm.Meta{
 type ErrFieldQuery struct{ c orm.QueryCore }
 
 // NewErrFieldQuery returns a query of every ErrField.
-func NewErrFieldQuery(ex orm.Executor) *ErrFieldQuery {
+func NewErrFieldQuery(ex velox.Executor) *ErrFieldQuery {
 	return &ErrFieldQuery{c: orm.QueryCore{M: &ErrFieldMeta, Ex: ex}}
 }
 
@@ -260,7 +261,7 @@ func (q *ErrFieldQuery) Iter(ctx context.Context) iter.Seq2[*ErrField, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ErrFieldQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ErrFieldConnection, error) {
+func (q *ErrFieldQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ErrFieldConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -301,7 +302,7 @@ func (q *ErrFieldQuery) IDs(ctx context.Context) ([]int, error) {
 type ErrFieldCreate struct{ c orm.MutCore }
 
 // NewErrFieldCreate returns a builder that creates a ErrField.
-func NewErrFieldCreate(ex orm.Executor) *ErrFieldCreate {
+func NewErrFieldCreate(ex velox.Executor) *ErrFieldCreate {
 	return &ErrFieldCreate{c: orm.MutCore{M: &ErrFieldMeta, Ex: ex}}
 }
 
@@ -349,7 +350,7 @@ func (b *ErrFieldCreate) Exec(ctx context.Context) error {
 
 // ErrFieldCreateBulk creates several ErrField rows with one statement.
 type ErrFieldCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ErrFieldCreate
 	n  int
 }
@@ -357,7 +358,7 @@ type ErrFieldCreateBulk struct {
 // NewErrFieldCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewErrFieldCreateBulk(ex orm.Executor, bs ...*ErrFieldCreate) *ErrFieldCreateBulk {
+func NewErrFieldCreateBulk(ex velox.Executor, bs ...*ErrFieldCreate) *ErrFieldCreateBulk {
 	return &ErrFieldCreateBulk{ex: ex, bs: bs}
 }
 
@@ -410,7 +411,7 @@ func (b *ErrFieldCreateBulk) Exec(ctx context.Context) error {
 type ErrFieldUpdate struct{ c orm.MutCore }
 
 // NewErrFieldUpdate returns a builder that updates the rows its predicates match.
-func NewErrFieldUpdate(ex orm.Executor) *ErrFieldUpdate {
+func NewErrFieldUpdate(ex velox.Executor) *ErrFieldUpdate {
 	return &ErrFieldUpdate{c: orm.MutCore{M: &ErrFieldMeta, Ex: ex}}
 }
 
@@ -476,7 +477,7 @@ func (b *ErrFieldUpdate) SaveOne(ctx context.Context) (*ErrField, error) {
 type ErrFieldDelete struct{ c orm.MutCore }
 
 // NewErrFieldDelete returns a builder that deletes the rows its predicates match.
-func NewErrFieldDelete(ex orm.Executor) *ErrFieldDelete {
+func NewErrFieldDelete(ex velox.Executor) *ErrFieldDelete {
 	return &ErrFieldDelete{c: orm.MutCore{M: &ErrFieldMeta, Ex: ex}}
 }
 

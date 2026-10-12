@@ -112,14 +112,14 @@ func linkComment(dst any, es []any) {
 
 // CommentEdge is a row of a page of Comment, with its cursor.
 type CommentEdge struct {
-	Node   *Comment   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Comment     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // CommentConnection is one page of Comment.
 type CommentConnection struct {
 	Edges    []*CommentEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -148,7 +148,7 @@ var CommentMeta = orm.Meta{
 type CommentQuery struct{ c orm.QueryCore }
 
 // NewCommentQuery returns a query of every Comment.
-func NewCommentQuery(ex orm.Executor) *CommentQuery {
+func NewCommentQuery(ex velox.Executor) *CommentQuery {
 	return &CommentQuery{c: orm.QueryCore{M: &CommentMeta, Ex: ex}}
 }
 
@@ -293,7 +293,7 @@ func (q *CommentQuery) Iter(ctx context.Context) iter.Seq2[*Comment, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *CommentQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*CommentConnection, error) {
+func (q *CommentQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*CommentConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -334,7 +334,7 @@ func (q *CommentQuery) IDs(ctx context.Context) ([]int, error) {
 type CommentCreate struct{ c orm.MutCore }
 
 // NewCommentCreate returns a builder that creates a Comment.
-func NewCommentCreate(ex orm.Executor) *CommentCreate {
+func NewCommentCreate(ex velox.Executor) *CommentCreate {
 	return &CommentCreate{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
 }
 
@@ -382,7 +382,7 @@ func (b *CommentCreate) Exec(ctx context.Context) error {
 
 // CommentCreateBulk creates several Comment rows with one statement.
 type CommentCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*CommentCreate
 	n  int
 }
@@ -390,7 +390,7 @@ type CommentCreateBulk struct {
 // NewCommentCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewCommentCreateBulk(ex orm.Executor, bs ...*CommentCreate) *CommentCreateBulk {
+func NewCommentCreateBulk(ex velox.Executor, bs ...*CommentCreate) *CommentCreateBulk {
 	return &CommentCreateBulk{ex: ex, bs: bs}
 }
 
@@ -443,7 +443,7 @@ func (b *CommentCreateBulk) Exec(ctx context.Context) error {
 type CommentUpdate struct{ c orm.MutCore }
 
 // NewCommentUpdate returns a builder that updates the rows its predicates match.
-func NewCommentUpdate(ex orm.Executor) *CommentUpdate {
+func NewCommentUpdate(ex velox.Executor) *CommentUpdate {
 	return &CommentUpdate{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
 }
 
@@ -509,7 +509,7 @@ func (b *CommentUpdate) SaveOne(ctx context.Context) (*Comment, error) {
 type CommentDelete struct{ c orm.MutCore }
 
 // NewCommentDelete returns a builder that deletes the rows its predicates match.
-func NewCommentDelete(ex orm.Executor) *CommentDelete {
+func NewCommentDelete(ex velox.Executor) *CommentDelete {
 	return &CommentDelete{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
 }
 
@@ -532,7 +532,7 @@ func (b *CommentDelete) Exec(ctx context.Context) (int, error) { return b.c.Dele
 // QueryPost queries the "post" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Comment) QueryPost(ex orm.Executor) *PostQuery {
+func (e *Comment) QueryPost(ex velox.Executor) *PostQuery {
 	q := NewPostQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(CommentMeta.Edges[0], e))
 	return q
@@ -555,7 +555,7 @@ func (q *CommentQuery) WithPost(opts ...*PostQuery) *CommentQuery {
 // QueryAuthor queries the "author" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Comment) QueryAuthor(ex orm.Executor) *UserQuery {
+func (e *Comment) QueryAuthor(ex velox.Executor) *UserQuery {
 	q := NewUserQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(CommentMeta.Edges[1], e))
 	return q
@@ -590,8 +590,8 @@ var commentOrderColumns = map[string]string{
 // CommentOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type CommentOrder struct {
-	Direction orm.OrderDirection `json:"direction"`
-	Field     comment.OrderField `json:"field"`
+	Direction velox.OrderDirection `json:"direction"`
+	Field     comment.OrderField   `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -606,27 +606,27 @@ func (o *CommentOrder) Term() predicate.CommentOrderTerm {
 }
 
 // Post resolves the "post" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Comment) Post(ctx context.Context) (*Post, error) {
 	v, err := e.Edges.PostOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryPost(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryPost(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }
 
 // Author resolves the "author" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Comment) Author(ctx context.Context) (*User, error) {
 	v, err := e.Edges.AuthorOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryAuthor(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryAuthor(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }

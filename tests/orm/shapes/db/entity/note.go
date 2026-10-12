@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -61,14 +62,14 @@ func linkNote(dst any, es []any) {
 
 // NoteEdge is a row of a page of Note, with its cursor.
 type NoteEdge struct {
-	Node   *Note      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Note        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // NoteConnection is one page of Note.
 type NoteConnection struct {
-	Edges    []*NoteEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*NoteEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -92,7 +93,7 @@ var NoteMeta = orm.Meta{
 type NoteQuery struct{ c orm.QueryCore }
 
 // NewNoteQuery returns a query of every Note.
-func NewNoteQuery(ex orm.Executor) *NoteQuery {
+func NewNoteQuery(ex velox.Executor) *NoteQuery {
 	return &NoteQuery{c: orm.QueryCore{M: &NoteMeta, Ex: ex}}
 }
 
@@ -237,7 +238,7 @@ func (q *NoteQuery) Iter(ctx context.Context) iter.Seq2[*Note, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *NoteQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*NoteConnection, error) {
+func (q *NoteQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NoteConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -278,7 +279,7 @@ func (q *NoteQuery) IDs(ctx context.Context) ([]int, error) {
 type NoteCreate struct{ c orm.MutCore }
 
 // NewNoteCreate returns a builder that creates a Note.
-func NewNoteCreate(ex orm.Executor) *NoteCreate {
+func NewNoteCreate(ex velox.Executor) *NoteCreate {
 	return &NoteCreate{c: orm.MutCore{M: &NoteMeta, Ex: ex}}
 }
 
@@ -326,7 +327,7 @@ func (b *NoteCreate) Exec(ctx context.Context) error {
 
 // NoteCreateBulk creates several Note rows with one statement.
 type NoteCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*NoteCreate
 	n  int
 }
@@ -334,7 +335,7 @@ type NoteCreateBulk struct {
 // NewNoteCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewNoteCreateBulk(ex orm.Executor, bs ...*NoteCreate) *NoteCreateBulk {
+func NewNoteCreateBulk(ex velox.Executor, bs ...*NoteCreate) *NoteCreateBulk {
 	return &NoteCreateBulk{ex: ex, bs: bs}
 }
 
@@ -387,7 +388,7 @@ func (b *NoteCreateBulk) Exec(ctx context.Context) error {
 type NoteUpdate struct{ c orm.MutCore }
 
 // NewNoteUpdate returns a builder that updates the rows its predicates match.
-func NewNoteUpdate(ex orm.Executor) *NoteUpdate {
+func NewNoteUpdate(ex velox.Executor) *NoteUpdate {
 	return &NoteUpdate{c: orm.MutCore{M: &NoteMeta, Ex: ex}}
 }
 
@@ -453,7 +454,7 @@ func (b *NoteUpdate) SaveOne(ctx context.Context) (*Note, error) {
 type NoteDelete struct{ c orm.MutCore }
 
 // NewNoteDelete returns a builder that deletes the rows its predicates match.
-func NewNoteDelete(ex orm.Executor) *NoteDelete {
+func NewNoteDelete(ex velox.Executor) *NoteDelete {
 	return &NoteDelete{c: orm.MutCore{M: &NoteMeta, Ex: ex}}
 }
 

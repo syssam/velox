@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,41 +18,43 @@ type StampedClient struct{}
 
 // Query returns a query of every Stamped, to run on ex: a database handle or a
 // transaction.
-func (*StampedClient) Query(ex orm.Executor) *entity.StampedQuery { return entity.NewStampedQuery(ex) }
+func (*StampedClient) Query(ex velox.Executor) *entity.StampedQuery {
+	return entity.NewStampedQuery(ex)
+}
 
 // Create returns a builder that creates a Stamped.
-func (*StampedClient) Create(ex orm.Executor) *entity.StampedCreate {
+func (*StampedClient) Create(ex velox.Executor) *entity.StampedCreate {
 	return entity.NewStampedCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*StampedClient) CreateBulk(ex orm.Executor, bs ...*entity.StampedCreate) *entity.StampedCreateBulk {
+func (*StampedClient) CreateBulk(ex velox.Executor, bs ...*entity.StampedCreate) *entity.StampedCreateBulk {
 	return entity.NewStampedCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Stamped rows its conditions match.
-func (*StampedClient) Update(ex orm.Executor) *entity.StampedUpdate {
+func (*StampedClient) Update(ex velox.Executor) *entity.StampedUpdate {
 	return entity.NewStampedUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Stamped rows its conditions match.
-func (*StampedClient) Delete(ex orm.Executor) *entity.StampedDelete {
+func (*StampedClient) Delete(ex velox.Executor) *entity.StampedDelete {
 	return entity.NewStampedDelete(ex)
 }
 
 // Get returns the Stamped with the given id, or velox.ErrNotFound.
-func (c *StampedClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Stamped, error) {
+func (c *StampedClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Stamped, error) {
 	return c.Query(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Stamped with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *StampedClient) UpdateByID(ex orm.Executor, id int) *entity.StampedUpdate {
+func (c *StampedClient) UpdateByID(ex velox.Executor, id int) *entity.StampedUpdate {
 	return c.Update(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Stamped with the given id, or returns velox.ErrNotFound.
-func (c *StampedClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *StampedClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Stamped(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.StampedMeta.NotFound()

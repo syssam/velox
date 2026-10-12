@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrId(v any, i int) any {
 
 // IdEdge is a row of a page of Id, with its cursor.
 type IdEdge struct {
-	Node   *Id        `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Id          `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // IdConnection is one page of Id.
 type IdConnection struct {
-	Edges    []*IdEdge    `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*IdEdge      `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var IdMeta = orm.Meta{
 type IdQuery struct{ c orm.QueryCore }
 
 // NewIdQuery returns a query of every Id.
-func NewIdQuery(ex orm.Executor) *IdQuery { return &IdQuery{c: orm.QueryCore{M: &IdMeta, Ex: ex}} }
+func NewIdQuery(ex velox.Executor) *IdQuery { return &IdQuery{c: orm.QueryCore{M: &IdMeta, Ex: ex}} }
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +212,7 @@ func (q *IdQuery) Iter(ctx context.Context) iter.Seq2[*Id, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *IdQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*IdConnection, error) {
+func (q *IdQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*IdConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +253,7 @@ func (q *IdQuery) IDs(ctx context.Context) ([]int, error) {
 type IdCreate struct{ c orm.MutCore }
 
 // NewIdCreate returns a builder that creates a Id.
-func NewIdCreate(ex orm.Executor) *IdCreate { return &IdCreate{c: orm.MutCore{M: &IdMeta, Ex: ex}} }
+func NewIdCreate(ex velox.Executor) *IdCreate { return &IdCreate{c: orm.MutCore{M: &IdMeta, Ex: ex}} }
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +299,7 @@ func (b *IdCreate) Exec(ctx context.Context) error {
 
 // IdCreateBulk creates several Id rows with one statement.
 type IdCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*IdCreate
 	n  int
 }
@@ -306,7 +307,7 @@ type IdCreateBulk struct {
 // NewIdCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewIdCreateBulk(ex orm.Executor, bs ...*IdCreate) *IdCreateBulk {
+func NewIdCreateBulk(ex velox.Executor, bs ...*IdCreate) *IdCreateBulk {
 	return &IdCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +360,7 @@ func (b *IdCreateBulk) Exec(ctx context.Context) error {
 type IdUpdate struct{ c orm.MutCore }
 
 // NewIdUpdate returns a builder that updates the rows its predicates match.
-func NewIdUpdate(ex orm.Executor) *IdUpdate { return &IdUpdate{c: orm.MutCore{M: &IdMeta, Ex: ex}} }
+func NewIdUpdate(ex velox.Executor) *IdUpdate { return &IdUpdate{c: orm.MutCore{M: &IdMeta, Ex: ex}} }
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +424,7 @@ func (b *IdUpdate) SaveOne(ctx context.Context) (*Id, error) {
 type IdDelete struct{ c orm.MutCore }
 
 // NewIdDelete returns a builder that deletes the rows its predicates match.
-func NewIdDelete(ex orm.Executor) *IdDelete { return &IdDelete{c: orm.MutCore{M: &IdMeta, Ex: ex}} }
+func NewIdDelete(ex velox.Executor) *IdDelete { return &IdDelete{c: orm.MutCore{M: &IdMeta, Ex: ex}} }
 
 // Where restricts the rows deleted; all predicates must hold.
 //

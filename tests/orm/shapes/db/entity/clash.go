@@ -122,14 +122,14 @@ func edgeClash(v any, i int) any {
 
 // ClashEdge is a row of a page of Clash, with its cursor.
 type ClashEdge struct {
-	Node   *Clash     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Clash       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ClashConnection is one page of Clash.
 type ClashConnection struct {
-	Edges    []*ClashEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*ClashEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -170,7 +170,7 @@ var ClashMeta = orm.Meta{
 type ClashQuery struct{ c orm.QueryCore }
 
 // NewClashQuery returns a query of every Clash.
-func NewClashQuery(ex orm.Executor) *ClashQuery {
+func NewClashQuery(ex velox.Executor) *ClashQuery {
 	return &ClashQuery{c: orm.QueryCore{M: &ClashMeta, Ex: ex}}
 }
 
@@ -315,7 +315,7 @@ func (q *ClashQuery) Iter(ctx context.Context) iter.Seq2[*Clash, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ClashQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ClashConnection, error) {
+func (q *ClashQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ClashConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -356,7 +356,7 @@ func (q *ClashQuery) IDs(ctx context.Context) ([]int, error) {
 type ClashCreate struct{ c orm.MutCore }
 
 // NewClashCreate returns a builder that creates a Clash.
-func NewClashCreate(ex orm.Executor) *ClashCreate {
+func NewClashCreate(ex velox.Executor) *ClashCreate {
 	return &ClashCreate{c: orm.MutCore{M: &ClashMeta, Ex: ex}}
 }
 
@@ -404,7 +404,7 @@ func (b *ClashCreate) Exec(ctx context.Context) error {
 
 // ClashCreateBulk creates several Clash rows with one statement.
 type ClashCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ClashCreate
 	n  int
 }
@@ -412,7 +412,7 @@ type ClashCreateBulk struct {
 // NewClashCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewClashCreateBulk(ex orm.Executor, bs ...*ClashCreate) *ClashCreateBulk {
+func NewClashCreateBulk(ex velox.Executor, bs ...*ClashCreate) *ClashCreateBulk {
 	return &ClashCreateBulk{ex: ex, bs: bs}
 }
 
@@ -465,7 +465,7 @@ func (b *ClashCreateBulk) Exec(ctx context.Context) error {
 type ClashUpdate struct{ c orm.MutCore }
 
 // NewClashUpdate returns a builder that updates the rows its predicates match.
-func NewClashUpdate(ex orm.Executor) *ClashUpdate {
+func NewClashUpdate(ex velox.Executor) *ClashUpdate {
 	return &ClashUpdate{c: orm.MutCore{M: &ClashMeta, Ex: ex}}
 }
 
@@ -531,7 +531,7 @@ func (b *ClashUpdate) SaveOne(ctx context.Context) (*Clash, error) {
 type ClashDelete struct{ c orm.MutCore }
 
 // NewClashDelete returns a builder that deletes the rows its predicates match.
-func NewClashDelete(ex orm.Executor) *ClashDelete {
+func NewClashDelete(ex velox.Executor) *ClashDelete {
 	return &ClashDelete{c: orm.MutCore{M: &ClashMeta, Ex: ex}}
 }
 
@@ -554,7 +554,7 @@ func (b *ClashDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete
 // QueryOthers queries the "others" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Clash) QueryOthers(ex orm.Executor) *FieldQuery {
+func (e *Clash) QueryOthers(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ClashMeta.Edges[0], e))
 	return q
@@ -577,7 +577,7 @@ func (q *ClashQuery) WithOthers(opts ...*FieldQuery) *ClashQuery {
 // QueryOthersOrErrEdge queries the "others_or_err" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Clash) QueryOthersOrErrEdge(ex orm.Executor) *FieldQuery {
+func (e *Clash) QueryOthersOrErrEdge(ex velox.Executor) *FieldQuery {
 	q := NewFieldQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ClashMeta.Edges[1], e))
 	return q

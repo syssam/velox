@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,41 @@ type LockerClient struct{}
 
 // Query returns a query of every Locker, to run on ex: a database handle or a
 // transaction.
-func (*LockerClient) Query(ex orm.Executor) *entity.LockerQuery { return entity.NewLockerQuery(ex) }
+func (*LockerClient) Query(ex velox.Executor) *entity.LockerQuery { return entity.NewLockerQuery(ex) }
 
 // Create returns a builder that creates a Locker.
-func (*LockerClient) Create(ex orm.Executor) *entity.LockerCreate { return entity.NewLockerCreate(ex) }
+func (*LockerClient) Create(ex velox.Executor) *entity.LockerCreate {
+	return entity.NewLockerCreate(ex)
+}
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*LockerClient) CreateBulk(ex orm.Executor, bs ...*entity.LockerCreate) *entity.LockerCreateBulk {
+func (*LockerClient) CreateBulk(ex velox.Executor, bs ...*entity.LockerCreate) *entity.LockerCreateBulk {
 	return entity.NewLockerCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Locker rows its conditions match.
-func (*LockerClient) Update(ex orm.Executor) *entity.LockerUpdate { return entity.NewLockerUpdate(ex) }
+func (*LockerClient) Update(ex velox.Executor) *entity.LockerUpdate {
+	return entity.NewLockerUpdate(ex)
+}
 
 // Delete returns a builder that deletes the Locker rows its conditions match.
-func (*LockerClient) Delete(ex orm.Executor) *entity.LockerDelete { return entity.NewLockerDelete(ex) }
+func (*LockerClient) Delete(ex velox.Executor) *entity.LockerDelete {
+	return entity.NewLockerDelete(ex)
+}
 
 // Get returns the Locker with the given id, or velox.ErrNotFound.
-func (c *LockerClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Locker, error) {
+func (c *LockerClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Locker, error) {
 	return c.Query(ex).Where(predicate.Locker(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Locker with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *LockerClient) UpdateByID(ex orm.Executor, id int) *entity.LockerUpdate {
+func (c *LockerClient) UpdateByID(ex velox.Executor, id int) *entity.LockerUpdate {
 	return c.Update(ex).Where(predicate.Locker(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Locker with the given id, or returns velox.ErrNotFound.
-func (c *LockerClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *LockerClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Locker(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.LockerMeta.NotFound()

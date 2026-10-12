@@ -22,7 +22,7 @@ type MutCore struct {
 	M *Meta
 	// Ex is what the mutation runs on: the database handle or transaction
 	// it was built from.
-	Ex    Executor
+	Ex    velox.Executor
 	Sets  []S
 	Preds []P
 }
@@ -404,12 +404,12 @@ func (m *MutCore) Insert(ctx context.Context) (any, error) {
 	return m.M.entity(v, err)
 }
 
-func (m *MutCore) insert(ctx context.Context, c *conn) (any, error) {
+func (m *MutCore) insert(ctx context.Context, c *velox.ExecutorState) (any, error) {
 	spec, vals, err := createSpec(m.M, m.Sets)
 	if err != nil {
 		return nil, err
 	}
-	if err := sqlgraph.CreateNode(ctx, c.atomic(), spec); err != nil {
+	if err := sqlgraph.CreateNode(ctx, c.Atomic(), spec); err != nil {
 		return nil, wrapErr(err)
 	}
 	return built(m.M, spec, vals)
@@ -430,7 +430,7 @@ func (m *MutCore) insert(ctx context.Context, c *conn) (any, error) {
 // it in the table, and their entities are returned with the error.
 //
 //go:noinline
-func InsertBulk(ctx context.Context, ex Executor, m *Meta, rows [][]S, batch int) ([]any, error) {
+func InsertBulk(ctx context.Context, ex velox.Executor, m *Meta, rows [][]S, batch int) ([]any, error) {
 	if batch <= 0 || batch >= len(rows) {
 		return insertRows(ctx, ex, m, rows)
 	}
@@ -446,7 +446,7 @@ func InsertBulk(ctx context.Context, ex Executor, m *Meta, rows [][]S, batch int
 }
 
 // insertRows is a bulk create of one statement.
-func insertRows(ctx context.Context, ex Executor, m *Meta, rows [][]S) ([]any, error) {
+func insertRows(ctx context.Context, ex velox.Executor, m *Meta, rows [][]S) ([]any, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -457,7 +457,7 @@ func insertRows(ctx context.Context, ex Executor, m *Meta, rows [][]S) ([]any, e
 	if err != nil {
 		return nil, err
 	}
-	if m.Policy == nil && len(c.hooks()) == 0 && len(m.Hooks) == 0 {
+	if m.Policy == nil && len(c.Hooks()) == 0 && len(m.Hooks) == 0 {
 		return insertBulk(ctx, c, m, rows)
 	}
 	final := make([][]S, len(rows))
@@ -508,7 +508,7 @@ func (m *Meta) entity(v any, err error) (any, error) {
 	return v, nil
 }
 
-func insertBulk(ctx context.Context, c *conn, m *Meta, rows [][]S) ([]any, error) {
+func insertBulk(ctx context.Context, c *velox.ExecutorState, m *Meta, rows [][]S) ([]any, error) {
 	batch := &sqlgraph.BatchCreateSpec{Nodes: make([]*sqlgraph.CreateSpec, len(rows))}
 	vals := make([]map[string]any, len(rows))
 	for i, sets := range rows {
@@ -522,11 +522,11 @@ func insertBulk(ctx context.Context, c *conn, m *Meta, rows [][]S) ([]any, error
 	// one row however many were asked for; such rows go one at a time.
 	if !slices.ContainsFunc(batch.Nodes, func(n *sqlgraph.CreateSpec) bool { return len(n.Fields) > 0 || n.ID.Value != nil }) {
 		for _, spec := range batch.Nodes {
-			if err := sqlgraph.CreateNode(ctx, c.atomic(), spec); err != nil {
+			if err := sqlgraph.CreateNode(ctx, c.Atomic(), spec); err != nil {
 				return nil, wrapErr(err)
 			}
 		}
-	} else if err := sqlgraph.BatchCreate(ctx, c.atomic(), batch); err != nil {
+	} else if err := sqlgraph.BatchCreate(ctx, c.Atomic(), batch); err != nil {
 		return nil, wrapErr(err)
 	}
 	out := make([]any, len(rows))
@@ -754,7 +754,7 @@ func (m *MutCore) Update(ctx context.Context) (int, error) {
 	return n, err
 }
 
-func (m *MutCore) update(ctx context.Context, c *conn) (int, error) {
+func (m *MutCore) update(ctx context.Context, c *velox.ExecutorState) (int, error) {
 	spec, err := m.updateSpec()
 	if err != nil {
 		return 0, err
@@ -767,7 +767,7 @@ func (m *MutCore) update(ctx context.Context, c *conn) (int, error) {
 		matched, cerr := (&QueryCore{M: m.M, Preds: m.Preds}).count(ctx, c)
 		return matched, wrapErr(cerr)
 	}
-	n, err := sqlgraph.UpdateNodes(ctx, c.atomic(), spec)
+	n, err := sqlgraph.UpdateNodes(ctx, c.Atomic(), spec)
 	return n, wrapErr(err)
 }
 
@@ -796,7 +796,7 @@ func (m *MutCore) ExecOne(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	hooked := len(c.hooks())+len(m.M.Hooks) > 0
+	hooked := len(c.Hooks())+len(m.M.Hooks) > 0
 	_, err = m.mutate(ctx, c, velox.OpUpdateOne, func(ctx context.Context, m *MutCore) (any, error) {
 		if hooked {
 			return m.updateOne(ctx, c)
@@ -807,7 +807,7 @@ func (m *MutCore) ExecOne(ctx context.Context) error {
 }
 
 // execOne is updateOne without the read of the row afterwards.
-func (m *MutCore) execOne(ctx context.Context, c *conn) error {
+func (m *MutCore) execOne(ctx context.Context, c *velox.ExecutorState) error {
 	meta := m.M
 	if meta.id() == nil {
 		return fmt.Errorf("velox: %s has no single-column id", meta.Name)
@@ -844,7 +844,7 @@ func (m *MutCore) execOne(ctx context.Context, c *conn) error {
 // updateOne finds, updates and reads back the row. Its reads are the
 // mutation's own, under the mutation's conditions: no query policy or
 // interceptor applies to them.
-func (m *MutCore) updateOne(ctx context.Context, c *conn) (any, error) {
+func (m *MutCore) updateOne(ctx context.Context, c *velox.ExecutorState) (any, error) {
 	meta := m.M
 	if meta.id() == nil {
 		return nil, fmt.Errorf("velox: %s has no single-column id", meta.Name)
@@ -880,7 +880,7 @@ func (m *MutCore) updateOne(ctx context.Context, c *conn) (any, error) {
 
 // updateByID updates the row with the given id, if it also satisfies the
 // mutation's conditions, and returns its entity; ErrNotFound otherwise.
-func (m *MutCore) updateByID(ctx context.Context, c *conn, id any) (any, error) {
+func (m *MutCore) updateByID(ctx context.Context, c *velox.ExecutorState, id any) (any, error) {
 	meta := m.M
 	spec, err := m.updateSpec()
 	if err != nil {
@@ -904,9 +904,9 @@ func (m *MutCore) updateByID(ctx context.Context, c *conn, id any) (any, error) 
 	spec.Assign = func([]string, []any) error { return nil }
 	// UpdateNode always asks for a transaction (it writes, then reads the row
 	// back). Only a change to edges makes it more than one write.
-	drv := c.drv
+	drv := c.Driver()
 	if len(spec.Edges.Add)+len(spec.Edges.Clear) > 0 {
-		drv = c.atomic()
+		drv = c.Atomic()
 	}
 	if len(spec.Edges.Add)+len(spec.Edges.Clear) > 0 {
 		// The rows of a join table are written before the row itself is
@@ -946,7 +946,7 @@ func (m *MutCore) Delete(ctx context.Context) (int, error) {
 	return n, err
 }
 
-func (m *MutCore) delete(ctx context.Context, c *conn) (int, error) {
+func (m *MutCore) delete(ctx context.Context, c *velox.ExecutorState) (int, error) {
 	meta := m.M
 	if err := m.conditions(); err != nil {
 		return 0, err
@@ -967,6 +967,6 @@ func (m *MutCore) delete(ctx context.Context, c *conn) (int, error) {
 			}
 		}
 	}
-	n, err := sqlgraph.DeleteNodes(ctx, c.drv, spec)
+	n, err := sqlgraph.DeleteNodes(ctx, c.Driver(), spec)
 	return n, wrapErr(err)
 }

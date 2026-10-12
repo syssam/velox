@@ -81,7 +81,7 @@ type Context struct{ velox.Schema }
 // Fields of the Context.
 func (Context) Fields() []velox.Field { return labelOnly() }
 
-// Tx is named like orm.Tx.
+// Tx is named like velox.Tx.
 type Tx struct{ velox.Schema }
 
 // Fields of the Tx.
@@ -136,6 +136,13 @@ type Orm struct{ velox.Schema }
 
 // Fields of the Orm.
 func (Orm) Fields() []velox.Field { return labelOnly() }
+
+// Velox is named like the library's root package, which generated code
+// imports for the database handle and the errors.
+type Velox struct{ velox.Schema }
+
+// Fields of the Velox.
+func (Velox) Fields() []velox.Field { return labelOnly() }
 
 // Internal would get a package the application cannot import: the go command
 // lets only the generated tree itself import a directory called internal.

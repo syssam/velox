@@ -30,11 +30,11 @@ type rewriter struct {
 	// predicates now (the library's AndPredicates): not to be wrapped.
 	made map[*ast.CallExpr]bool
 	// wrapped are the calls that became the argument of another call
-	// (orm.Must, orm.Check) or a call with other arguments.
+	// (velox.Must, velox.Check) or a call with other arguments.
 	wrapped map[*ast.CallExpr]bool
 	// handles are the parameters of the application's functions that take
 	// a client only to query on it (by where they are declared): their type
-	// becomes orm.Executor, so that a transaction can be passed for them.
+	// becomes velox.Executor, so that a transaction can be passed for them.
 	handles map[token.Pos]bool
 	// ownMethods are the names of the methods the application declares,
 	// and ownPkgs the import paths of its packages.
@@ -72,6 +72,10 @@ func (r *rewriter) targetOf(obj types.Object, recv string) (target, bool) {
 
 func (r *rewriter) root(pos token.Pos) string { return r.ref(r.s.to, rootName(r.s.to), pos) }
 func (r *rewriter) orm(pos token.Pos) string  { return r.ref(ormPath, "orm", pos) }
+
+// velox is the library's root package, which has the database handle, the
+// errors and the types of a paged list.
+func (r *rewriter) velox(pos token.Pos) string { return r.ref(r.lib, "velox", pos) }
 func (r *rewriter) entity(pos token.Pos) string {
 	return r.ref(r.s.to+"/entity", "entity", pos)
 }
@@ -290,18 +294,18 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			}
 			switch name {
 			case "Tx":
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".Tx")
+				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".Tx")
 				embedded()
 				r.count("type Tx")
 			case "Client":
 				if star, ok := parent(stack, 1).(*ast.StarExpr); ok && r.handleParam(stack) {
 					// A parameter that is only queried on: a transaction
 					// is passed for it as well as a database.
-					r.replace(star.Pos(), sel.End(), r.orm(sel.Pos())+".Executor")
+					r.replace(star.Pos(), sel.End(), r.velox(sel.Pos())+".Executor")
 					r.count("handle parameter")
 					break
 				}
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".DB")
+				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".DB")
 				embedded()
 				r.count("type Client")
 			case "Noder":
@@ -348,7 +352,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			if star, ok := parent(stack, 1).(*ast.StarExpr); ok {
 				from = star.Pos()
 			}
-			r.replace(from, sel.End(), r.orm(sel.Pos())+".Executor")
+			r.replace(from, sel.End(), r.velox(sel.Pos())+".Executor")
 		default:
 			r.note(sel.Pos(), "the type %s has no counterpart", name)
 			return
@@ -379,13 +383,13 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 					r.count("Paginatable")
 				}
 			} else if name == "Cursor" || name == "PageInfo" || name == "OrderDirection" {
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
+				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+"."+name)
 				r.count("type " + name)
 			}
 			return
 		}
 		if name == "OrderDirectionAsc" || name == "OrderDirectionDesc" {
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
+			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+"."+name)
 			r.count("type OrderDirection")
 			return
 		}
@@ -407,7 +411,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 		if obj.Pkg().Path() == r.lib+"/contrib/graphql/gqlrelay" {
 			switch name {
 			case "Cursor", "PageInfo", "OrderDirection", "OrderDirectionAsc", "OrderDirectionDesc":
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
+				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+"."+name)
 				r.count("gqlrelay")
 			default:
 				r.note(sel.Pos(), "gqlrelay.%s: rewrite by hand", name)
@@ -691,7 +695,7 @@ func (r *rewriter) handleParam(stack []ast.Node) bool {
 }
 
 // toHandle reports whether e is an argument for a parameter that takes
-// orm.Executor now.
+// velox.Executor now.
 func (r *rewriter) toHandle(e ast.Expr, stack []ast.Node) bool {
 	c, ok := parent(stack, 1).(*ast.CallExpr)
 	if !ok {
@@ -870,7 +874,7 @@ func (r *rewriter) call(call *ast.CallExpr, stack []ast.Node) {
 		return
 	}
 	// defer q.ExecX(ctx) ran ExecX when the function returned. As the
-	// argument of orm.Must it would run where the defer statement is.
+	// argument of velox.Must it would run where the defer statement is.
 	switch p := parent(stack, 1).(type) {
 	case *ast.DeferStmt:
 		if p.Call != call {
@@ -928,7 +932,7 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 		switch name {
 		case "AllX", "OnlyX", "FirstX":
 			r.replace(sel.Sel.Pos(), sel.Sel.End(), strings.TrimSuffix(name, "X"))
-			r.open(call.Pos(), r.orm(call.Pos())+".Must(")
+			r.open(call.Pos(), r.velox(call.Pos())+".Must(")
 			r.insert(call.End(), ")")
 			r.wrapped[call] = true
 			r.count(name)
@@ -947,14 +951,14 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 			// x.RuntimeConfig().Driver is x.Driver(): see member. Anything
 			// else done with the configuration is for a person.
 			if m, _ := receiverOf(call, stack); m != "Driver" {
-				r.note(call.Pos(), "%s.RuntimeConfig: there is no runtime configuration to pass on; what took it takes the handle (orm.Executor)", t.kind)
+				r.note(call.Pos(), "%s.RuntimeConfig: there is no runtime configuration to pass on; what took it takes the handle (velox.Executor)", t.kind)
 			}
 		case "Client":
 			r.replace(call.Pos(), call.End(), r.render(sel.X))
 			r.count("tx.Client()")
 			if m, _ := receiverOf(call, stack); m == "" && !r.toHandle(call, stack) {
 				// Handed on rather than queried on at once.
-				r.note(call.Pos(), "tx.Client() is the transaction itself now: what it is given to must take orm.Executor (a transaction is not a *orm.DB)")
+				r.note(call.Pos(), "tx.Client() is the transaction itself now: what it is given to must take velox.Executor (a transaction is not a *velox.DB)")
 			}
 		default:
 			r.note(call.Pos(), "%s.%s: rewrite by hand", t.kind, name)
@@ -983,15 +987,15 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 				// handle of the context is what its edges are resolved on
 				// for a GraphQL engine too; whether every caller's context
 				// carries one is for a person to check.
-				r.open(call.Lparen+1, r.orm(call.Pos())+".ExecutorFrom("+r.contextAt(call.Pos())+")")
-				r.note(call.Pos(), "%s is given the handle of the context (orm.ExecutorFrom): check that every caller's context carries one (orm.WithExecutor), or pass the handle", name)
+				r.open(call.Lparen+1, r.velox(call.Pos())+".ExecutorFrom("+r.contextAt(call.Pos())+")")
+				r.note(call.Pos(), "%s is given the handle of the context (velox.ExecutorFrom): check that every caller's context carries one (velox.WithExecutor), or pass the handle", name)
 				r.count("edge query on the context's handle")
 			default:
 				r.note(call.Pos(), "%s takes the handle to query on now: e.%s(handle)", name, name)
 			}
 		case t.ent.edges[name]:
 			// The method a GraphQL engine resolves the edge with.
-			r.note(call.Pos(), "%s.%s reads the edge on the handle of the context now: the context must carry one (orm.WithExecutor), or it returns orm.ErrNoExecutor", t.ent.name, name)
+			r.note(call.Pos(), "%s.%s reads the edge on the handle of the context now: the context must carry one (velox.WithExecutor), or it returns velox.ErrNoExecutor", t.ent.name, name)
 		}
 	case t.where == "<entity>":
 		// A method of an enum type.
@@ -1166,21 +1170,21 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			r.replace(call.Pos(), call.End(), "func("+sv+" *"+sqlPkg+".Selector) { "+sv+".OrderBy("+strings.Join(cols, ", ")+") }")
 			r.count("order function")
 		case "NewContext", "NewTxContext":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".WithExecutor")
+			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".WithExecutor")
 			r.count("WithExecutor")
 		case "Open":
 			if len(call.Args) == 2 {
-				r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".Open")
+				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".Open")
 				r.count("Open")
 			} else {
-				r.note(call.Pos(), "Open with options: orm.Open(dialect, dsn) takes none; hooks and interceptors are registered on the handle (Use, Intercept)")
+				r.note(call.Pos(), "Open with options: velox.Open(dialect, dsn) takes none; hooks and interceptors are registered on the handle (Use, Intercept)")
 			}
 		case "FromContext":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".ExecutorFrom")
-			r.note(call.Pos(), "FromContext is orm.ExecutorFrom: the handle the context carries, a transaction too (velox kept a client and a transaction under separate keys), as an orm.Executor")
+			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".ExecutorFrom")
+			r.note(call.Pos(), "FromContext is velox.ExecutorFrom: the handle the context carries, a transaction too (velox kept a client and a transaction under separate keys), as a velox.Executor")
 			r.count("ExecutorFrom")
 		case "TxFromContext":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".TxFrom")
+			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".TxFrom")
 			r.count("TxFrom")
 		case "As", "Sum", "Count", "Max", "Min", "Mean":
 			// The aggregates of a grouped read; the read around them is
@@ -1259,7 +1263,7 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 		}
 		text := start + "Get(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + r.render(call.Args[1]) + ")"
 		if name == "GetX" {
-			text = r.orm(call.Pos()) + ".Must(" + text + ")"
+			text = r.velox(call.Pos()) + ".Must(" + text + ")"
 			r.wrapped[call] = true
 		}
 		r.replace(call.Pos(), call.End(), text)
@@ -1827,7 +1831,7 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 		r.open(call.Lparen+1, inner)
 	}
 	wrap := func(fn string) {
-		r.open(call.Pos(), r.orm(call.Pos())+"."+fn+"(")
+		r.open(call.Pos(), r.velox(call.Pos())+"."+fn+"(")
 		r.insert(call.End(), ")")
 		r.wrapped[call] = true
 	}
@@ -1975,7 +1979,7 @@ func (r *rewriter) deleteOne(call *ast.CallExpr, sel *ast.SelectorExpr, t target
 	id := r.render(inner.Args[0])
 	text := r.root(call.Pos()) + "." + t.ent.name + ".DeleteByID(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + id + ")"
 	if name == "ExecX" {
-		text = r.orm(call.Pos()) + ".Check(" + text + ")"
+		text = r.velox(call.Pos()) + ".Check(" + text + ")"
 		r.wrapped[call] = true
 	}
 	r.replace(call.Pos(), call.End(), text)
@@ -1987,7 +1991,7 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 	e := t.ent
 	rename := func(to string) { r.replace(sel.Sel.Pos(), sel.Sel.End(), to) }
 	must := func() {
-		r.open(call.Pos(), r.orm(call.Pos())+".Must(")
+		r.open(call.Pos(), r.velox(call.Pos())+".Must(")
 		r.insert(call.End(), ")")
 		r.wrapped[call] = true
 	}
@@ -2015,7 +2019,7 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 	case "FirstID", "FirstIDX":
 		// The id of the first row: the first of the ids of a query of one.
 		rename("Limit(1).IDs")
-		r.open(call.Pos(), r.orm(call.Pos())+".First(")
+		r.open(call.Pos(), r.velox(call.Pos())+".First(")
 		r.insert(call.End(), ")")
 		r.wrapped[call] = true
 		if name == "FirstIDX" {

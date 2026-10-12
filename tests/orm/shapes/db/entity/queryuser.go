@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrQueryUser(v any, i int) any {
 
 // QueryUserEdge is a row of a page of QueryUser, with its cursor.
 type QueryUserEdge struct {
-	Node   *QueryUser `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *QueryUser   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // QueryUserConnection is one page of QueryUser.
 type QueryUserConnection struct {
 	Edges    []*QueryUserEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var QueryUserMeta = orm.Meta{
 type QueryUserQuery struct{ c orm.QueryCore }
 
 // NewQueryUserQuery returns a query of every QueryUser.
-func NewQueryUserQuery(ex orm.Executor) *QueryUserQuery {
+func NewQueryUserQuery(ex velox.Executor) *QueryUserQuery {
 	return &QueryUserQuery{c: orm.QueryCore{M: &QueryUserMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *QueryUserQuery) Iter(ctx context.Context) iter.Seq2[*QueryUser, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *QueryUserQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*QueryUserConnection, error) {
+func (q *QueryUserQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*QueryUserConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *QueryUserQuery) IDs(ctx context.Context) ([]int, error) {
 type QueryUserCreate struct{ c orm.MutCore }
 
 // NewQueryUserCreate returns a builder that creates a QueryUser.
-func NewQueryUserCreate(ex orm.Executor) *QueryUserCreate {
+func NewQueryUserCreate(ex velox.Executor) *QueryUserCreate {
 	return &QueryUserCreate{c: orm.MutCore{M: &QueryUserMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *QueryUserCreate) Exec(ctx context.Context) error {
 
 // QueryUserCreateBulk creates several QueryUser rows with one statement.
 type QueryUserCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*QueryUserCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type QueryUserCreateBulk struct {
 // NewQueryUserCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewQueryUserCreateBulk(ex orm.Executor, bs ...*QueryUserCreate) *QueryUserCreateBulk {
+func NewQueryUserCreateBulk(ex velox.Executor, bs ...*QueryUserCreate) *QueryUserCreateBulk {
 	return &QueryUserCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *QueryUserCreateBulk) Exec(ctx context.Context) error {
 type QueryUserUpdate struct{ c orm.MutCore }
 
 // NewQueryUserUpdate returns a builder that updates the rows its predicates match.
-func NewQueryUserUpdate(ex orm.Executor) *QueryUserUpdate {
+func NewQueryUserUpdate(ex velox.Executor) *QueryUserUpdate {
 	return &QueryUserUpdate{c: orm.MutCore{M: &QueryUserMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *QueryUserUpdate) SaveOne(ctx context.Context) (*QueryUser, error) {
 type QueryUserDelete struct{ c orm.MutCore }
 
 // NewQueryUserDelete returns a builder that deletes the rows its predicates match.
-func NewQueryUserDelete(ex orm.Executor) *QueryUserDelete {
+func NewQueryUserDelete(ex velox.Executor) *QueryUserDelete {
 	return &QueryUserDelete{c: orm.MutCore{M: &QueryUserMeta, Ex: ex}}
 }
 

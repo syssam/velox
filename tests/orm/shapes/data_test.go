@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/blob"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
 	"github.com/syssam/velox/tests/orm/shapes/db/int64key"
@@ -188,7 +187,7 @@ func TestBlob_BytesAndJSON(t *testing.T) {
 }
 
 // 40 columns of mixed types: a misaligned column shows up as a wrong value.
-func wideRow(db orm.Executor, n int, optional bool) *entity.WideCreate {
+func wideRow(db velox.Executor, n int, optional bool) *entity.WideCreate {
 	b := client.Wide.Create(db).Set(
 		wide.Key.Set(fmt.Sprintf("k%d", n)), wide.S1.Set(fmt.Sprintf("s1-%d", n)), wide.T1.Set(fmt.Sprintf("t1-%d", n)),
 		wide.B1.Set(n%2 == 0), wide.I1.Set(n), wide.I8.Set(int8(-n)), wide.I16.Set(int16(n*100)), wide.I32.Set(int32(n*1000)),

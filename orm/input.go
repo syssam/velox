@@ -1,42 +1,16 @@
 package orm
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"reflect"
+
+	"github.com/syssam/velox"
 )
 
 // This file is what a request-driven layer (GraphQL, or a REST handler that
-// takes a filter object) needs on top of queries: the handle of the request
-// carried in the context, and predicates and order terms made from input
-// values. Nothing here imports a GraphQL engine.
-
-type executorKey struct{}
-
-// WithExecutor returns a context that carries ex, the database handle or the
-// transaction of a request. A server sets it once per request; the methods a
-// GraphQL engine calls on an entity to resolve its edges (u.Posts(ctx, ...))
-// have nowhere else to take one from.
-func WithExecutor(ctx context.Context, ex Executor) context.Context {
-	return context.WithValue(ctx, executorKey{}, ex)
-}
-
-// ExecutorFrom returns the handle WithExecutor put in ctx, or nil: a query
-// made from nil reports ErrNoExecutor when it runs.
-func ExecutorFrom(ctx context.Context) Executor {
-	ex, _ := ctx.Value(executorKey{}).(Executor)
-	return ex
-}
-
-// TxFrom returns the transaction the context carries, or nil when it
-// carries none or a handle that is not a transaction: for code that does
-// something only inside a transaction (a check that must be rolled back
-// with the write it follows).
-func TxFrom(ctx context.Context) *Tx {
-	tx, _ := ctx.Value(executorKey{}).(*Tx)
-	return tx
-}
+// takes a filter object) needs on top of queries: predicates and order terms
+// made from input values. Nothing here imports a GraphQL engine.
 
 // opInvalid is a predicate that could not be built; Val is the error the
 // query or mutation reports.
@@ -50,8 +24,8 @@ func Invalid(err error) P { return P{Op: opInvalid, Val: err} }
 // OrderTerm returns the order term of an order input: columns maps the
 // values of the entity's OrderField enum to columns, field is the value the
 // request gave ("" orders by the id), dir its direction ("" is ascending).
-func OrderTerm(m *Meta, columns map[string]string, field string, dir OrderDirection) O {
-	o := O{Desc: dir == OrderDirectionDesc}
+func OrderTerm(m *Meta, columns map[string]string, field string, dir velox.OrderDirection) O {
+	o := O{Desc: dir == velox.OrderDirectionDesc}
 	switch col, ok := columns[field]; {
 	case field == "":
 		if id := m.id(); id != nil {

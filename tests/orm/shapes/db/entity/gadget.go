@@ -85,14 +85,14 @@ func linkGadget(dst any, es []any) {
 
 // GadgetEdge is a row of a page of Gadget, with its cursor.
 type GadgetEdge struct {
-	Node   *Gadget    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Gadget      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // GadgetConnection is one page of Gadget.
 type GadgetConnection struct {
-	Edges    []*GadgetEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*GadgetEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -118,7 +118,7 @@ var GadgetMeta = orm.Meta{
 type GadgetQuery struct{ c orm.QueryCore }
 
 // NewGadgetQuery returns a query of every Gadget.
-func NewGadgetQuery(ex orm.Executor) *GadgetQuery {
+func NewGadgetQuery(ex velox.Executor) *GadgetQuery {
 	return &GadgetQuery{c: orm.QueryCore{M: &GadgetMeta, Ex: ex}}
 }
 
@@ -263,7 +263,7 @@ func (q *GadgetQuery) Iter(ctx context.Context) iter.Seq2[*Gadget, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *GadgetQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*GadgetConnection, error) {
+func (q *GadgetQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*GadgetConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,7 @@ func (q *GadgetQuery) IDs(ctx context.Context) ([]int, error) {
 type GadgetCreate struct{ c orm.MutCore }
 
 // NewGadgetCreate returns a builder that creates a Gadget.
-func NewGadgetCreate(ex orm.Executor) *GadgetCreate {
+func NewGadgetCreate(ex velox.Executor) *GadgetCreate {
 	return &GadgetCreate{c: orm.MutCore{M: &GadgetMeta, Ex: ex}}
 }
 
@@ -352,7 +352,7 @@ func (b *GadgetCreate) Exec(ctx context.Context) error {
 
 // GadgetCreateBulk creates several Gadget rows with one statement.
 type GadgetCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*GadgetCreate
 	n  int
 }
@@ -360,7 +360,7 @@ type GadgetCreateBulk struct {
 // NewGadgetCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewGadgetCreateBulk(ex orm.Executor, bs ...*GadgetCreate) *GadgetCreateBulk {
+func NewGadgetCreateBulk(ex velox.Executor, bs ...*GadgetCreate) *GadgetCreateBulk {
 	return &GadgetCreateBulk{ex: ex, bs: bs}
 }
 
@@ -413,7 +413,7 @@ func (b *GadgetCreateBulk) Exec(ctx context.Context) error {
 type GadgetUpdate struct{ c orm.MutCore }
 
 // NewGadgetUpdate returns a builder that updates the rows its predicates match.
-func NewGadgetUpdate(ex orm.Executor) *GadgetUpdate {
+func NewGadgetUpdate(ex velox.Executor) *GadgetUpdate {
 	return &GadgetUpdate{c: orm.MutCore{M: &GadgetMeta, Ex: ex}}
 }
 
@@ -479,7 +479,7 @@ func (b *GadgetUpdate) SaveOne(ctx context.Context) (*Gadget, error) {
 type GadgetDelete struct{ c orm.MutCore }
 
 // NewGadgetDelete returns a builder that deletes the rows its predicates match.
-func NewGadgetDelete(ex orm.Executor) *GadgetDelete {
+func NewGadgetDelete(ex velox.Executor) *GadgetDelete {
 	return &GadgetDelete{c: orm.MutCore{M: &GadgetMeta, Ex: ex}}
 }
 
@@ -502,7 +502,7 @@ func (b *GadgetDelete) Exec(ctx context.Context) (int, error) { return b.c.Delet
 // QueryOwner queries the "owner" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Gadget) QueryOwner(ex orm.Executor) *AuthorQuery {
+func (e *Gadget) QueryOwner(ex velox.Executor) *AuthorQuery {
 	q := NewAuthorQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(GadgetMeta.Edges[0], e))
 	return q

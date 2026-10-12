@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,35 +18,35 @@ type OrClient struct{}
 
 // Query returns a query of every Or, to run on ex: a database handle or a
 // transaction.
-func (*OrClient) Query(ex orm.Executor) *entity.OrQuery { return entity.NewOrQuery(ex) }
+func (*OrClient) Query(ex velox.Executor) *entity.OrQuery { return entity.NewOrQuery(ex) }
 
 // Create returns a builder that creates a Or.
-func (*OrClient) Create(ex orm.Executor) *entity.OrCreate { return entity.NewOrCreate(ex) }
+func (*OrClient) Create(ex velox.Executor) *entity.OrCreate { return entity.NewOrCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*OrClient) CreateBulk(ex orm.Executor, bs ...*entity.OrCreate) *entity.OrCreateBulk {
+func (*OrClient) CreateBulk(ex velox.Executor, bs ...*entity.OrCreate) *entity.OrCreateBulk {
 	return entity.NewOrCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Or rows its conditions match.
-func (*OrClient) Update(ex orm.Executor) *entity.OrUpdate { return entity.NewOrUpdate(ex) }
+func (*OrClient) Update(ex velox.Executor) *entity.OrUpdate { return entity.NewOrUpdate(ex) }
 
 // Delete returns a builder that deletes the Or rows its conditions match.
-func (*OrClient) Delete(ex orm.Executor) *entity.OrDelete { return entity.NewOrDelete(ex) }
+func (*OrClient) Delete(ex velox.Executor) *entity.OrDelete { return entity.NewOrDelete(ex) }
 
 // Get returns the Or with the given id, or velox.ErrNotFound.
-func (c *OrClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Or, error) {
+func (c *OrClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Or, error) {
 	return c.Query(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Or with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *OrClient) UpdateByID(ex orm.Executor, id int) *entity.OrUpdate {
+func (c *OrClient) UpdateByID(ex velox.Executor, id int) *entity.OrUpdate {
 	return c.Update(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Or with the given id, or returns velox.ErrNotFound.
-func (c *OrClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *OrClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Or(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.OrMeta.NotFound()

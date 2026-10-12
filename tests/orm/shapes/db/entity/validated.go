@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	slots "github.com/syssam/velox/tests/orm/shapes/db/internal/slots"
@@ -96,14 +97,14 @@ func ptrValidated(v any, i int) any {
 
 // ValidatedEdge is a row of a page of Validated, with its cursor.
 type ValidatedEdge struct {
-	Node   *Validated `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Validated   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ValidatedConnection is one page of Validated.
 type ValidatedConnection struct {
 	Edges    []*ValidatedEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -147,7 +148,7 @@ var ValidatedMeta = orm.Meta{
 type ValidatedQuery struct{ c orm.QueryCore }
 
 // NewValidatedQuery returns a query of every Validated.
-func NewValidatedQuery(ex orm.Executor) *ValidatedQuery {
+func NewValidatedQuery(ex velox.Executor) *ValidatedQuery {
 	return &ValidatedQuery{c: orm.QueryCore{M: &ValidatedMeta, Ex: ex}}
 }
 
@@ -295,7 +296,7 @@ func (q *ValidatedQuery) Iter(ctx context.Context) iter.Seq2[*Validated, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ValidatedQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ValidatedConnection, error) {
+func (q *ValidatedQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ValidatedConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -336,7 +337,7 @@ func (q *ValidatedQuery) IDs(ctx context.Context) ([]int, error) {
 type ValidatedCreate struct{ c orm.MutCore }
 
 // NewValidatedCreate returns a builder that creates a Validated.
-func NewValidatedCreate(ex orm.Executor) *ValidatedCreate {
+func NewValidatedCreate(ex velox.Executor) *ValidatedCreate {
 	return &ValidatedCreate{c: orm.MutCore{M: &ValidatedMeta, Ex: ex}}
 }
 
@@ -384,7 +385,7 @@ func (b *ValidatedCreate) Exec(ctx context.Context) error {
 
 // ValidatedCreateBulk creates several Validated rows with one statement.
 type ValidatedCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ValidatedCreate
 	n  int
 }
@@ -392,7 +393,7 @@ type ValidatedCreateBulk struct {
 // NewValidatedCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewValidatedCreateBulk(ex orm.Executor, bs ...*ValidatedCreate) *ValidatedCreateBulk {
+func NewValidatedCreateBulk(ex velox.Executor, bs ...*ValidatedCreate) *ValidatedCreateBulk {
 	return &ValidatedCreateBulk{ex: ex, bs: bs}
 }
 
@@ -445,7 +446,7 @@ func (b *ValidatedCreateBulk) Exec(ctx context.Context) error {
 type ValidatedUpdate struct{ c orm.MutCore }
 
 // NewValidatedUpdate returns a builder that updates the rows its predicates match.
-func NewValidatedUpdate(ex orm.Executor) *ValidatedUpdate {
+func NewValidatedUpdate(ex velox.Executor) *ValidatedUpdate {
 	return &ValidatedUpdate{c: orm.MutCore{M: &ValidatedMeta, Ex: ex}}
 }
 
@@ -511,7 +512,7 @@ func (b *ValidatedUpdate) SaveOne(ctx context.Context) (*Validated, error) {
 type ValidatedDelete struct{ c orm.MutCore }
 
 // NewValidatedDelete returns a builder that deletes the rows its predicates match.
-func NewValidatedDelete(ex orm.Executor) *ValidatedDelete {
+func NewValidatedDelete(ex velox.Executor) *ValidatedDelete {
 	return &ValidatedDelete{c: orm.MutCore{M: &ValidatedMeta, Ex: ex}}
 }
 

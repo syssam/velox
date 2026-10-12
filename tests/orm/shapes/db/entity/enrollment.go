@@ -112,14 +112,14 @@ func linkEnrollment(dst any, es []any) {
 
 // EnrollmentEdge is a row of a page of Enrollment, with its cursor.
 type EnrollmentEdge struct {
-	Node   *Enrollment `json:"node"`
-	Cursor orm.Cursor  `json:"cursor"`
+	Node   *Enrollment  `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // EnrollmentConnection is one page of Enrollment.
 type EnrollmentConnection struct {
 	Edges    []*EnrollmentEdge `json:"edges"`
-	PageInfo orm.PageInfo      `json:"pageInfo"`
+	PageInfo velox.PageInfo    `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -150,7 +150,7 @@ var EnrollmentMeta = orm.Meta{
 type EnrollmentQuery struct{ c orm.QueryCore }
 
 // NewEnrollmentQuery returns a query of every Enrollment.
-func NewEnrollmentQuery(ex orm.Executor) *EnrollmentQuery {
+func NewEnrollmentQuery(ex velox.Executor) *EnrollmentQuery {
 	return &EnrollmentQuery{c: orm.QueryCore{M: &EnrollmentMeta, Ex: ex}}
 }
 
@@ -298,7 +298,7 @@ func (q *EnrollmentQuery) Iter(ctx context.Context) iter.Seq2[*Enrollment, error
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *EnrollmentQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*EnrollmentConnection, error) {
+func (q *EnrollmentQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*EnrollmentConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -339,7 +339,7 @@ func (q *EnrollmentQuery) IDs(ctx context.Context) ([]int, error) {
 type EnrollmentCreate struct{ c orm.MutCore }
 
 // NewEnrollmentCreate returns a builder that creates a Enrollment.
-func NewEnrollmentCreate(ex orm.Executor) *EnrollmentCreate {
+func NewEnrollmentCreate(ex velox.Executor) *EnrollmentCreate {
 	return &EnrollmentCreate{c: orm.MutCore{M: &EnrollmentMeta, Ex: ex}}
 }
 
@@ -387,7 +387,7 @@ func (b *EnrollmentCreate) Exec(ctx context.Context) error {
 
 // EnrollmentCreateBulk creates several Enrollment rows with one statement.
 type EnrollmentCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*EnrollmentCreate
 	n  int
 }
@@ -395,7 +395,7 @@ type EnrollmentCreateBulk struct {
 // NewEnrollmentCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewEnrollmentCreateBulk(ex orm.Executor, bs ...*EnrollmentCreate) *EnrollmentCreateBulk {
+func NewEnrollmentCreateBulk(ex velox.Executor, bs ...*EnrollmentCreate) *EnrollmentCreateBulk {
 	return &EnrollmentCreateBulk{ex: ex, bs: bs}
 }
 
@@ -448,7 +448,7 @@ func (b *EnrollmentCreateBulk) Exec(ctx context.Context) error {
 type EnrollmentUpdate struct{ c orm.MutCore }
 
 // NewEnrollmentUpdate returns a builder that updates the rows its predicates match.
-func NewEnrollmentUpdate(ex orm.Executor) *EnrollmentUpdate {
+func NewEnrollmentUpdate(ex velox.Executor) *EnrollmentUpdate {
 	return &EnrollmentUpdate{c: orm.MutCore{M: &EnrollmentMeta, Ex: ex}}
 }
 
@@ -514,7 +514,7 @@ func (b *EnrollmentUpdate) SaveOne(ctx context.Context) (*Enrollment, error) {
 type EnrollmentDelete struct{ c orm.MutCore }
 
 // NewEnrollmentDelete returns a builder that deletes the rows its predicates match.
-func NewEnrollmentDelete(ex orm.Executor) *EnrollmentDelete {
+func NewEnrollmentDelete(ex velox.Executor) *EnrollmentDelete {
 	return &EnrollmentDelete{c: orm.MutCore{M: &EnrollmentMeta, Ex: ex}}
 }
 
@@ -537,7 +537,7 @@ func (b *EnrollmentDelete) Exec(ctx context.Context) (int, error) { return b.c.D
 // QueryStudent queries the "student" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Enrollment) QueryStudent(ex orm.Executor) *StudentQuery {
+func (e *Enrollment) QueryStudent(ex velox.Executor) *StudentQuery {
 	q := NewStudentQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(EnrollmentMeta.Edges[0], e))
 	return q
@@ -560,7 +560,7 @@ func (q *EnrollmentQuery) WithStudent(opts ...*StudentQuery) *EnrollmentQuery {
 // QueryCourse queries the "course" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Enrollment) QueryCourse(ex orm.Executor) *CourseQuery {
+func (e *Enrollment) QueryCourse(ex velox.Executor) *CourseQuery {
 	q := NewCourseQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(EnrollmentMeta.Edges[1], e))
 	return q

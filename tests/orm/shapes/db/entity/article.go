@@ -150,14 +150,14 @@ func linkArticle(dst any, es []any) {
 
 // ArticleEdge is a row of a page of Article, with its cursor.
 type ArticleEdge struct {
-	Node   *Article   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Article     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // ArticleConnection is one page of Article.
 type ArticleConnection struct {
 	Edges    []*ArticleEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -188,7 +188,7 @@ var ArticleMeta = orm.Meta{
 type ArticleQuery struct{ c orm.QueryCore }
 
 // NewArticleQuery returns a query of every Article.
-func NewArticleQuery(ex orm.Executor) *ArticleQuery {
+func NewArticleQuery(ex velox.Executor) *ArticleQuery {
 	return &ArticleQuery{c: orm.QueryCore{M: &ArticleMeta, Ex: ex}}
 }
 
@@ -333,7 +333,7 @@ func (q *ArticleQuery) Iter(ctx context.Context) iter.Seq2[*Article, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *ArticleQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*ArticleConnection, error) {
+func (q *ArticleQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*ArticleConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -374,7 +374,7 @@ func (q *ArticleQuery) IDs(ctx context.Context) ([]int, error) {
 type ArticleCreate struct{ c orm.MutCore }
 
 // NewArticleCreate returns a builder that creates a Article.
-func NewArticleCreate(ex orm.Executor) *ArticleCreate {
+func NewArticleCreate(ex velox.Executor) *ArticleCreate {
 	return &ArticleCreate{c: orm.MutCore{M: &ArticleMeta, Ex: ex}}
 }
 
@@ -422,7 +422,7 @@ func (b *ArticleCreate) Exec(ctx context.Context) error {
 
 // ArticleCreateBulk creates several Article rows with one statement.
 type ArticleCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*ArticleCreate
 	n  int
 }
@@ -430,7 +430,7 @@ type ArticleCreateBulk struct {
 // NewArticleCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewArticleCreateBulk(ex orm.Executor, bs ...*ArticleCreate) *ArticleCreateBulk {
+func NewArticleCreateBulk(ex velox.Executor, bs ...*ArticleCreate) *ArticleCreateBulk {
 	return &ArticleCreateBulk{ex: ex, bs: bs}
 }
 
@@ -483,7 +483,7 @@ func (b *ArticleCreateBulk) Exec(ctx context.Context) error {
 type ArticleUpdate struct{ c orm.MutCore }
 
 // NewArticleUpdate returns a builder that updates the rows its predicates match.
-func NewArticleUpdate(ex orm.Executor) *ArticleUpdate {
+func NewArticleUpdate(ex velox.Executor) *ArticleUpdate {
 	return &ArticleUpdate{c: orm.MutCore{M: &ArticleMeta, Ex: ex}}
 }
 
@@ -549,7 +549,7 @@ func (b *ArticleUpdate) SaveOne(ctx context.Context) (*Article, error) {
 type ArticleDelete struct{ c orm.MutCore }
 
 // NewArticleDelete returns a builder that deletes the rows its predicates match.
-func NewArticleDelete(ex orm.Executor) *ArticleDelete {
+func NewArticleDelete(ex velox.Executor) *ArticleDelete {
 	return &ArticleDelete{c: orm.MutCore{M: &ArticleMeta, Ex: ex}}
 }
 
@@ -572,7 +572,7 @@ func (b *ArticleDelete) Exec(ctx context.Context) (int, error) { return b.c.Dele
 // QueryAuthor queries the "author" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Article) QueryAuthor(ex orm.Executor) *AuthorQuery {
+func (e *Article) QueryAuthor(ex velox.Executor) *AuthorQuery {
 	q := NewAuthorQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ArticleMeta.Edges[0], e))
 	return q
@@ -595,7 +595,7 @@ func (q *ArticleQuery) WithAuthor(opts ...*AuthorQuery) *ArticleQuery {
 // QueryEditor queries the "editor" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Article) QueryEditor(ex orm.Executor) *AuthorQuery {
+func (e *Article) QueryEditor(ex velox.Executor) *AuthorQuery {
 	q := NewAuthorQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ArticleMeta.Edges[1], e))
 	return q
@@ -618,7 +618,7 @@ func (q *ArticleQuery) WithEditor(opts ...*AuthorQuery) *ArticleQuery {
 // QueryTopics queries the "topics" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Article) QueryTopics(ex orm.Executor) *TopicQuery {
+func (e *Article) QueryTopics(ex velox.Executor) *TopicQuery {
 	q := NewTopicQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ArticleMeta.Edges[2], e))
 	return q
@@ -641,7 +641,7 @@ func (q *ArticleQuery) WithTopics(opts ...*TopicQuery) *ArticleQuery {
 // QueryBannedTopics queries the "banned_topics" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Article) QueryBannedTopics(ex orm.Executor) *TopicQuery {
+func (e *Article) QueryBannedTopics(ex velox.Executor) *TopicQuery {
 	q := NewTopicQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ArticleMeta.Edges[3], e))
 	return q
@@ -664,7 +664,7 @@ func (q *ArticleQuery) WithBannedTopics(opts ...*TopicQuery) *ArticleQuery {
 // QueryNotes queries the "notes" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Article) QueryNotes(ex orm.Executor) *NoteQuery {
+func (e *Article) QueryNotes(ex velox.Executor) *NoteQuery {
 	q := NewNoteQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(ArticleMeta.Edges[4], e))
 	return q

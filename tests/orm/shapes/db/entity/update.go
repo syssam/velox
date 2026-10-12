@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrUpdate(v any, i int) any {
 
 // UpdateEdge is a row of a page of Update, with its cursor.
 type UpdateEdge struct {
-	Node   *Update    `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Update      `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // UpdateConnection is one page of Update.
 type UpdateConnection struct {
-	Edges    []*UpdateEdge `json:"edges"`
-	PageInfo orm.PageInfo  `json:"pageInfo"`
+	Edges    []*UpdateEdge  `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var UpdateMeta = orm.Meta{
 type UpdateQuery struct{ c orm.QueryCore }
 
 // NewUpdateQuery returns a query of every Update.
-func NewUpdateQuery(ex orm.Executor) *UpdateQuery {
+func NewUpdateQuery(ex velox.Executor) *UpdateQuery {
 	return &UpdateQuery{c: orm.QueryCore{M: &UpdateMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *UpdateQuery) Iter(ctx context.Context) iter.Seq2[*Update, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UpdateQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UpdateConnection, error) {
+func (q *UpdateQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*UpdateConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *UpdateQuery) IDs(ctx context.Context) ([]int, error) {
 type UpdateCreate struct{ c orm.MutCore }
 
 // NewUpdateCreate returns a builder that creates a Update.
-func NewUpdateCreate(ex orm.Executor) *UpdateCreate {
+func NewUpdateCreate(ex velox.Executor) *UpdateCreate {
 	return &UpdateCreate{c: orm.MutCore{M: &UpdateMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *UpdateCreate) Exec(ctx context.Context) error {
 
 // UpdateCreateBulk creates several Update rows with one statement.
 type UpdateCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*UpdateCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type UpdateCreateBulk struct {
 // NewUpdateCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewUpdateCreateBulk(ex orm.Executor, bs ...*UpdateCreate) *UpdateCreateBulk {
+func NewUpdateCreateBulk(ex velox.Executor, bs ...*UpdateCreate) *UpdateCreateBulk {
 	return &UpdateCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *UpdateCreateBulk) Exec(ctx context.Context) error {
 type UpdateUpdate struct{ c orm.MutCore }
 
 // NewUpdateUpdate returns a builder that updates the rows its predicates match.
-func NewUpdateUpdate(ex orm.Executor) *UpdateUpdate {
+func NewUpdateUpdate(ex velox.Executor) *UpdateUpdate {
 	return &UpdateUpdate{c: orm.MutCore{M: &UpdateMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *UpdateUpdate) SaveOne(ctx context.Context) (*Update, error) {
 type UpdateDelete struct{ c orm.MutCore }
 
 // NewUpdateDelete returns a builder that deletes the rows its predicates match.
-func NewUpdateDelete(ex orm.Executor) *UpdateDelete {
+func NewUpdateDelete(ex velox.Executor) *UpdateDelete {
 	return &UpdateDelete{c: orm.MutCore{M: &UpdateMeta, Ex: ex}}
 }
 

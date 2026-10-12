@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -43,13 +44,13 @@ func ptrNamedBoolNil(v any, i int) any {
 // NamedBoolNilEdge is a row of a page of NamedBoolNil, with its cursor.
 type NamedBoolNilEdge struct {
 	Node   *NamedBoolNil `json:"node"`
-	Cursor orm.Cursor    `json:"cursor"`
+	Cursor velox.Cursor  `json:"cursor"`
 }
 
 // NamedBoolNilConnection is one page of NamedBoolNil.
 type NamedBoolNilConnection struct {
 	Edges    []*NamedBoolNilEdge `json:"edges"`
-	PageInfo orm.PageInfo        `json:"pageInfo"`
+	PageInfo velox.PageInfo      `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -73,7 +74,7 @@ var NamedBoolNilMeta = orm.Meta{
 type NamedBoolNilQuery struct{ c orm.QueryCore }
 
 // NewNamedBoolNilQuery returns a query of every NamedBoolNil.
-func NewNamedBoolNilQuery(ex orm.Executor) *NamedBoolNilQuery {
+func NewNamedBoolNilQuery(ex velox.Executor) *NamedBoolNilQuery {
 	return &NamedBoolNilQuery{c: orm.QueryCore{M: &NamedBoolNilMeta, Ex: ex}}
 }
 
@@ -221,7 +222,7 @@ func (q *NamedBoolNilQuery) Iter(ctx context.Context) iter.Seq2[*NamedBoolNil, e
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *NamedBoolNilQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*NamedBoolNilConnection, error) {
+func (q *NamedBoolNilQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NamedBoolNilConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -262,7 +263,7 @@ func (q *NamedBoolNilQuery) IDs(ctx context.Context) ([]int, error) {
 type NamedBoolNilCreate struct{ c orm.MutCore }
 
 // NewNamedBoolNilCreate returns a builder that creates a NamedBoolNil.
-func NewNamedBoolNilCreate(ex orm.Executor) *NamedBoolNilCreate {
+func NewNamedBoolNilCreate(ex velox.Executor) *NamedBoolNilCreate {
 	return &NamedBoolNilCreate{c: orm.MutCore{M: &NamedBoolNilMeta, Ex: ex}}
 }
 
@@ -310,7 +311,7 @@ func (b *NamedBoolNilCreate) Exec(ctx context.Context) error {
 
 // NamedBoolNilCreateBulk creates several NamedBoolNil rows with one statement.
 type NamedBoolNilCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*NamedBoolNilCreate
 	n  int
 }
@@ -318,7 +319,7 @@ type NamedBoolNilCreateBulk struct {
 // NewNamedBoolNilCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewNamedBoolNilCreateBulk(ex orm.Executor, bs ...*NamedBoolNilCreate) *NamedBoolNilCreateBulk {
+func NewNamedBoolNilCreateBulk(ex velox.Executor, bs ...*NamedBoolNilCreate) *NamedBoolNilCreateBulk {
 	return &NamedBoolNilCreateBulk{ex: ex, bs: bs}
 }
 
@@ -371,7 +372,7 @@ func (b *NamedBoolNilCreateBulk) Exec(ctx context.Context) error {
 type NamedBoolNilUpdate struct{ c orm.MutCore }
 
 // NewNamedBoolNilUpdate returns a builder that updates the rows its predicates match.
-func NewNamedBoolNilUpdate(ex orm.Executor) *NamedBoolNilUpdate {
+func NewNamedBoolNilUpdate(ex velox.Executor) *NamedBoolNilUpdate {
 	return &NamedBoolNilUpdate{c: orm.MutCore{M: &NamedBoolNilMeta, Ex: ex}}
 }
 
@@ -437,7 +438,7 @@ func (b *NamedBoolNilUpdate) SaveOne(ctx context.Context) (*NamedBoolNil, error)
 type NamedBoolNilDelete struct{ c orm.MutCore }
 
 // NewNamedBoolNilDelete returns a builder that deletes the rows its predicates match.
-func NewNamedBoolNilDelete(ex orm.Executor) *NamedBoolNilDelete {
+func NewNamedBoolNilDelete(ex velox.Executor) *NamedBoolNilDelete {
 	return &NamedBoolNilDelete{c: orm.MutCore{M: &NamedBoolNilMeta, Ex: ex}}
 }
 

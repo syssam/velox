@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/db/predicate"
@@ -17,35 +18,35 @@ type PetClient struct{}
 
 // Query returns a query of every Pet, to run on ex: a database handle or a
 // transaction.
-func (*PetClient) Query(ex orm.Executor) *entity.PetQuery { return entity.NewPetQuery(ex) }
+func (*PetClient) Query(ex velox.Executor) *entity.PetQuery { return entity.NewPetQuery(ex) }
 
 // Create returns a builder that creates a Pet.
-func (*PetClient) Create(ex orm.Executor) *entity.PetCreate { return entity.NewPetCreate(ex) }
+func (*PetClient) Create(ex velox.Executor) *entity.PetCreate { return entity.NewPetCreate(ex) }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*PetClient) CreateBulk(ex orm.Executor, bs ...*entity.PetCreate) *entity.PetCreateBulk {
+func (*PetClient) CreateBulk(ex velox.Executor, bs ...*entity.PetCreate) *entity.PetCreateBulk {
 	return entity.NewPetCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Pet rows its conditions match.
-func (*PetClient) Update(ex orm.Executor) *entity.PetUpdate { return entity.NewPetUpdate(ex) }
+func (*PetClient) Update(ex velox.Executor) *entity.PetUpdate { return entity.NewPetUpdate(ex) }
 
 // Delete returns a builder that deletes the Pet rows its conditions match.
-func (*PetClient) Delete(ex orm.Executor) *entity.PetDelete { return entity.NewPetDelete(ex) }
+func (*PetClient) Delete(ex velox.Executor) *entity.PetDelete { return entity.NewPetDelete(ex) }
 
 // Get returns the Pet with the given id, or velox.ErrNotFound.
-func (c *PetClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Pet, error) {
+func (c *PetClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Pet, error) {
 	return c.Query(ex).Where(predicate.Pet(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Pet with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *PetClient) UpdateByID(ex orm.Executor, id int) *entity.PetUpdate {
+func (c *PetClient) UpdateByID(ex velox.Executor, id int) *entity.PetUpdate {
 	return c.Update(ex).Where(predicate.Pet(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Pet with the given id, or returns velox.ErrNotFound.
-func (c *PetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *PetClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Pet(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.PetMeta.NotFound()
@@ -54,7 +55,7 @@ func (c *PetClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) err
 }
 
 // node is Get for an id of any type: see NodeTypes.
-func (c *PetClient) node(ctx context.Context, ex orm.Executor, key any) (Noder, error) {
+func (c *PetClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
 	v, ok := orm.IDAs[int](key)
 	if !ok {
 		return nil, entity.PetMeta.NotFound()

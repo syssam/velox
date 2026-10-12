@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrInternal(v any, i int) any {
 
 // InternalEdge is a row of a page of Internal, with its cursor.
 type InternalEdge struct {
-	Node   *Internal  `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Internal    `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // InternalConnection is one page of Internal.
 type InternalConnection struct {
 	Edges    []*InternalEdge `json:"edges"`
-	PageInfo orm.PageInfo    `json:"pageInfo"`
+	PageInfo velox.PageInfo  `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var InternalMeta = orm.Meta{
 type InternalQuery struct{ c orm.QueryCore }
 
 // NewInternalQuery returns a query of every Internal.
-func NewInternalQuery(ex orm.Executor) *InternalQuery {
+func NewInternalQuery(ex velox.Executor) *InternalQuery {
 	return &InternalQuery{c: orm.QueryCore{M: &InternalMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *InternalQuery) Iter(ctx context.Context) iter.Seq2[*Internal, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *InternalQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*InternalConnection, error) {
+func (q *InternalQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*InternalConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *InternalQuery) IDs(ctx context.Context) ([]int, error) {
 type InternalCreate struct{ c orm.MutCore }
 
 // NewInternalCreate returns a builder that creates a Internal.
-func NewInternalCreate(ex orm.Executor) *InternalCreate {
+func NewInternalCreate(ex velox.Executor) *InternalCreate {
 	return &InternalCreate{c: orm.MutCore{M: &InternalMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *InternalCreate) Exec(ctx context.Context) error {
 
 // InternalCreateBulk creates several Internal rows with one statement.
 type InternalCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*InternalCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type InternalCreateBulk struct {
 // NewInternalCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewInternalCreateBulk(ex orm.Executor, bs ...*InternalCreate) *InternalCreateBulk {
+func NewInternalCreateBulk(ex velox.Executor, bs ...*InternalCreate) *InternalCreateBulk {
 	return &InternalCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *InternalCreateBulk) Exec(ctx context.Context) error {
 type InternalUpdate struct{ c orm.MutCore }
 
 // NewInternalUpdate returns a builder that updates the rows its predicates match.
-func NewInternalUpdate(ex orm.Executor) *InternalUpdate {
+func NewInternalUpdate(ex velox.Executor) *InternalUpdate {
 	return &InternalUpdate{c: orm.MutCore{M: &InternalMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *InternalUpdate) SaveOne(ctx context.Context) (*Internal, error) {
 type InternalDelete struct{ c orm.MutCore }
 
 // NewInternalDelete returns a builder that deletes the rows its predicates match.
-func NewInternalDelete(ex orm.Executor) *InternalDelete {
+func NewInternalDelete(ex velox.Executor) *InternalDelete {
 	return &InternalDelete{c: orm.MutCore{M: &InternalMeta, Ex: ex}}
 }
 

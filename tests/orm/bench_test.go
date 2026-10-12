@@ -7,9 +7,9 @@ import (
 
 	client "github.com/syssam/velox/tests/orm/db"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
-	"github.com/syssam/velox/orm"
 	integration "github.com/syssam/velox/tests/integration"
 	"github.com/syssam/velox/tests/orm/db/user"
 )
@@ -17,7 +17,7 @@ import (
 // benchDB returns a handle and a velox client over one SQLite database
 // holding n users, so each benchmark below runs the same operation through
 // both on the same data.
-func benchDB(b *testing.B, n int) (*orm.DB, *integration.Client, []int) {
+func benchDB(b *testing.B, n int) (*velox.DB, *integration.Client, []int) {
 	b.Helper()
 	ctx := context.Background()
 	dsn := fmt.Sprintf("file:ormbench%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", dbSeq.Add(1))
@@ -30,7 +30,7 @@ func benchDB(b *testing.B, n int) (*orm.DB, *integration.Client, []int) {
 	if err := ref.Schema.Create(ctx); err != nil {
 		b.Fatal(err)
 	}
-	db := orm.OpenDB(dialect.SQLite, drv.DB())
+	db := velox.OpenDB(dialect.SQLite, drv.DB())
 	ids := make([]int, n)
 	for i := range ids {
 		u, err := client.User.Create(db).

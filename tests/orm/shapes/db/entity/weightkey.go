@@ -112,14 +112,14 @@ func linkWeightKey(dst any, es []any) {
 
 // WeightKeyEdge is a row of a page of WeightKey, with its cursor.
 type WeightKeyEdge struct {
-	Node   *WeightKey `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *WeightKey   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // WeightKeyConnection is one page of WeightKey.
 type WeightKeyConnection struct {
 	Edges    []*WeightKeyEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -144,7 +144,7 @@ var WeightKeyMeta = orm.Meta{
 type WeightKeyQuery struct{ c orm.QueryCore }
 
 // NewWeightKeyQuery returns a query of every WeightKey.
-func NewWeightKeyQuery(ex orm.Executor) *WeightKeyQuery {
+func NewWeightKeyQuery(ex velox.Executor) *WeightKeyQuery {
 	return &WeightKeyQuery{c: orm.QueryCore{M: &WeightKeyMeta, Ex: ex}}
 }
 
@@ -292,7 +292,7 @@ func (q *WeightKeyQuery) Iter(ctx context.Context) iter.Seq2[*WeightKey, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *WeightKeyQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*WeightKeyConnection, error) {
+func (q *WeightKeyQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*WeightKeyConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -333,7 +333,7 @@ func (q *WeightKeyQuery) IDs(ctx context.Context) ([]types.Weight, error) {
 type WeightKeyCreate struct{ c orm.MutCore }
 
 // NewWeightKeyCreate returns a builder that creates a WeightKey.
-func NewWeightKeyCreate(ex orm.Executor) *WeightKeyCreate {
+func NewWeightKeyCreate(ex velox.Executor) *WeightKeyCreate {
 	return &WeightKeyCreate{c: orm.MutCore{M: &WeightKeyMeta, Ex: ex}}
 }
 
@@ -381,7 +381,7 @@ func (b *WeightKeyCreate) Exec(ctx context.Context) error {
 
 // WeightKeyCreateBulk creates several WeightKey rows with one statement.
 type WeightKeyCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*WeightKeyCreate
 	n  int
 }
@@ -389,7 +389,7 @@ type WeightKeyCreateBulk struct {
 // NewWeightKeyCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewWeightKeyCreateBulk(ex orm.Executor, bs ...*WeightKeyCreate) *WeightKeyCreateBulk {
+func NewWeightKeyCreateBulk(ex velox.Executor, bs ...*WeightKeyCreate) *WeightKeyCreateBulk {
 	return &WeightKeyCreateBulk{ex: ex, bs: bs}
 }
 
@@ -442,7 +442,7 @@ func (b *WeightKeyCreateBulk) Exec(ctx context.Context) error {
 type WeightKeyUpdate struct{ c orm.MutCore }
 
 // NewWeightKeyUpdate returns a builder that updates the rows its predicates match.
-func NewWeightKeyUpdate(ex orm.Executor) *WeightKeyUpdate {
+func NewWeightKeyUpdate(ex velox.Executor) *WeightKeyUpdate {
 	return &WeightKeyUpdate{c: orm.MutCore{M: &WeightKeyMeta, Ex: ex}}
 }
 
@@ -508,7 +508,7 @@ func (b *WeightKeyUpdate) SaveOne(ctx context.Context) (*WeightKey, error) {
 type WeightKeyDelete struct{ c orm.MutCore }
 
 // NewWeightKeyDelete returns a builder that deletes the rows its predicates match.
-func NewWeightKeyDelete(ex orm.Executor) *WeightKeyDelete {
+func NewWeightKeyDelete(ex velox.Executor) *WeightKeyDelete {
 	return &WeightKeyDelete{c: orm.MutCore{M: &WeightKeyMeta, Ex: ex}}
 }
 
@@ -531,7 +531,7 @@ func (b *WeightKeyDelete) Exec(ctx context.Context) (int, error) { return b.c.De
 // QueryOwner queries the "owner" neighbors of e, on ex.
 //
 //go:noinline
-func (e *WeightKey) QueryOwner(ex orm.Executor) *LabelKeyQuery {
+func (e *WeightKey) QueryOwner(ex velox.Executor) *LabelKeyQuery {
 	q := NewLabelKeyQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(WeightKeyMeta.Edges[0], e))
 	return q
@@ -554,7 +554,7 @@ func (q *WeightKeyQuery) WithOwner(opts ...*LabelKeyQuery) *WeightKeyQuery {
 // QueryLabels queries the "labels" neighbors of e, on ex.
 //
 //go:noinline
-func (e *WeightKey) QueryLabels(ex orm.Executor) *LabelKeyQuery {
+func (e *WeightKey) QueryLabels(ex velox.Executor) *LabelKeyQuery {
 	q := NewLabelKeyQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(WeightKeyMeta.Edges[1], e))
 	return q
@@ -577,7 +577,7 @@ func (q *WeightKeyQuery) WithLabels(opts ...*LabelKeyQuery) *WeightKeyQuery {
 // QueryPeers queries the "peers" neighbors of e, on ex.
 //
 //go:noinline
-func (e *WeightKey) QueryPeers(ex orm.Executor) *WeightKeyQuery {
+func (e *WeightKey) QueryPeers(ex velox.Executor) *WeightKeyQuery {
 	q := NewWeightKeyQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(WeightKeyMeta.Edges[2], e))
 	return q

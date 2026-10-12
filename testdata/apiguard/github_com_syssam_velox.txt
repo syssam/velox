@@ -1,4 +1,8 @@
   field Config.Table string
+  field PageInfo.EndCursor *Cursor
+  field PageInfo.HasNextPage bool
+  field PageInfo.HasPreviousPage bool
+  field PageInfo.StartCursor *Cursor
   field QueryContext.Fields []string
   field QueryContext.Limit *int
   field QueryContext.Offset *int
@@ -16,7 +20,25 @@
   method ConstraintError.Is(error) bool
   method ConstraintError.Message() string
   method ConstraintError.Unwrap() error
+  method Cursor.MarshalGQL(io.Writer)
+  method Cursor.UnmarshalGQL(any) error
+  method DB.Begin(context.Context) (*Tx, error)
+  method DB.BeginTx(context.Context, *database/sql.TxOptions) (*Tx, error)
+  method DB.Close() error
+  method DB.Dialect() string
+  method DB.Driver() github.com/syssam/velox/dialect.Driver
+  method DB.Intercept(...Interceptor)
+  method DB.RunTx(context.Context, func(tx *Tx) error) error
+  method DB.RunTxOptions(context.Context, *database/sql.TxOptions, func(tx *Tx) error) error
+  method DB.SQL() *database/sql.DB
+  method DB.State() *ExecutorState
+  method DB.Use(...Hook)
   method Edge.Descriptor() *github.com/syssam/velox/schema/edge.Descriptor
+  method Executor.State() *ExecutorState
+  method ExecutorState.Atomic() github.com/syssam/velox/dialect.Driver
+  method ExecutorState.Driver() github.com/syssam/velox/dialect.Driver
+  method ExecutorState.Hooks() []Hook
+  method ExecutorState.Interceptors() []Interceptor
   method Field.Descriptor() *github.com/syssam/velox/schema/field.Descriptor
   method Index.Descriptor() *github.com/syssam/velox/schema/index.Descriptor
   method InterceptFunc.Intercept(Querier) Querier
@@ -90,6 +112,11 @@
   method TraverseFunc.Intercept(Querier) Querier
   method TraverseFunc.Traverse(context.Context, Query) error
   method Traverser.Traverse(context.Context, Query) error
+  method Tx.AfterCommit(func())
+  method Tx.Commit() error
+  method Tx.Driver() github.com/syssam/velox/dialect.Driver
+  method Tx.Rollback() error
+  method Tx.State() *ExecutorState
   method ValidationError.Error() string
   method ValidationError.Unwrap() error
   method View.Annotations() []github.com/syssam/velox/schema.Annotation
@@ -117,6 +144,11 @@ const OpQueryOnlyID untyped string
 const OpQuerySelect untyped string
 const OpUpdate Op
 const OpUpdateOne Op
+const OrderDirectionAsc OrderDirection
+const OrderDirectionDesc OrderDirection
+func Check(error)
+func ExecutorFrom(context.Context) Executor
+func First[T any]([]T, error) (T, error)
 func IsConstraintError(error) bool
 func IsNotFound(error) bool
 func IsNotLoaded(error) bool
@@ -124,18 +156,27 @@ func IsNotSingular(error) bool
 func IsRetryable(error) bool
 func IsValidationError(error) bool
 func MaskNotFound(error) error
+func Must[T any](T, error) T
 func NewConstraintError(string, error) *ConstraintError
 func NewNotFoundError(string) *NotFoundError
 func NewNotLoadedError(string) *NotLoadedError
 func NewNotSingularError(string) *NotSingularError
 func NewQueryContext(context.Context, *QueryContext) context.Context
 func NewValidationError(string, error) *ValidationError
+func Open(string, string) (*DB, error)
+func OpenDB(string, *database/sql.DB) *DB
 func QueryFromContext(context.Context) *QueryContext
+func TxFrom(context.Context) *Tx
+func WithExecutor(context.Context, Executor) context.Context
 func WithHooks[V Value, M any, PM interface{*M; Mutation}](context.Context, func(context.Context) (V, error), PM, []Hook) (V, error)
 func WithInterceptors[V Value](context.Context, Query, Querier, []Interceptor) (V, error)
 type Config struct
 type ConstraintError struct
+type Cursor string
+type DB struct
 type Edge interface
+type Executor interface
+type ExecutorState struct
 type Field interface
 type Hook func(Mutator) Mutator
 type Index interface
@@ -150,6 +191,8 @@ type NotFoundError struct
 type NotLoadedError struct
 type NotSingularError struct
 type Op uint
+type OrderDirection string
+type PageInfo struct
 type Policy interface
 type Querier interface
 type QuerierFunc func(context.Context, Query) (Value, error)
@@ -158,13 +201,17 @@ type QueryContext struct
 type Schema struct
 type TraverseFunc func(context.Context, Query) error
 type Traverser interface
+type Tx struct
 type ValidationError struct
 type Value interface
 type View struct
 type Viewer interface
+var ErrBadCursor error
 var ErrCheck error
 var ErrForeignKey error
+var ErrNoExecutor error
 var ErrNotFound error
 var ErrNotSingular error
+var ErrTxDone error
 var ErrTxStarted error
 var ErrUnique error

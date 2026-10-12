@@ -930,6 +930,17 @@ type ValidatedSetter orm.S
 // ValidatedOrderTerm is an order term of a query of Validated.
 type ValidatedOrderTerm orm.O
 
+// Velox is a predicate of Velox. It is a type of its own, as are the
+// assignments and order terms below, so those of another entity do not
+// compile in a query or mutation of this one.
+type Velox orm.P
+
+// VeloxSetter is an assignment of a mutation of Velox.
+type VeloxSetter orm.S
+
+// VeloxOrderTerm is an order term of a query of Velox.
+type VeloxOrderTerm orm.O
+
 // WeightKey is a predicate of WeightKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
 // compile in a query or mutation of this one.

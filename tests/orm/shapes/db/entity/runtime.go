@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrRuntime(v any, i int) any {
 
 // RuntimeEdge is a row of a page of Runtime, with its cursor.
 type RuntimeEdge struct {
-	Node   *Runtime   `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Runtime     `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // RuntimeConnection is one page of Runtime.
 type RuntimeConnection struct {
 	Edges    []*RuntimeEdge `json:"edges"`
-	PageInfo orm.PageInfo   `json:"pageInfo"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var RuntimeMeta = orm.Meta{
 type RuntimeQuery struct{ c orm.QueryCore }
 
 // NewRuntimeQuery returns a query of every Runtime.
-func NewRuntimeQuery(ex orm.Executor) *RuntimeQuery {
+func NewRuntimeQuery(ex velox.Executor) *RuntimeQuery {
 	return &RuntimeQuery{c: orm.QueryCore{M: &RuntimeMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *RuntimeQuery) Iter(ctx context.Context) iter.Seq2[*Runtime, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *RuntimeQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*RuntimeConnection, error) {
+func (q *RuntimeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*RuntimeConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *RuntimeQuery) IDs(ctx context.Context) ([]int, error) {
 type RuntimeCreate struct{ c orm.MutCore }
 
 // NewRuntimeCreate returns a builder that creates a Runtime.
-func NewRuntimeCreate(ex orm.Executor) *RuntimeCreate {
+func NewRuntimeCreate(ex velox.Executor) *RuntimeCreate {
 	return &RuntimeCreate{c: orm.MutCore{M: &RuntimeMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *RuntimeCreate) Exec(ctx context.Context) error {
 
 // RuntimeCreateBulk creates several Runtime rows with one statement.
 type RuntimeCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*RuntimeCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type RuntimeCreateBulk struct {
 // NewRuntimeCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewRuntimeCreateBulk(ex orm.Executor, bs ...*RuntimeCreate) *RuntimeCreateBulk {
+func NewRuntimeCreateBulk(ex velox.Executor, bs ...*RuntimeCreate) *RuntimeCreateBulk {
 	return &RuntimeCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *RuntimeCreateBulk) Exec(ctx context.Context) error {
 type RuntimeUpdate struct{ c orm.MutCore }
 
 // NewRuntimeUpdate returns a builder that updates the rows its predicates match.
-func NewRuntimeUpdate(ex orm.Executor) *RuntimeUpdate {
+func NewRuntimeUpdate(ex velox.Executor) *RuntimeUpdate {
 	return &RuntimeUpdate{c: orm.MutCore{M: &RuntimeMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *RuntimeUpdate) SaveOne(ctx context.Context) (*Runtime, error) {
 type RuntimeDelete struct{ c orm.MutCore }
 
 // NewRuntimeDelete returns a builder that deletes the rows its predicates match.
-func NewRuntimeDelete(ex orm.Executor) *RuntimeDelete {
+func NewRuntimeDelete(ex velox.Executor) *RuntimeDelete {
 	return &RuntimeDelete{c: orm.MutCore{M: &RuntimeMeta, Ex: ex}}
 }
 

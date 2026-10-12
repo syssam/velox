@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -18,43 +19,43 @@ type LabelKeyClient struct{}
 
 // Query returns a query of every LabelKey, to run on ex: a database handle or a
 // transaction.
-func (*LabelKeyClient) Query(ex orm.Executor) *entity.LabelKeyQuery {
+func (*LabelKeyClient) Query(ex velox.Executor) *entity.LabelKeyQuery {
 	return entity.NewLabelKeyQuery(ex)
 }
 
 // Create returns a builder that creates a LabelKey.
-func (*LabelKeyClient) Create(ex orm.Executor) *entity.LabelKeyCreate {
+func (*LabelKeyClient) Create(ex velox.Executor) *entity.LabelKeyCreate {
 	return entity.NewLabelKeyCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*LabelKeyClient) CreateBulk(ex orm.Executor, bs ...*entity.LabelKeyCreate) *entity.LabelKeyCreateBulk {
+func (*LabelKeyClient) CreateBulk(ex velox.Executor, bs ...*entity.LabelKeyCreate) *entity.LabelKeyCreateBulk {
 	return entity.NewLabelKeyCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the LabelKey rows its conditions match.
-func (*LabelKeyClient) Update(ex orm.Executor) *entity.LabelKeyUpdate {
+func (*LabelKeyClient) Update(ex velox.Executor) *entity.LabelKeyUpdate {
 	return entity.NewLabelKeyUpdate(ex)
 }
 
 // Delete returns a builder that deletes the LabelKey rows its conditions match.
-func (*LabelKeyClient) Delete(ex orm.Executor) *entity.LabelKeyDelete {
+func (*LabelKeyClient) Delete(ex velox.Executor) *entity.LabelKeyDelete {
 	return entity.NewLabelKeyDelete(ex)
 }
 
 // Get returns the LabelKey with the given id, or velox.ErrNotFound.
-func (c *LabelKeyClient) Get(ctx context.Context, ex orm.Executor, id types.Label) (*entity.LabelKey, error) {
+func (c *LabelKeyClient) Get(ctx context.Context, ex velox.Executor, id types.Label) (*entity.LabelKey, error) {
 	return c.Query(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the LabelKey with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *LabelKeyClient) UpdateByID(ex orm.Executor, id types.Label) *entity.LabelKeyUpdate {
+func (c *LabelKeyClient) UpdateByID(ex velox.Executor, id types.Label) *entity.LabelKeyUpdate {
 	return c.Update(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the LabelKey with the given id, or returns velox.ErrNotFound.
-func (c *LabelKeyClient) DeleteByID(ctx context.Context, ex orm.Executor, id types.Label) error {
+func (c *LabelKeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id types.Label) error {
 	n, err := c.Delete(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.LabelKeyMeta.NotFound()

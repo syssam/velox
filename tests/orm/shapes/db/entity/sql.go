@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrSql(v any, i int) any {
 
 // SqlEdge is a row of a page of Sql, with its cursor.
 type SqlEdge struct {
-	Node   *Sql       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Sql         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // SqlConnection is one page of Sql.
 type SqlConnection struct {
-	Edges    []*SqlEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*SqlEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,9 @@ var SqlMeta = orm.Meta{
 type SqlQuery struct{ c orm.QueryCore }
 
 // NewSqlQuery returns a query of every Sql.
-func NewSqlQuery(ex orm.Executor) *SqlQuery { return &SqlQuery{c: orm.QueryCore{M: &SqlMeta, Ex: ex}} }
+func NewSqlQuery(ex velox.Executor) *SqlQuery {
+	return &SqlQuery{c: orm.QueryCore{M: &SqlMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +214,7 @@ func (q *SqlQuery) Iter(ctx context.Context) iter.Seq2[*Sql, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *SqlQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*SqlConnection, error) {
+func (q *SqlQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*SqlConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +255,9 @@ func (q *SqlQuery) IDs(ctx context.Context) ([]int, error) {
 type SqlCreate struct{ c orm.MutCore }
 
 // NewSqlCreate returns a builder that creates a Sql.
-func NewSqlCreate(ex orm.Executor) *SqlCreate { return &SqlCreate{c: orm.MutCore{M: &SqlMeta, Ex: ex}} }
+func NewSqlCreate(ex velox.Executor) *SqlCreate {
+	return &SqlCreate{c: orm.MutCore{M: &SqlMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +303,7 @@ func (b *SqlCreate) Exec(ctx context.Context) error {
 
 // SqlCreateBulk creates several Sql rows with one statement.
 type SqlCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*SqlCreate
 	n  int
 }
@@ -306,7 +311,7 @@ type SqlCreateBulk struct {
 // NewSqlCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewSqlCreateBulk(ex orm.Executor, bs ...*SqlCreate) *SqlCreateBulk {
+func NewSqlCreateBulk(ex velox.Executor, bs ...*SqlCreate) *SqlCreateBulk {
 	return &SqlCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +364,9 @@ func (b *SqlCreateBulk) Exec(ctx context.Context) error {
 type SqlUpdate struct{ c orm.MutCore }
 
 // NewSqlUpdate returns a builder that updates the rows its predicates match.
-func NewSqlUpdate(ex orm.Executor) *SqlUpdate { return &SqlUpdate{c: orm.MutCore{M: &SqlMeta, Ex: ex}} }
+func NewSqlUpdate(ex velox.Executor) *SqlUpdate {
+	return &SqlUpdate{c: orm.MutCore{M: &SqlMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +430,9 @@ func (b *SqlUpdate) SaveOne(ctx context.Context) (*Sql, error) {
 type SqlDelete struct{ c orm.MutCore }
 
 // NewSqlDelete returns a builder that deletes the rows its predicates match.
-func NewSqlDelete(ex orm.Executor) *SqlDelete { return &SqlDelete{c: orm.MutCore{M: &SqlMeta, Ex: ex}} }
+func NewSqlDelete(ex velox.Executor) *SqlDelete {
+	return &SqlDelete{c: orm.MutCore{M: &SqlMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //

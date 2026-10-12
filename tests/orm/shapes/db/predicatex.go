@@ -4,6 +4,7 @@ package db
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	entity "github.com/syssam/velox/tests/orm/shapes/db/entity"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -17,43 +18,43 @@ type PredicateClient struct{}
 
 // Query returns a query of every Predicate, to run on ex: a database handle or a
 // transaction.
-func (*PredicateClient) Query(ex orm.Executor) *entity.PredicateQuery {
+func (*PredicateClient) Query(ex velox.Executor) *entity.PredicateQuery {
 	return entity.NewPredicateQuery(ex)
 }
 
 // Create returns a builder that creates a Predicate.
-func (*PredicateClient) Create(ex orm.Executor) *entity.PredicateCreate {
+func (*PredicateClient) Create(ex velox.Executor) *entity.PredicateCreate {
 	return entity.NewPredicateCreate(ex)
 }
 
 // CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*PredicateClient) CreateBulk(ex orm.Executor, bs ...*entity.PredicateCreate) *entity.PredicateCreateBulk {
+func (*PredicateClient) CreateBulk(ex velox.Executor, bs ...*entity.PredicateCreate) *entity.PredicateCreateBulk {
 	return entity.NewPredicateCreateBulk(ex, bs...)
 }
 
 // Update returns a builder that updates the Predicate rows its conditions match.
-func (*PredicateClient) Update(ex orm.Executor) *entity.PredicateUpdate {
+func (*PredicateClient) Update(ex velox.Executor) *entity.PredicateUpdate {
 	return entity.NewPredicateUpdate(ex)
 }
 
 // Delete returns a builder that deletes the Predicate rows its conditions match.
-func (*PredicateClient) Delete(ex orm.Executor) *entity.PredicateDelete {
+func (*PredicateClient) Delete(ex velox.Executor) *entity.PredicateDelete {
 	return entity.NewPredicateDelete(ex)
 }
 
 // Get returns the Predicate with the given id, or velox.ErrNotFound.
-func (c *PredicateClient) Get(ctx context.Context, ex orm.Executor, id int) (*entity.Predicate, error) {
+func (c *PredicateClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Predicate, error) {
 	return c.Query(ex).Where(predicate.Predicate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
 // UpdateByID returns a builder that updates the Predicate with the given id; end it
 // with SaveOne, which reports a missing row.
-func (c *PredicateClient) UpdateByID(ex orm.Executor, id int) *entity.PredicateUpdate {
+func (c *PredicateClient) UpdateByID(ex velox.Executor, id int) *entity.PredicateUpdate {
 	return c.Update(ex).Where(predicate.Predicate(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
 // DeleteByID deletes the Predicate with the given id, or returns velox.ErrNotFound.
-func (c *PredicateClient) DeleteByID(ctx context.Context, ex orm.Executor, id int) error {
+func (c *PredicateClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Predicate(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {
 		err = entity.PredicateMeta.NotFound()

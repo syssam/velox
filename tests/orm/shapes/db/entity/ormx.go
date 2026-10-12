@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrOrm(v any, i int) any {
 
 // OrmEdge is a row of a page of Orm, with its cursor.
 type OrmEdge struct {
-	Node   *Orm       `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Orm         `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // OrmConnection is one page of Orm.
 type OrmConnection struct {
-	Edges    []*OrmEdge   `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*OrmEdge     `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,9 @@ var OrmMeta = orm.Meta{
 type OrmQuery struct{ c orm.QueryCore }
 
 // NewOrmQuery returns a query of every Orm.
-func NewOrmQuery(ex orm.Executor) *OrmQuery { return &OrmQuery{c: orm.QueryCore{M: &OrmMeta, Ex: ex}} }
+func NewOrmQuery(ex velox.Executor) *OrmQuery {
+	return &OrmQuery{c: orm.QueryCore{M: &OrmMeta, Ex: ex}}
+}
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +214,7 @@ func (q *OrmQuery) Iter(ctx context.Context) iter.Seq2[*Orm, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *OrmQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*OrmConnection, error) {
+func (q *OrmQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*OrmConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +255,9 @@ func (q *OrmQuery) IDs(ctx context.Context) ([]int, error) {
 type OrmCreate struct{ c orm.MutCore }
 
 // NewOrmCreate returns a builder that creates a Orm.
-func NewOrmCreate(ex orm.Executor) *OrmCreate { return &OrmCreate{c: orm.MutCore{M: &OrmMeta, Ex: ex}} }
+func NewOrmCreate(ex velox.Executor) *OrmCreate {
+	return &OrmCreate{c: orm.MutCore{M: &OrmMeta, Ex: ex}}
+}
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +303,7 @@ func (b *OrmCreate) Exec(ctx context.Context) error {
 
 // OrmCreateBulk creates several Orm rows with one statement.
 type OrmCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*OrmCreate
 	n  int
 }
@@ -306,7 +311,7 @@ type OrmCreateBulk struct {
 // NewOrmCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewOrmCreateBulk(ex orm.Executor, bs ...*OrmCreate) *OrmCreateBulk {
+func NewOrmCreateBulk(ex velox.Executor, bs ...*OrmCreate) *OrmCreateBulk {
 	return &OrmCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +364,9 @@ func (b *OrmCreateBulk) Exec(ctx context.Context) error {
 type OrmUpdate struct{ c orm.MutCore }
 
 // NewOrmUpdate returns a builder that updates the rows its predicates match.
-func NewOrmUpdate(ex orm.Executor) *OrmUpdate { return &OrmUpdate{c: orm.MutCore{M: &OrmMeta, Ex: ex}} }
+func NewOrmUpdate(ex velox.Executor) *OrmUpdate {
+	return &OrmUpdate{c: orm.MutCore{M: &OrmMeta, Ex: ex}}
+}
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +430,9 @@ func (b *OrmUpdate) SaveOne(ctx context.Context) (*Orm, error) {
 type OrmDelete struct{ c orm.MutCore }
 
 // NewOrmDelete returns a builder that deletes the rows its predicates match.
-func NewOrmDelete(ex orm.Executor) *OrmDelete { return &OrmDelete{c: orm.MutCore{M: &OrmMeta, Ex: ex}} }
+func NewOrmDelete(ex velox.Executor) *OrmDelete {
+	return &OrmDelete{c: orm.MutCore{M: &OrmMeta, Ex: ex}}
+}
 
 // Where restricts the rows deleted; all predicates must hold.
 //

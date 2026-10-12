@@ -1,12 +1,31 @@
-// Package orm is the runtime of generated code: one entity-agnostic
-// implementation of queries, mutations, eager loading and transactions that
-// the thin generated wrappers of every entity delegate to.
+// Package orm is the runtime of the code cmd/velox-gen generates: one
+// implementation of queries, mutations, eager loading and paging, for every
+// entity, that the thin generated types delegate to.
 //
-// The exported types of this package are deliberately small and mention no
-// SQL-builder type. Generated code and application code name them in
-// signatures, and the Go compiler writes every type a signature reaches into
-// each package's export data; a wide type here would be paid for in every
-// package of the application.
+// An application rarely names this package. What it writes most is in
+// package velox: the database handle and the transaction (velox.DB, velox.Tx,
+// velox.Executor), the errors (velox.ErrNotFound, velox.IsNotFound, ...), the
+// types of a paged list (velox.Cursor, velox.PageInfo) and velox.Must. It
+// comes here for what the typed API of the generated packages cannot say:
+//
+//   - a condition, an order or a statement written against the SQL builder:
+//     Raw, RawOrder, Compile, ExecSQL, QuerySQL;
+//   - conditions built at run time or over any entity: FieldPredicate,
+//     FieldOrder, And, Or, Not, IsZero, and the Column interfaces;
+//   - a grouped read: Count, Sum, Min, Max, Mean, As;
+//   - a hook or an interceptor that works on the query or the mutation
+//     itself: Query, Mutation, TraverseFunc, InterceptFunc.
+//
+// The rest is for generated code: Meta, FieldMeta and EdgeMeta describe an
+// entity; QueryCore and MutCore are what its query and mutation types wrap;
+// P, S and O are a condition, an assignment and an order term as data;
+// WhereField, Where, DecodeWhere and EncodeWhere are behind the where inputs
+// of the GraphQL layer.
+//
+// The exported types here are deliberately small and mention no SQL-builder
+// type. Generated code names them in signatures, and the Go compiler writes
+// every type a signature reaches into each package's export data; a wide
+// type here would be paid for in every package of the application.
 package orm
 
 import (

@@ -655,7 +655,7 @@ func (Owner) Annotations() []schema.Annotation { return []schema.Annotation{grap
 `,
 		want: builds,
 		generated: map[string][]string{"entity/owner.go": {
-			"func (e *Owner) Bares(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*BareConnection, error)",
+			"func (e *Owner) Bares(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*BareConnection, error)",
 		}}},
 	// Names velox's schema loader rejects before the generator runs.
 	{name: "entity named Query", schema: labelEntities("Query"),

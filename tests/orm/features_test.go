@@ -38,7 +38,7 @@ func TestByID_GetUpdateOneDeleteOne(t *testing.T) {
 	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// Get is a plain function: it can be handed to a generic helper.
-	fetch := func(get func(context.Context, orm.Executor, int) (*entity.User, error)) (*entity.User, error) {
+	fetch := func(get func(context.Context, velox.Executor, int) (*entity.User, error)) (*entity.User, error) {
 		return get(ctx, db, u.ID)
 	}
 	_, err = fetch(client.User.Get)
@@ -218,7 +218,7 @@ func TestExecAndQuerySQL(t *testing.T) {
 	u := newUser(t, db, "ann", 30)
 
 	// A statement issued through a transaction is part of it.
-	err := db.RunTx(ctx, func(tx *orm.Tx) error {
+	err := db.RunTx(ctx, func(tx *velox.Tx) error {
 		if _, err := orm.ExecSQL(ctx, tx, "UPDATE users SET age = age + 1"); err != nil {
 			return err
 		}
@@ -251,7 +251,7 @@ func TestLocks(t *testing.T) {
 	ann := newUser(t, db, "ann", 30)
 	newPost(t, db, ann, "a1")
 
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		u, err := client.User.Query(tx).Where(user.ID.EQ(ann.ID)).ForUpdate().Only(ctx)
 		if err != nil {
 			return err
@@ -370,31 +370,31 @@ func TestExecutorIsBoundAtTheHead(t *testing.T) {
 	ann := newUser(t, db, "ann", 30)
 	newPost(t, db, ann, "p1")
 
-	var noTx *orm.Tx
-	for name, ex := range map[string]orm.Executor{"nil": nil, "nil transaction": noTx} {
+	var noTx *velox.Tx
+	for name, ex := range map[string]velox.Executor{"nil": nil, "nil transaction": noTx} {
 		_, err := client.User.Query(ex).All(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.Query(ex).Count(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.Query(ex).Paginate(ctx, nil, nil, nil, nil)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.Query(ex).Select().Aggregate(orm.Count()).Int(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		for _, err := range client.User.Query(ex).Iter(ctx) {
-			require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+			require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		}
 		_, err = client.User.Create(ex).Set(user.Name.Set("x")).Save(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.Update(ex).Set(user.Age.Set(1)).Exec(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.UpdateByID(ex, ann.ID).Set(user.Age.Set(1)).SaveOne(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.Delete(ex).Exec(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = client.User.CreateBulk(ex, client.User.Create(db).Set(user.Name.Set("x"))).Save(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 		_, err = ann.QueryPosts(ex).All(ctx)
-		require.ErrorIs(t, err, orm.ErrNoExecutor, name)
+		require.ErrorIs(t, err, velox.ErrNoExecutor, name)
 	}
 	n, err := client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
@@ -402,7 +402,7 @@ func TestExecutorIsBoundAtTheHead(t *testing.T) {
 
 	// A builder is finished and run by whoever holds it; nothing but the
 	// builder has to be passed along.
-	build := func(ex orm.Executor) *entity.UserQuery { return client.User.Query(ex).Where(user.Age.GTE(18)) }
+	build := func(ex velox.Executor) *entity.UserQuery { return client.User.Query(ex).Where(user.Age.GTE(18)) }
 	run := func(q *entity.UserQuery) (int, error) { return q.OrderBy(user.ID.Asc()).Count(ctx) }
 	n, err = run(build(db))
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func TestExecutorIsBoundAtTheHead(t *testing.T) {
 
 	// The rows of a bulk create come from the builders; the statement runs
 	// on the handle CreateBulk was given.
-	require.NoError(t, db.RunTx(ctx, func(tx *orm.Tx) error {
+	require.NoError(t, db.RunTx(ctx, func(tx *velox.Tx) error {
 		_, err := client.User.CreateBulk(tx, client.User.Create(nil).Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40))).Save(ctx)
 		return err
 	}))
@@ -512,7 +512,7 @@ func TestTxOptions(t *testing.T) {
 	newUser(t, db, "ann", 30)
 	opts := &stdsql.TxOptions{ReadOnly: true}
 	var n int
-	err := db.RunTxOptions(ctx, opts, func(tx *orm.Tx) error {
+	err := db.RunTxOptions(ctx, opts, func(tx *velox.Tx) error {
 		var err error
 		n, err = client.User.Query(tx).Count(ctx)
 		return err
@@ -520,7 +520,7 @@ func TestTxOptions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	err = db.RunTxOptions(ctx, opts, func(tx *orm.Tx) error {
+	err = db.RunTxOptions(ctx, opts, func(tx *velox.Tx) error {
 		_, err := client.User.Create(tx).Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40)).Save(ctx)
 		return err
 	})
@@ -531,7 +531,7 @@ func TestTxOptions(t *testing.T) {
 	// Commit does nothing.
 	tx, err := db.BeginTx(ctx, &stdsql.TxOptions{Isolation: stdsql.LevelSerializable})
 	require.NoError(t, err)
-	defer func() { assert.ErrorIs(t, tx.Rollback(), orm.ErrTxDone) }()
+	defer func() { assert.ErrorIs(t, tx.Rollback(), velox.ErrTxDone) }()
 	_, err = client.User.UpdateByID(tx, 1).Set(user.Age.Set(31)).SaveOne(ctx)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
@@ -824,7 +824,7 @@ func TestCreateBulk_BatchSize(t *testing.T) {
 	assert.Zero(t, n, "a row of the failed batch, or of one after it")
 
 	// The same in a transaction that is rolled back for the error: nothing.
-	err = db.RunTx(ctx, func(tx *orm.Tx) error {
+	err = db.RunTx(ctx, func(tx *velox.Tx) error {
 		return client.User.CreateBulk(tx, rows("v", "w", "x", "a")...).BatchSize(3).Exec(ctx)
 	})
 	require.True(t, velox.IsConstraintError(err), "%v", err)

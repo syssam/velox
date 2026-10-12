@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/db/entity"
 	"github.com/syssam/velox/tests/orm/shapes/db/scalar"
 )
@@ -198,7 +197,7 @@ var (
 
 // nullOptionals stores NULL in every Optional column of the Scalar row seq,
 // with raw SQL: the ORM itself never leaves such a column NULL on create.
-func nullOptionals(t *testing.T, db *orm.DB, seq int) {
+func nullOptionals(t *testing.T, db *velox.DB, seq int) {
 	t.Helper()
 	for _, col := range append(append([]string{}, scalarOptCols...), scalarNilCols...) {
 		rawExec(t, db, "UPDATE scalars SET "+col+" = NULL WHERE seq = ?", seq)

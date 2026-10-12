@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrPredicate(v any, i int) any {
 
 // PredicateEdge is a row of a page of Predicate, with its cursor.
 type PredicateEdge struct {
-	Node   *Predicate `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Predicate   `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PredicateConnection is one page of Predicate.
 type PredicateConnection struct {
 	Edges    []*PredicateEdge `json:"edges"`
-	PageInfo orm.PageInfo     `json:"pageInfo"`
+	PageInfo velox.PageInfo   `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var PredicateMeta = orm.Meta{
 type PredicateQuery struct{ c orm.QueryCore }
 
 // NewPredicateQuery returns a query of every Predicate.
-func NewPredicateQuery(ex orm.Executor) *PredicateQuery {
+func NewPredicateQuery(ex velox.Executor) *PredicateQuery {
 	return &PredicateQuery{c: orm.QueryCore{M: &PredicateMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *PredicateQuery) Iter(ctx context.Context) iter.Seq2[*Predicate, error] 
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PredicateQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PredicateConnection, error) {
+func (q *PredicateQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PredicateConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *PredicateQuery) IDs(ctx context.Context) ([]int, error) {
 type PredicateCreate struct{ c orm.MutCore }
 
 // NewPredicateCreate returns a builder that creates a Predicate.
-func NewPredicateCreate(ex orm.Executor) *PredicateCreate {
+func NewPredicateCreate(ex velox.Executor) *PredicateCreate {
 	return &PredicateCreate{c: orm.MutCore{M: &PredicateMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *PredicateCreate) Exec(ctx context.Context) error {
 
 // PredicateCreateBulk creates several Predicate rows with one statement.
 type PredicateCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PredicateCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type PredicateCreateBulk struct {
 // NewPredicateCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPredicateCreateBulk(ex orm.Executor, bs ...*PredicateCreate) *PredicateCreateBulk {
+func NewPredicateCreateBulk(ex velox.Executor, bs ...*PredicateCreate) *PredicateCreateBulk {
 	return &PredicateCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *PredicateCreateBulk) Exec(ctx context.Context) error {
 type PredicateUpdate struct{ c orm.MutCore }
 
 // NewPredicateUpdate returns a builder that updates the rows its predicates match.
-func NewPredicateUpdate(ex orm.Executor) *PredicateUpdate {
+func NewPredicateUpdate(ex velox.Executor) *PredicateUpdate {
 	return &PredicateUpdate{c: orm.MutCore{M: &PredicateMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *PredicateUpdate) SaveOne(ctx context.Context) (*Predicate, error) {
 type PredicateDelete struct{ c orm.MutCore }
 
 // NewPredicateDelete returns a builder that deletes the rows its predicates match.
-func NewPredicateDelete(ex orm.Executor) *PredicateDelete {
+func NewPredicateDelete(ex velox.Executor) *PredicateDelete {
 	return &PredicateDelete{c: orm.MutCore{M: &PredicateMeta, Ex: ex}}
 }
 

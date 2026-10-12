@@ -157,14 +157,14 @@ func linkPost(dst any, es []any) {
 
 // PostEdge is a row of a page of Post, with its cursor.
 type PostEdge struct {
-	Node   *Post      `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Post        `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PostConnection is one page of Post.
 type PostConnection struct {
-	Edges    []*PostEdge  `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*PostEdge    `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -197,7 +197,7 @@ var PostMeta = orm.Meta{
 type PostQuery struct{ c orm.QueryCore }
 
 // NewPostQuery returns a query of every Post.
-func NewPostQuery(ex orm.Executor) *PostQuery {
+func NewPostQuery(ex velox.Executor) *PostQuery {
 	return &PostQuery{c: orm.QueryCore{M: &PostMeta, Ex: ex}}
 }
 
@@ -342,7 +342,7 @@ func (q *PostQuery) Iter(ctx context.Context) iter.Seq2[*Post, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PostQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PostConnection, error) {
+func (q *PostQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PostConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -383,7 +383,7 @@ func (q *PostQuery) IDs(ctx context.Context) ([]int, error) {
 type PostCreate struct{ c orm.MutCore }
 
 // NewPostCreate returns a builder that creates a Post.
-func NewPostCreate(ex orm.Executor) *PostCreate {
+func NewPostCreate(ex velox.Executor) *PostCreate {
 	return &PostCreate{c: orm.MutCore{M: &PostMeta, Ex: ex}}
 }
 
@@ -431,7 +431,7 @@ func (b *PostCreate) Exec(ctx context.Context) error {
 
 // PostCreateBulk creates several Post rows with one statement.
 type PostCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PostCreate
 	n  int
 }
@@ -439,7 +439,7 @@ type PostCreateBulk struct {
 // NewPostCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPostCreateBulk(ex orm.Executor, bs ...*PostCreate) *PostCreateBulk {
+func NewPostCreateBulk(ex velox.Executor, bs ...*PostCreate) *PostCreateBulk {
 	return &PostCreateBulk{ex: ex, bs: bs}
 }
 
@@ -492,7 +492,7 @@ func (b *PostCreateBulk) Exec(ctx context.Context) error {
 type PostUpdate struct{ c orm.MutCore }
 
 // NewPostUpdate returns a builder that updates the rows its predicates match.
-func NewPostUpdate(ex orm.Executor) *PostUpdate {
+func NewPostUpdate(ex velox.Executor) *PostUpdate {
 	return &PostUpdate{c: orm.MutCore{M: &PostMeta, Ex: ex}}
 }
 
@@ -558,7 +558,7 @@ func (b *PostUpdate) SaveOne(ctx context.Context) (*Post, error) {
 type PostDelete struct{ c orm.MutCore }
 
 // NewPostDelete returns a builder that deletes the rows its predicates match.
-func NewPostDelete(ex orm.Executor) *PostDelete {
+func NewPostDelete(ex velox.Executor) *PostDelete {
 	return &PostDelete{c: orm.MutCore{M: &PostMeta, Ex: ex}}
 }
 
@@ -581,7 +581,7 @@ func (b *PostDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(
 // QueryAuthor queries the "author" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Post) QueryAuthor(ex orm.Executor) *UserQuery {
+func (e *Post) QueryAuthor(ex velox.Executor) *UserQuery {
 	q := NewUserQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PostMeta.Edges[0], e))
 	return q
@@ -604,7 +604,7 @@ func (q *PostQuery) WithAuthor(opts ...*UserQuery) *PostQuery {
 // QueryComments queries the "comments" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Post) QueryComments(ex orm.Executor) *CommentQuery {
+func (e *Post) QueryComments(ex velox.Executor) *CommentQuery {
 	q := NewCommentQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PostMeta.Edges[1], e))
 	return q
@@ -627,7 +627,7 @@ func (q *PostQuery) WithComments(opts ...*CommentQuery) *PostQuery {
 // QueryTags queries the "tags" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Post) QueryTags(ex orm.Executor) *TagQuery {
+func (e *Post) QueryTags(ex velox.Executor) *TagQuery {
 	q := NewTagQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PostMeta.Edges[2], e))
 	return q
@@ -650,7 +650,7 @@ func (q *PostQuery) WithTags(opts ...*TagQuery) *PostQuery {
 // QueryLikers queries the "likers" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Post) QueryLikers(ex orm.Executor) *UserQuery {
+func (e *Post) QueryLikers(ex velox.Executor) *UserQuery {
 	q := NewUserQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PostMeta.Edges[3], e))
 	return q
@@ -673,7 +673,7 @@ func (q *PostQuery) WithLikers(opts ...*UserQuery) *PostQuery {
 // QueryLikes queries the "likes" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Post) QueryLikes(ex orm.Executor) *LikeQuery {
+func (e *Post) QueryLikes(ex velox.Executor) *LikeQuery {
 	q := NewLikeQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PostMeta.Edges[4], e))
 	return q
@@ -711,8 +711,8 @@ var postOrderColumns = map[string]string{
 // PostOrder is the ordering a request asks for: the orderBy argument of a
 // GraphQL connection. Without a Field it orders by the id.
 type PostOrder struct {
-	Direction orm.OrderDirection `json:"direction"`
-	Field     post.OrderField    `json:"field"`
+	Direction velox.OrderDirection `json:"direction"`
+	Field     post.OrderField      `json:"field"`
 }
 
 // Term returns the order term of the input, for OrderBy; the term of a nil
@@ -727,24 +727,24 @@ func (o *PostOrder) Term() predicate.PostOrderTerm {
 }
 
 // Author resolves the "author" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (orm.WithExecutor).
+// loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Post) Author(ctx context.Context) (*User, error) {
 	v, err := e.Edges.AuthorOrErr()
 	if velox.IsNotLoaded(err) {
-		v, err = e.QueryAuthor(orm.ExecutorFrom(ctx)).Only(ctx)
+		v, err = e.QueryAuthor(velox.ExecutorFrom(ctx)).Only(ctx)
 	}
 	return v, velox.MaskNotFound(err)
 }
 
 // Comments resolves the "comments" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).
+// neighbors, queried on the handle of the context (velox.WithExecutor).
 //
 //go:noinline
-func (e *Post) Comments(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy []*CommentOrder) (*CommentConnection, error) {
-	q := e.QueryComments(orm.ExecutorFrom(ctx))
+func (e *Post) Comments(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy []*CommentOrder) (*CommentConnection, error) {
+	q := e.QueryComments(velox.ExecutorFrom(ctx))
 	for _, o := range orderBy {
 		q.OrderBy(o.Term())
 	}
@@ -752,21 +752,21 @@ func (e *Post) Comments(ctx context.Context, after *orm.Cursor, first *int, befo
 }
 
 // Tags resolves the "tags" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).
+// neighbors, queried on the handle of the context (velox.WithExecutor).
 //
 //go:noinline
-func (e *Post) Tags(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *TagOrder) (*TagConnection, error) {
-	q := e.QueryTags(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+func (e *Post) Tags(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *TagOrder) (*TagConnection, error) {
+	q := e.QueryTags(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
 	return q.Paginate(ctx, after, first, before, last)
 }
 
 // Likers resolves the "likers" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).
+// neighbors, queried on the handle of the context (velox.WithExecutor).
 // where is a *filter.UserWhereInput, or nil.
 //
 //go:noinline
-func (e *Post) Likers(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy []*UserOrder, where interface{ P() predicate.User }) (*UserConnection, error) {
-	q := e.QueryLikers(orm.ExecutorFrom(ctx))
+func (e *Post) Likers(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy []*UserOrder, where interface{ P() predicate.User }) (*UserConnection, error) {
+	q := e.QueryLikers(velox.ExecutorFrom(ctx))
 	if where != nil {
 		q.Where(where.P())
 	}
@@ -777,11 +777,11 @@ func (e *Post) Likers(ctx context.Context, after *orm.Cursor, first *int, before
 }
 
 // Likes resolves the "likes" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (orm.WithExecutor).
+// neighbors, queried on the handle of the context (velox.WithExecutor).
 //
 //go:noinline
-func (e *Post) Likes(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int, orderBy *LikeOrder) (*LikeConnection, error) {
-	q := e.QueryLikes(orm.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
+func (e *Post) Likes(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *LikeOrder) (*LikeConnection, error) {
+	q := e.QueryLikes(velox.ExecutorFrom(ctx)).OrderBy(orderBy.Term())
 	return q.Paginate(ctx, after, first, before, last)
 }
 

@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrOrder(v any, i int) any {
 
 // OrderEdge is a row of a page of Order, with its cursor.
 type OrderEdge struct {
-	Node   *Order     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Order       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // OrderConnection is one page of Order.
 type OrderConnection struct {
-	Edges    []*OrderEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*OrderEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var OrderMeta = orm.Meta{
 type OrderQuery struct{ c orm.QueryCore }
 
 // NewOrderQuery returns a query of every Order.
-func NewOrderQuery(ex orm.Executor) *OrderQuery {
+func NewOrderQuery(ex velox.Executor) *OrderQuery {
 	return &OrderQuery{c: orm.QueryCore{M: &OrderMeta, Ex: ex}}
 }
 
@@ -213,7 +214,7 @@ func (q *OrderQuery) Iter(ctx context.Context) iter.Seq2[*Order, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *OrderQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*OrderConnection, error) {
+func (q *OrderQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*OrderConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -254,7 +255,7 @@ func (q *OrderQuery) IDs(ctx context.Context) ([]int, error) {
 type OrderCreate struct{ c orm.MutCore }
 
 // NewOrderCreate returns a builder that creates a Order.
-func NewOrderCreate(ex orm.Executor) *OrderCreate {
+func NewOrderCreate(ex velox.Executor) *OrderCreate {
 	return &OrderCreate{c: orm.MutCore{M: &OrderMeta, Ex: ex}}
 }
 
@@ -302,7 +303,7 @@ func (b *OrderCreate) Exec(ctx context.Context) error {
 
 // OrderCreateBulk creates several Order rows with one statement.
 type OrderCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*OrderCreate
 	n  int
 }
@@ -310,7 +311,7 @@ type OrderCreateBulk struct {
 // NewOrderCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewOrderCreateBulk(ex orm.Executor, bs ...*OrderCreate) *OrderCreateBulk {
+func NewOrderCreateBulk(ex velox.Executor, bs ...*OrderCreate) *OrderCreateBulk {
 	return &OrderCreateBulk{ex: ex, bs: bs}
 }
 
@@ -363,7 +364,7 @@ func (b *OrderCreateBulk) Exec(ctx context.Context) error {
 type OrderUpdate struct{ c orm.MutCore }
 
 // NewOrderUpdate returns a builder that updates the rows its predicates match.
-func NewOrderUpdate(ex orm.Executor) *OrderUpdate {
+func NewOrderUpdate(ex velox.Executor) *OrderUpdate {
 	return &OrderUpdate{c: orm.MutCore{M: &OrderMeta, Ex: ex}}
 }
 
@@ -429,7 +430,7 @@ func (b *OrderUpdate) SaveOne(ctx context.Context) (*Order, error) {
 type OrderDelete struct{ c orm.MutCore }
 
 // NewOrderDelete returns a builder that deletes the rows its predicates match.
-func NewOrderDelete(ex orm.Executor) *OrderDelete {
+func NewOrderDelete(ex velox.Executor) *OrderDelete {
 	return &OrderDelete{c: orm.MutCore{M: &OrderMeta, Ex: ex}}
 }
 

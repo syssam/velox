@@ -85,14 +85,14 @@ func linkPassport(dst any, es []any) {
 
 // PassportEdge is a row of a page of Passport, with its cursor.
 type PassportEdge struct {
-	Node   *Passport  `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Passport    `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // PassportConnection is one page of Passport.
 type PassportConnection struct {
 	Edges    []*PassportEdge `json:"edges"`
-	PageInfo orm.PageInfo    `json:"pageInfo"`
+	PageInfo velox.PageInfo  `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -117,7 +117,7 @@ var PassportMeta = orm.Meta{
 type PassportQuery struct{ c orm.QueryCore }
 
 // NewPassportQuery returns a query of every Passport.
-func NewPassportQuery(ex orm.Executor) *PassportQuery {
+func NewPassportQuery(ex velox.Executor) *PassportQuery {
 	return &PassportQuery{c: orm.QueryCore{M: &PassportMeta, Ex: ex}}
 }
 
@@ -262,7 +262,7 @@ func (q *PassportQuery) Iter(ctx context.Context) iter.Seq2[*Passport, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *PassportQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*PassportConnection, error) {
+func (q *PassportQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*PassportConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -303,7 +303,7 @@ func (q *PassportQuery) IDs(ctx context.Context) ([]int, error) {
 type PassportCreate struct{ c orm.MutCore }
 
 // NewPassportCreate returns a builder that creates a Passport.
-func NewPassportCreate(ex orm.Executor) *PassportCreate {
+func NewPassportCreate(ex velox.Executor) *PassportCreate {
 	return &PassportCreate{c: orm.MutCore{M: &PassportMeta, Ex: ex}}
 }
 
@@ -351,7 +351,7 @@ func (b *PassportCreate) Exec(ctx context.Context) error {
 
 // PassportCreateBulk creates several Passport rows with one statement.
 type PassportCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*PassportCreate
 	n  int
 }
@@ -359,7 +359,7 @@ type PassportCreateBulk struct {
 // NewPassportCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewPassportCreateBulk(ex orm.Executor, bs ...*PassportCreate) *PassportCreateBulk {
+func NewPassportCreateBulk(ex velox.Executor, bs ...*PassportCreate) *PassportCreateBulk {
 	return &PassportCreateBulk{ex: ex, bs: bs}
 }
 
@@ -412,7 +412,7 @@ func (b *PassportCreateBulk) Exec(ctx context.Context) error {
 type PassportUpdate struct{ c orm.MutCore }
 
 // NewPassportUpdate returns a builder that updates the rows its predicates match.
-func NewPassportUpdate(ex orm.Executor) *PassportUpdate {
+func NewPassportUpdate(ex velox.Executor) *PassportUpdate {
 	return &PassportUpdate{c: orm.MutCore{M: &PassportMeta, Ex: ex}}
 }
 
@@ -478,7 +478,7 @@ func (b *PassportUpdate) SaveOne(ctx context.Context) (*Passport, error) {
 type PassportDelete struct{ c orm.MutCore }
 
 // NewPassportDelete returns a builder that deletes the rows its predicates match.
-func NewPassportDelete(ex orm.Executor) *PassportDelete {
+func NewPassportDelete(ex velox.Executor) *PassportDelete {
 	return &PassportDelete{c: orm.MutCore{M: &PassportMeta, Ex: ex}}
 }
 
@@ -501,7 +501,7 @@ func (b *PassportDelete) Exec(ctx context.Context) (int, error) { return b.c.Del
 // QueryOwner queries the "owner" neighbors of e, on ex.
 //
 //go:noinline
-func (e *Passport) QueryOwner(ex orm.Executor) *AuthorQuery {
+func (e *Passport) QueryOwner(ex velox.Executor) *AuthorQuery {
 	q := NewAuthorQuery(ex)
 	q.c.Preds = append(q.c.Preds, orm.NeighborOf(PassportMeta.Edges[0], e))
 	return q

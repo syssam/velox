@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrUserSetter(v any, i int) any {
 
 // UserSetterEdge is a row of a page of UserSetter, with its cursor.
 type UserSetterEdge struct {
-	Node   *UserSetter `json:"node"`
-	Cursor orm.Cursor  `json:"cursor"`
+	Node   *UserSetter  `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // UserSetterConnection is one page of UserSetter.
 type UserSetterConnection struct {
 	Edges    []*UserSetterEdge `json:"edges"`
-	PageInfo orm.PageInfo      `json:"pageInfo"`
+	PageInfo velox.PageInfo    `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var UserSetterMeta = orm.Meta{
 type UserSetterQuery struct{ c orm.QueryCore }
 
 // NewUserSetterQuery returns a query of every UserSetter.
-func NewUserSetterQuery(ex orm.Executor) *UserSetterQuery {
+func NewUserSetterQuery(ex velox.Executor) *UserSetterQuery {
 	return &UserSetterQuery{c: orm.QueryCore{M: &UserSetterMeta, Ex: ex}}
 }
 
@@ -216,7 +217,7 @@ func (q *UserSetterQuery) Iter(ctx context.Context) iter.Seq2[*UserSetter, error
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *UserSetterQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*UserSetterConnection, error) {
+func (q *UserSetterQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*UserSetterConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func (q *UserSetterQuery) IDs(ctx context.Context) ([]int, error) {
 type UserSetterCreate struct{ c orm.MutCore }
 
 // NewUserSetterCreate returns a builder that creates a UserSetter.
-func NewUserSetterCreate(ex orm.Executor) *UserSetterCreate {
+func NewUserSetterCreate(ex velox.Executor) *UserSetterCreate {
 	return &UserSetterCreate{c: orm.MutCore{M: &UserSetterMeta, Ex: ex}}
 }
 
@@ -305,7 +306,7 @@ func (b *UserSetterCreate) Exec(ctx context.Context) error {
 
 // UserSetterCreateBulk creates several UserSetter rows with one statement.
 type UserSetterCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*UserSetterCreate
 	n  int
 }
@@ -313,7 +314,7 @@ type UserSetterCreateBulk struct {
 // NewUserSetterCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewUserSetterCreateBulk(ex orm.Executor, bs ...*UserSetterCreate) *UserSetterCreateBulk {
+func NewUserSetterCreateBulk(ex velox.Executor, bs ...*UserSetterCreate) *UserSetterCreateBulk {
 	return &UserSetterCreateBulk{ex: ex, bs: bs}
 }
 
@@ -366,7 +367,7 @@ func (b *UserSetterCreateBulk) Exec(ctx context.Context) error {
 type UserSetterUpdate struct{ c orm.MutCore }
 
 // NewUserSetterUpdate returns a builder that updates the rows its predicates match.
-func NewUserSetterUpdate(ex orm.Executor) *UserSetterUpdate {
+func NewUserSetterUpdate(ex velox.Executor) *UserSetterUpdate {
 	return &UserSetterUpdate{c: orm.MutCore{M: &UserSetterMeta, Ex: ex}}
 }
 
@@ -432,7 +433,7 @@ func (b *UserSetterUpdate) SaveOne(ctx context.Context) (*UserSetter, error) {
 type UserSetterDelete struct{ c orm.MutCore }
 
 // NewUserSetterDelete returns a builder that deletes the rows its predicates match.
-func NewUserSetterDelete(ex orm.Executor) *UserSetterDelete {
+func NewUserSetterDelete(ex velox.Executor) *UserSetterDelete {
 	return &UserSetterDelete{c: orm.MutCore{M: &UserSetterMeta, Ex: ex}}
 }
 

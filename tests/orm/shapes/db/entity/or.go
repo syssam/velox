@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -38,14 +39,14 @@ func ptrOr(v any, i int) any {
 
 // OrEdge is a row of a page of Or, with its cursor.
 type OrEdge struct {
-	Node   *Or        `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Or          `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // OrConnection is one page of Or.
 type OrConnection struct {
-	Edges    []*OrEdge    `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*OrEdge      `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -68,7 +69,7 @@ var OrMeta = orm.Meta{
 type OrQuery struct{ c orm.QueryCore }
 
 // NewOrQuery returns a query of every Or.
-func NewOrQuery(ex orm.Executor) *OrQuery { return &OrQuery{c: orm.QueryCore{M: &OrMeta, Ex: ex}} }
+func NewOrQuery(ex velox.Executor) *OrQuery { return &OrQuery{c: orm.QueryCore{M: &OrMeta, Ex: ex}} }
 
 // Where adds predicates; all must hold.
 //
@@ -211,7 +212,7 @@ func (q *OrQuery) Iter(ctx context.Context) iter.Seq2[*Or, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *OrQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*OrConnection, error) {
+func (q *OrQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*OrConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -252,7 +253,7 @@ func (q *OrQuery) IDs(ctx context.Context) ([]int, error) {
 type OrCreate struct{ c orm.MutCore }
 
 // NewOrCreate returns a builder that creates a Or.
-func NewOrCreate(ex orm.Executor) *OrCreate { return &OrCreate{c: orm.MutCore{M: &OrMeta, Ex: ex}} }
+func NewOrCreate(ex velox.Executor) *OrCreate { return &OrCreate{c: orm.MutCore{M: &OrMeta, Ex: ex}} }
 
 // Set adds field values and edges of the new row.
 //
@@ -298,7 +299,7 @@ func (b *OrCreate) Exec(ctx context.Context) error {
 
 // OrCreateBulk creates several Or rows with one statement.
 type OrCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*OrCreate
 	n  int
 }
@@ -306,7 +307,7 @@ type OrCreateBulk struct {
 // NewOrCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewOrCreateBulk(ex orm.Executor, bs ...*OrCreate) *OrCreateBulk {
+func NewOrCreateBulk(ex velox.Executor, bs ...*OrCreate) *OrCreateBulk {
 	return &OrCreateBulk{ex: ex, bs: bs}
 }
 
@@ -359,7 +360,7 @@ func (b *OrCreateBulk) Exec(ctx context.Context) error {
 type OrUpdate struct{ c orm.MutCore }
 
 // NewOrUpdate returns a builder that updates the rows its predicates match.
-func NewOrUpdate(ex orm.Executor) *OrUpdate { return &OrUpdate{c: orm.MutCore{M: &OrMeta, Ex: ex}} }
+func NewOrUpdate(ex velox.Executor) *OrUpdate { return &OrUpdate{c: orm.MutCore{M: &OrMeta, Ex: ex}} }
 
 // Set adds assignments and edge changes.
 //
@@ -423,7 +424,7 @@ func (b *OrUpdate) SaveOne(ctx context.Context) (*Or, error) {
 type OrDelete struct{ c orm.MutCore }
 
 // NewOrDelete returns a builder that deletes the rows its predicates match.
-func NewOrDelete(ex orm.Executor) *OrDelete { return &OrDelete{c: orm.MutCore{M: &OrMeta, Ex: ex}} }
+func NewOrDelete(ex velox.Executor) *OrDelete { return &OrDelete{c: orm.MutCore{M: &OrMeta, Ex: ex}} }
 
 // Where restricts the rows deleted; all predicates must hold.
 //

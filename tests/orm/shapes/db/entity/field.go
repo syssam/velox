@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -82,14 +83,14 @@ func linkField(dst any, es []any) {
 
 // FieldEdge is a row of a page of Field, with its cursor.
 type FieldEdge struct {
-	Node   *Field     `json:"node"`
-	Cursor orm.Cursor `json:"cursor"`
+	Node   *Field       `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // FieldConnection is one page of Field.
 type FieldConnection struct {
-	Edges    []*FieldEdge `json:"edges"`
-	PageInfo orm.PageInfo `json:"pageInfo"`
+	Edges    []*FieldEdge   `json:"edges"`
+	PageInfo velox.PageInfo `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -113,7 +114,7 @@ var FieldMeta = orm.Meta{
 type FieldQuery struct{ c orm.QueryCore }
 
 // NewFieldQuery returns a query of every Field.
-func NewFieldQuery(ex orm.Executor) *FieldQuery {
+func NewFieldQuery(ex velox.Executor) *FieldQuery {
 	return &FieldQuery{c: orm.QueryCore{M: &FieldMeta, Ex: ex}}
 }
 
@@ -258,7 +259,7 @@ func (q *FieldQuery) Iter(ctx context.Context) iter.Seq2[*Field, error] {
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *FieldQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*FieldConnection, error) {
+func (q *FieldQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*FieldConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -299,7 +300,7 @@ func (q *FieldQuery) IDs(ctx context.Context) ([]int, error) {
 type FieldCreate struct{ c orm.MutCore }
 
 // NewFieldCreate returns a builder that creates a Field.
-func NewFieldCreate(ex orm.Executor) *FieldCreate {
+func NewFieldCreate(ex velox.Executor) *FieldCreate {
 	return &FieldCreate{c: orm.MutCore{M: &FieldMeta, Ex: ex}}
 }
 
@@ -347,7 +348,7 @@ func (b *FieldCreate) Exec(ctx context.Context) error {
 
 // FieldCreateBulk creates several Field rows with one statement.
 type FieldCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*FieldCreate
 	n  int
 }
@@ -355,7 +356,7 @@ type FieldCreateBulk struct {
 // NewFieldCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewFieldCreateBulk(ex orm.Executor, bs ...*FieldCreate) *FieldCreateBulk {
+func NewFieldCreateBulk(ex velox.Executor, bs ...*FieldCreate) *FieldCreateBulk {
 	return &FieldCreateBulk{ex: ex, bs: bs}
 }
 
@@ -408,7 +409,7 @@ func (b *FieldCreateBulk) Exec(ctx context.Context) error {
 type FieldUpdate struct{ c orm.MutCore }
 
 // NewFieldUpdate returns a builder that updates the rows its predicates match.
-func NewFieldUpdate(ex orm.Executor) *FieldUpdate {
+func NewFieldUpdate(ex velox.Executor) *FieldUpdate {
 	return &FieldUpdate{c: orm.MutCore{M: &FieldMeta, Ex: ex}}
 }
 
@@ -474,7 +475,7 @@ func (b *FieldUpdate) SaveOne(ctx context.Context) (*Field, error) {
 type FieldDelete struct{ c orm.MutCore }
 
 // NewFieldDelete returns a builder that deletes the rows its predicates match.
-func NewFieldDelete(ex orm.Executor) *FieldDelete {
+func NewFieldDelete(ex velox.Executor) *FieldDelete {
 	return &FieldDelete{c: orm.MutCore{M: &FieldMeta, Ex: ex}}
 }
 

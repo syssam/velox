@@ -4,6 +4,7 @@ package entity
 
 import (
 	context "context"
+	velox "github.com/syssam/velox"
 	orm "github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
 	predicate "github.com/syssam/velox/tests/orm/shapes/db/predicate"
@@ -45,14 +46,14 @@ func ptrNamedBytes(v any, i int) any {
 
 // NamedBytesEdge is a row of a page of NamedBytes, with its cursor.
 type NamedBytesEdge struct {
-	Node   *NamedBytes `json:"node"`
-	Cursor orm.Cursor  `json:"cursor"`
+	Node   *NamedBytes  `json:"node"`
+	Cursor velox.Cursor `json:"cursor"`
 }
 
 // NamedBytesConnection is one page of NamedBytes.
 type NamedBytesConnection struct {
 	Edges    []*NamedBytesEdge `json:"edges"`
-	PageInfo orm.PageInfo      `json:"pageInfo"`
+	PageInfo velox.PageInfo    `json:"pageInfo"`
 	// TotalCount is the number of rows the query matches, or -1 when it
 	// was not counted (orm.WithoutTotal).
 	TotalCount int `json:"totalCount"`
@@ -77,7 +78,7 @@ var NamedBytesMeta = orm.Meta{
 type NamedBytesQuery struct{ c orm.QueryCore }
 
 // NewNamedBytesQuery returns a query of every NamedBytes.
-func NewNamedBytesQuery(ex orm.Executor) *NamedBytesQuery {
+func NewNamedBytesQuery(ex velox.Executor) *NamedBytesQuery {
 	return &NamedBytesQuery{c: orm.QueryCore{M: &NamedBytesMeta, Ex: ex}}
 }
 
@@ -225,7 +226,7 @@ func (q *NamedBytesQuery) Iter(ctx context.Context) iter.Seq2[*NamedBytes, error
 // connection, for any kind of list endpoint.
 //
 //go:noinline
-func (q *NamedBytesQuery) Paginate(ctx context.Context, after *orm.Cursor, first *int, before *orm.Cursor, last *int) (*NamedBytesConnection, error) {
+func (q *NamedBytesQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NamedBytesConnection, error) {
 	p, err := q.c.Paginate(ctx, after, first, before, last)
 	if err != nil {
 		return nil, err
@@ -266,7 +267,7 @@ func (q *NamedBytesQuery) IDs(ctx context.Context) ([]int, error) {
 type NamedBytesCreate struct{ c orm.MutCore }
 
 // NewNamedBytesCreate returns a builder that creates a NamedBytes.
-func NewNamedBytesCreate(ex orm.Executor) *NamedBytesCreate {
+func NewNamedBytesCreate(ex velox.Executor) *NamedBytesCreate {
 	return &NamedBytesCreate{c: orm.MutCore{M: &NamedBytesMeta, Ex: ex}}
 }
 
@@ -314,7 +315,7 @@ func (b *NamedBytesCreate) Exec(ctx context.Context) error {
 
 // NamedBytesCreateBulk creates several NamedBytes rows with one statement.
 type NamedBytesCreateBulk struct {
-	ex orm.Executor
+	ex velox.Executor
 	bs []*NamedBytesCreate
 	n  int
 }
@@ -322,7 +323,7 @@ type NamedBytesCreateBulk struct {
 // NewNamedBytesCreateBulk returns a builder that creates one row per given builder, as each
 // is when the rows are inserted: what is set on one after this call is part
 // of its row.
-func NewNamedBytesCreateBulk(ex orm.Executor, bs ...*NamedBytesCreate) *NamedBytesCreateBulk {
+func NewNamedBytesCreateBulk(ex velox.Executor, bs ...*NamedBytesCreate) *NamedBytesCreateBulk {
 	return &NamedBytesCreateBulk{ex: ex, bs: bs}
 }
 
@@ -375,7 +376,7 @@ func (b *NamedBytesCreateBulk) Exec(ctx context.Context) error {
 type NamedBytesUpdate struct{ c orm.MutCore }
 
 // NewNamedBytesUpdate returns a builder that updates the rows its predicates match.
-func NewNamedBytesUpdate(ex orm.Executor) *NamedBytesUpdate {
+func NewNamedBytesUpdate(ex velox.Executor) *NamedBytesUpdate {
 	return &NamedBytesUpdate{c: orm.MutCore{M: &NamedBytesMeta, Ex: ex}}
 }
 
@@ -441,7 +442,7 @@ func (b *NamedBytesUpdate) SaveOne(ctx context.Context) (*NamedBytes, error) {
 type NamedBytesDelete struct{ c orm.MutCore }
 
 // NewNamedBytesDelete returns a builder that deletes the rows its predicates match.
-func NewNamedBytesDelete(ex orm.Executor) *NamedBytesDelete {
+func NewNamedBytesDelete(ex velox.Executor) *NamedBytesDelete {
 	return &NamedBytesDelete{c: orm.MutCore{M: &NamedBytesMeta, Ex: ex}}
 }
 
