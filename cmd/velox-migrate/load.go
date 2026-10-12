@@ -108,9 +108,11 @@ type listed struct {
 	TestGoFiles  []string
 	XTestGoFiles []string
 	ImportMap    map[string]string
-	Standard     bool
-	DepOnly      bool
-	Module       *struct {
+	// Deps are the packages the package imports, directly or not.
+	Deps     []string
+	Standard bool
+	DepOnly  bool
+	Module   *struct {
 		Path string
 		Main bool
 	}
@@ -163,7 +165,7 @@ func newInfo() *types.Info {
 // them in dependency order.
 func load(dir string, patterns []string, generated func(string) bool) (*program, error) {
 	cmd := exec.Command("go", append([]string{"list", "-deps", "-test", "-e", //nolint:gosec // the go command, on the patterns given to this one
-		"-json=ImportPath,Dir,GoFiles,CgoFiles,TestGoFiles,XTestGoFiles,ImportMap,Standard,DepOnly,Module"}, patterns...)...)
+		"-json=ImportPath,Dir,GoFiles,CgoFiles,TestGoFiles,XTestGoFiles,ImportMap,Deps,Standard,DepOnly,Module"}, patterns...)...)
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

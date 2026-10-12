@@ -205,3 +205,7 @@ func (s *Store) AddAndCount(ctx context.Context, name, email string) (inside, af
 	after, err = countUsers(ctx, s.Client)
 	return inside, after, err
 }
+
+// Creating reports whether a mutation creates a row, by the names the
+// generated root package repeats from the library.
+func Creating(m integration.Mutation) bool { return m.Op().Is(integration.OpCreate) }

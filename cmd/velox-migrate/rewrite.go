@@ -81,9 +81,9 @@ func (r *rewriter) velox(pos token.Pos) string { return r.ref(r.lib, "velox", po
 // app names, for the application, a name of the library's root package: the
 // handle, an error, Must. The generated root package gives most of them under
 // its own name (ormgen.RootNames), so that a file which starts its queries
-// there needs one import; that is the name written wherever the file's
-// package already depends on the generated root, and so can import it. A
-// package the schema imports cannot, and names the library.
+// there needs one import; that is the name written wherever the file can
+// import the generated root. A package the schema imports cannot, and names
+// the library.
 func (r *rewriter) app(name string, pos token.Pos) string {
 	if r.s.gives(name) && r.reachesRoot() {
 		return r.root(pos) + "." + name
@@ -145,18 +145,19 @@ func (r *rewriter) libraryNames() {
 	}
 }
 
-// reachesRoot reports whether the package of the file imports the generated
-// root package.
+// reachesRoot reports whether the file can import the generated root
+// package: it does already, or its package is not one the root package
+// imports (the schema and what the schema is written with would close a
+// cycle).
 func (r *rewriter) reachesRoot() bool {
-	if r.pkg == nil {
+	if _, ok := r.names[r.s.root]; ok {
+		return true
+	}
+	if r.pkg == nil || len(r.s.below) == 0 {
 		return false
 	}
-	for _, imp := range r.pkg.Imports() {
-		if imp.Path() == r.s.root {
-			return true
-		}
-	}
-	return false
+	path := r.pkg.Path()
+	return path != r.s.root && !r.s.below[path]
 }
 
 // gqlinput is the runtime of the GraphQL layer of the new generated code:
@@ -2526,9 +2527,10 @@ func (r *rewriter) option(call *ast.CallExpr, name string, obj types.Object, sta
 	r.count("pagination option")
 }
 
-// repeated rewrites a name the generated root package repeated from the
-// library (Mutation, OpCreate, Hook, MutateFunc ...) to the library's, and
-// reports whether it was one.
+// repeated handles a name the generated root package repeated from the
+// library (Mutation, OpCreate, Hook, MutateFunc ...), and reports whether it
+// was one. The new root package gives most of them too, and the name stays
+// as it is written; one it does not give takes the library's.
 func (r *rewriter) repeated(sel *ast.SelectorExpr, obj types.Object) bool {
 	if r.libScope == nil {
 		return false
@@ -2551,7 +2553,7 @@ func (r *rewriter) repeated(sel *ast.SelectorExpr, obj types.Object) bool {
 			return false
 		}
 	}
-	r.replace(sel.X.Pos(), sel.X.End(), r.ref(r.lib, "velox", sel.Pos()))
+	r.replace(sel.Pos(), sel.End(), r.app(obj.Name(), sel.Pos()))
 	r.count("library name")
 	return true
 }

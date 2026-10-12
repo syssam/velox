@@ -25,7 +25,7 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	)
 	gotest := func(dir string) string {
 		t.Helper()
-		cmd := exec.Command("go", "test", "-count=1", "./"+dir) //nolint:gosec // the go command on a directory of this test
+		cmd := exec.Command("go", "test", "-count=1", "./"+dir+"/...") //nolint:gosec // the go command on a directory of this test
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("go test ./%s: %v\n%s", dir, err, out)
@@ -48,12 +48,20 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	if err != nil || len(sources) < 3 {
 		t.Fatal(sources, err)
 	}
+	if err := os.Mkdir(filepath.Join(app, "narrow"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	sources = append(sources, "testdata/app/narrow/narrow.go")
 	for _, src := range sources {
 		data, err := os.ReadFile(src) //nolint:gosec // a file of testdata
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(app, filepath.Base(src)), data, 0o600); err != nil {
+		rel, err := filepath.Rel("testdata/app", src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(app, rel), data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -61,7 +69,7 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	var log bytes.Buffer
 	report := filepath.Join(work, "report.txt")
 	err = run([]string{"-dir", "../..", "-generated", from, "-to", to, "-write", "-report", report,
-		"./cmd/velox-migrate/" + filepath.ToSlash(app)}, &log)
+		"./cmd/velox-migrate/" + filepath.ToSlash(app) + "/..."}, &log)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log.String())
 	}
@@ -183,6 +191,17 @@ next:
 			`"github.com/syssam/velox/tests/orm/velox"`,
 			".BatchSize(size).Save(ctx)",
 			"return errors.Is(err, gqlinput.ErrWhereDepth), gqlinput.MaxWhereDepth",
+			// A name the old root package repeated from the library is one
+			// the new root package gives too.
+			"func Creating(m velox.Mutation) bool { return m.Op().Is(velox.OpCreate) }",
+		},
+		// A package that named the library and not the generated root can
+		// import the root (the root does not import it), and takes the one
+		// import a file needs.
+		"narrow/narrow.go": {
+			"func Gone(_ *entity.User, err error) bool { return velox.IsNotFound(err) }",
+			`"github.com/syssam/velox/tests/orm/velox"`,
+			`"github.com/syssam/velox/tests/orm/velox/entity"`,
 		},
 		"more_test.go": {
 			`require.True(t, orm.IsZero(Scope(true, "ann")))`,
@@ -200,6 +219,9 @@ next:
 			if !strings.Contains(string(text), want) {
 				t.Errorf("the migrated %s does not contain %q:\n%s", file, want, text)
 			}
+		}
+		if file == "narrow/narrow.go" && strings.Contains(string(text), `"github.com/syssam/velox"`) {
+			t.Errorf("the migrated %s still imports the library:\n%s", file, text)
 		}
 	}
 	gotest(app)

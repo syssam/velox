@@ -19,8 +19,12 @@ import (
 type schema struct {
 	// to is the import path of the root package velox-gen generates: root, unless
 	// the new code goes somewhere else.
-	to       string
-	root     string                 // import path of the generated root package
+	to   string
+	root string // import path of the generated root package
+	// below are the packages the generated root package imports, directly
+	// or not: the generated tree, the schema, and what the schema is written
+	// with. None of them can import the root package.
+	below    map[string]bool
 	entities map[string]*entityInfo // by Go name
 	byLeaf   map[string]*entityInfo // by the import path of the entity's own package
 }
@@ -60,7 +64,12 @@ type entityInfo struct {
 }
 
 func readSchema(p *program, root string) (*schema, error) {
-	s := &schema{root: root, entities: map[string]*entityInfo{}, byLeaf: map[string]*entityInfo{}}
+	s := &schema{root: root, entities: map[string]*entityInfo{}, byLeaf: map[string]*entityInfo{}, below: map[string]bool{}}
+	if r := p.pkgs[root]; r != nil && r.l != nil {
+		for _, dep := range r.l.Deps {
+			s.below[dep] = true
+		}
+	}
 	ent := p.pkgs[root+"/entity"]
 	if ent == nil || ent.types == nil {
 		return nil, fmt.Errorf("%s/entity was not found", root)
