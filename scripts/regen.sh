@@ -55,6 +55,7 @@ DRIFT_CHECK_MODULES=(
     examples/globalid
     examples/json-field
     examples/multitenant
+    examples/orm-basic
     examples/realworld
     examples/tree
     examples/versioned-migration
