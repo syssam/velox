@@ -3,17 +3,18 @@
 package entity
 
 import (
-	context "context"
-	slots "example.com/orm-graphql/velox/internal/slots"
-	predicate "example.com/orm-graphql/velox/predicate"
-	todo "example.com/orm-graphql/velox/todo"
-	velox "github.com/syssam/velox"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+	"time"
+
+	"example.com/orm-graphql/velox/internal/slots"
+	"example.com/orm-graphql/velox/predicate"
+	"example.com/orm-graphql/velox/todo"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	iter "iter"
-	slices "slices"
-	time "time"
 )
 
 // Todo is the Todo entity.

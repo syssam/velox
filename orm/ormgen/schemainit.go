@@ -85,7 +85,7 @@ func (g *generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 	if schemaPath == "" {
 		return nil, fmt.Errorf("velox: the graph has no schema package path")
 	}
-	im := newImports()
+	im := g.imports()
 	im.use(ormPath, "orm")
 	slotsPkg := im.use(g.cfg.Package+"/internal/slots", "slots")
 	schemaPkg := im.use(schemaPath, "schemapkg")
@@ -218,7 +218,7 @@ func (g *generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 	out.WriteString("// Package schemainit stitches the defaults, validators, hooks and policies of the schema\n// package into the runtime tables of the entities. The root package of the generated tree\n// imports it, so a program that starts its queries there has them; one that uses the\n// entity package alone imports it itself:\n//\n//\timport _ \"" + g.cfg.Package + "/schemainit\"\npackage schemainit\n\n")
 	// An import block is what split reads the file by, even an empty one.
 	if b.Len() == 0 {
-		im = newImports()
+		im = g.imports()
 	}
 	out.WriteString(im.block())
 	out.WriteString("\n")

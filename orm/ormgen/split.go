@@ -80,7 +80,8 @@ func split(src []byte, common string) (map[string][]byte, error) {
 		return nil, fmt.Errorf("velox: split: want one import declaration, found %d", len(f.Decls))
 	}
 	off := func(p token.Pos) int { return fset.Position(p).Offset }
-	type imp struct{ name, path string }
+	// spec is the import as the generator wrote it, with or without a name.
+	type imp struct{ name, path, spec string }
 	var imps []imp
 	names := map[string]int{}
 	for _, s := range f.Imports {
@@ -95,7 +96,11 @@ func split(src []byte, common string) (map[string][]byte, error) {
 		if name != "_" {
 			names[name] = len(imps)
 		}
-		imps = append(imps, imp{name, path})
+		spec := s.Path.Value
+		if s.Name != nil {
+			spec = s.Name.Name + " " + spec
+		}
+		imps = append(imps, imp{name, path, spec})
 	}
 	preamble := src[:off(f.Decls[0].Pos())]
 	body := src[off(f.Decls[0].End()):]
@@ -155,7 +160,6 @@ func split(src []byte, common string) (map[string][]byte, error) {
 				need = append(need, im)
 			}
 		}
-		sort.Slice(need, func(i, j int) bool { return need[i].path < need[j].path })
 		var w bytes.Buffer
 		if name == common {
 			w.Write(preamble)
@@ -164,11 +168,12 @@ func split(src []byte, common string) (map[string][]byte, error) {
 			w.WriteString(clause)
 		}
 		if len(need) > 0 {
-			w.WriteString("import (\n")
+			specs := make(map[string]string, len(need))
 			for _, im := range need {
-				fmt.Fprintf(&w, "\t%s %q\n", im.name, im.path)
+				specs[im.path] = im.spec
 			}
-			w.WriteString(")\n\n")
+			w.WriteString(importDecl(specs))
+			w.WriteString("\n")
 		}
 		w.Write(bytes.TrimLeft(b.Bytes(), "\n"))
 		src, ferr := formatted(&w, f.Name.Name+"/"+name+".go")

@@ -3,18 +3,19 @@
 package entity
 
 import (
-	context "context"
+	"context"
+	"iter"
+	"slices"
+	"time"
+
 	uuid "github.com/google/uuid"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	wide "github.com/syssam/velox/tests/orm/shapes/velox/wide"
-	iter "iter"
-	slices "slices"
-	time "time"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/wide"
 )
 
 // Wide is the Wide entity.

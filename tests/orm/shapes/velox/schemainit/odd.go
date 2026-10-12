@@ -3,10 +3,10 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
+	"github.com/syssam/velox/orm"
 	schemapkg "github.com/syssam/velox/tests/orm/shapes/schema"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 	oddpkg "github.com/syssam/velox/tests/orm/shapes/velox/odd"
 )
 

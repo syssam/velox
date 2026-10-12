@@ -3,16 +3,17 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+	"time"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	renamed "github.com/syssam/velox/tests/orm/shapes/velox/renamed"
-	iter "iter"
-	slices "slices"
-	time "time"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/renamed"
 )
 
 // Renamed is the Renamed entity.

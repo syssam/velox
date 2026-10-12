@@ -3,11 +3,12 @@
 package velox
 
 import (
-	context "context"
-	entity "example.com/orm-basic/velox/entity"
-	predicate "example.com/orm-basic/velox/predicate"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+
+	"example.com/orm-basic/velox/entity"
+	"example.com/orm-basic/velox/predicate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 )
 
 // User starts the queries and mutations of User.

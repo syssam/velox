@@ -3,10 +3,11 @@
 package schemainit
 
 import (
+	"time"
+
 	schemapkg "example.com/orm-basic/schema"
-	slots "example.com/orm-basic/velox/internal/slots"
-	orm "github.com/syssam/velox/orm"
-	time "time"
+	"example.com/orm-basic/velox/internal/slots"
+	"github.com/syssam/velox/orm"
 )
 
 // init stitches the defaults, validators, hooks and policy of the Comment schema.

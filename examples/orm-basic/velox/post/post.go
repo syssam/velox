@@ -5,8 +5,8 @@
 package post
 
 import (
-	predicate "example.com/orm-basic/velox/predicate"
-	orm "github.com/syssam/velox/orm"
+	"example.com/orm-basic/velox/predicate"
+	"github.com/syssam/velox/orm"
 )
 
 // Table is the table of Post, and ModelName the name of the entity: what the

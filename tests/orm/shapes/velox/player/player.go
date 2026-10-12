@@ -6,8 +6,8 @@ package player
 
 import (
 	uuid "github.com/google/uuid"
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Table is the table of Player, and ModelName the name of the entity: what the

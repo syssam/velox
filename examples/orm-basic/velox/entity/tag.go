@@ -3,15 +3,16 @@
 package entity
 
 import (
-	context "context"
-	slots "example.com/orm-basic/velox/internal/slots"
-	predicate "example.com/orm-basic/velox/predicate"
-	tag "example.com/orm-basic/velox/tag"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"example.com/orm-basic/velox/internal/slots"
+	"example.com/orm-basic/velox/predicate"
+	"example.com/orm-basic/velox/tag"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	iter "iter"
-	slices "slices"
 )
 
 // Tag is the Tag entity.

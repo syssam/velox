@@ -3,8 +3,8 @@
 package stringkey
 
 import (
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // StringIDColumn is a column of Go type string: its methods build the predicates,

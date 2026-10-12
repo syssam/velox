@@ -3,14 +3,15 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	student "github.com/syssam/velox/tests/orm/shapes/velox/student"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/student"
 )
 
 // Student is the Student entity.

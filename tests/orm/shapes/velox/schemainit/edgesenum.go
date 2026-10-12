@@ -3,10 +3,10 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
+	"github.com/syssam/velox/orm"
 	schemapkg "github.com/syssam/velox/tests/orm/shapes/schema"
 	edgesenumpkg "github.com/syssam/velox/tests/orm/shapes/velox/edgesenum"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
 // init stitches the defaults, validators, hooks and policy of the EdgesEnum schema.

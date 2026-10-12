@@ -3,9 +3,10 @@
 package user
 
 import (
-	predicate "example.com/orm-graphql/velox/predicate"
-	orm "github.com/syssam/velox/orm"
-	time "time"
+	"time"
+
+	"example.com/orm-graphql/velox/predicate"
+	"github.com/syssam/velox/orm"
 )
 
 // IntColumn is a column of Go type int: its methods build the predicates,

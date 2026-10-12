@@ -6,9 +6,10 @@
 package velox
 
 import (
-	context "context"
-	sql "database/sql"
-	velox "github.com/syssam/velox"
+	"context"
+	"database/sql"
+
+	"github.com/syssam/velox"
 	_ "github.com/syssam/velox/tests/orm/velox/schemainit"
 )
 

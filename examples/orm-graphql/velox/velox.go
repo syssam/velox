@@ -6,10 +6,11 @@
 package velox
 
 import (
-	context "context"
-	sql "database/sql"
+	"context"
+	"database/sql"
+
 	_ "example.com/orm-graphql/velox/schemainit"
-	velox "github.com/syssam/velox"
+	"github.com/syssam/velox"
 )
 
 // The library's types under this package's name: a file that starts its

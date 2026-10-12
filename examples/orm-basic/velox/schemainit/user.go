@@ -3,11 +3,12 @@
 package schemainit
 
 import (
+	"time"
+
 	schemapkg "example.com/orm-basic/schema"
-	slots "example.com/orm-basic/velox/internal/slots"
+	"example.com/orm-basic/velox/internal/slots"
 	userpkg "example.com/orm-basic/velox/user"
-	orm "github.com/syssam/velox/orm"
-	time "time"
+	"github.com/syssam/velox/orm"
 )
 
 // init stitches the defaults, validators, hooks and policy of the User schema.

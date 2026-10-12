@@ -179,7 +179,7 @@ func columnsFile(e *ent) string {
 // change to one entity rebuilds its package, package entity and what uses them,
 // and not the other 453 per-entity packages.
 func (g *generator) leaf(e *ent) (map[string][]byte, error) {
-	im := newImports()
+	im := g.imports()
 	im.use(ormPath, "orm")
 	im.use(g.cfg.Package+"/predicate", "predicate")
 	var b bytes.Buffer

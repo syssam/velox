@@ -3,12 +3,13 @@
 package velox
 
 import (
-	context "context"
+	"context"
+
 	uuid "github.com/google/uuid"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
-	entity "github.com/syssam/velox/tests/orm/shapes/velox/entity"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Team starts the queries and mutations of Team.

@@ -3,15 +3,16 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	labelkey "github.com/syssam/velox/tests/orm/shapes/velox/labelkey"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/labelkey"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // LabelKey is the LabelKey entity.

@@ -3,8 +3,8 @@
 package int64key
 
 import (
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Int64Column is a column of Go type int64: its methods build the predicates,

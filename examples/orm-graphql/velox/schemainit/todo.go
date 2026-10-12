@@ -3,11 +3,12 @@
 package schemainit
 
 import (
+	"time"
+
 	schemapkg "example.com/orm-graphql/schema"
-	slots "example.com/orm-graphql/velox/internal/slots"
+	"example.com/orm-graphql/velox/internal/slots"
 	todopkg "example.com/orm-graphql/velox/todo"
-	orm "github.com/syssam/velox/orm"
-	time "time"
+	"github.com/syssam/velox/orm"
 )
 
 // init stitches the defaults, validators, hooks and policy of the Todo schema.

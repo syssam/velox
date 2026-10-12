@@ -3,16 +3,17 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	slots "github.com/syssam/velox/tests/orm/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
-	tag "github.com/syssam/velox/tests/orm/velox/tag"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/tests/orm/velox/tag"
 )
 
 // Tag is the Tag entity.

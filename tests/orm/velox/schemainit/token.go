@@ -4,11 +4,11 @@ package schemainit
 
 import (
 	uuid "github.com/google/uuid"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
-	slots "github.com/syssam/velox/tests/orm/velox/internal/slots"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/velox/internal/slots"
 	schemapkg "github.com/syssam/velox/testschema"
-	types "github.com/syssam/velox/testschema/types"
+	"github.com/syssam/velox/testschema/types"
 )
 
 // init stitches the defaults, validators, hooks and policy of the Token schema.

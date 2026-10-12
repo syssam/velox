@@ -3,11 +3,12 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
-	slots "github.com/syssam/velox/tests/orm/velox/internal/slots"
+	"time"
+
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/velox/internal/slots"
 	postpkg "github.com/syssam/velox/tests/orm/velox/post"
 	schemapkg "github.com/syssam/velox/testschema"
-	time "time"
 )
 
 // init stitches the defaults, validators, hooks and policy of the Post schema.

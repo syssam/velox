@@ -3,15 +3,16 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // NamedBool is the NamedBool entity.

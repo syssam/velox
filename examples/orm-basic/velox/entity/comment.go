@@ -3,16 +3,17 @@
 package entity
 
 import (
-	context "context"
-	comment "example.com/orm-basic/velox/comment"
-	slots "example.com/orm-basic/velox/internal/slots"
-	predicate "example.com/orm-basic/velox/predicate"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+	"time"
+
+	"example.com/orm-basic/velox/comment"
+	"example.com/orm-basic/velox/internal/slots"
+	"example.com/orm-basic/velox/predicate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	iter "iter"
-	slices "slices"
-	time "time"
 )
 
 // Comment is the Comment entity.

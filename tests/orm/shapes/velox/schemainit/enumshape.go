@@ -3,11 +3,11 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
+	"github.com/syssam/velox/orm"
 	schemapkg "github.com/syssam/velox/tests/orm/shapes/schema"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	enumshapepkg "github.com/syssam/velox/tests/orm/shapes/velox/enumshape"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
 // init stitches the defaults, validators, hooks and policy of the EnumShape schema.

@@ -3,11 +3,12 @@
 package filter
 
 import (
-	predicate "example.com/orm-graphql/velox/predicate"
-	user "example.com/orm-graphql/velox/user"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
-	io "io"
+	"io"
+
+	"example.com/orm-graphql/velox/predicate"
+	"example.com/orm-graphql/velox/user"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 )
 
 // UserWhereInput is the filter a request gives for a list of User: the where

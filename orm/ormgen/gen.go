@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	vgen "github.com/syssam/velox/compiler/gen"
@@ -188,7 +189,7 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 				g.enumOwner[f], g.enumType[f] = e, t
 			}
 		}
-		g.filterIm = newImports()
+		g.filterIm = g.imports()
 		var err error
 		if schema, err = g.graphql(graph); err != nil {
 			return err
@@ -538,10 +539,31 @@ func (g *generator) edges(e *ent) error {
 type imports struct {
 	byPath map[string]string
 	byName map[string]string
+	// tree is the import path of the generated tree: its packages are
+	// named like their directories.
+	tree string
 }
 
-func newImports() *imports {
-	return &imports{byPath: map[string]string{}, byName: map[string]string{}}
+// imports starts the imports of a generated file.
+func (g *generator) imports() *imports {
+	return &imports{byPath: map[string]string{}, byName: map[string]string{}, tree: g.cfg.Package}
+}
+
+// importSpec is the line of an import declaration: the path alone where the
+// package is known to be named like the last element of its path (the
+// standard library, the library, the generated tree) and is imported under
+// that name, as a person writes it; with the name otherwise. A package of the
+// application (the type of a field, the schema) keeps the name: what its
+// package clause says is not the generator's to assume.
+func importSpec(name, path, tree string) string {
+	plain := name == path[strings.LastIndex(path, "/")+1:] &&
+		(!strings.Contains(strings.SplitN(path, "/", 2)[0], ".") ||
+			path == veloxPath || strings.HasPrefix(path, veloxPath+"/") ||
+			tree != "" && (path == tree || strings.HasPrefix(path, tree+"/")))
+	if plain {
+		return strconv.Quote(path)
+	}
+	return name + " " + strconv.Quote(path)
 }
 
 // use records an import and returns the name to qualify identifiers with.
@@ -561,15 +583,36 @@ func (im *imports) use(path, name string) string {
 }
 
 func (im *imports) block() string {
-	paths := make([]string, 0, len(im.byPath))
-	for p := range im.byPath {
-		paths = append(paths, p)
+	specs := make(map[string]string, len(im.byPath))
+	for p, name := range im.byPath {
+		specs[p] = importSpec(name, p, im.tree)
 	}
-	sort.Strings(paths)
+	return importDecl(specs)
+}
+
+// importDecl writes an import declaration from the line of each path: the
+// standard library first, then the rest, each sorted by path.
+func importDecl(specs map[string]string) string {
+	var std, rest []string
+	for p := range specs {
+		if strings.Contains(strings.SplitN(p, "/", 2)[0], ".") {
+			rest = append(rest, p)
+		} else {
+			std = append(std, p)
+		}
+	}
+	sort.Strings(std)
+	sort.Strings(rest)
 	var b strings.Builder
 	b.WriteString("import (\n")
-	for _, p := range paths {
-		fmt.Fprintf(&b, "\t%s %q\n", im.byPath[p], p)
+	for _, p := range std {
+		b.WriteString("\t" + specs[p] + "\n")
+	}
+	if len(std) > 0 && len(rest) > 0 {
+		b.WriteString("\n")
+	}
+	for _, p := range rest {
+		b.WriteString("\t" + specs[p] + "\n")
 	}
 	b.WriteString(")\n")
 	return b.String()

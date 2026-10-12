@@ -51,7 +51,7 @@ func relConst(r vgen.Rel) string {
 }
 
 func (g *generator) model() (map[string][]byte, error) {
-	im := newImports()
+	im := g.imports()
 	im.use(ormPath, "orm")
 	// The errors an edge accessor returns are package velox's.
 	veloxPkg := im.use(veloxPath, "velox")

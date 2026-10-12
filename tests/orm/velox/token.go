@@ -3,13 +3,14 @@
 package velox
 
 import (
-	context "context"
+	"context"
+
 	uuid "github.com/google/uuid"
-	velox "github.com/syssam/velox"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
-	entity "github.com/syssam/velox/tests/orm/velox/entity"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
 
 // Token starts the queries and mutations of Token.

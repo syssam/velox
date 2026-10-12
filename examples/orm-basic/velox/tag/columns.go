@@ -3,8 +3,8 @@
 package tag
 
 import (
-	predicate "example.com/orm-basic/velox/predicate"
-	orm "github.com/syssam/velox/orm"
+	"example.com/orm-basic/velox/predicate"
+	"github.com/syssam/velox/orm"
 )
 
 // IntColumn is a column of Go type int: its methods build the predicates,

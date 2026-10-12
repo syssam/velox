@@ -3,16 +3,17 @@
 package entity
 
 import (
-	context "context"
+	"context"
+	"iter"
+	"slices"
+
 	uuid "github.com/google/uuid"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	team "github.com/syssam/velox/tests/orm/shapes/velox/team"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/team"
 )
 
 // Team is the Team entity.

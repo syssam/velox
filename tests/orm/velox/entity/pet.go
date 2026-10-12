@@ -3,15 +3,16 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	pet "github.com/syssam/velox/tests/orm/velox/pet"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/velox/pet"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
 
 // Pet is the Pet entity.

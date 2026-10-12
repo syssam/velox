@@ -3,12 +3,13 @@
 package filter
 
 import (
-	predicate "example.com/orm-graphql/velox/predicate"
-	todo "example.com/orm-graphql/velox/todo"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
-	io "io"
-	time "time"
+	"io"
+	"time"
+
+	"example.com/orm-graphql/velox/predicate"
+	"example.com/orm-graphql/velox/todo"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 )
 
 // TodoWhereInput is the filter a request gives for a list of Todo: the where

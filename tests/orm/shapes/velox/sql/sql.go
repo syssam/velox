@@ -5,8 +5,8 @@
 package sql
 
 import (
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Table is the table of Sql, and ModelName the name of the entity: what the

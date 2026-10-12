@@ -3,16 +3,17 @@
 package entity
 
 import (
-	context "context"
-	slots "example.com/orm-basic/velox/internal/slots"
-	predicate "example.com/orm-basic/velox/predicate"
-	user "example.com/orm-basic/velox/user"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+	"time"
+
+	"example.com/orm-basic/velox/internal/slots"
+	"example.com/orm-basic/velox/predicate"
+	"example.com/orm-basic/velox/user"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	iter "iter"
-	slices "slices"
-	time "time"
 )
 
 // User is the User entity.

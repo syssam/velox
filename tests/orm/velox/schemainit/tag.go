@@ -3,9 +3,9 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
-	privacy "github.com/syssam/velox/privacy"
-	slots "github.com/syssam/velox/tests/orm/velox/internal/slots"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/privacy"
+	"github.com/syssam/velox/tests/orm/velox/internal/slots"
 	schemapkg "github.com/syssam/velox/testschema"
 )
 

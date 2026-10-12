@@ -5,8 +5,8 @@
 package user
 
 import (
-	predicate "example.com/orm-graphql/velox/predicate"
-	orm "github.com/syssam/velox/orm"
+	"example.com/orm-graphql/velox/predicate"
+	"github.com/syssam/velox/orm"
 )
 
 // Table is the table of User, and ModelName the name of the entity: what the

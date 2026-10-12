@@ -3,8 +3,8 @@
 package badge
 
 import (
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Uint16Column is a column of Go type uint16: its methods build the predicates,

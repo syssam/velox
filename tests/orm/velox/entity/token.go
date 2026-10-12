@@ -3,18 +3,19 @@
 package entity
 
 import (
-	context "context"
+	"context"
+	"iter"
+	"slices"
+
 	uuid "github.com/google/uuid"
-	velox "github.com/syssam/velox"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	slots "github.com/syssam/velox/tests/orm/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
-	token "github.com/syssam/velox/tests/orm/velox/token"
-	types "github.com/syssam/velox/testschema/types"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/tests/orm/velox/token"
+	"github.com/syssam/velox/testschema/types"
 )
 
 // Token is the Token entity.

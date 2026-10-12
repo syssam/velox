@@ -3,11 +3,12 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
+	"time"
+
+	"github.com/syssam/velox/orm"
 	schemapkg "github.com/syssam/velox/tests/orm/shapes/schema"
 	enrollmentpkg "github.com/syssam/velox/tests/orm/shapes/velox/enrollment"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
-	time "time"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
 // init stitches the defaults, validators, hooks and policy of the Enrollment schema.

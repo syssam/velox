@@ -3,12 +3,13 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
-	privacy "github.com/syssam/velox/privacy"
-	slots "github.com/syssam/velox/tests/orm/velox/internal/slots"
+	"time"
+
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/privacy"
+	"github.com/syssam/velox/tests/orm/velox/internal/slots"
 	userpkg "github.com/syssam/velox/tests/orm/velox/user"
 	schemapkg "github.com/syssam/velox/testschema"
-	time "time"
 )
 
 // init stitches the defaults, validators, hooks and policy of the User schema.

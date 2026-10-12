@@ -3,9 +3,9 @@
 package labelkey
 
 import (
-	orm "github.com/syssam/velox/orm"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // LabelIDColumn is a column of Go type types.Label: its methods build the predicates,

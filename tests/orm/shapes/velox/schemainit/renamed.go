@@ -3,11 +3,12 @@
 package schemainit
 
 import (
-	orm "github.com/syssam/velox/orm"
+	"time"
+
+	"github.com/syssam/velox/orm"
 	schemapkg "github.com/syssam/velox/tests/orm/shapes/schema"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 	renamedpkg "github.com/syssam/velox/tests/orm/shapes/velox/renamed"
-	time "time"
 )
 
 // init stitches the defaults, validators, hooks and policy of the Renamed schema.

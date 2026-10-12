@@ -24,7 +24,7 @@ import (
 // handle or a transaction, is given where it starts and travels with the
 // builder, so a builder can be finished and run by another function.
 func (g *generator) client() (map[string][]byte, error) {
-	im := newImports()
+	im := g.imports()
 	im.use(ormPath, "orm")
 	im.use(veloxPath, "velox")
 	modelPkg := im.use(g.cfg.Package+"/entity", "entity")

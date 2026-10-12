@@ -3,9 +3,9 @@
 package weightkey
 
 import (
-	orm "github.com/syssam/velox/orm"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // WeightColumn is a column of Go type types.Weight: its methods build the predicates,

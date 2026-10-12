@@ -84,3 +84,32 @@ func TestRootNames_AreDeclared(t *testing.T) {
 		t.Error("tests/orm/shapes/velox: want the entity Tx and the library's DB")
 	}
 }
+
+// An import is written as a person writes it where the generator knows the
+// package's name, and with the name where it is the application's package.
+func TestImportSpec(t *testing.T) {
+	const tree = "example.com/app/velox"
+	for _, c := range []struct{ name, path, want string }{
+		{"context", "context", `"context"`},
+		{"sql", "database/sql", `"database/sql"`},
+		{"velox", veloxPath, `"github.com/syssam/velox"`},
+		{"orm", ormPath, `"github.com/syssam/velox/orm"`},
+		{"schemafield", "github.com/syssam/velox/schema/field", `schemafield "github.com/syssam/velox/schema/field"`},
+		{"predicate", tree + "/predicate", `"example.com/app/velox/predicate"`},
+		{"userpkg", tree + "/user", `userpkg "example.com/app/velox/user"`},
+		{"_", tree + "/schemainit", `_ "example.com/app/velox/schemainit"`},
+		// The application's own: its package clause may say another name.
+		{"uuid", "github.com/google/uuid", `uuid "github.com/google/uuid"`},
+		{"schema", "example.com/app/schema", `schema "example.com/app/schema"`},
+		{"time2", "time", `time2 "time"`},
+	} {
+		if got := importSpec(c.name, c.path, tree); got != c.want {
+			t.Errorf("importSpec(%q, %q) = %s, want %s", c.name, c.path, got, c.want)
+		}
+	}
+	decl := importDecl(map[string]string{"time": `"time"`, "context": `"context"`, ormPath: `"` + ormPath + `"`, "example.com/app/schema": `schema "example.com/app/schema"`})
+	want := "import (\n\t\"context\"\n\t\"time\"\n\n\tschema \"example.com/app/schema\"\n\t\"" + ormPath + "\"\n)\n"
+	if decl != want {
+		t.Errorf("got:\n%s\nwant:\n%s", decl, want)
+	}
+}

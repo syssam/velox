@@ -3,11 +3,12 @@
 package filter
 
 import (
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
-	post "github.com/syssam/velox/tests/orm/velox/post"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
-	io "io"
+	"io"
+
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
 
 // PostWhereInput is the filter a request gives for a list of Post: the where

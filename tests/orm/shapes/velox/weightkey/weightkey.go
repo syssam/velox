@@ -5,9 +5,9 @@
 package weightkey
 
 import (
-	orm "github.com/syssam/velox/orm"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Table is the table of WeightKey, and ModelName the name of the entity: what the

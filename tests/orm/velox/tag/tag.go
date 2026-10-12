@@ -5,8 +5,8 @@
 package tag
 
 import (
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
 
 // Table is the table of Tag, and ModelName the name of the entity: what the

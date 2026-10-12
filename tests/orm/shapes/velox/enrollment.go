@@ -3,11 +3,12 @@
 package velox
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
-	entity "github.com/syssam/velox/tests/orm/shapes/velox/entity"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"context"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Enrollment starts the queries and mutations of Enrollment.

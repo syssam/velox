@@ -3,10 +3,11 @@
 package defaultshape
 
 import (
+	"time"
+
 	uuid "github.com/google/uuid"
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	time "time"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // IntColumn is a column of Go type int: its methods build the predicates,

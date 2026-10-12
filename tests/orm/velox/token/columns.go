@@ -4,9 +4,9 @@ package token
 
 import (
 	uuid "github.com/google/uuid"
-	orm "github.com/syssam/velox/orm"
-	predicate "github.com/syssam/velox/tests/orm/velox/predicate"
-	types "github.com/syssam/velox/testschema/types"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/testschema/types"
 )
 
 // UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,

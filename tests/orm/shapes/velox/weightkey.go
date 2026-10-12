@@ -3,12 +3,13 @@
 package velox
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	entity "github.com/syssam/velox/tests/orm/shapes/velox/entity"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
+	"context"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // WeightKey starts the queries and mutations of WeightKey.

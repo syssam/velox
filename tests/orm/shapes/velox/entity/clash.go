@@ -3,16 +3,17 @@
 package entity
 
 import (
-	context "context"
-	velox "github.com/syssam/velox"
-	orm "github.com/syssam/velox/orm"
+	"context"
+	"iter"
+	"slices"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
-	types "github.com/syssam/velox/tests/orm/shapes/types"
-	clash "github.com/syssam/velox/tests/orm/shapes/velox/clash"
-	slots "github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
-	predicate "github.com/syssam/velox/tests/orm/shapes/velox/predicate"
-	iter "iter"
-	slices "slices"
+	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/clash"
+	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
 // Clash is the Clash entity.

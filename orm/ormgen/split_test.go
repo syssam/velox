@@ -49,14 +49,15 @@ const Late = 1
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The imports of a file are the standard library's, then the rest.
 	want := map[string]struct {
 		imports  []string
 		contains []string
 		absent   []string
 	}{
-		"p.go":    {[]string{"example.com/linked", "strings"}, []string{"// Package p is documented once.", "var Shared", "const Late"}, []string{"type User", "type Post"}},
-		"user.go": {[]string{"example.com/orm", "time"}, []string{"type User struct", "func init()", "// User mentions fmt.Println"}, []string{"Package p is documented", "type Post"}},
-		"post.go": {[]string{"example.com/orm", "fmt"}, []string{"type Post struct", "func (*Post) String()"}, []string{"type User", "Shared"}},
+		"p.go":    {[]string{"strings", "example.com/linked"}, []string{"// Package p is documented once.", "var Shared", "const Late"}, []string{"type User", "type Post"}},
+		"user.go": {[]string{"time", "example.com/orm"}, []string{"type User struct", "func init()", "// User mentions fmt.Println"}, []string{"Package p is documented", "type Post"}},
+		"post.go": {[]string{"fmt", "example.com/orm"}, []string{"type Post struct", "func (*Post) String()"}, []string{"type User", "Shared"}},
 	}
 	if len(files) != len(want) {
 		t.Fatalf("got %d files, want %d", len(files), len(want))

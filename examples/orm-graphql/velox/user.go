@@ -3,12 +3,13 @@
 package velox
 
 import (
-	context "context"
-	entity "example.com/orm-graphql/velox/entity"
-	predicate "example.com/orm-graphql/velox/predicate"
-	velox "github.com/syssam/velox"
-	gqlinput "github.com/syssam/velox/contrib/graphql/gqlinput"
-	orm "github.com/syssam/velox/orm"
+	"context"
+
+	"example.com/orm-graphql/velox/entity"
+	"example.com/orm-graphql/velox/predicate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/gqlinput"
+	"github.com/syssam/velox/orm"
 )
 
 // User starts the queries and mutations of User.
