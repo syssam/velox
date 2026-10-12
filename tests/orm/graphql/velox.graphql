@@ -17,7 +17,7 @@ scalar Time
 An object with an ID.
 Follows the [Relay Global Object Identification Specification](https://relay.dev/graphql/objectidentification.htm)
 """
-interface Node @goModel(model: "github.com/syssam/velox/tests/orm/db.Noder") {
+interface Node @goModel(model: "github.com/syssam/velox/tests/orm/velox.Noder") {
   """
   The id of the object.
   """

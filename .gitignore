@@ -9,6 +9,13 @@
 *.dylib
 velox
 !/cmd/velox/
+# The examples of velox-gen keep their generated tree, so that it can be read
+# without running anything.
+!/examples/orm-basic/velox/
+!/examples/orm-graphql/velox/
+# So do the trees the tests of package orm run against.
+!/tests/orm/velox/
+!/tests/orm/shapes/velox/
 testgen
 
 # Test binary

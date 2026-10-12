@@ -5,22 +5,22 @@ entities: a user and the todos they own. [`orm-basic`](../orm-basic) is the
 ORM alone.
 
 ```bash
-go run generate.go   # writes ./db and ./graphql from ./schema
+go run generate.go   # writes ./velox and ./graphql from ./schema
 go test ./...        # walkthrough_test.go
 ```
 
 No GraphQL engine is imported, here or by the generated code: the inputs are
 plain Go types, and an engine binds to them through the `@goModel` directives
-of the generated schema. `./db` and `./graphql` are checked in.
+of the generated schema. `./velox` and `./graphql` are checked in.
 
 ## What `-graphql` adds
 
 ```
 graphql/velox*.graphql     the schema: types, enums, where and order inputs, connections
-db/filter/                 TodoWhereInput, UserWhereInput
-db/entity/                 TodoOrder, TodoConnection, and a method per edge for an engine to bind
-db/todo/                   OrderField and its constants
-db/db.go                   NodeTypes, for node(id:)
+velox/filter/                 TodoWhereInput, UserWhereInput
+velox/entity/                 TodoOrder, TodoConnection, and a method per edge for an engine to bind
+velox/todo/                   OrderField and its constants
+velox/velox.go                NodeTypes, for node(id:)
 ```
 
 At run time this code calls
@@ -33,7 +33,7 @@ on package `orm`. Neither `orm` nor the root package knows GraphQL.
 // todos(after, first, before, last, orderBy: TodoOrder, where: TodoWhereInput): TodoConnection!
 func Todos(ctx context.Context, ex velox.Executor, after *velox.Cursor, first *int, before *velox.Cursor, last *int,
     orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-    return db.Todo.Query(ex).
+    return velox.Todo.Query(ex).
         Where(where.P()).
         OrderBy(orderBy.Term()).
         Paginate(ctx, after, first, before, last)

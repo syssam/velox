@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/go-openapi/inflect"
+
+	"github.com/syssam/velox/orm/ormgen"
 )
 
 // schema is what the generated code says of the entities: read from its
@@ -22,6 +24,30 @@ type schema struct {
 	entities map[string]*entityInfo // by Go name
 	byLeaf   map[string]*entityInfo // by the import path of the entity's own package
 }
+
+// gives reports whether the root package velox-gen generates declares name
+// for the library's: every name of ormgen.RootNames that no entity, and no
+// entity's client type, has.
+func (s *schema) gives(name string) bool {
+	if !rootNames[name] {
+		return false
+	}
+	if s.entities[name] != nil {
+		return false
+	}
+	if base, ok := strings.CutSuffix(name, "Client"); ok && s.entities[base] != nil {
+		return false
+	}
+	return true
+}
+
+var rootNames = func() map[string]bool {
+	m := map[string]bool{}
+	for _, n := range ormgen.RootNames() {
+		m[n] = true
+	}
+	return m
+}()
 
 type entityInfo struct {
 	name   string

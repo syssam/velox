@@ -4,17 +4,17 @@ import (
 	"context"
 	"testing"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/tests/orm/shapes/db/bare"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/labelkey"
-	"github.com/syssam/velox/tests/orm/shapes/db/weightkey"
 	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/bare"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/labelkey"
+	"github.com/syssam/velox/tests/orm/shapes/velox/weightkey"
 )
 
 // An entity with no field but its id: every statement has an empty column

@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	client "github.com/syssam/velox/tests/orm/db"
+	client "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,12 +19,12 @@ import (
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
 	integration "github.com/syssam/velox/tests/integration"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/migrate"
-	"github.com/syssam/velox/tests/orm/db/pet"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/tag"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/migrate"
+	"github.com/syssam/velox/tests/orm/velox/pet"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/tag"
+	"github.com/syssam/velox/tests/orm/velox/user"
 
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"

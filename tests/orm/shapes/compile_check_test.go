@@ -21,12 +21,12 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
-	"github.com/syssam/velox/tests/orm/shapes/db/article"
-	"github.com/syssam/velox/tests/orm/shapes/db/author"
-	client "github.com/syssam/velox/tests/orm/shapes/db"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/scalar"
-	"github.com/syssam/velox/tests/orm/shapes/db/topic"
+	"github.com/syssam/velox/tests/orm/shapes/velox/article"
+	"github.com/syssam/velox/tests/orm/shapes/velox/author"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/scalar"
+	"github.com/syssam/velox/tests/orm/shapes/velox/topic"
 )
 
 var (
@@ -118,7 +118,9 @@ var compileCases = []compileCase{
 		body: `	_, _ = client.Scalar.Update(db).Set(scalar.StringPtr.Clear()).Exec(ctx)`},
 	{name: "Clear on an Optional bytes field", want: "scalar.BytesOpt.Clear undefined",
 		body: `	_, _ = client.Scalar.Create(db).Set(scalar.BytesOpt.Clear()).Save(ctx)`},
-	{name: "a raw database/sql handle as the executor", want: "does not implement velox.Executor",
+	// The compiler spells the package out: the generated root package is
+	// called velox too.
+	{name: "a raw database/sql handle as the executor", want: `does not implement "github.com/syssam/velox".Executor (missing method State)`,
 		body: `	_, _ = client.Author.Query(db.SQL()).All(ctx)`},
 	{name: "an untyped runtime predicate", want: "cannot use",
 		body: `	_, _ = client.Author.Query(db).Where(orm.P{Op: orm.OpEQ, Col: "name", Val: "x"}).All(ctx)`},

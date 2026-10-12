@@ -14,15 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
 
-	"example.com/orm-graphql/db"
-	"example.com/orm-graphql/db/entity"
-	"example.com/orm-graphql/db/filter"
-	"example.com/orm-graphql/db/migrate"
-	"example.com/orm-graphql/db/todo"
-	"example.com/orm-graphql/db/user"
+	"example.com/orm-graphql/velox"
+	"example.com/orm-graphql/velox/entity"
+	"example.com/orm-graphql/velox/filter"
+	"example.com/orm-graphql/velox/migrate"
+	"example.com/orm-graphql/velox/todo"
+	"example.com/orm-graphql/velox/user"
 
 	_ "modernc.org/sqlite"
 )
@@ -42,7 +41,7 @@ func open(t *testing.T) (conn *velox.DB, ann, bob *entity.User) {
 	t.Cleanup(func() { _ = conn.Close() })
 	require.NoError(t, migrate.Create(ctx, conn))
 	newUser := func(name string) *entity.User {
-		u, err := db.User.Create(conn).Set(user.Name.Set(name), user.Email.Set(name+"@example.com")).Save(ctx)
+		u, err := velox.User.Create(conn).Set(user.Name.Set(name), user.Email.Set(name+"@example.com")).Save(ctx)
 		require.NoError(t, err)
 		return u
 	}
@@ -58,7 +57,7 @@ func open(t *testing.T) (conn *velox.DB, ann, bob *entity.User) {
 		{"ship", 1, todo.StatusTodo, ann},
 		{"read", 5, todo.StatusTodo, bob},
 	} {
-		_, err := db.Todo.Create(conn).
+		_, err := velox.Todo.Create(conn).
 			Set(todo.Title.Set(row.title), todo.Priority.Set(row.priority), todo.Status.Set(row.status), todo.Owner.Set(row.owner.ID)).
 			Save(ctx)
 		require.NoError(t, err)
@@ -74,7 +73,7 @@ func open(t *testing.T) (conn *velox.DB, ann, bob *entity.User) {
 // All of it: the where input gives a condition, the order input an order
 // term, and Paginate is the query's own. Both inputs may be nil.
 func Todos(ctx context.Context, ex velox.Executor, after *velox.Cursor, first *int, before *velox.Cursor, last *int, orderBy *entity.TodoOrder, where *filter.TodoWhereInput) (*entity.TodoConnection, error) {
-	return db.Todo.Query(ex).
+	return velox.Todo.Query(ex).
 		Where(where.P()).
 		OrderBy(orderBy.Term()).
 		Paginate(ctx, after, first, before, last)
@@ -185,7 +184,7 @@ func TestEdgeResolver(t *testing.T) {
 // node(id:) goes by the types of node: each knows how to read one by id.
 func TestNode(t *testing.T) {
 	conn, ann, _ := open(t)
-	for _, nt := range db.NodeTypes() {
+	for _, nt := range velox.NodeTypes() {
 		if nt.Name != "User" {
 			continue
 		}

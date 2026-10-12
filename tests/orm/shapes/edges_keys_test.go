@@ -4,20 +4,20 @@ import (
 	"context"
 	"testing"
 
-	"github.com/syssam/velox/tests/orm/shapes/db/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/tests/orm/shapes/db/article"
-	"github.com/syssam/velox/tests/orm/shapes/db/author"
-	"github.com/syssam/velox/tests/orm/shapes/db/badge"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/player"
-	"github.com/syssam/velox/tests/orm/shapes/db/team"
+	"github.com/syssam/velox/tests/orm/shapes/velox/article"
+	"github.com/syssam/velox/tests/orm/shapes/velox/author"
+	"github.com/syssam/velox/tests/orm/shapes/velox/badge"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/player"
+	"github.com/syssam/velox/tests/orm/shapes/velox/team"
 )
 
 // createTeam saves b; name is for the reader.

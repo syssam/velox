@@ -2,7 +2,7 @@
 // package: the entities, their columns and edges, and the clients that
 // package orm runs.
 //
-//	velox-gen -schema ./schema -target ./db -package example.com/app/db
+//	velox-gen -schema ./schema -target ./velox -package example.com/app/velox
 package main
 
 import (
@@ -19,7 +19,7 @@ import (
 
 func main() {
 	schema := flag.String("schema", "./schema", "path of the schema package")
-	target := flag.String("target", "./db", "output directory")
+	target := flag.String("target", "./velox", "output directory")
 	pkg := flag.String("package", "", "import path of the output directory")
 	graphqlSchema := flag.String("graphql", "", "also generate the GraphQL layer; the path of the root schema file to write, e.g. ./schema/velox.graphql")
 	flag.Parse()

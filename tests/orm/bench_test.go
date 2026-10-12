@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"testing"
 
-	client "github.com/syssam/velox/tests/orm/db"
+	client "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
 	integration "github.com/syssam/velox/tests/integration"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/user"
 )
 
 // benchDB returns a handle and a velox client over one SQLite database

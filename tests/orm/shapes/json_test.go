@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/renamed"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/renamed"
 )
 
 // The JSON of an entity is keyed by the schema's field names, whatever the

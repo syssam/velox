@@ -16,13 +16,13 @@ import (
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/orm"
-	client "github.com/syssam/velox/tests/orm/db"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/filter"
-	"github.com/syssam/velox/tests/orm/db/like"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/predicate"
-	"github.com/syssam/velox/tests/orm/db/user"
+	client "github.com/syssam/velox/tests/orm/velox"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/filter"
+	"github.com/syssam/velox/tests/orm/velox/like"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/tests/orm/velox/user"
 )
 
 // What an independent review of the runtime found. Each test is the case as

@@ -12,7 +12,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
-	"github.com/syssam/velox/tests/orm/shapes/db/migrate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/migrate"
 )
 
 // ddlOf returns the statement that created every table and index of db.

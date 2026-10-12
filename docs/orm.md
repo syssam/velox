@@ -29,31 +29,39 @@ keep their generated tree in the repository.
 
 ```sh
 go run github.com/syssam/velox/cmd/velox-gen \
-    -schema ./schema -target ./db -package example.com/app/db
+    -schema ./schema -target ./velox -package example.com/app/velox
 ```
 
-This writes, under `db`:
+This writes, under `velox`:
 
 | package | what is in it |
 |---|---|
-| `db` | where every query and mutation starts: `db.User.Query(conn)` |
-| `db/entity` | the entities and their typed builders |
-| `db/user`, ... | one small package per entity: its columns, enum values and edges |
-| `db/migrate` | the tables, and `migrate.Create(ctx, conn)` |
-| `db/predicate` | the types that keep one entity's conditions out of another's query |
-| `db/schemainit` | the schema's defaults, validators, hooks and policies; `db` links it |
-| `db/filter` | with `-graphql`: the where inputs of the GraphQL schema |
+| `velox` | where every query and mutation starts: `velox.User.Query(conn)`; and the library's handle and errors under the same name |
+| `velox/entity` | the entities and their typed builders |
+| `velox/user`, ... | one small package per entity: its columns, enum values and edges |
+| `velox/migrate` | the tables, and `migrate.Create(ctx, conn)` |
+| `velox/predicate` | the types that keep one entity's conditions out of another's query |
+| `velox/schemainit` | the schema's defaults, validators, hooks and policies; `velox` links it |
+| `velox/filter` | with `-graphql`: the where inputs of the GraphQL schema |
 
-The root package is named after the directory, so the application picks the
-name (`db`, `store`, `data`) by picking the directory. A generation removes the
-generated files of an entity that left the schema.
+The root package is named after the directory. `velox` is the default and
+what this guide writes: the generated package then has the library's name,
+and gives the library's handle, errors and hook types under it (`velox.DB`,
+`velox.Tx`, `velox.IsNotFound`, `velox.Must`, `velox.Mutation`), as aliases and
+forwarding functions. A file that starts its queries at `velox.User` imports
+that one package; a file that starts none (a package the schema itself
+imports, a shared helper) imports the library, and writes the same
+`velox.Tx`. They are one type. An entity named like one of these (`Tx`,
+`Policy`) keeps the name, and that one is left to the library's import.
 
-`db`, `db/entity` and `db/schemainit` have **one file per entity**
-(`db/entity/user.go`): the definition an editor jumps to is in a file of a
+A generation removes the generated files of an entity that left the schema.
+
+`velox`, `velox/entity` and `velox/schemainit` have **one file per entity**
+(`velox/entity/user.go`): the definition an editor jumps to is in a file of a
 thousand lines, not one of 285,000. The compiler takes the same time either
 way; the language server does not (the outline of the single 8 MB file: 3-5 s,
 43,000 symbols, 1.3 GB, and no semantic highlighting at that size; of one
-entity's file: 1.4-2 s, 0.3 GB). `db/internal/slots` is what lets `entity` and
+entity's file: 1.4-2 s, 0.3 GB). `velox/internal/slots` is what lets `entity` and
 `schemainit` compile at the same time after a schema edit instead of one after
 the other.
 
@@ -67,15 +75,15 @@ conn, err := velox.Open("postgres", dsn)
 err = migrate.Create(ctx, conn) // create or update the tables
 
 // Create, with setters.
-alice, err := db.User.Create(conn).
+alice, err := velox.User.Create(conn).
     Set(user.Name.Set("alice"), user.Email.Set("alice@example.com"), user.Age.Set(30)).
     Save(ctx)
 
 // Query: conditions, order, an eager-loaded edge with conditions of its own.
-users, err := db.User.Query(conn).
+users, err := velox.User.Query(conn).
     Where(user.Name.EQ("alice"), user.Age.GT(18)).
     OrderBy(user.CreatedAt.Desc()).
-    WithPosts(db.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10)).
+    WithPosts(velox.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10)).
     Limit(20).
     All(ctx)
 
@@ -83,12 +91,12 @@ users, err := db.User.Query(conn).
 count, err := alice.QueryPosts(conn).Where(post.Title.EQ("first")).Count(ctx)
 
 // Update one row and get it back; update many and get the count.
-alice, err = db.User.UpdateByID(conn, alice.ID).Set(user.Age.Add(1)).SaveOne(ctx)
-n, err := db.Post.Update(conn).Set(post.ViewCount.Add(1)).Where(post.Author.HasWith(user.ID.EQ(alice.ID))).Exec(ctx)
+alice, err = velox.User.UpdateByID(conn, alice.ID).Set(user.Age.Add(1)).SaveOne(ctx)
+n, err := velox.Post.Update(conn).Set(post.ViewCount.Add(1)).Where(post.Author.HasWith(user.ID.EQ(alice.ID))).Exec(ctx)
 
 // By id; a missing row is velox.ErrNotFound.
-u, err := db.User.Get(ctx, conn, id)
-err = db.User.DeleteByID(ctx, conn, id)
+u, err := velox.User.Get(ctx, conn, id)
+err = velox.User.DeleteByID(ctx, conn, id)
 ```
 
 - **What a query or mutation runs on is given where it starts and travels
@@ -99,7 +107,7 @@ err = db.User.DeleteByID(ctx, conn, id)
 - **An entity holds no connection.** `u.QueryPosts(tx)` queries its
   neighbors on what it is given, `WithPosts(...)` loads them with the query
   into `u.Edges.Posts`.
-- `db.User` is a package-level variable, not a field of a client struct. A
+- `velox.User` is a package-level variable, not a field of a client struct. A
   struct with a field per entity makes every package that names it read every
   builder of every entity: when it was tried on the 450-entity fixture, the
   312 services that named one took about two and a half times the CPU (556
@@ -137,7 +145,7 @@ err = db.User.DeleteByID(ctx, conn, id)
 - **Eager loading is `With<Edge>`**: one more query per edge, whatever the
   number of rows. A query of the target describes the load: its conditions,
   order, nested `With<Edge>` and its limit, which applies per parent. That
-  query is not run, so it needs no handle (`db.Post.Query(nil)`).
+  query is not run, so it needs no handle (`velox.Post.Query(nil)`).
 - **`Exec` on an update or delete touches every matching row and returns the
   count; it is not an error when that is zero.** `SaveOne` is for exactly one
   row (`velox.ErrNotFound`, `velox.ErrNotSingular`); `DeleteByID` reports a
@@ -146,7 +154,7 @@ err = db.User.DeleteByID(ctx, conn, id)
 - **`CreateBulk` is one statement** for all its rows, and all of them or
   none. A statement has a limit on its parameters (65,535 on Postgres, and a
   row takes one for each column), so a create of many rows says how many go
-  into one: `db.Log.CreateBulk(tx, rows...).BatchSize(500).Save(ctx)`. The
+  into one: `velox.Log.CreateBulk(tx, rows...).BatchSize(500).Save(ctx)`. The
   statements are then one transaction only when the handle is one. On a
   database handle, a batch that fails leaves the batches before it in the
   table, and `Save` returns their entities with the error.
@@ -159,7 +167,7 @@ err = db.User.DeleteByID(ctx, conn, id)
   other fields stay zero, so such an entity is for reading. The id, the
   columns the query is ordered by and the keys of the edges it loads are
   read too. The query given to an eager load takes it as well:
-  `WithPosts(db.Post.Query(nil).Columns(post.ColumnTitle))`. `Select(...)`
+  `WithPosts(velox.Post.Query(nil).Columns(post.ColumnTitle))`. `Select(...)`
   is the other thing: columns and aggregates scanned
   into a struct of the caller's.
 - An order is `user.Name.Asc()`; by a column named at run time,
@@ -237,17 +245,17 @@ err = db.User.DeleteByID(ctx, conn, id)
 
 ```go
 err := conn.RunTx(ctx, func(tx *velox.Tx) error {
-    u, err := db.User.Create(tx).
+    u, err := velox.User.Create(tx).
         Set(user.Name.Set("bob"), user.Email.Set("bob@example.com"), user.Age.Set(40)).
         Save(ctx)
     if err != nil {
         return err
     }
-    locked, err := db.User.Query(tx).Where(user.ID.EQ(u.ID)).ForUpdate().Only(ctx)
+    locked, err := velox.User.Query(tx).Where(user.ID.EQ(u.ID)).ForUpdate().Only(ctx)
     if err != nil {
         return err
     }
-    _, err = db.User.UpdateByID(tx, locked.ID).Set(user.Age.Set(locked.Age + 1)).SaveOne(ctx)
+    _, err = velox.User.UpdateByID(tx, locked.ID).Set(user.Age.Set(locked.Age + 1)).SaveOne(ctx)
     return err
 })
 ```
@@ -281,12 +289,12 @@ type updateUser struct {
     Nickname orm.Opt[string] `json:"nickname"`
 }
 
-u, err := db.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: orm.Some("caz")}).Save(ctx)
+u, err := velox.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: orm.Some("caz")}).Save(ctx)
 
 // A PATCH body: a missing key leaves the column alone, null clears it.
 var patch updateUser
 err = json.Unmarshal([]byte(`{"age": 31, "nickname": null}`), &patch)
-u, err = db.User.UpdateByID(conn, u.ID).Fill(patch).SaveOne(ctx)
+u, err = velox.User.UpdateByID(conn, u.ID).Fill(patch).SaveOne(ctx)
 ```
 
 - A nil pointer, slice or map gives nothing. Anything else is a value and is
@@ -323,23 +331,23 @@ code and nothing measurable to its compile.
 
 ```go
 // One row at a time, without holding the result. Every loop runs the query.
-for u, err := range db.User.Query(conn).Where(user.Age.GTE(22)).OrderBy(user.Age.Asc()).Iter(ctx) {
+for u, err := range velox.User.Query(conn).Where(user.Age.GTE(22)).OrderBy(user.Age.Asc()).Iter(ctx) {
     ...
 }
 
 // A page at a time, with a cursor per row: keyset pagination in the shape of
 // a Relay connection (after, first, before, last).
-page, err := db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, nil, &size, nil, nil)
+page, err := velox.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, nil, &size, nil, nil)
 // page.Edges[i].Node, page.Edges[i].Cursor, page.PageInfo.HasNextPage, page.TotalCount
-page, err = db.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, page.PageInfo.EndCursor, &size, nil, nil)
+page, err = velox.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, page.PageInfo.EndCursor, &size, nil, nil)
 
 // Columns and aggregates instead of entities; a column that does not exist is an error.
-total, err := db.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+total, err := velox.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
 var rows []struct{ Role string `json:"role"`; N int `json:"n"` }
-err = db.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)
+err = velox.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)
 
 // The statement a query would run, and its arguments, without running it.
-query, args, err := db.User.Query(conn).Where(user.Age.GT(18)).Select().SQL(ctx)
+query, args, err := velox.User.Query(conn).Where(user.Age.GT(18)).Select().SQL(ctx)
 
 // A condition written against the SQL builder, and one that arrives at run time.
 p := predicate.User(orm.Raw(func(s *sql.Selector) { ... }))
@@ -368,7 +376,7 @@ against everything the types it names expose, method results included:
 `(*User).QueryPosts` returns a `*PostQuery`, `User.Edges` names every entity
 `User` is connected to, each with such methods, so a package that names one
 entity reads the query builder of every entity. With the neighbors queried
-from the root package instead (`db.User.QueryPosts(tx, u)`), the 312 services
+from the root package instead (`velox.User.QueryPosts(tx, u)`), the 312 services
 of the fixture compiled in 106-116 CPU-s; as generated, 141-147. What is paid
 is in proportion to the methods of a query type, so that type is kept small.
 
@@ -376,7 +384,7 @@ is in proportion to the methods of a query type, so that type is kept small.
 
 ```sh
 go run github.com/syssam/velox/cmd/velox-gen \
-    -schema ./schema -target ./db -package example.com/app/db \
+    -schema ./schema -target ./velox -package example.com/app/velox \
     -graphql ./graphql/velox.graphql
 ```
 
@@ -403,7 +411,7 @@ not import it.
 | `enum PostOrderField` | `post.OrderField` and its constants, `post.OrderFieldCreatedAt` |
 | `input PostWhereInput` | `filter.PostWhereInput` |
 | `enum PostStatus` | `post.StatusEnum` and its constants |
-| `interface Node` | `db.Noder`; each entity has `IsNode()`, and `db.NodeTypes()` lists them |
+| `interface Node` | `velox.Noder`; each entity has `IsNode()`, and `velox.NodeTypes()` lists them |
 
 A list resolver is a query like any other; the inputs turn into what `Where`
 and `OrderBy` take:
@@ -412,7 +420,7 @@ and `OrderBy` take:
 func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int,
     orderBy *entity.PostOrder, where *filter.PostWhereInput,
 ) (*entity.PostConnection, error) {
-    return db.Post.Query(s.db).
+    return velox.Post.Query(s.db).
         Where(where.P()).
         OrderBy(orderBy.Term()).
         Paginate(ctx, after, first, before, last)
@@ -439,7 +447,7 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
   if err := json.Unmarshal(text, &where); err != nil {
       return err
   }
-  posts, err := db.Post.Query(conn).Where(where.P()).All(ctx)
+  posts, err := velox.Post.Query(conn).Where(where.P()).All(ctx)
   ```
 
   A filter narrows what a caller sees, so nothing is read or written as
@@ -492,7 +500,7 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
 - `Paginate` counts the rows of the whole query for `TotalCount`.
   `orm.WithoutTotal(ctx)` skips the count (it is then -1): for a request that
   does not select `totalCount`.
-- `db.NodeTypes()` is what a `node(id:)` field goes by when an id does not
+- `velox.NodeTypes()` is what a `node(id:)` field goes by when an id does not
   say its type: each type's name, table, and a `Get(ctx, ex, id)` that takes
   an id of any type (an id of another type than the entity's is
   `velox.ErrNotFound`, like an id no row has; an `int64` from an engine finds
@@ -572,8 +580,8 @@ side's key or a join row without asking the other entity's policy or hooks:
 `user.Pets.Add(id)` rewrites `pets.owner_id` under User's policy only.
 
 The root package links `schemainit`, so a program that starts its queries at
-`db.<Entity>` has all of this. One that uses `db/entity` alone must import
-`db/schemainit` itself; until it does, an entity whose schema has defaults,
+`velox.<Entity>` has all of this. One that uses `velox/entity` alone must import
+`velox/schemainit` itself; until it does, an entity whose schema has defaults,
 validators, hooks or a policy returns an error from every query and mutation.
 
 ## Code written once for several entities
@@ -589,7 +597,7 @@ func recent[P orm.Predicate](created orm.OrderedColumn[time.Time, P], since time
     return orm.And(append(more, created.GTE(since))...)
 }
 
-posts, err := db.Post.Query(conn).Where(recent(&post.CreatedAt, since)).All(ctx)
+posts, err := velox.Post.Query(conn).Where(recent(&post.CreatedAt, since)).All(ctx)
 ```
 
 A column is passed by its address (the methods of a column type have
@@ -645,9 +653,11 @@ first:
 What it keeps without a word: the errors. Package `orm` returns the
 library's own (`velox.ErrNotFound`, `*velox.ValidationError`, ...), so a test
 of an error, a field read from one and an error made with
-`velox.NewNotFoundError(x)` hold as they are; one written with the name the
-generated package repeated (`IsNotFound`, `ValidationError`, `MaskNotFound`
-of the generated root) takes the library's. `CreateBulk(...).BatchSize(n)` is the same call. testify's `Nil` and `NotNil` of a
+`velox.NewNotFoundError(x)` hold as they are. They and the handle are written
+through the generated package wherever the file's package imports it, so a
+file that was written against the generated `velox` keeps its one import;
+a name the generated package does not give (`velox.Field`) keeps the
+library, which such a file then imports as `veloxpkg`. `CreateBulk(...).BatchSize(n)` is the same call. testify's `Nil` and `NotNil` of a
 predicate become `True` and `False` of `orm.IsZero(p)`, like `p == nil`: a
 predicate was a function, nil when it was no condition, and is data now,
 which is never nil, so that `NotNil` left alone would pass for every

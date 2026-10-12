@@ -29,8 +29,8 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 		// that is generated with one.
 		sdl string
 	}{
-		{"testschema", "github.com/syssam/velox/testschema", "../../tests/orm/db", Config{Package: "github.com/syssam/velox/tests/orm/db"}, "../../tests/orm/graphql"},
-		{"shapes", "github.com/syssam/velox/tests/orm/shapes/schema", "../../tests/orm/shapes/db", Config{Package: "github.com/syssam/velox/tests/orm/shapes/db"}, ""},
+		{"testschema", "github.com/syssam/velox/testschema", "../../tests/orm/velox", Config{Package: "github.com/syssam/velox/tests/orm/velox"}, "../../tests/orm/graphql"},
+		{"shapes", "github.com/syssam/velox/tests/orm/shapes/schema", "../../tests/orm/shapes/velox", Config{Package: "github.com/syssam/velox/tests/orm/shapes/velox"}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			out := t.TempDir()

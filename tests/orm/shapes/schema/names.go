@@ -105,7 +105,8 @@ type Predicate struct{ velox.Schema }
 // Fields of the Predicate.
 func (Predicate) Fields() []velox.Field { return labelOnly() }
 
-// Db is named like the root package of the generated tree (tests/shapes/db).
+// Db is named like the root package of a generated tree in a directory db.
+// This tree is in velox, the name the entity Velox has.
 type Db struct{ velox.Schema }
 
 // Fields of the Db.

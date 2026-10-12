@@ -12,10 +12,10 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/migrate"
-	"github.com/syssam/velox/tests/orm/db/tag"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/migrate"
+	"github.com/syssam/velox/tests/orm/velox/tag"
+	"github.com/syssam/velox/tests/orm/velox/user"
 
 	_ "modernc.org/sqlite"
 )
@@ -31,7 +31,7 @@ func TestEntityWithoutSchemainitRefusesToRun(t *testing.T) {
 	db := velox.OpenDB(dialect.SQLite, drv.DB())
 	require.NoError(t, migrate.Create(ctx, db))
 
-	const want = `import _ "github.com/syssam/velox/tests/orm/db/schemainit"`
+	const want = `import _ "github.com/syssam/velox/tests/orm/velox/schemainit"`
 	_, err = entity.NewTagQuery(db).All(ctx)
 	require.ErrorContains(t, err, want)
 	_, err = entity.NewTagQuery(db).Count(ctx)

@@ -58,6 +58,10 @@ type fileEdits struct {
 	// any differs.
 	rename map[string]string
 	moved  bool
+	// gone are the imports the file had whose every reference was given
+	// another qualifier: the import is removed even though its name is
+	// still used, by the package that took it.
+	gone map[string]bool
 }
 
 func (f *fileEdits) off(p token.Pos) int { return f.fset.Position(p).Offset }
@@ -253,6 +257,19 @@ func (f *fileEdits) finish(defaultName func(path string) string) ([]byte, error)
 			spec.Name = ast.NewIdent(defaultName(old))
 		}
 		spec.Path.Value = strconv.Quote(to)
+	}
+	for path := range f.gone {
+		for _, spec := range file.Imports {
+			if p, _ := strconv.Unquote(spec.Path.Value); p != path {
+				continue
+			}
+			if spec.Name != nil {
+				astutil.DeleteNamedImport(fset, file, spec.Name.Name, path)
+			} else {
+				astutil.DeleteImport(fset, file, path)
+			}
+			break
+		}
 	}
 	for path, local := range f.imports {
 		if local == defaultName(path) {

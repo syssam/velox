@@ -4,7 +4,7 @@
 //
 //	schema/   the shapes: one small entity (or a few) each
 //	types/    custom Go types bound with GoType(), deliberately outside schema/
-//	db/       generated output; regenerate after any change to schema/ or to orm/ormgen
+//	velox/    generated output; regenerate after any change to schema/ or to orm/ormgen
 //
 //	*_test.go                    one behavior test per shape
 //	compile_check_test.go        mixing entities must not compile
@@ -31,4 +31,4 @@
 // belongs. No runtime gap is pinned at present.
 package shapes
 
-//go:generate go run ../../../cmd/velox-gen -schema ./schema -target ./db -package github.com/syssam/velox/tests/orm/shapes/db
+//go:generate go run ../../../cmd/velox-gen -schema ./schema -target ./velox -package github.com/syssam/velox/tests/orm/shapes/velox

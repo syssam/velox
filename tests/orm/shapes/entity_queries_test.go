@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	client "github.com/syssam/velox/tests/orm/shapes/db"
-	"github.com/syssam/velox/tests/orm/shapes/db/article"
-	"github.com/syssam/velox/tests/orm/shapes/db/author"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/topic"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
+	"github.com/syssam/velox/tests/orm/shapes/velox/article"
+	"github.com/syssam/velox/tests/orm/shapes/velox/author"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/topic"
 )
 
 // u.QueryPosts(ex) is the one way to query an edge from a row: a query of

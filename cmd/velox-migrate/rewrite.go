@@ -78,6 +78,87 @@ func (r *rewriter) orm(pos token.Pos) string  { return r.ref(ormPath, "orm", pos
 // errors and the types of a paged list.
 func (r *rewriter) velox(pos token.Pos) string { return r.ref(r.lib, "velox", pos) }
 
+// app names, for the application, a name of the library's root package: the
+// handle, an error, Must. The generated root package gives most of them under
+// its own name (ormgen.RootNames), so that a file which starts its queries
+// there needs one import; that is the name written wherever the file's
+// package already depends on the generated root, and so can import it. A
+// package the schema imports cannot, and names the library.
+func (r *rewriter) app(name string, pos token.Pos) string {
+	if r.s.gives(name) && r.reachesRoot() {
+		return r.root(pos) + "." + name
+	}
+	return r.velox(pos) + "." + name
+}
+
+// libraryNames moves the references a file has to the library's root package
+// over to the generated root package, for the names that package gives: the
+// two are called velox, and a file that names both must import one under
+// another name. Where the library held the name and the generated package
+// does not have it yet, the generated package takes it, and what is left of
+// the library (a name the generated package does not give) is written with
+// the library's other name.
+func (r *rewriter) libraryNames() {
+	if !r.reachesRoot() {
+		return
+	}
+	var given, others []*ast.SelectorExpr
+	ast.Inspect(r.file, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		id, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if pn, ok := r.info.Uses[id].(*types.PkgName); !ok || pn.Imported().Path() != r.lib {
+			return true
+		}
+		if r.s.gives(sel.Sel.Name) {
+			given = append(given, sel)
+		} else {
+			others = append(others, sel)
+		}
+		return true
+	})
+	if len(given) == 0 && len(others) == 0 {
+		return
+	}
+	// The library keeps its name in a file where the generated package
+	// already has another, or where the two are not named alike.
+	local := r.names[r.lib]
+	if _, has := r.names[r.s.root]; !has && local == rootName(r.s.to) {
+		delete(r.names, r.lib)
+		if r.gone == nil {
+			r.gone = map[string]bool{}
+		}
+		r.gone[r.lib] = true
+		r.root(r.file.Pos()) // takes the name
+		for _, sel := range others {
+			r.replace(sel.X.Pos(), sel.X.End(), r.velox(sel.Pos()))
+		}
+	}
+	for _, sel := range given {
+		r.replace(sel.X.Pos(), sel.X.End(), r.root(sel.Pos()))
+		r.count("library name of the generated package")
+	}
+}
+
+// reachesRoot reports whether the package of the file imports the generated
+// root package.
+func (r *rewriter) reachesRoot() bool {
+	if r.pkg == nil {
+		return false
+	}
+	for _, imp := range r.pkg.Imports() {
+		if imp.Path() == r.s.root {
+			return true
+		}
+	}
+	return false
+}
+
 // gqlinput is the runtime of the GraphQL layer of the new generated code:
 // the direction of an order input, the depth of a where input.
 func (r *rewriter) gqlinput(pos token.Pos) string {
@@ -91,7 +172,7 @@ func (r *rewriter) paging(name string, pos token.Pos) string {
 	if strings.HasPrefix(name, "OrderDirection") {
 		return r.gqlinput(pos) + "." + name
 	}
-	return r.velox(pos) + "." + name
+	return r.app(name, pos)
 }
 func (r *rewriter) entity(pos token.Pos) string {
 	return r.ref(r.s.to+"/entity", "entity", pos)
@@ -167,6 +248,7 @@ var (
 
 // file rewrites one file and reports whether anything changed.
 func (r *rewriter) run() {
+	r.libraryNames()
 	var stack []ast.Node
 	ast.Inspect(r.file, func(n ast.Node) bool {
 		if n == nil {
@@ -311,18 +393,18 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			}
 			switch name {
 			case "Tx":
-				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".Tx")
+				r.replace(sel.Pos(), sel.End(), r.app("Tx", sel.Pos()))
 				embedded()
 				r.count("type Tx")
 			case "Client":
 				if star, ok := parent(stack, 1).(*ast.StarExpr); ok && r.handleParam(stack) {
 					// A parameter that is only queried on: a transaction
 					// is passed for it as well as a database.
-					r.replace(star.Pos(), sel.End(), r.velox(sel.Pos())+".Executor")
+					r.replace(star.Pos(), sel.End(), r.app("Executor", sel.Pos()))
 					r.count("handle parameter")
 					break
 				}
-				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".DB")
+				r.replace(sel.Pos(), sel.End(), r.app("DB", sel.Pos()))
 				embedded()
 				r.count("type Client")
 			case "Noder":
@@ -369,7 +451,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 			if star, ok := parent(stack, 1).(*ast.StarExpr); ok {
 				from = star.Pos()
 			}
-			r.replace(from, sel.End(), r.velox(sel.Pos())+".Executor")
+			r.replace(from, sel.End(), r.app("Executor", sel.Pos()))
 		default:
 			r.note(sel.Pos(), "the type %s has no counterpart", name)
 			return
@@ -537,7 +619,7 @@ func (r *rewriter) failure(sel *ast.SelectorExpr, obj types.Object) bool {
 	case r.lib:
 		return true
 	case r.s.root, r.lib + "/runtime":
-		r.replace(sel.X.Pos(), sel.X.End(), r.ref(r.lib, "velox", sel.Pos()))
+		r.replace(sel.Pos(), sel.End(), r.app(obj.Name(), sel.Pos()))
 		r.count("error of the library")
 		return true
 	}
@@ -949,7 +1031,7 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 		switch name {
 		case "AllX", "OnlyX", "FirstX":
 			r.replace(sel.Sel.Pos(), sel.Sel.End(), strings.TrimSuffix(name, "X"))
-			r.open(call.Pos(), r.velox(call.Pos())+".Must(")
+			r.open(call.Pos(), r.app("Must", call.Pos())+"(")
 			r.insert(call.End(), ")")
 			r.wrapped[call] = true
 			r.count(name)
@@ -1004,7 +1086,7 @@ func (r *rewriter) dispatch(call *ast.CallExpr, stack []ast.Node) {
 				// handle of the context is what its edges are resolved on
 				// for a GraphQL engine too; whether every caller's context
 				// carries one is for a person to check.
-				r.open(call.Lparen+1, r.velox(call.Pos())+".ExecutorFrom("+r.contextAt(call.Pos())+")")
+				r.open(call.Lparen+1, r.app("ExecutorFrom", call.Pos())+"("+r.contextAt(call.Pos())+")")
 				r.note(call.Pos(), "%s is given the handle of the context (velox.ExecutorFrom): check that every caller's context carries one (velox.WithExecutor), or pass the handle", name)
 				r.count("edge query on the context's handle")
 			default:
@@ -1187,21 +1269,21 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			r.replace(call.Pos(), call.End(), "func("+sv+" *"+sqlPkg+".Selector) { "+sv+".OrderBy("+strings.Join(cols, ", ")+") }")
 			r.count("order function")
 		case "NewContext", "NewTxContext":
-			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".WithExecutor")
+			r.replace(sel.Pos(), sel.End(), r.app("WithExecutor", sel.Pos()))
 			r.count("WithExecutor")
 		case "Open":
 			if len(call.Args) == 2 {
-				r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".Open")
+				r.replace(sel.Pos(), sel.End(), r.app("Open", sel.Pos()))
 				r.count("Open")
 			} else {
 				r.note(call.Pos(), "Open with options: velox.Open(dialect, dsn) takes none; hooks and interceptors are registered on the handle (Use, Intercept)")
 			}
 		case "FromContext":
-			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".ExecutorFrom")
+			r.replace(sel.Pos(), sel.End(), r.app("ExecutorFrom", sel.Pos()))
 			r.note(call.Pos(), "FromContext is velox.ExecutorFrom: the handle the context carries, a transaction too (velox kept a client and a transaction under separate keys), as a velox.Executor")
 			r.count("ExecutorFrom")
 		case "TxFromContext":
-			r.replace(sel.Pos(), sel.End(), r.velox(sel.Pos())+".TxFrom")
+			r.replace(sel.Pos(), sel.End(), r.app("TxFrom", sel.Pos()))
 			r.count("TxFrom")
 		case "As", "Sum", "Count", "Max", "Min", "Mean":
 			// The aggregates of a grouped read; the read around them is
@@ -1280,7 +1362,7 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 		}
 		text := start + "Get(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + r.render(call.Args[1]) + ")"
 		if name == "GetX" {
-			text = r.velox(call.Pos()) + ".Must(" + text + ")"
+			text = r.app("Must", call.Pos()) + "(" + text + ")"
 			r.wrapped[call] = true
 		}
 		r.replace(call.Pos(), call.End(), text)
@@ -1848,7 +1930,7 @@ func (r *rewriter) builder(call *ast.CallExpr, sel *ast.SelectorExpr, t target, 
 		r.open(call.Lparen+1, inner)
 	}
 	wrap := func(fn string) {
-		r.open(call.Pos(), r.velox(call.Pos())+"."+fn+"(")
+		r.open(call.Pos(), r.app(fn, call.Pos())+"(")
 		r.insert(call.End(), ")")
 		r.wrapped[call] = true
 	}
@@ -1996,7 +2078,7 @@ func (r *rewriter) deleteOne(call *ast.CallExpr, sel *ast.SelectorExpr, t target
 	id := r.render(inner.Args[0])
 	text := r.root(call.Pos()) + "." + t.ent.name + ".DeleteByID(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + id + ")"
 	if name == "ExecX" {
-		text = r.velox(call.Pos()) + ".Check(" + text + ")"
+		text = r.app("Check", call.Pos()) + "(" + text + ")"
 		r.wrapped[call] = true
 	}
 	r.replace(call.Pos(), call.End(), text)
@@ -2008,7 +2090,7 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 	e := t.ent
 	rename := func(to string) { r.replace(sel.Sel.Pos(), sel.Sel.End(), to) }
 	must := func() {
-		r.open(call.Pos(), r.velox(call.Pos())+".Must(")
+		r.open(call.Pos(), r.app("Must", call.Pos())+"(")
 		r.insert(call.End(), ")")
 		r.wrapped[call] = true
 	}
@@ -2036,7 +2118,7 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 	case "FirstID", "FirstIDX":
 		// The id of the first row: the first of the ids of a query of one.
 		rename("Limit(1).IDs")
-		r.open(call.Pos(), r.velox(call.Pos())+".First(")
+		r.open(call.Pos(), r.app("First", call.Pos())+"(")
 		r.insert(call.End(), ")")
 		r.wrapped[call] = true
 		if name == "FirstIDX" {

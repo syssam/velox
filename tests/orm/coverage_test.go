@@ -13,10 +13,10 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
-	client "github.com/syssam/velox/tests/orm/db"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/tag"
-	"github.com/syssam/velox/tests/orm/db/user"
+	client "github.com/syssam/velox/tests/orm/velox"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/tag"
+	"github.com/syssam/velox/tests/orm/velox/user"
 	testschema "github.com/syssam/velox/testschema"
 )
 

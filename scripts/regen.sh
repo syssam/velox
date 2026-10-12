@@ -30,8 +30,8 @@ go run tests/integration/generate.go
 # The trees velox-gen writes for package orm's tests are tracked, so --check
 # sees a generator change that was not regenerated as a diff.
 echo "==> regenerating tests/orm fixtures (velox-gen)"
-go run ./cmd/velox-gen -schema github.com/syssam/velox/testschema -target ./tests/orm/db \
-    -package github.com/syssam/velox/tests/orm/db -graphql ./tests/orm/graphql/velox.graphql
+go run ./cmd/velox-gen -schema github.com/syssam/velox/testschema -target ./tests/orm/velox \
+    -package github.com/syssam/velox/tests/orm/velox -graphql ./tests/orm/graphql/velox.graphql
 go generate ./tests/orm/shapes/
 
 # Directories that participate in drift-check. Each regenerates into a local

@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox/tests/orm/db/predicate"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/db"
+	client "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/user"
 	testschema "github.com/syssam/velox/testschema"
 )
 

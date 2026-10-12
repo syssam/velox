@@ -7,15 +7,15 @@ import (
 	"slices"
 	"testing"
 
-	client "github.com/syssam/velox/tests/orm/db"
+	client "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/stretchr/testify/require"
 
 	refentity "github.com/syssam/velox/tests/integration/entity"
 	veloxuser "github.com/syssam/velox/tests/integration/user"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/tag"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/tag"
+	"github.com/syssam/velox/tests/orm/velox/user"
 )
 
 // snapshot is everything the differential test compares, read back through

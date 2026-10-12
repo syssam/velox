@@ -7,26 +7,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox/tests/orm/shapes/db/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/tests/orm/shapes/db/defaultshape"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/enumshape"
-	"github.com/syssam/velox/tests/orm/shapes/db/errfield"
-	"github.com/syssam/velox/tests/orm/shapes/db/gotypeshape"
-	"github.com/syssam/velox/tests/orm/shapes/db/mixedin"
-	"github.com/syssam/velox/tests/orm/shapes/db/mixinonly"
-	"github.com/syssam/velox/tests/orm/shapes/db/renamed"
-	"github.com/syssam/velox/tests/orm/shapes/db/validated"
 	"github.com/syssam/velox/tests/orm/shapes/schema"
 	"github.com/syssam/velox/tests/orm/shapes/types"
+	"github.com/syssam/velox/tests/orm/shapes/velox/defaultshape"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/enumshape"
+	"github.com/syssam/velox/tests/orm/shapes/velox/errfield"
+	"github.com/syssam/velox/tests/orm/shapes/velox/gotypeshape"
+	"github.com/syssam/velox/tests/orm/shapes/velox/mixedin"
+	"github.com/syssam/velox/tests/orm/shapes/velox/mixinonly"
+	"github.com/syssam/velox/tests/orm/shapes/velox/renamed"
+	"github.com/syssam/velox/tests/orm/shapes/velox/validated"
 )
 
 // invalid asserts err is a validation error of the given schema field.

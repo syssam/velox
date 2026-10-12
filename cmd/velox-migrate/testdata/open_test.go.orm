@@ -6,12 +6,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/migrate"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/migrate"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/user"
 
 	_ "modernc.org/sqlite"
 )

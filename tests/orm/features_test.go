@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox/tests/orm/db/predicate"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/db"
+	client "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,10 +18,10 @@ import (
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/privacy"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/tag"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/tag"
+	"github.com/syssam/velox/tests/orm/velox/user"
 	testschema "github.com/syssam/velox/testschema"
 )
 
@@ -946,4 +946,41 @@ func TestNotFound_Text(t *testing.T) {
 	made := fmt.Errorf("loading: %w", velox.NewNotFoundError("price list"))
 	assert.True(t, velox.IsNotFound(made))
 	assert.EqualError(t, made, "loading: velox: price list not found")
+}
+
+// The generated root package gives the library's handle, errors and hook
+// types under its own name, so that a file which starts its queries there
+// needs one import. They are the library's, not copies: a value made with
+// one package's name is what the other's names.
+func TestRootPackage_GivesTheLibrarysNames(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+
+	// One type: what is written with one package's name is passed where
+	// the other's is asked for.
+	generated := func(d *client.DB, ex client.Executor) (*client.DB, client.Executor) { return d, ex }
+	library := func(tx *velox.Tx) *velox.Tx { return tx }
+	conn, ex := generated(db, db)
+	err := conn.RunTx(ctx, func(tx *client.Tx) error {
+		_, err := client.User.Query(library(tx)).Count(ctx)
+		return err
+	})
+	require.NoError(t, err)
+
+	// One set of errors.
+	_, err = client.User.Get(ctx, ex, 404)
+	assert.True(t, client.IsNotFound(err))
+	require.ErrorIs(t, err, client.ErrNotFound)
+	var nf *client.NotFoundError
+	require.ErrorAs(t, err, &nf)
+	assert.Same(t, velox.ErrNotFound, client.ErrNotFound)
+	assert.NoError(t, client.MaskNotFound(err))
+
+	// The forwarding functions do what the library's do.
+	assert.Equal(t, 0, client.Must(client.User.Query(ex).Count(ctx)))
+	assert.Equal(t, velox.OpCreate, client.OpCreate)
+	assert.Same(t, conn, client.ExecutorFrom(client.WithExecutor(ctx, conn)))
+	assert.Panics(t, func() { client.Check(velox.ErrTxDone) })
+	var hook client.Hook = func(next client.Mutator) client.Mutator { return next }
+	conn.Use(hook)
 }

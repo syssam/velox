@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox/tests/orm/shapes/db/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/scalar"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/scalar"
 )
 
 var (

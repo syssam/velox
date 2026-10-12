@@ -15,14 +15,14 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
 	reffilter "github.com/syssam/velox/tests/integration/filter"
-	client "github.com/syssam/velox/tests/orm/db"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/filter"
-	"github.com/syssam/velox/tests/orm/db/pet"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/predicate"
-	"github.com/syssam/velox/tests/orm/db/token"
-	"github.com/syssam/velox/tests/orm/db/user"
+	client "github.com/syssam/velox/tests/orm/velox"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/filter"
+	"github.com/syssam/velox/tests/orm/velox/pet"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/tests/orm/velox/token"
+	"github.com/syssam/velox/tests/orm/velox/user"
 )
 
 // The GraphQL layer of this tree is generated from the schema velox writes

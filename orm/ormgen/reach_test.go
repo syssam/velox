@@ -42,7 +42,7 @@ func TestOneWayToQueryAnEdge(t *testing.T) {
 		}
 		return n
 	}
-	for _, dir := range []string{"../../tests/orm/db", "../../tests/orm/shapes/db"} {
+	for _, dir := range []string{"../../tests/orm/velox", "../../tests/orm/shapes/velox"} {
 		if n := count(dir, func(name string) bool { return strings.HasSuffix(name, "Client") }); n != 0 {
 			t.Errorf("%s: %d Query<Edge> methods on clients", dir, n)
 		}
@@ -60,7 +60,7 @@ func TestOneWayToQueryAnEdge(t *testing.T) {
 // needs the same check before it is allowed.
 func TestNoGenericTypeWithMethodsInSignatures(t *testing.T) {
 	allowed := map[string]bool{"iter.Seq2": true}
-	for _, dir := range []string{"../../tests/orm/db/entity", "../../tests/orm/db", "../../tests/orm/shapes/db/entity", "../../tests/orm/shapes/db"} {
+	for _, dir := range []string{"../../tests/orm/velox/entity", "../../tests/orm/velox", "../../tests/orm/shapes/velox/entity", "../../tests/orm/shapes/velox"} {
 		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(paths) == 0 {
 			t.Fatal(dir, err)
@@ -121,7 +121,7 @@ func TestNoGenericTypeWithMethodsInSignatures(t *testing.T) {
 // schema, and 0.07 of the 0.38 CPU-seconds a package that only returns an
 // entity took to compile.)
 func TestPackageEntityExportsNoConstants(t *testing.T) {
-	for _, dir := range []string{"../../tests/orm/db/entity", "../../tests/orm/shapes/db/entity"} {
+	for _, dir := range []string{"../../tests/orm/velox/entity", "../../tests/orm/shapes/velox/entity"} {
 		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(paths) == 0 {
 			t.Fatal(dir, err)
@@ -147,7 +147,7 @@ func TestPackageEntityExportsNoConstants(t *testing.T) {
 		}
 	}
 	// And the order fields are where they went.
-	src, err := parser.ParseFile(token.NewFileSet(), "../../tests/orm/db/user/user.go", nil, parser.SkipObjectResolution)
+	src, err := parser.ParseFile(token.NewFileSet(), "../../tests/orm/velox/user/user.go", nil, parser.SkipObjectResolution)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestPackageEntityExportsNoConstants(t *testing.T) {
 // a package that works with entities does not compile against the where
 // input of every entity.
 func TestPackageEntityDoesNotImportTheFilters(t *testing.T) {
-	paths, err := filepath.Glob("../../tests/orm/db/entity/*.go")
+	paths, err := filepath.Glob("../../tests/orm/velox/entity/*.go")
 	if err != nil || len(paths) == 0 {
 		t.Fatal(err)
 	}

@@ -129,12 +129,21 @@ func (c *%[1]s) node(ctx %[2]s.Context, ex velox.Executor, key any) (Noder, erro
 `, t, ctxPkg, id, n.Meta, modelPkg)
 		}
 	}
+	// What the package gives of the library under its own name.
+	if len(nodes) > 0 {
+		for _, n := range [...]string{"Noder", "NodeType", "NodeTypes"} {
+			taken[n] = true
+		}
+	}
+	lib := reexports(taken, im.use(veloxPath, "velox"), ctxPkg, im.use("database/sql", "sql"))
+
 	var out bytes.Buffer
 	out.WriteString(header)
 	root := rootPackage(g.cfg.Package)
 	fmt.Fprintf(&out, "// Package %[1]s is where every query and mutation starts: %[1]s.<Entity>.Query(conn),\n// %[1]s.<Entity>.Create(conn), %[1]s.<Entity>.UpdateByID(conn, id). The entities are in the\n// entity package, their columns and edges in a package each.\npackage %[1]s\n\n", root)
 	out.WriteString(im.block())
 	out.WriteString("\n")
+	out.WriteString(lib)
 	if len(nodes) > 0 {
 		sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
 		fmt.Fprintf(&out, `// Noder is an entity that is a node of the GraphQL schema: what the schema's

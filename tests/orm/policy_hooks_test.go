@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/syssam/velox/tests/orm/db/predicate"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/db"
+	client "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,11 +16,11 @@ import (
 	"github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/privacy"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/pet"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/tag"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/pet"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/tag"
+	"github.com/syssam/velox/tests/orm/velox/user"
 	testschema "github.com/syssam/velox/testschema"
 )
 

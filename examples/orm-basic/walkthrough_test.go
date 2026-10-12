@@ -13,14 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox"
-
-	"example.com/orm-basic/db"
-	"example.com/orm-basic/db/entity"
-	"example.com/orm-basic/db/migrate"
-	"example.com/orm-basic/db/post"
-	"example.com/orm-basic/db/tag"
-	"example.com/orm-basic/db/user"
+	"example.com/orm-basic/velox"
+	"example.com/orm-basic/velox/entity"
+	"example.com/orm-basic/velox/migrate"
+	"example.com/orm-basic/velox/post"
+	"example.com/orm-basic/velox/tag"
+	"example.com/orm-basic/velox/user"
 
 	_ "modernc.org/sqlite"
 )
@@ -43,7 +41,7 @@ func open(t *testing.T) *velox.DB {
 
 func newUser(t *testing.T, ex velox.Executor, name string, age int) *entity.User {
 	t.Helper()
-	u, err := db.User.Create(ex).
+	u, err := velox.User.Create(ex).
 		Set(user.Name.Set(name), user.Email.Set(name+"@example.com"), user.Age.Set(age)).
 		Save(ctx)
 	require.NoError(t, err)
@@ -54,7 +52,7 @@ func newUser(t *testing.T, ex velox.Executor, name string, age int) *entity.User
 // user.Name.Set(v) the assignment. What is not set takes the schema's default.
 func TestCreate(t *testing.T) {
 	conn := open(t)
-	ann, err := db.User.Create(conn).
+	ann, err := velox.User.Create(conn).
 		Set(
 			user.Name.Set("ann"),
 			user.Email.Set("ann@example.com"),
@@ -67,9 +65,9 @@ func TestCreate(t *testing.T) {
 	assert.False(t, ann.CreatedAt.IsZero(), "the time mixin")
 
 	// Several rows with one statement.
-	tags, err := db.Tag.CreateBulk(conn,
-		db.Tag.Create(conn).Set(tag.Name.Set("go")),
-		db.Tag.Create(conn).Set(tag.Name.Set("sql")),
+	tags, err := velox.Tag.CreateBulk(conn,
+		velox.Tag.Create(conn).Set(tag.Name.Set("go")),
+		velox.Tag.Create(conn).Set(tag.Name.Set("sql")),
 	).Save(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tags, 2)
@@ -81,31 +79,31 @@ func TestErrors(t *testing.T) {
 	newUser(t, conn, "ann", 30)
 
 	// The schema's validators run before any SQL.
-	_, err := db.User.Create(conn).Set(user.Name.Set(""), user.Email.Set("x@example.com")).Save(ctx)
+	_, err := velox.User.Create(conn).Set(user.Name.Set(""), user.Email.Set("x@example.com")).Save(ctx)
 	var invalid *velox.ValidationError
 	require.ErrorAs(t, err, &invalid)
 	assert.Equal(t, "name", invalid.Name)
 
 	// What the database refuses says which kind of constraint it was.
-	_, err = db.User.Create(conn).Set(user.Name.Set("ann2"), user.Email.Set("ann@example.com")).Save(ctx)
+	_, err = velox.User.Create(conn).Set(user.Name.Set("ann2"), user.Email.Set("ann@example.com")).Save(ctx)
 	require.True(t, velox.IsConstraintError(err))
 	require.ErrorIs(t, err, velox.ErrUnique)
 
 	// A row that is not there.
-	_, err = db.User.Get(ctx, conn, 404)
+	_, err = velox.User.Get(ctx, conn, 404)
 	require.True(t, velox.IsNotFound(err))
 	assert.EqualError(t, err, "velox: user not found")
 }
 
 // A condition is a method of the column. One of another entity's columns
-// does not compile here: db.User.Query(conn).Where(post.Title.EQ("x")).
+// does not compile here: velox.User.Query(conn).Where(post.Title.EQ("x")).
 func TestQuery(t *testing.T) {
 	conn := open(t)
 	newUser(t, conn, "ann", 30)
 	newUser(t, conn, "bob", 17)
 	newUser(t, conn, "cat", 45)
 
-	adults, err := db.User.Query(conn).
+	adults, err := velox.User.Query(conn).
 		Where(user.Age.GTE(18)).
 		OrderBy(user.Age.Desc()).
 		All(ctx)
@@ -113,7 +111,7 @@ func TestQuery(t *testing.T) {
 	assert.Equal(t, []string{"cat", "ann"}, names(adults))
 
 	// And, Or and Not of the entity's own conditions.
-	some, err := db.User.Query(conn).
+	some, err := velox.User.Query(conn).
 		Where(user.Or(user.Name.EQ("bob"), user.And(user.Age.GT(40), user.Not(user.Name.Contains("z"))))).
 		OrderBy(user.Name.Asc()).
 		All(ctx)
@@ -121,13 +119,13 @@ func TestQuery(t *testing.T) {
 	assert.Equal(t, []string{"bob", "cat"}, names(some))
 
 	// One row, a count, whether any.
-	bob, err := db.User.Query(conn).Where(user.Email.EQ("bob@example.com")).Only(ctx)
+	bob, err := velox.User.Query(conn).Where(user.Email.EQ("bob@example.com")).Only(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 17, bob.Age)
-	n, err := db.User.Query(conn).Where(user.Role.EQ(user.RoleUser)).Count(ctx)
+	n, err := velox.User.Query(conn).Where(user.Role.EQ(user.RoleUser)).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
-	any, err := db.User.Query(conn).Where(user.Role.EQ(user.RoleAdmin)).Exists(ctx)
+	any, err := velox.User.Query(conn).Where(user.Role.EQ(user.RoleAdmin)).Exists(ctx)
 	require.NoError(t, err)
 	assert.False(t, any)
 }
@@ -139,23 +137,23 @@ func TestUpdateAndDelete(t *testing.T) {
 	ann := newUser(t, conn, "ann", 30)
 	newUser(t, conn, "bob", 17)
 
-	ann, err := db.User.UpdateByID(conn, ann.ID).
+	ann, err := velox.User.UpdateByID(conn, ann.ID).
 		Set(user.Age.Add(1), user.Role.Set(user.RoleAdmin)).
 		SaveOne(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 31, ann.Age)
 	assert.Equal(t, user.RoleAdmin, ann.Role)
 
-	n, err := db.User.Update(conn).
+	n, err := velox.User.Update(conn).
 		Set(user.Role.Set(user.RoleGuest)).
 		Where(user.Age.LT(18)).
 		Exec(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	require.NoError(t, db.User.DeleteByID(ctx, conn, ann.ID))
-	require.True(t, velox.IsNotFound(db.User.DeleteByID(ctx, conn, ann.ID)), "it is gone")
-	n, err = db.User.Delete(conn).Where(user.Role.EQ(user.RoleGuest)).Exec(ctx)
+	require.NoError(t, velox.User.DeleteByID(ctx, conn, ann.ID))
+	require.True(t, velox.IsNotFound(velox.User.DeleteByID(ctx, conn, ann.ID)), "it is gone")
+	n, err = velox.User.Delete(conn).Where(user.Role.EQ(user.RoleGuest)).Exec(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 }
@@ -165,7 +163,7 @@ func TestUpdateAndDelete(t *testing.T) {
 func TestEdges(t *testing.T) {
 	conn := open(t)
 	ann, bob := newUser(t, conn, "ann", 30), newUser(t, conn, "bob", 40)
-	golang, err := db.Tag.Create(conn).Set(tag.Name.Set("go")).Save(ctx)
+	golang, err := velox.Tag.Create(conn).Set(tag.Name.Set("go")).Save(ctx)
 	require.NoError(t, err)
 
 	// A post belongs to its author and carries tags.
@@ -174,7 +172,7 @@ func TestEdges(t *testing.T) {
 		if i == 2 {
 			author = bob
 		}
-		b := db.Post.Create(conn).Set(post.Title.Set(title), post.Author.Set(author.ID))
+		b := velox.Post.Create(conn).Set(post.Title.Set(title), post.Author.Set(author.ID))
 		if i < 2 {
 			b.Set(post.Tags.Add(golang.ID), post.Status.Set(post.StatusPublished))
 		}
@@ -183,7 +181,7 @@ func TestEdges(t *testing.T) {
 	}
 
 	// Filter through an edge.
-	gophers, err := db.User.Query(conn).
+	gophers, err := velox.User.Query(conn).
 		Where(user.Posts.HasWith(post.Tags.HasWith(tag.Name.EQ("go")))).
 		All(ctx)
 	require.NoError(t, err)
@@ -191,9 +189,9 @@ func TestEdges(t *testing.T) {
 
 	// Load an edge with the rows: one more query for the edge, whatever the
 	// number of users. The query given describes what to load of it.
-	users, err := db.User.Query(conn).
+	users, err := velox.User.Query(conn).
 		OrderBy(user.Name.Asc()).
-		WithPosts(db.Post.Query(nil).Where(post.Status.EQ(post.StatusPublished)).OrderBy(post.Title.Asc())).
+		WithPosts(velox.Post.Query(nil).Where(post.Status.EQ(post.StatusPublished)).OrderBy(post.Title.Asc())).
 		All(ctx)
 	require.NoError(t, err)
 	require.Len(t, users, 2)
@@ -214,7 +212,7 @@ func TestTransaction(t *testing.T) {
 	failed := errors.New("changed my mind")
 	err := conn.RunTx(ctx, func(tx *velox.Tx) error {
 		newUser(t, tx, "ann", 30) // newUser takes a velox.Executor
-		n, err := db.User.Query(tx).Count(ctx)
+		n, err := velox.User.Query(tx).Count(ctx)
 		if err != nil {
 			return err
 		}
@@ -222,7 +220,7 @@ func TestTransaction(t *testing.T) {
 		return failed
 	})
 	require.ErrorIs(t, err, failed)
-	n, err := db.User.Query(conn).Count(ctx)
+	n, err := velox.User.Query(conn).Count(ctx)
 	require.NoError(t, err)
 	assert.Zero(t, n, "rolled back")
 }
@@ -235,14 +233,14 @@ func TestPaginate(t *testing.T) {
 		newUser(t, conn, name, 30)
 	}
 	two := 2
-	page, err := db.User.Query(conn).OrderBy(user.Name.Asc()).Paginate(ctx, nil, &two, nil, nil)
+	page, err := velox.User.Query(conn).OrderBy(user.Name.Asc()).Paginate(ctx, nil, &two, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 5, page.TotalCount)
 	assert.True(t, page.PageInfo.HasNextPage)
 	require.Len(t, page.Edges, 2)
 	assert.Equal(t, "ann", page.Edges[0].Node.Name)
 
-	next, err := db.User.Query(conn).OrderBy(user.Name.Asc()).Paginate(ctx, page.PageInfo.EndCursor, &two, nil, nil)
+	next, err := velox.User.Query(conn).OrderBy(user.Name.Asc()).Paginate(ctx, page.PageInfo.EndCursor, &two, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "cat", next.Edges[0].Node.Name)
 }

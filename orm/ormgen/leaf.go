@@ -159,15 +159,26 @@ func (g *generator) enumNames(e *ent) (*namer, map[*fld]string, map[*fld][]strin
 	return n, types, consts, columns
 }
 
+// columnsFile is the file of the column types in the package of e.
+func columnsFile(e *ent) string {
+	if fileName(e) == "columns" {
+		return "columns_gen"
+	}
+	return "columns"
+}
+
 // leaf generates the package of one entity: a descriptor per field and per
 // edge, so that application code reads
 // db.User.Query(tx).Where(user.Name.EQ(...), user.Posts.Has()). The
 // builders are reached through the root package, not from here.
 //
+// It returns the files of the package by name: the entity's own, and the one
+// of its column types.
+//
 // It imports the predicate package and not package entity (nor another entity's package): a
 // change to one entity rebuilds its package, package entity and what uses them,
 // and not the other 453 per-entity packages.
-func (g *generator) leaf(e *ent) ([]byte, error) {
+func (g *generator) leaf(e *ent) (map[string][]byte, error) {
 	im := newImports()
 	im.use(ormPath, "orm")
 	im.use(g.cfg.Package+"/predicate", "predicate")
@@ -335,6 +346,11 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 	}
 
 	pred, set, ord := e.pred(), e.set(), e.order()
+	// The column types go to a file of their own: they are the same methods
+	// for every Go type a column has, most of the package and nothing a
+	// reader looks for. What the entity is (its columns, its enums, its
+	// edges) stays in the file named after it.
+	typesFrom := b.Len()
 	for _, s := range order {
 		w("// %s is a column of Go type %s: its methods build the predicates,\n// assignments and order terms of that column. They have pointer receivers so\n// that the compiler emits each once.\ntype %s string\n\n", s.name, s.gotype, s.name)
 		for _, o := range s.ops {
@@ -365,6 +381,8 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 			w("// Asc orders by the column, smallest first.\nfunc (f *%s) Asc() %s { return %s{Col: string(*f)} }\n\n// Desc orders by the column, greatest first.\nfunc (f *%s) Desc() %s { return %s{Col: string(*f), Desc: true} }\n\n", s.name, ord, ord, s.name, ord, ord)
 		}
 	}
+
+	typesTo := b.Len()
 
 	// A column has two names: user.Name is its descriptor, whose methods
 	// build conditions, assignments and order terms, and user.ColumnName is
@@ -408,8 +426,12 @@ func (g *generator) leaf(e *ent) ([]byte, error) {
 	fmt.Fprintf(&out, "// Package %s describes the columns and edges of %s. Its queries and\n// mutations start at the root package's %s.\npackage %s\n\n", e.Pkg, e.Name, e.Name, e.Pkg)
 	out.WriteString(im.block())
 	out.WriteString("\n")
-	out.Write(b.Bytes())
-	return formatted(&out, e.Pkg)
+	src := b.Bytes()
+	out.Write(src[:typesFrom])
+	out.Write(src[typesTo:])
+	fmt.Fprintf(&out, "\n%s%s\n\n", fileMarker, columnsFile(e))
+	out.Write(src[typesFrom:typesTo])
+	return split(out.Bytes(), fileName(e))
 }
 
 // leafEdges writes the description and the descriptor of each edge of e. The

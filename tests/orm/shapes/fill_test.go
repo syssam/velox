@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox/orm"
-	client "github.com/syssam/velox/tests/orm/shapes/db"
-	"github.com/syssam/velox/tests/orm/shapes/db/defaultshape"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
+	"github.com/syssam/velox/tests/orm/shapes/velox/defaultshape"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 )
 
 // opt is an optional as an API layer has one: absent, present and null, or

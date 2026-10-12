@@ -632,7 +632,7 @@ func (Thing) Fields() []velox.Field {
 	return []velox.Field{field.String("id").GoType(types.Label("")), field.String("label").GoType(types.Label(""))}
 }
 `,
-		want: builds, generated: map[string][]string{"thing/thing.go": {"type LabelIDColumn string", "type LabelColumn string"}}},
+		want: builds, generated: map[string][]string{"thing/columns.go": {"type LabelIDColumn string", "type LabelColumn string"}}},
 	// An entity nothing can be ordered by has no order in the schema: lists
 	// of it take no orderBy, and the edge to it has none either. (velox's
 	// schema generator wrote an order enum without values, and refused its

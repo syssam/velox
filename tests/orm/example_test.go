@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"log"
 
-	db "github.com/syssam/velox/tests/orm/db"
+	db "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
-	"github.com/syssam/velox/tests/orm/db/entity"
-	"github.com/syssam/velox/tests/orm/db/migrate"
-	"github.com/syssam/velox/tests/orm/db/post"
-	"github.com/syssam/velox/tests/orm/db/predicate"
-	"github.com/syssam/velox/tests/orm/db/user"
+	"github.com/syssam/velox/tests/orm/velox/entity"
+	"github.com/syssam/velox/tests/orm/velox/migrate"
+	"github.com/syssam/velox/tests/orm/velox/post"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/tests/orm/velox/user"
 )
 
 // The examples below are the README's, run by go test: a snippet that stops

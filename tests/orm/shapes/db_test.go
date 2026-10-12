@@ -21,7 +21,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const dbPackage = "github.com/syssam/velox/tests/orm/shapes/db"
+const dbPackage = "github.com/syssam/velox/tests/orm/shapes/velox"
 
 // graph is the schema graph of ./schema, loaded once. The generated code has no migration
 // generator yet, so the tests create their tables from it with velox's

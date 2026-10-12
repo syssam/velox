@@ -21,7 +21,7 @@ func TestMigrateKeepsBehavior(t *testing.T) {
 	}
 	const (
 		from = "github.com/syssam/velox/tests/integration"
-		to   = "github.com/syssam/velox/tests/orm/db"
+		to   = "github.com/syssam/velox/tests/orm/velox"
 	)
 	gotest := func(dir string) string {
 		t.Helper()
@@ -119,20 +119,20 @@ next:
 	// A few shapes worth pinning: they are what a reader of the result sees.
 	for _, want := range []string{
 		"Client *velox.DB", // the embedded client keeps its field name
-		"db.User.Create(s.Client).",
+		"velox.User.Create(s.Client).",
 		"user.Nickname.SetNillable(nick),", // setters joined into one Set
 		"return predicate.User{}",          // a nil predicate
 		"!orm.IsZero(p)",
 		"predicate.User(orm.Raw(func(s *sql.Selector) {",
 		"user.Posts.HasWith(post.Status.EQ(post.StatusDraft))",
 		".Set(user.Role.Set(user.RoleAdmin), user.Nickname.Clear(), user.Age.Add(1)).SaveOne(ctx)",
-		"db.User.UpdateByID(s.Client, id).Set(user.Name.Set(name)).ExecOne(ctx)",
-		"db.User.DeleteByID(ctx, s.Client, id)",
+		"velox.User.UpdateByID(s.Client, id).Set(user.Name.Set(name)).ExecOne(ctx)",
+		"velox.User.DeleteByID(ctx, s.Client, id)",
 		".OrderBy(orderBy.Term()).Where(where.P()).Paginate(ctx, after, first, nil, nil)",
 		"s.Client.Begin(ctx)",
 		"moveAll(ctx, tx, from, to)", // a client passed as a value is the handle
 		"posts velox.Executor",
-		"WithPosts(db.Post.Query(nil).Where(post.Title.HasPrefix(prefix)))",
+		"WithPosts(velox.Post.Query(nil).Where(post.Title.HasPrefix(prefix)))",
 		"func roleOf(s string) user.RoleEnum { return user.RoleEnum(s) }",
 		`user.ModelName + ":" + string(u.Role)`,
 		".Set(post.Tags.Add(tagIDs...))", // AddTagIDs: the edge is Tags
@@ -141,7 +141,7 @@ next:
 		"q.OrderBy(o.Term())",
 		"p = predicate.User(orm.Invalid(err))",
 		"orm.Apply(q, opts...).Paginate(ctx, nil, first, nil, nil)",
-		"q, ok := db.User.Query(s.Client), true",
+		"q, ok := velox.User.Query(s.Client), true",
 		`.Select().GroupBy(post.ColumnStatus).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)`,
 		"u.QueryPosts(s.Client).OrderBy(post.Title.Asc()).All(ctx)", // the handle the entity was read on
 		"p.QueryAuthor(s.Client).Only(ctx)",                         // through the loop over what a query returned
@@ -173,7 +173,14 @@ next:
 	for file, wants := range map[string][]string{
 		"more.go": {
 			// An error of the library is the same error from package orm.
+			// An error of the library is the same error from package orm, and
+			// is named through the generated package, which is called velox
+			// too; what that package does not give keeps the library, under
+			// another name.
 			"func Missing(what string) error { return velox.NewNotFoundError(what) }",
+			"func Described(fields []veloxpkg.Field) int { return len(fields) }",
+			`veloxpkg "github.com/syssam/velox"`,
+			`"github.com/syssam/velox/tests/orm/velox"`,
 			".BatchSize(size).Save(ctx)",
 			"return errors.Is(err, gqlinput.ErrWhereDepth), gqlinput.MaxWhereDepth",
 		},
@@ -242,7 +249,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 
 	var log bytes.Buffer
 	report := filepath.Join(work, "report.txt")
-	err = run([]string{"-dir", "../..", "-generated", "github.com/syssam/velox/tests/integration", "-to", "github.com/syssam/velox/tests/orm/db",
+	err = run([]string{"-dir", "../..", "-generated", "github.com/syssam/velox/tests/integration", "-to", "github.com/syssam/velox/tests/orm/velox",
 		"-write", "-report", report, "./cmd/velox-migrate/" + filepath.ToSlash(dir)}, &log)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, log.String())
@@ -299,8 +306,8 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"ctx = velox.WithExecutor(ctx, c) ctx = velox.WithExecutor(ctx, tx)",
 		"return velox.TxFrom(ctx) != nil && velox.ExecutorFrom(ctx) != nil",
 		// Order terms in a variable.
-		"order := func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnCreatedAt)), sql.Desc(s.C(user.ColumnName))) } return db.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(order))).First(ctx)",
-		"byAge := func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C(user.ColumnAge))) } return db.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(byAge))).First(ctx)",
+		"order := func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnCreatedAt)), sql.Desc(s.C(user.ColumnName))) } return velox.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(order))).First(ctx)",
+		"byAge := func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C(user.ColumnAge))) } return velox.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(byAge))).First(ctx)",
 		// An order written as a function; a column named at run time; a list of functions.
 		`OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { s.OrderBy(s.C(user.ColumnNickname) + " NULLS LAST") })), predicate.UserOrderTerm{Col: column, Desc: true}).All(ctx)`,
 		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { for _, f := range fs { f(s) } }))).All(ctx)",
@@ -314,14 +321,14 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func begins(ctx context.Context, c *velox.DB) error {",
 		"func countIfAny(ctx context.Context, c *velox.DB) (int, error) {",
 		// An option kept in a variable shapes the query it is given.
-		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return db.User.Query(c).WithPosts(orm.Apply(db.Post.Query(nil), opt)).All(ctx) }",
+		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return velox.User.Query(c).WithPosts(orm.Apply(velox.Post.Query(nil), opt)).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",
 		"Owner orm.OrderedColumn[int, P]", // every column can be asked IsNil
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
 		"func tables(ctx context.Context, c *velox.DB) error { return migrate.Create(ctx, c) }",
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
-		"return velox.First(db.User.Query(c).Limit(1).IDs(ctx))",
-		"return db.User.Query(c).ForUpdate(orm.SkipLocked).All(ctx)",
+		"return velox.First(velox.User.Query(c).Limit(1).IDs(ctx))",
+		"return velox.User.Query(c).ForUpdate(orm.SkipLocked).All(ctx)",
 		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(sql.OrderByField(user.ColumnNickname, sql.OrderAsc(), sql.OrderNullsFirst()).ToFunc())), user.ID.Asc()).All(ctx)",
 		"return who.QueryPosts(c).All(ctx)",
 		`func noField(o *entity.PostOrder) bool { return o == nil || o.Field == "" }`,
@@ -331,23 +338,23 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func anyOfThem[Q exister](ctx context.Context, q Q) (bool, error) { return q.Exists(ctx) }",
 		`func opened(dsn string) (*velox.DB, error) { return velox.Open("sqlite", dsn) }`,
 		// The start of a query as a value.
-		"func starter(c *velox.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return db.User.Query(c) } }",
+		"func starter(c *velox.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return velox.User.Query(c) } }",
 		// Some columns of an eager load's neighbors.
-		"WithAuthor(db.User.Query(nil).Columns(user.ColumnName)).All(ctx)",
+		"WithAuthor(velox.User.Query(nil).Columns(user.ColumnName)).All(ctx)",
 		// Conditions that are not predicate types keep the library's combinator.
 		"func plain(fs ...func(*sql.Selector)) func(*sql.Selector) { return sql.AndPredicates(fs...) }",
 		// Deferred: still later.
-		"defer func() { velox.Must(db.User.Update(c).Set(user.Age.Set(0)).Exec(ctx)) }()",
-		`go func() { velox.Must(db.User.Create(c).Set(user.Name.Set("x")).Save(ctx)) }()`,
+		"defer func() { velox.Must(velox.User.Update(c).Set(user.Age.Set(0)).Exec(ctx)) }()",
+		`go func() { velox.Must(velox.User.Create(c).Set(user.Name.Set("x")).Save(ctx)) }()`,
 		// The last order; no order.
-		"return db.Post.Query(c).OrderBy(b.Term()).Paginate(ctx, nil, nil, nil, nil) //",
-		"return db.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) }",
+		"return velox.Post.Query(c).OrderBy(b.Term()).Paginate(ctx, nil, nil, nil, nil) //",
+		"return velox.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) }",
 		// The adapter of package intercept, called.
 		"return orm.TraverseFunc(func(ctx context.Context, q *orm.Query) error { q.Limit(100)",
 		// A parameter that does not capture the builder.
 		"return func(v_ string) *entity.UserUpdate { return v.Set(user.Name.Set(v_)) }",
 		// A first argument that is itself rewritten.
-		`return db.User.CreateBulk(c, db.User.Create(c).Set(user.Name.Set("a"), user.Email.Set("a@x")), db.User.Create(c).Set(user.Name.Set("b"), user.Email.Set("b@x"))).Save(ctx)`,
+		`return velox.User.CreateBulk(c, velox.User.Create(c).Set(user.Name.Set("a"), user.Email.Set("a@x")), velox.User.Create(c).Set(user.Name.Set("b"), user.Email.Set("b@x"))).Save(ctx)`,
 		// Predicates in a field and in a map.
 		"cond: predicate.User(orm.Raw(func(s *sql.Selector) {",
 		`"none": predicate.User{}`,
@@ -357,7 +364,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// The values of the errors.
 		"return errors.Is(err, velox.ErrNotFound) || errors.Is(err, velox.ErrNotSingular)",
 		// A last order that is nil is no order; an order written out.
-		"return db.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) // note: more than one order",
+		"return velox.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) // note: more than one order",
 		"OrderBy((&entity.PostOrder{Field: f}).Term()).Paginate(",
 		// Unwrap as a statement.
 		"_ = u if err := tx.Commit(); err != nil {",
@@ -368,7 +375,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// A column's name where no rule rewrites the call around it.
 		"s.OrderBy(sql.Asc(user.ColumnName))",
 		// Likes, not LikedPosts.
-		"db.User.UpdateByID(c, userID).Set(user.Likes.Add(likeIDs...)).ExecOne(ctx)",
+		"velox.User.UpdateByID(c, userID).Set(user.Likes.Add(likeIDs...)).ExecOne(ctx)",
 		// A package name the application has taken, in another file.
 		"return slicespkg.Contains(user.RoleValues(), r)",
 	} {

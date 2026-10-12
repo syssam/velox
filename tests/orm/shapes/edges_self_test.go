@@ -4,20 +4,20 @@ import (
 	"context"
 	"testing"
 
-	"github.com/syssam/velox/tests/orm/shapes/db/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/tests/orm/shapes/db/course"
-	"github.com/syssam/velox/tests/orm/shapes/db/enrollment"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/node"
-	"github.com/syssam/velox/tests/orm/shapes/db/person"
-	"github.com/syssam/velox/tests/orm/shapes/db/student"
+	"github.com/syssam/velox/tests/orm/shapes/velox/course"
+	"github.com/syssam/velox/tests/orm/shapes/velox/enrollment"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/node"
+	"github.com/syssam/velox/tests/orm/shapes/velox/person"
+	"github.com/syssam/velox/tests/orm/shapes/velox/student"
 )
 
 func nodeNames(ns []*entity.Node) []string {

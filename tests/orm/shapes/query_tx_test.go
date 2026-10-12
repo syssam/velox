@@ -6,20 +6,20 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/syssam/velox/tests/orm/shapes/db/predicate"
+	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 
-	client "github.com/syssam/velox/tests/orm/shapes/db"
+	client "github.com/syssam/velox/tests/orm/shapes/velox"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/tests/orm/shapes/db/article"
-	"github.com/syssam/velox/tests/orm/shapes/db/author"
-	"github.com/syssam/velox/tests/orm/shapes/db/entity"
-	"github.com/syssam/velox/tests/orm/shapes/db/intkey"
-	"github.com/syssam/velox/tests/orm/shapes/db/person"
-	"github.com/syssam/velox/tests/orm/shapes/db/topic"
+	"github.com/syssam/velox/tests/orm/shapes/velox/article"
+	"github.com/syssam/velox/tests/orm/shapes/velox/author"
+	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
+	"github.com/syssam/velox/tests/orm/shapes/velox/intkey"
+	"github.com/syssam/velox/tests/orm/shapes/velox/person"
+	"github.com/syssam/velox/tests/orm/shapes/velox/topic"
 )
 
 func intKeys(t *testing.T, db velox.Executor, names ...string) []*entity.IntKey {

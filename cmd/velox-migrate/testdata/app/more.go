@@ -59,6 +59,10 @@ func ClassifyByLibrary(err error) string {
 // code under test takes for a missing row.
 func Missing(what string) error { return velox.NewNotFoundError(what) }
 
+// Described counts the fields of a schema: velox.Field is a name of the
+// library that no generated package repeats.
+func Described(fields []velox.Field) int { return len(fields) }
+
 // Scope is the condition a caller's access adds to a list: none for one who
 // sees every row.
 func Scope(seesAll bool, name string) predicate.User {

@@ -209,7 +209,7 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 		files[filepath.Join("entity", name)] = src
 	}
 	// The package of an entity is written from that entity alone.
-	leaves := make([][]byte, len(g.ents))
+	leaves := make([]map[string][]byte, len(g.ents))
 	err = each(len(g.ents), func(i int) error {
 		src, leafErr := g.leaf(g.ents[i])
 		if leafErr != nil {
@@ -222,7 +222,9 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 		return err
 	}
 	for i, e := range g.ents {
-		files[filepath.Join(e.Pkg, e.Pkg+".go")] = leaves[i]
+		for name, src := range leaves[i] {
+			files[filepath.Join(e.Pkg, name)] = src
+		}
 	}
 	pr, err := g.predicates()
 	if err != nil {
