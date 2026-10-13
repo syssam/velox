@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql"
 )
 
 // The builders. A generated tree names them per entity,
@@ -152,6 +153,25 @@ func (q *QueryOf[PT, E, ID]) ForShare[_ Lazy[ID]](opts ...LockOption) *QueryOf[P
 //go:noinline
 func (q *QueryOf[PT, E, ID]) Select[_ Lazy[ID]](columns ...string) *Selection {
 	return q.c.Select(columns...)
+}
+
+// Aggregate reads aggregates over the matching rows instead of entities:
+//
+//	n, err := q.Aggregate(orm.Sum(order.ColumnAmount)).Int(ctx)
+//
+// With columns to group by it is Select().GroupBy(...).Aggregate(...).
+//
+//go:noinline
+func (q *QueryOf[PT, E, ID]) Aggregate[_ Lazy[ID]](aggs ...Agg) *Selection {
+	return q.c.Select().Aggregate(aggs...)
+}
+
+// SQL returns the statement the query runs for All and its arguments,
+// without running it: for a log, a test, or a look at the plan.
+//
+//go:noinline
+func (q *QueryOf[PT, E, ID]) SQL[_ Lazy[ID]](ctx context.Context) (query string, args []any, err error) {
+	return q.c.Select().SQL(ctx)
 }
 
 // Clone returns an independent copy of the query.
@@ -582,10 +602,11 @@ func (c *ClientOf[PT, E, ID]) Create[_ Lazy[ID]](ex velox.Executor) *CreateOf[PT
 	return &CreateOf[PT, E]{c: MutCore{M: c.Meta, Ex: ex}}
 }
 
-// CreateBulk returns a builder that creates several rows with one statement:
-// one per given builder, each as it is when the rows are inserted (what is
-// set on a builder after this call is part of its row), and one per call of
-// the builder's Row.
+// CreateBulk returns a builder that creates several rows with one statement,
+// on ex: one per call of the builder's Row, and one per given builder, each
+// as it is when the rows are inserted (what is set on a builder after this
+// call is part of its row). Of a given builder only what it sets is used:
+// the rows run on ex, whatever the builder was made with.
 func (c *ClientOf[PT, E, ID]) CreateBulk[_ Lazy[ID]](ex velox.Executor, bs ...*CreateOf[PT, E]) *CreateBulkOf[PT, E] {
 	return &CreateBulkOf[PT, E]{m: c.Meta, ex: ex, bs: bs}
 }
@@ -600,6 +621,43 @@ func (c *ClientOf[PT, E, ID]) Delete[_ Lazy[ID]](ex velox.Executor) *DeleteOf[E]
 	return &DeleteOf[E]{c: MutCore{M: c.Meta, Ex: ex}}
 }
 
+// Raw returns a condition of the entity written against the SQL builder, for
+// what the columns' methods do not say:
+//
+//	velox.User.Raw(func(s *sql.Selector) { s.Where(sql.ExprP("lower(name) = ?", name)) })
+//
+//go:noinline
+func (c *ClientOf[PT, E, ID]) Raw[_ Lazy[ID]](f func(*sql.Selector)) E { return E(Raw(f)) }
+
+// RawOrder returns an order term of the entity written against the SQL
+// builder: NULLS LAST, an expression. A query ordered this way cannot be
+// paged with Paginate.
+//
+//go:noinline
+func (c *ClientOf[PT, E, ID]) RawOrder[_ Lazy[ID]](f func(*sql.Selector)) OrderOf[E] {
+	return OrderOf[E](RawOrder(f))
+}
+
+// FieldPredicate returns the condition on a field named at run time, a
+// filter of a list endpoint: the field by its name in the schema, an
+// operator, a value of the field's type. A field that is not there, or one
+// the operator does not fit, is an error.
+//
+//go:noinline
+func (c *ClientOf[PT, E, ID]) FieldPredicate[_ Lazy[ID]](field string, op Op, value any) (E, error) {
+	p, err := FieldPredicate(c.Meta, field, op, value)
+	return E(p), err
+}
+
+// FieldOrder returns the order by a field named at run time. A field that
+// is not there, or a sensitive one, is an error.
+//
+//go:noinline
+func (c *ClientOf[PT, E, ID]) FieldOrder[_ Lazy[ID]](field string, desc bool) (OrderOf[E], error) {
+	o, err := FieldOrder(c.Meta, field, desc)
+	return OrderOf[E](o), err
+}
+
 //go:noinline
 func (c *ClientOf[PT, E, ID]) byID[_ Lazy[ID]](id ID) E {
 	return E(P{Op: OpEQ, Col: c.Meta.id().Column, Val: id})
@@ -612,8 +670,9 @@ func (c *ClientOf[PT, E, ID]) Get[_ Lazy[ID]](ctx context.Context, ex velox.Exec
 	return c.Query(ex).Where(c.byID(id)).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the row with the given id; end
-// it with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the row with the given id. End
+// it with SaveOne or ExecOne, which report a missing row; Exec returns 0 for
+// one and no error.
 //
 //go:noinline
 func (c *ClientOf[PT, E, ID]) UpdateByID[_ Lazy[ID]](ex velox.Executor, id ID) *UpdateOf[PT, E] {

@@ -77,8 +77,10 @@ func And(ps ...predicate.DefaultShape) predicate.DefaultShape { return group(orm
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.DefaultShape) predicate.DefaultShape { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.DefaultShape) predicate.DefaultShape { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.DefaultShape) predicate.DefaultShape {
+	return group(orm.OpNot, []predicate.DefaultShape{p})
+}
 
 // group joins conditions on DefaultShape under one operator.
 func group(op orm.Op, ps []predicate.DefaultShape) predicate.DefaultShape {

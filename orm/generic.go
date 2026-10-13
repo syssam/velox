@@ -50,8 +50,8 @@ func And[T Predicate](ps ...T) T { return group(OpAnd, ps) }
 // Or matches the rows at least one of ps matches; without any, none.
 func Or[T Predicate](ps ...T) T { return group(OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not[T Predicate](ps ...T) T { return group(OpNot, ps) }
+// Not matches the rows p does not match.
+func Not[T Predicate](p T) T { return group(OpNot, []T{p}) }
 
 // IsZero reports whether p is the zero predicate: no condition, what a
 // function returns when it has nothing to add.

@@ -45,38 +45,6 @@ func Compile[T Predicate](p T) func(*sql.Selector) {
 	return compile(&c)
 }
 
-// ExecSQL runs a statement that returns no rows on the executor: on the
-// transaction when ex is one, which is what a lock statement such as
-// pg_advisory_xact_lock needs.
-func ExecSQL(ctx context.Context, ex velox.Executor, query string, args ...any) (stdsql.Result, error) {
-	var res stdsql.Result
-	if ex == nil || ex.State() == nil {
-		return nil, velox.ErrNoExecutor
-	}
-	if err := ex.State().Driver().Exec(ctx, query, args, &res); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-// QuerySQL runs a statement that returns rows on the executor. The caller
-// closes the rows.
-func QuerySQL(ctx context.Context, ex velox.Executor, query string, args ...any) (*stdsql.Rows, error) {
-	rows := &sql.Rows{}
-	if ex == nil || ex.State() == nil {
-		return nil, velox.ErrNoExecutor
-	}
-	if err := ex.State().Driver().Query(ctx, query, args, rows); err != nil {
-		return nil, err
-	}
-	r, ok := rows.ColumnScanner.(*stdsql.Rows)
-	if !ok {
-		_ = rows.Close()
-		return nil, fmt.Errorf("velox: the driver returned %T, not database/sql rows", rows.ColumnScanner)
-	}
-	return r, nil
-}
-
 // Lock is the row lock a query takes on what it reads. It needs a
 // transaction to mean anything, and SQLite ignores it.
 type Lock uint8
@@ -134,7 +102,7 @@ func (q *QueryCore) SetLock(l Lock, opts []LockOption) {
 type Agg func(*sql.Selector) string
 
 // The aggregates below take a column by name; the generated constants
-// (order.FieldAmount) are names that cannot be misspelled.
+// (order.ColumnAmount) are names that cannot be misspelled.
 
 // Count counts rows.
 func Count() Agg { return func(*sql.Selector) string { return sql.Count("*") } }
@@ -152,13 +120,13 @@ func Max(column string) Agg { return func(s *sql.Selector) string { return sql.M
 func Mean(column string) Agg { return func(s *sql.Selector) string { return sql.Avg(s.C(column)) } }
 
 // As names the aggregate in the result, so that it can be scanned into a
-// struct field tagged with that name.
-func As(a Agg, name string) Agg {
+// struct field tagged with that name: orm.Count().As("n").
+func (a Agg) As(name string) Agg {
 	return func(s *sql.Selector) string { return sql.As(a(s), name) }
 }
 
-// Selection reads columns and aggregates of a query instead of entities. The
-// generated Select method of a query returns one.
+// Selection reads columns and aggregates of a query instead of entities: what
+// a query's Select and Aggregate return.
 type Selection struct {
 	q     *QueryCore
 	cols  []string
@@ -191,6 +159,20 @@ func (s *Selection) Aggregate(aggs ...Agg) *Selection {
 //go:noinline
 func (s *Selection) Scan(ctx context.Context, dest any) error {
 	return runSelection(ctx, s, func(rows *sql.Rows) error { return sql.ScanSlice(rows, dest) })
+}
+
+// Float runs the read and returns its single number, e.g. a mean or a sum of
+// a column that is not of integers: 0 when no row matches or the value is
+// NULL.
+func (s *Selection) Float(ctx context.Context) (float64, error) {
+	var v stdsql.NullFloat64
+	err := runSelection(ctx, s, func(rows *sql.Rows) error {
+		if !rows.Next() {
+			return rows.Err()
+		}
+		return rows.Scan(&v)
+	})
+	return v.Float64, err
 }
 
 // Int runs the read and returns its single integer, e.g. a count or a

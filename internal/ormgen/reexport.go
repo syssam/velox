@@ -28,13 +28,17 @@ var (
 	}
 	rootConsts = []string{"OpCreate", "OpUpdate", "OpUpdateOne", "OpDelete", "OpDeleteOne"}
 	rootVars   = []string{
-		"ErrNotFound", "ErrNotSingular", "ErrTxStarted", "ErrTxDone", "ErrNoExecutor", "ErrBadCursor",
+		"ErrNotFound", "ErrNotSingular", "ErrTxStarted", "ErrTxDone", "ErrNoExecutor", "ErrNoEntity", "ErrBadCursor",
 		"ErrUnique", "ErrForeignKey", "ErrCheck",
 	}
 	// rootFuncs are forwarded: the signature, and the arguments of the call.
 	rootFuncs = []struct{ name, sig, call string }{
 		{"Open", "(dialectName, dsn string) (*%[1]s.DB, error)", "(dialectName, dsn)"},
 		{"OpenDB", "(dialectName string, db *%[3]s.DB) *%[1]s.DB", "(dialectName, db)"},
+		{"ExecSQL", "(ctx %[2]s.Context, ex %[1]s.Executor, query string, args ...any) (%[3]s.Result, error)", "(ctx, ex, query, args...)"},
+		{"QuerySQL", "(ctx %[2]s.Context, ex %[1]s.Executor, query string, args ...any) (*%[3]s.Rows, error)", "(ctx, ex, query, args...)"},
+		{"Some", "[T any](v T) %[1]s.Opt[T]", "(v)"},
+		{"Null", "[T any]() %[1]s.Opt[T]", "[T]()"},
 		{"WithExecutor", "(ctx %[2]s.Context, ex %[1]s.Executor) %[2]s.Context", "(ctx, ex)"},
 		{"ExecutorFrom", "(ctx %[2]s.Context) %[1]s.Executor", "(ctx)"},
 		{"TxFrom", "(ctx %[2]s.Context) *%[1]s.Tx", "(ctx)"},
@@ -61,7 +65,7 @@ var (
 // one of these names (or whose client type is) does not get that one: the
 // entity keeps the name.
 func RootNames() []string {
-	names := append(append(append([]string(nil), rootTypes...), rootConsts...), rootVars...)
+	names := append(append(append([]string{"Opt"}, rootTypes...), rootConsts...), rootVars...)
 	for _, f := range rootFuncs {
 		names = append(names, f.name)
 	}
@@ -97,6 +101,12 @@ func reexports(taken map[string]bool, lib, ctx, sql string) string {
 		b.WriteString(")\n\n")
 	}
 	group("type", "// The library's types under this package's name: a file that starts its\n// queries here needs one import. They are aliases, so "+lib+".Tx is one type\n// whichever of the two packages a file imports.", rootTypes)
+	// The one generic type: an alias of it has the type parameter too.
+	if taken["Opt"] {
+		left = append(left, "Opt")
+	} else {
+		fmt.Fprintf(&b, "// Opt is the library's Opt: a value of an input that may be absent, null or\n// given.\ntype Opt[T any] = %s.Opt[T]\n\n", lib)
+	}
 	group("const", "// The operations of a mutation.", rootConsts)
 	group("var", "// The library's error values.", rootVars)
 	for _, f := range rootFuncs {

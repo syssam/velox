@@ -92,6 +92,10 @@
   method NotSingularError.Label() string
   method Op.Is(Op) bool
   method Op.String() string
+  method Opt.IsZero() bool
+  method Opt.MarshalJSON() ([]byte, error)
+  method Opt.UnmarshalJSON([]byte) error
+  method Opt.ValueOK() (*T, bool)
   method Policy.EvalMutation(context.Context, Mutation) error
   method Policy.EvalQuery(context.Context, Query) error
   method Querier.Query(context.Context, Query) (Value, error)
@@ -144,6 +148,7 @@ const OpQuerySelect untyped string
 const OpUpdate Op
 const OpUpdateOne Op
 func Check(error)
+func ExecSQL(context.Context, Executor, string, ...any) (database/sql.Result, error)
 func ExecutorFrom(context.Context) Executor
 func First[T any]([]T, error) (T, error)
 func IsConstraintError(error) bool
@@ -160,9 +165,12 @@ func NewNotLoadedError(string) *NotLoadedError
 func NewNotSingularError(string) *NotSingularError
 func NewQueryContext(context.Context, *QueryContext) context.Context
 func NewValidationError(string, error) *ValidationError
+func Null[T any]() Opt[T]
 func Open(string, string) (*DB, error)
 func OpenDB(string, *database/sql.DB) *DB
 func QueryFromContext(context.Context) *QueryContext
+func QuerySQL(context.Context, Executor, string, ...any) (*database/sql.Rows, error)
+func Some[T any](T) Opt[T]
 func TxFrom(context.Context) *Tx
 func WithExecutor(context.Context, Executor) context.Context
 func WithHooks[V Value, M any, PM interface{*M; Mutation}](context.Context, func(context.Context) (V, error), PM, []Hook) (V, error)
@@ -188,6 +196,7 @@ type NotFoundError struct
 type NotLoadedError struct
 type NotSingularError struct
 type Op uint
+type Opt[T any] struct
 type PageInfo struct
 type Policy interface
 type Querier interface
@@ -205,6 +214,7 @@ type Viewer interface
 var ErrBadCursor error
 var ErrCheck error
 var ErrForeignKey error
+var ErrNoEntity error
 var ErrNoExecutor error
 var ErrNotFound error
 var ErrNotSingular error

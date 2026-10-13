@@ -34,8 +34,10 @@ func And(ps ...predicate.Uint16Key) predicate.Uint16Key { return group(orm.OpAnd
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.Uint16Key) predicate.Uint16Key { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Uint16Key) predicate.Uint16Key { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.Uint16Key) predicate.Uint16Key {
+	return group(orm.OpNot, []predicate.Uint16Key{p})
+}
 
 // group joins conditions on Uint16Key under one operator.
 func group(op orm.Op, ps []predicate.Uint16Key) predicate.Uint16Key {

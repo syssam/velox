@@ -46,8 +46,10 @@ func And(ps ...predicate.KindShape) predicate.KindShape { return group(orm.OpAnd
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.KindShape) predicate.KindShape { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.KindShape) predicate.KindShape { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.KindShape) predicate.KindShape {
+	return group(orm.OpNot, []predicate.KindShape{p})
+}
 
 // group joins conditions on KindShape under one operator.
 func group(op orm.Op, ps []predicate.KindShape) predicate.KindShape {

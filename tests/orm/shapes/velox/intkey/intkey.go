@@ -34,8 +34,8 @@ func And(ps ...predicate.IntKey) predicate.IntKey { return group(orm.OpAnd, ps) 
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.IntKey) predicate.IntKey { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.IntKey) predicate.IntKey { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.IntKey) predicate.IntKey { return group(orm.OpNot, []predicate.IntKey{p}) }
 
 // group joins conditions on IntKey under one operator.
 func group(op orm.Op, ps []predicate.IntKey) predicate.IntKey {

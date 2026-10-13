@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/syssam/velox"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox/orm"
 	client "github.com/syssam/velox/tests/orm/shapes/velox"
 	"github.com/syssam/velox/tests/orm/shapes/velox/defaultshape"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
@@ -141,15 +142,15 @@ func TestFill_Tags(t *testing.T) {
 func TestZeroBuilder(t *testing.T) {
 	ctx := context.Background()
 	_, err := new(entity.DefaultShapeQuery).All(ctx)
-	require.ErrorIs(t, err, orm.ErrNoEntity)
+	require.ErrorIs(t, err, velox.ErrNoEntity)
 	_, err = new(entity.DefaultShapeQuery).Count(ctx)
-	require.ErrorIs(t, err, orm.ErrNoEntity)
+	require.ErrorIs(t, err, velox.ErrNoEntity)
 	_, err = new(entity.DefaultShapeCreate).Save(ctx)
-	require.ErrorIs(t, err, orm.ErrNoEntity)
+	require.ErrorIs(t, err, velox.ErrNoEntity)
 	_, err = new(entity.DefaultShapeUpdate).Exec(ctx)
-	require.ErrorIs(t, err, orm.ErrNoEntity)
+	require.ErrorIs(t, err, velox.ErrNoEntity)
 	_, err = new(entity.DefaultShapeDelete).Exec(ctx)
-	require.ErrorIs(t, err, orm.ErrNoEntity)
+	require.ErrorIs(t, err, velox.ErrNoEntity)
 }
 
 // orm.Opt is the three-state field for a caller that has none of its own: it
@@ -160,10 +161,10 @@ func TestFill_Opt(t *testing.T) {
 	a := must(client.DefaultShape.Create(db).Set(defaultshape.Name.Set("a"), defaultshape.Code.Set("x"), defaultshape.NilNote.Set("nil note")).Save(ctx))
 
 	type patch struct {
-		Name    orm.Opt[string] `json:"name,omitzero"`
-		Note    orm.Opt[string] `json:"note,omitzero"`
-		NilNote orm.Opt[string] `json:"nil_note,omitzero"`
-		Big     orm.Opt[int64]  `json:"big,omitzero"`
+		Name    velox.Opt[string] `json:"name,omitzero"`
+		Note    velox.Opt[string] `json:"note,omitzero"`
+		NilNote velox.Opt[string] `json:"nil_note,omitzero"`
+		Big     velox.Opt[int64]  `json:"big,omitzero"`
 	}
 	var in patch
 	require.NoError(t, json.Unmarshal([]byte(`{"note": "", "nil_note": null, "big": 0}`), &in))
@@ -173,14 +174,14 @@ func TestFill_Opt(t *testing.T) {
 	assert.Nil(t, got.NilNote, "null did not clear the column")
 	assert.Equal(t, int64(0), got.Big)
 
-	got = must(client.DefaultShape.UpdateByID(db, a.ID).Fill(patch{Name: orm.Some("b"), NilNote: orm.Some("x"), Note: orm.Null[string]()}).SaveOne(ctx))
+	got = must(client.DefaultShape.UpdateByID(db, a.ID).Fill(patch{Name: velox.Some("b"), NilNote: velox.Some("x"), Note: velox.Null[string]()}).SaveOne(ctx))
 	assert.Equal(t, "b", got.Name)
 	require.NotNil(t, got.NilNote)
 	assert.Equal(t, "x", *got.NilNote)
 	assert.Equal(t, "", got.Note, "null for a column that is NOT NULL changed it")
 
 	// And back to JSON: an absent Opt is a missing key.
-	out, err := json.Marshal(patch{Name: orm.Some("n"), NilNote: orm.Null[string]()})
+	out, err := json.Marshal(patch{Name: velox.Some("n"), NilNote: velox.Null[string]()})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"name": "n", "nil_note": null}`, string(out))
 	require.Error(t, json.Unmarshal([]byte(`{"big": "not a number"}`), &in))

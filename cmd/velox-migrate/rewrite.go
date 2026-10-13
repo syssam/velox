@@ -1287,7 +1287,17 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 		case "TxFromContext":
 			r.replace(sel.Pos(), sel.End(), r.app("TxFrom", sel.Pos()))
 			r.count("TxFrom")
-		case "As", "Sum", "Count", "Max", "Min", "Mean":
+		case "As":
+			// As(aggregate, name) is the aggregate's method:
+			// orm.Count().As("n").
+			if len(call.Args) != 2 {
+				r.note(call.Pos(), "As of an aggregate: it is the aggregate's method now, orm.Count().As(name)")
+				return
+			}
+			r.replace(call.Pos(), call.Args[0].Pos(), "")
+			r.replace(call.Args[0].End(), call.Args[1].Pos(), ".As(")
+			r.count("aggregate")
+		case "Sum", "Count", "Max", "Min", "Mean":
 			// The aggregates of a grouped read; the read around them is
 			// rewritten by hand (see the note on GroupBy and Aggregate).
 			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
@@ -2776,6 +2786,16 @@ func (r *rewriter) combinator(call *ast.CallExpr) bool {
 		r.emptyList(call, to)
 	}
 	r.replace(call.Fun.Pos(), call.Fun.End(), r.orm(call.Pos())+"."+to)
+	// orm.Not takes one condition: what velox negated was the conjunction
+	// of a list.
+	if to == "Not" && (len(call.Args) != 1 || call.Ellipsis.IsValid()) {
+		if len(call.Args) == 0 {
+			r.note(call.Pos(), "Not of no predicate: orm.Not takes one condition; of none, velox's matched no row")
+		} else {
+			r.open(call.Args[0].Pos(), r.orm(call.Pos())+".And(")
+			r.insert(call.Rparen, ")")
+		}
+	}
 	r.made[call] = true
 	r.count("generic " + to)
 	return true

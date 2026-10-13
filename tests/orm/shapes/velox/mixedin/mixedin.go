@@ -54,8 +54,8 @@ func And(ps ...predicate.MixedIn) predicate.MixedIn { return group(orm.OpAnd, ps
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.MixedIn) predicate.MixedIn { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.MixedIn) predicate.MixedIn { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.MixedIn) predicate.MixedIn { return group(orm.OpNot, []predicate.MixedIn{p}) }
 
 // group joins conditions on MixedIn under one operator.
 func group(op orm.Op, ps []predicate.MixedIn) predicate.MixedIn {

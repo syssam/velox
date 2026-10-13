@@ -59,8 +59,10 @@ func And(ps ...predicate.GoTypeShape) predicate.GoTypeShape { return group(orm.O
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.GoTypeShape) predicate.GoTypeShape { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.GoTypeShape) predicate.GoTypeShape { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.GoTypeShape) predicate.GoTypeShape {
+	return group(orm.OpNot, []predicate.GoTypeShape{p})
+}
 
 // group joins conditions on GoTypeShape under one operator.
 func group(op orm.Op, ps []predicate.GoTypeShape) predicate.GoTypeShape {

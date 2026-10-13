@@ -34,8 +34,8 @@ func And(ps ...predicate.Int64Key) predicate.Int64Key { return group(orm.OpAnd, 
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.Int64Key) predicate.Int64Key { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Int64Key) predicate.Int64Key { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.Int64Key) predicate.Int64Key { return group(orm.OpNot, []predicate.Int64Key{p}) }
 
 // group joins conditions on Int64Key under one operator.
 func group(op orm.Op, ps []predicate.Int64Key) predicate.Int64Key {

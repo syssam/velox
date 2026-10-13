@@ -555,9 +555,9 @@ func TestScalar_Predicates(t *testing.T) {
 	assert.Equal(t, []int{1, 4}, seqs(scalar.Or(scalar.IntOpt.EQ(1), scalar.IntOpt.EQ(4))))
 	assert.Equal(t, []int{2}, seqs(scalar.And(scalar.IntOpt.GT(1), scalar.IntOpt.LT(4))))
 	assert.Equal(t, []int{1, 4}, seqs(scalar.Not(scalar.IntOpt.EQ(2)), scalar.IntNil.NotNil()))
-	// Not of several predicates negates their conjunction.
+	// Not takes one condition; of several it negates their conjunction.
 	assert.Equal(t, []int{1, 2, 3},
-		seqs(scalar.Not(scalar.And(scalar.Seq.GT(1), scalar.Seq.GT(3)), scalar.Or(scalar.Seq.EQ(4), scalar.Seq.EQ(9)))))
+		seqs(scalar.Not(scalar.And(scalar.And(scalar.Seq.GT(1), scalar.Seq.GT(3)), scalar.Or(scalar.Seq.EQ(4), scalar.Seq.EQ(9))))))
 	assert.Equal(t, []int{1, 3},
 		seqs(scalar.Or(
 			scalar.And(scalar.Seq.EQ(1), scalar.Not(scalar.IntNil.IsNil())),

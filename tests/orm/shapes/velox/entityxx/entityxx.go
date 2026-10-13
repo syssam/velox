@@ -34,8 +34,8 @@ func And(ps ...predicate.Entity) predicate.Entity { return group(orm.OpAnd, ps) 
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.Entity) predicate.Entity { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Entity) predicate.Entity { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.Entity) predicate.Entity { return group(orm.OpNot, []predicate.Entity{p}) }
 
 // group joins conditions on Entity under one operator.
 func group(op orm.Op, ps []predicate.Entity) predicate.Entity {

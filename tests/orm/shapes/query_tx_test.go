@@ -147,12 +147,14 @@ func TestQuery_EmptyCombinators(t *testing.T) {
 	assert.Zero(t, must(client.IntKey.Update(db).Set(intkey.Name.Set("never")).Where(intkey.Or(filters...)).Exec(ctx)))
 	assert.Zero(t, must(client.IntKey.Delete(db).Where(intkey.Or(filters...)).Exec(ctx)), "the delete removed nothing")
 	assert.Equal(t, 2, must(client.IntKey.Query(db).Count(ctx)))
-	// Not() without operands negates the empty conjunction: no row. A
-	// delete built as Not(excluded...) over an empty list removes nothing.
-	assert.Empty(t, must(client.IntKey.Query(db).Where(intkey.Not(filters...)).All(ctx)))
-	assert.Len(t, must(client.IntKey.Query(db).Where(intkey.Not(intkey.Not())).All(ctx)), 2)
+	// Not takes one condition. Negating a list is Not(And(list...)), and
+	// the empty conjunction holds for every row: its negation for none. A
+	// delete built as Not(And(excluded...)) over an empty list removes
+	// nothing.
+	assert.Empty(t, must(client.IntKey.Query(db).Where(intkey.Not(intkey.And(filters...))).All(ctx)))
+	assert.Len(t, must(client.IntKey.Query(db).Where(intkey.Not(intkey.Not(intkey.And()))).All(ctx)), 2)
 	assert.Len(t, must(client.IntKey.Query(db).Where(intkey.Not(intkey.And())).All(ctx)), 0)
-	assert.Zero(t, must(client.IntKey.Delete(db).Where(intkey.Not(filters...)).Exec(ctx)), "the delete removed nothing")
+	assert.Zero(t, must(client.IntKey.Delete(db).Where(intkey.Not(intkey.And(filters...))).Exec(ctx)), "the delete removed nothing")
 	assert.Equal(t, 2, must(client.IntKey.Query(db).Count(ctx)))
 }
 

@@ -150,7 +150,7 @@ next:
 		"p = predicate.User(orm.Invalid(err))",
 		"orm.Apply(q, opts...).Paginate(ctx, nil, first, nil, nil)",
 		"q, ok := velox.User.Query(s.Client), true",
-		`.Select().GroupBy(post.ColumnStatus).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)`,
+		`.Select().GroupBy(post.ColumnStatus).Aggregate(orm.Count().As("n")).Scan(ctx, &rows)`,
 		"u.QueryPosts(s.Client).OrderBy(post.Title.Asc()).All(ctx)", // the handle the entity was read on
 		"p.QueryAuthor(s.Client).Only(ctx)",                         // through the loop over what a query returned
 		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value

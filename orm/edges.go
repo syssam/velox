@@ -5,7 +5,7 @@ package orm
 // ToOne is an edge of an entity to at most one neighbor, as a generated
 // entity package declares it,
 //
-//	Author = &orm.ToOne[predicate.Post, predicate.User, int]{Meta: &authorEdge}
+//	Author = &orm.ToOne[predicate.Post, predicate.User, int]{Meta: &authorMeta}
 //
 // and what its methods build: post.Author.Has() is a condition of a query of
 // Post, post.Author.Set(id) an assignment of a mutation of it. E is the

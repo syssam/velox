@@ -1,7 +1,6 @@
 package orm
 
 import (
-	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -9,16 +8,12 @@ import (
 	"github.com/syssam/velox"
 )
 
-// Errors of the runtime's own. The ones an application tests after a query
-// or a mutation are package velox's, whichever runtime ran it:
-// velox.ErrNotFound, velox.ErrNotSingular, *velox.ValidationError,
-// *velox.ConstraintError with velox.ErrUnique and its other kinds,
-// *velox.NotLoadedError, and velox.IsNotFound and the rest for each.
-var (
-	// ErrNoEntity: the zero value of a builder was run. Builders come from
-	// the generated package (db.User.Query(conn)).
-	ErrNoEntity = errors.New("velox: a builder that was not made by the generated package has no entity")
-)
+// This package defines no error of its own. The ones an application tests
+// after a query or a mutation are package velox's, whichever runtime ran it:
+// velox.ErrNotFound, velox.ErrNotSingular, velox.ErrNoEntity,
+// *velox.ValidationError, *velox.ConstraintError with velox.ErrUnique and its
+// other kinds, *velox.NotLoadedError, and velox.IsNotFound and the rest for
+// each.
 
 // NotFound returns the error of a query or mutation of the entity that
 // matched no row: a *velox.NotFoundError, which is velox.ErrNotFound and

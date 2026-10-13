@@ -66,6 +66,11 @@ func TestNoGenericTypeWithMethodsInSignatures(t *testing.T) {
 	for _, name := range []string{"QueryOf", "CreateOf", "CreateBulkOf", "UpdateOf", "DeleteOf", "PageEdge", "Connection", "ClientOf"} {
 		allowed["orm."+name] = true
 	}
+	// velox.Opt has ordinary methods, and the root package names it only
+	// where nothing is instantiated: in the alias Opt[T] and in the generic
+	// functions Some and Null. A package pays for it when it has a field
+	// of velox.Opt[string] itself.
+	allowed["velox.Opt"] = true
 	for _, dir := range []string{"../../tests/orm/velox/entity", "../../tests/orm/velox", "../../tests/orm/shapes/velox/entity", "../../tests/orm/shapes/velox"} {
 		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(paths) == 0 {

@@ -12,14 +12,13 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/migrate"
 )
 
 // ddlOf returns the statement that created every table and index of db.
 func ddlOf(t *testing.T, db *velox.DB) map[string]string {
 	t.Helper()
-	rows, err := orm.QuerySQL(context.Background(), db, "SELECT type || ' ' || name, COALESCE(sql, '') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+	rows, err := velox.QuerySQL(context.Background(), db, "SELECT type || ' ' || name, COALESCE(sql, '') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
 	require.NoError(t, err)
 	defer func() { _ = rows.Close() }()
 	out := map[string]string{}

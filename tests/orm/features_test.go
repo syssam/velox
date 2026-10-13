@@ -152,7 +152,7 @@ func TestSelectGroupAggregate(t *testing.T) {
 		AuthorID int `json:"user_posts"`
 		N        int `json:"n"`
 	}
-	require.NoError(t, client.Post.Query(db).Select().GroupBy("user_posts").Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows))
+	require.NoError(t, client.Post.Query(db).Select().GroupBy("user_posts").Aggregate(orm.Count().As("n")).Scan(ctx, &rows))
 	got := map[int]int{}
 	for _, r := range rows {
 		got[r.AuthorID] = r.N
@@ -219,10 +219,10 @@ func TestExecAndQuerySQL(t *testing.T) {
 
 	// A statement issued through a transaction is part of it.
 	err := db.RunTx(ctx, func(tx *velox.Tx) error {
-		if _, err := orm.ExecSQL(ctx, tx, "UPDATE users SET age = age + 1"); err != nil {
+		if _, err := velox.ExecSQL(ctx, tx, "UPDATE users SET age = age + 1"); err != nil {
 			return err
 		}
-		rows, err := orm.QuerySQL(ctx, tx, "SELECT age FROM users")
+		rows, err := velox.QuerySQL(ctx, tx, "SELECT age FROM users")
 		if err != nil {
 			return err
 		}
@@ -238,7 +238,7 @@ func TestExecAndQuerySQL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 30, got.Age, "the raw statement was not rolled back with its transaction")
 
-	res, err := orm.ExecSQL(ctx, db, "UPDATE users SET age = age + 1")
+	res, err := velox.ExecSQL(ctx, db, "UPDATE users SET age = age + 1")
 	require.NoError(t, err)
 	n, err := res.RowsAffected()
 	require.NoError(t, err)
@@ -292,7 +292,7 @@ func TestSaveOne_GuardIsPartOfTheUpdate(t *testing.T) {
 		return velox.MutateFunc(func(ctx context.Context, m velox.Mutation) (velox.Value, error) {
 			if strike && m.Op().Is(velox.OpUpdateOne) {
 				strike = false
-				if _, err := orm.ExecSQL(ctx, m.(*orm.Mutation).Executor(), fmt.Sprintf("UPDATE users SET age = 99 WHERE id = %d", u.ID)); err != nil {
+				if _, err := velox.ExecSQL(ctx, m.(*orm.Mutation).Executor(), fmt.Sprintf("UPDATE users SET age = 99 WHERE id = %d", u.ID)); err != nil {
 					return nil, err
 				}
 			}
@@ -305,7 +305,7 @@ func TestSaveOne_GuardIsPartOfTheUpdate(t *testing.T) {
 		{user.Name.EQ("ann"), user.Age.EQ(30)}, // no id at all
 	} {
 		strike = true
-		_, err := orm.ExecSQL(ctx, db, fmt.Sprintf("UPDATE users SET age = 30, name = 'ann' WHERE id = %d", u.ID))
+		_, err := velox.ExecSQL(ctx, db, fmt.Sprintf("UPDATE users SET age = 30, name = 'ann' WHERE id = %d", u.ID))
 		require.NoError(t, err)
 		_, err = client.User.Update(db).Set(user.Name.Set("changed")).Where(guard...).SaveOne(ctx)
 		assert.ErrorIs(t, err, velox.ErrNotFound, "the guard no longer holds")
@@ -458,10 +458,10 @@ func TestFill_SamePathAsSetters(t *testing.T) {
 	type input struct {
 		Name, Email string
 		Age         *int
-		Nickname    orm.Opt[string]
+		Nickname    velox.Opt[string]
 	}
 	age := 30
-	u, err := client.User.Create(db).Fill(input{Name: "ann", Email: "ann@example.com", Age: &age, Nickname: orm.Some("annie")}).Save(ctx)
+	u, err := client.User.Create(db).Fill(input{Name: "ann", Email: "ann@example.com", Age: &age, Nickname: velox.Some("annie")}).Save(ctx)
 	require.NoError(t, err)
 	for _, f := range []string{"name", "email", "age", "nickname"} {
 		assert.Contains(t, seen, f, "the hook did not see a field of the input")
@@ -479,7 +479,7 @@ func TestFill_SamePathAsSetters(t *testing.T) {
 	_, err = client.User.UpdateByID(db, u.ID).Fill(input{Age: &zero}, "Name", "Email").SaveOne(ctx)
 	require.ErrorContains(t, err, "less than minimum", "the validator of age did not see the input's value")
 	age = 31
-	got, err := client.User.UpdateByID(db, u.ID).Fill(input{Age: &age, Nickname: orm.Null[string]()}, "Name", "Email").SaveOne(ctx)
+	got, err := client.User.UpdateByID(db, u.ID).Fill(input{Age: &age, Nickname: velox.Null[string]()}, "Name", "Email").SaveOne(ctx)
 	require.NoError(t, err)
 	r = ref.User.GetX(ctx, u.ID)
 	assert.Equal(t, 31, r.Age)
@@ -979,4 +979,58 @@ func TestRootPackage_GivesTheLibrarysNames(t *testing.T) {
 	assert.Panics(t, func() { client.Check(velox.ErrTxDone) })
 	var hook client.Hook = func(next client.Mutator) client.Mutator { return next }
 	conn.Use(hook)
+}
+
+// What starts at the entity or at the query, where it took a function of
+// package orm, a conversion and the entity's description: a condition and an
+// order written against the SQL builder or named at run time, an aggregate,
+// and the statement of a query.
+func TestEscapeHatchesStartAtTheEntity(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	for i, name := range []string{"ann", "bob", "cy"} {
+		newUser(t, db, name, 20+10*i)
+	}
+
+	// A condition and an order on the SQL builder.
+	names := func(us []*entity.User, err error) []string {
+		require.NoError(t, err)
+		var out []string
+		for _, u := range us {
+			out = append(out, u.Name)
+		}
+		return out
+	}
+	long := client.User.Raw(func(s *sql.Selector) { s.Where(sql.GT(s.C(user.ColumnAge), 25)) })
+	byNameDesc := client.User.RawOrder(func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnName))) })
+	assert.Equal(t, []string{"cy", "bob"}, names(client.User.Query(db).Where(long).OrderBy(byNameDesc).All(ctx)))
+
+	// A field named at run time: the filter and the order of a list endpoint.
+	p, err := client.User.FieldPredicate("age", orm.OpLT, 40)
+	require.NoError(t, err)
+	o, err := client.User.FieldOrder("name", true)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"bob", "ann"}, names(client.User.Query(db).Where(p).OrderBy(o).All(ctx)))
+	_, err = client.User.FieldPredicate("no_such_field", orm.OpEQ, 1)
+	require.Error(t, err)
+	_, err = client.User.FieldOrder("no_such_field", false)
+	require.Error(t, err)
+
+	// Aggregates straight from the query; a mean is not an integer.
+	sum, err := client.User.Query(db).Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 90, sum)
+	mean, err := client.User.Query(db).Where(p).Aggregate(orm.Mean(user.ColumnAge)).Float(ctx)
+	require.NoError(t, err)
+	assert.InDelta(t, 25.0, mean, 0.001)
+	none, err := client.User.Query(db).Where(user.Age.GT(1000)).Aggregate(orm.Mean(user.ColumnAge)).Float(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, none, "no row: the mean is NULL")
+
+	// The statement of a query, not run.
+	query, args, err := client.User.Query(db).Where(user.Age.GT(25)).OrderBy(user.Name.Asc()).Limit(2).SQL(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, query, "ORDER BY")
+	assert.Contains(t, query, "LIMIT 2")
+	assert.Equal(t, []any{25}, args)
 }

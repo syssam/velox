@@ -13,7 +13,7 @@ import (
 
 // This file is the database handle of the code cmd/velox-gen generates: DB,
 // Tx and Executor, which every query and mutation of that code is started
-// on (db.User.Query(tx)). The handle mentions no entity, so naming it in a
+// on (velox.User.Query(tx)). The handle mentions no entity, so naming it in a
 // signature costs the compiler nothing beyond this package.
 
 // Executor is what a query or a mutation runs on: a *DB, or a *Tx to run
@@ -63,8 +63,9 @@ func (s *ExecutorState) Interceptors() []Interceptor {
 // DB is a database handle. It mentions no entity, so naming it in a
 // signature costs the compiler nothing beyond this package.
 //
-// It reaches nothing of database/sql either, by its fields or by the
-// signature of a method, and that is on purpose: a package compiles
+// It reaches none of the handles of database/sql either (its DB, Tx and
+// Rows), by its fields or by the signature of a method, and that is on
+// purpose: a package compiles
 // something for every type the types it names can reach, and for the handles
 // of database/sql that is 240 KB of object code (package orm's
 // TestApplicationTypesDoNotReachReflect).
@@ -137,6 +138,38 @@ func (db *DB) Use(hooks ...Hook) {
 // which rows a caller may touch belongs in the schema's Policy.
 func (db *DB) Intercept(inters ...Interceptor) {
 	db.c.ext.inters = append(db.c.ext.inters, inters...)
+}
+
+// ExecSQL runs a statement that returns no rows on the executor: on the
+// transaction when ex is one, which is what a lock statement such as
+// pg_advisory_xact_lock needs.
+func ExecSQL(ctx context.Context, ex Executor, query string, args ...any) (stdsql.Result, error) {
+	var res stdsql.Result
+	if ex == nil || ex.State() == nil {
+		return nil, ErrNoExecutor
+	}
+	if err := ex.State().Driver().Exec(ctx, query, args, &res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// QuerySQL runs a statement that returns rows on the executor. The caller
+// closes the rows.
+func QuerySQL(ctx context.Context, ex Executor, query string, args ...any) (*stdsql.Rows, error) {
+	rows := &sql.Rows{}
+	if ex == nil || ex.State() == nil {
+		return nil, ErrNoExecutor
+	}
+	if err := ex.State().Driver().Query(ctx, query, args, rows); err != nil {
+		return nil, err
+	}
+	r, ok := rows.ColumnScanner.(*stdsql.Rows)
+	if !ok {
+		_ = rows.Close()
+		return nil, fmt.Errorf("velox: the driver returned %T, not database/sql rows", rows.ColumnScanner)
+	}
+	return r, nil
 }
 
 // Tx is an open transaction. Pass it wherever a *DB is accepted to run inside it.
@@ -313,8 +346,13 @@ func (db *DB) RunTxOptions(ctx context.Context, opts *stdsql.TxOptions, fn func(
 	return nil
 }
 
+// ErrNoEntity is the error of a builder that was not made by the generated
+// package: the zero value of one was run. Builders come from the entity's
+// variable (velox.User.Query(conn)).
+var ErrNoEntity = errors.New("velox: a builder that was not made by the generated package has no entity")
+
 // ErrNoExecutor is the error of a query or mutation that was run without a
-// handle: one built from nil (db.User.Query(nil)), or from a nil *DB or *Tx.
+// handle: one built from nil (velox.User.Query(nil)), or from a nil *DB or *Tx.
 var ErrNoExecutor = errors.New("velox: nothing to run on: build the query or mutation from a database handle or a transaction")
 
 // ErrTxDone is returned by Commit and Rollback of a transaction that was
@@ -350,7 +388,7 @@ func TxFrom(ctx context.Context) *Tx {
 // Must returns v, and panics when err is not nil: for a test, and for the
 // start of a program, where an error ends things either way.
 //
-//	u := velox.Must(db.User.Create(conn).Set(user.Name.Set("a")).Save(ctx))
+//	u := velox.Must(velox.User.Create(conn).Set(user.Name.Set("a")).Save(ctx))
 //
 // The builders have no SaveX, GetX or ExecX of their own: each would be a
 // method of every builder, and a package pays for the methods of every type

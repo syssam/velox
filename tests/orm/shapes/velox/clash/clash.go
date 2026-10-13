@@ -296,8 +296,8 @@ func And(ps ...predicate.Clash) predicate.Clash { return group(orm.OpAnd, ps) }
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.Clash) predicate.Clash { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Clash) predicate.Clash { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.Clash) predicate.Clash { return group(orm.OpNot, []predicate.Clash{p}) }
 
 // group joins conditions on Clash under one operator.
 func group(op orm.Op, ps []predicate.Clash) predicate.Clash {

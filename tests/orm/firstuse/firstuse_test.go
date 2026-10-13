@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/privacy"
 	"github.com/syssam/velox/tests/orm/velox"
 	"github.com/syssam/velox/tests/orm/velox/migrate"
@@ -35,9 +34,9 @@ func TestEntityFirstUsedThroughAnother(t *testing.T) {
 
 	// The rows are written without the entities, which stay unused.
 	now := time.Now()
-	_, err = orm.ExecSQL(ctx, conn, `INSERT INTO users (id, created_at, updated_at, name, email, age, role) VALUES (1, ?, ?, 'ann', 'ann@example.com', 30, 'user')`, now, now)
+	_, err = velox.ExecSQL(ctx, conn, `INSERT INTO users (id, created_at, updated_at, name, email, age, role) VALUES (1, ?, ?, 'ann', 'ann@example.com', 30, 'user')`, now, now)
 	require.NoError(t, err)
-	_, err = orm.ExecSQL(ctx, conn, `INSERT INTO posts (id, created_at, updated_at, title, content, status, view_count, user_posts) VALUES (1, ?, ?, 'first', '', 'draft', 0, 1)`, now, now)
+	_, err = velox.ExecSQL(ctx, conn, `INSERT INTO posts (id, created_at, updated_at, title, content, status, view_count, user_posts) VALUES (1, ?, ?, 'first', '', 'draft', 0, 1)`, now, now)
 	require.NoError(t, err)
 
 	// Tag, first used as the target of a condition on an edge: its policy
@@ -58,7 +57,7 @@ func TestEntityFirstUsedThroughAnother(t *testing.T) {
 	// gets the defaults of its schema.
 	_, err = velox.Post.UpdateByID(conn, 1).Set(post.Likers.Add(1)).SaveOne(ctx)
 	require.NoError(t, err)
-	rows, err := orm.QuerySQL(ctx, conn, `SELECT liked_at FROM likes WHERE post_id = 1 AND user_id = 1`)
+	rows, err := velox.QuerySQL(ctx, conn, `SELECT liked_at FROM likes WHERE post_id = 1 AND user_id = 1`)
 	require.NoError(t, err)
 	defer func() { _ = rows.Close() }()
 	require.True(t, rows.Next(), "the join row was not written")

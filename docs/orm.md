@@ -110,7 +110,7 @@ err = velox.User.DeleteByID(ctx, conn, id)
   with the builder**: a database handle or a transaction. A function can build
   a query and another run it. A builder made from `nil` or from a nil
   `*velox.Tx` returns `velox.ErrNoExecutor` when run; the zero value of a builder
-  returns `orm.ErrNoEntity`.
+  returns `velox.ErrNoEntity`.
 - **An entity holds no connection.** `u.QueryPosts(tx)` queries its
   neighbors on what it is given, `With(user.Posts)` loads them with the query
   into `u.Edges.Posts`.
@@ -197,14 +197,14 @@ err = velox.User.DeleteByID(ctx, conn, id)
   the entities, for a list that shows a few columns of a wide table. The
   other fields stay zero, so such an entity is for reading. The id, the
   columns the query is ordered by and the keys of the edges it loads are
-  read too. The query given to an eager load takes it as well:
+  read too. An eager load says it at the edge:
   `With(user.Posts.Columns(post.ColumnTitle))`. `Select(...)`
   is the other thing: columns and aggregates scanned
   into a struct of the caller's.
 - An order is `user.Name.Asc()`; by a column named at run time,
-  `predicate.UserOrderTerm{Col: name, Desc: true}` (a name that is no column
-  fails the query); and for what neither says (NULLS LAST, an expression),
-  `predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { ... }))`. A
+  `velox.User.FieldOrder(name, desc)` (a name that is no field, or a
+  sensitive one, is an error); and for what neither says (NULLS LAST, an
+  expression), `velox.User.RawOrder(func(s *sql.Selector) { ... })`. A
   query ordered by a function cannot be paged: a cursor is made of columns.
 - Every column has `IsNil` and `NotNil`, one that cannot be NULL included
   (it never is): a filter chosen at run time, or code written once for every
@@ -243,7 +243,10 @@ err = velox.User.DeleteByID(ctx, conn, id)
   or a delete refuses it, so that a forgotten condition is not a statement
   over every row.
 - There is no `SaveX`, `GetX` or `ExecX`. In a test, `velox.Must(q.Save(ctx))`
-  and `velox.Check(q.Exec(ctx))` panic on an error. As methods they would be on
+  panics on an error, and so does `velox.Must` of the `Exec` of an update or
+  a delete, which returns the number of rows with the error;
+  `velox.Check(b.Exec(ctx))` is for the `Exec` of a create, which returns
+  the error alone. As methods they would be on
   every builder, and a package pays for the methods of every type it can
   reach.
 - `And()` of nothing holds for every row, `Or()` and `Not()` of nothing for
@@ -265,10 +268,8 @@ err = velox.User.DeleteByID(ctx, conn, id)
   `Constraint()`, what the database named as violated.
   `velox.IsRetryable(err)` is true for a serialization failure or a deadlock:
   the errors for which the transaction, as a whole, may be run again.
-- The zero predicate (`var p predicate.User`) is no condition in a query,
-  which is what a filter built only under some circumstance wants. In an
-  update or a delete it is an error: a forgotten assignment must not become a
-  statement over every row. To change every row, leave `Where` out.
+- To change or delete every row, leave `Where` out: the zero predicate in
+  one (see above) is refused, an absent `Where` is a decision.
 - Terminals of a query: `All`, `First`, `Only`, `Count`, `Exists`, `IDs`,
   `Iter`, `Paginate`, and `Select(...)` for columns and aggregates.
 
@@ -311,16 +312,16 @@ type createUser struct {
     Name     string
     Email    string
     Age      *int            // nil: not given
-    Nickname orm.Opt[string] // absent, null, or a value
+    Nickname velox.Opt[string] // absent, null, or a value
     Source   string          `orm:"-"` // not for the row
 }
 type updateUser struct {
-    Name     orm.Opt[string] `json:"name"`
-    Age      orm.Opt[int]    `json:"age"`
-    Nickname orm.Opt[string] `json:"nickname"`
+    Name     velox.Opt[string] `json:"name"`
+    Age      velox.Opt[int]    `json:"age"`
+    Nickname velox.Opt[string] `json:"nickname"`
 }
 
-u, err := velox.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: orm.Some("caz")}).Save(ctx)
+u, err := velox.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: velox.Some("caz")}).Save(ctx)
 
 // A PATCH body: a missing key leaves the column alone, null clears it.
 var patch updateUser
@@ -332,8 +333,8 @@ u, err = velox.User.UpdateByID(conn, u.ID).Fill(patch).SaveOne(ctx)
   written, zero included.
 - An optional gives nothing when absent. Present and null, it sets a column
   that can be NULL to NULL on an update, and gives nothing otherwise. An
-  optional is any type with a method `ValueOK() (T, bool)`: `orm.Opt[T]`
-  (`orm.Some(v)`, `orm.Null[T]()`; it decodes from JSON), or the one an API
+  optional is any type with a method `ValueOK() (*T, bool)`: `velox.Opt[T]`
+  (`velox.Some(v)`, `velox.Null[T]()`; it decodes from JSON), or the one an API
   layer already has.
 - A bool field `Clear<Name>` that is true sets the column to NULL.
 - **Every field of the struct must name a field of the entity.** A field that
@@ -355,8 +356,8 @@ entity stored `is_active = true` where `false` was asked for.
 
 Measured on a create of four fields: 76 allocations with setters, 84 with a
 struct of pointers, 86 with a struct of optionals; the time is the statement's
-in all three. `Fill` adds two one-line methods per entity to the generated
-code and nothing measurable to its compile.
+in all three. `Fill` is a method of the builders of package `orm`: it adds
+nothing to the generated code.
 
 ### Large results, pages, aggregates, raw SQL
 
@@ -373,29 +374,29 @@ page, err := velox.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, nil, 
 page, err = velox.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, page.PageInfo.EndCursor, &size, nil, nil)
 
 // Columns and aggregates instead of entities; a column that does not exist is an error.
-total, err := velox.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+total, err := velox.User.Query(conn).Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
 var rows []struct{ Role string `json:"role"`; N int `json:"n"` }
-err = velox.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows)
+err = velox.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.Count().As("n")).Scan(ctx, &rows)
 
 // The statement a query would run, and its arguments, without running it.
-query, args, err := velox.User.Query(conn).Where(user.Age.GT(18)).Select().SQL(ctx)
+query, args, err := velox.User.Query(conn).Where(user.Age.GT(18)).SQL(ctx)
 
 // A condition written against the SQL builder, and one that arrives at run time.
-p := predicate.User(orm.Raw(func(s *sql.Selector) { ... }))
-q, err := orm.FieldPredicate(&entity.UserMeta, "age", orm.OpGT, 18)
+p := velox.User.Raw(func(s *sql.Selector) { ... })
+q, err := velox.User.FieldPredicate("age", orm.OpGT, 18)
 // A typed predicate as a selector function (for a privacy filter or interceptor).
 // The zero predicate, which is no condition, is no function: nil.
 fn := orm.Compile(user.Age.GT(18))
 // Plain statements, on the transaction when given one.
-_, err = orm.ExecSQL(ctx, tx, "SELECT pg_advisory_xact_lock($1)", key)
+_, err = velox.ExecSQL(ctx, tx, "SELECT pg_advisory_xact_lock($1)", key)
 ```
 
 ### One way to say each thing
 
 A column is one value that does everything: `user.Name.EQ("a")` is a
 condition, `user.Name.Set("a")` a setter, `user.Name.Asc()` an order.
-Its methods are generated once per column *type* of an entity (about ten per
-entity), not once per column and builder. There is no `SetName(v)`: the
+Its methods are those of a column type of package `orm`, written once for
+every entity, not once per column and builder. There is no `SetName(v)`: the
 per-field methods of velox and Ent were an option here once, and one spelling
 was preferred to two. They also cost: with `Set<Field>` alone the `entity`
 package of the 450-entity fixture went from 18,958 functions, 14-18 CPU-s and
@@ -643,7 +644,7 @@ queries and mutations alike.
 A hook that decides by rows narrows the statement with `m.WhereP(...)` and
 reads which rows it is about to touch from `m.PredicatesFuncs()`, the
 mutation's conditions as functions a query of the entity takes
-(`predicate.User(orm.Raw(f))`). `WhereP` of a mutation refuses a nil
+(`velox.User.Raw(f)`). `WhereP` of a mutation refuses a nil
 function, which is what `orm.Compile` makes of the zero predicate: a rule
 that meant to narrow a statement and narrowed it by nothing fails it, and
 does not let it run on every row. In a query a nil function is no condition.
@@ -805,11 +806,10 @@ entity the schema calls `Http` stays `Http`. Where it departs, on purpose:
   receivers: a method with a value receiver is compiled twice (measured: 1.7
   times the compile of the descriptor packages).
 - Conditions are methods of the column (`user.Name.EQ("a")`), although
-  functions (`orm.EQ(user.Name, "a")`) would compile ten times faster and
-  keep the same checks: the descriptor packages are about 40 CPU-s of a cold
-  build (4 as functions) and none of an incremental one. The methods read
-  better, are found by typing a period, and give shorter errors. Ten designs
-  are compared in `benchmarks/fixtures/realistic/README.md`.
+  functions (`orm.EQ(user.Name, "a")`) would compile faster still and keep
+  the same checks. The methods read better, are found by typing a period,
+  and give shorter errors; what they cost is in
+  `benchmarks/fixtures/realistic/README.md`, where ten designs are compared.
 - The package of an entity is named after it (`user`, `order`, `time`), which
   takes a name the caller may want for a variable or already has for a
   standard package. Import it under another name where that happens. One

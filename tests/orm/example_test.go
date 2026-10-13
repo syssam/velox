@@ -14,11 +14,10 @@ import (
 	"github.com/syssam/velox/tests/orm/velox/entity"
 	"github.com/syssam/velox/tests/orm/velox/migrate"
 	"github.com/syssam/velox/tests/orm/velox/post"
-	"github.com/syssam/velox/tests/orm/velox/predicate"
 	"github.com/syssam/velox/tests/orm/velox/user"
 )
 
-// The examples below are the README's, run by go test: a snippet that stops
+// The examples below are those of docs/orm.md, run by go test: a snippet that stops
 // compiling or prints something else fails the build.
 
 var exampleSeq int
@@ -137,18 +136,18 @@ func Example_fill() {
 	type createUser struct {
 		Name     string
 		Email    string
-		Age      *int            // nil: not given
-		Nickname orm.Opt[string] // absent, null, or a value
-		Source   string          `orm:"-"` // not for the row
+		Age      *int              // nil: not given
+		Nickname velox.Opt[string] // absent, null, or a value
+		Source   string            `orm:"-"` // not for the row
 	}
 	type updateUser struct {
-		Name     orm.Opt[string] `json:"name"`
-		Age      orm.Opt[int]    `json:"age"`
-		Nickname orm.Opt[string] `json:"nickname"`
+		Name     velox.Opt[string] `json:"name"`
+		Age      velox.Opt[int]    `json:"age"`
+		Nickname velox.Opt[string] `json:"nickname"`
 	}
 
 	age := 30
-	u, err := db.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: orm.Some("caz"), Source: "signup"}).Save(ctx)
+	u, err := db.User.Create(conn).Fill(createUser{Name: "carol", Email: "carol@example.com", Age: &age, Nickname: velox.Some("caz"), Source: "signup"}).Save(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -205,7 +204,7 @@ func Example_iter() {
 	fmt.Println(len(page.Edges), page.PageInfo.HasNextPage)
 
 	// Columns and aggregates instead of entities.
-	total, err := db.User.Query(conn).Select().Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+	total, err := db.User.Query(conn).Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -213,18 +212,18 @@ func Example_iter() {
 		Role string `json:"role"`
 		N    int    `json:"n"`
 	}
-	if err := db.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.As(orm.Count(), "n")).Scan(ctx, &rows); err != nil {
+	if err := db.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.Count().As("n")).Scan(ctx, &rows); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(total, rows)
 
 	// A condition that arrives at run time, as the filter of a list endpoint
 	// does; a typed one as a function on the SQL builder.
-	p, err := orm.FieldPredicate(&entity.UserMeta, "age", orm.OpGT, 22)
+	p, err := db.User.FieldPredicate("age", orm.OpGT, 22)
 	if err != nil {
 		log.Fatal(err)
 	}
-	older, err := db.User.Query(conn).Where(predicate.User(p)).Count(ctx)
+	older, err := db.User.Query(conn).Where(p).Count(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

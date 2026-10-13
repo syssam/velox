@@ -200,10 +200,11 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 	for _, c := range []struct{ fn, op, doc string }{
 		{"And", "OpAnd", "And matches the rows every one of ps matches."},
 		{"Or", "OpOr", "Or matches the rows at least one of ps matches; without any, none."},
-		{"Not", "OpNot", "Not matches the rows that do not match all of ps; without any, none."},
 	} {
 		w("// %s\nfunc %s(ps ...%s) %s { return group(orm.%s, ps) }\n\n", c.doc, c.fn, pred, pred, c.op)
 	}
+	// One condition: Not(a, b) would have to mean one of two things.
+	w("// Not matches the rows p does not match.\nfunc Not(p %[1]s) %[1]s { return group(orm.OpNot, []%[1]s{p}) }\n\n", pred)
 	w("// group joins conditions on %[1]s under one operator.\nfunc group(op orm.Op, ps []%[2]s) %[2]s {\n\tsubs := make([]orm.P, len(ps))\n\tfor i, p := range ps {\n\t\tsubs[i] = orm.P(p)\n\t}\n\treturn %[2]s{Op: op, Subs: subs}\n}\n\n", e.Name, pred)
 
 	var out bytes.Buffer

@@ -78,8 +78,8 @@ func And(ps ...predicate.Author) predicate.Author { return group(orm.OpAnd, ps) 
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.Author) predicate.Author { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Author) predicate.Author { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.Author) predicate.Author { return group(orm.OpNot, []predicate.Author{p}) }
 
 // group joins conditions on Author under one operator.
 func group(op orm.Op, ps []predicate.Author) predicate.Author {

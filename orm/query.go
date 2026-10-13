@@ -146,7 +146,7 @@ func (q *Query) Limit(n int) { q.c.Limit = n }
 //		return nil
 //	}))
 //
-// It reaches reads only: see the README on why a rule about which rows a
+// It reaches reads only: see docs/orm.md on why a rule about which rows a
 // caller may touch belongs in the policy.
 type TraverseFunc func(context.Context, *Query) error
 
@@ -231,7 +231,7 @@ func (q *QueryCore) conn() (*velox.ExecutorState, error) { return connOf(q.Ex, q
 // entity m that was not built from a handle.
 func connOf(ex velox.Executor, m *Meta) (*velox.ExecutorState, error) {
 	if m == nil {
-		return nil, ErrNoEntity
+		return nil, velox.ErrNoEntity
 	}
 	if ex != nil {
 		if c := ex.State(); c != nil && c.Driver() != nil {

@@ -37,8 +37,10 @@ func And(ps ...predicate.NamedBool) predicate.NamedBool { return group(orm.OpAnd
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.NamedBool) predicate.NamedBool { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.NamedBool) predicate.NamedBool { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.NamedBool) predicate.NamedBool {
+	return group(orm.OpNot, []predicate.NamedBool{p})
+}
 
 // group joins conditions on NamedBool under one operator.
 func group(op orm.Op, ps []predicate.NamedBool) predicate.NamedBool {

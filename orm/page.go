@@ -18,7 +18,7 @@ import (
 // RPC): keyset pagination with opaque cursors, and predicates and order terms
 // built from field names that arrive in a request.
 
-// Page is one page as the runtime returns it; the generated Paginate of an
+// Page is one page as the runtime returns it; the Paginate of an
 // entity turns it into that entity's connection.
 type Page struct {
 	Rows []any

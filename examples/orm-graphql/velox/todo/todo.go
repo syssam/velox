@@ -77,8 +77,8 @@ func And(ps ...predicate.Todo) predicate.Todo { return group(orm.OpAnd, ps) }
 // Or matches the rows at least one of ps matches; without any, none.
 func Or(ps ...predicate.Todo) predicate.Todo { return group(orm.OpOr, ps) }
 
-// Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Todo) predicate.Todo { return group(orm.OpNot, ps) }
+// Not matches the rows p does not match.
+func Not(p predicate.Todo) predicate.Todo { return group(orm.OpNot, []predicate.Todo{p}) }
 
 // group joins conditions on Todo under one operator.
 func group(op orm.Op, ps []predicate.Todo) predicate.Todo {

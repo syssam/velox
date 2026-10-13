@@ -44,6 +44,10 @@ type (
 	ValidationError  = velox.ValidationError
 )
 
+// Opt is the library's Opt: a value of an input that may be absent, null or
+// given.
+type Opt[T any] = velox.Opt[T]
+
 // The operations of a mutation.
 const (
 	OpCreate    = velox.OpCreate
@@ -60,6 +64,7 @@ var (
 	ErrTxStarted   = velox.ErrTxStarted
 	ErrTxDone      = velox.ErrTxDone
 	ErrNoExecutor  = velox.ErrNoExecutor
+	ErrNoEntity    = velox.ErrNoEntity
 	ErrBadCursor   = velox.ErrBadCursor
 	ErrUnique      = velox.ErrUnique
 	ErrForeignKey  = velox.ErrForeignKey
@@ -71,6 +76,22 @@ func Open(dialectName, dsn string) (*velox.DB, error) { return velox.Open(dialec
 
 // OpenDB is the library's OpenDB.
 func OpenDB(dialectName string, db *sql.DB) *velox.DB { return velox.OpenDB(dialectName, db) }
+
+// ExecSQL is the library's ExecSQL.
+func ExecSQL(ctx context.Context, ex velox.Executor, query string, args ...any) (sql.Result, error) {
+	return velox.ExecSQL(ctx, ex, query, args...)
+}
+
+// QuerySQL is the library's QuerySQL.
+func QuerySQL(ctx context.Context, ex velox.Executor, query string, args ...any) (*sql.Rows, error) {
+	return velox.QuerySQL(ctx, ex, query, args...)
+}
+
+// Some is the library's Some.
+func Some[T any](v T) velox.Opt[T] { return velox.Some(v) }
+
+// Null is the library's Null.
+func Null[T any]() velox.Opt[T] { return velox.Null[T]() }
 
 // WithExecutor is the library's WithExecutor.
 func WithExecutor(ctx context.Context, ex velox.Executor) context.Context {

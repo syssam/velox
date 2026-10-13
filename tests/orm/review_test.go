@@ -263,10 +263,10 @@ func TestInterceptorReturningSomethingElse(t *testing.T) {
 
 func TestRawSQLWithoutAHandle(t *testing.T) {
 	ctx := context.Background()
-	_, err := orm.ExecSQL(ctx, velox.ExecutorFrom(ctx), "SELECT 1")
+	_, err := velox.ExecSQL(ctx, velox.ExecutorFrom(ctx), "SELECT 1")
 	require.ErrorIs(t, err, velox.ErrNoExecutor)
 	var tx *velox.Tx
-	_, err = orm.QuerySQL(ctx, tx, "SELECT 1")
+	_, err = velox.QuerySQL(ctx, tx, "SELECT 1")
 	require.ErrorIs(t, err, velox.ErrNoExecutor)
 }
 
