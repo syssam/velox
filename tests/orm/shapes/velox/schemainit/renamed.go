@@ -16,33 +16,17 @@ func init() {
 	slots.Renamed.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Renamed{}.Fields()
 		{ // title
-			d := fields[0].Descriptor()
-			f := m.Field("ttl")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("ttl")
+			f.Default = orm.DefaultValue(d.Default.(string))
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // seen_at
-			d := fields[2].Descriptor()
-			f := m.Field("seen")
-			upd := d.UpdateDefault.(func() time.Time)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := fields[2].Descriptor(), m.Field("seen")
+			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
 		}
 		{ // kind
-			d := fields[3].Descriptor()
-			f := m.Field("knd")
-			def := renamedpkg.KindEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[3].Descriptor(), m.Field("knd")
+			f.Default = orm.DefaultValue(renamedpkg.KindEnum(d.Default.(string)))
 		}
 	})
 }

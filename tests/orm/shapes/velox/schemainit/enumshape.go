@@ -15,22 +15,16 @@ func init() {
 	slots.EnumShape.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.EnumShape{}.Fields()
 		{ // state
-			d := fields[0].Descriptor()
-			f := m.Field("state")
-			def := enumshapepkg.StateEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[0].Descriptor(), m.Field("state")
+			f.Default = orm.DefaultValue(enumshapepkg.StateEnum(d.Default.(string)))
 		}
 		{ // phase
-			d := fields[2].Descriptor()
-			f := m.Field("phase")
-			def := enumshapepkg.PhaseEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[2].Descriptor(), m.Field("phase")
+			f.Default = orm.DefaultValue(enumshapepkg.PhaseEnum(d.Default.(string)))
 		}
 		{ // tier
-			d := fields[4].Descriptor()
-			f := m.Field("tier")
-			def := types.Tier(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[4].Descriptor(), m.Field("tier")
+			f.Default = orm.DefaultValue(types.Tier(d.Default.(string)))
 		}
 	})
 }

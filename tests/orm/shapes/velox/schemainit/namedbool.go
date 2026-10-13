@@ -14,10 +14,8 @@ func init() {
 	slots.NamedBool.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.NamedBool{}.Fields()
 		{ // flag
-			d := fields[1].Descriptor()
-			f := m.Field("flag")
-			def := types.Flag(d.Default.(bool))
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("flag")
+			f.Default = orm.DefaultValue(types.Flag(d.Default.(bool)))
 		}
 	})
 }

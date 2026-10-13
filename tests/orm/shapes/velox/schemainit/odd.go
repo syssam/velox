@@ -15,34 +15,24 @@ func init() {
 	slots.Odd.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Odd{}.Fields()
 		{ // label
-			d := fields[0].Descriptor()
-			f := m.Field("label")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[0].Descriptor(), m.Field("label")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // role
-			d := fields[4].Descriptor()
-			f := m.Field("role")
-			def := oddpkg.RoleEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[4].Descriptor(), m.Field("role")
+			f.Default = orm.DefaultValue(oddpkg.RoleEnum(d.Default.(string)))
 		}
 		{ // role_type
-			d := fields[5].Descriptor()
-			f := m.Field("role_type")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[5].Descriptor(), m.Field("role_type")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // role_admin
-			d := fields[6].Descriptor()
-			f := m.Field("role_admin")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[6].Descriptor(), m.Field("role_admin")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // tier
-			d := fields[7].Descriptor()
-			f := m.Field("tier")
-			def := types.Tier(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[7].Descriptor(), m.Field("tier")
+			f.Default = orm.DefaultValue(types.Tier(d.Default.(string)))
 		}
 	})
 }

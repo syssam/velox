@@ -13,25 +13,12 @@ func init() {
 	slots.Author.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Author{}.Fields()
 		{ // name
-			d := fields[0].Descriptor()
-			f := m.Field("name")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("name")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // age
-			d := fields[1].Descriptor()
-			f := m.Field("age")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("age")
+			f.Default = orm.DefaultValue(d.Default.(int))
 		}
 	})
 }

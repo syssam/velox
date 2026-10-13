@@ -13,10 +13,8 @@ func init() {
 	slots.Entityx.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Entityx{}.Fields()
 		{ // other
-			d := fields[1].Descriptor()
-			f := m.Field("other")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("other")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 	})
 }

@@ -18,46 +18,25 @@ func init() {
 		mixinFields0 := mixin[0].Fields()
 		fields := schemapkg.Todo{}.Fields()
 		{ // created_at
-			d := mixinFields0[0].Descriptor()
-			f := m.Field("created_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 		{ // updated_at
-			d := mixinFields0[1].Descriptor()
-			f := m.Field("updated_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
-			upd := d.UpdateDefault.(func() time.Time)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
+			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
 		}
 		{ // title
-			d := fields[0].Descriptor()
-			f := m.Field("title")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("title")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // status
-			d := fields[1].Descriptor()
-			f := m.Field("status")
-			def := todopkg.StatusEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("status")
+			f.Default = orm.DefaultValue(todopkg.StatusEnum(d.Default.(string)))
 		}
 		{ // priority
-			d := fields[2].Descriptor()
-			f := m.Field("priority")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
+			d, f := fields[2].Descriptor(), m.Field("priority")
+			f.Default = orm.DefaultValue(d.Default.(int))
 		}
 	})
 }

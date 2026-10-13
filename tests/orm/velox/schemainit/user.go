@@ -20,85 +20,33 @@ func init() {
 		m.Policy = privacy.NewPolicies(schemapkg.User{})
 		fields := schemapkg.User{}.Fields()
 		{ // created_at
-			d := mixinFields0[0].Descriptor()
-			f := m.Field("created_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 		{ // updated_at
-			d := mixinFields0[1].Descriptor()
-			f := m.Field("updated_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
-			upd := d.UpdateDefault.(func() time.Time)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
+			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
 		}
 		{ // name
-			d := fields[0].Descriptor()
-			f := m.Field("name")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("name")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // email
-			d := fields[1].Descriptor()
-			f := m.Field("email")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[1].Descriptor(), m.Field("email")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // age
-			d := fields[2].Descriptor()
-			f := m.Field("age")
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(int))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[2].Descriptor(), m.Field("age")
+			f.Validate = orm.Validators[int](d.Validators)
 		}
 		{ // nickname
-			d := fields[3].Descriptor()
-			f := m.Field("nickname")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[3].Descriptor(), m.Field("nickname")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // role
-			d := fields[4].Descriptor()
-			f := m.Field("role")
-			def := userpkg.RoleEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[4].Descriptor(), m.Field("role")
+			f.Default = orm.DefaultValue(userpkg.RoleEnum(d.Default.(string)))
 		}
 	})
 }

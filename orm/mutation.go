@@ -369,8 +369,8 @@ func (m *MutCore) mutate(ctx context.Context, c *velox.ExecutorState, op velox.O
 	if err := invalid(m.Sets); err != nil {
 		return nil, err
 	}
-	hooks := c.Hooks()
-	if meta.Policy == nil && len(hooks) == 0 && len(meta.Hooks) == 0 {
+	hooks, schemaHooks, policy := c.Hooks(), meta.hooks(), meta.policy()
+	if policy == nil && len(hooks) == 0 && len(schemaHooks) == 0 {
 		return exec(ctx, m)
 	}
 	// The policy and the hooks work on a copy: what they add belongs to this
@@ -379,21 +379,21 @@ func (m *MutCore) mutate(ctx context.Context, c *velox.ExecutorState, op velox.O
 	// write of the key's field, and defaults are already in.
 	own := &MutCore{M: meta, Ex: m.Ex, Sets: withDefaults(meta, op, keyWrites(meta, m.Sets)), Preds: slices.Clone(m.Preds)}
 	mut := &Mutation{op: op, c: own, ex: m.Ex}
-	if meta.Policy != nil {
-		if err := meta.Policy.EvalMutation(ctx, mut); err != nil {
+	if policy != nil {
+		if err := policy.EvalMutation(ctx, mut); err != nil {
 			return nil, err
 		}
 	}
 	// The handle's hooks outermost, then the schema's.
-	all := make([]velox.Hook, 0, len(hooks)+len(meta.Hooks))
-	all = append(append(all, hooks...), meta.Hooks...)
+	all := make([]velox.Hook, 0, len(hooks)+len(schemaHooks))
+	all = append(append(all, hooks...), schemaHooks...)
 	var chain velox.Mutator = velox.MutateFunc(func(ctx context.Context, vm velox.Mutation) (velox.Value, error) {
 		mm, ok := vm.(*Mutation)
 		if !ok {
 			return nil, fmt.Errorf("velox: a hook passed on a %T instead of the mutation it received", vm)
 		}
-		if len(all) > 0 && meta.Policy != nil {
-			if err := meta.Policy.EvalMutation(ctx, mm); err != nil {
+		if len(all) > 0 && policy != nil {
+			if err := policy.EvalMutation(ctx, mm); err != nil {
 				return nil, err
 			}
 		}
@@ -433,6 +433,7 @@ func keyWrites(meta *Meta, sets []S) []S {
 // withDefaults adds the schema defaults a create would apply, and the update
 // defaults an update would, for the columns the caller left alone.
 func withDefaults(meta *Meta, op velox.Op, sets []S) []S {
+	meta.stitch()
 	touched := func(col string) bool {
 		return slices.ContainsFunc(sets, func(s S) bool {
 			return s.Edge == nil && s.Col == col || s.Edge != nil && s.Edge.fkOnOwner() && s.Edge.Columns[0] == col

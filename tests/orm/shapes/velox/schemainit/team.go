@@ -14,10 +14,8 @@ func init() {
 	slots.Team.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Team{}.Fields()
 		{ // id
-			d := fields[0].Descriptor()
-			f := m.Field("id")
-			def := d.Default.(func() uuid.UUID)
-			f.Default = func() any { return def() }
+			d, f := fields[0].Descriptor(), m.Field("id")
+			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
 		}
 	})
 }

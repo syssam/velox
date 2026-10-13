@@ -15,10 +15,8 @@ func init() {
 	slots.Like.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Like{}.Fields()
 		{ // liked_at
-			d := fields[0].Descriptor()
-			f := m.Field("liked_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := fields[0].Descriptor(), m.Field("liked_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 	})
 }

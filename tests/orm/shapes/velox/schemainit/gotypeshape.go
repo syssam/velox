@@ -14,83 +14,31 @@ func init() {
 	slots.GoTypeShape.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.GoTypeShape{}.Fields()
 		{ // label
-			d := fields[0].Descriptor()
-			f := m.Field("label")
-			def := types.Label(d.Default.(string))
-			f.Default = func() any { return def }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(types.Label))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("label")
+			f.Default = orm.DefaultValue(types.Label(d.Default.(string)))
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
 		}
 		{ // alias
-			d := fields[1].Descriptor()
-			f := m.Field("alias")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(types.Label))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[1].Descriptor(), m.Field("alias")
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
 		}
 		{ // weight
-			d := fields[3].Descriptor()
-			f := m.Field("weight")
-			def := types.Weight(d.Default.(int))
-			f.Default = func() any { return def }
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(types.Weight))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[3].Descriptor(), m.Field("weight")
+			f.Default = orm.DefaultValue(types.Weight(d.Default.(int)))
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Weight) int { return int(v) })
 		}
 		{ // bonus
-			d := fields[4].Descriptor()
-			f := m.Field("bonus")
-			def := types.Weight(d.Default.(int))
-			f.Default = func() any { return def }
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(types.Weight))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[4].Descriptor(), m.Field("bonus")
+			f.Default = orm.DefaultValue(types.Weight(d.Default.(int)))
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Weight) int { return int(v) })
 		}
 		{ // ratio
-			d := fields[6].Descriptor()
-			f := m.Field("ratio")
-			def := types.Ratio(d.Default.(float64))
-			f.Default = func() any { return def }
+			d, f := fields[6].Descriptor(), m.Field("ratio")
+			f.Default = orm.DefaultValue(types.Ratio(d.Default.(float64)))
 		}
 		{ // tax
-			d := fields[10].Descriptor()
-			f := m.Field("tax")
-			def := d.Default.(func() types.Decimal)
-			f.Default = func() any { return def() }
+			d, f := fields[10].Descriptor(), m.Field("tax")
+			f.Default = orm.DefaultFunc[types.Decimal](d.Default)
 		}
 	})
 }

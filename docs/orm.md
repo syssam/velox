@@ -56,7 +56,7 @@ imports, a shared helper) imports the library, and writes the same
 
 A generation removes the generated files of an entity that left the schema.
 
-`velox`, `velox/entity` and `velox/schemainit` have **one file per entity**
+`velox`, `velox/entity`, `velox/schemainit` and `velox/migrate` have **one file per entity**
 (`velox/entity/user.go`): the definition an editor jumps to is in a file of a
 thousand lines, not one of 285,000. The compiler takes the same time either
 way; the language server does not (the outline of the single 8 MB file: 3-5 s,
@@ -632,6 +632,19 @@ The root package links `schemainit`, so a program that starts its queries at
 `velox.<Entity>` has all of this. One that uses `velox/entity` alone must import
 `velox/schemainit` itself; until it does, an entity whose schema has defaults,
 validators, hooks or a policy returns an error from every query and mutation.
+
+An entity gets the code of its schema **when it is first used**, not when the
+program starts: the first query or mutation of it, or the first of another
+entity that reaches it (a condition on an edge to it, an eager load of it, a
+row of its join table). Getting it means calling the schema's `Fields`,
+`Mixin`, `Hooks` and `Policy`, and for every entity at once that is what a
+program with a large schema would pay each time it starts, a test binary
+included (measured in
+[`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md)).
+`orm.StitchAll()` does it for all of them at once: call it at start to learn
+there, and not at a first request, that the generated code is the schema's (a
+schema edited without generating again panics where its default or validator
+is no longer of the type the generated code expects).
 
 ## Code written once for several entities
 

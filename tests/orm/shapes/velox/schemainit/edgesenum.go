@@ -14,10 +14,8 @@ func init() {
 	slots.EdgesEnum.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.EdgesEnum{}.Fields()
 		{ // edges
-			d := fields[0].Descriptor()
-			f := m.Field("edges")
-			def := edgesenumpkg.EdgesEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[0].Descriptor(), m.Field("edges")
+			f.Default = orm.DefaultValue(edgesenumpkg.EdgesEnum(d.Default.(string)))
 		}
 	})
 }

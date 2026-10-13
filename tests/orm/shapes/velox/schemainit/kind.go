@@ -14,10 +14,8 @@ func init() {
 	slots.Kind.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Kind{}.Fields()
 		{ // shape
-			d := fields[1].Descriptor()
-			f := m.Field("shape")
-			def := kindpkg.ShapeEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("shape")
+			f.Default = orm.DefaultValue(kindpkg.ShapeEnum(d.Default.(string)))
 		}
 	})
 }

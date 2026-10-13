@@ -472,3 +472,91 @@ An earlier version of this section compared the front end's wall time
 165 / 372 / 180 ms for none / on the entities / off the entities. The order
 was right and the sizes were not; off the entities is 0.30 s here, not the
 same as no layer. Compare CPU time, and repeat the baseline in every round.
+
+## The generated tree of a real schema, by kind of file (2026-10-13, load 15-45)
+
+The mock schema of this fixture is 450 entities of one shape. A real one of
+455 (33 columns and 3 edges on average, 12 column types per entity, 9,921
+defaults and validators, mixins, hooks, policies) puts the weight elsewhere,
+and what follows was measured on it: the tree as `velox-gen -graphql` wrote
+it, each package compiled alone with `go tool compile` against the import
+configuration of a full build (`go list -export -deps`), CPU = user + sys.
+
+| | files | MB | lines | compile, CPU-s | memory | object |
+|---|---|---|---|---|---|---|
+| the entities' packages: `columns.go` | 455 | 16.4 | 459,560 | 70 for the 455 packages | | |
+| the entities' packages: the rest | 899 | 5.8 | 138,642 | (with the line above) | | |
+| `entity` | 456 | 11.7 | 328,417 | 24.0 | 1.8 GB | 131 MB |
+| `entity`, the GraphQL layer | 445 | 1.7 | 45,470 | (in `entity`) | | |
+| `filter` | 445 | 13.1 | 164,659 | 3.9 | 0.6 GB | 31 MB |
+| `schemainit` | 456 | 2.2 | 87,728 | 11.8 | 1.0 GB | 39 MB |
+| `migrate` | 2 | 2.6 | 89,110 | 3.7 | 0.4 GB | 12 MB |
+| the root package | 457 | 1.3 | 35,396 | 4.1 | 0.5 GB | 31 MB |
+| `predicate` | 1 | 0.2 | 5,012 | 0.1 | | |
+| all | 3,618 | 55.0 | 1,354,545 | | | |
+
+Three things in it were found only at this size.
+
+### `schemainit`: a closure per default and per validator
+
+The package was 9,921 generated closures (`f.Default = func() any { return
+def }`, a loop over the validators of each field), and it recompiles on every
+edit to the schema. The closures are in package `orm` now (`orm.DefaultValue`,
+`DefaultFunc`, `Validators`), called once per field:
+
+| | lines | CPU-s | memory | object |
+|---|---|---|---|---|
+| a closure written out per field | 87,728 | 11.6-12.9 (14.0-16.1 at load 35-45) | 0.86-0.98 GB | 38.9 MB |
+| calls to helpers the compiler may inline | 45,495 | 16.3-17.3 | 1.22-1.24 GB | 54.5 MB |
+| the same helpers, `//go:noinline` | 45,495 | 6.8-7.9 (at load 35-45) | 0.53-0.62 GB | 18.1 MB |
+
+The middle row is why the helpers carry `//go:noinline`: inlined, every call
+is the closure written out again, by the compiler, and the package was dearer
+than the one it replaced.
+
+### Starting a program: every entity stitched before `main`
+
+`GODEBUG=inittrace=1` on a program that imports the generated tree and exits:
+
+| | `schemainit` | all package initialization | heap in use at `main` |
+|---|---|---|---|
+| every entity stitched at initialization | 160 ms, 550,270 allocations, 52.4 MB | 194 ms, 559,869 allocations | 9.9 MB |
+| each entity stitched when first used | 0.03 ms, none | 33-42 ms, 9,607 allocations | 5.2-5.6 MB |
+
+Stitching an entity calls its schema's `Fields`, `Mixin`, `Hooks` and
+`Policy`, which build every field of the entity and of each of its mixins to
+get at the few that have a default or a validator. For all 455 entities that
+was what every start of the program paid, a test binary's too (the
+application has 353 test packages), and a command that touches three tables.
+`orm.StitchAll` is the old behavior for a program that wants it.
+
+### Column types: an interface over one generic type, tried and not adopted
+
+`columns.go` is a third of the tree: 5,586 column types and 73,019 methods,
+the same few methods for every Go type a column has, per entity. Tried
+instead: no generated column type at all, each column a variable of a
+generic interface type of package `orm` (`orm.OrdCol[int64,
+predicate.User]`), all implemented by one generic type there.
+
+| | the tree | the 455 entity packages | 253 packages of the application's services |
+|---|---|---|---|
+| generated column types (as generated) | 1,354,545 lines, 55.0 MB | 69.6 / 70.9 CPU-s | 134.8 / 141.9 CPU-s |
+| interface-typed columns over one generic type | 956,076 lines, 41.1 MB | 199.5 / 200.9 | 154.2 / 158.1 |
+
+A third less source, and nearly three times the compile of the packages that
+declare the columns: each instantiates the generic type's methods for every
+Go type its columns have (one entity's package: 0.14 s and 0.8 MB of object
+generated, 0.35 s and 2.9 MB generic), and the packages that use the columns
+are 13% dearer too, though they only call through an interface. It also
+makes every column's methods reachable through an interface, which the
+linker then keeps. This is the earlier table's "method syntax is what is
+paid for", on a real schema: a method that returns an entity's own predicate
+type is compiled once per entity whoever writes it, and the compiler writes
+it at a higher price than the generator.
+
+### One file for all the tables
+
+`migrate/schema.go` was the one file that was still the whole schema: 2.6 MB
+and 89,000 lines. It is a file per entity now, like `entity`, the root
+package and `schemainit`, and `schema.go` keeps what is no entity's (the join
+tables, the list of tables, the foreign keys' wiring): 64 KB.

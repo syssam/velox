@@ -18,82 +18,30 @@ func init() {
 		m.Hooks = []velox.Hook{hooks[0]}
 		fields := schemapkg.Token{}.Fields()
 		{ // id
-			d := fields[0].Descriptor()
-			f := m.Field("id")
-			def := d.Default.(func() uuid.UUID)
-			f.Default = func() any { return def() }
+			d, f := fields[0].Descriptor(), m.Field("id")
+			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
 		}
 		{ // name
-			d := fields[1].Descriptor()
-			f := m.Field("name")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[1].Descriptor(), m.Field("name")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // tier
-			d := fields[2].Descriptor()
-			f := m.Field("tier")
-			def := types.Tier(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[2].Descriptor(), m.Field("tier")
+			f.Default = orm.DefaultValue(types.Tier(d.Default.(string)))
 		}
 		{ // label
-			d := fields[4].Descriptor()
-			f := m.Field("label")
-			def := types.Label(d.Default.(string))
-			f.Default = func() any { return def }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(types.Label))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[4].Descriptor(), m.Field("label")
+			f.Default = orm.DefaultValue(types.Label(d.Default.(string)))
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
 		}
 		{ // alias
-			d := fields[5].Descriptor()
-			f := m.Field("alias")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(types.Label))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[5].Descriptor(), m.Field("alias")
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
 		}
 		{ // weight
-			d := fields[6].Descriptor()
-			f := m.Field("weight")
-			def := types.Weight(d.Default.(int))
-			f.Default = func() any { return def }
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(types.Weight))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[6].Descriptor(), m.Field("weight")
+			f.Default = orm.DefaultValue(types.Weight(d.Default.(int)))
+			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Weight) int { return int(v) })
 		}
 	})
 }

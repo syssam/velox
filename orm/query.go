@@ -192,14 +192,15 @@ func (q *QueryCore) guarded(ctx context.Context, c *velox.ExecutorState, exec fu
 		return nil, err
 	}
 	inters := c.Interceptors()
-	if q.M.Policy == nil && len(inters) == 0 {
+	policy := q.M.policy()
+	if policy == nil && len(inters) == 0 {
 		return exec(ctx, q)
 	}
 	own := *q
 	own.Preds = slices.Clone(q.Preds)
 	qw := &Query{c: &own}
-	if q.M.Policy != nil {
-		if err := q.M.Policy.EvalQuery(ctx, qw); err != nil {
+	if policy != nil {
+		if err := policy.EvalQuery(ctx, qw); err != nil {
 			return nil, err
 		}
 	}
@@ -782,7 +783,7 @@ func compile(p *P) func(*sql.Selector) {
 		for i := range p.Subs {
 			fns[i] = compile(&p.Subs[i])
 		}
-		if len(fns) == 0 && e.Target.Policy == nil {
+		if len(fns) == 0 && e.Target.policy() == nil {
 			return func(s *sql.Selector) { sqlgraph.HasNeighbors(s, step) }
 		}
 		return func(s *sql.Selector) {
@@ -805,14 +806,15 @@ func compile(p *P) func(*sql.Selector) {
 // targetPolicy applies the query policy of m to t, the subquery of an edge
 // predicate whose target is m.
 func targetPolicy(ctx context.Context, m *Meta, t *sql.Selector) error {
-	if m.Policy == nil {
+	policy := m.policy()
+	if policy == nil {
 		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	q := &Query{c: &QueryCore{M: m}}
-	if err := m.Policy.EvalQuery(ctx, q); err != nil {
+	if err := policy.EvalQuery(ctx, q); err != nil {
 		return err
 	}
 	for i := range q.c.Preds {
@@ -982,8 +984,8 @@ func loadEdge(ctx context.Context, c *velox.ExecutorState, l *EdgeLoad, parents 
 	e := l.Edge
 	// A target the caller may not read fails the load whether or not any
 	// neighbor exists; otherwise the error would tell the caller which.
-	if e.Target.Policy != nil {
-		if err := e.Target.Policy.EvalQuery(ctx, &Query{c: &QueryCore{M: e.Target}}); err != nil {
+	if policy := e.Target.policy(); policy != nil {
+		if err := policy.EvalQuery(ctx, &Query{c: &QueryCore{M: e.Target}}); err != nil {
 			return err
 		}
 	}

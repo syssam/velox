@@ -3,6 +3,8 @@ package orm
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -134,8 +136,10 @@ func TestMetaDestKinds(t *testing.T) {
 
 func typeName(v any) string { return fmt.Sprintf("%T", v) }
 
-// A slot stitches as soon as it has both the entity and the schema's
-// function, in whichever order package initialization gives them, and once.
+// A slot that has both the entity and the schema's function, in whichever
+// order package initialization gives them, stitches when the entity is first
+// used, and once: not when the program starts, where every entity of a large
+// schema would pay for the few a program uses.
 func TestSlot(t *testing.T) {
 	stitch := func(calls *int) func(*Meta) {
 		return func(m *Meta) { *calls++; m.Hooks = make([]velox.Hook, 1) }
@@ -149,11 +153,61 @@ func TestSlot(t *testing.T) {
 		var calls int
 		m := &Meta{Name: "T", Runtime: true, Package: "example.com/db"}
 		order(&s, m, stitch(&calls))
-		if calls != 1 || len(m.Hooks) != 1 {
-			t.Errorf("%s: the stitch function ran %d times", name, calls)
+		if calls != 0 {
+			t.Errorf("%s: the stitch function ran before the entity was used", name)
+		}
+		// Whatever is asked of the entity first stitches it.
+		if got := m.hooks(); calls != 1 || len(got) != 1 {
+			t.Errorf("%s: the hooks of an entity used for the first time: %d, after %d runs of the stitch function", name, len(got), calls)
 		}
 		if err := m.ready(); err != nil {
 			t.Errorf("%s: %v", name, err)
+		}
+		_ = m.policy()
+		if calls != 1 {
+			t.Errorf("%s: the stitch function ran %d times", name, calls)
+		}
+	}
+
+	// Used by many at once for the first time, an entity is stitched once,
+	// and nobody sees it half done.
+	{
+		var s Slot
+		var calls atomic.Int32
+		m := &Meta{Name: "T", Runtime: true, Package: "example.com/db"}
+		s.Bind(m)
+		s.Stitch(func(m *Meta) {
+			calls.Add(1)
+			time.Sleep(5 * time.Millisecond)
+			m.Hooks = make([]velox.Hook, 1)
+		})
+		var wg sync.WaitGroup
+		for range 16 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if got := m.hooks(); len(got) != 1 {
+					t.Errorf("an entity being stitched was seen with %d hooks", len(got))
+				}
+			}()
+		}
+		wg.Wait()
+		if calls.Load() != 1 {
+			t.Errorf("stitched %d times", calls.Load())
+		}
+	}
+
+	// StitchAll does it for every entity now.
+	{
+		var s Slot
+		var calls int
+		m := &Meta{Name: "T", Runtime: true, Package: "example.com/db"}
+		s.Bind(m)
+		s.Stitch(stitch(&calls))
+		StitchAll()
+		StitchAll()
+		if calls != 1 {
+			t.Errorf("StitchAll ran the stitch function %d times", calls)
 		}
 	}
 
@@ -172,5 +226,70 @@ func TestSlot(t *testing.T) {
 	// An entity whose schema has no code needs no slot.
 	if err := (&Meta{Name: "Plain"}).ready(); err != nil {
 		t.Error(err)
+	}
+}
+
+// What schemainit fills a field in with: the schema's default and
+// validators, as the runtime calls them.
+func TestStitchHelpers(t *testing.T) {
+	if got := DefaultValue(7)(); got != 7 {
+		t.Errorf("DefaultValue: %v", got)
+	}
+	n := 0
+	def := DefaultFunc[int](func() int { n++; return n })
+	if def() != 1 || def() != 2 {
+		t.Errorf("DefaultFunc does not call the schema's function every time")
+	}
+	var seen []string
+	check := Validators[string]([]any{
+		func(v string) error { seen = append(seen, "first:"+v); return nil },
+		func(v string) error {
+			if v == "" {
+				return fmt.Errorf("empty")
+			}
+			return nil
+		},
+		func(v string) error { seen = append(seen, "third:"+v); return nil },
+	})
+	if err := check("a"); err != nil || strings.Join(seen, " ") != "first:a third:a" {
+		t.Errorf("Validators: %v, ran %v", err, seen)
+	}
+	// The first error is the field's, and the rest do not run.
+	seen = nil
+	if err := check(""); err == nil || err.Error() != "empty" || strings.Join(seen, " ") != "first:" {
+		t.Errorf("Validators on a value the second refuses: %v, ran %v", err, seen)
+	}
+	// A value of another type than the field's is an error, not a panic.
+	if err := check(7); err == nil {
+		t.Errorf("Validators took an int for a string field")
+	}
+	// A field of a named type is validated as its basic type.
+	type code string
+	named := ValidatorsOf([]any{func(v string) error {
+		if len(v) != 2 {
+			return fmt.Errorf("want two letters")
+		}
+		return nil
+	}}, func(v code) string { return string(v) })
+	if err := named(code("hk")); err != nil {
+		t.Error(err)
+	}
+	if err := named(code("hkg")); err == nil {
+		t.Errorf("ValidatorsOf did not validate")
+	}
+	// The schema holding another type than the generated code was written
+	// for says so when the entity is stitched.
+	for name, fn := range map[string]func(){
+		"a default of another type":   func() { DefaultFunc[int](func() string { return "" }) },
+		"a validator of another type": func() { Validators[int]([]any{func(string) error { return nil }}) },
+	} {
+		func() {
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "generate the code again") {
+					t.Errorf("%s: %v", name, r)
+				}
+			}()
+			fn()
+		}()
 	}
 }

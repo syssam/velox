@@ -13,16 +13,12 @@ func init() {
 	slots.Wide.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Wide{}.Fields()
 		{ // dflt
-			d := fields[34].Descriptor()
-			f := m.Field("dflt")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[34].Descriptor(), m.Field("dflt")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // n1
-			d := fields[37].Descriptor()
-			f := m.Field("n1")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
+			d, f := fields[37].Descriptor(), m.Field("n1")
+			f.Default = orm.DefaultValue(d.Default.(int))
 		}
 	})
 }

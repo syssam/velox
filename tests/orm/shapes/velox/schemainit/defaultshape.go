@@ -16,122 +16,82 @@ func init() {
 	slots.DefaultShape.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.DefaultShape{}.Fields()
 		{ // created_at
-			d := fields[1].Descriptor()
-			f := m.Field("created_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := fields[1].Descriptor(), m.Field("created_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 		{ // updated_at
-			d := fields[2].Descriptor()
-			f := m.Field("updated_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
-			upd := d.UpdateDefault.(func() time.Time)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := fields[2].Descriptor(), m.Field("updated_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
+			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
 		}
 		{ // revision
-			d := fields[3].Descriptor()
-			f := m.Field("revision")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
-			upd := d.UpdateDefault.(func() int)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := fields[3].Descriptor(), m.Field("revision")
+			f.Default = orm.DefaultValue(d.Default.(int))
+			f.UpdateDefault = orm.DefaultFunc[int](d.UpdateDefault)
 		}
 		{ // note
-			d := fields[4].Descriptor()
-			f := m.Field("note")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[4].Descriptor(), m.Field("note")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // opt_note
-			d := fields[5].Descriptor()
-			f := m.Field("opt_note")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[5].Descriptor(), m.Field("opt_note")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // nil_note
-			d := fields[6].Descriptor()
-			f := m.Field("nil_note")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[6].Descriptor(), m.Field("nil_note")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // active
-			d := fields[7].Descriptor()
-			f := m.Field("active")
-			def := d.Default.(bool)
-			f.Default = func() any { return def }
+			d, f := fields[7].Descriptor(), m.Field("active")
+			f.Default = orm.DefaultValue(d.Default.(bool))
 		}
 		{ // ratio
-			d := fields[8].Descriptor()
-			f := m.Field("ratio")
-			def := d.Default.(float64)
-			f.Default = func() any { return def }
+			d, f := fields[8].Descriptor(), m.Field("ratio")
+			f.Default = orm.DefaultValue(d.Default.(float64))
 		}
 		{ // ratio32
-			d := fields[9].Descriptor()
-			f := m.Field("ratio32")
-			def := d.Default.(float32)
-			f.Default = func() any { return def }
+			d, f := fields[9].Descriptor(), m.Field("ratio32")
+			f.Default = orm.DefaultValue(d.Default.(float32))
 		}
 		{ // tiny
-			d := fields[10].Descriptor()
-			f := m.Field("tiny")
-			def := d.Default.(int8)
-			f.Default = func() any { return def }
+			d, f := fields[10].Descriptor(), m.Field("tiny")
+			f.Default = orm.DefaultValue(d.Default.(int8))
 		}
 		{ // big
-			d := fields[11].Descriptor()
-			f := m.Field("big")
-			def := d.Default.(int64)
-			f.Default = func() any { return def }
+			d, f := fields[11].Descriptor(), m.Field("big")
+			f.Default = orm.DefaultValue(d.Default.(int64))
 		}
 		{ // mask
-			d := fields[12].Descriptor()
-			f := m.Field("mask")
-			def := d.Default.(uint32)
-			f.Default = func() any { return def }
+			d, f := fields[12].Descriptor(), m.Field("mask")
+			f.Default = orm.DefaultValue(d.Default.(uint32))
 		}
 		{ // blob
-			d := fields[13].Descriptor()
-			f := m.Field("blob")
-			def := d.Default.([]byte)
-			f.Default = func() any { return def }
+			d, f := fields[13].Descriptor(), m.Field("blob")
+			f.Default = orm.DefaultValue(d.Default.([]byte))
 		}
 		{ // uid
-			d := fields[14].Descriptor()
-			f := m.Field("uid")
-			def := d.Default.(func() uuid.UUID)
-			f.Default = func() any { return def() }
+			d, f := fields[14].Descriptor(), m.Field("uid")
+			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
 		}
 		{ // token
-			d := fields[15].Descriptor()
-			f := m.Field("token")
-			def := d.Default.(func() string)
-			f.Default = func() any { return def() }
+			d, f := fields[15].Descriptor(), m.Field("token")
+			f.Default = orm.DefaultFunc[string](d.Default)
 		}
 		{ // counter
-			d := fields[16].Descriptor()
-			f := m.Field("counter")
-			def := d.Default.(func() int)
-			f.Default = func() any { return def() }
+			d, f := fields[16].Descriptor(), m.Field("counter")
+			f.Default = orm.DefaultFunc[int](d.Default)
 		}
 		{ // tags
-			d := fields[17].Descriptor()
-			f := m.Field("tags")
-			def := d.Default.([]string)
-			f.Default = func() any { return def }
+			d, f := fields[17].Descriptor(), m.Field("tags")
+			f.Default = orm.DefaultValue(d.Default.([]string))
 		}
 		{ // touched
-			d := fields[19].Descriptor()
-			f := m.Field("touched")
-			upd := d.UpdateDefault.(func() int64)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := fields[19].Descriptor(), m.Field("touched")
+			f.UpdateDefault = orm.DefaultFunc[int64](d.UpdateDefault)
 		}
 		{ // seen
-			d := fields[20].Descriptor()
-			f := m.Field("seen")
-			upd := d.UpdateDefault.(func() time.Time)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := fields[20].Descriptor(), m.Field("seen")
+			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
 		}
 	})
 }

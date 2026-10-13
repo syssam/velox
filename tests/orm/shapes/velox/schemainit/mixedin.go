@@ -19,102 +19,44 @@ func init() {
 		mixinFields2 := mixin[2].Fields()
 		fields := schemapkg.MixedIn{}.Fields()
 		{ // created_at
-			d := mixinFields0[0].Descriptor()
-			f := m.Field("created_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 		{ // updated_at
-			d := mixinFields0[1].Descriptor()
-			f := m.Field("updated_at")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
-			upd := d.UpdateDefault.(func() time.Time)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
+			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
 		}
 		{ // created_by
-			d := mixinFields1[0].Descriptor()
-			f := m.Field("created_by")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := mixinFields1[0].Descriptor(), m.Field("created_by")
+			f.Default = orm.DefaultValue(d.Default.(string))
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // version
-			d := mixinFields1[1].Descriptor()
-			f := m.Field("version")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
-			upd := d.UpdateDefault.(func() int)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := mixinFields1[1].Descriptor(), m.Field("version")
+			f.Default = orm.DefaultValue(d.Default.(int))
+			f.UpdateDefault = orm.DefaultFunc[int](d.UpdateDefault)
 		}
 		{ // archived
-			d := mixinFields2[0].Descriptor()
-			f := m.Field("archived")
-			def := d.Default.(bool)
-			f.Default = func() any { return def }
+			d, f := mixinFields2[0].Descriptor(), m.Field("archived")
+			f.Default = orm.DefaultValue(d.Default.(bool))
 		}
 		{ // reason
-			d := mixinFields2[2].Descriptor()
-			f := m.Field("reason")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := mixinFields2[2].Descriptor(), m.Field("reason")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // name
-			d := fields[0].Descriptor()
-			f := m.Field("name")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("name")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // slug
-			d := fields[1].Descriptor()
-			f := m.Field("slug")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[1].Descriptor(), m.Field("slug")
+			f.Default = orm.DefaultValue(d.Default.(string))
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // due
-			d := fields[2].Descriptor()
-			f := m.Field("due")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := fields[2].Descriptor(), m.Field("due")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 	})
 }

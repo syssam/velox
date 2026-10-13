@@ -15,10 +15,8 @@ func init() {
 	slots.Time.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Time{}.Fields()
 		{ // time
-			d := fields[1].Descriptor()
-			f := m.Field("time")
-			def := d.Default.(func() time.Time)
-			f.Default = func() any { return def() }
+			d, f := fields[1].Descriptor(), m.Field("time")
+			f.Default = orm.DefaultFunc[time.Time](d.Default)
 		}
 	})
 }

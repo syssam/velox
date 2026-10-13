@@ -14,10 +14,8 @@ func init() {
 	slots.UUID.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.UUID{}.Fields()
 		{ // uuid
-			d := fields[1].Descriptor()
-			f := m.Field("uuid")
-			def := d.Default.(func() uuid.UUID)
-			f.Default = func() any { return def() }
+			d, f := fields[1].Descriptor(), m.Field("uuid")
+			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
 		}
 	})
 }

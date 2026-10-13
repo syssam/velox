@@ -41,6 +41,7 @@ func validate(m *Meta, f *FieldMeta, v any) error {
 	if v == nil {
 		return nil
 	}
+	m.stitch()
 	if len(f.Enums) > 0 {
 		if s := fmt.Sprint(v); !slices.Contains(f.Enums, s) {
 			return m.invalid(f.Name, fmt.Errorf("invalid enum value %q", s))
@@ -70,6 +71,7 @@ func edgeSpec(e *EdgeMeta, ids []any) *sqlgraph.EdgeSpec {
 	// A join table with an entity of its own has columns besides the two
 	// keys; a join row gets their defaults like any other row of that entity.
 	if e.Through != nil && len(ids) > 0 {
+		e.Through.stitch()
 		for _, f := range e.Through.Fields {
 			if f.Default != nil && f != e.Through.id() {
 				spec.Target.Fields = append(spec.Target.Fields, &sqlgraph.FieldSpec{Column: f.Column, Type: f.Type, Value: bound(f, bytesValue(f, fresh(f, f.Default())))})
@@ -123,6 +125,7 @@ func invalid(sets []S) error {
 // the column (post.AuthorID.To) or the to-one edge stored in it
 // (post.Author.Set).
 func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error) {
+	m.stitch()
 	if m.id() == nil {
 		return nil, nil, fmt.Errorf("velox: %s has no single-column id", m.Name)
 	}
@@ -457,7 +460,7 @@ func insertRows(ctx context.Context, ex velox.Executor, m *Meta, rows [][]S) ([]
 	if err != nil {
 		return nil, err
 	}
-	if m.Policy == nil && len(c.Hooks()) == 0 && len(m.Hooks) == 0 {
+	if m.policy() == nil && len(c.Hooks()) == 0 && len(m.hooks()) == 0 {
 		return insertBulk(ctx, c, m, rows)
 	}
 	final := make([][]S, len(rows))
@@ -564,6 +567,7 @@ func (m *MutCore) conditions() error {
 // updateSpec validates the setters and renders the UPDATE.
 func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 	meta := m.M
+	meta.stitch()
 	if err := m.conditions(); err != nil {
 		return nil, err
 	}
@@ -796,7 +800,7 @@ func (m *MutCore) ExecOne(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	hooked := len(c.Hooks())+len(m.M.Hooks) > 0
+	hooked := len(c.Hooks())+len(m.M.hooks()) > 0
 	_, err = m.mutate(ctx, c, velox.OpUpdateOne, func(ctx context.Context, m *MutCore) (any, error) {
 		if hooked {
 			return m.updateOne(ctx, c)

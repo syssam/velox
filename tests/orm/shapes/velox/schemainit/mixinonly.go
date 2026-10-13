@@ -14,29 +14,14 @@ func init() {
 		mixin := schemapkg.MixinOnly{}.Mixin()
 		mixinFields0 := mixin[0].Fields()
 		{ // created_by
-			d := mixinFields0[0].Descriptor()
-			f := m.Field("created_by")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := mixinFields0[0].Descriptor(), m.Field("created_by")
+			f.Default = orm.DefaultValue(d.Default.(string))
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // version
-			d := mixinFields0[1].Descriptor()
-			f := m.Field("version")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
-			upd := d.UpdateDefault.(func() int)
-			f.UpdateDefault = func() any { return upd() }
+			d, f := mixinFields0[1].Descriptor(), m.Field("version")
+			f.Default = orm.DefaultValue(d.Default.(int))
+			f.UpdateDefault = orm.DefaultFunc[int](d.UpdateDefault)
 		}
 	})
 }

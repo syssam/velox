@@ -13,22 +13,9 @@ func init() {
 	slots.StringKey.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.StringKey{}.Fields()
 		{ // id
-			d := fields[0].Descriptor()
-			f := m.Field("id")
-			def := d.Default.(func() string)
-			f.Default = func() any { return def() }
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("id")
+			f.Default = orm.DefaultFunc[string](d.Default)
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 	})
 }

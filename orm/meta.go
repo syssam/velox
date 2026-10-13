@@ -33,8 +33,10 @@ package orm
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema/field"
@@ -100,18 +102,22 @@ type Meta struct {
 	Edges []*EdgeMeta
 	// Hooks and Policy are the schema's (and its mixins'), stitched in by
 	// the generated schemainit package. Without that package imported an
-	// entity runs with neither.
+	// entity runs with neither. They are for that package to set: what
+	// reads them, in this package, goes through hooks and policy, which
+	// stitch first.
 	Hooks  []velox.Hook
 	Policy velox.Policy
 	// Runtime says the schema has parts that only schemainit can provide
 	// (defaults, validators, hooks, a policy). An entity with Runtime that
-	// was not stitched refuses to run: without its policy it would answer
+	// cannot be stitched refuses to run: without its policy it would answer
 	// every caller. See Slot.
 	Runtime bool
 	// Package is the import path of the generated tree, for that error.
 	Package string
 
-	stitched bool // schemainit has provided what Runtime promises
+	stitched atomic.Bool // schemainit has provided what Runtime promises
+	stitchMu sync.Mutex  // held while it does
+	stitchFn func(*Meta) // what schemainit gave the entity's slot
 	once     sync.Once
 	byColumn map[string]*FieldMeta
 	byName   map[string]*FieldMeta
@@ -124,7 +130,8 @@ type Meta struct {
 // ready reports the error of running an entity whose schema runtime was not
 // linked in.
 func (m *Meta) ready() error {
-	if m.Runtime && !m.stitched {
+	m.stitch()
+	if m.Runtime && !m.stitched.Load() {
 		return fmt.Errorf("velox: %s has defaults, validators, hooks or a policy that are not linked into this program: import _ %q", m.Name, m.Package+"/schemainit")
 	}
 	return nil
@@ -134,8 +141,7 @@ func (m *Meta) ready() error {
 // default functions, validators, hooks and a policy. The generated entity
 // package binds the entity's Meta to its slot, the generated schemainit
 // package gives the slot a function that fills a Meta in, and the function
-// runs as soon as the slot has both: during package initialization, before
-// any query can.
+// runs when the entity is first used (see Meta.stitch), or in StitchAll.
 //
 // The slot is what lets schemainit not import the entity package. Both are
 // recompiled by an edit to a schema field, and the root package of the
@@ -150,6 +156,9 @@ type Slot struct {
 // Bind gives the slot its entity.
 func (s *Slot) Bind(m *Meta) {
 	s.m = m
+	slotted.Lock()
+	slotted.metas = append(slotted.metas, m)
+	slotted.Unlock()
 	s.join()
 }
 
@@ -160,11 +169,71 @@ func (s *Slot) Stitch(fn func(*Meta)) {
 }
 
 func (s *Slot) join() {
-	if s.m == nil || s.fn == nil || s.m.stitched {
+	if s.m == nil || s.fn == nil {
 		return
 	}
-	s.fn(s.m)
-	s.m.stitched = true
+	s.m.stitchMu.Lock()
+	s.m.stitchFn = s.fn
+	s.m.stitchMu.Unlock()
+}
+
+// slotted are the entities that have a slot.
+var slotted struct {
+	sync.Mutex
+	metas []*Meta
+}
+
+// stitch fills m in with the code of its schema, the first time something
+// of it is asked for: the function schemainit gave the entity's slot calls
+// the schema's Fields, Mixin, Hooks and Policy, and what those build is
+// built once per entity that is used, not once per entity when the program
+// starts. On a schema of 455 entities, stitching them all took a program
+// 160 ms, 550,000 allocations and 52 MB before main, every time it started:
+// a test binary, a command that touches three tables.
+//
+// Everything that reads what the schema provides calls it first: ready, for
+// the entity a query or a mutation is of, and hooks and policy, for an
+// entity reached another way (the target of an edge, the entity of a join
+// table). A function that reads a field's Default, UpdateDefault or
+// Validate calls it itself.
+func (m *Meta) stitch() {
+	if m.stitched.Load() {
+		return
+	}
+	m.stitchMu.Lock()
+	defer m.stitchMu.Unlock()
+	if m.stitched.Load() || m.stitchFn == nil {
+		return
+	}
+	m.stitchFn(m)
+	m.stitched.Store(true)
+}
+
+// hooks returns the hooks of the schema.
+func (m *Meta) hooks() []velox.Hook {
+	m.stitch()
+	return m.Hooks
+}
+
+// policy returns the policy of the schema, or nil.
+func (m *Meta) policy() velox.Policy {
+	m.stitch()
+	return m.Policy
+}
+
+// StitchAll fills every entity in with the code of its schema now, where
+// each is otherwise filled in when it is first used. A program calls it
+// when it starts to learn then, and not at a first request, that the
+// generated code is the schema's (a default or a validator of another type
+// than the generated code expects panics here), or to keep the first use of
+// each entity from paying for it.
+func StitchAll() {
+	slotted.Lock()
+	metas := slices.Clone(slotted.metas)
+	slotted.Unlock()
+	for _, m := range metas {
+		m.stitch()
+	}
 }
 
 // Describe renders an entity for logs: every column but the sensitive ones.

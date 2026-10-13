@@ -15,103 +15,72 @@ func init() {
 	slots.Clash.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Clash{}.Fields()
 		{ // label
-			d := fields[0].Descriptor()
-			f := m.Field("label")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[0].Descriptor(), m.Field("label")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // order
-			d := fields[1].Descriptor()
-			f := m.Field("order")
-			def := clashpkg.OrderEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("order")
+			f.Default = orm.DefaultValue(clashpkg.OrderEnum(d.Default.(string)))
 		}
 		{ // set
-			d := fields[2].Descriptor()
-			f := m.Field("set")
-			def := clashpkg.SetEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[2].Descriptor(), m.Field("set")
+			f.Default = orm.DefaultValue(clashpkg.SetEnum(d.Default.(string)))
 		}
 		{ // query
-			d := fields[3].Descriptor()
-			f := m.Field("query")
-			def := clashpkg.QueryEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[3].Descriptor(), m.Field("query")
+			f.Default = orm.DefaultValue(clashpkg.QueryEnum(d.Default.(string)))
 		}
 		{ // create
-			d := fields[4].Descriptor()
-			f := m.Field("create")
-			def := clashpkg.CreateEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[4].Descriptor(), m.Field("create")
+			f.Default = orm.DefaultValue(clashpkg.CreateEnum(d.Default.(string)))
 		}
 		{ // update
-			d := fields[5].Descriptor()
-			f := m.Field("update")
-			def := clashpkg.UpdateEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[5].Descriptor(), m.Field("update")
+			f.Default = orm.DefaultValue(clashpkg.UpdateEnum(d.Default.(string)))
 		}
 		{ // load
-			d := fields[6].Descriptor()
-			f := m.Field("load")
-			def := clashpkg.LoadEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[6].Descriptor(), m.Field("load")
+			f.Default = orm.DefaultValue(clashpkg.LoadEnum(d.Default.(string)))
 		}
 		{ // edge
-			d := fields[7].Descriptor()
-			f := m.Field("edge")
-			def := clashpkg.EdgeEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[7].Descriptor(), m.Field("edge")
+			f.Default = orm.DefaultValue(clashpkg.EdgeEnum(d.Default.(string)))
 		}
 		{ // meta
-			d := fields[8].Descriptor()
-			f := m.Field("meta")
-			def := clashpkg.MetaEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[8].Descriptor(), m.Field("meta")
+			f.Default = orm.DefaultValue(clashpkg.MetaEnum(d.Default.(string)))
 		}
 		{ // pred
-			d := fields[9].Descriptor()
-			f := m.Field("pred")
-			def := clashpkg.PredEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[9].Descriptor(), m.Field("pred")
+			f.Default = orm.DefaultValue(clashpkg.PredEnum(d.Default.(string)))
 		}
 		{ // kind
-			d := fields[10].Descriptor()
-			f := m.Field("kind")
-			def := clashpkg.KindEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[10].Descriptor(), m.Field("kind")
+			f.Default = orm.DefaultValue(clashpkg.KindEnum(d.Default.(string)))
 		}
 		{ // a
-			d := fields[11].Descriptor()
-			f := m.Field("a")
-			def := clashpkg.AEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[11].Descriptor(), m.Field("a")
+			f.Default = orm.DefaultValue(clashpkg.AEnum(d.Default.(string)))
 		}
 		{ // a_b
-			d := fields[12].Descriptor()
-			f := m.Field("a_b")
-			def := clashpkg.ABEnum(d.Default.(string))
-			f.Default = func() any { return def }
+			d, f := fields[12].Descriptor(), m.Field("a_b")
+			f.Default = orm.DefaultValue(clashpkg.ABEnum(d.Default.(string)))
 		}
 		{ // user_name
-			d := fields[13].Descriptor()
-			f := m.Field("user_name")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[13].Descriptor(), m.Field("user_name")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // query_others
-			d := fields[14].Descriptor()
-			f := m.Field("query_others")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[14].Descriptor(), m.Field("query_others")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // price
-			d := fields[15].Descriptor()
-			f := m.Field("price")
+			d, f := fields[15].Descriptor(), m.Field("price")
 			var def types.Decimal
 			if err := (&def).Scan(d.Default); err != nil {
 				panic("velox: default of Clash.price: " + err.Error())
 			}
-			f.Default = func() any { return def }
+			f.Default = orm.DefaultValue(def)
 		}
 	})
 }

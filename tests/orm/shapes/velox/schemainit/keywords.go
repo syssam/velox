@@ -13,262 +13,176 @@ func init() {
 	slots.Keywords.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Keywords{}.Fields()
 		{ // type
-			d := fields[0].Descriptor()
-			f := m.Field("type")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[0].Descriptor(), m.Field("type")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // func
-			d := fields[1].Descriptor()
-			f := m.Field("func")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[1].Descriptor(), m.Field("func")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // range
-			d := fields[2].Descriptor()
-			f := m.Field("range")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[2].Descriptor(), m.Field("range")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // select
-			d := fields[3].Descriptor()
-			f := m.Field("select")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[3].Descriptor(), m.Field("select")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // from
-			d := fields[4].Descriptor()
-			f := m.Field("from")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[4].Descriptor(), m.Field("from")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // where
-			d := fields[5].Descriptor()
-			f := m.Field("where")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[5].Descriptor(), m.Field("where")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // order
-			d := fields[6].Descriptor()
-			f := m.Field("order")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[6].Descriptor(), m.Field("order")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // group
-			d := fields[7].Descriptor()
-			f := m.Field("group")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[7].Descriptor(), m.Field("group")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // default
-			d := fields[8].Descriptor()
-			f := m.Field("default")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[8].Descriptor(), m.Field("default")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // table
-			d := fields[9].Descriptor()
-			f := m.Field("table")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[9].Descriptor(), m.Field("table")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // index
-			d := fields[10].Descriptor()
-			f := m.Field("index")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[10].Descriptor(), m.Field("index")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // key
-			d := fields[11].Descriptor()
-			f := m.Field("key")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[11].Descriptor(), m.Field("key")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // values
-			d := fields[12].Descriptor()
-			f := m.Field("values")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[12].Descriptor(), m.Field("values")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // query
-			d := fields[13].Descriptor()
-			f := m.Field("query")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[13].Descriptor(), m.Field("query")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // create
-			d := fields[14].Descriptor()
-			f := m.Field("create")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[14].Descriptor(), m.Field("create")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // create_bulk
-			d := fields[15].Descriptor()
-			f := m.Field("create_bulk")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[15].Descriptor(), m.Field("create_bulk")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // update
-			d := fields[16].Descriptor()
-			f := m.Field("update")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[16].Descriptor(), m.Field("update")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // delete
-			d := fields[17].Descriptor()
-			f := m.Field("delete")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[17].Descriptor(), m.Field("delete")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // set
-			d := fields[18].Descriptor()
-			f := m.Field("set")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[18].Descriptor(), m.Field("set")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // and
-			d := fields[19].Descriptor()
-			f := m.Field("and")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[19].Descriptor(), m.Field("and")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // or
-			d := fields[20].Descriptor()
-			f := m.Field("or")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[20].Descriptor(), m.Field("or")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // not
-			d := fields[21].Descriptor()
-			f := m.Field("not")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[21].Descriptor(), m.Field("not")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // meta
-			d := fields[22].Descriptor()
-			f := m.Field("meta")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[22].Descriptor(), m.Field("meta")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // load
-			d := fields[23].Descriptor()
-			f := m.Field("load")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[23].Descriptor(), m.Field("load")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // pred
-			d := fields[24].Descriptor()
-			f := m.Field("pred")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[24].Descriptor(), m.Field("pred")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // edge
-			d := fields[25].Descriptor()
-			f := m.Field("edge")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[25].Descriptor(), m.Field("edge")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // model
-			d := fields[26].Descriptor()
-			f := m.Field("model")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[26].Descriptor(), m.Field("model")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // orm
-			d := fields[27].Descriptor()
-			f := m.Field("orm")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[27].Descriptor(), m.Field("orm")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // context
-			d := fields[28].Descriptor()
-			f := m.Field("context")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[28].Descriptor(), m.Field("context")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // tx
-			d := fields[29].Descriptor()
-			f := m.Field("tx")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[29].Descriptor(), m.Field("tx")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // string
-			d := fields[30].Descriptor()
-			f := m.Field("string")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[30].Descriptor(), m.Field("string")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // int
-			d := fields[31].Descriptor()
-			f := m.Field("int")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
+			d, f := fields[31].Descriptor(), m.Field("int")
+			f.Default = orm.DefaultValue(d.Default.(int))
 		}
 		{ // error
-			d := fields[32].Descriptor()
-			f := m.Field("error")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[32].Descriptor(), m.Field("error")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // len
-			d := fields[33].Descriptor()
-			f := m.Field("len")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[33].Descriptor(), m.Field("len")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // new
-			d := fields[34].Descriptor()
-			f := m.Field("new")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[34].Descriptor(), m.Field("new")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // string_column
-			d := fields[35].Descriptor()
-			f := m.Field("string_column")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[35].Descriptor(), m.Field("string_column")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // int_column
-			d := fields[36].Descriptor()
-			f := m.Field("int_column")
-			def := d.Default.(int)
-			f.Default = func() any { return def }
+			d, f := fields[36].Descriptor(), m.Field("int_column")
+			f.Default = orm.DefaultValue(d.Default.(int))
 		}
 		{ // to
-			d := fields[37].Descriptor()
-			f := m.Field("to")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[37].Descriptor(), m.Field("to")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // asc
-			d := fields[39].Descriptor()
-			f := m.Field("asc")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[39].Descriptor(), m.Field("asc")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // desc
-			d := fields[40].Descriptor()
-			f := m.Field("desc")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[40].Descriptor(), m.Field("desc")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // eq
-			d := fields[41].Descriptor()
-			f := m.Field("eq")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[41].Descriptor(), m.Field("eq")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // in
-			d := fields[42].Descriptor()
-			f := m.Field("in")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[42].Descriptor(), m.Field("in")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 		{ // has
-			d := fields[43].Descriptor()
-			f := m.Field("has")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[43].Descriptor(), m.Field("has")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 	})
 }

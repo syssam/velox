@@ -13,10 +13,8 @@ func init() {
 	slots.EdgesField.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.EdgesField{}.Fields()
 		{ // edges
-			d := fields[0].Descriptor()
-			f := m.Field("edges")
-			def := d.Default.(string)
-			f.Default = func() any { return def }
+			d, f := fields[0].Descriptor(), m.Field("edges")
+			f.Default = orm.DefaultValue(d.Default.(string))
 		}
 	})
 }

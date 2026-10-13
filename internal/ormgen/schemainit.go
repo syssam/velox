@@ -180,33 +180,36 @@ func (g *Generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 					src = fmt.Sprintf("mixinFields%d", p.MixinIndex)
 				}
 			}
-			w("\t{ // %s\n\t\td := %s[%d].Descriptor()\n\t\tf := m.Field(%q)\n", f.F.Name, src, idx, f.Col)
+			// What the descriptor holds becomes what the runtime calls in package
+			// orm (DefaultValue, DefaultFunc, Validators), not in a closure
+			// written here: see orm/stitch.go for what the closures cost.
+			w("\t{ // %s\n\t\td, f := %s[%d].Descriptor(), m.Field(%q)\n", f.F.Name, src, idx, f.Col)
 			if f.F.Default {
 				switch {
 				case f.F.DefaultFunc():
-					w("\t\tdef := d.Default.(func() %s)\n\t\tf.Default = func() any { return def() }\n", full)
+					w("\t\tf.Default = orm.DefaultFunc[%s](d.Default)\n", full)
 				case f.Enum != "":
-					w("\t\tdef := %s(d.Default.(string))\n\t\tf.Default = func() any { return def }\n", full)
+					w("\t\tf.Default = orm.DefaultValue(%s(d.Default.(string)))\n", full)
 				case f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther() && scansDefault(f.F):
 					// The Go type is not a named form of the basic type (a
 					// decimal stored as a string): it parses the default the
 					// way it parses a column value.
-					w("\t\tvar def %s\n\t\tif err := (&def).Scan(d.Default); err != nil {\n\t\t\tpanic(\"velox: default of %s.%s: \" + err.Error())\n\t\t}\n\t\tf.Default = func() any { return def }\n", full, e.Name, f.F.Name)
+					w("\t\tvar def %s\n\t\tif err := (&def).Scan(d.Default); err != nil {\n\t\t\tpanic(\"velox: default of %s.%s: \" + err.Error())\n\t\t}\n\t\tf.Default = orm.DefaultValue(def)\n", full, e.Name, f.F.Name)
 				case f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther():
-					w("\t\tdef := %s(d.Default.(%s))\n\t\tf.Default = func() any { return def }\n", full, basic)
+					w("\t\tf.Default = orm.DefaultValue(%s(d.Default.(%s)))\n", full, basic)
 				default:
-					w("\t\tdef := d.Default.(%s)\n\t\tf.Default = func() any { return def }\n", full)
+					w("\t\tf.Default = orm.DefaultValue(d.Default.(%s))\n", full)
 				}
 			}
 			if f.F.UpdateDefault {
-				w("\t\tupd := d.UpdateDefault.(func() %s)\n\t\tf.UpdateDefault = func() any { return upd() }\n", full)
+				w("\t\tf.UpdateDefault = orm.DefaultFunc[%s](d.UpdateDefault)\n", full)
 			}
 			if f.F.Validators > 0 {
-				w("\t\tchecks := [...]func(%s) error{\n", basic)
-				for i := 0; i < f.F.Validators; i++ {
-					w("\t\t\td.Validators[%d].(func(%s) error),\n", i, basic)
+				if basic == full {
+					w("\t\tf.Validate = orm.Validators[%s](d.Validators)\n", full)
+				} else {
+					w("\t\tf.Validate = orm.ValidatorsOf(d.Validators, func(v %s) %s { return %s(v) })\n", full, basic, basic)
 				}
-				w("\t\t}\n\t\tf.Validate = func(v any) error {\n\t\t\tfor _, check := range checks {\n\t\t\t\tif err := check(%s(v.(%s))); err != nil {\n\t\t\t\t\treturn err\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn nil\n\t\t}\n", basic, full)
 			}
 			w("\t}\n")
 		}

@@ -13,328 +13,93 @@ func init() {
 	slots.Validated.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Validated{}.Fields()
 		{ // one
-			d := fields[0].Descriptor()
-			f := m.Field("one")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[0].Descriptor(), m.Field("one")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // two
-			d := fields[1].Descriptor()
-			f := m.Field("two")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[1].Descriptor(), m.Field("two")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // three
-			d := fields[2].Descriptor()
-			f := m.Field("three")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-				d.Validators[1].(func(string) error),
-				d.Validators[2].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[2].Descriptor(), m.Field("three")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // score
-			d := fields[3].Descriptor()
-			f := m.Field("score")
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(int))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[3].Descriptor(), m.Field("score")
+			f.Validate = orm.Validators[int](d.Validators)
 		}
 		{ // rank
-			d := fields[4].Descriptor()
-			f := m.Field("rank")
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-				d.Validators[1].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(int))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[4].Descriptor(), m.Field("rank")
+			f.Validate = orm.Validators[int](d.Validators)
 		}
 		{ // even
-			d := fields[5].Descriptor()
-			f := m.Field("even")
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(int))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[5].Descriptor(), m.Field("even")
+			f.Validate = orm.Validators[int](d.Validators)
 		}
 		{ // ratio
-			d := fields[6].Descriptor()
-			f := m.Field("ratio")
-			checks := [...]func(float64) error{
-				d.Validators[0].(func(float64) error),
-				d.Validators[1].(func(float64) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(float64(v.(float64))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[6].Descriptor(), m.Field("ratio")
+			f.Validate = orm.Validators[float64](d.Validators)
 		}
 		{ // i8
-			d := fields[7].Descriptor()
-			f := m.Field("i8")
-			def := d.Default.(int8)
-			f.Default = func() any { return def }
-			checks := [...]func(int8) error{
-				d.Validators[0].(func(int8) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int8(v.(int8))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[7].Descriptor(), m.Field("i8")
+			f.Default = orm.DefaultValue(d.Default.(int8))
+			f.Validate = orm.Validators[int8](d.Validators)
 		}
 		{ // i16
-			d := fields[8].Descriptor()
-			f := m.Field("i16")
-			def := d.Default.(int16)
-			f.Default = func() any { return def }
-			checks := [...]func(int16) error{
-				d.Validators[0].(func(int16) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int16(v.(int16))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[8].Descriptor(), m.Field("i16")
+			f.Default = orm.DefaultValue(d.Default.(int16))
+			f.Validate = orm.Validators[int16](d.Validators)
 		}
 		{ // i32
-			d := fields[9].Descriptor()
-			f := m.Field("i32")
-			def := d.Default.(int32)
-			f.Default = func() any { return def }
-			checks := [...]func(int32) error{
-				d.Validators[0].(func(int32) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int32(v.(int32))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[9].Descriptor(), m.Field("i32")
+			f.Default = orm.DefaultValue(d.Default.(int32))
+			f.Validate = orm.Validators[int32](d.Validators)
 		}
 		{ // i64
-			d := fields[10].Descriptor()
-			f := m.Field("i64")
-			def := d.Default.(int64)
-			f.Default = func() any { return def }
-			checks := [...]func(int64) error{
-				d.Validators[0].(func(int64) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int64(v.(int64))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[10].Descriptor(), m.Field("i64")
+			f.Default = orm.DefaultValue(d.Default.(int64))
+			f.Validate = orm.Validators[int64](d.Validators)
 		}
 		{ // u
-			d := fields[11].Descriptor()
-			f := m.Field("u")
-			def := d.Default.(uint)
-			f.Default = func() any { return def }
-			checks := [...]func(uint) error{
-				d.Validators[0].(func(uint) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(uint(v.(uint))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[11].Descriptor(), m.Field("u")
+			f.Default = orm.DefaultValue(d.Default.(uint))
+			f.Validate = orm.Validators[uint](d.Validators)
 		}
 		{ // u8
-			d := fields[12].Descriptor()
-			f := m.Field("u8")
-			def := d.Default.(uint8)
-			f.Default = func() any { return def }
-			checks := [...]func(uint8) error{
-				d.Validators[0].(func(uint8) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(uint8(v.(uint8))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[12].Descriptor(), m.Field("u8")
+			f.Default = orm.DefaultValue(d.Default.(uint8))
+			f.Validate = orm.Validators[uint8](d.Validators)
 		}
 		{ // u64
-			d := fields[13].Descriptor()
-			f := m.Field("u64")
-			def := d.Default.(uint64)
-			f.Default = func() any { return def }
-			checks := [...]func(uint64) error{
-				d.Validators[0].(func(uint64) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(uint64(v.(uint64))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[13].Descriptor(), m.Field("u64")
+			f.Default = orm.DefaultValue(d.Default.(uint64))
+			f.Validate = orm.Validators[uint64](d.Validators)
 		}
 		{ // f32
-			d := fields[14].Descriptor()
-			f := m.Field("f32")
-			def := d.Default.(float32)
-			f.Default = func() any { return def }
-			checks := [...]func(float32) error{
-				d.Validators[0].(func(float32) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(float32(v.(float32))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[14].Descriptor(), m.Field("f32")
+			f.Default = orm.DefaultValue(d.Default.(float32))
+			f.Validate = orm.Validators[float32](d.Validators)
 		}
 		{ // raw
-			d := fields[15].Descriptor()
-			f := m.Field("raw")
-			def := d.Default.([]byte)
-			f.Default = func() any { return def }
-			checks := [...]func([]byte) error{
-				d.Validators[0].(func([]byte) error),
-				d.Validators[1].(func([]byte) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check([]byte(v.([]byte))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[15].Descriptor(), m.Field("raw")
+			f.Default = orm.DefaultValue(d.Default.([]byte))
+			f.Validate = orm.Validators[[]byte](d.Validators)
 		}
 		{ // opt
-			d := fields[16].Descriptor()
-			f := m.Field("opt")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[16].Descriptor(), m.Field("opt")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // opt_pos
-			d := fields[17].Descriptor()
-			f := m.Field("opt_pos")
-			checks := [...]func(int) error{
-				d.Validators[0].(func(int) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(int(v.(int))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[17].Descriptor(), m.Field("opt_pos")
+			f.Validate = orm.Validators[int](d.Validators)
 		}
 		{ // opt_ne
-			d := fields[18].Descriptor()
-			f := m.Field("opt_ne")
-			checks := [...]func(string) error{
-				d.Validators[0].(func(string) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check(string(v.(string))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[18].Descriptor(), m.Field("opt_ne")
+			f.Validate = orm.Validators[string](d.Validators)
 		}
 		{ // opt_raw
-			d := fields[19].Descriptor()
-			f := m.Field("opt_raw")
-			checks := [...]func([]byte) error{
-				d.Validators[0].(func([]byte) error),
-			}
-			f.Validate = func(v any) error {
-				for _, check := range checks {
-					if err := check([]byte(v.([]byte))); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			d, f := fields[19].Descriptor(), m.Field("opt_raw")
+			f.Validate = orm.Validators[[]byte](d.Validators)
 		}
 	})
 }

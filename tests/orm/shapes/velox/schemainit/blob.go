@@ -13,10 +13,8 @@ func init() {
 	slots.Blob.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Blob{}.Fields()
 		{ // optd
-			d := fields[3].Descriptor()
-			f := m.Field("optd")
-			def := d.Default.([]byte)
-			f.Default = func() any { return def }
+			d, f := fields[3].Descriptor(), m.Field("optd")
+			f.Default = orm.DefaultValue(d.Default.([]byte))
 		}
 	})
 }
