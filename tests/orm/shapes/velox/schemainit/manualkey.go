@@ -12,10 +12,8 @@ import (
 // schema.
 func init() {
 	slots.ManualKey.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.ManualKey{}.Fields()
-		{ // id
-			d, f := fields[0].Descriptor(), m.Field("id")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
+		orm.StitchFields(m, schemapkg.ManualKey{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "id", Validate: orm.Validators[string]},
+		})
 	})
 }

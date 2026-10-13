@@ -12,14 +12,9 @@ import (
 // schema.
 func init() {
 	slots.Author.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Author{}.Fields()
-		{ // name
-			d, f := fields[0].Descriptor(), m.Field("name")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // age
-			d, f := fields[1].Descriptor(), m.Field("age")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
+		orm.StitchFields(m, schemapkg.Author{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "name", Validate: orm.Validators[string]},
+			{Index: 1, Column: "age", Default: orm.DefaultOf[int]},
+		})
 	})
 }

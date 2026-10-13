@@ -15,49 +15,22 @@ import (
 func init() {
 	slots.MixedIn.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.MixedIn{}.Mixin()
-		mixinFields0 := mixin[0].Fields()
-		mixinFields1 := mixin[1].Fields()
-		mixinFields2 := mixin[2].Fields()
-		fields := schemapkg.MixedIn{}.Fields()
-		{ // created_at
-			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // updated_at
-			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // created_by
-			d, f := mixinFields1[0].Descriptor(), m.Field("created_by")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // version
-			d, f := mixinFields1[1].Descriptor(), m.Field("version")
-			f.Default = orm.DefaultValue(d.Default.(int))
-			f.UpdateDefault = orm.DefaultFunc[int](d.UpdateDefault)
-		}
-		{ // archived
-			d, f := mixinFields2[0].Descriptor(), m.Field("archived")
-			f.Default = orm.DefaultValue(d.Default.(bool))
-		}
-		{ // reason
-			d, f := mixinFields2[2].Descriptor(), m.Field("reason")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // name
-			d, f := fields[0].Descriptor(), m.Field("name")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // slug
-			d, f := fields[1].Descriptor(), m.Field("slug")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // due
-			d, f := fields[2].Descriptor(), m.Field("due")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
+		orm.StitchFields(m, mixin[0].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 1, Column: "updated_at", Default: orm.DefaultFunc[time.Time], UpdateDefault: orm.DefaultFunc[time.Time]},
+		})
+		orm.StitchFields(m, mixin[1].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_by", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 1, Column: "version", Default: orm.DefaultOf[int], UpdateDefault: orm.DefaultFunc[int]},
+		})
+		orm.StitchFields(m, mixin[2].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "archived", Default: orm.DefaultOf[bool]},
+			{Index: 2, Column: "reason", Validate: orm.Validators[string]},
+		})
+		orm.StitchFields(m, schemapkg.MixedIn{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "name", Validate: orm.Validators[string]},
+			{Index: 1, Column: "slug", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 2, Column: "due", Default: orm.DefaultFunc[time.Time]},
+		})
 	})
 }

@@ -15,20 +15,12 @@ import (
 func init() {
 	slots.Comment.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.Comment{}.Mixin()
-		mixinFields0 := mixin[0].Fields()
-		fields := schemapkg.Comment{}.Fields()
-		{ // created_at
-			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // updated_at
-			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // content
-			d, f := fields[0].Descriptor(), m.Field("content")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
+		orm.StitchFields(m, mixin[0].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 1, Column: "updated_at", Default: orm.DefaultFunc[time.Time], UpdateDefault: orm.DefaultFunc[time.Time]},
+		})
+		orm.StitchFields(m, schemapkg.Comment{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "content", Validate: orm.Validators[string]},
+		})
 	})
 }

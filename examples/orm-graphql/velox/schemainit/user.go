@@ -14,20 +14,12 @@ import (
 func init() {
 	slots.User.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.User{}.Mixin()
-		mixinFields0 := mixin[0].Fields()
-		fields := schemapkg.User{}.Fields()
-		{ // created_at
-			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // updated_at
-			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // name
-			d, f := fields[0].Descriptor(), m.Field("name")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
+		orm.StitchFields(m, mixin[0].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 1, Column: "updated_at", Default: orm.DefaultFunc[time.Time], UpdateDefault: orm.DefaultFunc[time.Time]},
+		})
+		orm.StitchFields(m, schemapkg.User{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "name", Validate: orm.Validators[string]},
+		})
 	})
 }

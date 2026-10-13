@@ -11,10 +11,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Tag schema.
 func init() {
 	slots.Tag.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Tag{}.Fields()
-		{ // name
-			d, f := fields[0].Descriptor(), m.Field("name")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
+		orm.StitchFields(m, schemapkg.Tag{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "name", Validate: orm.Validators[string]},
+		})
 	})
 }

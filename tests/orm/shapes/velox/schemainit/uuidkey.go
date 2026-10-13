@@ -13,10 +13,8 @@ import (
 // schema.
 func init() {
 	slots.UUIDKey.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.UUIDKey{}.Fields()
-		{ // id
-			d, f := fields[0].Descriptor(), m.Field("id")
-			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
-		}
+		orm.StitchFields(m, schemapkg.UUIDKey{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "id", Default: orm.DefaultFunc[uuid.UUID]},
+		})
 	})
 }

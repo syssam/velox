@@ -15,28 +15,14 @@ import (
 func init() {
 	slots.Todo.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.Todo{}.Mixin()
-		mixinFields0 := mixin[0].Fields()
-		fields := schemapkg.Todo{}.Fields()
-		{ // created_at
-			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // updated_at
-			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // title
-			d, f := fields[0].Descriptor(), m.Field("title")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // status
-			d, f := fields[1].Descriptor(), m.Field("status")
-			f.Default = orm.DefaultValue(todopkg.StatusEnum(d.Default.(string)))
-		}
-		{ // priority
-			d, f := fields[2].Descriptor(), m.Field("priority")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
+		orm.StitchFields(m, mixin[0].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 1, Column: "updated_at", Default: orm.DefaultFunc[time.Time], UpdateDefault: orm.DefaultFunc[time.Time]},
+		})
+		orm.StitchFields(m, schemapkg.Todo{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "title", Validate: orm.Validators[string]},
+			{Index: 1, Column: "status", Default: orm.DefaultString[todopkg.StatusEnum]},
+			{Index: 2, Column: "priority", Default: orm.DefaultOf[int]},
+		})
 	})
 }

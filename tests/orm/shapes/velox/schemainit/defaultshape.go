@@ -15,84 +15,26 @@ import (
 // schema.
 func init() {
 	slots.DefaultShape.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.DefaultShape{}.Fields()
-		{ // created_at
-			d, f := fields[1].Descriptor(), m.Field("created_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // updated_at
-			d, f := fields[2].Descriptor(), m.Field("updated_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // revision
-			d, f := fields[3].Descriptor(), m.Field("revision")
-			f.Default = orm.DefaultValue(d.Default.(int))
-			f.UpdateDefault = orm.DefaultFunc[int](d.UpdateDefault)
-		}
-		{ // note
-			d, f := fields[4].Descriptor(), m.Field("note")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // opt_note
-			d, f := fields[5].Descriptor(), m.Field("opt_note")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // nil_note
-			d, f := fields[6].Descriptor(), m.Field("nil_note")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // active
-			d, f := fields[7].Descriptor(), m.Field("active")
-			f.Default = orm.DefaultValue(d.Default.(bool))
-		}
-		{ // ratio
-			d, f := fields[8].Descriptor(), m.Field("ratio")
-			f.Default = orm.DefaultValue(d.Default.(float64))
-		}
-		{ // ratio32
-			d, f := fields[9].Descriptor(), m.Field("ratio32")
-			f.Default = orm.DefaultValue(d.Default.(float32))
-		}
-		{ // tiny
-			d, f := fields[10].Descriptor(), m.Field("tiny")
-			f.Default = orm.DefaultValue(d.Default.(int8))
-		}
-		{ // big
-			d, f := fields[11].Descriptor(), m.Field("big")
-			f.Default = orm.DefaultValue(d.Default.(int64))
-		}
-		{ // mask
-			d, f := fields[12].Descriptor(), m.Field("mask")
-			f.Default = orm.DefaultValue(d.Default.(uint32))
-		}
-		{ // blob
-			d, f := fields[13].Descriptor(), m.Field("blob")
-			f.Default = orm.DefaultValue(d.Default.([]byte))
-		}
-		{ // uid
-			d, f := fields[14].Descriptor(), m.Field("uid")
-			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
-		}
-		{ // token
-			d, f := fields[15].Descriptor(), m.Field("token")
-			f.Default = orm.DefaultFunc[string](d.Default)
-		}
-		{ // counter
-			d, f := fields[16].Descriptor(), m.Field("counter")
-			f.Default = orm.DefaultFunc[int](d.Default)
-		}
-		{ // tags
-			d, f := fields[17].Descriptor(), m.Field("tags")
-			f.Default = orm.DefaultValue(d.Default.([]string))
-		}
-		{ // touched
-			d, f := fields[19].Descriptor(), m.Field("touched")
-			f.UpdateDefault = orm.DefaultFunc[int64](d.UpdateDefault)
-		}
-		{ // seen
-			d, f := fields[20].Descriptor(), m.Field("seen")
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
+		orm.StitchFields(m, schemapkg.DefaultShape{}.Fields(), []orm.FieldCode{
+			{Index: 1, Column: "created_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 2, Column: "updated_at", Default: orm.DefaultFunc[time.Time], UpdateDefault: orm.DefaultFunc[time.Time]},
+			{Index: 3, Column: "revision", Default: orm.DefaultOf[int], UpdateDefault: orm.DefaultFunc[int]},
+			{Index: 4, Column: "note", Default: orm.DefaultOf[string]},
+			{Index: 5, Column: "opt_note", Default: orm.DefaultOf[string]},
+			{Index: 6, Column: "nil_note", Default: orm.DefaultOf[string]},
+			{Index: 7, Column: "active", Default: orm.DefaultOf[bool]},
+			{Index: 8, Column: "ratio", Default: orm.DefaultOf[float64]},
+			{Index: 9, Column: "ratio32", Default: orm.DefaultOf[float32]},
+			{Index: 10, Column: "tiny", Default: orm.DefaultOf[int8]},
+			{Index: 11, Column: "big", Default: orm.DefaultOf[int64]},
+			{Index: 12, Column: "mask", Default: orm.DefaultOf[uint32]},
+			{Index: 13, Column: "blob", Default: orm.DefaultOf[[]byte]},
+			{Index: 14, Column: "uid", Default: orm.DefaultFunc[uuid.UUID]},
+			{Index: 15, Column: "token", Default: orm.DefaultFunc[string]},
+			{Index: 16, Column: "counter", Default: orm.DefaultFunc[int]},
+			{Index: 17, Column: "tags", Default: orm.DefaultOf[[]string]},
+			{Index: 19, Column: "touched", UpdateDefault: orm.DefaultFunc[int64]},
+			{Index: 20, Column: "seen", UpdateDefault: orm.DefaultFunc[time.Time]},
+		})
 	})
 }

@@ -12,10 +12,8 @@ import (
 // schema.
 func init() {
 	slots.EdgesField.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.EdgesField{}.Fields()
-		{ // edges
-			d, f := fields[0].Descriptor(), m.Field("edges")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
+		orm.StitchFields(m, schemapkg.EdgesField{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "edges", Default: orm.DefaultOf[string]},
+		})
 	})
 }

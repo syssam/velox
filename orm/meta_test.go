@@ -293,3 +293,86 @@ func TestStitchHelpers(t *testing.T) {
 		}()
 	}
 }
+
+// What schemainit writes of an entity is a row per field; StitchFields
+// reads each field's descriptor and gives the field what its row names.
+func TestStitchFields(t *testing.T) {
+	type code string
+	type row struct {
+		Name string
+		Code code
+		Seen int
+	}
+	newMeta := func() *Meta {
+		return &Meta{
+			Name:    "T",
+			Columns: []string{"name", "code", "seen"},
+			New:     func() any { return new(row) },
+			Ptr: func(e any, i int) any {
+				r := e.(*row)
+				return []any{&r.Name, &r.Code, &r.Seen}[i]
+			},
+			Fields: []*FieldMeta{
+				{Name: "name", Column: "name", Type: field.TypeString},
+				{Name: "code", Column: "code", Type: field.TypeString},
+				{Name: "seen", Column: "seen", Type: field.TypeInt},
+			},
+		}
+	}
+	n := 0
+	fields := []velox.Field{
+		field.String("skipped"),
+		field.String("name").Default("ann").NotEmpty(),
+		field.String("code").Default("hk").MaxLen(2),
+		field.Int("seen").DefaultFunc(func() int { n++; return n }).UpdateDefault(func() int { return -1 }),
+	}
+	m := newMeta()
+	StitchFields(m, fields, []FieldCode{
+		{Index: 1, Column: "name", Default: DefaultOf[string], Validate: Validators[string]},
+		{Index: 2, Column: "code", Default: DefaultString[code], Validate: ValidatorsString[code]},
+		{Index: 3, Column: "seen", Default: DefaultFunc[int], UpdateDefault: DefaultFunc[int]},
+	})
+	name, c, seen := m.Field("name"), m.Field("code"), m.Field("seen")
+	if got := name.Default(); got != "ann" {
+		t.Errorf("default of name: %#v", got)
+	}
+	if name.Validate("x") != nil || name.Validate("") == nil {
+		t.Error("the validator of name was not stitched")
+	}
+	if name.UpdateDefault != nil {
+		t.Error("name has an update default no row gave it")
+	}
+	// The default of a named string type is of that type, and its
+	// validators see a string.
+	if got := c.Default(); got != code("hk") {
+		t.Errorf("default of code: %#v", got)
+	}
+	if c.Validate(code("hk")) != nil || c.Validate(code("hkg")) == nil {
+		t.Error("the validator of code was not stitched")
+	}
+	if seen.Default() != 1 || seen.Default() != 2 || seen.UpdateDefault() != -1 {
+		t.Error("the functions of seen are not the schema's")
+	}
+	if seen.Validate != nil {
+		t.Error("seen has a validator no row gave it")
+	}
+
+	// A schema that is not the one the code was generated for is said so,
+	// when the entity is stitched: a field that is no longer there, a column
+	// the entity does not have, a default of another type.
+	for what, codes := range map[string][]FieldCode{
+		"a field past the end":                           {{Index: 4, Column: "name"}},
+		"a column of no field":                           {{Index: 1, Column: "nickname"}},
+		"a default of another type":                      {{Index: 1, Column: "name", Default: DefaultOf[int]}},
+		"a string default for a field that has a number": {{Index: 3, Column: "seen", Default: DefaultString[code]}},
+	} {
+		func() {
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "generate the code again") {
+					t.Errorf("%s: %v", what, r)
+				}
+			}()
+			StitchFields(newMeta(), fields, codes)
+		}()
+	}
+}

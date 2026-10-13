@@ -12,18 +12,10 @@ import (
 // schema.
 func init() {
 	slots.Article.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Article{}.Fields()
-		{ // title
-			d, f := fields[0].Descriptor(), m.Field("title")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // words
-			d, f := fields[1].Descriptor(), m.Field("words")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
-		{ // section
-			d, f := fields[2].Descriptor(), m.Field("section")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
+		orm.StitchFields(m, schemapkg.Article{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "title", Validate: orm.Validators[string]},
+			{Index: 1, Column: "words", Default: orm.DefaultOf[int]},
+			{Index: 2, Column: "section", Default: orm.DefaultOf[string]},
+		})
 	})
 }

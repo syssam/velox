@@ -12,10 +12,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Kind schema.
 func init() {
 	slots.Kind.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Kind{}.Fields()
-		{ // shape
-			d, f := fields[1].Descriptor(), m.Field("shape")
-			f.Default = orm.DefaultValue(kindpkg.ShapeEnum(d.Default.(string)))
-		}
+		orm.StitchFields(m, schemapkg.Kind{}.Fields(), []orm.FieldCode{
+			{Index: 1, Column: "shape", Default: orm.DefaultString[kindpkg.ShapeEnum]},
+		})
 	})
 }

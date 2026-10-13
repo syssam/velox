@@ -13,26 +13,12 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Odd schema.
 func init() {
 	slots.Odd.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Odd{}.Fields()
-		{ // label
-			d, f := fields[0].Descriptor(), m.Field("label")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // role
-			d, f := fields[4].Descriptor(), m.Field("role")
-			f.Default = orm.DefaultValue(oddpkg.RoleEnum(d.Default.(string)))
-		}
-		{ // role_type
-			d, f := fields[5].Descriptor(), m.Field("role_type")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // role_admin
-			d, f := fields[6].Descriptor(), m.Field("role_admin")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // tier
-			d, f := fields[7].Descriptor(), m.Field("tier")
-			f.Default = orm.DefaultValue(types.Tier(d.Default.(string)))
-		}
+		orm.StitchFields(m, schemapkg.Odd{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "label", Default: orm.DefaultOf[string]},
+			{Index: 4, Column: "role", Default: orm.DefaultString[oddpkg.RoleEnum]},
+			{Index: 5, Column: "role_type", Default: orm.DefaultOf[string]},
+			{Index: 6, Column: "role_admin", Default: orm.DefaultOf[string]},
+			{Index: 7, Column: "tier", Default: func(v any) func() any { return orm.DefaultValue(types.Tier(v.(string))) }},
+		})
 	})
 }

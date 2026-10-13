@@ -12,95 +12,27 @@ import (
 // schema.
 func init() {
 	slots.Validated.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Validated{}.Fields()
-		{ // one
-			d, f := fields[0].Descriptor(), m.Field("one")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // two
-			d, f := fields[1].Descriptor(), m.Field("two")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // three
-			d, f := fields[2].Descriptor(), m.Field("three")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // score
-			d, f := fields[3].Descriptor(), m.Field("score")
-			f.Validate = orm.Validators[int](d.Validators)
-		}
-		{ // rank
-			d, f := fields[4].Descriptor(), m.Field("rank")
-			f.Validate = orm.Validators[int](d.Validators)
-		}
-		{ // even
-			d, f := fields[5].Descriptor(), m.Field("even")
-			f.Validate = orm.Validators[int](d.Validators)
-		}
-		{ // ratio
-			d, f := fields[6].Descriptor(), m.Field("ratio")
-			f.Validate = orm.Validators[float64](d.Validators)
-		}
-		{ // i8
-			d, f := fields[7].Descriptor(), m.Field("i8")
-			f.Default = orm.DefaultValue(d.Default.(int8))
-			f.Validate = orm.Validators[int8](d.Validators)
-		}
-		{ // i16
-			d, f := fields[8].Descriptor(), m.Field("i16")
-			f.Default = orm.DefaultValue(d.Default.(int16))
-			f.Validate = orm.Validators[int16](d.Validators)
-		}
-		{ // i32
-			d, f := fields[9].Descriptor(), m.Field("i32")
-			f.Default = orm.DefaultValue(d.Default.(int32))
-			f.Validate = orm.Validators[int32](d.Validators)
-		}
-		{ // i64
-			d, f := fields[10].Descriptor(), m.Field("i64")
-			f.Default = orm.DefaultValue(d.Default.(int64))
-			f.Validate = orm.Validators[int64](d.Validators)
-		}
-		{ // u
-			d, f := fields[11].Descriptor(), m.Field("u")
-			f.Default = orm.DefaultValue(d.Default.(uint))
-			f.Validate = orm.Validators[uint](d.Validators)
-		}
-		{ // u8
-			d, f := fields[12].Descriptor(), m.Field("u8")
-			f.Default = orm.DefaultValue(d.Default.(uint8))
-			f.Validate = orm.Validators[uint8](d.Validators)
-		}
-		{ // u64
-			d, f := fields[13].Descriptor(), m.Field("u64")
-			f.Default = orm.DefaultValue(d.Default.(uint64))
-			f.Validate = orm.Validators[uint64](d.Validators)
-		}
-		{ // f32
-			d, f := fields[14].Descriptor(), m.Field("f32")
-			f.Default = orm.DefaultValue(d.Default.(float32))
-			f.Validate = orm.Validators[float32](d.Validators)
-		}
-		{ // raw
-			d, f := fields[15].Descriptor(), m.Field("raw")
-			f.Default = orm.DefaultValue(d.Default.([]byte))
-			f.Validate = orm.Validators[[]byte](d.Validators)
-		}
-		{ // opt
-			d, f := fields[16].Descriptor(), m.Field("opt")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // opt_pos
-			d, f := fields[17].Descriptor(), m.Field("opt_pos")
-			f.Validate = orm.Validators[int](d.Validators)
-		}
-		{ // opt_ne
-			d, f := fields[18].Descriptor(), m.Field("opt_ne")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // opt_raw
-			d, f := fields[19].Descriptor(), m.Field("opt_raw")
-			f.Validate = orm.Validators[[]byte](d.Validators)
-		}
+		orm.StitchFields(m, schemapkg.Validated{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "one", Validate: orm.Validators[string]},
+			{Index: 1, Column: "two", Validate: orm.Validators[string]},
+			{Index: 2, Column: "three", Validate: orm.Validators[string]},
+			{Index: 3, Column: "score", Validate: orm.Validators[int]},
+			{Index: 4, Column: "rank", Validate: orm.Validators[int]},
+			{Index: 5, Column: "even", Validate: orm.Validators[int]},
+			{Index: 6, Column: "ratio", Validate: orm.Validators[float64]},
+			{Index: 7, Column: "i8", Default: orm.DefaultOf[int8], Validate: orm.Validators[int8]},
+			{Index: 8, Column: "i16", Default: orm.DefaultOf[int16], Validate: orm.Validators[int16]},
+			{Index: 9, Column: "i32", Default: orm.DefaultOf[int32], Validate: orm.Validators[int32]},
+			{Index: 10, Column: "i64", Default: orm.DefaultOf[int64], Validate: orm.Validators[int64]},
+			{Index: 11, Column: "u", Default: orm.DefaultOf[uint], Validate: orm.Validators[uint]},
+			{Index: 12, Column: "u8", Default: orm.DefaultOf[uint8], Validate: orm.Validators[uint8]},
+			{Index: 13, Column: "u64", Default: orm.DefaultOf[uint64], Validate: orm.Validators[uint64]},
+			{Index: 14, Column: "f32", Default: orm.DefaultOf[float32], Validate: orm.Validators[float32]},
+			{Index: 15, Column: "raw", Default: orm.DefaultOf[[]byte], Validate: orm.Validators[[]byte]},
+			{Index: 16, Column: "opt", Validate: orm.Validators[string]},
+			{Index: 17, Column: "opt_pos", Validate: orm.Validators[int]},
+			{Index: 18, Column: "opt_ne", Validate: orm.Validators[string]},
+			{Index: 19, Column: "opt_raw", Validate: orm.Validators[[]byte]},
+		})
 	})
 }

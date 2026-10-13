@@ -75,7 +75,10 @@ func TestSchemaCodeIsReadAfterStitching(t *testing.T) {
 			if len(whole) > 0 && !accessor {
 				t.Errorf("%s: %s reads the %s of a Meta itself: it goes through Meta.hooks or Meta.policy, which stitch first", at, fn.Name.Name, strings.Join(whole, ", "))
 			}
-			if len(fields) > 0 {
+			// StitchFields is the one function that writes them: what
+			// stitching a field is.
+			writer := name == "stitch.go" && fn.Recv == nil && fn.Name.Name == "StitchFields"
+			if len(fields) > 0 && !writer {
 				checked++
 				if !stitches {
 					t.Errorf("%s: %s reads a field's %s and does not stitch the entity first", at, fn.Name.Name, strings.Join(fields, ", "))

@@ -13,74 +13,29 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Clash schema.
 func init() {
 	slots.Clash.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Clash{}.Fields()
-		{ // label
-			d, f := fields[0].Descriptor(), m.Field("label")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // order
-			d, f := fields[1].Descriptor(), m.Field("order")
-			f.Default = orm.DefaultValue(clashpkg.OrderEnum(d.Default.(string)))
-		}
-		{ // set
-			d, f := fields[2].Descriptor(), m.Field("set")
-			f.Default = orm.DefaultValue(clashpkg.SetEnum(d.Default.(string)))
-		}
-		{ // query
-			d, f := fields[3].Descriptor(), m.Field("query")
-			f.Default = orm.DefaultValue(clashpkg.QueryEnum(d.Default.(string)))
-		}
-		{ // create
-			d, f := fields[4].Descriptor(), m.Field("create")
-			f.Default = orm.DefaultValue(clashpkg.CreateEnum(d.Default.(string)))
-		}
-		{ // update
-			d, f := fields[5].Descriptor(), m.Field("update")
-			f.Default = orm.DefaultValue(clashpkg.UpdateEnum(d.Default.(string)))
-		}
-		{ // load
-			d, f := fields[6].Descriptor(), m.Field("load")
-			f.Default = orm.DefaultValue(clashpkg.LoadEnum(d.Default.(string)))
-		}
-		{ // edge
-			d, f := fields[7].Descriptor(), m.Field("edge")
-			f.Default = orm.DefaultValue(clashpkg.EdgeEnum(d.Default.(string)))
-		}
-		{ // meta
-			d, f := fields[8].Descriptor(), m.Field("meta")
-			f.Default = orm.DefaultValue(clashpkg.MetaEnum(d.Default.(string)))
-		}
-		{ // pred
-			d, f := fields[9].Descriptor(), m.Field("pred")
-			f.Default = orm.DefaultValue(clashpkg.PredEnum(d.Default.(string)))
-		}
-		{ // kind
-			d, f := fields[10].Descriptor(), m.Field("kind")
-			f.Default = orm.DefaultValue(clashpkg.KindEnum(d.Default.(string)))
-		}
-		{ // a
-			d, f := fields[11].Descriptor(), m.Field("a")
-			f.Default = orm.DefaultValue(clashpkg.AEnum(d.Default.(string)))
-		}
-		{ // a_b
-			d, f := fields[12].Descriptor(), m.Field("a_b")
-			f.Default = orm.DefaultValue(clashpkg.ABEnum(d.Default.(string)))
-		}
-		{ // user_name
-			d, f := fields[13].Descriptor(), m.Field("user_name")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // query_others
-			d, f := fields[14].Descriptor(), m.Field("query_others")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // price
-			d, f := fields[15].Descriptor(), m.Field("price")
-			var def types.Decimal
-			if err := (&def).Scan(d.Default); err != nil {
-				panic("velox: default of Clash.price: " + err.Error())
-			}
-			f.Default = orm.DefaultValue(def)
-		}
+		orm.StitchFields(m, schemapkg.Clash{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "label", Default: orm.DefaultOf[string]},
+			{Index: 1, Column: "order", Default: orm.DefaultString[clashpkg.OrderEnum]},
+			{Index: 2, Column: "set", Default: orm.DefaultString[clashpkg.SetEnum]},
+			{Index: 3, Column: "query", Default: orm.DefaultString[clashpkg.QueryEnum]},
+			{Index: 4, Column: "create", Default: orm.DefaultString[clashpkg.CreateEnum]},
+			{Index: 5, Column: "update", Default: orm.DefaultString[clashpkg.UpdateEnum]},
+			{Index: 6, Column: "load", Default: orm.DefaultString[clashpkg.LoadEnum]},
+			{Index: 7, Column: "edge", Default: orm.DefaultString[clashpkg.EdgeEnum]},
+			{Index: 8, Column: "meta", Default: orm.DefaultString[clashpkg.MetaEnum]},
+			{Index: 9, Column: "pred", Default: orm.DefaultString[clashpkg.PredEnum]},
+			{Index: 10, Column: "kind", Default: orm.DefaultString[clashpkg.KindEnum]},
+			{Index: 11, Column: "a", Default: orm.DefaultString[clashpkg.AEnum]},
+			{Index: 12, Column: "a_b", Default: orm.DefaultString[clashpkg.ABEnum]},
+			{Index: 13, Column: "user_name", Default: orm.DefaultOf[string]},
+			{Index: 14, Column: "query_others", Default: orm.DefaultOf[string]},
+			{Index: 15, Column: "price", Default: func(v any) func() any {
+				var def types.Decimal
+				if err := (&def).Scan(v); err != nil {
+					panic("velox: default of Clash.price: " + err.Error())
+				}
+				return orm.DefaultValue(def)
+			}},
+		})
 	})
 }

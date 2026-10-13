@@ -12,178 +12,50 @@ import (
 // schema.
 func init() {
 	slots.Keywords.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Keywords{}.Fields()
-		{ // type
-			d, f := fields[0].Descriptor(), m.Field("type")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // func
-			d, f := fields[1].Descriptor(), m.Field("func")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // range
-			d, f := fields[2].Descriptor(), m.Field("range")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // select
-			d, f := fields[3].Descriptor(), m.Field("select")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // from
-			d, f := fields[4].Descriptor(), m.Field("from")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // where
-			d, f := fields[5].Descriptor(), m.Field("where")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // order
-			d, f := fields[6].Descriptor(), m.Field("order")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // group
-			d, f := fields[7].Descriptor(), m.Field("group")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // default
-			d, f := fields[8].Descriptor(), m.Field("default")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // table
-			d, f := fields[9].Descriptor(), m.Field("table")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // index
-			d, f := fields[10].Descriptor(), m.Field("index")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // key
-			d, f := fields[11].Descriptor(), m.Field("key")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // values
-			d, f := fields[12].Descriptor(), m.Field("values")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // query
-			d, f := fields[13].Descriptor(), m.Field("query")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // create
-			d, f := fields[14].Descriptor(), m.Field("create")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // create_bulk
-			d, f := fields[15].Descriptor(), m.Field("create_bulk")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // update
-			d, f := fields[16].Descriptor(), m.Field("update")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // delete
-			d, f := fields[17].Descriptor(), m.Field("delete")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // set
-			d, f := fields[18].Descriptor(), m.Field("set")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // and
-			d, f := fields[19].Descriptor(), m.Field("and")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // or
-			d, f := fields[20].Descriptor(), m.Field("or")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // not
-			d, f := fields[21].Descriptor(), m.Field("not")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // meta
-			d, f := fields[22].Descriptor(), m.Field("meta")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // load
-			d, f := fields[23].Descriptor(), m.Field("load")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // pred
-			d, f := fields[24].Descriptor(), m.Field("pred")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // edge
-			d, f := fields[25].Descriptor(), m.Field("edge")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // model
-			d, f := fields[26].Descriptor(), m.Field("model")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // orm
-			d, f := fields[27].Descriptor(), m.Field("orm")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // context
-			d, f := fields[28].Descriptor(), m.Field("context")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // tx
-			d, f := fields[29].Descriptor(), m.Field("tx")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // string
-			d, f := fields[30].Descriptor(), m.Field("string")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // int
-			d, f := fields[31].Descriptor(), m.Field("int")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
-		{ // error
-			d, f := fields[32].Descriptor(), m.Field("error")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // len
-			d, f := fields[33].Descriptor(), m.Field("len")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // new
-			d, f := fields[34].Descriptor(), m.Field("new")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // string_column
-			d, f := fields[35].Descriptor(), m.Field("string_column")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // int_column
-			d, f := fields[36].Descriptor(), m.Field("int_column")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
-		{ // to
-			d, f := fields[37].Descriptor(), m.Field("to")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // asc
-			d, f := fields[39].Descriptor(), m.Field("asc")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // desc
-			d, f := fields[40].Descriptor(), m.Field("desc")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // eq
-			d, f := fields[41].Descriptor(), m.Field("eq")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // in
-			d, f := fields[42].Descriptor(), m.Field("in")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // has
-			d, f := fields[43].Descriptor(), m.Field("has")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
+		orm.StitchFields(m, schemapkg.Keywords{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "type", Default: orm.DefaultOf[string]},
+			{Index: 1, Column: "func", Default: orm.DefaultOf[string]},
+			{Index: 2, Column: "range", Default: orm.DefaultOf[string]},
+			{Index: 3, Column: "select", Default: orm.DefaultOf[string]},
+			{Index: 4, Column: "from", Default: orm.DefaultOf[string]},
+			{Index: 5, Column: "where", Default: orm.DefaultOf[string]},
+			{Index: 6, Column: "order", Default: orm.DefaultOf[string]},
+			{Index: 7, Column: "group", Default: orm.DefaultOf[string]},
+			{Index: 8, Column: "default", Default: orm.DefaultOf[string]},
+			{Index: 9, Column: "table", Default: orm.DefaultOf[string]},
+			{Index: 10, Column: "index", Default: orm.DefaultOf[string]},
+			{Index: 11, Column: "key", Default: orm.DefaultOf[string]},
+			{Index: 12, Column: "values", Default: orm.DefaultOf[string]},
+			{Index: 13, Column: "query", Default: orm.DefaultOf[string]},
+			{Index: 14, Column: "create", Default: orm.DefaultOf[string]},
+			{Index: 15, Column: "create_bulk", Default: orm.DefaultOf[string]},
+			{Index: 16, Column: "update", Default: orm.DefaultOf[string]},
+			{Index: 17, Column: "delete", Default: orm.DefaultOf[string]},
+			{Index: 18, Column: "set", Default: orm.DefaultOf[string]},
+			{Index: 19, Column: "and", Default: orm.DefaultOf[string]},
+			{Index: 20, Column: "or", Default: orm.DefaultOf[string]},
+			{Index: 21, Column: "not", Default: orm.DefaultOf[string]},
+			{Index: 22, Column: "meta", Default: orm.DefaultOf[string]},
+			{Index: 23, Column: "load", Default: orm.DefaultOf[string]},
+			{Index: 24, Column: "pred", Default: orm.DefaultOf[string]},
+			{Index: 25, Column: "edge", Default: orm.DefaultOf[string]},
+			{Index: 26, Column: "model", Default: orm.DefaultOf[string]},
+			{Index: 27, Column: "orm", Default: orm.DefaultOf[string]},
+			{Index: 28, Column: "context", Default: orm.DefaultOf[string]},
+			{Index: 29, Column: "tx", Default: orm.DefaultOf[string]},
+			{Index: 30, Column: "string", Default: orm.DefaultOf[string]},
+			{Index: 31, Column: "int", Default: orm.DefaultOf[int]},
+			{Index: 32, Column: "error", Default: orm.DefaultOf[string]},
+			{Index: 33, Column: "len", Default: orm.DefaultOf[string]},
+			{Index: 34, Column: "new", Default: orm.DefaultOf[string]},
+			{Index: 35, Column: "string_column", Default: orm.DefaultOf[string]},
+			{Index: 36, Column: "int_column", Default: orm.DefaultOf[int]},
+			{Index: 37, Column: "to", Default: orm.DefaultOf[string]},
+			{Index: 39, Column: "asc", Default: orm.DefaultOf[string]},
+			{Index: 40, Column: "desc", Default: orm.DefaultOf[string]},
+			{Index: 41, Column: "eq", Default: orm.DefaultOf[string]},
+			{Index: 42, Column: "in", Default: orm.DefaultOf[string]},
+			{Index: 43, Column: "has", Default: orm.DefaultOf[string]},
+		})
 	})
 }

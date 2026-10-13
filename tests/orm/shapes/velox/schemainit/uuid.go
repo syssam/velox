@@ -12,10 +12,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the UUID schema.
 func init() {
 	slots.UUID.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.UUID{}.Fields()
-		{ // uuid
-			d, f := fields[1].Descriptor(), m.Field("uuid")
-			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
-		}
+		orm.StitchFields(m, schemapkg.UUID{}.Fields(), []orm.FieldCode{
+			{Index: 1, Column: "uuid", Default: orm.DefaultFunc[uuid.UUID]},
+		})
 	})
 }

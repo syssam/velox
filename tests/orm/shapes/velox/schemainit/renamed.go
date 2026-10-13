@@ -15,19 +15,10 @@ import (
 // schema.
 func init() {
 	slots.Renamed.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Renamed{}.Fields()
-		{ // title
-			d, f := fields[0].Descriptor(), m.Field("ttl")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // seen_at
-			d, f := fields[2].Descriptor(), m.Field("seen")
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // kind
-			d, f := fields[3].Descriptor(), m.Field("knd")
-			f.Default = orm.DefaultValue(renamedpkg.KindEnum(d.Default.(string)))
-		}
+		orm.StitchFields(m, schemapkg.Renamed{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "ttl", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 2, Column: "seen", UpdateDefault: orm.DefaultFunc[time.Time]},
+			{Index: 3, Column: "knd", Default: orm.DefaultString[renamedpkg.KindEnum]},
+		})
 	})
 }

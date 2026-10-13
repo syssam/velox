@@ -15,18 +15,10 @@ import (
 // schema.
 func init() {
 	slots.Enrollment.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Enrollment{}.Fields()
-		{ // enrolled_at
-			d, f := fields[0].Descriptor(), m.Field("enrolled_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // status
-			d, f := fields[1].Descriptor(), m.Field("status")
-			f.Default = orm.DefaultValue(enrollmentpkg.StatusEnum(d.Default.(string)))
-		}
-		{ // credits
-			d, f := fields[2].Descriptor(), m.Field("credits")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
+		orm.StitchFields(m, schemapkg.Enrollment{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "enrolled_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 1, Column: "status", Default: orm.DefaultString[enrollmentpkg.StatusEnum]},
+			{Index: 2, Column: "credits", Default: orm.DefaultOf[int]},
+		})
 	})
 }

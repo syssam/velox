@@ -12,10 +12,8 @@ import (
 // schema.
 func init() {
 	slots.Entityx.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Entityx{}.Fields()
-		{ // other
-			d, f := fields[1].Descriptor(), m.Field("other")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
+		orm.StitchFields(m, schemapkg.Entityx{}.Fields(), []orm.FieldCode{
+			{Index: 1, Column: "other", Default: orm.DefaultOf[string]},
+		})
 	})
 }

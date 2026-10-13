@@ -102,22 +102,14 @@ func (g *Generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 		w("\n%s%s\n\n", fileMarker, fileName(e))
 		w("// init stitches the defaults, validators, hooks and policy of the %s schema.\nfunc init() {\n\t%s.%s.Stitch(func(m *orm.Meta) {\n", e.Name, slotsPkg, e.Name)
 		mixins := map[int]bool{}
-		own := false
 		for _, f := range fields {
 			if p := f.F.Position; p != nil && p.MixedIn {
 				mixins[p.MixinIndex] = true
-			} else {
-				own = true
 			}
 		}
 		needMixin := len(mixins) > 0 || len(t.MixedInPolicies()) > 0 || len(t.MixedInHooks()) > 0
 		if needMixin {
 			w("\tmixin := %s.%s{}.Mixin()\n", schemaPkg, t.Name)
-			for i := 0; i < t.NumMixin(); i++ {
-				if mixins[i] {
-					w("\tmixinFields%d := mixin[%d].Fields()\n", i, i)
-				}
-			}
 		}
 		if len(policies) > 0 {
 			// The mixins' policies first, then the schema's own, as velox
@@ -148,9 +140,13 @@ func (g *Generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 			}
 			w("\tm.Hooks = []%s.Hook{%s}\n", im.use("github.com/syssam/velox", "velox"), strings.Join(list, ", "))
 		}
-		if own {
-			w("\tfields := %s.%s{}.Fields()\n", schemaPkg, t.Name)
-		}
+		// The fields are rows of a table per source of descriptors (the
+		// schema, each mixin), which orm.StitchFields goes through: what a
+		// descriptor holds becomes what the runtime calls in package orm
+		// (DefaultOf, DefaultFunc, Validators), named in the row, and is not
+		// a statement here. See orm/stitch.go for what the statements cost.
+		rows := map[string][]string{}
+		var sources []string
 		for _, f := range fields {
 			full := f.Base
 			if f.Enum != "" {
@@ -172,46 +168,53 @@ func (g *Generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 			case "uuid.UUID":
 				im.use("github.com/google/uuid", "uuid")
 			}
-			src := "fields"
+			src := fmt.Sprintf("%s.%s{}.Fields()", schemaPkg, t.Name)
 			idx := 0
 			if p := f.F.Position; p != nil {
 				idx = p.Index
 				if p.MixedIn {
-					src = fmt.Sprintf("mixinFields%d", p.MixinIndex)
+					src = fmt.Sprintf("mixin[%d].Fields()", p.MixinIndex)
 				}
 			}
-			// What the descriptor holds becomes what the runtime calls in package
-			// orm (DefaultValue, DefaultFunc, Validators), not in a closure
-			// written here: see orm/stitch.go for what the closures cost.
-			w("\t{ // %s\n\t\td, f := %s[%d].Descriptor(), m.Field(%q)\n", f.F.Name, src, idx, f.Col)
+			row := fmt.Sprintf("{Index: %d, Column: %q", idx, f.Col)
+			named := f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther()
 			if f.F.Default {
 				switch {
 				case f.F.DefaultFunc():
-					w("\t\tf.Default = orm.DefaultFunc[%s](d.Default)\n", full)
+					row += fmt.Sprintf(", Default: orm.DefaultFunc[%s]", full)
 				case f.Enum != "":
-					w("\t\tf.Default = orm.DefaultValue(%s(d.Default.(string)))\n", full)
-				case f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther() && scansDefault(f.F):
+					row += fmt.Sprintf(", Default: orm.DefaultString[%s]", full)
+				case named && scansDefault(f.F):
 					// The Go type is not a named form of the basic type (a
 					// decimal stored as a string): it parses the default the
 					// way it parses a column value.
-					w("\t\tvar def %s\n\t\tif err := (&def).Scan(d.Default); err != nil {\n\t\t\tpanic(\"velox: default of %s.%s: \" + err.Error())\n\t\t}\n\t\tf.Default = orm.DefaultValue(def)\n", full, e.Name, f.F.Name)
-				case f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther():
-					w("\t\tf.Default = orm.DefaultValue(%s(d.Default.(%s)))\n", full, basic)
+					row += fmt.Sprintf(", Default: func(v any) func() any {\n\tvar def %s\n\tif err := (&def).Scan(v); err != nil {\n\t\tpanic(\"velox: default of %s.%s: \" + err.Error())\n\t}\n\treturn orm.DefaultValue(def)\n}", full, e.Name, f.F.Name)
+				case named:
+					row += fmt.Sprintf(", Default: func(v any) func() any { return orm.DefaultValue(%s(v.(%s))) }", full, basic)
 				default:
-					w("\t\tf.Default = orm.DefaultValue(d.Default.(%s))\n", full)
+					row += fmt.Sprintf(", Default: orm.DefaultOf[%s]", full)
 				}
 			}
 			if f.F.UpdateDefault {
-				w("\t\tf.UpdateDefault = orm.DefaultFunc[%s](d.UpdateDefault)\n", full)
+				row += fmt.Sprintf(", UpdateDefault: orm.DefaultFunc[%s]", full)
 			}
 			if f.F.Validators > 0 {
-				if basic == full {
-					w("\t\tf.Validate = orm.Validators[%s](d.Validators)\n", full)
-				} else {
-					w("\t\tf.Validate = orm.ValidatorsOf(d.Validators, func(v %s) %s { return %s(v) })\n", full, basic, basic)
+				switch {
+				case basic == full:
+					row += fmt.Sprintf(", Validate: orm.Validators[%s]", full)
+				case basic == "string" && f.Enum != "":
+					row += fmt.Sprintf(", Validate: orm.ValidatorsString[%s]", full)
+				default:
+					row += fmt.Sprintf(", Validate: func(checks []any) func(any) error {\n\treturn orm.ValidatorsOf(checks, func(v %s) %s { return %s(v) })\n}", full, basic, basic)
 				}
 			}
-			w("\t}\n")
+			if _, seen := rows[src]; !seen {
+				sources = append(sources, src)
+			}
+			rows[src] = append(rows[src], row+"},")
+		}
+		for _, src := range sources {
+			w("\torm.StitchFields(m, %s, []orm.FieldCode{\n\t\t%s\n\t})\n", src, strings.Join(rows[src], "\n\t\t"))
 		}
 		w("\t})\n}\n\n")
 	}

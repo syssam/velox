@@ -12,65 +12,19 @@ import (
 // schema.
 func init() {
 	slots.ErrField.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.ErrField{}.Fields()
-		{ // err
-			d, f := fields[0].Descriptor(), m.Field("err")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // errs
-			d, f := fields[1].Descriptor(), m.Field("errs")
-			f.Default = orm.DefaultValue(d.Default.(int))
-			f.Validate = orm.Validators[int](d.Validators)
-		}
-		{ // fn
-			d, f := fields[2].Descriptor(), m.Field("fn")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // fns
-			d, f := fields[3].Descriptor(), m.Field("fns")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // def
-			d, f := fields[4].Descriptor(), m.Field("def")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // checks
-			d, f := fields[5].Descriptor(), m.Field("checks")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // m
-			d, f := fields[6].Descriptor(), m.Field("m")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // d
-			d, f := fields[7].Descriptor(), m.Field("d")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // f
-			d, f := fields[8].Descriptor(), m.Field("f")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // v
-			d, f := fields[9].Descriptor(), m.Field("v")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // fields
-			d, f := fields[10].Descriptor(), m.Field("fields")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // mixin
-			d, f := fields[11].Descriptor(), m.Field("mixin")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
+		orm.StitchFields(m, schemapkg.ErrField{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "err", Validate: orm.Validators[string]},
+			{Index: 1, Column: "errs", Default: orm.DefaultOf[int], Validate: orm.Validators[int]},
+			{Index: 2, Column: "fn", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 3, Column: "fns", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 4, Column: "def", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 5, Column: "checks", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 6, Column: "m", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 7, Column: "d", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 8, Column: "f", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 9, Column: "v", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 10, Column: "fields", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 11, Column: "mixin", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+		})
 	})
 }

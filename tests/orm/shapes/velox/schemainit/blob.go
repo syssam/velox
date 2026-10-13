@@ -11,10 +11,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Blob schema.
 func init() {
 	slots.Blob.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Blob{}.Fields()
-		{ // optd
-			d, f := fields[3].Descriptor(), m.Field("optd")
-			f.Default = orm.DefaultValue(d.Default.([]byte))
-		}
+		orm.StitchFields(m, schemapkg.Blob{}.Fields(), []orm.FieldCode{
+			{Index: 3, Column: "optd", Default: orm.DefaultOf[[]byte]},
+		})
 	})
 }

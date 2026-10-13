@@ -12,10 +12,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Team schema.
 func init() {
 	slots.Team.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Team{}.Fields()
-		{ // id
-			d, f := fields[0].Descriptor(), m.Field("id")
-			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
-		}
+		orm.StitchFields(m, schemapkg.Team{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "id", Default: orm.DefaultFunc[uuid.UUID]},
+		})
 	})
 }

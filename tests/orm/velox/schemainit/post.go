@@ -15,29 +15,14 @@ import (
 func init() {
 	slots.Post.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.Post{}.Mixin()
-		mixinFields0 := mixin[0].Fields()
-		fields := schemapkg.Post{}.Fields()
-		{ // created_at
-			d, f := mixinFields0[0].Descriptor(), m.Field("created_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
-		{ // updated_at
-			d, f := mixinFields0[1].Descriptor(), m.Field("updated_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-			f.UpdateDefault = orm.DefaultFunc[time.Time](d.UpdateDefault)
-		}
-		{ // title
-			d, f := fields[0].Descriptor(), m.Field("title")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // status
-			d, f := fields[2].Descriptor(), m.Field("status")
-			f.Default = orm.DefaultValue(postpkg.StatusEnum(d.Default.(string)))
-		}
-		{ // view_count
-			d, f := fields[3].Descriptor(), m.Field("view_count")
-			f.Default = orm.DefaultValue(d.Default.(int))
-			f.Validate = orm.Validators[int](d.Validators)
-		}
+		orm.StitchFields(m, mixin[0].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_at", Default: orm.DefaultFunc[time.Time]},
+			{Index: 1, Column: "updated_at", Default: orm.DefaultFunc[time.Time], UpdateDefault: orm.DefaultFunc[time.Time]},
+		})
+		orm.StitchFields(m, schemapkg.Post{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "title", Validate: orm.Validators[string]},
+			{Index: 2, Column: "status", Default: orm.DefaultString[postpkg.StatusEnum]},
+			{Index: 3, Column: "view_count", Default: orm.DefaultOf[int], Validate: orm.Validators[int]},
+		})
 	})
 }

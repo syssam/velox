@@ -13,10 +13,8 @@ import (
 // schema.
 func init() {
 	slots.NamedBool.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.NamedBool{}.Fields()
-		{ // flag
-			d, f := fields[1].Descriptor(), m.Field("flag")
-			f.Default = orm.DefaultValue(types.Flag(d.Default.(bool)))
-		}
+		orm.StitchFields(m, schemapkg.NamedBool{}.Fields(), []orm.FieldCode{
+			{Index: 1, Column: "flag", Default: func(v any) func() any { return orm.DefaultValue(types.Flag(v.(bool))) }},
+		})
 	})
 }

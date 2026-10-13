@@ -13,16 +13,9 @@ import (
 func init() {
 	slots.MixinOnly.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.MixinOnly{}.Mixin()
-		mixinFields0 := mixin[0].Fields()
-		{ // created_by
-			d, f := mixinFields0[0].Descriptor(), m.Field("created_by")
-			f.Default = orm.DefaultValue(d.Default.(string))
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // version
-			d, f := mixinFields0[1].Descriptor(), m.Field("version")
-			f.Default = orm.DefaultValue(d.Default.(int))
-			f.UpdateDefault = orm.DefaultFunc[int](d.UpdateDefault)
-		}
+		orm.StitchFields(m, mixin[0].Fields(), []orm.FieldCode{
+			{Index: 0, Column: "created_by", Default: orm.DefaultOf[string], Validate: orm.Validators[string]},
+			{Index: 1, Column: "version", Default: orm.DefaultOf[int], UpdateDefault: orm.DefaultFunc[int]},
+		})
 	})
 }

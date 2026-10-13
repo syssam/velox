@@ -13,10 +13,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Like schema.
 func init() {
 	slots.Like.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Like{}.Fields()
-		{ // liked_at
-			d, f := fields[0].Descriptor(), m.Field("liked_at")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
+		orm.StitchFields(m, schemapkg.Like{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "liked_at", Default: orm.DefaultFunc[time.Time]},
+		})
 	})
 }

@@ -13,10 +13,8 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Time schema.
 func init() {
 	slots.Time.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Time{}.Fields()
-		{ // time
-			d, f := fields[1].Descriptor(), m.Field("time")
-			f.Default = orm.DefaultFunc[time.Time](d.Default)
-		}
+		orm.StitchFields(m, schemapkg.Time{}.Fields(), []orm.FieldCode{
+			{Index: 1, Column: "time", Default: orm.DefaultFunc[time.Time]},
+		})
 	})
 }

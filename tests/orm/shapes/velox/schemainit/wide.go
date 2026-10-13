@@ -11,14 +11,9 @@ import (
 // init stitches the defaults, validators, hooks and policy of the Wide schema.
 func init() {
 	slots.Wide.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.Wide{}.Fields()
-		{ // dflt
-			d, f := fields[34].Descriptor(), m.Field("dflt")
-			f.Default = orm.DefaultValue(d.Default.(string))
-		}
-		{ // n1
-			d, f := fields[37].Descriptor(), m.Field("n1")
-			f.Default = orm.DefaultValue(d.Default.(int))
-		}
+		orm.StitchFields(m, schemapkg.Wide{}.Fields(), []orm.FieldCode{
+			{Index: 34, Column: "dflt", Default: orm.DefaultOf[string]},
+			{Index: 37, Column: "n1", Default: orm.DefaultOf[int]},
+		})
 	})
 }

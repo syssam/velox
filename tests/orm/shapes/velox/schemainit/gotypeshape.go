@@ -13,33 +13,21 @@ import (
 // schema.
 func init() {
 	slots.GoTypeShape.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.GoTypeShape{}.Fields()
-		{ // label
-			d, f := fields[0].Descriptor(), m.Field("label")
-			f.Default = orm.DefaultValue(types.Label(d.Default.(string)))
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
-		}
-		{ // alias
-			d, f := fields[1].Descriptor(), m.Field("alias")
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
-		}
-		{ // weight
-			d, f := fields[3].Descriptor(), m.Field("weight")
-			f.Default = orm.DefaultValue(types.Weight(d.Default.(int)))
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Weight) int { return int(v) })
-		}
-		{ // bonus
-			d, f := fields[4].Descriptor(), m.Field("bonus")
-			f.Default = orm.DefaultValue(types.Weight(d.Default.(int)))
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Weight) int { return int(v) })
-		}
-		{ // ratio
-			d, f := fields[6].Descriptor(), m.Field("ratio")
-			f.Default = orm.DefaultValue(types.Ratio(d.Default.(float64)))
-		}
-		{ // tax
-			d, f := fields[10].Descriptor(), m.Field("tax")
-			f.Default = orm.DefaultFunc[types.Decimal](d.Default)
-		}
+		orm.StitchFields(m, schemapkg.GoTypeShape{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "label", Default: func(v any) func() any { return orm.DefaultValue(types.Label(v.(string))) }, Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Label) string { return string(v) })
+			}},
+			{Index: 1, Column: "alias", Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Label) string { return string(v) })
+			}},
+			{Index: 3, Column: "weight", Default: func(v any) func() any { return orm.DefaultValue(types.Weight(v.(int))) }, Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Weight) int { return int(v) })
+			}},
+			{Index: 4, Column: "bonus", Default: func(v any) func() any { return orm.DefaultValue(types.Weight(v.(int))) }, Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Weight) int { return int(v) })
+			}},
+			{Index: 6, Column: "ratio", Default: func(v any) func() any { return orm.DefaultValue(types.Ratio(v.(float64))) }},
+			{Index: 10, Column: "tax", Default: orm.DefaultFunc[types.Decimal]},
+		})
 	})
 }

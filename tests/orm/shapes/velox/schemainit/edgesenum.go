@@ -13,10 +13,8 @@ import (
 // schema.
 func init() {
 	slots.EdgesEnum.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.EdgesEnum{}.Fields()
-		{ // edges
-			d, f := fields[0].Descriptor(), m.Field("edges")
-			f.Default = orm.DefaultValue(edgesenumpkg.EdgesEnum(d.Default.(string)))
-		}
+		orm.StitchFields(m, schemapkg.EdgesEnum{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "edges", Default: orm.DefaultString[edgesenumpkg.EdgesEnum]},
+		})
 	})
 }

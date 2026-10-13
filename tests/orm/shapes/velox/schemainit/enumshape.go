@@ -14,18 +14,10 @@ import (
 // schema.
 func init() {
 	slots.EnumShape.Stitch(func(m *orm.Meta) {
-		fields := schemapkg.EnumShape{}.Fields()
-		{ // state
-			d, f := fields[0].Descriptor(), m.Field("state")
-			f.Default = orm.DefaultValue(enumshapepkg.StateEnum(d.Default.(string)))
-		}
-		{ // phase
-			d, f := fields[2].Descriptor(), m.Field("phase")
-			f.Default = orm.DefaultValue(enumshapepkg.PhaseEnum(d.Default.(string)))
-		}
-		{ // tier
-			d, f := fields[4].Descriptor(), m.Field("tier")
-			f.Default = orm.DefaultValue(types.Tier(d.Default.(string)))
-		}
+		orm.StitchFields(m, schemapkg.EnumShape{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "state", Default: orm.DefaultString[enumshapepkg.StateEnum]},
+			{Index: 2, Column: "phase", Default: orm.DefaultString[enumshapepkg.PhaseEnum]},
+			{Index: 4, Column: "tier", Default: func(v any) func() any { return orm.DefaultValue(types.Tier(v.(string))) }},
+		})
 	})
 }

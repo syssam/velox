@@ -842,3 +842,33 @@ now, over a helper of the package's own (`group`). The edges' one ordinary
 method (`loadOf`, what lets `With` take an edge) costs 4-5 ms and 53 KB of
 the same package and stays: without it `With(post.Author)` cannot be
 written.
+
+## `schemainit` as a table per entity (2026-10-13, load 4-10)
+
+`schemainit` is what every edit to the schema recompiles, and it was a
+statement block per field: the descriptor read, the field looked up, one
+call for the default, one for the validators. Each field is now a row,
+
+```go
+orm.StitchFields(m, schemapkg.User{}.Fields(), []orm.FieldCode{
+	{Index: 0, Column: "name", Validate: orm.Validators[string]},
+	{Index: 4, Column: "role", Default: orm.DefaultString[userpkg.RoleEnum]},
+})
+```
+
+and `orm.StitchFields` does what the statements did. A row names the
+function of package `orm` that makes of the descriptor's value what the
+runtime calls; a field none of them fits (a Go type that scans its default,
+a named type over another basic type than string) has a function written
+out in its row.
+
+| | lines | compile | compiler's memory | object |
+|---|---|---|---|---|
+| a statement block per field | 44,583 | 4.5 / 4.9 CPU-s | 464-501 MB | 17.2 MB |
+| a row per field | 20,934 | 1.8 / 1.9 CPU-s | 240 MB | 5.8 MB |
+
+(Both measured in the same minutes on a machine slower than for the tables
+above, where the first row was 3.1-3.3 CPU-s.) `entity`, the root package
+and the 312 services do not change. The link of a test binary that imports
+the root package goes from 0.39-0.41 CPU-s and 313 MB to 0.37 and 291 MB:
+what is left of that half of the link is the schema package itself.

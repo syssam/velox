@@ -16,32 +16,19 @@ func init() {
 	slots.Token.Stitch(func(m *orm.Meta) {
 		hooks := schemapkg.Token{}.Hooks()
 		m.Hooks = []velox.Hook{hooks[0]}
-		fields := schemapkg.Token{}.Fields()
-		{ // id
-			d, f := fields[0].Descriptor(), m.Field("id")
-			f.Default = orm.DefaultFunc[uuid.UUID](d.Default)
-		}
-		{ // name
-			d, f := fields[1].Descriptor(), m.Field("name")
-			f.Validate = orm.Validators[string](d.Validators)
-		}
-		{ // tier
-			d, f := fields[2].Descriptor(), m.Field("tier")
-			f.Default = orm.DefaultValue(types.Tier(d.Default.(string)))
-		}
-		{ // label
-			d, f := fields[4].Descriptor(), m.Field("label")
-			f.Default = orm.DefaultValue(types.Label(d.Default.(string)))
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
-		}
-		{ // alias
-			d, f := fields[5].Descriptor(), m.Field("alias")
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Label) string { return string(v) })
-		}
-		{ // weight
-			d, f := fields[6].Descriptor(), m.Field("weight")
-			f.Default = orm.DefaultValue(types.Weight(d.Default.(int)))
-			f.Validate = orm.ValidatorsOf(d.Validators, func(v types.Weight) int { return int(v) })
-		}
+		orm.StitchFields(m, schemapkg.Token{}.Fields(), []orm.FieldCode{
+			{Index: 0, Column: "id", Default: orm.DefaultFunc[uuid.UUID]},
+			{Index: 1, Column: "name", Validate: orm.Validators[string]},
+			{Index: 2, Column: "tier", Default: func(v any) func() any { return orm.DefaultValue(types.Tier(v.(string))) }},
+			{Index: 4, Column: "label", Default: func(v any) func() any { return orm.DefaultValue(types.Label(v.(string))) }, Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Label) string { return string(v) })
+			}},
+			{Index: 5, Column: "alias", Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Label) string { return string(v) })
+			}},
+			{Index: 6, Column: "weight", Default: func(v any) func() any { return orm.DefaultValue(types.Weight(v.(int))) }, Validate: func(checks []any) func(any) error {
+				return orm.ValidatorsOf(checks, func(v types.Weight) int { return int(v) })
+			}},
+		})
 	})
 }
