@@ -343,7 +343,7 @@ func TestQuerySQL(t *testing.T) {
 	assert.Contains(t, query, "LIMIT 5")
 	assert.Equal(t, []any{18, "ann"}, args)
 	// The statement is the one that runs: the same rows.
-	rows, err := db.SQL().QueryContext(ctx, query, args...)
+	rows, err := velox.SQLDB(db).QueryContext(ctx, query, args...)
 	require.NoError(t, err)
 	n := 0
 	for rows.Next() {

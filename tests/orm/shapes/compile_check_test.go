@@ -123,7 +123,7 @@ var compileCases = []compileCase{
 	// The compiler spells the package out: the generated root package is
 	// called velox too.
 	{name: "a raw database/sql handle as the executor", want: `does not implement "github.com/syssam/velox".Executor (missing method State)`,
-		body: `	_, _ = client.Author.Query(db.SQL()).All(ctx)`},
+		body: `	_, _ = client.Author.Query(velox.SQLDB(db)).All(ctx)`},
 	{name: "an untyped runtime predicate", want: "cannot use",
 		body: `	_, _ = client.Author.Query(db).Where(orm.P{Op: orm.OpEQ, Col: "name", Val: "x"}).All(ctx)`},
 }

@@ -130,7 +130,7 @@ func ptr[T any](v T) *T { return &v }
 // cannot or must not write (a NULL in a column it would not leave NULL).
 func rawExec(t *testing.T, db *velox.DB, query string, args ...any) {
 	t.Helper()
-	_, err := db.SQL().ExecContext(context.Background(), query, args...)
+	_, err := velox.SQLDB(db).ExecContext(context.Background(), query, args...)
 	require.NoError(t, err)
 }
 
@@ -138,6 +138,6 @@ func rawExec(t *testing.T, db *velox.DB, query string, args ...any) {
 func rawValue[T any](t *testing.T, db *velox.DB, query string, args ...any) T {
 	t.Helper()
 	var v T
-	require.NoError(t, db.SQL().QueryRowContext(context.Background(), query, args...).Scan(&v))
+	require.NoError(t, velox.SQLDB(db).QueryRowContext(context.Background(), query, args...).Scan(&v))
 	return v
 }

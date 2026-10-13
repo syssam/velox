@@ -37,7 +37,7 @@ func ddlOf(t *testing.T, db *stdsql.DB) map[string]string {
 // its database already up to date.
 func TestGeneratedMigrate(t *testing.T) {
 	ctx := context.Background()
-	want := ddlOf(t, open(t).SQL())
+	want := ddlOf(t, velox.SQLDB(open(t)))
 	require.NotEmpty(t, want)
 
 	raw, err := stdsql.Open("sqlite", fmt.Sprintf("file:migrate_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", dbSeq.Add(1)))

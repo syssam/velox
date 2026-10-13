@@ -30,7 +30,6 @@
   method DB.Intercept(...Interceptor)
   method DB.RunTx(context.Context, func(tx *Tx) error) error
   method DB.RunTxOptions(context.Context, *database/sql.TxOptions, func(tx *Tx) error) error
-  method DB.SQL() *database/sql.DB
   method DB.State() *ExecutorState
   method DB.Use(...Hook)
   method Edge.Descriptor() *github.com/syssam/velox/schema/edge.Descriptor
@@ -164,6 +163,7 @@ func NewValidationError(string, error) *ValidationError
 func Open(string, string) (*DB, error)
 func OpenDB(string, *database/sql.DB) *DB
 func QueryFromContext(context.Context) *QueryContext
+func SQLDB(*DB) *database/sql.DB
 func TxFrom(context.Context) *Tx
 func WithExecutor(context.Context, Executor) context.Context
 func WithHooks[V Value, M any, PM interface{*M; Mutation}](context.Context, func(context.Context) (V, error), PM, []Hook) (V, error)

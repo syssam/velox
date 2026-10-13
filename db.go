@@ -62,9 +62,24 @@ func (s *ExecutorState) Interceptors() []Interceptor {
 
 // DB is a database handle. It mentions no entity, so naming it in a
 // signature costs the compiler nothing beyond this package.
+//
+// It reaches nothing of database/sql either, by its fields or by the
+// signature of a method, and that is on purpose: a package compiles
+// something for every type the types it names can reach, and for the handles
+// of database/sql that is 240 KB of object code (package orm's
+// TestApplicationTypesDoNotReachReflect).
+// A service that holds the *DB would pay it. So the database/sql handle is
+// what a function returns, SQLDB, and not a method.
 type DB struct {
 	c   ExecutorState
-	raw *sql.Driver
+	raw rawDriver
+}
+
+// rawDriver is what a DB needs of dialect/sql's *Driver, which it holds:
+// naming that type would reach database/sql's.
+type rawDriver interface {
+	dialect.Driver
+	BeginTx(ctx context.Context, opts *stdsql.TxOptions) (dialect.Tx, error)
 }
 
 // Open opens a database with the given dialect ("postgres", "mysql",
@@ -94,9 +109,6 @@ func (db *DB) State() *ExecutorState {
 // Close closes the database.
 func (db *DB) Close() error { return db.raw.Close() }
 
-// SQL returns the underlying database/sql handle.
-func (db *DB) SQL() *stdsql.DB { return db.raw.DB() }
-
 // Dialect returns the dialect name.
 func (db *DB) Dialect() string { return db.c.drv.Dialect() }
 
@@ -118,6 +130,17 @@ func (db *DB) Use(hooks ...Hook) {
 // which rows a caller may touch belongs in the schema's Policy.
 func (db *DB) Intercept(inters ...Interceptor) {
 	db.c.ext.inters = append(db.c.ext.inters, inters...)
+}
+
+// SQLDB returns the database/sql handle under db: for the settings of its
+// pool (SetMaxOpenConns), its statistics, or a statement that goes around
+// the ORM. It is a function and not a method of DB for what DB's comment
+// says.
+func SQLDB(db *DB) *stdsql.DB {
+	if d, ok := db.raw.(*sql.Driver); ok {
+		return d.DB()
+	}
+	return nil
 }
 
 // Tx is an open transaction. Pass it wherever a *DB is accepted to run inside it.

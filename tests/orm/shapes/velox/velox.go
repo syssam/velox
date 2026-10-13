@@ -72,6 +72,9 @@ func Open(dialectName, dsn string) (*velox.DB, error) { return velox.Open(dialec
 // OpenDB is the library's OpenDB.
 func OpenDB(dialectName string, db *sql.DB) *velox.DB { return velox.OpenDB(dialectName, db) }
 
+// SQLDB is the library's SQLDB.
+func SQLDB(db *velox.DB) *sql.DB { return velox.SQLDB(db) }
+
 // WithExecutor is the library's WithExecutor.
 func WithExecutor(ctx context.Context, ex velox.Executor) context.Context {
 	return velox.WithExecutor(ctx, ex)

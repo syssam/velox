@@ -872,3 +872,17 @@ above, where the first row was 3.1-3.3 CPU-s.) `entity`, the root package
 and the 312 services do not change. The link of a test binary that imports
 the root package goes from 0.39-0.41 CPU-s and 313 MB to 0.37 and 291 MB:
 what is left of that half of the link is the schema package itself.
+
+## The database handle (2026-10-14, load 3-9)
+
+`*velox.DB` reached `database/sql` through one method, `SQL() *sql.DB`, and
+through the type of the field it kept the driver in. The method is the
+function `velox.SQLDB(db)` now and the field an interface of this package:
+
+| | a package with one variable of `*velox.DB` | the 312 services |
+|---|---|---|
+| before | 255 KB | 116.0 / 116.5 CPU-s |
+| after | 26 KB | 107.8 / 108.0 CPU-s |
+
+Each of the services holds the handle, as a service does. `*velox.DB` is in
+the list of `orm/reach_test.go` with the other types an application names.

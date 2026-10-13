@@ -73,7 +73,7 @@ func TestApplicationTypesDoNotReachReflect(t *testing.T) {
 		"*orm.ToOne[orm.P, orm.P, int]", "*orm.ToMany[orm.P, orm.P, int]",
 		"*orm.QueryOf[*int, orm.P, int]", "*orm.CreateOf[*int, orm.P]", "*orm.CreateBulkOf[*int, orm.P]",
 		"*orm.UpdateOf[*int, orm.P]", "*orm.DeleteOf[orm.P]", "orm.ClientOf[*int, orm.P, int]",
-		"*orm.Connection[*int]", "velox.Executor", "*velox.Tx", "velox.Hook", "velox.Policy", "velox.Interceptor",
+		"*orm.Connection[*int]", "velox.Executor", "*velox.DB", "*velox.Tx", "velox.Hook", "velox.Policy", "velox.Interceptor",
 	} {
 		imports := ormImport
 		if !strings.Contains(typ, "velox.") {
