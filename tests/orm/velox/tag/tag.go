@@ -32,20 +32,20 @@ var postsMeta = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.M2M, Inverse: tru
 
 // Posts is the "posts" edge of Tag, to Post: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithPosts.
+// With(tag.Posts).
 var Posts = &orm.ToMany[predicate.Tag, predicate.Post, int]{Meta: &postsMeta}
 
 var parentMeta = orm.EdgeMeta{Name: "parent", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "tags", Columns: []string{"tag_children"}}
 
 // Parent is the "parent" edge of Tag, to Tag: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithParent.
+// and changes to it (Set, Clear). A query eager-loads it with With(tag.Parent).
 var Parent = &orm.ToOne[predicate.Tag, predicate.Tag, int]{Meta: &parentMeta}
 
 var childrenMeta = orm.EdgeMeta{Name: "children", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "tags", Columns: []string{"tag_children"}}
 
 // Children is the "children" edge of Tag, to Tag: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithChildren.
+// With(tag.Children).
 var Children = &orm.ToMany[predicate.Tag, predicate.Tag, int]{Meta: &childrenMeta}
 
 // EdgeMetas returns the descriptions of the edges of Tag, in order. The

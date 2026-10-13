@@ -53,7 +53,7 @@ var shapesMeta = orm.EdgeMeta{Name: "shapes", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Shapes is the "shapes" edge of Kind, to KindShape: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithShapes.
+// With(kind.Shapes).
 var Shapes = &orm.ToMany[predicate.Kind, predicate.KindShape, int]{Meta: &shapesMeta}
 
 // EdgeMetas returns the descriptions of the edges of Kind, in order. The

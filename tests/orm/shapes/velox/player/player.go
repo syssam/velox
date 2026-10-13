@@ -32,14 +32,15 @@ var (
 var teamMeta = orm.EdgeMeta{Name: "team", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "players", Columns: []string{"team_players"}}
 
 // Team is the "team" edge of Player, to Team: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithTeam.
+// and changes to it (Set, Clear). A query eager-loads it with
+// With(player.Team).
 var Team = &orm.ToOne[predicate.Player, predicate.Team, uuid.UUID]{Meta: &teamMeta}
 
 var fanOfMeta = orm.EdgeMeta{Name: "fan_of", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "team_fans", Columns: []string{"team_id", "player_id"}}
 
 // FanOf is the "fan_of" edge of Player, to Team: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithFanOf.
+// With(player.FanOf).
 var FanOf = &orm.ToMany[predicate.Player, predicate.Team, uuid.UUID]{Meta: &fanOfMeta}
 
 // EdgeMetas returns the descriptions of the edges of Player, in order. The

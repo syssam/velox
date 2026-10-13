@@ -53,13 +53,19 @@ func TestOneWayToQueryAnEdge(t *testing.T) {
 }
 
 // TestNoGenericTypeWithMethodsInSignatures pins which generic types the
-// generated signatures may name. A generic type's methods are compiled by
-// every package that can reach one of its instantiations, whether it calls
-// them or not; iter.Seq2 has none. (A page was orm.Page[T] with two methods
-// once: half the compile time of every service.) Another generic type here
+// generated signatures may name. The ordinary methods of a generic type are
+// compiled by every package that can reach one of its instantiations,
+// whether it calls them or not. (A page was orm.Page[T] with two methods
+// once: half the compile time of every service.) iter.Seq2 has none, and the
+// builders of package orm have only methods with a type parameter of their
+// own, which are compiled where they are called: that is pinned next to them,
+// by orm's TestMethodsOfGenericTypesAreGeneric. Another generic type here
 // needs the same check before it is allowed.
 func TestNoGenericTypeWithMethodsInSignatures(t *testing.T) {
 	allowed := map[string]bool{"iter.Seq2": true}
+	for _, name := range []string{"QueryOf", "CreateOf", "CreateBulkOf", "UpdateOf", "DeleteOf", "PageEdge", "Connection", "ClientOf"} {
+		allowed["orm."+name] = true
+	}
 	for _, dir := range []string{"../../tests/orm/velox/entity", "../../tests/orm/velox", "../../tests/orm/shapes/velox/entity", "../../tests/orm/shapes/velox"} {
 		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(paths) == 0 {
@@ -105,7 +111,7 @@ func TestNoGenericTypeWithMethodsInSignatures(t *testing.T) {
 				})
 			}
 		}
-		if strings.HasSuffix(dir, "entity") && seen["iter.Seq2"] == 0 {
+		if strings.HasSuffix(dir, "entity") && seen["orm.QueryOf"] == 0 {
 			t.Errorf("%s: found %v: the test no longer reads the signatures", dir, seen)
 		}
 	}

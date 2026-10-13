@@ -61,14 +61,14 @@ var studentMeta = orm.EdgeMeta{Name: "student", Index: 0, Rel: orm.M2O, Inverse:
 
 // Student is the "student" edge of Enrollment, to Student: conditions on it
 // (Has, HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithStudent.
+// With(enrollment.Student).
 var Student = &orm.ToOne[predicate.Enrollment, predicate.Student, int]{Meta: &studentMeta}
 
 var courseMeta = orm.EdgeMeta{Name: "course", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "enrollments", Columns: []string{"course_id"}, Immutable: true, Required: true}
 
 // Course is the "course" edge of Enrollment, to Course: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithCourse.
+// With(enrollment.Course).
 var Course = &orm.ToOne[predicate.Enrollment, predicate.Course, int]{Meta: &courseMeta}
 
 // EdgeMetas returns the descriptions of the edges of Enrollment, in order. The

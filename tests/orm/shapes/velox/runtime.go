@@ -3,64 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Runtime starts the queries and mutations of Runtime.
-var Runtime RuntimeClient
-
-// RuntimeClient is the type of Runtime.
-type RuntimeClient struct{}
-
-// Query returns a query of every Runtime, to run on ex: a database handle or a
-// transaction.
-func (*RuntimeClient) Query(ex velox.Executor) *entity.RuntimeQuery {
-	return entity.NewRuntimeQuery(ex)
-}
-
-// Create returns a builder that creates a Runtime.
-func (*RuntimeClient) Create(ex velox.Executor) *entity.RuntimeCreate {
-	return entity.NewRuntimeCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*RuntimeClient) CreateBulk(ex velox.Executor, bs ...*entity.RuntimeCreate) *entity.RuntimeCreateBulk {
-	return entity.NewRuntimeCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Runtime rows its conditions match.
-func (*RuntimeClient) Update(ex velox.Executor) *entity.RuntimeUpdate {
-	return entity.NewRuntimeUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Runtime rows its conditions match.
-func (*RuntimeClient) Delete(ex velox.Executor) *entity.RuntimeDelete {
-	return entity.NewRuntimeDelete(ex)
-}
-
-// Get returns the Runtime with the given id, or velox.ErrNotFound.
-func (c *RuntimeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Runtime, error) {
-	return c.Query(ex).Where(predicate.Runtime(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Runtime with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *RuntimeClient) UpdateByID(ex velox.Executor, id int) *entity.RuntimeUpdate {
-	return c.Update(ex).Where(predicate.Runtime(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Runtime with the given id, or returns
-// velox.ErrNotFound.
-func (c *RuntimeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Runtime(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.RuntimeMeta.NotFound()
-	}
-	return err
-}
+// Runtime starts the queries and mutations of Runtime: Runtime.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Runtime = orm.ClientOf[*entity.Runtime, predicate.Runtime, int]{Meta: &entity.RuntimeMeta}

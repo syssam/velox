@@ -3,62 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Errors starts the queries and mutations of Errors.
-var Errors ErrorsClient
-
-// ErrorsClient is the type of Errors.
-type ErrorsClient struct{}
-
-// Query returns a query of every Errors, to run on ex: a database handle or a
-// transaction.
-func (*ErrorsClient) Query(ex velox.Executor) *entity.ErrorsQuery { return entity.NewErrorsQuery(ex) }
-
-// Create returns a builder that creates a Errors.
-func (*ErrorsClient) Create(ex velox.Executor) *entity.ErrorsCreate {
-	return entity.NewErrorsCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*ErrorsClient) CreateBulk(ex velox.Executor, bs ...*entity.ErrorsCreate) *entity.ErrorsCreateBulk {
-	return entity.NewErrorsCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Errors rows its conditions match.
-func (*ErrorsClient) Update(ex velox.Executor) *entity.ErrorsUpdate {
-	return entity.NewErrorsUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Errors rows its conditions match.
-func (*ErrorsClient) Delete(ex velox.Executor) *entity.ErrorsDelete {
-	return entity.NewErrorsDelete(ex)
-}
-
-// Get returns the Errors with the given id, or velox.ErrNotFound.
-func (c *ErrorsClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Errors, error) {
-	return c.Query(ex).Where(predicate.Errors(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Errors with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *ErrorsClient) UpdateByID(ex velox.Executor, id int) *entity.ErrorsUpdate {
-	return c.Update(ex).Where(predicate.Errors(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Errors with the given id, or returns
-// velox.ErrNotFound.
-func (c *ErrorsClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Errors(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.ErrorsMeta.NotFound()
-	}
-	return err
-}
+// Errors starts the queries and mutations of Errors: Errors.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Errors = orm.ClientOf[*entity.Errors, predicate.Errors, int]{Meta: &entity.ErrorsMeta}

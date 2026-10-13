@@ -181,7 +181,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	// O2M, twice between the same pair, O2O twice, in one query. cid has
 	// nothing: every edge is loaded and empty.
 	authors := must(client.Author.Query(db).OrderBy(author.Name.Asc()).
-		WithArticles(client.Article.Query(db).OrderBy(article.Title.Desc())).WithEdited().WithPassport().WithLocker().All(ctx))
+		With(author.Articles.Load(client.Article.Query(db).OrderBy(article.Title.Desc()))).With(author.Edited).With(author.Passport).With(author.Locker).All(ctx))
 	require.Len(t, authors, 4)
 	ann, bob, cid, dee := authors[0], authors[1], authors[2], authors[3]
 	assert.Equal(t, []string{"a2", "a1"}, titles(ann.Edges.Articles), "the order of the load's query")
@@ -218,7 +218,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	_, err = plain.Edges.LockerOrErr()
 	notLoaded(t, err, "locker")
 	// Requesting one edge does not mark its neighbors in the struct loaded.
-	one := must(client.Author.Query(db).Where(author.Name.EQ("ann")).WithEdited().Only(ctx))
+	one := must(client.Author.Query(db).Where(author.Name.EQ("ann")).With(author.Edited).Only(ctx))
 	_, err = one.Edges.ArticlesOrErr()
 	notLoaded(t, err, "articles")
 	_, err = one.Edges.PassportOrErr()
@@ -228,7 +228,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	// M2O required and optional, M2M twice between the same pair, O2M with
 	// an overridden key column.
 	articles := must(client.Article.Query(db).OrderBy(article.Title.Asc()).
-		WithAuthor().WithEditor().WithTopics(client.Topic.Query(db).OrderBy(topic.Name.Asc())).WithBannedTopics(client.Topic.Query(db).OrderBy(topic.Name.Desc())).WithNotes().All(ctx))
+		With(article.Author).With(article.Editor).With(article.Topics.Load(client.Topic.Query(db).OrderBy(topic.Name.Asc()))).With(article.BannedTopics.Load(client.Topic.Query(db).OrderBy(topic.Name.Desc()))).With(article.Notes).All(ctx))
 	require.Len(t, articles, 4)
 	a1, a2, b1, d1 := articles[0], articles[1], articles[2], articles[3]
 	assert.Equal(t, []string{"ann", "ann", "bob", "dee"}, []string{a1.Edges.Author.Name, a2.Edges.Author.Name, b1.Edges.Author.Name, d1.Edges.Author.Name})
@@ -253,7 +253,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 
 	// The inverse sides.
 	topics := must(client.Topic.Query(db).OrderBy(topic.Name.Asc()).
-		WithArticles(client.Article.Query(db).OrderBy(article.Title.Asc())).WithBannedIn(client.Article.Query(db).OrderBy(article.Title.Asc())).All(ctx))
+		With(topic.Articles.Load(client.Article.Query(db).OrderBy(article.Title.Asc()))).With(topic.BannedIn.Load(client.Article.Query(db).OrderBy(article.Title.Asc()))).All(ctx))
 	require.Len(t, topics, 3)
 	assert.Equal(t, []string{"a1", "a2"}, titles(topics[0].Edges.Articles))
 	assert.Equal(t, []string{"b1"}, titles(topics[0].Edges.BannedIn))
@@ -261,29 +261,29 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	assert.Equal(t, []string{"a1", "b1"}, titles(topics[1].Edges.BannedIn))
 	assert.Equal(t, []string{"a1", "d1"}, titles(topics[2].Edges.Articles))
 	assert.Empty(t, topics[2].Edges.BannedIn)
-	passports := must(client.Passport.Query(db).OrderBy(passport.Number.Asc()).WithOwner().All(ctx))
+	passports := must(client.Passport.Query(db).OrderBy(passport.Number.Asc()).With(passport.Owner).All(ctx))
 	require.Len(t, passports, 2)
 	assert.Equal(t, "ann", passports[0].Edges.Owner.Name)
 	assert.Equal(t, "bob", passports[1].Edges.Owner.Name)
-	lockers := must(client.Locker.Query(db).OrderBy(locker.Code.Asc()).WithHolder().All(ctx))
+	lockers := must(client.Locker.Query(db).OrderBy(locker.Code.Asc()).With(locker.Holder).All(ctx))
 	require.Len(t, lockers, 2)
 	assert.Equal(t, "ann", lockers[0].Edges.Holder.Name)
 	_, err = lockers[1].Edges.HolderOrErr()
 	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// With on First and Only.
-	first := must(client.Article.Query(db).OrderBy(article.Words.Desc()).WithAuthor().WithTopics().First(ctx))
+	first := must(client.Article.Query(db).OrderBy(article.Words.Desc()).With(article.Author).With(article.Topics).First(ctx))
 	assert.Equal(t, "b1", first.Title)
 	assert.Equal(t, "bob", first.Edges.Author.Name)
-	only := must(client.Author.Query(db).Where(author.ID.EQ(l.dee.ID)).WithArticles().Only(ctx))
+	only := must(client.Author.Query(db).Where(author.ID.EQ(l.dee.ID)).With(author.Articles).Only(ctx))
 	assert.Equal(t, []string{"d1"}, titles(only.Edges.Articles))
 
 	// A query that matches no row loads nothing and does not fail.
-	nobody := must(client.Author.Query(db).Where(author.Name.EQ("nobody")).WithArticles().WithPassport().All(ctx))
+	nobody := must(client.Author.Query(db).Where(author.Name.EQ("nobody")).With(author.Articles).With(author.Passport).All(ctx))
 	assert.Empty(t, nobody)
 
 	// With on a query of parents that has its own limit and offset.
-	page := must(client.Author.Query(db).OrderBy(author.Name.Asc()).Offset(1).Limit(2).WithArticles().All(ctx))
+	page := must(client.Author.Query(db).OrderBy(author.Name.Asc()).Offset(1).Limit(2).With(author.Articles).All(ctx))
 	require.Len(t, page, 2)
 	assert.Equal(t, []string{"b1"}, titles(page[0].Edges.Articles))
 	assert.Empty(t, page[1].Edges.Articles)
@@ -295,7 +295,7 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 	l := library(t, db)
 
 	// Three levels: authors -> articles -> (topics, editor -> passport).
-	authors := must(client.Author.Query(db).OrderBy(author.Name.Asc()).WithArticles(client.Article.Query(db).OrderBy(article.Title.Asc()).WithTopics(client.Topic.Query(db).OrderBy(topic.Name.Asc()).WithBannedIn(client.Article.Query(db).OrderBy(article.Title.Asc()))).WithEditor(client.Author.Query(db).WithPassport())).All(ctx))
+	authors := must(client.Author.Query(db).OrderBy(author.Name.Asc()).With(author.Articles.Load(client.Article.Query(db).OrderBy(article.Title.Asc()).With(article.Topics.Load(client.Topic.Query(db).OrderBy(topic.Name.Asc()).With(topic.BannedIn.Load(client.Article.Query(db).OrderBy(article.Title.Asc()))))).With(article.Editor.Load(client.Author.Query(db).With(author.Passport))))).All(ctx))
 	require.Len(t, authors, 4)
 	ann := authors[0]
 	require.Equal(t, []string{"a1", "a2"}, titles(ann.Edges.Articles))
@@ -321,7 +321,7 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 
 	// A predicate on the load filters the neighbors, not the parents.
 	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).
-		WithArticles(client.Article.Query(db).Where(article.Words.GTE(200))).All(ctx))
+		With(author.Articles.Load(client.Article.Query(db).Where(article.Words.GTE(200)))).All(ctx))
 	require.Len(t, authors, 4)
 	assert.Equal(t, []string{"a2"}, titles(authors[0].Edges.Articles))
 	assert.Equal(t, []string{"b1"}, titles(authors[1].Edges.Articles))
@@ -330,7 +330,7 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 	require.NoError(t, err)
 	// ...on a to-one edge too: the neighbor that does not match is absent.
 	articles := must(client.Article.Query(db).OrderBy(article.Title.Asc()).
-		WithAuthor(client.Author.Query(db).Where(author.Age.GT(35))).WithEditor(client.Author.Query(db).Where(author.Name.EQ("bob"))).All(ctx))
+		With(article.Author.Load(client.Author.Query(db).Where(author.Age.GT(35)))).With(article.Editor.Load(client.Author.Query(db).Where(author.Name.EQ("bob")))).All(ctx))
 	_, err = articles[0].Edges.AuthorOrErr()
 	assert.ErrorIs(t, err, velox.ErrNotFound, "ann is 30")
 	assert.Equal(t, "bob", articles[2].Edges.Author.Name)
@@ -339,7 +339,7 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 	assert.ErrorIs(t, err, velox.ErrNotFound, "d1 is edited by ann")
 	// ...and through an edge predicate of the neighbor.
 	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).
-		WithArticles(client.Article.Query(db).Where(article.Topics.HasWith(topic.Name.EQ("sql")))).All(ctx))
+		With(author.Articles.Load(client.Article.Query(db).Where(article.Topics.HasWith(topic.Name.EQ("sql"))))).All(ctx))
 	assert.Equal(t, []string{"a1"}, titles(authors[0].Edges.Articles))
 	assert.Empty(t, authors[1].Edges.Articles)
 	assert.Equal(t, []string{"d1"}, titles(authors[3].Edges.Articles))
@@ -348,62 +348,59 @@ func TestEdges_EagerLoadNestedLimitAndFilters(t *testing.T) {
 	must(client.Article.Create(db).Set(article.Title.Set("a3"), article.Words.Set(150), article.Author.Set(l.ann.ID)).Save(ctx))
 	must(client.Article.Create(db).Set(article.Title.Set("b2"), article.Words.Set(10), article.Author.Set(l.bob.ID)).Save(ctx))
 	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).
-		WithArticles(client.Article.Query(db).OrderBy(article.Words.Desc()).Limit(2)).All(ctx))
+		With(author.Articles.Load(client.Article.Query(db).OrderBy(article.Words.Desc()).Limit(2))).All(ctx))
 	assert.Equal(t, []string{"a2", "a3"}, titles(authors[0].Edges.Articles), "ann's two longest of three")
 	assert.Equal(t, []string{"b1", "b2"}, titles(authors[1].Edges.Articles), "bob's two, not the two left over from a global limit")
 	assert.Empty(t, authors[2].Edges.Articles)
 	assert.Equal(t, []string{"d1"}, titles(authors[3].Edges.Articles))
 	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).
-		WithArticles(client.Article.Query(db).OrderBy(article.Words.Asc()).Limit(1)).All(ctx))
+		With(author.Articles.Load(client.Article.Query(db).OrderBy(article.Words.Asc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"a1"}, titles(authors[0].Edges.Articles))
 	assert.Equal(t, []string{"b2"}, titles(authors[1].Edges.Articles))
 	// ...for M2M, from both sides.
 	articles = must(client.Article.Query(db).Where(article.Title.In("a1", "a2", "d1")).OrderBy(article.Title.Asc()).
-		WithTopics(client.Topic.Query(db).OrderBy(topic.Name.Desc()).Limit(1)).All(ctx))
+		With(article.Topics.Load(client.Topic.Query(db).OrderBy(topic.Name.Desc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"sql"}, topicNames(articles[0].Edges.Topics))
 	assert.Equal(t, []string{"go"}, topicNames(articles[1].Edges.Topics))
 	assert.Equal(t, []string{"sql"}, topicNames(articles[2].Edges.Topics))
 	topics := must(client.Topic.Query(db).OrderBy(topic.Name.Asc()).
-		WithArticles(client.Article.Query(db).OrderBy(article.Title.Desc()).Limit(1)).All(ctx))
+		With(topic.Articles.Load(client.Article.Query(db).OrderBy(article.Title.Desc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"a2"}, titles(topics[0].Edges.Articles))
 	assert.Empty(t, topics[1].Edges.Articles)
 	assert.Equal(t, []string{"d1"}, titles(topics[2].Edges.Articles))
 	// ...and a limit with a predicate.
 	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).
-		WithArticles(client.Article.Query(db).Where(article.Words.LT(200)).OrderBy(article.Words.Desc()).Limit(1)).All(ctx))
+		With(author.Articles.Load(client.Article.Query(db).Where(article.Words.LT(200)).OrderBy(article.Words.Desc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"a3"}, titles(authors[0].Edges.Articles))
 	assert.Equal(t, []string{"b2"}, titles(authors[1].Edges.Articles))
 
 	// Offset and Distinct are not supported on a load, and say so.
-	_, err = client.Author.Query(db).WithArticles(client.Article.Query(db).Offset(1)).All(ctx)
+	_, err = client.Author.Query(db).With(author.Articles.Load(client.Article.Query(db).Offset(1))).All(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Offset")
-	_, err = client.Author.Query(db).WithArticles(client.Article.Query(db).Distinct()).All(ctx)
+	_, err = client.Author.Query(db).With(author.Articles.Load(client.Article.Query(db).Distinct())).All(ctx)
 	require.Error(t, err)
-	_, err = client.Article.Query(db).WithTopics(client.Topic.Query(db).WithArticles(client.Article.Query(db).Offset(1))).All(ctx)
+	_, err = client.Article.Query(db).With(article.Topics.Load(client.Topic.Query(db).With(topic.Articles.Load(client.Article.Query(db).Offset(1))))).All(ctx)
 	require.Error(t, err, "nested")
 	// ...also when the query has no row to load the edge for.
-	_, err = client.Author.Query(db).Where(author.Name.EQ("nobody")).WithArticles(client.Article.Query(db).Offset(1)).All(ctx)
+	_, err = client.Author.Query(db).Where(author.Name.EQ("nobody")).With(author.Articles.Load(client.Article.Query(db).Offset(1))).All(ctx)
 	require.ErrorContains(t, err, "Offset and Distinct are not supported on an eager load")
-	_, err = client.Author.Query(db).Where(author.Name.EQ("nobody")).WithArticles(client.Article.Query(db).WithTopics(client.Topic.Query(db).Distinct())).All(ctx)
+	_, err = client.Author.Query(db).Where(author.Name.EQ("nobody")).With(author.Articles.Load(client.Article.Query(db).With(article.Topics.Load(client.Topic.Query(db).Distinct())))).All(ctx)
 	require.ErrorContains(t, err, "not supported on an eager load", "nested, without rows")
-	_, err = client.Author.Query(db).Where(author.Name.EQ("nobody")).WithArticles(client.Article.Query(db).WithTopics(client.Topic.Query(db).Offset(2))).First(ctx)
+	_, err = client.Author.Query(db).Where(author.Name.EQ("nobody")).With(author.Articles.Load(client.Article.Query(db).With(article.Topics.Load(client.Topic.Query(db).Offset(2))))).First(ctx)
 	require.ErrorContains(t, err, "not supported on an eager load", "before the query that would have said not found")
 
 	// The query given to WithArticles is read when the call is made and not
 	// kept: it can be changed and used again without changing the load.
 	q := client.Article.Query(db).OrderBy(article.Title.Asc()).Where(article.Words.GTE(150))
-	aq := client.Author.Query(db).OrderBy(author.Name.Asc()).WithArticles(q)
+	aq := client.Author.Query(db).OrderBy(author.Name.Asc()).With(author.Articles.Load(q))
 	q.Where(article.Title.EQ("never"))
 	authors = must(aq.All(ctx))
-	assert.Equal(t, []string{"a2", "a3"}, titles(authors[0].Edges.Articles), "the load is the query as it was when WithArticles was called")
-	again := must(client.Author.Query(db).OrderBy(author.Name.Desc()).WithArticles(q).All(ctx))
+	assert.Equal(t, []string{"a2", "a3"}, titles(authors[0].Edges.Articles), "the load is the query as it was when Load was called")
+	again := must(client.Author.Query(db).OrderBy(author.Name.Desc()).With(author.Articles.Load(q)).All(ctx))
 	assert.Empty(t, titles(again[3].Edges.Articles), "the changed query describes the next load it is given to")
-	// More than one query for one load is a mistake, reported when it runs.
-	_, err = client.Author.Query(db).WithArticles(q, q).All(ctx)
-	require.ErrorContains(t, err, "one query describes the load, 2 were given")
 	// Without one, every neighbor is loaded.
-	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).WithArticles().All(ctx))
+	authors = must(client.Author.Query(db).OrderBy(author.Name.Asc()).With(author.Articles).All(ctx))
 	assert.Len(t, authors[0].Edges.Articles, 3)
 }
 
@@ -535,7 +532,7 @@ func TestEdges_QueryNeighbours(t *testing.T) {
 	// From queried entities, with the target's own predicates, order, limit
 	// and eager loads on top.
 	ann := must(client.Author.Query(db).Where(author.Name.EQ("ann")).Only(ctx))
-	got := must(ann.QueryArticles(db).Where(article.Words.GT(100)).WithTopics().WithAuthor().All(ctx))
+	got := must(ann.QueryArticles(db).Where(article.Words.GT(100)).With(article.Topics).With(article.Author).All(ctx))
 	require.Len(t, got, 1)
 	assert.Equal(t, "a2", got[0].Title)
 	assert.Equal(t, []string{"go"}, topicNames(got[0].Edges.Topics))

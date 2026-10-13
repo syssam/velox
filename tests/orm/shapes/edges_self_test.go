@@ -73,7 +73,7 @@ func TestSelfRef_Tree(t *testing.T) {
 
 	// Eager loading, both directions, nested on itself.
 	rows := must(client.Node.Query(db).OrderBy(node.Name.Asc()).
-		WithParent(client.Node.Query(db).WithParent()).WithChildren(client.Node.Query(db).OrderBy(node.Name.Desc()).WithChildren()).All(ctx))
+		With(node.Parent.Load(client.Node.Query(db).With(node.Parent))).With(node.Children.Load(client.Node.Query(db).OrderBy(node.Name.Desc()).With(node.Children))).All(ctx))
 	require.Len(t, rows, 4)
 	qc1, qc2, qg, qroot := rows[0], rows[1], rows[2], rows[3]
 	assert.Equal(t, []string{"c2", "c1"}, nodeNames(qroot.Edges.Children))
@@ -93,7 +93,7 @@ func TestSelfRef_Tree(t *testing.T) {
 	assert.Empty(t, kids)
 	// Per-parent limit on the tree.
 	rows = must(client.Node.Query(db).Where(node.Children.Has()).OrderBy(node.Name.Asc()).
-		WithChildren(client.Node.Query(db).OrderBy(node.Name.Desc()).Limit(1)).All(ctx))
+		With(node.Children.Load(client.Node.Query(db).OrderBy(node.Name.Desc()).Limit(1))).All(ctx))
 	require.Len(t, rows, 2)
 	assert.Equal(t, []string{"g1"}, nodeNames(rows[0].Edges.Children))
 	assert.Equal(t, []string{"c2"}, nodeNames(rows[1].Edges.Children))
@@ -153,7 +153,7 @@ func TestSelfRef_List(t *testing.T) {
 	q3 := must(client.Node.Query(db).Where(node.Name.EQ("n3")).Only(ctx))
 	assert.Equal(t, "n2", must(q3.QueryPrev(db).Only(ctx)).Name)
 
-	rows := must(client.Node.Query(db).OrderBy(node.Name.Asc()).WithNext(client.Node.Query(db).WithNext()).WithPrev(client.Node.Query(db).WithPrev()).All(ctx))
+	rows := must(client.Node.Query(db).OrderBy(node.Name.Asc()).With(node.Next.Load(client.Node.Query(db).With(node.Next))).With(node.Prev.Load(client.Node.Query(db).With(node.Prev))).All(ctx))
 	require.Len(t, rows, 3)
 	assert.Equal(t, "n2", rows[0].Edges.Next.Name)
 	assert.Equal(t, "n3", rows[0].Edges.Next.Edges.Next.Name)
@@ -211,14 +211,14 @@ func TestSelfRef_Person(t *testing.T) {
 	assert.Equal(t, []string{"ann"}, friends(bob))
 	assert.Equal(t, []string{"ann"}, friends(cid))
 	assert.Empty(t, friends(dee))
-	rows := must(client.Person.Query(db).OrderBy(person.Name.Asc()).WithFriends(client.Person.Query(db).OrderBy(person.Name.Desc())).All(ctx))
+	rows := must(client.Person.Query(db).OrderBy(person.Name.Asc()).With(person.Friends.Load(client.Person.Query(db).OrderBy(person.Name.Desc()))).All(ctx))
 	assert.Equal(t, []string{"cid", "bob"}, personNames(rows[0].Edges.Friends))
 	assert.Equal(t, []string{"ann"}, personNames(rows[1].Edges.Friends))
 	assert.Equal(t, []string{"ann"}, personNames(rows[2].Edges.Friends))
 	fs, err := rows[3].Edges.FriendsOrErr()
 	require.NoError(t, err)
 	assert.Empty(t, fs)
-	rows = must(client.Person.Query(db).OrderBy(person.Name.Asc()).WithFriends(client.Person.Query(db).OrderBy(person.Name.Asc()).Limit(1)).All(ctx))
+	rows = must(client.Person.Query(db).OrderBy(person.Name.Asc()).With(person.Friends.Load(client.Person.Query(db).OrderBy(person.Name.Asc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"bob"}, personNames(rows[0].Edges.Friends))
 	assert.Equal(t, []string{"ann"}, personNames(rows[1].Edges.Friends))
 	assert.Equal(t, []string{"ann", "bob", "cid"}, names(person.Friends.Has()))
@@ -254,7 +254,7 @@ func TestSelfRef_Person(t *testing.T) {
 	assert.Equal(t, []string{"ann"}, followers(bob))
 	assert.Equal(t, []string{"ann", "bob"}, followers(cid))
 	rows = must(client.Person.Query(db).Where(person.Name.In("ann", "bob", "cid")).OrderBy(person.Name.Asc()).
-		WithFollowing(client.Person.Query(db).OrderBy(person.Name.Asc())).WithFollowers(client.Person.Query(db).OrderBy(person.Name.Asc()).WithFollowing()).All(ctx))
+		With(person.Following.Load(client.Person.Query(db).OrderBy(person.Name.Asc()))).With(person.Followers.Load(client.Person.Query(db).OrderBy(person.Name.Asc()).With(person.Following))).All(ctx))
 	assert.Equal(t, []string{"bob", "cid"}, personNames(rows[0].Edges.Following))
 	assert.Empty(t, rows[0].Edges.Followers)
 	assert.Equal(t, []string{"cid"}, personNames(rows[1].Edges.Following))
@@ -282,7 +282,7 @@ func TestSelfRef_Person(t *testing.T) {
 	assert.Equal(t, "ann", must(qbob.QuerySpouse(db).Only(ctx)).Name)
 	_, err = cid.QuerySpouse(db).Only(ctx)
 	assert.ErrorIs(t, err, velox.ErrNotFound)
-	rows = must(client.Person.Query(db).Where(person.Name.In("ann", "bob", "cid")).OrderBy(person.Name.Asc()).WithSpouse().All(ctx))
+	rows = must(client.Person.Query(db).Where(person.Name.In("ann", "bob", "cid")).OrderBy(person.Name.Asc()).With(person.Spouse).All(ctx))
 	assert.Equal(t, "bob", rows[0].Edges.Spouse.Name)
 	assert.Equal(t, "ann", rows[1].Edges.Spouse.Name)
 	_, err = rows[2].Edges.SpouseOrErr()
@@ -347,7 +347,7 @@ func TestThrough_EdgeSchema(t *testing.T) {
 
 	// The M2M through the join entity, and the O2M to the join entity.
 	students := must(client.Student.Query(db).OrderBy(student.Name.Asc()).
-		WithCourses(client.Course.Query(db).OrderBy(course.Title.Asc())).WithEnrollments(client.Enrollment.Query(db).OrderBy(enrollment.Credits.Asc()).WithCourse()).All(ctx))
+		With(student.Courses.Load(client.Course.Query(db).OrderBy(course.Title.Asc()))).With(student.Enrollments.Load(client.Enrollment.Query(db).OrderBy(enrollment.Credits.Asc()).With(enrollment.Course))).All(ctx))
 	require.Len(t, students, 3)
 	assert.Equal(t, []string{"c1", "c2"}, courseTitles(students[0].Edges.Courses))
 	assert.Equal(t, []string{"c2"}, courseTitles(students[1].Edges.Courses))
@@ -357,7 +357,7 @@ func TestThrough_EdgeSchema(t *testing.T) {
 	assert.Equal(t, 5, students[0].Edges.Enrollments[1].Credits)
 	assert.Empty(t, students[2].Edges.Enrollments)
 	courses := must(client.Course.Query(db).OrderBy(course.Title.Asc()).
-		WithStudents(client.Student.Query(db).OrderBy(student.Name.Asc())).WithEnrollments().All(ctx))
+		With(course.Students.Load(client.Student.Query(db).OrderBy(student.Name.Asc()))).With(course.Enrollments).All(ctx))
 	assert.Equal(t, []string{"s1"}, studentNames(courses[0].Edges.Students))
 	assert.Equal(t, []string{"s1", "s2"}, studentNames(courses[1].Edges.Students))
 	assert.Len(t, courses[1].Edges.Enrollments, 2)

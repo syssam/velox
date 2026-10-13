@@ -97,7 +97,7 @@ func TestFieldOfSeveralEdges(t *testing.T) {
 // a loaded edge resolves, an edge that was not loaded cannot.
 func TestFieldOfSeveralEdgesUsesWhatIsLoaded(t *testing.T) {
 	w := open(t)
-	all, err := velox.Asset.Query(w.conn).WithOrg().WithPerson().WithMaker().OrderBy(asset.ID.Asc()).All(ctx)
+	all, err := velox.Asset.Query(w.conn).With(asset.Org).With(asset.Person).With(asset.Maker).OrderBy(asset.ID.Asc()).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, all, 4)
 

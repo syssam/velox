@@ -114,11 +114,9 @@ type EdgeLoad struct {
 // Load asks the query to eager-load edge e, one of the edges of its entity.
 // opts, when not nil, is a query of the edge's target that describes the
 // load: its predicates, order, limit (applied per parent) and nested loads.
-// given is how many such queries the caller passed; more than one is
-// reported when the query runs.
 //
 //go:noinline
-func (q *QueryCore) Load(e *EdgeMeta, opts *QueryCore, given int) {
+func (q *QueryCore) Load(e *EdgeMeta, opts *QueryCore) {
 	l := &EdgeLoad{Edge: e}
 	if opts != nil {
 		l.Preds = append([]P(nil), opts.Preds...)
@@ -129,9 +127,6 @@ func (q *QueryCore) Load(e *EdgeMeta, opts *QueryCore, given int) {
 			l.Err = fmt.Errorf("velox: loading edge %q of %s: Offset and Distinct are not supported on an eager load", e.Name, e.Owner.Name)
 		}
 		l.Cols = append([]string(nil), opts.Cols...)
-	}
-	if given > 1 {
-		l.Err = fmt.Errorf("velox: loading edge %q of %s: one query describes the load, %d were given", e.Name, e.Owner.Name, given)
 	}
 	q.With = append(q.With, l)
 }

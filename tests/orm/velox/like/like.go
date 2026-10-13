@@ -37,13 +37,13 @@ var (
 var userMeta = orm.EdgeMeta{Name: "user", Index: 0, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id"}, Immutable: true, Required: true}
 
 // User is the "user" edge of Like, to User: conditions on it (Has, HasWith) and
-// changes to it (Set, Clear). A query eager-loads it with WithUser.
+// changes to it (Set, Clear). A query eager-loads it with With(like.User).
 var User = &orm.ToOne[predicate.Like, predicate.User, int]{Meta: &userMeta}
 
 var postMeta = orm.EdgeMeta{Name: "post", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"post_id"}, Immutable: true, Required: true}
 
 // Post is the "post" edge of Like, to Post: conditions on it (Has, HasWith) and
-// changes to it (Set, Clear). A query eager-loads it with WithPost.
+// changes to it (Set, Clear). A query eager-loads it with With(like.Post).
 var Post = &orm.ToOne[predicate.Like, predicate.Post, int]{Meta: &postMeta}
 
 // EdgeMetas returns the descriptions of the edges of Like, in order. The

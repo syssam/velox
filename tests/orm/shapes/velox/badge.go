@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Badge starts the queries and mutations of Badge.
-var Badge BadgeClient
-
-// BadgeClient is the type of Badge.
-type BadgeClient struct{}
-
-// Query returns a query of every Badge, to run on ex: a database handle or a
-// transaction.
-func (*BadgeClient) Query(ex velox.Executor) *entity.BadgeQuery { return entity.NewBadgeQuery(ex) }
-
-// Create returns a builder that creates a Badge.
-func (*BadgeClient) Create(ex velox.Executor) *entity.BadgeCreate { return entity.NewBadgeCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*BadgeClient) CreateBulk(ex velox.Executor, bs ...*entity.BadgeCreate) *entity.BadgeCreateBulk {
-	return entity.NewBadgeCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Badge rows its conditions match.
-func (*BadgeClient) Update(ex velox.Executor) *entity.BadgeUpdate { return entity.NewBadgeUpdate(ex) }
-
-// Delete returns a builder that deletes the Badge rows its conditions match.
-func (*BadgeClient) Delete(ex velox.Executor) *entity.BadgeDelete { return entity.NewBadgeDelete(ex) }
-
-// Get returns the Badge with the given id, or velox.ErrNotFound.
-func (c *BadgeClient) Get(ctx context.Context, ex velox.Executor, id uint16) (*entity.Badge, error) {
-	return c.Query(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Badge with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *BadgeClient) UpdateByID(ex velox.Executor, id uint16) *entity.BadgeUpdate {
-	return c.Update(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Badge with the given id, or returns velox.ErrNotFound.
-func (c *BadgeClient) DeleteByID(ctx context.Context, ex velox.Executor, id uint16) error {
-	n, err := c.Delete(ex).Where(predicate.Badge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.BadgeMeta.NotFound()
-	}
-	return err
-}
+// Badge starts the queries and mutations of Badge: Badge.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Badge = orm.ClientOf[*entity.Badge, predicate.Badge, uint16]{Meta: &entity.BadgeMeta}

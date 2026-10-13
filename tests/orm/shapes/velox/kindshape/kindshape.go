@@ -32,7 +32,7 @@ var kindMeta = orm.EdgeMeta{Name: "kind", Index: 0, Rel: orm.M2O, Inverse: true,
 
 // Kind is the "kind" edge of KindShape, to Kind: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithKind.
+// With(kindshape.Kind).
 var Kind = &orm.ToOne[predicate.KindShape, predicate.Kind, int]{Meta: &kindMeta}
 
 // EdgeMetas returns the descriptions of the edges of KindShape, in order. The

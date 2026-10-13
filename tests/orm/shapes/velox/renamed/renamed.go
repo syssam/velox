@@ -61,14 +61,14 @@ var frozenMeta = orm.EdgeMeta{Name: "frozen", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Frozen is the "frozen" edge of Renamed, to Note: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithFrozen.
+// With(renamed.Frozen).
 var Frozen = &orm.ToMany[predicate.Renamed, predicate.Note, int]{Meta: &frozenMeta}
 
 var frozenTopicsMeta = orm.EdgeMeta{Name: "frozen_topics", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "topics", Columns: []string{"renamed_frozen_topics"}, Immutable: true}
 
 // FrozenTopics is the "frozen_topics" edge of Renamed, to Topic: conditions on
 // it (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads
-// it with WithFrozenTopics.
+// it with With(renamed.FrozenTopics).
 var FrozenTopics = &orm.ToMany[predicate.Renamed, predicate.Topic, int]{Meta: &frozenTopicsMeta}
 
 // EdgeMetas returns the descriptions of the edges of Renamed, in order. The

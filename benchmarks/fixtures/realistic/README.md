@@ -645,3 +645,72 @@ What it costs: Go 1.27, and a method with a type parameter does not satisfy
 an interface, so code written once for several entities takes a column as a
 concrete column type (`*orm.OrderedColumn[T, E]`, through the column's
 `AsOrdered`) where it took an interface.
+
+## Builders whose methods are generic methods (2026-10-13, load 3-16)
+
+The same measure, for the builders. Generated, every entity had its own
+query, create, bulk create, update and delete types in package `entity`, some
+forty methods of three to ten lines each, and its own client type in the
+root package: 326,433 of the 564,135 lines, in the two packages that every
+package of an application reads. They are types of package `orm` now
+(`orm/builders.go`), every method with the `Lazy` type parameter, and a
+generated tree names them:
+
+```go
+// package entity
+type PostQuery = orm.QueryOf[*Post, predicate.Post, int]
+
+// the root package
+var Post = orm.ClientOf[*entity.Post, predicate.Post, int]{Meta: &entity.PostMeta}
+```
+
+The first type argument is the pointer to the entity's struct, so the
+builders of every entity are one shape to the compiler, and a package
+compiles each method it calls once per id type, not once per entity.
+
+| | generated lines | `entity` | root package | the 312 services | the 450 entity packages |
+|---|---|---|---|---|---|
+| generated builders (before) | 564,135 | 12.3 / 12.9 CPU-s, 1.5-1.6 GB, 112 MB object | 2.2 / 2.3 CPU-s, 0.44 GB | 95.2 / 95.3 / 98.0 CPU-s | 26.4 / 27.0 CPU-s |
+| builders of `orm`, generic methods that can be inlined | 345,945 | 3.6 CPU-s, 0.6 GB, 32 MB | 0.3 CPU-s, 0.08 GB | 87.6 / 88.7 | 26.4 |
+| the same, the methods `//go:noinline` | 345,259 | 3.4 / 3.7 CPU-s, 0.6 GB, 32 MB | 0.2 CPU-s, 0.08 GB | 76.8 / 77.7 / 78.7 / 78.9 | 26.5 |
+| the same, the five constructors of the client inlined | 345,259 | 3.5 / 3.6 CPU-s, 0.6 GB | 0.4 CPU-s | 76.8 / 78.1 / 78.5 / 78.9 | |
+| the same, nothing of `entity` marked `//go:noinline` (as generated now) | 337,945 | 3.5 CPU-s, 0.6 GB, 32 MB | | 78.4 / 79.8 | |
+
+`entity` is what a change to any entity recompiles: a quarter of the CPU and
+two fifths of the memory it took. The services compile a fifth faster,
+though they now compile the builder methods themselves: reading the export
+data of a package with 18,000 functions cost each of them more than
+compiling the dozen methods it calls (one service of 2,198 lines: 105 ms to
+74 ms, the front end from 84 to 48, the back end from 22 to 27). `schemainit`,
+`migrate` and `predicate` do not change (3.1-3.3, 1.4 and 0.1 CPU-s).
+
+Inlined, a builder method is compiled again at every call: the third row
+against the second. The five constructors of the client (`Query`, `Create`,
+`CreateBulk`, `Update`, `Delete`) are the exception, a composite literal
+each: not inlined, the builder they return is allocated for every query,
+where the compiler otherwise keeps it on the stack of the function that
+builds and runs it.
+
+The functions of package `entity` were all marked `//go:noinline` while the
+builders were among them (17% off the services then, see above). For what
+is left of the package, the accessors of the edges and `Query<Edge>`, it
+makes no difference (the last two rows), so they can be inlined again.
+
+At run time nothing changes (`tests/orm/bench_test.go`, SQLite in memory,
+2,000 iterations, two or three runs of each binary in turn):
+
+| | generated builders | builders of `orm` | allocations |
+|---|---|---|---|
+| point lookup | 10.8-12.1 µs | 11.1-11.8 µs | 81, 4.5 KB |
+| read 500 rows | 611-653 µs | 616-651 µs | 10,304, 336 KB |
+| create | 26.5-28.8 µs | 25.7-28.7 µs | 69, 4.9 KB |
+| update, `Exec` | 10.4-10.7 µs | 10.1-10.8 µs | 59, 4.7 KB |
+| update, `SaveOne` | 27.5-28.3 µs | 26.9-28.3 µs | 120, 7.9 KB |
+
+What it costs: eager loading is one method that takes the edges,
+`With(post.Author, post.Comments.Load(q))`, where it was a method per edge
+(`WithAuthor()`, `WithComments(q)`): a type of the library cannot have a
+method named after an edge of the schema. A builder's name in a compiler
+error is the library's (`*orm.QueryOf[*entity.Post, predicate.Post, int]`).
+gqlgen 0.17.86 binds the connection types as before
+(`entity.PostConnection` is `orm.Connection[*entity.Post]`).

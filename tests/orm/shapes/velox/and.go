@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// And starts the queries and mutations of And.
-var And AndClient
-
-// AndClient is the type of And.
-type AndClient struct{}
-
-// Query returns a query of every And, to run on ex: a database handle or a
-// transaction.
-func (*AndClient) Query(ex velox.Executor) *entity.AndQuery { return entity.NewAndQuery(ex) }
-
-// Create returns a builder that creates a And.
-func (*AndClient) Create(ex velox.Executor) *entity.AndCreate { return entity.NewAndCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*AndClient) CreateBulk(ex velox.Executor, bs ...*entity.AndCreate) *entity.AndCreateBulk {
-	return entity.NewAndCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the And rows its conditions match.
-func (*AndClient) Update(ex velox.Executor) *entity.AndUpdate { return entity.NewAndUpdate(ex) }
-
-// Delete returns a builder that deletes the And rows its conditions match.
-func (*AndClient) Delete(ex velox.Executor) *entity.AndDelete { return entity.NewAndDelete(ex) }
-
-// Get returns the And with the given id, or velox.ErrNotFound.
-func (c *AndClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.And, error) {
-	return c.Query(ex).Where(predicate.And(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the And with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *AndClient) UpdateByID(ex velox.Executor, id int) *entity.AndUpdate {
-	return c.Update(ex).Where(predicate.And(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the And with the given id, or returns velox.ErrNotFound.
-func (c *AndClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.And(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.AndMeta.NotFound()
-	}
-	return err
-}
+// And starts the queries and mutations of And: And.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var And = orm.ClientOf[*entity.And, predicate.And, int]{Meta: &entity.AndMeta}

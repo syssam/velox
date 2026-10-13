@@ -1,5 +1,5 @@
 // Package nostitch is a program that uses generated entities without linking
-// their schemainit package: it builds its queries from the entity package and
+// their schemainit package: it declares the clients of its entities itself and
 // never imports the root package, which would link it.
 package nostitch
 
@@ -12,12 +12,21 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
 	velsql "github.com/syssam/velox/dialect/sql"
+	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/entity"
 	"github.com/syssam/velox/tests/orm/velox/migrate"
+	"github.com/syssam/velox/tests/orm/velox/predicate"
 	"github.com/syssam/velox/tests/orm/velox/tag"
 	"github.com/syssam/velox/tests/orm/velox/user"
 
 	_ "modernc.org/sqlite"
+)
+
+// The clients of the entities, declared here as the root package declares
+// them: what a program has that leaves the root package out.
+var (
+	tags  = orm.ClientOf[*entity.Tag, predicate.Tag, int]{Meta: &entity.TagMeta}
+	users = orm.ClientOf[*entity.User, predicate.User, int]{Meta: &entity.UserMeta}
 )
 
 // Without schemainit an entity has no policy, hooks, validators or defaults.
@@ -32,16 +41,16 @@ func TestEntityWithoutSchemainitRefusesToRun(t *testing.T) {
 	require.NoError(t, migrate.Create(ctx, db))
 
 	const want = `import _ "github.com/syssam/velox/tests/orm/velox/schemainit"`
-	_, err = entity.NewTagQuery(db).All(ctx)
+	_, err = tags.Query(db).All(ctx)
 	require.ErrorContains(t, err, want)
-	_, err = entity.NewTagQuery(db).Count(ctx)
+	_, err = tags.Query(db).Count(ctx)
 	require.ErrorContains(t, err, want)
-	_, err = entity.NewTagCreate(db).Set(tag.Name.Set("")).Save(ctx)
+	_, err = tags.Create(db).Set(tag.Name.Set("")).Save(ctx)
 	require.ErrorContains(t, err, want)
-	_, err = entity.NewUserDelete(db).Exec(ctx)
+	_, err = users.Delete(db).Exec(ctx)
 	require.ErrorContains(t, err, want)
-	_, err = entity.NewUserUpdate(db).Set(user.Age.Set(1)).Exec(ctx)
+	_, err = users.Update(db).Set(user.Age.Set(1)).Exec(ctx)
 	require.ErrorContains(t, err, want)
-	_, err = entity.NewUserCreateBulk(db, entity.NewUserCreate(db).Set(user.Name.Set("a"), user.Email.Set("a@example.com"), user.Age.Set(1))).Save(ctx)
+	_, err = users.CreateBulk(db, users.Create(db).Set(user.Name.Set("a"), user.Email.Set("a@example.com"), user.Age.Set(1))).Save(ctx)
 	require.ErrorContains(t, err, want)
 }

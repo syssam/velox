@@ -3,64 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Passport starts the queries and mutations of Passport.
-var Passport PassportClient
-
-// PassportClient is the type of Passport.
-type PassportClient struct{}
-
-// Query returns a query of every Passport, to run on ex: a database handle or a
-// transaction.
-func (*PassportClient) Query(ex velox.Executor) *entity.PassportQuery {
-	return entity.NewPassportQuery(ex)
-}
-
-// Create returns a builder that creates a Passport.
-func (*PassportClient) Create(ex velox.Executor) *entity.PassportCreate {
-	return entity.NewPassportCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*PassportClient) CreateBulk(ex velox.Executor, bs ...*entity.PassportCreate) *entity.PassportCreateBulk {
-	return entity.NewPassportCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Passport rows its conditions match.
-func (*PassportClient) Update(ex velox.Executor) *entity.PassportUpdate {
-	return entity.NewPassportUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Passport rows its conditions match.
-func (*PassportClient) Delete(ex velox.Executor) *entity.PassportDelete {
-	return entity.NewPassportDelete(ex)
-}
-
-// Get returns the Passport with the given id, or velox.ErrNotFound.
-func (c *PassportClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Passport, error) {
-	return c.Query(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Passport with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *PassportClient) UpdateByID(ex velox.Executor, id int) *entity.PassportUpdate {
-	return c.Update(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Passport with the given id, or returns
-// velox.ErrNotFound.
-func (c *PassportClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Passport(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.PassportMeta.NotFound()
-	}
-	return err
-}
+// Passport starts the queries and mutations of Passport: Passport.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Passport = orm.ClientOf[*entity.Passport, predicate.Passport, int]{Meta: &entity.PassportMeta}

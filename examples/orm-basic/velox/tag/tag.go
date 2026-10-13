@@ -32,7 +32,7 @@ var postsMeta = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.M2M, Inverse: tru
 
 // Posts is the "posts" edge of Tag, to Post: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithPosts.
+// With(tag.Posts).
 var Posts = &orm.ToMany[predicate.Tag, predicate.Post, int]{Meta: &postsMeta}
 
 // EdgeMetas returns the descriptions of the edges of Tag, in order. The

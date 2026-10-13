@@ -36,21 +36,21 @@ var (
 var orgMeta = orm.EdgeMeta{Name: "org", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"org_assets"}}
 
 // Org is the "org" edge of Asset, to Org: conditions on it (Has, HasWith) and
-// changes to it (Set, Clear). A query eager-loads it with WithOrg.
+// changes to it (Set, Clear). A query eager-loads it with With(asset.Org).
 var Org = &orm.ToOne[predicate.Asset, predicate.Org, int]{Meta: &orgMeta}
 
 var personMeta = orm.EdgeMeta{Name: "person", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"person_assets"}}
 
 // Person is the "person" edge of Asset, to Person: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithPerson.
+// With(asset.Person).
 var Person = &orm.ToOne[predicate.Asset, predicate.Person, int]{Meta: &personMeta}
 
 var makerMeta = orm.EdgeMeta{Name: "maker", Index: 2, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"person_made"}}
 
 // Maker is the "maker" edge of Asset, to Person: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithMaker.
+// With(asset.Maker).
 var Maker = &orm.ToOne[predicate.Asset, predicate.Person, int]{Meta: &makerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Asset, in order. The

@@ -283,8 +283,8 @@ func (g *Generator) leafEdges(e *Entity, im *Imports, taken map[string]bool, b *
 		if x.E.Unique {
 			kind, does = "ToOne", "Has, HasWith) and changes to it (Set, Clear"
 		}
-		w("// %[1]s is the %[2]q edge of %[3]s, to %[4]s: conditions on it (%[5]s). A query eager-loads it with With%[6]s.\nvar %[1]s = &orm.%[7]s[%[8]s, %[9]s, %[10]s]{Meta: &%[11]s}\n\n",
-			x.Desc, x.E.Name, e.Name, x.Target.Name, does, x.GoName, kind, e.pred(), x.Target.pred(), ref.Expr, meta)
+		w("// %[1]s is the %[2]q edge of %[3]s, to %[4]s: conditions on it (%[5]s). A query eager-loads it with With(%[12]s.%[1]s).\nvar %[1]s = &orm.%[7]s[%[8]s, %[9]s, %[10]s]{Meta: &%[11]s}\n\n",
+			x.Desc, x.E.Name, e.Name, x.Target.Name, does, x.GoName, kind, e.pred(), x.Target.pred(), ref.Expr, meta, e.Pkg)
 	}
 	w("// EdgeMetas returns the descriptions of the edges of %s, in order. The generated\n// entity package connects them to the entities they join; nothing else needs them.\nfunc EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{%s} }\n\n", e.Name, strings.Join(metas, ", "))
 	return nil

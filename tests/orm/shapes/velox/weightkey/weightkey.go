@@ -33,21 +33,21 @@ var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: tru
 
 // Owner is the "owner" edge of WeightKey, to LabelKey: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithOwner.
+// With(weightkey.Owner).
 var Owner = &orm.ToOne[predicate.WeightKey, predicate.LabelKey, types.Label]{Meta: &ownerMeta}
 
 var labelsMeta = orm.EdgeMeta{Name: "labels", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "label_weights", Columns: []string{"label_key_id", "weight_key_id"}}
 
 // Labels is the "labels" edge of WeightKey, to LabelKey: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithLabels.
+// With(weightkey.Labels).
 var Labels = &orm.ToMany[predicate.WeightKey, predicate.LabelKey, types.Label]{Meta: &labelsMeta}
 
 var peersMeta = orm.EdgeMeta{Name: "peers", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "weight_key_peers", Columns: []string{"weight_key_id", "peer_id"}}
 
 // Peers is the "peers" edge of WeightKey, to WeightKey: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithPeers.
+// With(weightkey.Peers).
 var Peers = &orm.ToMany[predicate.WeightKey, predicate.WeightKey, types.Weight]{Meta: &peersMeta}
 
 // EdgeMetas returns the descriptions of the edges of WeightKey, in order. The

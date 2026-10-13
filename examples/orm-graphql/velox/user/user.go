@@ -40,7 +40,7 @@ var todosMeta = orm.EdgeMeta{Name: "todos", Index: 0, Rel: orm.O2M, Inverse: fal
 
 // Todos is the "todos" edge of User, to Todo: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithTodos.
+// With(user.Todos).
 var Todos = &orm.ToMany[predicate.User, predicate.Todo, int]{Meta: &todosMeta}
 
 // EdgeMetas returns the descriptions of the edges of User, in order. The

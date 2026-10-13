@@ -3,10 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
-
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
@@ -80,8 +76,6 @@ type KeywordsEdges struct {
 
 // FieldsOrErr returns the fields edge, or an error when it was not loaded
 // (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *KeywordsEdges) FieldsOrErr() ([]*Field, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("fields")
@@ -91,8 +85,6 @@ func (e *KeywordsEdges) FieldsOrErr() ([]*Field, error) {
 
 // ColumnsOrErr returns the columns edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *KeywordsEdges) ColumnsOrErr() (*Field, error) {
 	if !e.loaded[1] {
 		return nil, velox.NewNotLoadedError("columns")
@@ -105,8 +97,6 @@ func (e *KeywordsEdges) ColumnsOrErr() (*Field, error) {
 
 // LoadedOrErr returns the loaded edge, or an error when it was not loaded
 // (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *KeywordsEdges) LoadedOrErr() ([]*Field, error) {
 	if !e.loaded[2] {
 		return nil, velox.NewNotLoadedError("loaded")
@@ -116,8 +106,6 @@ func (e *KeywordsEdges) LoadedOrErr() ([]*Field, error) {
 
 // WithOrErr returns the with edge, or an error when it was not loaded
 // (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *KeywordsEdges) WithOrErr() ([]*Field, error) {
 	if !e.loaded[3] {
 		return nil, velox.NewNotLoadedError("with")
@@ -127,8 +115,6 @@ func (e *KeywordsEdges) WithOrErr() ([]*Field, error) {
 
 // AllOrErr returns the all edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *KeywordsEdges) AllOrErr() (*Field, error) {
 	if !e.loaded[4] {
 		return nil, velox.NewNotLoadedError("all")
@@ -142,8 +128,6 @@ func (e *KeywordsEdges) AllOrErr() (*Field, error) {
 // ptrKeywords returns the address of the field of a Keywords that holds its
 // i-th column: what a row is scanned into, and read from. It is the Ptr of
 // KeywordsMeta.
-//
-//go:noinline
 func ptrKeywords(v any, i int) any {
 	e := v.(*Keywords)
 	switch i {
@@ -248,8 +232,6 @@ func ptrKeywords(v any, i int) any {
 // edgeKeywords marks the i-th edge of a Keywords as loaded and returns the
 // address of the field that holds its neighbors. It is the Edge of
 // KeywordsMeta.
-//
-//go:noinline
 func edgeKeywords(v any, i int) any {
 	e := v.(*Keywords)
 	e.Edges.loaded[i] = true
@@ -266,21 +248,6 @@ func edgeKeywords(v any, i int) any {
 		return &e.Edges.All
 	}
 	return nil
-}
-
-// KeywordsEdge is a row of a page of Keywords, with its cursor.
-type KeywordsEdge struct {
-	Node   *Keywords    `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// KeywordsConnection is one page of Keywords.
-type KeywordsConnection struct {
-	Edges    []*KeywordsEdge `json:"edges"`
-	PageInfo velox.PageInfo  `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // KeywordsMeta is the runtime description of Keywords. Use it through its
@@ -343,508 +310,43 @@ var KeywordsMeta = orm.Meta{
 	},
 }
 
-// KeywordsQuery is the query of Keywords.
-type KeywordsQuery struct{ c orm.QueryCore }
-
-// NewKeywordsQuery returns a query of every Keywords.
-func NewKeywordsQuery(ex velox.Executor) *KeywordsQuery {
-	return &KeywordsQuery{c: orm.QueryCore{M: &KeywordsMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *KeywordsQuery) Where(ps ...predicate.Keywords) *KeywordsQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *KeywordsQuery) OrderBy(os ...predicate.KeywordsOrderTerm) *KeywordsQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *KeywordsQuery) Limit(n int) *KeywordsQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *KeywordsQuery) Offset(n int) *KeywordsQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *KeywordsQuery) Distinct() *KeywordsQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *KeywordsQuery) Columns(columns ...string) *KeywordsQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *KeywordsQuery) ForUpdate(opts ...orm.LockOption) *KeywordsQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *KeywordsQuery) ForShare(opts ...orm.LockOption) *KeywordsQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *KeywordsQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *KeywordsQuery) Clone() *KeywordsQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Keywords.
-//
-//go:noinline
-func (q *KeywordsQuery) All(ctx context.Context) ([]*Keywords, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Keywords, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Keywords)
-	}
-	return out, nil
-}
-
-// First returns the first matching Keywords, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *KeywordsQuery) First(ctx context.Context) (*Keywords, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Keywords), nil
-}
-
-// Only returns the single matching Keywords: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *KeywordsQuery) Only(ctx context.Context) (*Keywords, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Keywords), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *KeywordsQuery) Iter(ctx context.Context) iter.Seq2[*Keywords, error] {
-	return func(yield func(*Keywords, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Keywords), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *KeywordsQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*KeywordsConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &KeywordsConnection{Edges: make([]*KeywordsEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &KeywordsEdge{Node: r.(*Keywords), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *KeywordsQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *KeywordsQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *KeywordsQuery) IDs(ctx context.Context) ([]int, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(int)
-	}
-	return ids, nil
-}
-
-// KeywordsCreate creates one Keywords.
-type KeywordsCreate struct{ c orm.MutCore }
-
-// NewKeywordsCreate returns a builder that creates a Keywords.
-func NewKeywordsCreate(ex velox.Executor) *KeywordsCreate {
-	return &KeywordsCreate{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *KeywordsCreate) Set(ss ...predicate.KeywordsSetter) *KeywordsCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Keywords, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Keywords is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *KeywordsCreate) Fill(in any, skip ...string) *KeywordsCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *KeywordsCreate) Save(ctx context.Context) (*Keywords, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Keywords), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *KeywordsCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// KeywordsCreateBulk creates several Keywords rows with one statement.
-type KeywordsCreateBulk struct {
-	ex velox.Executor
-	bs []*KeywordsCreate
-	n  int
-}
-
-// NewKeywordsCreateBulk returns a builder that creates one row per given
-// builder, as each is when the rows are inserted: what is set on one after this
-// call is part of its row.
-func NewKeywordsCreateBulk(ex velox.Executor, bs ...*KeywordsCreate) *KeywordsCreateBulk {
-	return &KeywordsCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *KeywordsCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *KeywordsCreateBulk) BatchSize(n int) *KeywordsCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *KeywordsCreateBulk) Save(ctx context.Context) ([]*Keywords, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &KeywordsMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Keywords, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Keywords)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *KeywordsCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &KeywordsMeta, b.sets(), b.n)
-	return err
-}
-
-// KeywordsUpdate updates Keywords rows.
-type KeywordsUpdate struct{ c orm.MutCore }
-
-// NewKeywordsUpdate returns a builder that updates the rows its predicates
-// match.
-func NewKeywordsUpdate(ex velox.Executor) *KeywordsUpdate {
-	return &KeywordsUpdate{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *KeywordsUpdate) Set(ss ...predicate.KeywordsSetter) *KeywordsUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *KeywordsUpdate) Where(ps ...predicate.Keywords) *KeywordsUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *KeywordsUpdate) Fill(in any, skip ...string) *KeywordsUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *KeywordsUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *KeywordsUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *KeywordsUpdate) SaveOne(ctx context.Context) (*Keywords, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Keywords), nil
-}
-
-// KeywordsDelete deletes Keywords rows.
-type KeywordsDelete struct{ c orm.MutCore }
-
-// NewKeywordsDelete returns a builder that deletes the rows its predicates
-// match.
-func NewKeywordsDelete(ex velox.Executor) *KeywordsDelete {
-	return &KeywordsDelete{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *KeywordsDelete) Where(ps ...predicate.Keywords) *KeywordsDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *KeywordsDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Keywords, and a page of it: what the root package's Keywords
+// returns. Their methods are those of the types of package orm.
+type (
+	KeywordsQuery      = orm.QueryOf[*Keywords, predicate.Keywords, int]
+	KeywordsCreate     = orm.CreateOf[*Keywords, predicate.Keywords]
+	KeywordsCreateBulk = orm.CreateBulkOf[*Keywords, predicate.Keywords]
+	KeywordsUpdate     = orm.UpdateOf[*Keywords, predicate.Keywords]
+	KeywordsDelete     = orm.DeleteOf[predicate.Keywords]
+	// KeywordsEdge is a row of a page of Keywords, with its cursor, and
+	// KeywordsConnection one page: what Paginate returns.
+	KeywordsEdge       = orm.PageEdge[*Keywords]
+	KeywordsConnection = orm.Connection[*Keywords]
+)
 
 // QueryFields queries the "fields" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Keywords) QueryFields(ex velox.Executor) *FieldQuery {
-	q := NewFieldQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[0], e))
-	return q
-}
-
-// WithFields eager-loads the "fields" edge: one more query, whatever the number
-// of rows. A query of Field given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Keywords.
-//
-//go:noinline
-func (q *KeywordsQuery) WithFields(opts ...*FieldQuery) *KeywordsQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(KeywordsMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*Field, predicate.Field, int](KeywordsMeta.Edges[0], e, ex)
 }
 
 // QueryColumns queries the "columns" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Keywords) QueryColumns(ex velox.Executor) *FieldQuery {
-	q := NewFieldQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[1], e))
-	return q
-}
-
-// WithColumns eager-loads the "columns" edge: one more query, whatever the
-// number of rows. A query of Field given to it describes the load: its
-// conditions, order, nested loads and its limit, which applies per Keywords.
-//
-//go:noinline
-func (q *KeywordsQuery) WithColumns(opts ...*FieldQuery) *KeywordsQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(KeywordsMeta.Edges[1], o, len(opts))
-	return q
+	return orm.Neighbors[*Field, predicate.Field, int](KeywordsMeta.Edges[1], e, ex)
 }
 
 // QueryLoaded queries the "loaded" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Keywords) QueryLoaded(ex velox.Executor) *FieldQuery {
-	q := NewFieldQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[2], e))
-	return q
-}
-
-// WithLoaded eager-loads the "loaded" edge: one more query, whatever the number
-// of rows. A query of Field given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Keywords.
-//
-//go:noinline
-func (q *KeywordsQuery) WithLoaded(opts ...*FieldQuery) *KeywordsQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(KeywordsMeta.Edges[2], o, len(opts))
-	return q
+	return orm.Neighbors[*Field, predicate.Field, int](KeywordsMeta.Edges[2], e, ex)
 }
 
 // QueryWith queries the "with" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Keywords) QueryWith(ex velox.Executor) *FieldQuery {
-	q := NewFieldQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[3], e))
-	return q
-}
-
-// WithWith eager-loads the "with" edge: one more query, whatever the number
-// of rows. A query of Field given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Keywords.
-//
-//go:noinline
-func (q *KeywordsQuery) WithWith(opts ...*FieldQuery) *KeywordsQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(KeywordsMeta.Edges[3], o, len(opts))
-	return q
+	return orm.Neighbors[*Field, predicate.Field, int](KeywordsMeta.Edges[3], e, ex)
 }
 
 // QueryAll queries the "all" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Keywords) QueryAll(ex velox.Executor) *FieldQuery {
-	q := NewFieldQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KeywordsMeta.Edges[4], e))
-	return q
-}
-
-// WithAll eager-loads the "all" edge: one more query, whatever the number
-// of rows. A query of Field given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Keywords.
-//
-//go:noinline
-func (q *KeywordsQuery) WithAll(opts ...*FieldQuery) *KeywordsQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(KeywordsMeta.Edges[4], o, len(opts))
-	return q
+	return orm.Neighbors[*Field, predicate.Field, int](KeywordsMeta.Edges[4], e, ex)
 }
 
 func init() { slots.Keywords.Bind(&KeywordsMeta) }

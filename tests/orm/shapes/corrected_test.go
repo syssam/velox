@@ -323,7 +323,7 @@ func TestKeys_EdgesM2MEagerLoad(t *testing.T) {
 	ann := must(client.Person.Create(db).Set(person.Name.Set("ann")).Save(ctx))
 	must(client.Badge.Update(db).Set(badge.Holders.Add(ann.ID)).Where(badge.ID.EQ(f.b1.ID)).Exec(ctx))
 
-	teams := must(client.Team.Query(db).OrderBy(team.Name.Asc()).WithFans(client.Player.Query(db).OrderBy(player.ID.Desc()).WithFanOf().WithTeam()).WithRivals(client.Team.Query(db).WithBadges(client.Badge.Query(db).OrderBy(badge.Name.Asc()))).WithBadges(client.Badge.Query(db).OrderBy(badge.Name.Desc())).All(ctx))
+	teams := must(client.Team.Query(db).OrderBy(team.Name.Asc()).With(team.Fans.Load(client.Player.Query(db).OrderBy(player.ID.Desc()).With(player.FanOf).With(player.Team))).With(team.Rivals.Load(client.Team.Query(db).With(team.Badges.Load(client.Badge.Query(db).OrderBy(badge.Name.Asc()))))).With(team.Badges.Load(client.Badge.Query(db).OrderBy(badge.Name.Desc()))).All(ctx))
 	require.Len(t, teams, 3)
 	assert.Equal(t, []string{"p4", "p3"}, playerIDs(teams[0].Edges.Fans), "UUID owner, string target, in the load's order")
 	assert.Equal(t, []string{"p1"}, playerIDs(teams[1].Edges.Fans))
@@ -343,13 +343,13 @@ func TestKeys_EdgesM2MEagerLoad(t *testing.T) {
 	require.Len(t, teams[1].Edges.Badges, 1)
 	assert.Empty(t, teams[2].Edges.Badges)
 
-	players := must(client.Player.Query(db).OrderBy(player.ID.Asc()).WithFanOf(client.Team.Query(db).OrderBy(team.Name.Asc())).All(ctx))
+	players := must(client.Player.Query(db).OrderBy(player.ID.Asc()).With(player.FanOf.Load(client.Team.Query(db).OrderBy(team.Name.Asc()))).All(ctx))
 	require.Len(t, players, 4)
 	assert.Equal(t, []string{"t2"}, teamNames(players[0].Edges.FanOf))
 	assert.Empty(t, players[1].Edges.FanOf)
 	assert.Equal(t, []string{"t1"}, teamNames(players[2].Edges.FanOf))
 	assert.Equal(t, []string{"t1"}, teamNames(players[3].Edges.FanOf))
-	badges := must(client.Badge.Query(db).OrderBy(badge.Name.Asc()).WithTeams(client.Team.Query(db).OrderBy(team.Name.Desc())).WithHolders().All(ctx))
+	badges := must(client.Badge.Query(db).OrderBy(badge.Name.Asc()).With(badge.Teams.Load(client.Team.Query(db).OrderBy(team.Name.Desc()))).With(badge.Holders).All(ctx))
 	require.Len(t, badges, 2)
 	assert.Equal(t, []string{"t1"}, teamNames(badges[0].Edges.Teams), "uint16 owner, UUID target")
 	assert.Equal(t, []string{"t2", "t1"}, teamNames(badges[1].Edges.Teams))
@@ -359,14 +359,14 @@ func TestKeys_EdgesM2MEagerLoad(t *testing.T) {
 	// Per-parent limit, with order and with a predicate.
 	must(client.Team.Update(db).Set(team.Fans.Add("p1", "p2")).Where(team.ID.EQ(f.t1.ID)).Exec(ctx)) // t1: p1..p4
 	must(client.Team.Update(db).Set(team.Fans.Add("p2", "p4")).Where(team.ID.EQ(f.t2.ID)).Exec(ctx)) // t2: p1, p2, p4
-	teams = must(client.Team.Query(db).OrderBy(team.Name.Asc()).WithFans(client.Player.Query(db).OrderBy(player.ID.Desc()).Limit(2)).All(ctx))
+	teams = must(client.Team.Query(db).OrderBy(team.Name.Asc()).With(team.Fans.Load(client.Player.Query(db).OrderBy(player.ID.Desc()).Limit(2))).All(ctx))
 	assert.Equal(t, []string{"p4", "p3"}, playerIDs(teams[0].Edges.Fans))
 	assert.Equal(t, []string{"p4", "p2"}, playerIDs(teams[1].Edges.Fans))
 	assert.Empty(t, teams[2].Edges.Fans)
-	teams = must(client.Team.Query(db).OrderBy(team.Name.Asc()).WithFans(client.Player.Query(db).Where(player.ID.NEQ("p4")).OrderBy(player.ID.Asc()).Limit(1)).All(ctx))
+	teams = must(client.Team.Query(db).OrderBy(team.Name.Asc()).With(team.Fans.Load(client.Player.Query(db).Where(player.ID.NEQ("p4")).OrderBy(player.ID.Asc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"p1"}, playerIDs(teams[0].Edges.Fans))
 	assert.Equal(t, []string{"p1"}, playerIDs(teams[1].Edges.Fans))
-	players = must(client.Player.Query(db).OrderBy(player.ID.Asc()).WithFanOf(client.Team.Query(db).OrderBy(team.Name.Desc()).Limit(1)).All(ctx))
+	players = must(client.Player.Query(db).OrderBy(player.ID.Asc()).With(player.FanOf.Load(client.Team.Query(db).OrderBy(team.Name.Desc()).Limit(1))).All(ctx))
 	assert.Equal(t, []string{"t2"}, teamNames(players[0].Edges.FanOf))
 	assert.Equal(t, []string{"t2"}, teamNames(players[1].Edges.FanOf))
 	assert.Equal(t, []string{"t1"}, teamNames(players[2].Edges.FanOf))
@@ -376,7 +376,7 @@ func TestKeys_EdgesM2MEagerLoad(t *testing.T) {
 	la, lb, w1, w2 := namedKeys(t, db)
 	_, _ = la, lb
 	w3 := must(client.WeightKey.Create(db).Set(weightkey.ID.Set(60), weightkey.Name.Set("w3"), weightkey.Labels.Add("lb"), weightkey.Peers.Add(w1.ID, w2.ID)).Save(ctx))
-	labels := must(client.LabelKey.Query(db).OrderBy(labelkey.ID.Asc()).WithWeights(client.WeightKey.Query(db).OrderBy(weightkey.ID.Desc())).All(ctx))
+	labels := must(client.LabelKey.Query(db).OrderBy(labelkey.ID.Asc()).With(labelkey.Weights.Load(client.WeightKey.Query(db).OrderBy(weightkey.ID.Desc()))).All(ctx))
 	require.Len(t, labels, 2)
 	weightIDs := func(ws []*entity.WeightKey) []types.Weight {
 		out := make([]types.Weight, len(ws))
@@ -388,7 +388,7 @@ func TestKeys_EdgesM2MEagerLoad(t *testing.T) {
 	assert.Equal(t, []types.Weight{50}, weightIDs(labels[0].Edges.Weights), "named string owner, named int target")
 	assert.Equal(t, []types.Weight{60, 50}, weightIDs(labels[1].Edges.Weights))
 	weights := must(client.WeightKey.Query(db).OrderBy(weightkey.ID.Asc()).
-		WithLabels(client.LabelKey.Query(db).OrderBy(labelkey.ID.Desc()).Limit(1)).WithPeers(client.WeightKey.Query(db).OrderBy(weightkey.ID.Asc())).All(ctx))
+		With(weightkey.Labels.Load(client.LabelKey.Query(db).OrderBy(labelkey.ID.Desc()).Limit(1))).With(weightkey.Peers.Load(client.WeightKey.Query(db).OrderBy(weightkey.ID.Asc()))).All(ctx))
 	require.Len(t, weights, 3)
 	assert.Empty(t, weights[0].Edges.Labels)
 	require.Len(t, weights[1].Edges.Labels, 1, "named int owner, named string target, limited per parent")
@@ -502,7 +502,7 @@ func TestEdges_OptionalNonNillableKey(t *testing.T) {
 	assert.Equal(t, []string{"b1", "g1"}, names(gadget.Owner.HasWith(author.Name.EQ("ann"))))
 	assert.Equal(t, []string{"b1", "g1"}, names(gadget.OwnerID.EQ(ann.ID)))
 
-	loaded := must(client.Gadget.Query(db).Where(gadget.Name.HasPrefix("g")).OrderBy(gadget.Name.Asc()).WithOwner().All(ctx))
+	loaded := must(client.Gadget.Query(db).Where(gadget.Name.HasPrefix("g")).OrderBy(gadget.Name.Asc()).With(gadget.Owner).All(ctx))
 	require.Len(t, loaded, 3)
 	assert.Equal(t, "ann", loaded[0].Edges.Owner.Name)
 	_, err := loaded[1].Edges.OwnerOrErr()
@@ -512,7 +512,7 @@ func TestEdges_OptionalNonNillableKey(t *testing.T) {
 	assert.Equal(t, "ann", must(g1.QueryOwner(db).Only(ctx)).Name)
 	_, err = g2.QueryOwner(db).Only(ctx)
 	assert.ErrorIs(t, err, velox.ErrNotFound)
-	authors := must(client.Author.Query(db).OrderBy(author.Name.Asc()).WithGadgets(client.Gadget.Query(db).OrderBy(gadget.Name.Asc())).All(ctx))
+	authors := must(client.Author.Query(db).OrderBy(author.Name.Asc()).With(author.Gadgets.Load(client.Gadget.Query(db).OrderBy(gadget.Name.Asc()))).All(ctx))
 	assert.Len(t, authors[0].Edges.Gadgets, 2)
 	assert.Len(t, authors[1].Edges.Gadgets, 2)
 
@@ -648,7 +648,7 @@ func TestQuery_Count(t *testing.T) {
 	assert.Equal(t, 4, must(q().Offset(10).Count(ctx)))
 	assert.Equal(t, 4, must(q().Limit(2).Offset(1).OrderBy(article.Title.Desc()).Count(ctx)))
 	assert.Equal(t, 4, must(q().Distinct().Count(ctx)))
-	assert.Equal(t, 4, must(q().WithTopics().WithAuthor().Count(ctx)))
+	assert.Equal(t, 4, must(q().With(article.Topics).With(article.Author).Count(ctx)))
 	// a1 has two topics and two notes: one row.
 	assert.Equal(t, 3, must(q().Where(article.Topics.Has()).Count(ctx)))
 	assert.Equal(t, 3, must(q().Where(article.Topics.Has()).Distinct().Limit(1).Count(ctx)))
@@ -673,7 +673,7 @@ func TestNames_FieldNamedEdges(t *testing.T) {
 	f := must(client.Field.Create(db).Set(nfield.Label.Set("f1")).Save(ctx))
 	e := must(client.EdgesField.Create(db).Set(edgesfield.EdgesField.Set("mine"), edgesfield.Fields.Add(f.ID)).Save(ctx))
 	assert.Equal(t, "mine", e.EdgesField)
-	got := must(client.EdgesField.Query(db).Where(edgesfield.EdgesField.EQ("mine")).WithFields().Only(ctx))
+	got := must(client.EdgesField.Query(db).Where(edgesfield.EdgesField.EQ("mine")).With(edgesfield.Fields).Only(ctx))
 	require.Len(t, got.Edges.Fields, 1)
 	out, err := json.Marshal(got)
 	require.NoError(t, err)
@@ -798,7 +798,7 @@ func TestTx_FailedMutationLeavesNothingBehind(t *testing.T) {
 	}))
 	assert.Zero(t, must(client.Article.Query(db).Where(article.Title.In("ghost", "half", "half one", "ghost 1", "ghost 2")).Count(ctx)),
 		"part of a failed mutation was committed")
-	kept := must(client.Article.Query(db).Where(article.Title.EQ("kept")).WithTopics().Only(ctx))
+	kept := must(client.Article.Query(db).Where(article.Title.EQ("kept")).With(article.Topics).Only(ctx))
 	assert.Len(t, kept.Edges.Topics, 1)
 }
 

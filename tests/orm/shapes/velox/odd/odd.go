@@ -63,34 +63,35 @@ var (
 var iDEdgeMeta = orm.EdgeMeta{Name: "id", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_id"}}
 
 // IDEdge is the "id" edge of Odd, to Field: conditions on it (Has, HasWith) and
-// changes to it (Add, Remove, Clear). A query eager-loads it with WithID.
+// changes to it (Add, Remove, Clear). A query eager-loads it with
+// With(odd.IDEdge).
 var IDEdge = &orm.ToMany[predicate.Odd, predicate.Field, int]{Meta: &iDEdgeMeta}
 
 var queryMeta = orm.EdgeMeta{Name: "query", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_query"}}
 
 // Query is the "query" edge of Odd, to Field: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithQuery.
+// With(odd.Query).
 var Query = &orm.ToMany[predicate.Odd, predicate.Field, int]{Meta: &queryMeta}
 
 var edgesMeta = orm.EdgeMeta{Name: "edges", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_edges"}}
 
 // Edges is the "edges" edge of Odd, to Field: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithEdges.
+// With(odd.Edges).
 var Edges = &orm.ToMany[predicate.Odd, predicate.Field, int]{Meta: &edgesMeta}
 
 var tableEdgeMeta = orm.EdgeMeta{Name: "table", Index: 3, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_table"}}
 
 // TableEdge is the "table" edge of Odd, to Field: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithTable.
+// With(odd.TableEdge).
 var TableEdge = &orm.ToOne[predicate.Odd, predicate.Field, int]{Meta: &tableEdgeMeta}
 
 var modelMeta = orm.EdgeMeta{Name: "model", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_model"}}
 
 // Model is the "model" edge of Odd, to Field: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithModel.
+// and changes to it (Set, Clear). A query eager-loads it with With(odd.Model).
 var Model = &orm.ToOne[predicate.Odd, predicate.Field, int]{Meta: &modelMeta}
 
 // EdgeMetas returns the descriptions of the edges of Odd, in order. The

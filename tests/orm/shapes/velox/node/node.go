@@ -31,26 +31,27 @@ var (
 var parentMeta = orm.EdgeMeta{Name: "parent", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
 
 // Parent is the "parent" edge of Node, to Node: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithParent.
+// and changes to it (Set, Clear). A query eager-loads it with
+// With(node.Parent).
 var Parent = &orm.ToOne[predicate.Node, predicate.Node, int]{Meta: &parentMeta}
 
 var childrenMeta = orm.EdgeMeta{Name: "children", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
 
 // Children is the "children" edge of Node, to Node: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithChildren.
+// With(node.Children).
 var Children = &orm.ToMany[predicate.Node, predicate.Node, int]{Meta: &childrenMeta}
 
 var prevMeta = orm.EdgeMeta{Name: "prev", Index: 2, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
 
 // Prev is the "prev" edge of Node, to Node: conditions on it (Has, HasWith) and
-// changes to it (Set, Clear). A query eager-loads it with WithPrev.
+// changes to it (Set, Clear). A query eager-loads it with With(node.Prev).
 var Prev = &orm.ToOne[predicate.Node, predicate.Node, int]{Meta: &prevMeta}
 
 var nextMeta = orm.EdgeMeta{Name: "next", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
 
 // Next is the "next" edge of Node, to Node: conditions on it (Has, HasWith) and
-// changes to it (Set, Clear). A query eager-loads it with WithNext.
+// changes to it (Set, Clear). A query eager-loads it with With(node.Next).
 var Next = &orm.ToOne[predicate.Node, predicate.Node, int]{Meta: &nextMeta}
 
 // EdgeMetas returns the descriptions of the edges of Node, in order. The

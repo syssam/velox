@@ -32,7 +32,7 @@ var assetsMeta = orm.EdgeMeta{Name: "assets", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Assets is the "assets" edge of Org, to Asset: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithAssets.
+// With(org.Assets).
 var Assets = &orm.ToMany[predicate.Org, predicate.Asset, int]{Meta: &assetsMeta}
 
 // EdgeMetas returns the descriptions of the edges of Org, in order. The

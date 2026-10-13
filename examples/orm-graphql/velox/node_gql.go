@@ -5,7 +5,6 @@ package velox
 import (
 	"context"
 
-	"example.com/orm-graphql/velox/entity"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
 )
@@ -33,33 +32,7 @@ type NodeType struct {
 // learns (a prefix in the id, or which type answered for a range of ids).
 func NodeTypes() []NodeType {
 	return []NodeType{
-		{Name: "Todo", Table: "todos", Get: Todo.node},
-		{Name: "User", Table: "users", Get: User.node},
+		{Name: "Todo", Table: "todos", Get: gqlinput.NodeGet[Noder](&Todo)},
+		{Name: "User", Table: "users", Get: gqlinput.NodeGet[Noder](&User)},
 	}
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *TodoClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.TodoMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *UserClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.UserMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
 }

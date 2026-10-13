@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Id starts the queries and mutations of Id.
-var Id IdClient
-
-// IdClient is the type of Id.
-type IdClient struct{}
-
-// Query returns a query of every Id, to run on ex: a database handle or a
-// transaction.
-func (*IdClient) Query(ex velox.Executor) *entity.IdQuery { return entity.NewIdQuery(ex) }
-
-// Create returns a builder that creates a Id.
-func (*IdClient) Create(ex velox.Executor) *entity.IdCreate { return entity.NewIdCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*IdClient) CreateBulk(ex velox.Executor, bs ...*entity.IdCreate) *entity.IdCreateBulk {
-	return entity.NewIdCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Id rows its conditions match.
-func (*IdClient) Update(ex velox.Executor) *entity.IdUpdate { return entity.NewIdUpdate(ex) }
-
-// Delete returns a builder that deletes the Id rows its conditions match.
-func (*IdClient) Delete(ex velox.Executor) *entity.IdDelete { return entity.NewIdDelete(ex) }
-
-// Get returns the Id with the given id, or velox.ErrNotFound.
-func (c *IdClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Id, error) {
-	return c.Query(ex).Where(predicate.Id(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Id with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *IdClient) UpdateByID(ex velox.Executor, id int) *entity.IdUpdate {
-	return c.Update(ex).Where(predicate.Id(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Id with the given id, or returns velox.ErrNotFound.
-func (c *IdClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Id(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.IdMeta.NotFound()
-	}
-	return err
-}
+// Id starts the queries and mutations of Id: Id.Query(ex), Create, CreateBulk,
+// Update, Delete, Get, UpdateByID, DeleteByID.
+var Id = orm.ClientOf[*entity.Id, predicate.Id, int]{Meta: &entity.IdMeta}

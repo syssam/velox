@@ -32,28 +32,28 @@ var spouseMeta = orm.EdgeMeta{Name: "spouse", Index: 0, Rel: orm.O2O, Inverse: f
 
 // Spouse is the "spouse" edge of Person, to Person: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithSpouse.
+// With(person.Spouse).
 var Spouse = &orm.ToOne[predicate.Person, predicate.Person, int]{Meta: &spouseMeta}
 
 var friendsMeta = orm.EdgeMeta{Name: "friends", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "person_friends", Columns: []string{"person_id", "friend_id"}}
 
 // Friends is the "friends" edge of Person, to Person: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithFriends.
+// With(person.Friends).
 var Friends = &orm.ToMany[predicate.Person, predicate.Person, int]{Meta: &friendsMeta}
 
 var followersMeta = orm.EdgeMeta{Name: "followers", Index: 2, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
 
 // Followers is the "followers" edge of Person, to Person: conditions on it
 // (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it
-// with WithFollowers.
+// with With(person.Followers).
 var Followers = &orm.ToMany[predicate.Person, predicate.Person, int]{Meta: &followersMeta}
 
 var followingMeta = orm.EdgeMeta{Name: "following", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
 
 // Following is the "following" edge of Person, to Person: conditions on it
 // (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it
-// with WithFollowing.
+// with With(person.Following).
 var Following = &orm.ToMany[predicate.Person, predicate.Person, int]{Meta: &followingMeta}
 
 // EdgeMetas returns the descriptions of the edges of Person, in order. The

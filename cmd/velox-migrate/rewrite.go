@@ -2173,9 +2173,20 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 		}
 	default:
 		if edge, ok := strings.CutPrefix(name, "With"); ok && e.edges[edge] {
-			if len(call.Args) > 0 && !r.loadOption(call) && !r.applyOption(call) {
-				r.note(call.Pos(), "%s with options: the option is a query of the neighbors now, %s(<root>.<Target>.Query(nil).Where(...))", name, name)
+			// An eager load is the query's With, given the edge of the
+			// entity's package: WithPosts() is With(user.Posts), and what
+			// described the load goes to the edge's Load.
+			desc := r.leaf(e, call.Pos()) + "." + edge
+			r.count("With")
+			if len(call.Args) == 0 {
+				r.replace(sel.Sel.Pos(), call.End(), "With("+desc+")")
+				return
 			}
+			if !r.loadOption(call) && !r.applyOption(call) {
+				r.note(call.Pos(), "%s with options: the option is a query of the neighbors now, With(%s.Load(<root>.<Target>.Query(nil).Where(...)))", name, desc)
+			}
+			r.replace(sel.Sel.Pos(), call.Lparen+1, "With("+desc+".Load(")
+			r.insert(call.Rparen, ")")
 			return
 		}
 		r.note(call.Pos(), "%s of a query: rewrite by hand", name)
@@ -2187,7 +2198,8 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 //
 //	WithItems(func(q *query.ItemQuery) { q.Where(...).Limit(3) })
 //
-// to the query itself, WithItems(<root>.Item.Query(nil).Where(...).Limit(3)).
+// to the query itself, <root>.Item.Query(nil).Where(...).Limit(3): what the
+// edge's Load takes.
 func (r *rewriter) loadOption(call *ast.CallExpr) bool {
 	if len(call.Args) != 1 {
 		return false
@@ -2246,7 +2258,7 @@ func (r *rewriter) loadOption(call *ast.CallExpr) bool {
 // applyOption rewrites the options of an eager load that are functions of
 // more than one statement, or kept in variables, to the query they shape:
 //
-//	WithItems(opt)    WithItems(orm.Apply(<root>.Item.Query(nil), opt))
+//	WithItems(opt)    orm.Apply(<root>.Item.Query(nil), opt)
 func (r *rewriter) applyOption(call *ast.CallExpr) bool {
 	var target *entityInfo
 	for _, a := range call.Args {

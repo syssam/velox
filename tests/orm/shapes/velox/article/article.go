@@ -40,35 +40,35 @@ var authorMeta = orm.EdgeMeta{Name: "author", Index: 0, Rel: orm.M2O, Inverse: t
 
 // Author is the "author" edge of Article, to Author: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithAuthor.
+// With(article.Author).
 var Author = &orm.ToOne[predicate.Article, predicate.Author, int]{Meta: &authorMeta}
 
 var editorMeta = orm.EdgeMeta{Name: "editor", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "articles", Columns: []string{"editor_id"}}
 
 // Editor is the "editor" edge of Article, to Author: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithEditor.
+// With(article.Editor).
 var Editor = &orm.ToOne[predicate.Article, predicate.Author, int]{Meta: &editorMeta}
 
 var topicsMeta = orm.EdgeMeta{Name: "topics", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_topics", Columns: []string{"article_id", "topic_id"}}
 
 // Topics is the "topics" edge of Article, to Topic: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithTopics.
+// With(article.Topics).
 var Topics = &orm.ToMany[predicate.Article, predicate.Topic, int]{Meta: &topicsMeta}
 
 var bannedTopicsMeta = orm.EdgeMeta{Name: "banned_topics", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
 
 // BannedTopics is the "banned_topics" edge of Article, to Topic: conditions on
 // it (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads
-// it with WithBannedTopics.
+// it with With(article.BannedTopics).
 var BannedTopics = &orm.ToMany[predicate.Article, predicate.Topic, int]{Meta: &bannedTopicsMeta}
 
 var notesMeta = orm.EdgeMeta{Name: "notes", Index: 4, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "notes", Columns: []string{"article_ref"}}
 
 // Notes is the "notes" edge of Article, to Note: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithNotes.
+// With(article.Notes).
 var Notes = &orm.ToMany[predicate.Article, predicate.Note, int]{Meta: &notesMeta}
 
 // EdgeMetas returns the descriptions of the edges of Article, in order. The

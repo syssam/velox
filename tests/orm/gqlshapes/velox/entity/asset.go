@@ -3,10 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
-
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
@@ -38,8 +34,6 @@ type AssetEdges struct {
 
 // OrgOrErr returns the org edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *AssetEdges) OrgOrErr() (*Org, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("org")
@@ -52,8 +46,6 @@ func (e *AssetEdges) OrgOrErr() (*Org, error) {
 
 // PersonOrErr returns the person edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *AssetEdges) PersonOrErr() (*Person, error) {
 	if !e.loaded[1] {
 		return nil, velox.NewNotLoadedError("person")
@@ -66,8 +58,6 @@ func (e *AssetEdges) PersonOrErr() (*Person, error) {
 
 // MakerOrErr returns the maker edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *AssetEdges) MakerOrErr() (*Person, error) {
 	if !e.loaded[2] {
 		return nil, velox.NewNotLoadedError("maker")
@@ -81,8 +71,6 @@ func (e *AssetEdges) MakerOrErr() (*Person, error) {
 // ptrAsset returns the address of the field of a Asset that holds its i-th
 // column: what a row is scanned into, and read from. It is the Ptr of
 // AssetMeta.
-//
-//go:noinline
 func ptrAsset(v any, i int) any {
 	e := v.(*Asset)
 	switch i {
@@ -106,8 +94,6 @@ func ptrAsset(v any, i int) any {
 
 // edgeAsset marks the i-th edge of a Asset as loaded and returns the address of
 // the field that holds its neighbors. It is the Edge of AssetMeta.
-//
-//go:noinline
 func edgeAsset(v any, i int) any {
 	e := v.(*Asset)
 	e.Edges.loaded[i] = true
@@ -125,8 +111,6 @@ func edgeAsset(v any, i int) any {
 // linkAsset stores the neighbors an eager load read into dst, the address of
 // the field of another entity's edge to Asset: all of them, or the first where
 // the edge has one. It is the Link of AssetMeta.
-//
-//go:noinline
 func linkAsset(dst any, es []any) {
 	switch d := dst.(type) {
 	case *[]*Asset:
@@ -141,21 +125,6 @@ func linkAsset(dst any, es []any) {
 			*d = es[0].(*Asset)
 		}
 	}
-}
-
-// AssetEdge is a row of a page of Asset, with its cursor.
-type AssetEdge struct {
-	Node   *Asset       `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// AssetConnection is one page of Asset.
-type AssetConnection struct {
-	Edges    []*AssetEdge   `json:"edges"`
-	PageInfo velox.PageInfo `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // AssetMeta is the runtime description of Asset. Use it through its address.
@@ -175,460 +144,33 @@ var AssetMeta = orm.Meta{
 	},
 }
 
-// AssetQuery is the query of Asset.
-type AssetQuery struct{ c orm.QueryCore }
-
-// NewAssetQuery returns a query of every Asset.
-func NewAssetQuery(ex velox.Executor) *AssetQuery {
-	return &AssetQuery{c: orm.QueryCore{M: &AssetMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *AssetQuery) Where(ps ...predicate.Asset) *AssetQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *AssetQuery) OrderBy(os ...predicate.AssetOrderTerm) *AssetQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *AssetQuery) Limit(n int) *AssetQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *AssetQuery) Offset(n int) *AssetQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *AssetQuery) Distinct() *AssetQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *AssetQuery) Columns(columns ...string) *AssetQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *AssetQuery) ForUpdate(opts ...orm.LockOption) *AssetQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *AssetQuery) ForShare(opts ...orm.LockOption) *AssetQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *AssetQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *AssetQuery) Clone() *AssetQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Asset.
-//
-//go:noinline
-func (q *AssetQuery) All(ctx context.Context) ([]*Asset, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Asset, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Asset)
-	}
-	return out, nil
-}
-
-// First returns the first matching Asset, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *AssetQuery) First(ctx context.Context) (*Asset, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Asset), nil
-}
-
-// Only returns the single matching Asset: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *AssetQuery) Only(ctx context.Context) (*Asset, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Asset), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *AssetQuery) Iter(ctx context.Context) iter.Seq2[*Asset, error] {
-	return func(yield func(*Asset, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Asset), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *AssetQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*AssetConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &AssetConnection{Edges: make([]*AssetEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &AssetEdge{Node: r.(*Asset), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *AssetQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *AssetQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *AssetQuery) IDs(ctx context.Context) ([]int, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(int)
-	}
-	return ids, nil
-}
-
-// AssetCreate creates one Asset.
-type AssetCreate struct{ c orm.MutCore }
-
-// NewAssetCreate returns a builder that creates a Asset.
-func NewAssetCreate(ex velox.Executor) *AssetCreate {
-	return &AssetCreate{c: orm.MutCore{M: &AssetMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *AssetCreate) Set(ss ...predicate.AssetSetter) *AssetCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Asset, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Asset is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *AssetCreate) Fill(in any, skip ...string) *AssetCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *AssetCreate) Save(ctx context.Context) (*Asset, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Asset), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *AssetCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// AssetCreateBulk creates several Asset rows with one statement.
-type AssetCreateBulk struct {
-	ex velox.Executor
-	bs []*AssetCreate
-	n  int
-}
-
-// NewAssetCreateBulk returns a builder that creates one row per given builder,
-// as each is when the rows are inserted: what is set on one after this call is
-// part of its row.
-func NewAssetCreateBulk(ex velox.Executor, bs ...*AssetCreate) *AssetCreateBulk {
-	return &AssetCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *AssetCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *AssetCreateBulk) BatchSize(n int) *AssetCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *AssetCreateBulk) Save(ctx context.Context) ([]*Asset, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &AssetMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Asset, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Asset)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *AssetCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &AssetMeta, b.sets(), b.n)
-	return err
-}
-
-// AssetUpdate updates Asset rows.
-type AssetUpdate struct{ c orm.MutCore }
-
-// NewAssetUpdate returns a builder that updates the rows its predicates match.
-func NewAssetUpdate(ex velox.Executor) *AssetUpdate {
-	return &AssetUpdate{c: orm.MutCore{M: &AssetMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *AssetUpdate) Set(ss ...predicate.AssetSetter) *AssetUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *AssetUpdate) Where(ps ...predicate.Asset) *AssetUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *AssetUpdate) Fill(in any, skip ...string) *AssetUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *AssetUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *AssetUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *AssetUpdate) SaveOne(ctx context.Context) (*Asset, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Asset), nil
-}
-
-// AssetDelete deletes Asset rows.
-type AssetDelete struct{ c orm.MutCore }
-
-// NewAssetDelete returns a builder that deletes the rows its predicates match.
-func NewAssetDelete(ex velox.Executor) *AssetDelete {
-	return &AssetDelete{c: orm.MutCore{M: &AssetMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *AssetDelete) Where(ps ...predicate.Asset) *AssetDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *AssetDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Asset, and a page of it: what the root package's Asset
+// returns. Their methods are those of the types of package orm.
+type (
+	AssetQuery      = orm.QueryOf[*Asset, predicate.Asset, int]
+	AssetCreate     = orm.CreateOf[*Asset, predicate.Asset]
+	AssetCreateBulk = orm.CreateBulkOf[*Asset, predicate.Asset]
+	AssetUpdate     = orm.UpdateOf[*Asset, predicate.Asset]
+	AssetDelete     = orm.DeleteOf[predicate.Asset]
+	// AssetEdge is a row of a page of Asset, with its cursor, and
+	// AssetConnection one page: what Paginate returns.
+	AssetEdge       = orm.PageEdge[*Asset]
+	AssetConnection = orm.Connection[*Asset]
+)
 
 // QueryOrg queries the "org" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Asset) QueryOrg(ex velox.Executor) *OrgQuery {
-	q := NewOrgQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(AssetMeta.Edges[0], e))
-	return q
-}
-
-// WithOrg eager-loads the "org" edge: one more query, whatever the number
-// of rows. A query of Org given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Asset.
-//
-//go:noinline
-func (q *AssetQuery) WithOrg(opts ...*OrgQuery) *AssetQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(AssetMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*Org, predicate.Org, int](AssetMeta.Edges[0], e, ex)
 }
 
 // QueryPerson queries the "person" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Asset) QueryPerson(ex velox.Executor) *PersonQuery {
-	q := NewPersonQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(AssetMeta.Edges[1], e))
-	return q
-}
-
-// WithPerson eager-loads the "person" edge: one more query, whatever the number
-// of rows. A query of Person given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Asset.
-//
-//go:noinline
-func (q *AssetQuery) WithPerson(opts ...*PersonQuery) *AssetQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(AssetMeta.Edges[1], o, len(opts))
-	return q
+	return orm.Neighbors[*Person, predicate.Person, int](AssetMeta.Edges[1], e, ex)
 }
 
 // QueryMaker queries the "maker" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Asset) QueryMaker(ex velox.Executor) *PersonQuery {
-	q := NewPersonQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(AssetMeta.Edges[2], e))
-	return q
-}
-
-// WithMaker eager-loads the "maker" edge: one more query, whatever the number
-// of rows. A query of Person given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Asset.
-//
-//go:noinline
-func (q *AssetQuery) WithMaker(opts ...*PersonQuery) *AssetQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(AssetMeta.Edges[2], o, len(opts))
-	return q
+	return orm.Neighbors[*Person, predicate.Person, int](AssetMeta.Edges[2], e, ex)
 }
 
 func init() {

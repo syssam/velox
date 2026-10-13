@@ -32,13 +32,14 @@ var assetsMeta = orm.EdgeMeta{Name: "assets", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Assets is the "assets" edge of Person, to Asset: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithAssets.
+// With(person.Assets).
 var Assets = &orm.ToMany[predicate.Person, predicate.Asset, int]{Meta: &assetsMeta}
 
 var madeMeta = orm.EdgeMeta{Name: "made", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "assets", Columns: []string{"person_made"}}
 
 // Made is the "made" edge of Person, to Asset: conditions on it (Has, HasWith)
-// and changes to it (Add, Remove, Clear). A query eager-loads it with WithMade.
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// With(person.Made).
 var Made = &orm.ToMany[predicate.Person, predicate.Asset, int]{Meta: &madeMeta}
 
 // EdgeMetas returns the descriptions of the edges of Person, in order. The

@@ -87,9 +87,6 @@ type Entity struct {
 	ID     *Field
 	Fields []*Field // id first, then schema fields, then hidden foreign keys
 	Edges  []*Edge
-	// Client is the type of the entity's client in the root package:
-	// UserClient for User.
-	Client string
 	linked bool      // some edge targets the entity
 	alias  string    // name package entity imports the entity package under
 	pnames [2]string // its Setter and OrderTerm types in the predicate package
@@ -105,7 +102,6 @@ type Entity struct {
 // named like one of them (the setters of Purchase and an entity called
 // PurchaseSetter).
 func (e *Entity) pred() string  { return "predicate." + e.Name }
-func (e *Entity) set() string   { return "predicate." + e.pnames[0] }
 func (e *Entity) order() string { return "predicate." + e.pnames[1] }
 
 // Generator is one generation: the entities of a graph and the names taken
@@ -185,7 +181,6 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 			return fmt.Errorf("velox: %s: %w", e.Name, err)
 		}
 	}
-	g.clientTypes()
 	// An extension reads the entities, and takes the names it will declare,
 	// before any file is written.
 	for _, x := range cfg.Extensions {

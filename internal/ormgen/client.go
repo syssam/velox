@@ -40,10 +40,10 @@ func (g *Generator) client() (map[string][]byte, error) {
 
 	taken := map[string]bool{}
 	for _, e := range g.ents {
-		taken[e.Name], taken[e.Client] = true, true
+		taken[e.Name] = true
 	}
 	for _, e := range g.ents {
-		n, t := g.names(e), e.Client
+		n := g.names(e)
 		ref, err := goTypeOf(e.ID.F)
 		if err != nil {
 			return nil, fmt.Errorf("velox: %s: %w", e.Name, err)
@@ -53,49 +53,9 @@ func (g *Generator) client() (map[string][]byte, error) {
 		}
 		id := ref.Expr
 		w("\n%s%s\n\n", fileMarker, fileName(e))
-		w(`// %[2]s starts the queries and mutations of %[2]s.
-var %[2]s %[1]s
-
-// %[1]s is the type of %[2]s.
-type %[1]s struct{}
-
-// Query returns a query of every %[2]s, to run on ex: a database handle or a
-// transaction.
-func (*%[1]s) Query(ex velox.Executor) *%[3]s.%[4]s { return %[3]s.%[5]s(ex) }
-
-// Create returns a builder that creates a %[2]s.
-func (*%[1]s) Create(ex velox.Executor) *%[3]s.%[6]s { return %[3]s.%[7]s(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one statement.
-func (*%[1]s) CreateBulk(ex velox.Executor, bs ...*%[3]s.%[6]s) *%[3]s.%[8]s { return %[3]s.%[9]s(ex, bs...) }
-
-// Update returns a builder that updates the %[2]s rows its conditions match.
-func (*%[1]s) Update(ex velox.Executor) *%[3]s.%[10]s { return %[3]s.%[11]s(ex) }
-
-// Delete returns a builder that deletes the %[2]s rows its conditions match.
-func (*%[1]s) Delete(ex velox.Executor) *%[3]s.%[12]s { return %[3]s.%[13]s(ex) }
-
-// Get returns the %[2]s with the given id, or velox.ErrNotFound.
-func (c *%[1]s) Get(ctx %[14]s.Context, ex velox.Executor, id %[15]s) (*%[3]s.%[2]s, error) {
-	return c.Query(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the %[2]s with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *%[1]s) UpdateByID(ex velox.Executor, id %[15]s) *%[3]s.%[10]s {
-	return c.Update(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id}))
-}
-
-// DeleteByID deletes the %[2]s with the given id, or returns velox.ErrNotFound.
-func (c *%[1]s) DeleteByID(ctx %[14]s.Context, ex velox.Executor, id %[15]s) error {
-	n, err := c.Delete(ex).Where(%[16]s(orm.P{Op: orm.OpEQ, Col: %[17]q, Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = %[3]s.%[18]s.NotFound()
-	}
-	return err
-}
-
-`, t, e.Name, modelPkg, n.Query, n.NewQuery, n.Create, n.NewCreate, n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, n.Delete, n.NewDelete, ctxPkg, id, e.pred(), e.ID.Col, n.Meta)
+		// The entity's variable is a value of the client type of package orm:
+		// nothing of it is compiled here (orm/builders.go).
+		w("// %[1]s starts the queries and mutations of %[1]s:\n// %[1]s.Query(ex), Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.\nvar %[1]s = orm.ClientOf[*%[2]s.%[1]s, %[3]s, %[4]s]{Meta: &%[2]s.%[5]s}\n\n", e.Name, modelPkg, e.pred(), id, n.Meta)
 	}
 	// What the package gives of the library under its own name.
 	for n := range g.rootTaken {

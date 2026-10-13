@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Odd starts the queries and mutations of Odd.
-var Odd OddClient
-
-// OddClient is the type of Odd.
-type OddClient struct{}
-
-// Query returns a query of every Odd, to run on ex: a database handle or a
-// transaction.
-func (*OddClient) Query(ex velox.Executor) *entity.OddQuery { return entity.NewOddQuery(ex) }
-
-// Create returns a builder that creates a Odd.
-func (*OddClient) Create(ex velox.Executor) *entity.OddCreate { return entity.NewOddCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*OddClient) CreateBulk(ex velox.Executor, bs ...*entity.OddCreate) *entity.OddCreateBulk {
-	return entity.NewOddCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Odd rows its conditions match.
-func (*OddClient) Update(ex velox.Executor) *entity.OddUpdate { return entity.NewOddUpdate(ex) }
-
-// Delete returns a builder that deletes the Odd rows its conditions match.
-func (*OddClient) Delete(ex velox.Executor) *entity.OddDelete { return entity.NewOddDelete(ex) }
-
-// Get returns the Odd with the given id, or velox.ErrNotFound.
-func (c *OddClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Odd, error) {
-	return c.Query(ex).Where(predicate.Odd(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Odd with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *OddClient) UpdateByID(ex velox.Executor, id int) *entity.OddUpdate {
-	return c.Update(ex).Where(predicate.Odd(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Odd with the given id, or returns velox.ErrNotFound.
-func (c *OddClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Odd(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.OddMeta.NotFound()
-	}
-	return err
-}
+// Odd starts the queries and mutations of Odd: Odd.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Odd = orm.ClientOf[*entity.Odd, predicate.Odd, int]{Meta: &entity.OddMeta}

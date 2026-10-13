@@ -47,7 +47,7 @@ ann, err := velox.User.Create(conn).
 adults, err := velox.User.Query(conn).
     Where(user.Age.GTE(18), user.Posts.HasWith(post.Status.EQ(post.StatusPublished))).
     OrderBy(user.Name.Asc()).
-    WithPosts().
+    With(user.Posts).
     All(ctx)
 
 // Update and delete.

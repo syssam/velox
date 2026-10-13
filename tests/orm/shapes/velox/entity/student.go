@@ -3,10 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
-
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
@@ -31,8 +27,6 @@ type StudentEdges struct {
 
 // CoursesOrErr returns the courses edge, or an error when it was not loaded
 // (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *StudentEdges) CoursesOrErr() ([]*Course, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("courses")
@@ -42,8 +36,6 @@ func (e *StudentEdges) CoursesOrErr() ([]*Course, error) {
 
 // EnrollmentsOrErr returns the enrollments edge, or an error when it was not
 // loaded (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *StudentEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
 	if !e.loaded[1] {
 		return nil, velox.NewNotLoadedError("enrollments")
@@ -54,8 +46,6 @@ func (e *StudentEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
 // ptrStudent returns the address of the field of a Student that holds its i-th
 // column: what a row is scanned into, and read from. It is the Ptr of
 // StudentMeta.
-//
-//go:noinline
 func ptrStudent(v any, i int) any {
 	e := v.(*Student)
 	switch i {
@@ -69,8 +59,6 @@ func ptrStudent(v any, i int) any {
 
 // edgeStudent marks the i-th edge of a Student as loaded and returns the
 // address of the field that holds its neighbors. It is the Edge of StudentMeta.
-//
-//go:noinline
 func edgeStudent(v any, i int) any {
 	e := v.(*Student)
 	e.Edges.loaded[i] = true
@@ -86,8 +74,6 @@ func edgeStudent(v any, i int) any {
 // linkStudent stores the neighbors an eager load read into dst, the address of
 // the field of another entity's edge to Student: all of them, or the first
 // where the edge has one. It is the Link of StudentMeta.
-//
-//go:noinline
 func linkStudent(dst any, es []any) {
 	switch d := dst.(type) {
 	case *[]*Student:
@@ -102,21 +88,6 @@ func linkStudent(dst any, es []any) {
 			*d = es[0].(*Student)
 		}
 	}
-}
-
-// StudentEdge is a row of a page of Student, with its cursor.
-type StudentEdge struct {
-	Node   *Student     `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// StudentConnection is one page of Student.
-type StudentConnection struct {
-	Edges    []*StudentEdge `json:"edges"`
-	PageInfo velox.PageInfo `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // StudentMeta is the runtime description of Student. Use it through its
@@ -135,439 +106,28 @@ var StudentMeta = orm.Meta{
 	},
 }
 
-// StudentQuery is the query of Student.
-type StudentQuery struct{ c orm.QueryCore }
-
-// NewStudentQuery returns a query of every Student.
-func NewStudentQuery(ex velox.Executor) *StudentQuery {
-	return &StudentQuery{c: orm.QueryCore{M: &StudentMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *StudentQuery) Where(ps ...predicate.Student) *StudentQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *StudentQuery) OrderBy(os ...predicate.StudentOrderTerm) *StudentQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *StudentQuery) Limit(n int) *StudentQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *StudentQuery) Offset(n int) *StudentQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *StudentQuery) Distinct() *StudentQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *StudentQuery) Columns(columns ...string) *StudentQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *StudentQuery) ForUpdate(opts ...orm.LockOption) *StudentQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *StudentQuery) ForShare(opts ...orm.LockOption) *StudentQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *StudentQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *StudentQuery) Clone() *StudentQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Student.
-//
-//go:noinline
-func (q *StudentQuery) All(ctx context.Context) ([]*Student, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Student, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Student)
-	}
-	return out, nil
-}
-
-// First returns the first matching Student, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *StudentQuery) First(ctx context.Context) (*Student, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Student), nil
-}
-
-// Only returns the single matching Student: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *StudentQuery) Only(ctx context.Context) (*Student, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Student), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *StudentQuery) Iter(ctx context.Context) iter.Seq2[*Student, error] {
-	return func(yield func(*Student, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Student), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *StudentQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*StudentConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &StudentConnection{Edges: make([]*StudentEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &StudentEdge{Node: r.(*Student), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *StudentQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *StudentQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *StudentQuery) IDs(ctx context.Context) ([]int, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(int)
-	}
-	return ids, nil
-}
-
-// StudentCreate creates one Student.
-type StudentCreate struct{ c orm.MutCore }
-
-// NewStudentCreate returns a builder that creates a Student.
-func NewStudentCreate(ex velox.Executor) *StudentCreate {
-	return &StudentCreate{c: orm.MutCore{M: &StudentMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *StudentCreate) Set(ss ...predicate.StudentSetter) *StudentCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Student, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Student is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *StudentCreate) Fill(in any, skip ...string) *StudentCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *StudentCreate) Save(ctx context.Context) (*Student, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Student), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *StudentCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// StudentCreateBulk creates several Student rows with one statement.
-type StudentCreateBulk struct {
-	ex velox.Executor
-	bs []*StudentCreate
-	n  int
-}
-
-// NewStudentCreateBulk returns a builder that creates one row per given
-// builder, as each is when the rows are inserted: what is set on one after this
-// call is part of its row.
-func NewStudentCreateBulk(ex velox.Executor, bs ...*StudentCreate) *StudentCreateBulk {
-	return &StudentCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *StudentCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *StudentCreateBulk) BatchSize(n int) *StudentCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *StudentCreateBulk) Save(ctx context.Context) ([]*Student, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &StudentMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Student, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Student)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *StudentCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &StudentMeta, b.sets(), b.n)
-	return err
-}
-
-// StudentUpdate updates Student rows.
-type StudentUpdate struct{ c orm.MutCore }
-
-// NewStudentUpdate returns a builder that updates the rows its predicates
-// match.
-func NewStudentUpdate(ex velox.Executor) *StudentUpdate {
-	return &StudentUpdate{c: orm.MutCore{M: &StudentMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *StudentUpdate) Set(ss ...predicate.StudentSetter) *StudentUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *StudentUpdate) Where(ps ...predicate.Student) *StudentUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *StudentUpdate) Fill(in any, skip ...string) *StudentUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *StudentUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *StudentUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *StudentUpdate) SaveOne(ctx context.Context) (*Student, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Student), nil
-}
-
-// StudentDelete deletes Student rows.
-type StudentDelete struct{ c orm.MutCore }
-
-// NewStudentDelete returns a builder that deletes the rows its predicates
-// match.
-func NewStudentDelete(ex velox.Executor) *StudentDelete {
-	return &StudentDelete{c: orm.MutCore{M: &StudentMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *StudentDelete) Where(ps ...predicate.Student) *StudentDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *StudentDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Student, and a page of it: what the root package's Student
+// returns. Their methods are those of the types of package orm.
+type (
+	StudentQuery      = orm.QueryOf[*Student, predicate.Student, int]
+	StudentCreate     = orm.CreateOf[*Student, predicate.Student]
+	StudentCreateBulk = orm.CreateBulkOf[*Student, predicate.Student]
+	StudentUpdate     = orm.UpdateOf[*Student, predicate.Student]
+	StudentDelete     = orm.DeleteOf[predicate.Student]
+	// StudentEdge is a row of a page of Student, with its cursor, and
+	// StudentConnection one page: what Paginate returns.
+	StudentEdge       = orm.PageEdge[*Student]
+	StudentConnection = orm.Connection[*Student]
+)
 
 // QueryCourses queries the "courses" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Student) QueryCourses(ex velox.Executor) *CourseQuery {
-	q := NewCourseQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(StudentMeta.Edges[0], e))
-	return q
-}
-
-// WithCourses eager-loads the "courses" edge: one more query, whatever the
-// number of rows. A query of Course given to it describes the load: its
-// conditions, order, nested loads and its limit, which applies per Student.
-//
-//go:noinline
-func (q *StudentQuery) WithCourses(opts ...*CourseQuery) *StudentQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(StudentMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*Course, predicate.Course, int](StudentMeta.Edges[0], e, ex)
 }
 
 // QueryEnrollments queries the "enrollments" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Student) QueryEnrollments(ex velox.Executor) *EnrollmentQuery {
-	q := NewEnrollmentQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(StudentMeta.Edges[1], e))
-	return q
-}
-
-// WithEnrollments eager-loads the "enrollments" edge: one more query, whatever
-// the number of rows. A query of Enrollment given to it describes the load: its
-// conditions, order, nested loads and its limit, which applies per Student.
-//
-//go:noinline
-func (q *StudentQuery) WithEnrollments(opts ...*EnrollmentQuery) *StudentQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(StudentMeta.Edges[1], o, len(opts))
-	return q
+	return orm.Neighbors[*Enrollment, predicate.Enrollment, int](StudentMeta.Edges[1], e, ex)
 }
 
 func init() {

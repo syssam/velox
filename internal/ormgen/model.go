@@ -13,8 +13,7 @@ import (
 type Names struct {
 	Meta, Edges                               string
 	Query, Create, CreateBulk, Update, Delete string
-	NewQuery, NewCreate, NewCreateBulk        string
-	NewUpdate, NewDelete, ptr, edge, link     string
+	ptr, edge, link                           string
 }
 
 func (g *Generator) names(e *Entity) Names { return namesOf(e.Name) }
@@ -23,16 +22,13 @@ func (g *Generator) names(e *Entity) Names { return namesOf(e.Name) }
 // always gets.
 func reservedNames(n string) []string {
 	x := namesOf(n)
-	return []string{x.Meta, x.Edges, n + "Edge", n + "Connection", x.Query, x.Create, x.CreateBulk, x.Update, x.Delete,
-		x.NewQuery, x.NewCreate, x.NewCreateBulk, x.NewUpdate, x.NewDelete}
+	return []string{x.Meta, x.Edges, n + "Edge", n + "Connection", x.Query, x.Create, x.CreateBulk, x.Update, x.Delete}
 }
 
 func namesOf(n string) Names {
 	return Names{
 		Meta: n + "Meta", Edges: n + "Edges",
 		Query: n + "Query", Create: n + "Create", CreateBulk: n + "CreateBulk", Update: n + "Update", Delete: n + "Delete",
-		NewQuery: "New" + n + "Query", NewCreate: "New" + n + "Create", NewCreateBulk: "New" + n + "CreateBulk",
-		NewUpdate: "New" + n + "Update", NewDelete: "New" + n + "Delete",
 		ptr: "ptr" + n, edge: "edge" + n, link: "link" + n,
 	}
 }
@@ -163,26 +159,6 @@ func (g *Generator) model() (map[string][]byte, error) {
 			w("// %[1]s stores the neighbors an eager load read into dst, the address of the\n// field of another entity's edge to %[2]s: all of them, or the first where the\n// edge has one. It is the Link of %[3]s.\nfunc %[1]s(dst any, es []any) {\n\tswitch d := dst.(type) {\n\tcase *[]*%[2]s:\n\t\ts := make([]*%[2]s, len(es))\n\t\tfor i, e := range es {\n\t\t\ts[i] = e.(*%[2]s)\n\t\t}\n\t\t*d = s\n\tcase **%[2]s:\n\t\t*d = nil\n\t\tif len(es) > 0 {\n\t\t\t*d = es[0].(*%[2]s)\n\t\t}\n\t}\n}\n\n", n.link, e.Name, n.Meta)
 		}
 
-		// One page of the entity: what Paginate returns. The shape and the
-		// field names are Relay's, which is also what a GraphQL engine binds
-		// the entity's connection type to.
-		w(`// %[1]sEdge is a row of a page of %[1]s, with its cursor.
-type %[1]sEdge struct {
-	Node   *%[1]s     `+"`json:\"node\"`"+`
-	Cursor velox.Cursor `+"`json:\"cursor\"`"+`
-}
-
-// %[1]sConnection is one page of %[1]s.
-type %[1]sConnection struct {
-	Edges    []*%[1]sEdge `+"`json:\"edges\"`"+`
-	PageInfo velox.PageInfo `+"`json:\"pageInfo\"`"+`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `+"`json:\"totalCount\"`"+`
-}
-
-`, e.Name)
-
 		// Meta.
 		var cols []string
 		for _, f := range e.Fields {
@@ -243,350 +219,37 @@ type %[1]sConnection struct {
 			w("// String renders the %[1]s without its sensitive fields, so that printing\n// one does not put a secret in a log.\nfunc (e *%[1]s) String() string { return orm.Describe(&%[2]s, e) }\n\n", e.Name, n.Meta)
 		}
 
-		// Query.
-		w(`// %[1]s is the query of %[2]s.
-type %[1]s struct{ c orm.QueryCore }
+		// The builders, and a page of the entity: types of package orm under
+		// the entity's names. They are not written out per entity because
+		// their methods then are in this package, the one every package of an
+		// application reads: see orm/builders.go for what that cost.
+		w(`// The builders of %[1]s, and a page of it: what the root package's %[1]s
+// returns. Their methods are those of the types of package orm.
+type (
+	%[2]s = orm.QueryOf[*%[1]s, %[3]s, %[4]s]
+	%[5]s = orm.CreateOf[*%[1]s, %[3]s]
+	%[6]s = orm.CreateBulkOf[*%[1]s, %[3]s]
+	%[7]s = orm.UpdateOf[*%[1]s, %[3]s]
+	%[8]s = orm.DeleteOf[%[3]s]
+	// %[1]sEdge is a row of a page of %[1]s, with its cursor, and
+	// %[1]sConnection one page: what Paginate returns.
+	%[1]sEdge       = orm.PageEdge[*%[1]s]
+	%[1]sConnection = orm.Connection[*%[1]s]
+)
 
-// %[3]s returns a query of every %[2]s.
-func %[3]s(ex velox.Executor) *%[1]s { return &%[1]s{c: orm.QueryCore{M: &%[4]s, Ex: ex}} }
+`, e.Name, n.Query, e.pred(), id.Base, n.Create, n.CreateBulk, n.Update, n.Delete)
 
-// Where adds predicates; all must hold.
-func (q *%[1]s) Where(ps ...%[5]s) *%[1]s {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-func (q *%[1]s) OrderBy(os ...%[6]s) *%[1]s {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-func (q *%[1]s) Limit(n int) *%[1]s { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-func (q *%[1]s) Offset(n int) *%[1]s { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-func (q *%[1]s) Distinct() *%[1]s { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-func (q *%[1]s) Columns(columns ...string) *%[1]s { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-func (q *%[1]s) ForUpdate(opts ...orm.LockOption) *%[1]s { q.c.SetLock(orm.LockUpdate, opts); return q }
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-func (q *%[1]s) ForShare(opts ...orm.LockOption) *%[1]s { q.c.SetLock(orm.LockShare, opts); return q }
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-func (q *%[1]s) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-func (q *%[1]s) Clone() *%[1]s {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching %[2]s.
-func (q *%[1]s) All(ctx context.Context) ([]*%[2]s, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*%[2]s, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*%[2]s)
-	}
-	return out, nil
-}
-
-// First returns the first matching %[2]s, or velox.ErrNotFound.
-func (q *%[1]s) First(ctx context.Context) (*%[2]s, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*%[2]s), nil
-}
-
-// Only returns the single matching %[2]s: velox.ErrNotFound for none, velox.ErrNotSingular for more.
-func (q *%[1]s) Only(ctx context.Context) (*%[2]s, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*%[2]s), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-func (q *%[1]s) Iter(ctx context.Context) iter.Seq2[*%[2]s, error] {
-	return func(yield func(*%[2]s, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*%[2]s), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-func (q *%[1]s) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*%[2]sConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &%[2]sConnection{Edges: make([]*%[2]sEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &%[2]sEdge{Node: r.(*%[2]s), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-func (q *%[1]s) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-func (q *%[1]s) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-func (q *%[1]s) IDs(ctx context.Context) ([]%[8]s, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]%[8]s, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(%[8]s)
-	}
-	return ids, nil
-}
-
-`, n.Query, e.Name, n.NewQuery, n.Meta, e.pred(), e.order(), "", id.Base)
-
-		// Mutations.
-		w(`// %[1]s creates one %[2]s.
-type %[1]s struct{ c orm.MutCore }
-
-// %[3]s returns a builder that creates a %[2]s.
-func %[3]s(ex velox.Executor) *%[1]s { return &%[1]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
-
-// Set adds field values and edges of the new row.
-func (b *%[1]s) Set(ss ...%[5]s) *%[1]s {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// %[2]s, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of %[2]s is an error unless listed in
-// skip. A later Set wins.
-func (b *%[1]s) Fill(in any, skip ...string) *%[1]s {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-func (b *%[1]s) Save(ctx context.Context) (*%[2]s, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*%[2]s), nil
-}
-
-// Exec inserts the row.
-func (b *%[1]s) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// %[6]s creates several %[2]s rows with one statement.
-type %[6]s struct {
-	ex velox.Executor
-	bs []*%[1]s
-	n  int
-}
-
-// %[7]s returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
-func %[7]s(ex velox.Executor, bs ...*%[1]s) *%[6]s {
-	return &%[6]s{ex: ex, bs: bs}
-}
-
-func (b *%[6]s) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-func (b *%[6]s) BatchSize(n int) *%[6]s {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-func (b *%[6]s) Save(ctx context.Context) ([]*%[2]s, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &%[4]s, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*%[2]s, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*%[2]s)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-func (b *%[6]s) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &%[4]s, b.sets(), b.n)
-	return err
-}
-
-// %[8]s updates %[2]s rows.
-type %[8]s struct{ c orm.MutCore }
-
-// %[9]s returns a builder that updates the rows its predicates match.
-func %[9]s(ex velox.Executor) *%[8]s { return &%[8]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
-
-// Set adds assignments and edge changes.
-func (b *%[8]s) Set(ss ...%[5]s) *%[8]s {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-func (b *%[8]s) Where(ps ...%[10]s) *%[8]s {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-func (b *%[8]s) Fill(in any, skip ...string) *%[8]s {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-func (b *%[8]s) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-func (b *%[8]s) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-func (b *%[8]s) SaveOne(ctx context.Context) (*%[2]s, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*%[2]s), nil
-}
-
-// %[11]s deletes %[2]s rows.
-type %[11]s struct{ c orm.MutCore }
-
-// %[12]s returns a builder that deletes the rows its predicates match.
-func %[12]s(ex velox.Executor) *%[11]s { return &%[11]s{c: orm.MutCore{M: &%[4]s, Ex: ex}} }
-
-// Where restricts the rows deleted; all predicates must hold.
-func (b *%[11]s) Where(ps ...%[10]s) *%[11]s {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-func (b *%[11]s) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
-
-`, n.Create, e.Name, n.NewCreate, n.Meta, e.set(), n.CreateBulk, n.NewCreateBulk, n.Update, n.NewUpdate, e.pred(), n.Delete, n.NewDelete)
-		// The edges of the entity: u.QueryPosts(ex) on the entity, WithPosts
-		// on its query.
-		//
-		// Both name the query builder of another entity, and a Go package
-		// compiles against everything the types it names expose, so a
-		// package that names one entity reads the query builder of every
-		// entity. Keeping the builders out of reach (the neighbors queried
-		// from the root package, db.User.QueryPosts(ex, u), and WithPosts
-		// taking an interface) made the 312 services of the benchmark compile
-		// a quarter faster, 110-114 CPU-s against 140-154. It was given up
-		// for the spelling: one way to query an edge, the one that reads
-		// best. What it costs is in proportion to the methods of a query
-		// type, so a method added there is paid for by every package.
+		// The edges of the entity: u.QueryPosts(ex) queries the neighbors of
+		// one row. (Eager loading is the query's With, which takes the edge
+		// of the entity's package: With(user.Posts).)
 		for _, x := range e.Edges {
 			t := g.names(x.Target)
-			w(`// Query%[1]s queries the %[2]q neighbors of e, on ex.
-func (e *%[3]s) Query%[1]s(ex velox.Executor) *%[4]s {
-	q := %[5]s(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(%[6]s.Edges[%[7]d], e))
-	return q
-}
-
-// With%[1]s eager-loads the %[2]q edge: one more query, whatever the number
-// of rows. A query of %[8]s given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per %[3]s.
-func (q *%[9]s) With%[1]s(opts ...*%[4]s) *%[9]s {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(%[6]s.Edges[%[7]d], o, len(opts))
-	return q
-}
-
-`, x.GoName, x.E.Name, e.Name, t.Query, t.NewQuery, n.Meta, x.Index, x.Target.Name, n.Query)
+			tid, err := goTypeOf(x.Target.ID.F)
+			if err != nil {
+				return nil, fmt.Errorf("velox: %s: edge %q: %w", e.Name, x.E.Name, err)
+			}
+			w("// Query%[1]s queries the %[2]q neighbors of e, on ex.\nfunc (e *%[3]s) Query%[1]s(ex velox.Executor) *%[4]s {\n\treturn orm.Neighbors[*%[5]s, %[6]s, %[7]s](%[8]s.Edges[%[9]d], e, ex)\n}\n\n",
+				x.GoName, x.E.Name, e.Name, t.Query, x.Target.Name, x.Target.pred(), tid.Expr, n.Meta, x.Index)
 		}
 
 		// An edge is described by data in its owner's package, which cannot
@@ -608,29 +271,30 @@ func (q *%[9]s) With%[1]s(opts ...*%[4]s) *%[9]s {
 
 	var out bytes.Buffer
 	out.WriteString(header)
-	out.WriteString("// Package entity holds every entity, its typed builders and its runtime description:\n// a file per entity.\npackage entity\n\n")
+	out.WriteString("// Package entity holds every entity, the names of its builders and its runtime\n// description: a file per entity.\npackage entity\n\n")
 	out.WriteString(im.block())
 	out.WriteString("\n")
-	out.Write(noInline(b.Bytes()))
+	out.Write(b.Bytes())
 	return split(out.Bytes(), "entity")
 }
 
-// noInline marks every function of the generated entity package
-// //go:noinline.
+// noInline marks every function of a source //go:noinline: what an extension
+// does to the methods it adds to package entity (NoInline).
 //
 // The compiler writes the body of each function it could inline into the
 // package's export data, and every package that calls one reads it back and
-// compiles it again at the call site. Package entity is thousands of
-// three-line wrappers around the runtime, called from every package of the
-// application: withholding their bodies took 17% off the compile time of 312
-// services on a 454-entity schema (100.6 to 83.5 CPU-s) and 14% off this
-// package itself, for one more call per builder method at run time.
+// compiles it again at the call site. While the builders were generated,
+// package entity was thousands of three-line wrappers around the runtime,
+// called from every package of the application, and withholding their bodies
+// took 17% off the compile time of 312 services on a 454-entity schema (100.6
+// to 83.5 CPU-s). The builders are types of package orm now, and for what is
+// left of the package itself (the accessors of the edges, Query<Edge>) it
+// makes no difference: the same services, 78.4-79.8 CPU-s without it and
+// 78.5-78.9 with it. So the package's own functions can be inlined again.
 func noInline(src []byte) []byte {
 	var out bytes.Buffer
 	for _, line := range bytes.SplitAfter(src, []byte("\n")) {
-		// Constructors stay inlinable: inlined, the builder they return
-		// need not be allocated on the heap.
-		if bytes.HasPrefix(line, []byte("func ")) && !bytes.HasPrefix(line, []byte("func init(")) && !bytes.HasPrefix(line, []byte("func New")) {
+		if bytes.HasPrefix(line, []byte("func ")) && !bytes.HasPrefix(line, []byte("func init(")) {
 			out.WriteString("//go:noinline\n")
 		}
 		out.Write(line)

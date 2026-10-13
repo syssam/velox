@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/entity"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
 
-// Like starts the queries and mutations of Like.
-var Like LikeClient
-
-// LikeClient is the type of Like.
-type LikeClient struct{}
-
-// Query returns a query of every Like, to run on ex: a database handle or a
-// transaction.
-func (*LikeClient) Query(ex velox.Executor) *entity.LikeQuery { return entity.NewLikeQuery(ex) }
-
-// Create returns a builder that creates a Like.
-func (*LikeClient) Create(ex velox.Executor) *entity.LikeCreate { return entity.NewLikeCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*LikeClient) CreateBulk(ex velox.Executor, bs ...*entity.LikeCreate) *entity.LikeCreateBulk {
-	return entity.NewLikeCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Like rows its conditions match.
-func (*LikeClient) Update(ex velox.Executor) *entity.LikeUpdate { return entity.NewLikeUpdate(ex) }
-
-// Delete returns a builder that deletes the Like rows its conditions match.
-func (*LikeClient) Delete(ex velox.Executor) *entity.LikeDelete { return entity.NewLikeDelete(ex) }
-
-// Get returns the Like with the given id, or velox.ErrNotFound.
-func (c *LikeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Like, error) {
-	return c.Query(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Like with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *LikeClient) UpdateByID(ex velox.Executor, id int) *entity.LikeUpdate {
-	return c.Update(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Like with the given id, or returns velox.ErrNotFound.
-func (c *LikeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Like(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.LikeMeta.NotFound()
-	}
-	return err
-}
+// Like starts the queries and mutations of Like: Like.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Like = orm.ClientOf[*entity.Like, predicate.Like, int]{Meta: &entity.LikeMeta}

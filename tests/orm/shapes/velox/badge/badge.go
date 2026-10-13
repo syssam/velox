@@ -33,14 +33,14 @@ var teamsMeta = orm.EdgeMeta{Name: "teams", Index: 0, Rel: orm.M2M, Inverse: tru
 
 // Teams is the "teams" edge of Badge, to Team: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithTeams.
+// With(badge.Teams).
 var Teams = &orm.ToMany[predicate.Badge, predicate.Team, uuid.UUID]{Meta: &teamsMeta}
 
 var holdersMeta = orm.EdgeMeta{Name: "holders", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "persons", Columns: []string{"badge_holders"}}
 
 // Holders is the "holders" edge of Badge, to Person: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithHolders.
+// With(badge.Holders).
 var Holders = &orm.ToMany[predicate.Badge, predicate.Person, int]{Meta: &holdersMeta}
 
 // EdgeMetas returns the descriptions of the edges of Badge, in order. The

@@ -24,7 +24,6 @@ func (ext *extension) scalarNames(nodes bool) error {
 	taken := map[string]string{}
 	for _, e := range g.Entities() {
 		taken[e.Name] = "the entity " + e.Name
-		taken[e.Client] = "the client of the entity " + e.Name
 	}
 	if nodes {
 		for _, n := range []string{"Noder", "NodeType", "NodeTypes"} {

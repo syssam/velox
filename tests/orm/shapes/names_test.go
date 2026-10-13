@@ -657,7 +657,7 @@ func TestNames_PackageAndTypeCollisions(t *testing.T) {
 	// ...and Kind.shapes is an edge to it.
 	var ks *entity.KindShape = must(client.KindShape.Create(db).Set(nkindshape.Label.Set("s1"), nkindshape.Kind.Set(k.ID)).Save(ctx))
 	must(client.KindShape.Create(db).Set(nkindshape.Label.Set("s2")).Save(ctx))
-	kinds := must(client.Kind.Query(db).Where(nkind.Shapes.HasWith(nkindshape.Label.EQ("s1")), nkind.Shape.EQ(nkind.ShapeFlat)).WithShapes().All(ctx))
+	kinds := must(client.Kind.Query(db).Where(nkind.Shapes.HasWith(nkindshape.Label.EQ("s1")), nkind.Shape.EQ(nkind.ShapeFlat)).With(nkind.Shapes).All(ctx))
 	require.Len(t, kinds, 1)
 	require.Len(t, kinds[0].Edges.Shapes, 1)
 	assert.Equal(t, ks.ID, kinds[0].Edges.Shapes[0].ID)
@@ -725,7 +725,7 @@ func TestNames_KeywordFieldsAndEdges(t *testing.T) {
 	f3 := must(client.Field.Create(db).Set(nfield.Label.Set("f3")).Save(ctx))
 	k := must(client.Keywords.Create(db).Set(keywords.Fields.Add(f1.ID, f2.ID), keywords.Columns.Set(f1.ID), keywords.Loaded.Add(f3.ID), keywords.With.Add(f2.ID), keywords.All.Set(f3.ID)).Save(ctx))
 	loaded := must(client.Keywords.Query(db).Where(keywords.ID.EQ(k.ID), keywords.Fields.Has(), keywords.Columns.HasWith(nfield.Label.EQ("f1")), keywords.All.Has()).
-		WithFields(client.Field.Query(db).OrderBy(nfield.Label.Asc())).WithColumns().WithLoaded().WithWith().WithAll().Only(ctx))
+		With(keywords.Fields.Load(client.Field.Query(db).OrderBy(nfield.Label.Asc()))).With(keywords.Columns).With(keywords.Loaded).With(keywords.With).With(keywords.All).Only(ctx))
 	require.Len(t, loaded.Edges.Fields, 2)
 	assert.Equal(t, "f2", loaded.Edges.Fields[1].Label)
 	assert.Equal(t, "f1", loaded.Edges.Columns.Label)
@@ -740,7 +740,7 @@ func TestNames_KeywordFieldsAndEdges(t *testing.T) {
 	assert.Equal(t, "f2", must(k.QueryWith(db).Only(ctx)).Label)
 	assert.Equal(t, "f3", must(k.QueryAll(db).Only(ctx)).Label)
 	must(client.Keywords.Update(db).Set(keywords.Fields.Remove(f1.ID), keywords.Columns.Clear(), keywords.With.Clear(), keywords.All.Set(f2.ID)).Where(keywords.ID.EQ(k.ID)).Exec(ctx))
-	loaded = must(client.Keywords.Query(db).Where(keywords.ID.EQ(k.ID)).WithFields().WithColumns().WithWith().WithAll().Only(ctx))
+	loaded = must(client.Keywords.Query(db).Where(keywords.ID.EQ(k.ID)).With(keywords.Fields).With(keywords.Columns).With(keywords.With).With(keywords.All).Only(ctx))
 	require.Len(t, loaded.Edges.Fields, 1)
 	_, err := loaded.Edges.ColumnsOrErr()
 	assert.ErrorIs(t, err, velox.ErrNotFound)
@@ -771,7 +771,7 @@ func TestNames_Odd(t *testing.T) {
 	).Save(ctx))
 	must(client.Odd.Create(db).Save(ctx))
 
-	rows := must(client.Odd.Query(db).OrderBy(nodd.ID.Asc()).WithID().WithQuery().WithEdges().WithTable().WithModel().All(ctx))
+	rows := must(client.Odd.Query(db).OrderBy(nodd.ID.Asc()).With(nodd.IDEdge).With(nodd.Query).With(nodd.Edges).With(nodd.TableEdge).With(nodd.Model).All(ctx))
 	require.Len(t, rows, 3)
 	for _, i := range []int{0, 2} {
 		assert.Nil(t, rows[i].ByName)
@@ -849,7 +849,7 @@ func TestNames_ClashesAreRenamed(t *testing.T) {
 		nclash.UserName.Set("u"), nclash.QueryOthersField.Set("q"), nclash.Price.Set(types.Decimal{Cents: 250}),
 		nclash.Others.Add(f1.ID), nclash.OthersOrErrEdge.Add(f2.ID),
 	).Save(ctx))
-	rows := must(client.Clash.Query(db).OrderBy(nclash.ID.Asc()).WithOthers().WithOthersOrErrEdge().All(ctx))
+	rows := must(client.Clash.Query(db).OrderBy(nclash.ID.Asc()).With(nclash.Others).With(nclash.OthersOrErrEdge).All(ctx))
 	require.Len(t, rows, 2)
 	for name, r := range map[string]*entity.Clash{"created": a, "queried": rows[0]} {
 		assert.Equal(t, []any{nclash.OrderAsc, nclash.SetA, nclash.QueryA, nclash.CreateSingle, nclash.UpdateA, nclash.LoadLow, nclash.EdgeA, nclash.MetaA, nclash.PredA, nclash.KindOther, nclash.AX, nclash.ABY, "u1", "qo"},

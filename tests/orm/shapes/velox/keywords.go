@@ -3,64 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Keywords starts the queries and mutations of Keywords.
-var Keywords KeywordsClient
-
-// KeywordsClient is the type of Keywords.
-type KeywordsClient struct{}
-
-// Query returns a query of every Keywords, to run on ex: a database handle or a
-// transaction.
-func (*KeywordsClient) Query(ex velox.Executor) *entity.KeywordsQuery {
-	return entity.NewKeywordsQuery(ex)
-}
-
-// Create returns a builder that creates a Keywords.
-func (*KeywordsClient) Create(ex velox.Executor) *entity.KeywordsCreate {
-	return entity.NewKeywordsCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*KeywordsClient) CreateBulk(ex velox.Executor, bs ...*entity.KeywordsCreate) *entity.KeywordsCreateBulk {
-	return entity.NewKeywordsCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Keywords rows its conditions match.
-func (*KeywordsClient) Update(ex velox.Executor) *entity.KeywordsUpdate {
-	return entity.NewKeywordsUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Keywords rows its conditions match.
-func (*KeywordsClient) Delete(ex velox.Executor) *entity.KeywordsDelete {
-	return entity.NewKeywordsDelete(ex)
-}
-
-// Get returns the Keywords with the given id, or velox.ErrNotFound.
-func (c *KeywordsClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Keywords, error) {
-	return c.Query(ex).Where(predicate.Keywords(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Keywords with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *KeywordsClient) UpdateByID(ex velox.Executor, id int) *entity.KeywordsUpdate {
-	return c.Update(ex).Where(predicate.Keywords(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Keywords with the given id, or returns
-// velox.ErrNotFound.
-func (c *KeywordsClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Keywords(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.KeywordsMeta.NotFound()
-	}
-	return err
-}
+// Keywords starts the queries and mutations of Keywords: Keywords.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Keywords = orm.ClientOf[*entity.Keywords, predicate.Keywords, int]{Meta: &entity.KeywordsMeta}

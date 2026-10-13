@@ -216,7 +216,7 @@ func TestPaginate_ArgsCursorsAndPolicy(t *testing.T) {
 
 	// The policy narrows the page and its total; eager loads come with it.
 	only := testschema.FilterUserQueryToNameContext(ctx, "bob")
-	p, err = client.User.Query(db).WithPosts().Paginate(only, nil, intp(10), nil, nil)
+	p, err = client.User.Query(db).With(user.Posts).Paginate(only, nil, intp(10), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"bob"}, names(nodes(p)))
 	assert.Equal(t, 1, p.TotalCount)

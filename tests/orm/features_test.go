@@ -262,7 +262,7 @@ func TestLocks(t *testing.T) {
 		}
 		// With an eager load, with DISTINCT (which Postgres does not allow
 		// under a lock), with options, and shared.
-		if _, err := client.User.Query(tx).WithPosts().Distinct().ForUpdate(orm.SkipLocked).All(ctx); err != nil {
+		if _, err := client.User.Query(tx).With(user.Posts).Distinct().ForUpdate(orm.SkipLocked).All(ctx); err != nil {
 			return err
 		}
 		if _, err := client.User.Query(tx).ForShare(orm.NoWait).All(ctx); err != nil {
@@ -351,7 +351,7 @@ func TestIter(t *testing.T) {
 	}
 	assert.Equal(t, []string{"u5"}, got)
 	var last error
-	for _, err := range client.User.Query(db).WithPosts().Iter(ctx) {
+	for _, err := range client.User.Query(db).With(user.Posts).Iter(ctx) {
 		last = err
 	}
 	require.ErrorContains(t, last, "cannot eager-load")
@@ -418,22 +418,17 @@ func TestExecutorIsBoundAtTheHead(t *testing.T) {
 	// The query given to Load describes the load: its conditions, order and
 	// limit are used, and the load runs with the query it belongs to.
 	users, err := client.User.Query(db).Where(user.ID.EQ(ann.ID)).
-		WithPosts(client.Post.Query(nil).Where(post.Title.EQ("p1"))).All(ctx)
+		With(user.Posts.Load(client.Post.Query(nil).Where(post.Title.EQ("p1")))).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, users[0].Edges.Posts, 1)
 	// A nil query describes nothing: the load is the whole edge, as it is
 	// without one.
 	var none *entity.PostQuery
-	for name, q := range map[string]*entity.UserQuery{
-		"a nil *PostQuery": client.User.Query(db).WithPosts(none),
-		"nil":              client.User.Query(db).WithPosts(nil),
-	} {
-		users, err = q.Where(user.ID.EQ(ann.ID)).All(ctx)
-		require.NoError(t, err, name)
-		require.Len(t, users[0].Edges.Posts, 1, name)
-	}
+	users, err = client.User.Query(db).With(user.Posts.Load(none)).Where(user.ID.EQ(ann.ID)).All(ctx)
+	require.NoError(t, err)
+	require.Len(t, users[0].Edges.Posts, 1)
 	users, err = client.User.Query(db).Where(user.ID.EQ(ann.ID)).
-		WithPosts(client.Post.Query(nil).Where(post.Title.EQ("no such post"))).All(ctx)
+		With(user.Posts.Load(client.Post.Query(nil).Where(post.Title.EQ("no such post")))).All(ctx)
 	require.NoError(t, err)
 	require.Empty(t, users[0].Edges.Posts, "a description that is given is used")
 
@@ -618,14 +613,14 @@ func TestQuery_Columns(t *testing.T) {
 	assert.Equal(t, "bob@example.com", page.Edges[0].Node.Email)
 
 	// An edge stored in the entity's own table is loaded: its key is read.
-	ps, err := client.Post.Query(db).Columns(post.ColumnTitle).WithAuthor().OrderBy(post.Title.Asc()).All(ctx)
+	ps, err := client.Post.Query(db).Columns(post.ColumnTitle).With(post.Author).OrderBy(post.Title.Asc()).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ps, 2)
 	require.NotNil(t, ps[0].Edges.Author)
 	assert.Equal(t, "ann", ps[0].Edges.Author.Name)
 	assert.Empty(t, ps[0].Status, "a column that was not asked for")
 	// And one stored on the other side, from the id.
-	withPosts, err := client.User.Query(db).Columns(user.ColumnName).WithPosts().OrderBy(user.Name.Asc()).All(ctx)
+	withPosts, err := client.User.Query(db).Columns(user.ColumnName).With(user.Posts).OrderBy(user.Name.Asc()).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, withPosts[0].Edges.Posts, 1)
 	assert.Equal(t, "a1", withPosts[0].Edges.Posts[0].Title, "the neighbors are read whole")
@@ -659,7 +654,7 @@ func TestQuery_Columns(t *testing.T) {
 	require.ErrorContains(t, err, `User has no column "no_such_column" to read`)
 	// The neighbors of an eager load with only some of their columns: each
 	// kind of edge keeps what it is matched to its parent by.
-	loaded, err := client.User.Query(db).WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle).OrderBy(post.Title.Asc())).OrderBy(user.Name.Asc()).All(ctx)
+	loaded, err := client.User.Query(db).With(user.Posts.Load(client.Post.Query(nil).Columns(post.ColumnTitle).OrderBy(post.Title.Asc()))).OrderBy(user.Name.Asc()).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, loaded[0].Edges.Posts, 1)
 	assert.Equal(t, "a1", loaded[0].Edges.Posts[0].Title)
@@ -667,7 +662,7 @@ func TestQuery_Columns(t *testing.T) {
 	require.Len(t, loaded[1].Edges.Posts, 1)
 	assert.Equal(t, "b1", loaded[1].Edges.Posts[0].Title)
 	// To one, the key on this side.
-	authored, err := client.Post.Query(db).WithAuthor(client.User.Query(nil).Columns(user.ColumnName)).OrderBy(post.Title.Asc()).All(ctx)
+	authored, err := client.Post.Query(db).With(post.Author.Load(client.User.Query(nil).Columns(user.ColumnName))).OrderBy(post.Title.Asc()).All(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, authored[0].Edges.Author)
 	assert.Equal(t, "ann", authored[0].Edges.Author.Name)
@@ -676,12 +671,12 @@ func TestQuery_Columns(t *testing.T) {
 	tagged := must(client.Tag.Create(db).Set(tag.Name.Set("go")).Save(ctx))
 	require.NoError(t, client.Post.UpdateByID(db, authored[0].ID).Set(post.Tags.Add(tagged.ID)).ExecOne(ctx))
 	nested, err := client.User.Query(db).Where(user.ID.EQ(ann.ID)).
-		WithPosts(client.Post.Query(nil).Columns(post.ColumnTitle).WithTags(client.Tag.Query(nil).Columns(tag.ColumnName))).Only(ctx)
+		With(user.Posts.Load(client.Post.Query(nil).Columns(post.ColumnTitle).With(post.Tags.Load(client.Tag.Query(nil).Columns(tag.ColumnName))))).Only(ctx)
 	require.NoError(t, err)
 	require.Len(t, nested.Edges.Posts, 1)
 	require.Len(t, nested.Edges.Posts[0].Edges.Tags, 1)
 	assert.Equal(t, "go", nested.Edges.Posts[0].Edges.Tags[0].Name)
-	_, err = client.User.Query(db).WithPosts(client.Post.Query(nil).Columns("no_such_column")).All(ctx)
+	_, err = client.User.Query(db).With(user.Posts.Load(client.Post.Query(nil).Columns("no_such_column"))).All(ctx)
 	require.ErrorContains(t, err, `Post has no column "no_such_column" to read`)
 }
 

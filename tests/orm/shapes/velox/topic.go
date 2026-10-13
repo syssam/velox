@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Topic starts the queries and mutations of Topic.
-var Topic TopicClient
-
-// TopicClient is the type of Topic.
-type TopicClient struct{}
-
-// Query returns a query of every Topic, to run on ex: a database handle or a
-// transaction.
-func (*TopicClient) Query(ex velox.Executor) *entity.TopicQuery { return entity.NewTopicQuery(ex) }
-
-// Create returns a builder that creates a Topic.
-func (*TopicClient) Create(ex velox.Executor) *entity.TopicCreate { return entity.NewTopicCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*TopicClient) CreateBulk(ex velox.Executor, bs ...*entity.TopicCreate) *entity.TopicCreateBulk {
-	return entity.NewTopicCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Topic rows its conditions match.
-func (*TopicClient) Update(ex velox.Executor) *entity.TopicUpdate { return entity.NewTopicUpdate(ex) }
-
-// Delete returns a builder that deletes the Topic rows its conditions match.
-func (*TopicClient) Delete(ex velox.Executor) *entity.TopicDelete { return entity.NewTopicDelete(ex) }
-
-// Get returns the Topic with the given id, or velox.ErrNotFound.
-func (c *TopicClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Topic, error) {
-	return c.Query(ex).Where(predicate.Topic(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Topic with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *TopicClient) UpdateByID(ex velox.Executor, id int) *entity.TopicUpdate {
-	return c.Update(ex).Where(predicate.Topic(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Topic with the given id, or returns velox.ErrNotFound.
-func (c *TopicClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Topic(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.TopicMeta.NotFound()
-	}
-	return err
-}
+// Topic starts the queries and mutations of Topic: Topic.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Topic = orm.ClientOf[*entity.Topic, predicate.Topic, int]{Meta: &entity.TopicMeta}

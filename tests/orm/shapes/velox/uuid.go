@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// UUID starts the queries and mutations of UUID.
-var UUID UUIDClient
-
-// UUIDClient is the type of UUID.
-type UUIDClient struct{}
-
-// Query returns a query of every UUID, to run on ex: a database handle or a
-// transaction.
-func (*UUIDClient) Query(ex velox.Executor) *entity.UUIDQuery { return entity.NewUUIDQuery(ex) }
-
-// Create returns a builder that creates a UUID.
-func (*UUIDClient) Create(ex velox.Executor) *entity.UUIDCreate { return entity.NewUUIDCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*UUIDClient) CreateBulk(ex velox.Executor, bs ...*entity.UUIDCreate) *entity.UUIDCreateBulk {
-	return entity.NewUUIDCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the UUID rows its conditions match.
-func (*UUIDClient) Update(ex velox.Executor) *entity.UUIDUpdate { return entity.NewUUIDUpdate(ex) }
-
-// Delete returns a builder that deletes the UUID rows its conditions match.
-func (*UUIDClient) Delete(ex velox.Executor) *entity.UUIDDelete { return entity.NewUUIDDelete(ex) }
-
-// Get returns the UUID with the given id, or velox.ErrNotFound.
-func (c *UUIDClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.UUID, error) {
-	return c.Query(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the UUID with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *UUIDClient) UpdateByID(ex velox.Executor, id int) *entity.UUIDUpdate {
-	return c.Update(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the UUID with the given id, or returns velox.ErrNotFound.
-func (c *UUIDClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.UUID(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.UUIDMeta.NotFound()
-	}
-	return err
-}
+// UUID starts the queries and mutations of UUID: UUID.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var UUID = orm.ClientOf[*entity.UUID, predicate.UUID, int]{Meta: &entity.UUIDMeta}

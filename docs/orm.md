@@ -37,7 +37,7 @@ This writes, under `velox`:
 | package | what is in it |
 |---|---|
 | `velox` | where every query and mutation starts: `velox.User.Query(conn)`; and the library's handle and errors under the same name |
-| `velox/entity` | the entities and their typed builders |
+| `velox/entity` | the entities, and the names of their builders (`entity.UserQuery`), which are types of package `orm` |
 | `velox/user`, ... | one small package per entity: its columns, enum values and edges |
 | `velox/migrate` | the tables, and `migrate.Create(ctx, conn)` |
 | `velox/predicate` | the types that keep one entity's conditions out of another's query |
@@ -83,7 +83,7 @@ alice, err := velox.User.Create(conn).
 users, err := velox.User.Query(conn).
     Where(user.Name.EQ("alice"), user.Age.GT(18)).
     OrderBy(user.CreatedAt.Desc()).
-    WithPosts(velox.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10)).
+    With(user.Posts.Load(velox.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10))).
     Limit(20).
     All(ctx)
 
@@ -105,7 +105,7 @@ err = velox.User.DeleteByID(ctx, conn, id)
   `*velox.Tx` returns `velox.ErrNoExecutor` when run; the zero value of a builder
   returns `orm.ErrNoEntity`.
 - **An entity holds no connection.** `u.QueryPosts(tx)` queries its
-  neighbors on what it is given, `WithPosts(...)` loads them with the query
+  neighbors on what it is given, `With(user.Posts)` loads them with the query
   into `u.Edges.Posts`.
 - `velox.User` is a package-level variable, not a field of a client struct. A
   struct with a field per entity makes every package that names it read every
@@ -146,13 +146,27 @@ err = velox.User.DeleteByID(ctx, conn, id)
   (`orm.Lazy`), which is what keeps a package from compiling the methods it
   does not call (the numbers are in
   [`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md)).
+- The builders are types of package `orm` as well, under the entity's names:
+  `entity.UserQuery` is `orm.QueryOf[*entity.User, predicate.User, int]`,
+  and `velox.User` a variable of `orm.ClientOf` of the same three. Every
+  method of them has the type parameter too, so package `entity` holds the
+  entities and their description and none of the builders' code, and a
+  package compiles the builder methods it calls. Generated per entity (until
+  2026-10-13) they were three fifths of what was left of the tree and made
+  `entity` the package every other waited for: on the 450-entity fixture,
+  12-13 CPU-s and 1.6 GB to compile, now 3.5 and 0.6 GB, and the 312
+  services using it went from 95-98 CPU-s to 77-79. At run time the two are
+  the same, allocation for allocation.
 - A predicate, setter or order term of one entity does not compile in a query
-  or mutation of another, nor does `WithPosts` on a query of an entity without
-  that edge.
-- **Eager loading is `With<Edge>`**: one more query per edge, whatever the
-  number of rows. A query of the target describes the load: its conditions,
-  order, nested `With<Edge>` and its limit, which applies per parent. That
-  query is not run, so it needs no handle (`velox.Post.Query(nil)`).
+  or mutation of another, nor does an edge of another entity in `With`, or a
+  query of another entity in an edge's `Load`.
+- **Eager loading is `With`, given the edges**: `With(user.Posts, user.Profile)`,
+  one more query per edge, whatever the number of rows. An edge is loaded as
+  it is, every neighbor of every row; `user.Posts.Load(q)` is the edge with a
+  query of the target that describes the load: its conditions, order, nested
+  `With` and its limit, which applies per parent. That query is not run, so
+  it needs no handle (`velox.Post.Query(nil)`). (It was a method per edge,
+  `WithPosts(q)`, until 2026-10-13; `velox-migrate` writes the new form.)
 - **`Exec` on an update or delete touches every matching row and returns the
   count; it is not an error when that is zero.** `SaveOne` is for exactly one
   row (`velox.ErrNotFound`, `velox.ErrNotSingular`); `DeleteByID` reports a
@@ -174,7 +188,7 @@ err = velox.User.DeleteByID(ctx, conn, id)
   other fields stay zero, so such an entity is for reading. The id, the
   columns the query is ordered by and the keys of the edges it loads are
   read too. The query given to an eager load takes it as well:
-  `WithPosts(velox.Post.Query(nil).Columns(post.ColumnTitle))`. `Select(...)`
+  `With(user.Posts.Load(velox.Post.Query(nil).Columns(post.ColumnTitle)))`. `Select(...)`
   is the other thing: columns and aggregates scanned
   into a struct of the caller's.
 - An order is `user.Name.Asc()`; by a column named at run time,
@@ -378,14 +392,13 @@ package of the 450-entity fixture went from 18,958 functions, 14-18 CPU-s and
 1.6 GB to 46,348 functions, 26-31 CPU-s and 2.6 GB, on every schema change.
 
 An edge is queried from the row, `u.QueryPosts(tx)`, and only there. That
-spelling has a price too, and it was chosen knowing it. A Go package compiles
-against everything the types it names expose, method results included:
-`(*User).QueryPosts` returns a `*PostQuery`, `User.Edges` names every entity
-`User` is connected to, each with such methods, so a package that names one
-entity reads the query builder of every entity. With the neighbors queried
-from the root package instead (`velox.User.QueryPosts(tx, u)`), the 312 services
-of the fixture compiled in 106-116 CPU-s; as generated, 141-147. What is paid
-is in proportion to the methods of a query type, so that type is kept small.
+spelling had a price while the builders were generated: a Go package compiles
+against everything the types it names expose, method results included, and
+`(*User).QueryPosts` returns a `*PostQuery`, so a package that named one
+entity read the query builder of every entity (the 312 services of the
+fixture: 141-147 CPU-s, against 106-116 with the neighbors queried from the
+root package). A query type is now a type of package `orm` whose methods are
+compiled where they are called, and naming one costs nothing.
 
 ## GraphQL
 
@@ -792,10 +805,14 @@ entity the schema calls `Http` stays `Http`. Where it departs, on purpose:
   standard package. Import it under another name where that happens. One
   package per entity is what keeps a change to one entity from recompiling
   the others.
-- `entity.<Entity>Meta`, the `New<Entity>...` constructors, a per-entity
-  package's `EdgeMetas` and the fields of `orm.QueryCore`, `orm.MutCore` and
-  `orm.Meta` are exported for the generated packages, which are separate
-  packages; they are not for application code.
+- `entity.<Entity>Meta`, a per-entity package's `EdgeMetas` and the fields
+  of `orm.QueryCore`, `orm.MutCore` and `orm.Meta` are exported for the
+  generated packages, which are separate packages; they are not for
+  application code.
+- The builders have their names per entity (`entity.UserQuery`,
+  `entity.UserCreate`, `entity.UserConnection`) and the names of package
+  `orm` in a compiler error (`*orm.QueryOf[*entity.User, predicate.User,
+  int]`): an alias does not hide what it names.
 - `Fill` takes `any` and uses reflection, as `encoding/json` does: its inputs
   are types this module has never seen.
 - The schema's hooks and policies reach the entities through package-level
@@ -821,6 +838,14 @@ package went from 1.7 GB to 2.0 GB and 2.5 GB. The compile of `entity` spends
 a quarter of its CPU in the garbage collector (`go tool compile` takes
 `-cpuprofile` and `-traceprofile`; pass them with `-gcflags=<pkg>=...`). Set
 `GOGC` in the build environment, not in the program.
+
+The numbers at the top of this section are of 2026-10-09. Since then the
+column types and the builders became types of package `orm` (2026-10-13): the same tree is 337,945
+generated lines where it was 1,155,519, and with every package compiled by
+itself against the import configuration of a build, `entity` takes 3.5 CPU-s
+and 0.6 GB (13.0, 1.6 GB), the 450 entity packages 26 CPU-s (51) and the
+312 services 77-79 (92-95). The tables are in
+[`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md).
 
 ## Tests
 

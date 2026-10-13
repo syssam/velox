@@ -48,7 +48,7 @@ func TestJSON_SameAsVelox(t *testing.T) {
 	// With an edge loaded, it is under "edges" by the edge's name. (velox's
 	// client in this repository is generated with back-references, which
 	// encoding/json refuses as a cycle, so there is nothing to compare with.)
-	loaded, err := client.User.Query(db).Where(user.ID.EQ(ann.ID)).WithPosts().Only(ctx)
+	loaded, err := client.User.Query(db).Where(user.ID.EQ(ann.ID)).With(user.Posts).Only(ctx)
 	require.NoError(t, err)
 	withEdges := decode(loaded)
 	require.Contains(t, withEdges, "edges")
@@ -150,7 +150,7 @@ func TestHooks_MutationAPI(t *testing.T) {
 
 	// Edge changes: what is connected, disconnected and cleared.
 	tagsOf := func() []string {
-		got := must2(client.Post.Query(db).Where(post.ID.EQ(p.ID)).WithTags(client.Tag.Query(nil).OrderBy(tag.Name.Asc())).Only(ctx))
+		got := must2(client.Post.Query(db).Where(post.ID.EQ(p.ID)).With(post.Tags.Load(client.Tag.Query(nil).OrderBy(tag.Name.Asc()))).Only(ctx))
 		var names []string
 		for _, tg := range got.Edges.Tags {
 			names = append(names, tg.Name)
@@ -249,7 +249,7 @@ func TestErrors_ConstraintAndNotLoaded(t *testing.T) {
 	require.ErrorAs(t, err, &nl)
 	assert.Equal(t, "posts", nl.Edge())
 	assert.Equal(t, `velox: edge "posts" was not loaded`, err.Error())
-	loaded, err := client.User.Query(db).WithPosts().Only(ctx)
+	loaded, err := client.User.Query(db).With(user.Posts).Only(ctx)
 	require.NoError(t, err)
 	posts, err := loaded.Edges.PostsOrErr()
 	require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestTx_SavepointAroundAMutation(t *testing.T) {
 		_, err = client.Post.UpdateByID(tx, p.ID).Set(post.Title.Set("kept"), post.Tags.Add(tg.ID)).SaveOne(ctx)
 		return err
 	}))
-	got, err := client.Post.Query(db).WithTags().All(ctx)
+	got, err := client.Post.Query(db).With(post.Tags).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "kept", got[0].Title)

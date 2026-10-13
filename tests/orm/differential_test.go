@@ -167,7 +167,7 @@ func TestDifferential_RandomOperations(t *testing.T) {
 			for _, u := range us {
 				a.Users = append(a.Users, fmt.Sprint(u.ID, u.Name, u.Email, u.Age, str(u.Nickname), u.Role))
 			}
-			ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).WithAuthor().WithTags(client.Tag.Query(db).OrderBy(tag.ID.Asc())).All(ctx)
+			ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).With(post.Author).With(post.Tags.Load(client.Tag.Query(db).OrderBy(tag.ID.Asc()))).All(ctx)
 			require.NoError(t, err)
 			for _, p := range ps {
 				var ts []int

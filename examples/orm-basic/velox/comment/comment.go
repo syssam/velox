@@ -37,14 +37,15 @@ var (
 var postMeta = orm.EdgeMeta{Name: "post", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"post_comments"}, Required: true}
 
 // Post is the "post" edge of Comment, to Post: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithPost.
+// and changes to it (Set, Clear). A query eager-loads it with
+// With(comment.Post).
 var Post = &orm.ToOne[predicate.Comment, predicate.Post, int]{Meta: &postMeta}
 
 var authorMeta = orm.EdgeMeta{Name: "author", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"user_comments"}, Required: true}
 
 // Author is the "author" edge of Comment, to User: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithAuthor.
+// With(comment.Author).
 var Author = &orm.ToOne[predicate.Comment, predicate.User, int]{Meta: &authorMeta}
 
 // EdgeMetas returns the descriptions of the edges of Comment, in order. The

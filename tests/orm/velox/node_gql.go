@@ -5,10 +5,8 @@ package velox
 import (
 	"context"
 
-	uuid "github.com/google/uuid"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
-	"github.com/syssam/velox/tests/orm/velox/entity"
 )
 
 // Noder is an entity that is a node of the GraphQL schema: what the schema's
@@ -34,103 +32,12 @@ type NodeType struct {
 // learns (a prefix in the id, or which type answered for a range of ids).
 func NodeTypes() []NodeType {
 	return []NodeType{
-		{Name: "Comment", Table: "comments", Get: Comment.node},
-		{Name: "Like", Table: "likes", Get: Like.node},
-		{Name: "Pet", Table: "pets", Get: Pet.node},
-		{Name: "Post", Table: "posts", Get: Post.node},
-		{Name: "Tag", Table: "tags", Get: Tag.node},
-		{Name: "Token", Table: "tokens", Get: Token.node},
-		{Name: "User", Table: "users", Get: User.node},
+		{Name: "Comment", Table: "comments", Get: gqlinput.NodeGet[Noder](&Comment)},
+		{Name: "Like", Table: "likes", Get: gqlinput.NodeGet[Noder](&Like)},
+		{Name: "Pet", Table: "pets", Get: gqlinput.NodeGet[Noder](&Pet)},
+		{Name: "Post", Table: "posts", Get: gqlinput.NodeGet[Noder](&Post)},
+		{Name: "Tag", Table: "tags", Get: gqlinput.NodeGet[Noder](&Tag)},
+		{Name: "Token", Table: "tokens", Get: gqlinput.NodeGet[Noder](&Token)},
+		{Name: "User", Table: "users", Get: gqlinput.NodeGet[Noder](&User)},
 	}
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *CommentClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.CommentMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *LikeClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.LikeMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *PetClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.PetMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *PostClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.PostMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *TagClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.TagMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *TokenClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[uuid.UUID](key)
-	if !ok {
-		return nil, entity.TokenMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *UserClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.UserMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
 }

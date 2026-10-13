@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Meta starts the queries and mutations of Meta.
-var Meta MetaClient
-
-// MetaClient is the type of Meta.
-type MetaClient struct{}
-
-// Query returns a query of every Meta, to run on ex: a database handle or a
-// transaction.
-func (*MetaClient) Query(ex velox.Executor) *entity.MetaQuery { return entity.NewMetaQuery(ex) }
-
-// Create returns a builder that creates a Meta.
-func (*MetaClient) Create(ex velox.Executor) *entity.MetaCreate { return entity.NewMetaCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*MetaClient) CreateBulk(ex velox.Executor, bs ...*entity.MetaCreate) *entity.MetaCreateBulk {
-	return entity.NewMetaCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Meta rows its conditions match.
-func (*MetaClient) Update(ex velox.Executor) *entity.MetaUpdate { return entity.NewMetaUpdate(ex) }
-
-// Delete returns a builder that deletes the Meta rows its conditions match.
-func (*MetaClient) Delete(ex velox.Executor) *entity.MetaDelete { return entity.NewMetaDelete(ex) }
-
-// Get returns the Meta with the given id, or velox.ErrNotFound.
-func (c *MetaClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Meta, error) {
-	return c.Query(ex).Where(predicate.Meta(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Meta with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *MetaClient) UpdateByID(ex velox.Executor, id int) *entity.MetaUpdate {
-	return c.Update(ex).Where(predicate.Meta(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Meta with the given id, or returns velox.ErrNotFound.
-func (c *MetaClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Meta(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.MetaMeta.NotFound()
-	}
-	return err
-}
+// Meta starts the queries and mutations of Meta: Meta.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Meta = orm.ClientOf[*entity.Meta, predicate.Meta, int]{Meta: &entity.MetaMeta}

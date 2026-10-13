@@ -3,9 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
 	"time"
 
 	"github.com/syssam/velox"
@@ -37,8 +34,6 @@ type CommentEdges struct {
 
 // PostOrErr returns the post edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *CommentEdges) PostOrErr() (*Post, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("post")
@@ -51,8 +46,6 @@ func (e *CommentEdges) PostOrErr() (*Post, error) {
 
 // AuthorOrErr returns the author edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *CommentEdges) AuthorOrErr() (*User, error) {
 	if !e.loaded[1] {
 		return nil, velox.NewNotLoadedError("author")
@@ -66,8 +59,6 @@ func (e *CommentEdges) AuthorOrErr() (*User, error) {
 // ptrComment returns the address of the field of a Comment that holds its i-th
 // column: what a row is scanned into, and read from. It is the Ptr of
 // CommentMeta.
-//
-//go:noinline
 func ptrComment(v any, i int) any {
 	e := v.(*Comment)
 	switch i {
@@ -89,8 +80,6 @@ func ptrComment(v any, i int) any {
 
 // edgeComment marks the i-th edge of a Comment as loaded and returns the
 // address of the field that holds its neighbors. It is the Edge of CommentMeta.
-//
-//go:noinline
 func edgeComment(v any, i int) any {
 	e := v.(*Comment)
 	e.Edges.loaded[i] = true
@@ -106,8 +95,6 @@ func edgeComment(v any, i int) any {
 // linkComment stores the neighbors an eager load read into dst, the address of
 // the field of another entity's edge to Comment: all of them, or the first
 // where the edge has one. It is the Link of CommentMeta.
-//
-//go:noinline
 func linkComment(dst any, es []any) {
 	switch d := dst.(type) {
 	case *[]*Comment:
@@ -122,21 +109,6 @@ func linkComment(dst any, es []any) {
 			*d = es[0].(*Comment)
 		}
 	}
-}
-
-// CommentEdge is a row of a page of Comment, with its cursor.
-type CommentEdge struct {
-	Node   *Comment     `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// CommentConnection is one page of Comment.
-type CommentConnection struct {
-	Edges    []*CommentEdge `json:"edges"`
-	PageInfo velox.PageInfo `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // CommentMeta is the runtime description of Comment. Use it through its
@@ -159,439 +131,28 @@ var CommentMeta = orm.Meta{
 	},
 }
 
-// CommentQuery is the query of Comment.
-type CommentQuery struct{ c orm.QueryCore }
-
-// NewCommentQuery returns a query of every Comment.
-func NewCommentQuery(ex velox.Executor) *CommentQuery {
-	return &CommentQuery{c: orm.QueryCore{M: &CommentMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *CommentQuery) Where(ps ...predicate.Comment) *CommentQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *CommentQuery) OrderBy(os ...predicate.CommentOrderTerm) *CommentQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *CommentQuery) Limit(n int) *CommentQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *CommentQuery) Offset(n int) *CommentQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *CommentQuery) Distinct() *CommentQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *CommentQuery) Columns(columns ...string) *CommentQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *CommentQuery) ForUpdate(opts ...orm.LockOption) *CommentQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *CommentQuery) ForShare(opts ...orm.LockOption) *CommentQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *CommentQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *CommentQuery) Clone() *CommentQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Comment.
-//
-//go:noinline
-func (q *CommentQuery) All(ctx context.Context) ([]*Comment, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Comment, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Comment)
-	}
-	return out, nil
-}
-
-// First returns the first matching Comment, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *CommentQuery) First(ctx context.Context) (*Comment, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Comment), nil
-}
-
-// Only returns the single matching Comment: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *CommentQuery) Only(ctx context.Context) (*Comment, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Comment), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *CommentQuery) Iter(ctx context.Context) iter.Seq2[*Comment, error] {
-	return func(yield func(*Comment, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Comment), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *CommentQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*CommentConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &CommentConnection{Edges: make([]*CommentEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &CommentEdge{Node: r.(*Comment), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *CommentQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *CommentQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *CommentQuery) IDs(ctx context.Context) ([]int, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(int)
-	}
-	return ids, nil
-}
-
-// CommentCreate creates one Comment.
-type CommentCreate struct{ c orm.MutCore }
-
-// NewCommentCreate returns a builder that creates a Comment.
-func NewCommentCreate(ex velox.Executor) *CommentCreate {
-	return &CommentCreate{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *CommentCreate) Set(ss ...predicate.CommentSetter) *CommentCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Comment, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Comment is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *CommentCreate) Fill(in any, skip ...string) *CommentCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *CommentCreate) Save(ctx context.Context) (*Comment, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Comment), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *CommentCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// CommentCreateBulk creates several Comment rows with one statement.
-type CommentCreateBulk struct {
-	ex velox.Executor
-	bs []*CommentCreate
-	n  int
-}
-
-// NewCommentCreateBulk returns a builder that creates one row per given
-// builder, as each is when the rows are inserted: what is set on one after this
-// call is part of its row.
-func NewCommentCreateBulk(ex velox.Executor, bs ...*CommentCreate) *CommentCreateBulk {
-	return &CommentCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *CommentCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *CommentCreateBulk) BatchSize(n int) *CommentCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *CommentCreateBulk) Save(ctx context.Context) ([]*Comment, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &CommentMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Comment, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Comment)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *CommentCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &CommentMeta, b.sets(), b.n)
-	return err
-}
-
-// CommentUpdate updates Comment rows.
-type CommentUpdate struct{ c orm.MutCore }
-
-// NewCommentUpdate returns a builder that updates the rows its predicates
-// match.
-func NewCommentUpdate(ex velox.Executor) *CommentUpdate {
-	return &CommentUpdate{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *CommentUpdate) Set(ss ...predicate.CommentSetter) *CommentUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *CommentUpdate) Where(ps ...predicate.Comment) *CommentUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *CommentUpdate) Fill(in any, skip ...string) *CommentUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *CommentUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *CommentUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *CommentUpdate) SaveOne(ctx context.Context) (*Comment, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Comment), nil
-}
-
-// CommentDelete deletes Comment rows.
-type CommentDelete struct{ c orm.MutCore }
-
-// NewCommentDelete returns a builder that deletes the rows its predicates
-// match.
-func NewCommentDelete(ex velox.Executor) *CommentDelete {
-	return &CommentDelete{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *CommentDelete) Where(ps ...predicate.Comment) *CommentDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *CommentDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Comment, and a page of it: what the root package's Comment
+// returns. Their methods are those of the types of package orm.
+type (
+	CommentQuery      = orm.QueryOf[*Comment, predicate.Comment, int]
+	CommentCreate     = orm.CreateOf[*Comment, predicate.Comment]
+	CommentCreateBulk = orm.CreateBulkOf[*Comment, predicate.Comment]
+	CommentUpdate     = orm.UpdateOf[*Comment, predicate.Comment]
+	CommentDelete     = orm.DeleteOf[predicate.Comment]
+	// CommentEdge is a row of a page of Comment, with its cursor, and
+	// CommentConnection one page: what Paginate returns.
+	CommentEdge       = orm.PageEdge[*Comment]
+	CommentConnection = orm.Connection[*Comment]
+)
 
 // QueryPost queries the "post" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Comment) QueryPost(ex velox.Executor) *PostQuery {
-	q := NewPostQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(CommentMeta.Edges[0], e))
-	return q
-}
-
-// WithPost eager-loads the "post" edge: one more query, whatever the number
-// of rows. A query of Post given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Comment.
-//
-//go:noinline
-func (q *CommentQuery) WithPost(opts ...*PostQuery) *CommentQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(CommentMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*Post, predicate.Post, int](CommentMeta.Edges[0], e, ex)
 }
 
 // QueryAuthor queries the "author" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Comment) QueryAuthor(ex velox.Executor) *UserQuery {
-	q := NewUserQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(CommentMeta.Edges[1], e))
-	return q
-}
-
-// WithAuthor eager-loads the "author" edge: one more query, whatever the number
-// of rows. A query of User given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Comment.
-//
-//go:noinline
-func (q *CommentQuery) WithAuthor(opts ...*UserQuery) *CommentQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(CommentMeta.Edges[1], o, len(opts))
-	return q
+	return orm.Neighbors[*User, predicate.User, int](CommentMeta.Edges[1], e, ex)
 }
 
 func init() { slots.Comment.Bind(&CommentMeta) }

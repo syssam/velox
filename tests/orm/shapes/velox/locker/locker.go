@@ -34,7 +34,7 @@ var holderMeta = orm.EdgeMeta{Name: "holder", Index: 0, Rel: orm.O2O, Inverse: t
 
 // Holder is the "holder" edge of Locker, to Author: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithHolder.
+// With(locker.Holder).
 var Holder = &orm.ToOne[predicate.Locker, predicate.Author, int]{Meta: &holderMeta}
 
 // EdgeMetas returns the descriptions of the edges of Locker, in order. The

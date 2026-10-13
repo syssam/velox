@@ -65,40 +65,41 @@ var postsMeta = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.O2M, Inverse: fal
 
 // Posts is the "posts" edge of User, to Post: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithPosts.
+// With(user.Posts).
 var Posts = &orm.ToMany[predicate.User, predicate.Post, int]{Meta: &postsMeta}
 
 var petsMeta = orm.EdgeMeta{Name: "pets", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "pets", Columns: []string{"owner_id"}}
 
 // Pets is the "pets" edge of User, to Pet: conditions on it (Has, HasWith) and
-// changes to it (Add, Remove, Clear). A query eager-loads it with WithPets.
+// changes to it (Add, Remove, Clear). A query eager-loads it with
+// With(user.Pets).
 var Pets = &orm.ToMany[predicate.User, predicate.Pet, int]{Meta: &petsMeta}
 
 var commentsMeta = orm.EdgeMeta{Name: "comments", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "comments", Columns: []string{"user_comments"}}
 
 // Comments is the "comments" edge of User, to Comment: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithComments.
+// With(user.Comments).
 var Comments = &orm.ToMany[predicate.User, predicate.Comment, int]{Meta: &commentsMeta}
 
 var tokenMeta = orm.EdgeMeta{Name: "token", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
 
 // Token is the "token" edge of User, to Token: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithToken.
+// and changes to it (Set, Clear). A query eager-loads it with With(user.Token).
 var Token = &orm.ToOne[predicate.User, predicate.Token, uuid.UUID]{Meta: &tokenMeta}
 
 var likedPostsMeta = orm.EdgeMeta{Name: "liked_posts", Index: 4, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id", "post_id"}}
 
 // LikedPosts is the "liked_posts" edge of User, to Post: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithLikedPosts.
+// With(user.LikedPosts).
 var LikedPosts = &orm.ToMany[predicate.User, predicate.Post, int]{Meta: &likedPostsMeta}
 
 var likesMeta = orm.EdgeMeta{Name: "likes", Index: 5, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "likes", Columns: []string{"user_id"}}
 
 // Likes is the "likes" edge of User, to Like: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithLikes.
+// With(user.Likes).
 var Likes = &orm.ToMany[predicate.User, predicate.Like, int]{Meta: &likesMeta}
 
 // EdgeMetas returns the descriptions of the edges of User, in order. The

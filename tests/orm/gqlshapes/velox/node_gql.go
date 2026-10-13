@@ -7,7 +7,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/gqlinput"
-	"github.com/syssam/velox/tests/orm/gqlshapes/velox/entity"
 )
 
 // Noder is an entity that is a node of the GraphQL schema: what the schema's
@@ -33,47 +32,8 @@ type NodeType struct {
 // learns (a prefix in the id, or which type answered for a range of ids).
 func NodeTypes() []NodeType {
 	return []NodeType{
-		{Name: "Asset", Table: "assets", Get: Asset.node},
-		{Name: "Org", Table: "orgs", Get: Org.node},
-		{Name: "Person", Table: "persons", Get: Person.node},
+		{Name: "Asset", Table: "assets", Get: gqlinput.NodeGet[Noder](&Asset)},
+		{Name: "Org", Table: "orgs", Get: gqlinput.NodeGet[Noder](&Org)},
+		{Name: "Person", Table: "persons", Get: gqlinput.NodeGet[Noder](&Person)},
 	}
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *AssetClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.AssetMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *OrgClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.OrgMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-// node is Get for an id of any type: see NodeTypes.
-func (c *PersonClient) node(ctx context.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[int](key)
-	if !ok {
-		return nil, entity.PersonMeta.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
 }

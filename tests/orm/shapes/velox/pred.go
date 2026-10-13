@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Pred starts the queries and mutations of Pred.
-var Pred PredClient
-
-// PredClient is the type of Pred.
-type PredClient struct{}
-
-// Query returns a query of every Pred, to run on ex: a database handle or a
-// transaction.
-func (*PredClient) Query(ex velox.Executor) *entity.PredQuery { return entity.NewPredQuery(ex) }
-
-// Create returns a builder that creates a Pred.
-func (*PredClient) Create(ex velox.Executor) *entity.PredCreate { return entity.NewPredCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*PredClient) CreateBulk(ex velox.Executor, bs ...*entity.PredCreate) *entity.PredCreateBulk {
-	return entity.NewPredCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Pred rows its conditions match.
-func (*PredClient) Update(ex velox.Executor) *entity.PredUpdate { return entity.NewPredUpdate(ex) }
-
-// Delete returns a builder that deletes the Pred rows its conditions match.
-func (*PredClient) Delete(ex velox.Executor) *entity.PredDelete { return entity.NewPredDelete(ex) }
-
-// Get returns the Pred with the given id, or velox.ErrNotFound.
-func (c *PredClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Pred, error) {
-	return c.Query(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Pred with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *PredClient) UpdateByID(ex velox.Executor, id int) *entity.PredUpdate {
-	return c.Update(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Pred with the given id, or returns velox.ErrNotFound.
-func (c *PredClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Pred(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.PredMeta.NotFound()
-	}
-	return err
-}
+// Pred starts the queries and mutations of Pred: Pred.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Pred = orm.ClientOf[*entity.Pred, predicate.Pred, int]{Meta: &entity.PredMeta}

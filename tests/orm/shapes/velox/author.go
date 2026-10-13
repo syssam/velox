@@ -3,62 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Author starts the queries and mutations of Author.
-var Author AuthorClient
-
-// AuthorClient is the type of Author.
-type AuthorClient struct{}
-
-// Query returns a query of every Author, to run on ex: a database handle or a
-// transaction.
-func (*AuthorClient) Query(ex velox.Executor) *entity.AuthorQuery { return entity.NewAuthorQuery(ex) }
-
-// Create returns a builder that creates a Author.
-func (*AuthorClient) Create(ex velox.Executor) *entity.AuthorCreate {
-	return entity.NewAuthorCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*AuthorClient) CreateBulk(ex velox.Executor, bs ...*entity.AuthorCreate) *entity.AuthorCreateBulk {
-	return entity.NewAuthorCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Author rows its conditions match.
-func (*AuthorClient) Update(ex velox.Executor) *entity.AuthorUpdate {
-	return entity.NewAuthorUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Author rows its conditions match.
-func (*AuthorClient) Delete(ex velox.Executor) *entity.AuthorDelete {
-	return entity.NewAuthorDelete(ex)
-}
-
-// Get returns the Author with the given id, or velox.ErrNotFound.
-func (c *AuthorClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Author, error) {
-	return c.Query(ex).Where(predicate.Author(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Author with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *AuthorClient) UpdateByID(ex velox.Executor, id int) *entity.AuthorUpdate {
-	return c.Update(ex).Where(predicate.Author(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Author with the given id, or returns
-// velox.ErrNotFound.
-func (c *AuthorClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Author(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.AuthorMeta.NotFound()
-	}
-	return err
-}
+// Author starts the queries and mutations of Author: Author.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Author = orm.ClientOf[*entity.Author, predicate.Author, int]{Meta: &entity.AuthorMeta}

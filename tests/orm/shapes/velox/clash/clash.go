@@ -275,14 +275,14 @@ var othersMeta = orm.EdgeMeta{Name: "others", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Others is the "others" edge of Clash, to Field: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithOthers.
+// With(clash.Others).
 var Others = &orm.ToMany[predicate.Clash, predicate.Field, int]{Meta: &othersMeta}
 
 var othersOrErrEdgeMeta = orm.EdgeMeta{Name: "others_or_err", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others_or_err"}}
 
 // OthersOrErrEdge is the "others_or_err" edge of Clash, to Field: conditions on
 // it (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads
-// it with WithOthersOrErrEdge.
+// it with With(clash.OthersOrErrEdge).
 var OthersOrErrEdge = &orm.ToMany[predicate.Clash, predicate.Field, int]{Meta: &othersOrErrEdgeMeta}
 
 // EdgeMetas returns the descriptions of the edges of Clash, in order. The

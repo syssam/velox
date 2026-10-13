@@ -54,33 +54,7 @@ func (ext *extension) nodes() (map[string][]byte, error) {
 	im := g.Imports()
 	im.Use(ormgen.VeloxPath, "velox")
 	im.Use(gqlinputPath, "gqlinput")
-	modelPkg := im.Use(g.Package()+"/entity", "entity")
 	ctxPkg := im.Use("context", "context")
-	var b bytes.Buffer
-	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
-	for _, e := range nodes {
-		ref, err := ormgen.GoTypeOf(e.ID.F)
-		if err != nil {
-			return nil, fmt.Errorf("velox: %s: %w", e.Name, err)
-		}
-		if ref.PkgPath != "" {
-			im.Use(ref.PkgPath, ref.PkgName)
-		}
-		w(`// node is Get for an id of any type: see NodeTypes.
-func (c *%[1]s) node(ctx %[2]s.Context, ex velox.Executor, key any) (Noder, error) {
-	v, ok := gqlinput.IDAs[%[3]s](key)
-	if !ok {
-		return nil, %[5]s.%[4]s.NotFound()
-	}
-	n, err := c.Get(ctx, ex, v)
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
-`, e.Client, ctxPkg, ref.Expr, g.Names(e).Meta, modelPkg)
-	}
 	var out bytes.Buffer
 	out.WriteString(ormgen.Header)
 	fmt.Fprintf(&out, "package %s\n\n", ormgen.RootPackage(g.Package()))
@@ -112,9 +86,8 @@ func NodeTypes() []NodeType {
 	return []NodeType{
 `, ctxPkg)
 	for _, e := range nodes {
-		fmt.Fprintf(&out, "\t\t{Name: %q, Table: %q, Get: %s.node},\n", e.Name, e.T.Table(), e.Name)
+		fmt.Fprintf(&out, "\t\t{Name: %q, Table: %q, Get: gqlinput.NodeGet[Noder](&%s)},\n", e.Name, e.T.Table(), e.Name)
 	}
-	out.WriteString("\t}\n}\n\n")
-	out.Write(b.Bytes())
+	out.WriteString("\t}\n}\n")
 	return ormgen.Split(out.Bytes(), "node_gql")
 }

@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
 	"example.com/orm-basic/velox/entity"
 	"example.com/orm-basic/velox/predicate"
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 )
 
-// Tag starts the queries and mutations of Tag.
-var Tag TagClient
-
-// TagClient is the type of Tag.
-type TagClient struct{}
-
-// Query returns a query of every Tag, to run on ex: a database handle or a
-// transaction.
-func (*TagClient) Query(ex velox.Executor) *entity.TagQuery { return entity.NewTagQuery(ex) }
-
-// Create returns a builder that creates a Tag.
-func (*TagClient) Create(ex velox.Executor) *entity.TagCreate { return entity.NewTagCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*TagClient) CreateBulk(ex velox.Executor, bs ...*entity.TagCreate) *entity.TagCreateBulk {
-	return entity.NewTagCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Tag rows its conditions match.
-func (*TagClient) Update(ex velox.Executor) *entity.TagUpdate { return entity.NewTagUpdate(ex) }
-
-// Delete returns a builder that deletes the Tag rows its conditions match.
-func (*TagClient) Delete(ex velox.Executor) *entity.TagDelete { return entity.NewTagDelete(ex) }
-
-// Get returns the Tag with the given id, or velox.ErrNotFound.
-func (c *TagClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Tag, error) {
-	return c.Query(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Tag with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *TagClient) UpdateByID(ex velox.Executor, id int) *entity.TagUpdate {
-	return c.Update(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Tag with the given id, or returns velox.ErrNotFound.
-func (c *TagClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Tag(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.TagMeta.NotFound()
-	}
-	return err
-}
+// Tag starts the queries and mutations of Tag: Tag.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Tag = orm.ClientOf[*entity.Tag, predicate.Tag, int]{Meta: &entity.TagMeta}

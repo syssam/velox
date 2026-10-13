@@ -3,64 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// MixedIn starts the queries and mutations of MixedIn.
-var MixedIn MixedInClient
-
-// MixedInClient is the type of MixedIn.
-type MixedInClient struct{}
-
-// Query returns a query of every MixedIn, to run on ex: a database handle or a
-// transaction.
-func (*MixedInClient) Query(ex velox.Executor) *entity.MixedInQuery {
-	return entity.NewMixedInQuery(ex)
-}
-
-// Create returns a builder that creates a MixedIn.
-func (*MixedInClient) Create(ex velox.Executor) *entity.MixedInCreate {
-	return entity.NewMixedInCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*MixedInClient) CreateBulk(ex velox.Executor, bs ...*entity.MixedInCreate) *entity.MixedInCreateBulk {
-	return entity.NewMixedInCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the MixedIn rows its conditions match.
-func (*MixedInClient) Update(ex velox.Executor) *entity.MixedInUpdate {
-	return entity.NewMixedInUpdate(ex)
-}
-
-// Delete returns a builder that deletes the MixedIn rows its conditions match.
-func (*MixedInClient) Delete(ex velox.Executor) *entity.MixedInDelete {
-	return entity.NewMixedInDelete(ex)
-}
-
-// Get returns the MixedIn with the given id, or velox.ErrNotFound.
-func (c *MixedInClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.MixedIn, error) {
-	return c.Query(ex).Where(predicate.MixedIn(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the MixedIn with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *MixedInClient) UpdateByID(ex velox.Executor, id int) *entity.MixedInUpdate {
-	return c.Update(ex).Where(predicate.MixedIn(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the MixedIn with the given id, or returns
-// velox.ErrNotFound.
-func (c *MixedInClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.MixedIn(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.MixedInMeta.NotFound()
-	}
-	return err
-}
+// MixedIn starts the queries and mutations of MixedIn: MixedIn.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var MixedIn = orm.ClientOf[*entity.MixedIn, predicate.MixedIn, int]{Meta: &entity.MixedInMeta}

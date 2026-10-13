@@ -261,7 +261,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 
 	// O2M with a per-edge predicate, order and nested M2O.
 	users, err := client.User.Query(db).OrderBy(user.ID.Asc()).
-		WithPosts(client.Post.Query(db).Where(post.Title.NEQ("a1")).OrderBy(post.Title.Desc()).WithAuthor()).
+		With(user.Posts.Load(client.Post.Query(db).Where(post.Title.NEQ("a1")).OrderBy(post.Title.Desc()).With(post.Author))).
 		All(ctx)
 	require.NoError(t, err)
 	require.Len(t, users, 2)
@@ -280,7 +280,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	require.ErrorAs(t, err, &nle)
 
 	// M2O.
-	ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).WithAuthor().All(ctx)
+	ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).With(post.Author).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ps, 3)
 	assert.Equal(t, []int{ann.ID, ann.ID, bob.ID}, []int{ps[0].Edges.Author.ID, ps[1].Edges.Author.ID, ps[2].Edges.Author.ID})
@@ -299,7 +299,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, refTags)
 
-	ps, err = client.Post.Query(db).OrderBy(post.ID.Asc()).WithTags(client.Tag.Query(db).OrderBy(tag.Name.Asc())).All(ctx)
+	ps, err = client.Post.Query(db).OrderBy(post.ID.Asc()).With(post.Tags.Load(client.Tag.Query(db).OrderBy(tag.Name.Asc()))).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ps[0].Edges.Tags, 2)
 	assert.Equal(t, []string{"go", "sql"}, []string{ps[0].Edges.Tags[0].Name, ps[0].Edges.Tags[1].Name})
@@ -309,7 +309,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	require.NoError(t, err, "loaded and empty is not an error")
 	assert.Empty(t, tags)
 
-	ts, err := client.Tag.Query(db).OrderBy(tag.Name.Asc()).WithPosts(client.Post.Query(db).OrderBy(post.Title.Asc())).All(ctx)
+	ts, err := client.Tag.Query(db).OrderBy(tag.Name.Asc()).With(tag.Posts.Load(client.Post.Query(db).OrderBy(post.Title.Asc()))).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ts[0].Edges.Posts, 2)
 	assert.Equal(t, []string{"a1", "a2"}, []string{ts[0].Edges.Posts[0].Title, ts[0].Edges.Posts[1].Title})
@@ -327,7 +327,7 @@ func TestEdges_EagerLoadEveryKind(t *testing.T) {
 	assert.Zero(t, n)
 
 	// A per-parent limit.
-	users, err = client.User.Query(db).OrderBy(user.ID.Asc()).WithPosts(client.Post.Query(db).OrderBy(post.Title.Asc()).Limit(1)).All(ctx)
+	users, err = client.User.Query(db).OrderBy(user.ID.Asc()).With(user.Posts.Load(client.Post.Query(db).OrderBy(post.Title.Asc()).Limit(1))).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, users[0].Edges.Posts, 1)
 	assert.Equal(t, "a1", users[0].Edges.Posts[0].Title)

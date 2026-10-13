@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Order starts the queries and mutations of Order.
-var Order OrderClient
-
-// OrderClient is the type of Order.
-type OrderClient struct{}
-
-// Query returns a query of every Order, to run on ex: a database handle or a
-// transaction.
-func (*OrderClient) Query(ex velox.Executor) *entity.OrderQuery { return entity.NewOrderQuery(ex) }
-
-// Create returns a builder that creates a Order.
-func (*OrderClient) Create(ex velox.Executor) *entity.OrderCreate { return entity.NewOrderCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*OrderClient) CreateBulk(ex velox.Executor, bs ...*entity.OrderCreate) *entity.OrderCreateBulk {
-	return entity.NewOrderCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Order rows its conditions match.
-func (*OrderClient) Update(ex velox.Executor) *entity.OrderUpdate { return entity.NewOrderUpdate(ex) }
-
-// Delete returns a builder that deletes the Order rows its conditions match.
-func (*OrderClient) Delete(ex velox.Executor) *entity.OrderDelete { return entity.NewOrderDelete(ex) }
-
-// Get returns the Order with the given id, or velox.ErrNotFound.
-func (c *OrderClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Order, error) {
-	return c.Query(ex).Where(predicate.Order(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Order with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *OrderClient) UpdateByID(ex velox.Executor, id int) *entity.OrderUpdate {
-	return c.Update(ex).Where(predicate.Order(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Order with the given id, or returns velox.ErrNotFound.
-func (c *OrderClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Order(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.OrderMeta.NotFound()
-	}
-	return err
-}
+// Order starts the queries and mutations of Order: Order.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Order = orm.ClientOf[*entity.Order, predicate.Order, int]{Meta: &entity.OrderMeta}

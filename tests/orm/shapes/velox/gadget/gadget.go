@@ -34,7 +34,7 @@ var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: tru
 
 // Owner is the "owner" edge of Gadget, to Author: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithOwner.
+// With(gadget.Owner).
 var Owner = &orm.ToOne[predicate.Gadget, predicate.Author, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Gadget, in order. The

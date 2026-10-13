@@ -118,34 +118,35 @@ var fieldsMeta = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Fields is the "fields" edge of Keywords, to Field: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithFields.
+// With(keywords.Fields).
 var Fields = &orm.ToMany[predicate.Keywords, predicate.Field, int]{Meta: &fieldsMeta}
 
 var columnsMeta = orm.EdgeMeta{Name: "columns", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_columns"}}
 
 // Columns is the "columns" edge of Keywords, to Field: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithColumns.
+// With(keywords.Columns).
 var Columns = &orm.ToOne[predicate.Keywords, predicate.Field, int]{Meta: &columnsMeta}
 
 var loadedMeta = orm.EdgeMeta{Name: "loaded", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_loaded"}}
 
 // Loaded is the "loaded" edge of Keywords, to Field: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithLoaded.
+// With(keywords.Loaded).
 var Loaded = &orm.ToMany[predicate.Keywords, predicate.Field, int]{Meta: &loadedMeta}
 
 var withMeta = orm.EdgeMeta{Name: "with", Index: 3, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_with"}}
 
 // With is the "with" edge of Keywords, to Field: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithWith.
+// With(keywords.With).
 var With = &orm.ToMany[predicate.Keywords, predicate.Field, int]{Meta: &withMeta}
 
 var allMeta = orm.EdgeMeta{Name: "all", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_all"}}
 
 // All is the "all" edge of Keywords, to Field: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithAll.
+// and changes to it (Set, Clear). A query eager-loads it with
+// With(keywords.All).
 var All = &orm.ToOne[predicate.Keywords, predicate.Field, int]{Meta: &allMeta}
 
 // EdgeMetas returns the descriptions of the edges of Keywords, in order. The

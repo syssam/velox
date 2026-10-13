@@ -3,10 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
-
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
@@ -35,8 +31,6 @@ type NodeEdges struct {
 
 // ParentOrErr returns the parent edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *NodeEdges) ParentOrErr() (*Node, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("parent")
@@ -49,8 +43,6 @@ func (e *NodeEdges) ParentOrErr() (*Node, error) {
 
 // ChildrenOrErr returns the children edge, or an error when it was not loaded
 // (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *NodeEdges) ChildrenOrErr() ([]*Node, error) {
 	if !e.loaded[1] {
 		return nil, velox.NewNotLoadedError("children")
@@ -60,8 +52,6 @@ func (e *NodeEdges) ChildrenOrErr() ([]*Node, error) {
 
 // PrevOrErr returns the prev edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *NodeEdges) PrevOrErr() (*Node, error) {
 	if !e.loaded[2] {
 		return nil, velox.NewNotLoadedError("prev")
@@ -74,8 +64,6 @@ func (e *NodeEdges) PrevOrErr() (*Node, error) {
 
 // NextOrErr returns the next edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *NodeEdges) NextOrErr() (*Node, error) {
 	if !e.loaded[3] {
 		return nil, velox.NewNotLoadedError("next")
@@ -88,8 +76,6 @@ func (e *NodeEdges) NextOrErr() (*Node, error) {
 
 // ptrNode returns the address of the field of a Node that holds its i-th
 // column: what a row is scanned into, and read from. It is the Ptr of NodeMeta.
-//
-//go:noinline
 func ptrNode(v any, i int) any {
 	e := v.(*Node)
 	switch i {
@@ -107,8 +93,6 @@ func ptrNode(v any, i int) any {
 
 // edgeNode marks the i-th edge of a Node as loaded and returns the address of
 // the field that holds its neighbors. It is the Edge of NodeMeta.
-//
-//go:noinline
 func edgeNode(v any, i int) any {
 	e := v.(*Node)
 	e.Edges.loaded[i] = true
@@ -128,8 +112,6 @@ func edgeNode(v any, i int) any {
 // linkNode stores the neighbors an eager load read into dst, the address of the
 // field of another entity's edge to Node: all of them, or the first where the
 // edge has one. It is the Link of NodeMeta.
-//
-//go:noinline
 func linkNode(dst any, es []any) {
 	switch d := dst.(type) {
 	case *[]*Node:
@@ -144,21 +126,6 @@ func linkNode(dst any, es []any) {
 			*d = es[0].(*Node)
 		}
 	}
-}
-
-// NodeEdge is a row of a page of Node, with its cursor.
-type NodeEdge struct {
-	Node   *Node        `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// NodeConnection is one page of Node.
-type NodeConnection struct {
-	Edges    []*NodeEdge    `json:"edges"`
-	PageInfo velox.PageInfo `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // NodeMeta is the runtime description of Node. Use it through its address.
@@ -176,483 +143,38 @@ var NodeMeta = orm.Meta{
 	},
 }
 
-// NodeQuery is the query of Node.
-type NodeQuery struct{ c orm.QueryCore }
-
-// NewNodeQuery returns a query of every Node.
-func NewNodeQuery(ex velox.Executor) *NodeQuery {
-	return &NodeQuery{c: orm.QueryCore{M: &NodeMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *NodeQuery) Where(ps ...predicate.Node) *NodeQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *NodeQuery) OrderBy(os ...predicate.NodeOrderTerm) *NodeQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *NodeQuery) Limit(n int) *NodeQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *NodeQuery) Offset(n int) *NodeQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *NodeQuery) Distinct() *NodeQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *NodeQuery) Columns(columns ...string) *NodeQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *NodeQuery) ForUpdate(opts ...orm.LockOption) *NodeQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *NodeQuery) ForShare(opts ...orm.LockOption) *NodeQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *NodeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *NodeQuery) Clone() *NodeQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Node.
-//
-//go:noinline
-func (q *NodeQuery) All(ctx context.Context) ([]*Node, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Node, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Node)
-	}
-	return out, nil
-}
-
-// First returns the first matching Node, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *NodeQuery) First(ctx context.Context) (*Node, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Node), nil
-}
-
-// Only returns the single matching Node: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *NodeQuery) Only(ctx context.Context) (*Node, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Node), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *NodeQuery) Iter(ctx context.Context) iter.Seq2[*Node, error] {
-	return func(yield func(*Node, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Node), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *NodeQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*NodeConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &NodeConnection{Edges: make([]*NodeEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &NodeEdge{Node: r.(*Node), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *NodeQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *NodeQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *NodeQuery) IDs(ctx context.Context) ([]int, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(int)
-	}
-	return ids, nil
-}
-
-// NodeCreate creates one Node.
-type NodeCreate struct{ c orm.MutCore }
-
-// NewNodeCreate returns a builder that creates a Node.
-func NewNodeCreate(ex velox.Executor) *NodeCreate {
-	return &NodeCreate{c: orm.MutCore{M: &NodeMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *NodeCreate) Set(ss ...predicate.NodeSetter) *NodeCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Node, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Node is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *NodeCreate) Fill(in any, skip ...string) *NodeCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *NodeCreate) Save(ctx context.Context) (*Node, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Node), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *NodeCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// NodeCreateBulk creates several Node rows with one statement.
-type NodeCreateBulk struct {
-	ex velox.Executor
-	bs []*NodeCreate
-	n  int
-}
-
-// NewNodeCreateBulk returns a builder that creates one row per given builder,
-// as each is when the rows are inserted: what is set on one after this call is
-// part of its row.
-func NewNodeCreateBulk(ex velox.Executor, bs ...*NodeCreate) *NodeCreateBulk {
-	return &NodeCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *NodeCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *NodeCreateBulk) BatchSize(n int) *NodeCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &NodeMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Node, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Node)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *NodeCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &NodeMeta, b.sets(), b.n)
-	return err
-}
-
-// NodeUpdate updates Node rows.
-type NodeUpdate struct{ c orm.MutCore }
-
-// NewNodeUpdate returns a builder that updates the rows its predicates match.
-func NewNodeUpdate(ex velox.Executor) *NodeUpdate {
-	return &NodeUpdate{c: orm.MutCore{M: &NodeMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *NodeUpdate) Set(ss ...predicate.NodeSetter) *NodeUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *NodeUpdate) Where(ps ...predicate.Node) *NodeUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *NodeUpdate) Fill(in any, skip ...string) *NodeUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *NodeUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *NodeUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *NodeUpdate) SaveOne(ctx context.Context) (*Node, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Node), nil
-}
-
-// NodeDelete deletes Node rows.
-type NodeDelete struct{ c orm.MutCore }
-
-// NewNodeDelete returns a builder that deletes the rows its predicates match.
-func NewNodeDelete(ex velox.Executor) *NodeDelete {
-	return &NodeDelete{c: orm.MutCore{M: &NodeMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *NodeDelete) Where(ps ...predicate.Node) *NodeDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *NodeDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Node, and a page of it: what the root package's Node
+// returns. Their methods are those of the types of package orm.
+type (
+	NodeQuery      = orm.QueryOf[*Node, predicate.Node, int]
+	NodeCreate     = orm.CreateOf[*Node, predicate.Node]
+	NodeCreateBulk = orm.CreateBulkOf[*Node, predicate.Node]
+	NodeUpdate     = orm.UpdateOf[*Node, predicate.Node]
+	NodeDelete     = orm.DeleteOf[predicate.Node]
+	// NodeEdge is a row of a page of Node, with its cursor, and
+	// NodeConnection one page: what Paginate returns.
+	NodeEdge       = orm.PageEdge[*Node]
+	NodeConnection = orm.Connection[*Node]
+)
 
 // QueryParent queries the "parent" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Node) QueryParent(ex velox.Executor) *NodeQuery {
-	q := NewNodeQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[0], e))
-	return q
-}
-
-// WithParent eager-loads the "parent" edge: one more query, whatever the number
-// of rows. A query of Node given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Node.
-//
-//go:noinline
-func (q *NodeQuery) WithParent(opts ...*NodeQuery) *NodeQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(NodeMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*Node, predicate.Node, int](NodeMeta.Edges[0], e, ex)
 }
 
 // QueryChildren queries the "children" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Node) QueryChildren(ex velox.Executor) *NodeQuery {
-	q := NewNodeQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[1], e))
-	return q
-}
-
-// WithChildren eager-loads the "children" edge: one more query, whatever the
-// number of rows. A query of Node given to it describes the load: its
-// conditions, order, nested loads and its limit, which applies per Node.
-//
-//go:noinline
-func (q *NodeQuery) WithChildren(opts ...*NodeQuery) *NodeQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(NodeMeta.Edges[1], o, len(opts))
-	return q
+	return orm.Neighbors[*Node, predicate.Node, int](NodeMeta.Edges[1], e, ex)
 }
 
 // QueryPrev queries the "prev" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Node) QueryPrev(ex velox.Executor) *NodeQuery {
-	q := NewNodeQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[2], e))
-	return q
-}
-
-// WithPrev eager-loads the "prev" edge: one more query, whatever the number
-// of rows. A query of Node given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Node.
-//
-//go:noinline
-func (q *NodeQuery) WithPrev(opts ...*NodeQuery) *NodeQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(NodeMeta.Edges[2], o, len(opts))
-	return q
+	return orm.Neighbors[*Node, predicate.Node, int](NodeMeta.Edges[2], e, ex)
 }
 
 // QueryNext queries the "next" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Node) QueryNext(ex velox.Executor) *NodeQuery {
-	q := NewNodeQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(NodeMeta.Edges[3], e))
-	return q
-}
-
-// WithNext eager-loads the "next" edge: one more query, whatever the number
-// of rows. A query of Node given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Node.
-//
-//go:noinline
-func (q *NodeQuery) WithNext(opts ...*NodeQuery) *NodeQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(NodeMeta.Edges[3], o, len(opts))
-	return q
+	return orm.Neighbors[*Node, predicate.Node, int](NodeMeta.Edges[3], e, ex)
 }
 
 func init() {

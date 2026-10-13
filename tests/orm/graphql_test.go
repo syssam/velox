@@ -440,7 +440,7 @@ func TestEdgeResolvers(t *testing.T) {
 	_, err = p.Author(ctx)
 	require.ErrorIs(t, err, velox.ErrNoExecutor)
 	// A neighbor the query loaded is returned as it is: no handle, no query.
-	loaded := must(client.Post.Query(db).Where(post.Title.EQ("a1")).WithAuthor().Only(ctx))
+	loaded := must(client.Post.Query(db).Where(post.Title.EQ("a1")).With(post.Author).Only(ctx))
 	author, err = loaded.Author(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "ann", author.Name)

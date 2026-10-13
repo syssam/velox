@@ -3,64 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Article starts the queries and mutations of Article.
-var Article ArticleClient
-
-// ArticleClient is the type of Article.
-type ArticleClient struct{}
-
-// Query returns a query of every Article, to run on ex: a database handle or a
-// transaction.
-func (*ArticleClient) Query(ex velox.Executor) *entity.ArticleQuery {
-	return entity.NewArticleQuery(ex)
-}
-
-// Create returns a builder that creates a Article.
-func (*ArticleClient) Create(ex velox.Executor) *entity.ArticleCreate {
-	return entity.NewArticleCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*ArticleClient) CreateBulk(ex velox.Executor, bs ...*entity.ArticleCreate) *entity.ArticleCreateBulk {
-	return entity.NewArticleCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Article rows its conditions match.
-func (*ArticleClient) Update(ex velox.Executor) *entity.ArticleUpdate {
-	return entity.NewArticleUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Article rows its conditions match.
-func (*ArticleClient) Delete(ex velox.Executor) *entity.ArticleDelete {
-	return entity.NewArticleDelete(ex)
-}
-
-// Get returns the Article with the given id, or velox.ErrNotFound.
-func (c *ArticleClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Article, error) {
-	return c.Query(ex).Where(predicate.Article(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Article with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *ArticleClient) UpdateByID(ex velox.Executor, id int) *entity.ArticleUpdate {
-	return c.Update(ex).Where(predicate.Article(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Article with the given id, or returns
-// velox.ErrNotFound.
-func (c *ArticleClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Article(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.ArticleMeta.NotFound()
-	}
-	return err
-}
+// Article starts the queries and mutations of Article: Article.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Article = orm.ClientOf[*entity.Article, predicate.Article, int]{Meta: &entity.ArticleMeta}

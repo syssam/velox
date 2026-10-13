@@ -92,24 +92,6 @@ func (g *Generator) LeafNames(e *Entity) (*Namer, map[*Field]string) {
 // Names returns the names of e's types in package entity.
 func (g *Generator) Names(e *Entity) Names { return g.names(e) }
 
-// clientTypes names the client of every entity in the root package: a type
-// per entity, named after it, UserClient for User. A schema may have an
-// entity of that very name, and then the type gives way.
-func (g *Generator) clientTypes() {
-	taken := map[string]bool{}
-	for _, e := range g.ents {
-		taken[e.Name] = true
-	}
-	for _, e := range g.ents {
-		name := e.Name + "Client"
-		for taken[name] {
-			name += "Type"
-		}
-		taken[name] = true
-		e.Client = name
-	}
-}
-
 // Predicate is the entity's predicate type, as written outside the predicate
 // package.
 func (e *Entity) Predicate() string { return e.pred() }
@@ -150,7 +132,9 @@ func Formatted(src []byte, what string) ([]byte, error) {
 	return formatted(bytes.NewBuffer(src), what)
 }
 
-// NoInline marks the functions of a source of package entity //go:noinline.
+// NoInline marks the functions of a source of package entity //go:noinline:
+// for the methods an extension adds to the entities, which every package
+// of an application can call.
 func NoInline(src []byte) []byte { return noInline(src) }
 
 // RootPackage is the name of the package at the root of the generated tree.

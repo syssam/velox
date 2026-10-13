@@ -3,66 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// StringKey starts the queries and mutations of StringKey.
-var StringKey StringKeyClient
-
-// StringKeyClient is the type of StringKey.
-type StringKeyClient struct{}
-
-// Query returns a query of every StringKey, to run on ex: a database handle or
-// a transaction.
-func (*StringKeyClient) Query(ex velox.Executor) *entity.StringKeyQuery {
-	return entity.NewStringKeyQuery(ex)
-}
-
-// Create returns a builder that creates a StringKey.
-func (*StringKeyClient) Create(ex velox.Executor) *entity.StringKeyCreate {
-	return entity.NewStringKeyCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*StringKeyClient) CreateBulk(ex velox.Executor, bs ...*entity.StringKeyCreate) *entity.StringKeyCreateBulk {
-	return entity.NewStringKeyCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the StringKey rows its conditions
-// match.
-func (*StringKeyClient) Update(ex velox.Executor) *entity.StringKeyUpdate {
-	return entity.NewStringKeyUpdate(ex)
-}
-
-// Delete returns a builder that deletes the StringKey rows its conditions
-// match.
-func (*StringKeyClient) Delete(ex velox.Executor) *entity.StringKeyDelete {
-	return entity.NewStringKeyDelete(ex)
-}
-
-// Get returns the StringKey with the given id, or velox.ErrNotFound.
-func (c *StringKeyClient) Get(ctx context.Context, ex velox.Executor, id string) (*entity.StringKey, error) {
-	return c.Query(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the StringKey with the given id;
-// end it with SaveOne, which reports a missing row.
-func (c *StringKeyClient) UpdateByID(ex velox.Executor, id string) *entity.StringKeyUpdate {
-	return c.Update(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the StringKey with the given id, or returns
-// velox.ErrNotFound.
-func (c *StringKeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id string) error {
-	n, err := c.Delete(ex).Where(predicate.StringKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.StringKeyMeta.NotFound()
-	}
-	return err
-}
+// StringKey starts the queries and mutations of StringKey: StringKey.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var StringKey = orm.ClientOf[*entity.StringKey, predicate.StringKey, string]{Meta: &entity.StringKeyMeta}

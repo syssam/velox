@@ -3,10 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
-
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	schemafield "github.com/syssam/velox/schema/field"
@@ -32,8 +28,6 @@ type KindEdges struct {
 
 // ShapesOrErr returns the shapes edge, or an error when it was not loaded
 // (velox.IsNotLoaded).
-//
-//go:noinline
 func (e *KindEdges) ShapesOrErr() ([]*KindShape, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("shapes")
@@ -43,8 +37,6 @@ func (e *KindEdges) ShapesOrErr() ([]*KindShape, error) {
 
 // ptrKind returns the address of the field of a Kind that holds its i-th
 // column: what a row is scanned into, and read from. It is the Ptr of KindMeta.
-//
-//go:noinline
 func ptrKind(v any, i int) any {
 	e := v.(*Kind)
 	switch i {
@@ -60,8 +52,6 @@ func ptrKind(v any, i int) any {
 
 // edgeKind marks the i-th edge of a Kind as loaded and returns the address of
 // the field that holds its neighbors. It is the Edge of KindMeta.
-//
-//go:noinline
 func edgeKind(v any, i int) any {
 	e := v.(*Kind)
 	e.Edges.loaded[i] = true
@@ -75,8 +65,6 @@ func edgeKind(v any, i int) any {
 // linkKind stores the neighbors an eager load read into dst, the address of the
 // field of another entity's edge to Kind: all of them, or the first where the
 // edge has one. It is the Link of KindMeta.
-//
-//go:noinline
 func linkKind(dst any, es []any) {
 	switch d := dst.(type) {
 	case *[]*Kind:
@@ -91,21 +79,6 @@ func linkKind(dst any, es []any) {
 			*d = es[0].(*Kind)
 		}
 	}
-}
-
-// KindEdge is a row of a page of Kind, with its cursor.
-type KindEdge struct {
-	Node   *Kind        `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// KindConnection is one page of Kind.
-type KindConnection struct {
-	Edges    []*KindEdge    `json:"edges"`
-	PageInfo velox.PageInfo `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // KindMeta is the runtime description of Kind. Use it through its address.
@@ -126,414 +99,23 @@ var KindMeta = orm.Meta{
 	},
 }
 
-// KindQuery is the query of Kind.
-type KindQuery struct{ c orm.QueryCore }
-
-// NewKindQuery returns a query of every Kind.
-func NewKindQuery(ex velox.Executor) *KindQuery {
-	return &KindQuery{c: orm.QueryCore{M: &KindMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *KindQuery) Where(ps ...predicate.Kind) *KindQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *KindQuery) OrderBy(os ...predicate.KindOrderTerm) *KindQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *KindQuery) Limit(n int) *KindQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *KindQuery) Offset(n int) *KindQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *KindQuery) Distinct() *KindQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *KindQuery) Columns(columns ...string) *KindQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *KindQuery) ForUpdate(opts ...orm.LockOption) *KindQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *KindQuery) ForShare(opts ...orm.LockOption) *KindQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *KindQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *KindQuery) Clone() *KindQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Kind.
-//
-//go:noinline
-func (q *KindQuery) All(ctx context.Context) ([]*Kind, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Kind, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Kind)
-	}
-	return out, nil
-}
-
-// First returns the first matching Kind, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *KindQuery) First(ctx context.Context) (*Kind, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Kind), nil
-}
-
-// Only returns the single matching Kind: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *KindQuery) Only(ctx context.Context) (*Kind, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Kind), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *KindQuery) Iter(ctx context.Context) iter.Seq2[*Kind, error] {
-	return func(yield func(*Kind, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Kind), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *KindQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*KindConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &KindConnection{Edges: make([]*KindEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &KindEdge{Node: r.(*Kind), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *KindQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *KindQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *KindQuery) IDs(ctx context.Context) ([]int, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(int)
-	}
-	return ids, nil
-}
-
-// KindCreate creates one Kind.
-type KindCreate struct{ c orm.MutCore }
-
-// NewKindCreate returns a builder that creates a Kind.
-func NewKindCreate(ex velox.Executor) *KindCreate {
-	return &KindCreate{c: orm.MutCore{M: &KindMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *KindCreate) Set(ss ...predicate.KindSetter) *KindCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Kind, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Kind is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *KindCreate) Fill(in any, skip ...string) *KindCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *KindCreate) Save(ctx context.Context) (*Kind, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Kind), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *KindCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// KindCreateBulk creates several Kind rows with one statement.
-type KindCreateBulk struct {
-	ex velox.Executor
-	bs []*KindCreate
-	n  int
-}
-
-// NewKindCreateBulk returns a builder that creates one row per given builder,
-// as each is when the rows are inserted: what is set on one after this call is
-// part of its row.
-func NewKindCreateBulk(ex velox.Executor, bs ...*KindCreate) *KindCreateBulk {
-	return &KindCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *KindCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *KindCreateBulk) BatchSize(n int) *KindCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *KindCreateBulk) Save(ctx context.Context) ([]*Kind, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &KindMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Kind, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Kind)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *KindCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &KindMeta, b.sets(), b.n)
-	return err
-}
-
-// KindUpdate updates Kind rows.
-type KindUpdate struct{ c orm.MutCore }
-
-// NewKindUpdate returns a builder that updates the rows its predicates match.
-func NewKindUpdate(ex velox.Executor) *KindUpdate {
-	return &KindUpdate{c: orm.MutCore{M: &KindMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *KindUpdate) Set(ss ...predicate.KindSetter) *KindUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *KindUpdate) Where(ps ...predicate.Kind) *KindUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *KindUpdate) Fill(in any, skip ...string) *KindUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *KindUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *KindUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *KindUpdate) SaveOne(ctx context.Context) (*Kind, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Kind), nil
-}
-
-// KindDelete deletes Kind rows.
-type KindDelete struct{ c orm.MutCore }
-
-// NewKindDelete returns a builder that deletes the rows its predicates match.
-func NewKindDelete(ex velox.Executor) *KindDelete {
-	return &KindDelete{c: orm.MutCore{M: &KindMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *KindDelete) Where(ps ...predicate.Kind) *KindDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *KindDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Kind, and a page of it: what the root package's Kind
+// returns. Their methods are those of the types of package orm.
+type (
+	KindQuery      = orm.QueryOf[*Kind, predicate.Kind, int]
+	KindCreate     = orm.CreateOf[*Kind, predicate.Kind]
+	KindCreateBulk = orm.CreateBulkOf[*Kind, predicate.Kind]
+	KindUpdate     = orm.UpdateOf[*Kind, predicate.Kind]
+	KindDelete     = orm.DeleteOf[predicate.Kind]
+	// KindEdge is a row of a page of Kind, with its cursor, and
+	// KindConnection one page: what Paginate returns.
+	KindEdge       = orm.PageEdge[*Kind]
+	KindConnection = orm.Connection[*Kind]
+)
 
 // QueryShapes queries the "shapes" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Kind) QueryShapes(ex velox.Executor) *KindShapeQuery {
-	q := NewKindShapeQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(KindMeta.Edges[0], e))
-	return q
-}
-
-// WithShapes eager-loads the "shapes" edge: one more query, whatever the number
-// of rows. A query of KindShape given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Kind.
-//
-//go:noinline
-func (q *KindQuery) WithShapes(opts ...*KindShapeQuery) *KindQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(KindMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*KindShape, predicate.KindShape, int](KindMeta.Edges[0], e, ex)
 }
 
 func init() { slots.Kind.Bind(&KindMeta) }

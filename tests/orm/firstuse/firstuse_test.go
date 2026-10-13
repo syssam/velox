@@ -46,9 +46,9 @@ func TestEntityFirstUsedThroughAnother(t *testing.T) {
 	require.ErrorIs(t, err, privacy.Deny, "a condition on an edge to an entity that was never used ran without that entity's policy")
 
 	// User, first used as the target of an eager load.
-	_, err = velox.Post.Query(conn).WithAuthor().All(schema.EnforceUserPrivacyContext(ctx))
+	_, err = velox.Post.Query(conn).With(post.Author).All(schema.EnforceUserPrivacyContext(ctx))
 	require.ErrorIs(t, err, privacy.Deny, "an eager load of an entity that was never used ran without that entity's policy")
-	posts, err := velox.Post.Query(conn).WithAuthor().All(ctx)
+	posts, err := velox.Post.Query(conn).With(post.Author).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	require.NotNil(t, posts[0].Edges.Author)

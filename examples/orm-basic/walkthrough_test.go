@@ -191,7 +191,7 @@ func TestEdges(t *testing.T) {
 	// number of users. The query given describes what to load of it.
 	users, err := velox.User.Query(conn).
 		OrderBy(user.Name.Asc()).
-		WithPosts(velox.Post.Query(nil).Where(post.Status.EQ(post.StatusPublished)).OrderBy(post.Title.Asc())).
+		With(user.Posts.Load(velox.Post.Query(nil).Where(post.Status.EQ(post.StatusPublished)).OrderBy(post.Title.Asc()))).
 		All(ctx)
 	require.NoError(t, err)
 	require.Len(t, users, 2)

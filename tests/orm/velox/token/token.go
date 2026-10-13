@@ -43,7 +43,8 @@ var (
 var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
 
 // Owner is the "owner" edge of Token, to User: conditions on it (Has, HasWith)
-// and changes to it (Set, Clear). A query eager-loads it with WithOwner.
+// and changes to it (Set, Clear). A query eager-loads it with
+// With(token.Owner).
 var Owner = &orm.ToOne[predicate.Token, predicate.User, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Token, in order. The

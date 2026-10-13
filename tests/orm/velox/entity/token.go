@@ -3,10 +3,6 @@
 package entity
 
 import (
-	"context"
-	"iter"
-	"slices"
-
 	uuid "github.com/google/uuid"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
@@ -39,8 +35,6 @@ type TokenEdges struct {
 
 // OwnerOrErr returns the owner edge: an error when it was not loaded
 // (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
-//
-//go:noinline
 func (e *TokenEdges) OwnerOrErr() (*User, error) {
 	if !e.loaded[0] {
 		return nil, velox.NewNotLoadedError("owner")
@@ -54,8 +48,6 @@ func (e *TokenEdges) OwnerOrErr() (*User, error) {
 // ptrToken returns the address of the field of a Token that holds its i-th
 // column: what a row is scanned into, and read from. It is the Ptr of
 // TokenMeta.
-//
-//go:noinline
 func ptrToken(v any, i int) any {
 	e := v.(*Token)
 	switch i {
@@ -81,8 +73,6 @@ func ptrToken(v any, i int) any {
 
 // edgeToken marks the i-th edge of a Token as loaded and returns the address of
 // the field that holds its neighbors. It is the Edge of TokenMeta.
-//
-//go:noinline
 func edgeToken(v any, i int) any {
 	e := v.(*Token)
 	e.Edges.loaded[i] = true
@@ -96,8 +86,6 @@ func edgeToken(v any, i int) any {
 // linkToken stores the neighbors an eager load read into dst, the address of
 // the field of another entity's edge to Token: all of them, or the first where
 // the edge has one. It is the Link of TokenMeta.
-//
-//go:noinline
 func linkToken(dst any, es []any) {
 	switch d := dst.(type) {
 	case *[]*Token:
@@ -112,21 +100,6 @@ func linkToken(dst any, es []any) {
 			*d = es[0].(*Token)
 		}
 	}
-}
-
-// TokenEdge is a row of a page of Token, with its cursor.
-type TokenEdge struct {
-	Node   *Token       `json:"node"`
-	Cursor velox.Cursor `json:"cursor"`
-}
-
-// TokenConnection is one page of Token.
-type TokenConnection struct {
-	Edges    []*TokenEdge   `json:"edges"`
-	PageInfo velox.PageInfo `json:"pageInfo"`
-	// TotalCount is the number of rows the query matches, or -1 when it
-	// was not counted (orm.WithoutTotal).
-	TotalCount int `json:"totalCount"`
 }
 
 // TokenMeta is the runtime description of Token. Use it through its address.
@@ -151,414 +124,23 @@ var TokenMeta = orm.Meta{
 	},
 }
 
-// TokenQuery is the query of Token.
-type TokenQuery struct{ c orm.QueryCore }
-
-// NewTokenQuery returns a query of every Token.
-func NewTokenQuery(ex velox.Executor) *TokenQuery {
-	return &TokenQuery{c: orm.QueryCore{M: &TokenMeta, Ex: ex}}
-}
-
-// Where adds predicates; all must hold.
-//
-//go:noinline
-func (q *TokenQuery) Where(ps ...predicate.Token) *TokenQuery {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, orm.P(p))
-	}
-	return q
-}
-
-// OrderBy adds order terms.
-//
-//go:noinline
-func (q *TokenQuery) OrderBy(os ...predicate.TokenOrderTerm) *TokenQuery {
-	for _, o := range os {
-		q.c.Orders = append(q.c.Orders, orm.O(o))
-	}
-	return q
-}
-
-// Limit caps the number of rows.
-//
-//go:noinline
-func (q *TokenQuery) Limit(n int) *TokenQuery { q.c.Limit = n; return q }
-
-// Offset skips the first n rows.
-//
-//go:noinline
-func (q *TokenQuery) Offset(n int) *TokenQuery { q.c.Offset = n; return q }
-
-// Distinct removes duplicate rows.
-//
-//go:noinline
-func (q *TokenQuery) Distinct() *TokenQuery { q.c.Distinct = true; return q }
-
-// Columns reads only the named columns into the entities, for a list that
-// shows a few columns of a wide table; every other field of an entity is
-// left at its zero value, so such an entity is for reading, not for saving
-// back. The id is always read, and so is what the query needs itself: the
-// columns it is ordered by and the keys of the edges it loads.
-//
-//go:noinline
-func (q *TokenQuery) Columns(columns ...string) *TokenQuery { q.c.Columns(columns...); return q }
-
-// ForUpdate locks the rows read against concurrent changes until the
-// transaction ends. It needs a transaction to mean anything.
-//
-//go:noinline
-func (q *TokenQuery) ForUpdate(opts ...orm.LockOption) *TokenQuery {
-	q.c.SetLock(orm.LockUpdate, opts)
-	return q
-}
-
-// ForShare locks the rows read against concurrent changes, and lets others
-// read them, until the transaction ends.
-//
-//go:noinline
-func (q *TokenQuery) ForShare(opts ...orm.LockOption) *TokenQuery {
-	q.c.SetLock(orm.LockShare, opts)
-	return q
-}
-
-// Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities:
-// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
-//
-//go:noinline
-func (q *TokenQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
-
-// Clone returns an independent copy of the query.
-//
-//go:noinline
-func (q *TokenQuery) Clone() *TokenQuery {
-	c := *q
-	c.c.Preds = append([]orm.P(nil), q.c.Preds...)
-	c.c.Orders = append([]orm.O(nil), q.c.Orders...)
-	c.c.With = append([]*orm.EdgeLoad(nil), q.c.With...)
-	return &c
-}
-
-// All returns every matching Token.
-//
-//go:noinline
-func (q *TokenQuery) All(ctx context.Context) ([]*Token, error) {
-	rows, err := q.c.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*Token, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Token)
-	}
-	return out, nil
-}
-
-// First returns the first matching Token, or velox.ErrNotFound.
-//
-//go:noinline
-func (q *TokenQuery) First(ctx context.Context) (*Token, error) {
-	r, err := q.c.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Token), nil
-}
-
-// Only returns the single matching Token: velox.ErrNotFound for none,
-// velox.ErrNotSingular for more.
-//
-//go:noinline
-func (q *TokenQuery) Only(ctx context.Context) (*Token, error) {
-	r, err := q.c.Only(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return r.(*Token), nil
-}
-
-// Iter returns the matching rows one at a time, without loading them all:
-//
-//	for u, err := range q.Iter(ctx) { ... }
-//
-// Every loop over the result runs the query again. A failure is delivered as
-// the last pair. The rows stay open during the loop, so on a transaction
-// nothing else can run until it ends; eager loads are refused.
-//
-//go:noinline
-func (q *TokenQuery) Iter(ctx context.Context) iter.Seq2[*Token, error] {
-	return func(yield func(*Token, error) bool) {
-		err := q.c.Each(ctx, func(e any) bool { return yield(e.(*Token), nil) })
-		if err != nil {
-			yield(nil, err)
-		}
-	}
-}
-
-// Paginate returns one page of the matching rows, in the query's order, with
-// a cursor per row: the first rows after the cursor after, or the last rows
-// before the cursor before. It is keyset pagination in the shape of a Relay
-// connection, for any kind of list endpoint.
-//
-//go:noinline
-func (q *TokenQuery) Paginate(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int) (*TokenConnection, error) {
-	p, err := q.c.Paginate(ctx, after, first, before, last)
-	if err != nil {
-		return nil, err
-	}
-	conn := &TokenConnection{Edges: make([]*TokenEdge, len(p.Rows)), PageInfo: p.Info, TotalCount: p.Total}
-	for i, r := range p.Rows {
-		conn.Edges[i] = &TokenEdge{Node: r.(*Token), Cursor: p.Cursors[i]}
-	}
-	return conn, nil
-}
-
-// Count returns the number of matching rows.
-//
-//go:noinline
-func (q *TokenQuery) Count(ctx context.Context) (int, error) { return q.c.Count(ctx) }
-
-// Exists reports whether any row matches.
-//
-//go:noinline
-func (q *TokenQuery) Exists(ctx context.Context) (bool, error) { return q.c.Exists(ctx) }
-
-// IDs returns the ids of the matching rows.
-//
-//go:noinline
-func (q *TokenQuery) IDs(ctx context.Context) ([]uuid.UUID, error) {
-	vs, err := q.c.IDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]uuid.UUID, len(vs))
-	for i, v := range vs {
-		ids[i] = v.(uuid.UUID)
-	}
-	return ids, nil
-}
-
-// TokenCreate creates one Token.
-type TokenCreate struct{ c orm.MutCore }
-
-// NewTokenCreate returns a builder that creates a Token.
-func NewTokenCreate(ex velox.Executor) *TokenCreate {
-	return &TokenCreate{c: orm.MutCore{M: &TokenMeta, Ex: ex}}
-}
-
-// Set adds field values and edges of the new row.
-//
-//go:noinline
-func (b *TokenCreate) Set(ss ...predicate.TokenSetter) *TokenCreate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Fill takes what in gives: a struct whose fields are named like those of
-// Token, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Token is an error unless listed in
-// skip. A later Set wins.
-//
-//go:noinline
-func (b *TokenCreate) Fill(in any, skip ...string) *TokenCreate {
-	b.c.Fill(in, false, skip)
-	return b
-}
-
-// Save inserts the row and returns it.
-//
-//go:noinline
-func (b *TokenCreate) Save(ctx context.Context) (*Token, error) {
-	e, err := b.c.Insert(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Token), nil
-}
-
-// Exec inserts the row.
-//
-//go:noinline
-func (b *TokenCreate) Exec(ctx context.Context) error {
-	_, err := b.c.Insert(ctx)
-	return err
-}
-
-// TokenCreateBulk creates several Token rows with one statement.
-type TokenCreateBulk struct {
-	ex velox.Executor
-	bs []*TokenCreate
-	n  int
-}
-
-// NewTokenCreateBulk returns a builder that creates one row per given builder,
-// as each is when the rows are inserted: what is set on one after this call is
-// part of its row.
-func NewTokenCreateBulk(ex velox.Executor, bs ...*TokenCreate) *TokenCreateBulk {
-	return &TokenCreateBulk{ex: ex, bs: bs}
-}
-
-//go:noinline
-func (b *TokenCreateBulk) sets() [][]orm.S {
-	rows := make([][]orm.S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
-	}
-	return rows
-}
-
-// BatchSize makes Save and Exec insert the rows n at a time, with a statement
-// for every n of them where they would use one for all: a statement has a
-// limit on its parameters, and a row takes one for each of its columns. The
-// statements are one transaction only when the handle is one. On a database
-// handle, one that fails leaves the rows of those before it in the table, and
-// Save returns them with the error.
-//
-//go:noinline
-func (b *TokenCreateBulk) BatchSize(n int) *TokenCreateBulk {
-	b.n = n
-	return b
-}
-
-// Save inserts the rows and returns them in order.
-//
-//go:noinline
-func (b *TokenCreateBulk) Save(ctx context.Context) ([]*Token, error) {
-	rows, err := orm.InsertBulk(ctx, b.ex, &TokenMeta, b.sets(), b.n)
-	if err != nil && len(rows) == 0 {
-		return nil, err
-	}
-	out := make([]*Token, len(rows))
-	for i, r := range rows {
-		out[i] = r.(*Token)
-	}
-	return out, err
-}
-
-// Exec inserts the rows.
-//
-//go:noinline
-func (b *TokenCreateBulk) Exec(ctx context.Context) error {
-	_, err := orm.InsertBulk(ctx, b.ex, &TokenMeta, b.sets(), b.n)
-	return err
-}
-
-// TokenUpdate updates Token rows.
-type TokenUpdate struct{ c orm.MutCore }
-
-// NewTokenUpdate returns a builder that updates the rows its predicates match.
-func NewTokenUpdate(ex velox.Executor) *TokenUpdate {
-	return &TokenUpdate{c: orm.MutCore{M: &TokenMeta, Ex: ex}}
-}
-
-// Set adds assignments and edge changes.
-//
-//go:noinline
-func (b *TokenUpdate) Set(ss ...predicate.TokenSetter) *TokenUpdate {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, orm.S(s))
-	}
-	return b
-}
-
-// Where restricts the rows updated; all predicates must hold.
-//
-//go:noinline
-func (b *TokenUpdate) Where(ps ...predicate.Token) *TokenUpdate {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Fill takes what in gives, as on a create; here an optional that is present
-// and null, and a true Clear<Name> field, set a column that can be NULL to
-// NULL. What in does not give is left alone.
-//
-//go:noinline
-func (b *TokenUpdate) Fill(in any, skip ...string) *TokenUpdate {
-	b.c.Fill(in, true, skip)
-	return b
-}
-
-// Exec updates the matching rows and returns how many: with nothing to set,
-// how many match.
-//
-//go:noinline
-func (b *TokenUpdate) Exec(ctx context.Context) (int, error) { return b.c.Update(ctx) }
-
-// ExecOne updates the single matching row: velox.ErrNotFound when no row
-// matches, velox.ErrNotSingular (and nothing written) when several do. It is
-// SaveOne for a caller that has no use for the row.
-//
-//go:noinline
-func (b *TokenUpdate) ExecOne(ctx context.Context) error { return b.c.ExecOne(ctx) }
-
-// SaveOne updates the single matching row and returns it: velox.ErrNotFound
-// when no row matches, velox.ErrNotSingular (and nothing written) when several
-// do. Updating any number of rows is Exec.
-//
-//go:noinline
-func (b *TokenUpdate) SaveOne(ctx context.Context) (*Token, error) {
-	e, err := b.c.UpdateOne(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.(*Token), nil
-}
-
-// TokenDelete deletes Token rows.
-type TokenDelete struct{ c orm.MutCore }
-
-// NewTokenDelete returns a builder that deletes the rows its predicates match.
-func NewTokenDelete(ex velox.Executor) *TokenDelete {
-	return &TokenDelete{c: orm.MutCore{M: &TokenMeta, Ex: ex}}
-}
-
-// Where restricts the rows deleted; all predicates must hold.
-//
-//go:noinline
-func (b *TokenDelete) Where(ps ...predicate.Token) *TokenDelete {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, orm.P(p))
-	}
-	return b
-}
-
-// Exec deletes every matching row and returns how many.
-//
-//go:noinline
-func (b *TokenDelete) Exec(ctx context.Context) (int, error) { return b.c.Delete(ctx) }
+// The builders of Token, and a page of it: what the root package's Token
+// returns. Their methods are those of the types of package orm.
+type (
+	TokenQuery      = orm.QueryOf[*Token, predicate.Token, uuid.UUID]
+	TokenCreate     = orm.CreateOf[*Token, predicate.Token]
+	TokenCreateBulk = orm.CreateBulkOf[*Token, predicate.Token]
+	TokenUpdate     = orm.UpdateOf[*Token, predicate.Token]
+	TokenDelete     = orm.DeleteOf[predicate.Token]
+	// TokenEdge is a row of a page of Token, with its cursor, and
+	// TokenConnection one page: what Paginate returns.
+	TokenEdge       = orm.PageEdge[*Token]
+	TokenConnection = orm.Connection[*Token]
+)
 
 // QueryOwner queries the "owner" neighbors of e, on ex.
-//
-//go:noinline
 func (e *Token) QueryOwner(ex velox.Executor) *UserQuery {
-	q := NewUserQuery(ex)
-	q.c.Preds = append(q.c.Preds, orm.NeighborOf(TokenMeta.Edges[0], e))
-	return q
-}
-
-// WithOwner eager-loads the "owner" edge: one more query, whatever the number
-// of rows. A query of User given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Token.
-//
-//go:noinline
-func (q *TokenQuery) WithOwner(opts ...*UserQuery) *TokenQuery {
-	var o *orm.QueryCore
-	if len(opts) == 1 && opts[0] != nil {
-		o = &opts[0].c
-	}
-	q.c.Load(TokenMeta.Edges[0], o, len(opts))
-	return q
+	return orm.Neighbors[*User, predicate.User, int](TokenMeta.Edges[0], e, ex)
 }
 
 func init() { slots.Token.Bind(&TokenMeta) }

@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Table starts the queries and mutations of Table.
-var Table TableClient
-
-// TableClient is the type of Table.
-type TableClient struct{}
-
-// Query returns a query of every Table, to run on ex: a database handle or a
-// transaction.
-func (*TableClient) Query(ex velox.Executor) *entity.TableQuery { return entity.NewTableQuery(ex) }
-
-// Create returns a builder that creates a Table.
-func (*TableClient) Create(ex velox.Executor) *entity.TableCreate { return entity.NewTableCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*TableClient) CreateBulk(ex velox.Executor, bs ...*entity.TableCreate) *entity.TableCreateBulk {
-	return entity.NewTableCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Table rows its conditions match.
-func (*TableClient) Update(ex velox.Executor) *entity.TableUpdate { return entity.NewTableUpdate(ex) }
-
-// Delete returns a builder that deletes the Table rows its conditions match.
-func (*TableClient) Delete(ex velox.Executor) *entity.TableDelete { return entity.NewTableDelete(ex) }
-
-// Get returns the Table with the given id, or velox.ErrNotFound.
-func (c *TableClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Table, error) {
-	return c.Query(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Table with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *TableClient) UpdateByID(ex velox.Executor, id int) *entity.TableUpdate {
-	return c.Update(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Table with the given id, or returns velox.ErrNotFound.
-func (c *TableClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Table(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.TableMeta.NotFound()
-	}
-	return err
-}
+// Table starts the queries and mutations of Table: Table.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Table = orm.ClientOf[*entity.Table, predicate.Table, int]{Meta: &entity.TableMeta}

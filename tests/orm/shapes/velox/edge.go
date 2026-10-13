@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Edge starts the queries and mutations of Edge.
-var Edge EdgeClient
-
-// EdgeClient is the type of Edge.
-type EdgeClient struct{}
-
-// Query returns a query of every Edge, to run on ex: a database handle or a
-// transaction.
-func (*EdgeClient) Query(ex velox.Executor) *entity.EdgeQuery { return entity.NewEdgeQuery(ex) }
-
-// Create returns a builder that creates a Edge.
-func (*EdgeClient) Create(ex velox.Executor) *entity.EdgeCreate { return entity.NewEdgeCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*EdgeClient) CreateBulk(ex velox.Executor, bs ...*entity.EdgeCreate) *entity.EdgeCreateBulk {
-	return entity.NewEdgeCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Edge rows its conditions match.
-func (*EdgeClient) Update(ex velox.Executor) *entity.EdgeUpdate { return entity.NewEdgeUpdate(ex) }
-
-// Delete returns a builder that deletes the Edge rows its conditions match.
-func (*EdgeClient) Delete(ex velox.Executor) *entity.EdgeDelete { return entity.NewEdgeDelete(ex) }
-
-// Get returns the Edge with the given id, or velox.ErrNotFound.
-func (c *EdgeClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Edge, error) {
-	return c.Query(ex).Where(predicate.Edge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Edge with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *EdgeClient) UpdateByID(ex velox.Executor, id int) *entity.EdgeUpdate {
-	return c.Update(ex).Where(predicate.Edge(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Edge with the given id, or returns velox.ErrNotFound.
-func (c *EdgeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Edge(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.EdgeMeta.NotFound()
-	}
-	return err
-}
+// Edge starts the queries and mutations of Edge: Edge.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Edge = orm.ClientOf[*entity.Edge, predicate.Edge, int]{Meta: &entity.EdgeMeta}

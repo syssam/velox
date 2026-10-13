@@ -477,7 +477,7 @@ func TestRawOrder(t *testing.T) {
 	require.Len(t, us, 3)
 	assert.Equal(t, []string{"cy", "ann", "bob"}, []string{us[0].Name, us[1].Name, us[2].Name})
 	// On an eager load too.
-	_, err = client.Post.Query(db).WithAuthor(client.User.Query(nil).OrderBy(byNick)).All(ctx)
+	_, err = client.Post.Query(db).With(post.Author.Load(client.User.Query(nil).OrderBy(byNick))).All(ctx)
 	require.NoError(t, err)
 	_, err = client.User.Query(db).OrderBy(byNick).Paginate(ctx, nil, intp(1), nil, nil)
 	require.ErrorContains(t, err, "cannot be paged")

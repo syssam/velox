@@ -3,64 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/entity"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
 
-// Comment starts the queries and mutations of Comment.
-var Comment CommentClient
-
-// CommentClient is the type of Comment.
-type CommentClient struct{}
-
-// Query returns a query of every Comment, to run on ex: a database handle or a
-// transaction.
-func (*CommentClient) Query(ex velox.Executor) *entity.CommentQuery {
-	return entity.NewCommentQuery(ex)
-}
-
-// Create returns a builder that creates a Comment.
-func (*CommentClient) Create(ex velox.Executor) *entity.CommentCreate {
-	return entity.NewCommentCreate(ex)
-}
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*CommentClient) CreateBulk(ex velox.Executor, bs ...*entity.CommentCreate) *entity.CommentCreateBulk {
-	return entity.NewCommentCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Comment rows its conditions match.
-func (*CommentClient) Update(ex velox.Executor) *entity.CommentUpdate {
-	return entity.NewCommentUpdate(ex)
-}
-
-// Delete returns a builder that deletes the Comment rows its conditions match.
-func (*CommentClient) Delete(ex velox.Executor) *entity.CommentDelete {
-	return entity.NewCommentDelete(ex)
-}
-
-// Get returns the Comment with the given id, or velox.ErrNotFound.
-func (c *CommentClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Comment, error) {
-	return c.Query(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Comment with the given id; end
-// it with SaveOne, which reports a missing row.
-func (c *CommentClient) UpdateByID(ex velox.Executor, id int) *entity.CommentUpdate {
-	return c.Update(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Comment with the given id, or returns
-// velox.ErrNotFound.
-func (c *CommentClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Comment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.CommentMeta.NotFound()
-	}
-	return err
-}
+// Comment starts the queries and mutations of Comment: Comment.Query(ex),
+// Create, CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Comment = orm.ClientOf[*entity.Comment, predicate.Comment, int]{Meta: &entity.CommentMeta}

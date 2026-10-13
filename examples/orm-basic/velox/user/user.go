@@ -62,14 +62,14 @@ var postsMeta = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.O2M, Inverse: fal
 
 // Posts is the "posts" edge of User, to Post: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithPosts.
+// With(user.Posts).
 var Posts = &orm.ToMany[predicate.User, predicate.Post, int]{Meta: &postsMeta}
 
 var commentsMeta = orm.EdgeMeta{Name: "comments", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "comments", Columns: []string{"user_comments"}}
 
 // Comments is the "comments" edge of User, to Comment: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithComments.
+// With(user.Comments).
 var Comments = &orm.ToMany[predicate.User, predicate.Comment, int]{Meta: &commentsMeta}
 
 // EdgeMetas returns the descriptions of the edges of User, in order. The

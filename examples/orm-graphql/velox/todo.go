@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
 	"example.com/orm-graphql/velox/entity"
 	"example.com/orm-graphql/velox/predicate"
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 )
 
-// Todo starts the queries and mutations of Todo.
-var Todo TodoClient
-
-// TodoClient is the type of Todo.
-type TodoClient struct{}
-
-// Query returns a query of every Todo, to run on ex: a database handle or a
-// transaction.
-func (*TodoClient) Query(ex velox.Executor) *entity.TodoQuery { return entity.NewTodoQuery(ex) }
-
-// Create returns a builder that creates a Todo.
-func (*TodoClient) Create(ex velox.Executor) *entity.TodoCreate { return entity.NewTodoCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*TodoClient) CreateBulk(ex velox.Executor, bs ...*entity.TodoCreate) *entity.TodoCreateBulk {
-	return entity.NewTodoCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Todo rows its conditions match.
-func (*TodoClient) Update(ex velox.Executor) *entity.TodoUpdate { return entity.NewTodoUpdate(ex) }
-
-// Delete returns a builder that deletes the Todo rows its conditions match.
-func (*TodoClient) Delete(ex velox.Executor) *entity.TodoDelete { return entity.NewTodoDelete(ex) }
-
-// Get returns the Todo with the given id, or velox.ErrNotFound.
-func (c *TodoClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Todo, error) {
-	return c.Query(ex).Where(predicate.Todo(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Todo with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *TodoClient) UpdateByID(ex velox.Executor, id int) *entity.TodoUpdate {
-	return c.Update(ex).Where(predicate.Todo(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Todo with the given id, or returns velox.ErrNotFound.
-func (c *TodoClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Todo(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.TodoMeta.NotFound()
-	}
-	return err
-}
+// Todo starts the queries and mutations of Todo: Todo.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Todo = orm.ClientOf[*entity.Todo, predicate.Todo, int]{Meta: &entity.TodoMeta}

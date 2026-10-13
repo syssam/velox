@@ -32,7 +32,7 @@ var fieldsMeta = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: f
 
 // Fields is the "fields" edge of EdgesField, to Field: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithFields.
+// With(edgesfield.Fields).
 var Fields = &orm.ToMany[predicate.EdgesField, predicate.Field, int]{Meta: &fieldsMeta}
 
 // EdgeMetas returns the descriptions of the edges of EdgesField, in order. The

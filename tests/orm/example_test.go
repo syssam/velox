@@ -61,7 +61,7 @@ func Example() {
 	users, err := db.User.Query(conn).
 		Where(user.Name.EQ("alice"), user.Age.GT(18)).
 		OrderBy(user.CreatedAt.Desc()).
-		WithPosts(db.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10)).
+		With(user.Posts.Load(db.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10))).
 		Limit(20).
 		All(ctx)
 	if err != nil {

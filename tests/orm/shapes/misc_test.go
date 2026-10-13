@@ -73,12 +73,12 @@ func TestKeys_NamedGoTypeIDs(t *testing.T) {
 	assert.Equal(t, "w2", must(client.WeightKey.Query(db).Where(weightkey.ID.In(50, 51)).Only(ctx)).Name)
 
 	// O2M / M2O: eager load, traversal, predicates.
-	labels := must(client.LabelKey.Query(db).OrderBy(labelkey.ID.Asc()).WithItems(client.WeightKey.Query(db).OrderBy(weightkey.ID.Desc())).All(ctx))
+	labels := must(client.LabelKey.Query(db).OrderBy(labelkey.ID.Asc()).With(labelkey.Items.Load(client.WeightKey.Query(db).OrderBy(weightkey.ID.Desc()))).All(ctx))
 	require.Len(t, labels, 2)
 	require.Len(t, labels[0].Edges.Items, 2)
 	assert.Equal(t, types.Weight(50), labels[0].Edges.Items[0].ID)
 	assert.Empty(t, labels[1].Edges.Items)
-	weights := must(client.WeightKey.Query(db).OrderBy(weightkey.ID.Asc()).WithOwner().All(ctx))
+	weights := must(client.WeightKey.Query(db).OrderBy(weightkey.ID.Asc()).With(weightkey.Owner).All(ctx))
 	assert.Equal(t, "a", weights[0].Edges.Owner.Name)
 	assert.Equal(t, "a", weights[1].Edges.Owner.Name)
 	assert.Equal(t, 2, must(la.QueryItems(db).Count(ctx)))

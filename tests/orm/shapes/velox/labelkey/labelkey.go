@@ -33,14 +33,14 @@ var itemsMeta = orm.EdgeMeta{Name: "items", Index: 0, Rel: orm.O2M, Inverse: fal
 
 // Items is the "items" edge of LabelKey, to WeightKey: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithItems.
+// With(labelkey.Items).
 var Items = &orm.ToMany[predicate.LabelKey, predicate.WeightKey, types.Weight]{Meta: &itemsMeta}
 
 var weightsMeta = orm.EdgeMeta{Name: "weights", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "label_weights", Columns: []string{"label_key_id", "weight_key_id"}}
 
 // Weights is the "weights" edge of LabelKey, to WeightKey: conditions on it
 // (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it
-// with WithWeights.
+// with With(labelkey.Weights).
 var Weights = &orm.ToMany[predicate.LabelKey, predicate.WeightKey, types.Weight]{Meta: &weightsMeta}
 
 // EdgeMetas returns the descriptions of the edges of LabelKey, in order. The

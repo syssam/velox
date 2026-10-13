@@ -375,7 +375,7 @@ func ormCall(w func(string, ...any), i int, c call) {
 		head(fmt.Sprintf("([]*entity.%s, error)", e.name))
 		w("\treturn client.%s.Query(s.db).\n\t\tWhere(%s).\n", e.name, ormPreds(c))
 		if c.with != "" {
-			w("\t\tWith%s().\n", c.with)
+			w("\t\tWith(%s.%s).\n", e.pkg, c.with)
 		}
 		w("\t\tOrderBy(%s.%s.Desc()).\n\t\tLimit(%d).\n\t\tAll(ctx)\n}\n", e.pkg, c.order.pascal, c.limit)
 	case "get":

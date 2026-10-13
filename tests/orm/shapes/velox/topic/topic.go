@@ -32,14 +32,14 @@ var articlesMeta = orm.EdgeMeta{Name: "articles", Index: 0, Rel: orm.M2M, Invers
 
 // Articles is the "articles" edge of Topic, to Article: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithArticles.
+// With(topic.Articles).
 var Articles = &orm.ToMany[predicate.Topic, predicate.Article, int]{Meta: &articlesMeta}
 
 var bannedInMeta = orm.EdgeMeta{Name: "banned_in", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
 
 // BannedIn is the "banned_in" edge of Topic, to Article: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithBannedIn.
+// With(topic.BannedIn).
 var BannedIn = &orm.ToMany[predicate.Topic, predicate.Article, int]{Meta: &bannedInMeta}
 
 // EdgeMetas returns the descriptions of the edges of Topic, in order. The

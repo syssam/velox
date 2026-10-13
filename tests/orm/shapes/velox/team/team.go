@@ -33,27 +33,28 @@ var playersMeta = orm.EdgeMeta{Name: "players", Index: 0, Rel: orm.O2M, Inverse:
 
 // Players is the "players" edge of Team, to Player: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithPlayers.
+// With(team.Players).
 var Players = &orm.ToMany[predicate.Team, predicate.Player, string]{Meta: &playersMeta}
 
 var fansMeta = orm.EdgeMeta{Name: "fans", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_fans", Columns: []string{"team_id", "player_id"}}
 
 // Fans is the "fans" edge of Team, to Player: conditions on it (Has, HasWith)
-// and changes to it (Add, Remove, Clear). A query eager-loads it with WithFans.
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// With(team.Fans).
 var Fans = &orm.ToMany[predicate.Team, predicate.Player, string]{Meta: &fansMeta}
 
 var rivalsMeta = orm.EdgeMeta{Name: "rivals", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "team_rivals", Columns: []string{"team_id", "rival_id"}}
 
 // Rivals is the "rivals" edge of Team, to Team: conditions on it (Has, HasWith)
 // and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithRivals.
+// With(team.Rivals).
 var Rivals = &orm.ToMany[predicate.Team, predicate.Team, uuid.UUID]{Meta: &rivalsMeta}
 
 var badgesMeta = orm.EdgeMeta{Name: "badges", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_badges", Columns: []string{"team_id", "badge_id"}}
 
 // Badges is the "badges" edge of Team, to Badge: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithBadges.
+// With(team.Badges).
 var Badges = &orm.ToMany[predicate.Team, predicate.Badge, uint16]{Meta: &badgesMeta}
 
 // EdgeMetas returns the descriptions of the edges of Team, in order. The

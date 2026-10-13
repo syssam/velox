@@ -332,7 +332,7 @@ func TestTx_EdgesInsideATransaction(t *testing.T) {
 		require.Len(t, rows, 2)
 		// Eager loads and edge predicates on the transaction's connection.
 		authors := must(client.Author.Query(tx).OrderBy(author.Name.Asc()).
-			WithArticles(client.Article.Query(tx).OrderBy(article.Title.Asc()).WithTopics(client.Topic.Query(tx).OrderBy(topic.Name.Asc()))).WithEdited().WithLocker().All(ctx))
+			With(author.Articles.Load(client.Article.Query(tx).OrderBy(article.Title.Asc()).With(article.Topics.Load(client.Topic.Query(tx).OrderBy(topic.Name.Asc()))))).With(author.Edited).With(author.Locker).All(ctx))
 		require.Len(t, authors, 4)
 		assert.Equal(t, []string{"a1!", "a2"}, titles(authors[0].Edges.Articles))
 		assert.Equal(t, []string{"rust", "sql"}, topicNames(authors[0].Edges.Articles[0].Edges.Topics))
@@ -473,7 +473,7 @@ func TestQuery_ConcurrentReads(t *testing.T) {
 			errs <- func() error {
 				for range 20 {
 					authors, err := client.Author.Query(db).OrderBy(author.Name.Asc()).
-						WithArticles(client.Article.Query(db).WithTopics().WithEditor()).WithPassport().All(ctx)
+						With(author.Articles.Load(client.Article.Query(db).With(article.Topics).With(article.Editor))).With(author.Passport).All(ctx)
 					if err != nil {
 						return err
 					}

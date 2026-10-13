@@ -14,6 +14,7 @@ package orm
 // predicate type of the entity the edge is of, N that of the neighbor, and ID
 // the type of the neighbor's id. The methods have a type parameter of their
 // own for what the methods of the column types have theirs for: see Lazy.
+// The one ordinary method, loadOf, is what lets With take the edge itself.
 type ToOne[E, N Predicate, ID any] struct{ Meta *EdgeMeta }
 
 // Has matches the rows that have a neighbor on the edge.
@@ -34,6 +35,18 @@ func (e *ToOne[E, N, ID]) Set[_ Lazy[ID]](id ID) SetterOf[E] {
 func (e *ToOne[E, N, ID]) Clear[_ Lazy[ID]]() SetterOf[E] {
 	return SetterOf[E]{Kind: EdgeClear, Edge: e.Meta}
 }
+
+// Load is the edge with a query of its neighbor that describes how the edge
+// is eager-loaded, for With: the query's conditions and its nested loads.
+func (e *ToOne[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) LoadOf[E] {
+	if q == nil {
+		return LoadOf[E]{edge: e.Meta}
+	}
+	return LoadOf[E]{edge: e.Meta, load: &q.c}
+}
+
+// loadOf makes the edge a Loader: With takes it as it is.
+func (e *ToOne[E, N, ID]) loadOf() LoadOf[E] { return LoadOf[E]{edge: e.Meta} }
 
 // ToMany is an edge of an entity to any number of neighbors: see ToOne.
 type ToMany[E, N Predicate, ID any] struct{ Meta *EdgeMeta }
@@ -61,6 +74,19 @@ func (e *ToMany[E, N, ID]) Remove[_ Lazy[ID]](ids ...ID) SetterOf[E] {
 func (e *ToMany[E, N, ID]) Clear[_ Lazy[ID]]() SetterOf[E] {
 	return SetterOf[E]{Kind: EdgeClear, Edge: e.Meta}
 }
+
+// Load is the edge with a query of its neighbors that describes how the edge
+// is eager-loaded, for With: the query's conditions, order, nested loads and
+// its limit, which applies per row.
+func (e *ToMany[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) LoadOf[E] {
+	if q == nil {
+		return LoadOf[E]{edge: e.Meta}
+	}
+	return LoadOf[E]{edge: e.Meta, load: &q.c}
+}
+
+// loadOf makes the edge a Loader: With takes it as it is.
+func (e *ToMany[E, N, ID]) loadOf() LoadOf[E] { return LoadOf[E]{edge: e.Meta} }
 
 // plain returns the predicates of an entity as the engine holds them.
 func plain[E Predicate](ps []E) []P {

@@ -3,55 +3,11 @@
 package velox
 
 import (
-	"context"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/entity"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Field starts the queries and mutations of Field.
-var Field FieldClient
-
-// FieldClient is the type of Field.
-type FieldClient struct{}
-
-// Query returns a query of every Field, to run on ex: a database handle or a
-// transaction.
-func (*FieldClient) Query(ex velox.Executor) *entity.FieldQuery { return entity.NewFieldQuery(ex) }
-
-// Create returns a builder that creates a Field.
-func (*FieldClient) Create(ex velox.Executor) *entity.FieldCreate { return entity.NewFieldCreate(ex) }
-
-// CreateBulk returns a builder that creates one row per given builder with one
-// statement.
-func (*FieldClient) CreateBulk(ex velox.Executor, bs ...*entity.FieldCreate) *entity.FieldCreateBulk {
-	return entity.NewFieldCreateBulk(ex, bs...)
-}
-
-// Update returns a builder that updates the Field rows its conditions match.
-func (*FieldClient) Update(ex velox.Executor) *entity.FieldUpdate { return entity.NewFieldUpdate(ex) }
-
-// Delete returns a builder that deletes the Field rows its conditions match.
-func (*FieldClient) Delete(ex velox.Executor) *entity.FieldDelete { return entity.NewFieldDelete(ex) }
-
-// Get returns the Field with the given id, or velox.ErrNotFound.
-func (c *FieldClient) Get(ctx context.Context, ex velox.Executor, id int) (*entity.Field, error) {
-	return c.Query(ex).Where(predicate.Field(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
-}
-
-// UpdateByID returns a builder that updates the Field with the given id; end it
-// with SaveOne, which reports a missing row.
-func (c *FieldClient) UpdateByID(ex velox.Executor, id int) *entity.FieldUpdate {
-	return c.Update(ex).Where(predicate.Field(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
-}
-
-// DeleteByID deletes the Field with the given id, or returns velox.ErrNotFound.
-func (c *FieldClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
-	n, err := c.Delete(ex).Where(predicate.Field(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
-	if err == nil && n == 0 {
-		err = entity.FieldMeta.NotFound()
-	}
-	return err
-}
+// Field starts the queries and mutations of Field: Field.Query(ex), Create,
+// CreateBulk, Update, Delete, Get, UpdateByID, DeleteByID.
+var Field = orm.ClientOf[*entity.Field, predicate.Field, int]{Meta: &entity.FieldMeta}

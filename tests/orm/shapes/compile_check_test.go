@@ -55,7 +55,7 @@ var compileCases = []compileCase{
 	_, _ = client.Author.Query(db).
 		Where(author.Name.EQ("x"), author.Articles.HasWith(article.Title.EQ("y"), article.Topics.HasWith(topic.Name.EQ("z")))).
 		OrderBy(author.Age.Desc()).
-		WithArticles(client.Article.Query(db).Where(article.Words.GT(1)).OrderBy(article.Title.Asc()).WithTopics()).WithPassport().
+		With(author.Articles.Load(client.Article.Query(db).Where(article.Words.GT(1)).OrderBy(article.Title.Asc()).With(article.Topics)), author.Passport).
 		All(ctx)
 	_, _ = client.Author.Create(db).Set(author.Name.Set("x"), author.Age.Set(1), author.Edited.Add(1, 2)).Save(ctx)
 	_, _ = client.Author.CreateBulk(db, client.Author.Create(db), client.Author.Create(db)).Save(ctx)
@@ -86,10 +86,12 @@ var compileCases = []compileCase{
 		body: `	_, _ = client.Author.Update(db).Set(article.Title.Set("x")).Exec(ctx)`},
 	{name: "edge setter of another entity", want: "cannot use article.Topics.Add",
 		body: `	_, _ = client.Author.Update(db).Set(article.Topics.Add(1)).Exec(ctx)`},
-	{name: "eager load of an edge of another entity", want: "WithTopics undefined",
-		body: `	_, _ = client.Author.Query(db).WithTopics().All(ctx)`},
-	{name: "query of another entity as the description of a load", want: "cannot use client.Topic.Query(db)",
-		body: `	_, _ = client.Author.Query(db).WithArticles(client.Topic.Query(db)).All(ctx)`},
+	{name: "eager load of an edge of another entity", want: "cannot use article.Topics",
+		body: `	_, _ = client.Author.Query(db).With(article.Topics).All(ctx)`},
+	{name: "described eager load of an edge of another entity", want: "cannot use article.Topics.Load",
+		body: `	_, _ = client.Author.Query(db).With(article.Topics.Load(client.Topic.Query(db))).All(ctx)`},
+	{name: "query of another entity as the description of a load", want: "client.Topic.Query(db) does not match",
+		body: `	_, _ = client.Author.Query(db).With(author.Articles.Load(client.Topic.Query(db))).All(ctx)`},
 	{name: "order of another entity", want: "cannot use article.Title.Asc",
 		body: `	_, _ = client.Author.Query(db).OrderBy(article.Title.Asc()).All(ctx)`},
 	{name: "builder of another entity in CreateBulk", want: "cannot use client.Article.Create(db)",

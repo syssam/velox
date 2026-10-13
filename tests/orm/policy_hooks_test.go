@@ -62,7 +62,7 @@ func TestPolicy_QueryFilterReachesEveryRead(t *testing.T) {
 	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// Eager load: bob's post loads, its author does not.
-	ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).WithAuthor().All(only)
+	ps, err := client.Post.Query(db).OrderBy(post.ID.Asc()).With(post.Author).All(only)
 	require.NoError(t, err)
 	require.Len(t, ps, 2)
 	assert.NotNil(t, ps[0].Edges.Author)
@@ -111,7 +111,7 @@ func TestPolicy_QueryDeny(t *testing.T) {
 	assert.ErrorIs(t, err, privacy.Deny)
 	// A denied target fails the whole parent query, for an eager load and for
 	// an edge predicate alike.
-	_, err = client.Post.Query(db).WithTags().All(deny)
+	_, err = client.Post.Query(db).With(post.Tags).All(deny)
 	assert.ErrorIs(t, err, privacy.Deny)
 	_, err = client.Post.Query(db).Where(post.Tags.Has()).All(deny)
 	assert.ErrorIs(t, err, privacy.Deny)
@@ -125,7 +125,7 @@ func TestPolicy_QueryDeny(t *testing.T) {
 	// The prefix filter narrows an M2M eager load.
 	_, err = client.Tag.Create(db).Set(tag.Name.Set("rust")).Save(ctx)
 	require.NoError(t, err)
-	ps, err := client.Post.Query(db).WithTags().All(testschema.FilterTagQueryToPrefixContext(ctx, "ru"))
+	ps, err := client.Post.Query(db).With(post.Tags).All(testschema.FilterTagQueryToPrefixContext(ctx, "ru"))
 	require.NoError(t, err)
 	assert.Empty(t, ps[0].Edges.Tags)
 }
@@ -327,7 +327,7 @@ func TestInterceptors(t *testing.T) {
 	n, err := client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
-	ps, err := client.Post.Query(db).WithAuthor().All(ctx)
+	ps, err := client.Post.Query(db).With(post.Author).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ps, 1)
 	assert.Contains(t, seen, "Post")
@@ -438,7 +438,7 @@ func TestUpdate_EdgeChangesApplyInOrder(t *testing.T) {
 
 	// A to-one edge whose key is not a schema field.
 	parent := func() *int {
-		c, err := client.Tag.Query(db).Where(tag.ID.EQ(t2.ID)).WithParent().Only(ctx)
+		c, err := client.Tag.Query(db).Where(tag.ID.EQ(t2.ID)).With(tag.Parent).Only(ctx)
 		require.NoError(t, err)
 		if c.Edges.Parent == nil {
 			return nil
@@ -491,9 +491,9 @@ func TestPolicy_DeniedLoadWithNothingToLoad(t *testing.T) {
 	db, _ := open(t)
 	newPost(t, db, newUser(t, db, "ann", 30), "untagged")
 	deny := testschema.DenyTagQueryContext(ctx)
-	_, err := client.Post.Query(db).WithTags().All(deny)
+	_, err := client.Post.Query(db).With(post.Tags).All(deny)
 	assert.ErrorIs(t, err, privacy.Deny)
-	_, err = client.Tag.Query(db).WithParent().All(ctx)
+	_, err = client.Tag.Query(db).With(tag.Parent).All(ctx)
 	assert.NoError(t, err)
 }
 
@@ -569,7 +569,7 @@ func TestTraverseFuncAndInterceptFunc(t *testing.T) {
 	us, err := client.User.Query(db).All(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ann"}, names(us))
-	ps, err := client.Post.Query(db).WithAuthor().All(ctx)
+	ps, err := client.Post.Query(db).With(post.Author).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ps, 1)
 	assert.Contains(t, traversed, "Post")

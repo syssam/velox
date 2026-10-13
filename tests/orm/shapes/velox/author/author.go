@@ -34,35 +34,35 @@ var articlesMeta = orm.EdgeMeta{Name: "articles", Index: 0, Rel: orm.O2M, Invers
 
 // Articles is the "articles" edge of Author, to Article: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithArticles.
+// With(author.Articles).
 var Articles = &orm.ToMany[predicate.Author, predicate.Article, int]{Meta: &articlesMeta}
 
 var editedMeta = orm.EdgeMeta{Name: "edited", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "articles", Columns: []string{"editor_id"}}
 
 // Edited is the "edited" edge of Author, to Article: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithEdited.
+// With(author.Edited).
 var Edited = &orm.ToMany[predicate.Author, predicate.Article, int]{Meta: &editedMeta}
 
 var passportMeta = orm.EdgeMeta{Name: "passport", Index: 2, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "passports", Columns: []string{"author_passport"}}
 
 // Passport is the "passport" edge of Author, to Passport: conditions on it
 // (Has, HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithPassport.
+// With(author.Passport).
 var Passport = &orm.ToOne[predicate.Author, predicate.Passport, int]{Meta: &passportMeta}
 
 var lockerMeta = orm.EdgeMeta{Name: "locker", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "lockers", Columns: []string{"holder_id"}}
 
 // Locker is the "locker" edge of Author, to Locker: conditions on it (Has,
 // HasWith) and changes to it (Set, Clear). A query eager-loads it with
-// WithLocker.
+// With(author.Locker).
 var Locker = &orm.ToOne[predicate.Author, predicate.Locker, int]{Meta: &lockerMeta}
 
 var gadgetsMeta = orm.EdgeMeta{Name: "gadgets", Index: 4, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "gadgets", Columns: []string{"owner_id"}}
 
 // Gadgets is the "gadgets" edge of Author, to Gadget: conditions on it (Has,
 // HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
-// WithGadgets.
+// With(author.Gadgets).
 var Gadgets = &orm.ToMany[predicate.Author, predicate.Gadget, int]{Meta: &gadgetsMeta}
 
 // EdgeMetas returns the descriptions of the edges of Author, in order. The

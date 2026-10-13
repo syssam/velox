@@ -140,7 +140,7 @@ next:
 		"s.Client.Begin(ctx)",
 		"moveAll(ctx, tx, from, to)", // a client passed as a value is the handle
 		"posts velox.Executor",
-		"WithPosts(velox.Post.Query(nil).Where(post.Title.HasPrefix(prefix)))",
+		"With(user.Posts.Load(velox.Post.Query(nil).Where(post.Title.HasPrefix(prefix))))",
 		"func roleOf(s string) user.RoleEnum { return user.RoleEnum(s) }",
 		`user.ModelName + ":" + string(u.Role)`,
 		".Set(post.Tags.Add(tagIDs...))", // AddTagIDs: the edge is Tags
@@ -343,7 +343,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func begins(ctx context.Context, c *velox.DB) error {",
 		"func countIfAny(ctx context.Context, c *velox.DB) (int, error) {",
 		// An option kept in a variable shapes the query it is given.
-		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return velox.User.Query(c).WithPosts(orm.Apply(velox.Post.Query(nil), opt)).All(ctx) }",
+		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return velox.User.Query(c).With(user.Posts.Load(orm.Apply(velox.Post.Query(nil), opt))).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",
 		"Owner *orm.OrderedColumn[int, P]", // every column can be asked IsNil
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
@@ -362,7 +362,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// The start of a query as a value.
 		"func starter(c *velox.DB) func() *entity.UserQuery { return func() *entity.UserQuery { return velox.User.Query(c) } }",
 		// Some columns of an eager load's neighbors.
-		"WithAuthor(velox.User.Query(nil).Columns(user.ColumnName)).All(ctx)",
+		"With(postpkg.Author.Load(velox.User.Query(nil).Columns(user.ColumnName))).All(ctx)",
 		// Conditions that are not predicate types keep the library's combinator.
 		"func plain(fs ...func(*sql.Selector)) func(*sql.Selector) { return sql.AndPredicates(fs...) }",
 		// Deferred: still later.
