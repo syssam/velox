@@ -76,9 +76,43 @@ func TestWith(t *testing.T) {
 	if l := q.c.With[1]; l.Edge != posts.Meta || len(l.Preds) != 1 || len(l.Orders) != 1 || l.Limit != 2 {
 		t.Errorf("the edge with its query: %+v", l)
 	}
+	// Said at the edge, a load is the same thing: the conditions, the order
+	// and the limit of the neighbors, and their own edges.
+	author := &ToOne[postPred, userPred, int]{Meta: &EdgeMeta{Name: "author", Owner: user}}
+	q = &QueryOf[*struct{}, userPred, int]{}
+	q.With(
+		posts.Where(title.EQ("a")).OrderBy(title.Desc()).Limit(2).Columns("title").With(author.Columns("name")),
+		posts.Limit(1),
+		posts.OrderBy(title.Asc()),
+		boss.With(posts),
+	)
+	if len(q.c.With) != 4 {
+		t.Fatalf("%d loads, want 4", len(q.c.With))
+	}
+	if l := q.c.With[0]; l.Edge != posts.Meta || len(l.Preds) != 1 || len(l.Orders) != 1 || l.Limit != 2 ||
+		len(l.Cols) != 1 || len(l.With) != 1 || l.With[0].Edge != author.Meta || len(l.With[0].Cols) != 1 {
+		t.Errorf("a load said at the edge: %+v", l)
+	}
+	if l := q.c.With[1]; l.Edge != posts.Meta || l.Limit != 1 || l.Preds != nil {
+		t.Errorf("a load that starts at Limit: %+v", l)
+	}
+	if l := q.c.With[2]; len(l.Orders) != 1 || l.Limit != 0 {
+		t.Errorf("a load that starts at OrderBy: %+v", l)
+	}
+	if l := q.c.With[3]; l.Edge != boss.Meta || len(l.With) != 1 || l.With[0].Edge != posts.Meta {
+		t.Errorf("a to-one edge with an edge of its neighbor: %+v", l)
+	}
+	// As with a query, the load is what was said when With was called.
+	later := posts.Where(title.EQ("a"))
+	q = (&QueryOf[*struct{}, userPred, int]{}).With(later)
+	later.Where(title.EQ("b"))
+	if l := q.c.With[0]; len(l.Preds) != 1 {
+		t.Errorf("a condition added after With reached the load: %+v", l)
+	}
+
 	var none *QueryOf[*struct{}, postPred, int]
 	q.With(posts.Load(none))
-	if l := q.c.With[2]; l.Edge != posts.Meta || l.Preds != nil {
+	if l := q.c.With[len(q.c.With)-1]; l.Edge != posts.Meta || l.Preds != nil {
 		t.Errorf("a nil query describes nothing: %+v", l)
 	}
 }

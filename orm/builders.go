@@ -166,37 +166,94 @@ func (q *QueryOf[PT, E, ID]) Clone[_ Lazy[ID]]() *QueryOf[PT, E, ID] {
 }
 
 // Loader is an edge to eager-load, as With takes it: an edge of the entity
-// (post.Author), or an edge with the query that describes its load
-// (post.Comments.Load(q)).
+// as it is (post.Author), or with how it is loaded
+// (post.Comments.Where(...).Limit(10)).
 type Loader[E Predicate] interface {
-	// loadOf has the entity in its result so that an edge of another
+	// loadOf has the entity in its signature so that an edge of another
 	// entity is not a Loader of this one.
-	loadOf() LoadOf[E]
+	loadOf(E) load
 }
 
-// LoadOf is an edge of the entity whose predicate type is E with the query
-// that describes its load: what an edge's Load returns.
-type LoadOf[E Predicate] struct {
+// load is an edge and, when there is one, the description of its load.
+type load struct {
 	edge *EdgeMeta
-	load *QueryCore
+	as   *QueryCore
 }
 
-func (l LoadOf[E]) loadOf() LoadOf[E] { return l }
+// LoadOf is an edge of the entity whose predicate type is E, to the entity
+// whose predicate type is N, with how it is eager-loaded: which neighbors,
+// in what order, how many for each row, which of their columns and which of
+// their own edges. It starts at the edge (user.Posts.Where(...),
+// user.Posts.Limit(3)) and is given to With.
+type LoadOf[E, N Predicate] struct {
+	edge *EdgeMeta
+	as   QueryCore
+}
+
+func (l *LoadOf[E, N]) loadOf(E) load { return load{edge: l.edge, as: &l.as} }
+
+// loadAs is an edge loaded as a query of its neighbors says.
+func loadAs[E, N Predicate, PT, ID any](edge *EdgeMeta, q *QueryOf[PT, N, ID]) *LoadOf[E, N] {
+	l := &LoadOf[E, N]{edge: edge}
+	if q != nil {
+		l.as = q.c
+	}
+	return l
+}
+
+// Where loads only the neighbors that match; all predicates must hold.
+func (l *LoadOf[E, N]) Where[_ Lazy[E]](ps ...N) *LoadOf[E, N] {
+	l.as.Preds = conditions(l.as.Preds, ps)
+	return l
+}
+
+// OrderBy loads each row's neighbors in the given order.
+func (l *LoadOf[E, N]) OrderBy[_ Lazy[E]](os ...OrderOf[N]) *LoadOf[E, N] {
+	for _, o := range os {
+		l.as.Orders = append(l.as.Orders, O(o))
+	}
+	return l
+}
+
+// Limit loads at most n neighbors for each row.
+func (l *LoadOf[E, N]) Limit[_ Lazy[E]](n int) *LoadOf[E, N] {
+	l.as.Limit = n
+	return l
+}
+
+// Columns reads only the named columns into the neighbors, with the ones
+// the load cannot do without.
+func (l *LoadOf[E, N]) Columns[_ Lazy[E]](columns ...string) *LoadOf[E, N] {
+	l.as.Columns(columns...)
+	return l
+}
+
+// With loads edges of the neighbors too.
+func (l *LoadOf[E, N]) With[_ Lazy[E]](edges ...Loader[N]) *LoadOf[E, N] {
+	var of N
+	for _, e := range edges {
+		x := e.loadOf(of)
+		l.as.Load(x.edge, x.as)
+	}
+	return l
+}
 
 // With eager-loads edges: one more query per edge, whatever the number of
 // rows.
 //
-//	velox.Post.Query(conn).With(post.Author, post.Comments.Load(newest))
+//	velox.Post.Query(conn).With(post.Author, post.Comments.Where(comment.Hidden.EQ(false)).Limit(10))
 //
-// An edge is loaded as it is, every neighbor of every row; an edge's Load
-// takes a query of the neighbors that describes the load: its conditions,
-// order, nested loads and its limit, which applies per row.
+// An edge is loaded as it is, every neighbor of every row. What says
+// otherwise starts at the edge: its Where, OrderBy, Limit (for each row),
+// Columns, and With for the neighbors' own edges. The load is what was said
+// when With is called.
 //
 //go:noinline
 func (q *QueryOf[PT, E, ID]) With[_ Lazy[ID]](edges ...Loader[E]) *QueryOf[PT, E, ID] {
-	for _, l := range edges {
-		of := l.loadOf()
-		q.c.Load(of.edge, of.load)
+	var of E
+	for _, e := range edges {
+		x := e.loadOf(of)
+		q.c.Load(x.edge, x.as)
 	}
 	return q
 }

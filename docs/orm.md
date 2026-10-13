@@ -83,7 +83,7 @@ alice, err := velox.User.Create(conn).
 users, err := velox.User.Query(conn).
     Where(user.Name.EQ("alice"), user.Age.GT(18)).
     OrderBy(user.CreatedAt.Desc()).
-    With(user.Posts.Load(velox.Post.Query(nil).Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10))).
+    With(user.Posts.Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10)).
     Limit(20).
     All(ctx)
 
@@ -159,14 +159,15 @@ err = velox.User.DeleteByID(ctx, conn, id)
   the same, allocation for allocation.
 - A predicate, setter or order term of one entity does not compile in a query
   or mutation of another, nor does an edge of another entity in `With`, or a
-  query of another entity in an edge's `Load`.
+  condition of another entity in an edge's `Where`.
 - **Eager loading is `With`, given the edges**: `With(user.Posts, user.Profile)`,
   one more query per edge, whatever the number of rows. An edge is loaded as
-  it is, every neighbor of every row; `user.Posts.Load(q)` is the edge with a
-  query of the target that describes the load: its conditions, order, nested
-  `With` and its limit, which applies per parent. That query is not run, so
-  it needs no handle (`velox.Post.Query(nil)`). (It was a method per edge,
-  `WithPosts(q)`, until 2026-10-13; `velox-migrate` writes the new form.)
+  it is, every neighbor of every row. What says otherwise is said at the
+  edge: `user.Posts.Where(...)`, `.OrderBy(...)`, `.Limit(n)` (for each row),
+  `.Columns(...)`, and `.With(...)` for the neighbors' own edges, in any
+  order: `With(user.Posts.Where(post.Status.EQ(post.StatusPublished)).Limit(3).With(post.Tags))`.
+  For a query of the neighbors that is already there, built by other code,
+  `user.Posts.Load(q)` is the edge loaded as that query says.
 - **`Exec` on an update or delete touches every matching row and returns the
   count; it is not an error when that is zero.** `SaveOne` is for exactly one
   row (`velox.ErrNotFound`, `velox.ErrNotSingular`); `DeleteByID` reports a
@@ -188,7 +189,7 @@ err = velox.User.DeleteByID(ctx, conn, id)
   other fields stay zero, so such an entity is for reading. The id, the
   columns the query is ordered by and the keys of the edges it loads are
   read too. The query given to an eager load takes it as well:
-  `With(user.Posts.Load(velox.Post.Query(nil).Columns(post.ColumnTitle)))`. `Select(...)`
+  `With(user.Posts.Columns(post.ColumnTitle))`. `Select(...)`
   is the other thing: columns and aggregates scanned
   into a struct of the caller's.
 - An order is `user.Name.Asc()`; by a column named at run time,

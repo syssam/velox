@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
@@ -678,4 +679,82 @@ func TestEdges_DeleteRestricted(t *testing.T) {
 	_, err = client.Author.Delete(db).Exec(ctx)
 	require.True(t, errors.As(err, &target))
 	assert.Equal(t, 3, must(client.Author.Query(db).Count(ctx)), "a failed delete deletes nothing")
+}
+
+// A load is said at the edge: its conditions, order, limit, columns and the
+// neighbors' own edges. It is the load a query of the neighbors describes
+// (the edge's Load), which is what every other test of an eager load uses:
+// both are run here and must read the same rows.
+func TestEdges_EagerLoadSaidAtTheEdge(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	library(t, db)
+
+	shape := func(as []*entity.Author) []string {
+		var out []string
+		for _, a := range as {
+			line := a.Name + ":"
+			for _, x := range a.Edges.Articles {
+				line += " " + x.Title + "(" + strings.Join(topicNames(x.Edges.Topics), ",") + ")"
+				if ed, err := x.Edges.EditorOrErr(); err == nil {
+					line += "<" + ed.Name + ">"
+				}
+			}
+			if p, err := a.Edges.PassportOrErr(); err == nil {
+				line += " passport=" + p.Number
+			}
+			out = append(out, line)
+		}
+		return out
+	}
+	base := func() *entity.AuthorQuery { return client.Author.Query(db).OrderBy(author.Name.Asc()) }
+
+	atEdge := must(base().With(
+		author.Articles.
+			Where(article.Words.GTE(100)).
+			OrderBy(article.Title.Desc()).
+			Limit(2).
+			With(article.Topics.OrderBy(topic.Name.Asc()), article.Editor),
+		author.Passport,
+	).All(ctx))
+	byQuery := must(base().With(
+		author.Articles.Load(client.Article.Query(nil).
+			Where(article.Words.GTE(100)).
+			OrderBy(article.Title.Desc()).
+			Limit(2).
+			With(article.Topics.Load(client.Topic.Query(nil).OrderBy(topic.Name.Asc())), article.Editor)),
+		author.Passport,
+	).All(ctx))
+	require.Equal(t, shape(byQuery), shape(atEdge))
+	require.Len(t, atEdge, 4)
+	var loaded int
+	for _, a := range atEdge {
+		assert.LessOrEqual(t, len(a.Edges.Articles), 2, "the limit is for each author")
+		loaded += len(a.Edges.Articles)
+	}
+	assert.Positive(t, loaded, "the comparison is of loads that read something")
+
+	// A load that starts at Limit, and one that reads some columns: the
+	// others are left at their zero value.
+	firsts := must(base().With(author.Articles.Limit(1).Columns(article.ColumnTitle)).All(ctx))
+	for _, a := range firsts {
+		assert.LessOrEqual(t, len(a.Edges.Articles), 1)
+		for _, x := range a.Edges.Articles {
+			assert.NotEmpty(t, x.Title)
+			assert.Zero(t, x.Words, "a column that was not asked for")
+		}
+	}
+	// To one neighbor: the neighbor that matches, or none.
+	arts := must(client.Article.Query(db).OrderBy(article.Title.Asc()).With(article.Author.Where(author.Name.EQ("ann"))).All(ctx))
+	var anns, others int
+	for _, x := range arts {
+		if a, err := x.Edges.AuthorOrErr(); err == nil {
+			assert.Equal(t, "ann", a.Name)
+			anns++
+		} else {
+			others++
+		}
+	}
+	assert.Positive(t, anns)
+	assert.Positive(t, others, "an article of another author has no author that matches")
 }

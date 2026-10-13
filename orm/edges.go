@@ -34,17 +34,32 @@ func (e *ToOne[E, N, ID]) Clear[_ Lazy[ID]]() SetterOf[E] {
 	return SetterOf[E]{Kind: EdgeClear, Edge: e.Meta}
 }
 
-// Load is the edge with a query of its neighbor that describes how the edge
-// is eager-loaded, for With: the query's conditions and its nested loads.
-func (e *ToOne[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) LoadOf[E] {
-	if q == nil {
-		return LoadOf[E]{edge: e.Meta}
-	}
-	return LoadOf[E]{edge: e.Meta, load: &q.c}
+// Where is the edge, eager-loaded with only the neighbor that matches: what
+// With takes. Columns and With (the neighbor's own edges) continue it.
+func (e *ToOne[E, N, ID]) Where[_ Lazy[ID]](ps ...N) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).Where(ps...)
+}
+
+// Columns is the edge, eager-loaded with only the named columns read into
+// the neighbor.
+func (e *ToOne[E, N, ID]) Columns[_ Lazy[ID]](columns ...string) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).Columns(columns...)
+}
+
+// With is the edge, eager-loaded together with edges of the neighbor.
+func (e *ToOne[E, N, ID]) With[_ Lazy[ID]](edges ...Loader[N]) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).With(edges...)
+}
+
+// Load is the edge, eager-loaded as a query of its neighbor says, for a
+// query that is already there: one built by other code, or kept from a
+// request. Written in place, a load is the edge's Where, Columns and With.
+func (e *ToOne[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) *LoadOf[E, N] {
+	return loadAs[E, N](e.Meta, q)
 }
 
 // loadOf makes the edge a Loader: With takes it as it is.
-func (e *ToOne[E, N, ID]) loadOf() LoadOf[E] { return LoadOf[E]{edge: e.Meta} }
+func (e *ToOne[E, N, ID]) loadOf(E) load { return load{edge: e.Meta} }
 
 // ToMany is an edge of an entity to any number of neighbors: see ToOne.
 type ToMany[E, N Predicate, ID any] struct{ Meta *EdgeMeta }
@@ -73,18 +88,49 @@ func (e *ToMany[E, N, ID]) Clear[_ Lazy[ID]]() SetterOf[E] {
 	return SetterOf[E]{Kind: EdgeClear, Edge: e.Meta}
 }
 
-// Load is the edge with a query of its neighbors that describes how the edge
-// is eager-loaded, for With: the query's conditions, order, nested loads and
-// its limit, which applies per row.
-func (e *ToMany[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) LoadOf[E] {
-	if q == nil {
-		return LoadOf[E]{edge: e.Meta}
-	}
-	return LoadOf[E]{edge: e.Meta, load: &q.c}
+// Where is the edge, eager-loaded with only the neighbors that match: what
+// With takes.
+//
+//	velox.User.Query(conn).With(user.Posts.Where(post.Title.NEQ("draft")).OrderBy(post.Title.Asc()).Limit(10))
+//
+// OrderBy, Limit (per row), Columns and With (the neighbors' own edges)
+// start a load too, and continue one.
+func (e *ToMany[E, N, ID]) Where[_ Lazy[ID]](ps ...N) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).Where(ps...)
+}
+
+// OrderBy is the edge, eager-loaded with each row's neighbors in the given
+// order.
+func (e *ToMany[E, N, ID]) OrderBy[_ Lazy[ID]](os ...OrderOf[N]) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).OrderBy(os...)
+}
+
+// Limit is the edge, eager-loaded with at most n neighbors for each row.
+func (e *ToMany[E, N, ID]) Limit[_ Lazy[ID]](n int) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).Limit(n)
+}
+
+// Columns is the edge, eager-loaded with only the named columns read into
+// the neighbors.
+func (e *ToMany[E, N, ID]) Columns[_ Lazy[ID]](columns ...string) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).Columns(columns...)
+}
+
+// With is the edge, eager-loaded together with edges of the neighbors.
+func (e *ToMany[E, N, ID]) With[_ Lazy[ID]](edges ...Loader[N]) *LoadOf[E, N] {
+	return (&LoadOf[E, N]{edge: e.Meta}).With(edges...)
+}
+
+// Load is the edge, eager-loaded as a query of its neighbors says, for a
+// query that is already there: one built by other code, or kept from a
+// request. Written in place, a load is the edge's Where, OrderBy, Limit,
+// Columns and With.
+func (e *ToMany[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) *LoadOf[E, N] {
+	return loadAs[E, N](e.Meta, q)
 }
 
 // loadOf makes the edge a Loader: With takes it as it is.
-func (e *ToMany[E, N, ID]) loadOf() LoadOf[E] { return LoadOf[E]{edge: e.Meta} }
+func (e *ToMany[E, N, ID]) loadOf(E) load { return load{edge: e.Meta} }
 
 // plain returns the predicates of an entity as the engine holds them.
 func plain[E Predicate](ps []E) []P {

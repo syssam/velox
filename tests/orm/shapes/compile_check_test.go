@@ -55,7 +55,7 @@ var compileCases = []compileCase{
 	_, _ = client.Author.Query(db).
 		Where(author.Name.EQ("x"), author.Articles.HasWith(article.Title.EQ("y"), article.Topics.HasWith(topic.Name.EQ("z")))).
 		OrderBy(author.Age.Desc()).
-		With(author.Articles.Load(client.Article.Query(db).Where(article.Words.GT(1)).OrderBy(article.Title.Asc()).With(article.Topics)), author.Passport).
+		With(author.Articles.Where(article.Words.GT(1)).OrderBy(article.Title.Asc()).With(article.Topics), author.Passport, author.Edited.Load(client.Article.Query(db).Limit(1))).
 		All(ctx)
 	_, _ = client.Author.Create(db).Set(author.Name.Set("x"), author.Age.Set(1), author.Edited.Add(1, 2)).Save(ctx)
 	_, _ = client.Author.CreateBulk(db, client.Author.Create(db), client.Author.Create(db)).Save(ctx)
@@ -90,6 +90,12 @@ var compileCases = []compileCase{
 		body: `	_, _ = client.Author.Query(db).With(article.Topics).All(ctx)`},
 	{name: "described eager load of an edge of another entity", want: "cannot use article.Topics.Load",
 		body: `	_, _ = client.Author.Query(db).With(article.Topics.Load(client.Topic.Query(db))).All(ctx)`},
+	{name: "condition of another entity on the neighbors of a load", want: "cannot use author.Name.EQ",
+		body: `	_, _ = client.Author.Query(db).With(author.Articles.Where(author.Name.EQ("x"))).All(ctx)`},
+	{name: "order of another entity on the neighbors of a load", want: "cannot use author.Name.Asc",
+		body: `	_, _ = client.Author.Query(db).With(author.Articles.OrderBy(author.Name.Asc())).All(ctx)`},
+	{name: "edge of the owner as an edge of the neighbors of a load", want: "cannot use author.Passport",
+		body: `	_, _ = client.Author.Query(db).With(author.Articles.With(author.Passport)).All(ctx)`},
 	{name: "query of another entity as the description of a load", want: "client.Topic.Query(db) does not match",
 		body: `	_, _ = client.Author.Query(db).With(author.Articles.Load(client.Topic.Query(db))).All(ctx)`},
 	{name: "order of another entity", want: "cannot use article.Title.Asc",
