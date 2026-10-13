@@ -130,3 +130,8 @@ benchmarks/fixtures/realistic/app_orm/
 # Binaries built in place by `go build` in a command directory.
 /cmd/velox-migrate/velox-migrate
 /cmd/velox-gen/velox-gen
+
+# Binaries of the commands, when one is built in the repository root by
+# mistake (go build ./cmd/velox-migrate without -o).
+/velox-gen
+/velox-migrate
