@@ -211,7 +211,7 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 	out.WriteString(header)
 	fmt.Fprintf(&out, "// Package %s describes the columns and edges of %s. Its queries and\n// mutations start at the root package's %s.\npackage %s\n\n", e.Pkg, e.Name, e.Name, e.Pkg)
 	out.WriteString(im.block())
-	out.WriteString("\n")
+	out.WriteString("\n" + versionGate + "\n")
 	out.Write(b.Bytes())
 	return split(out.Bytes(), fileName(e))
 }

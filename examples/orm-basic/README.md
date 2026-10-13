@@ -52,7 +52,7 @@ adults, err := velox.User.Query(conn).
 
 // Update and delete.
 ann, err = velox.User.UpdateByID(conn, ann.ID).Set(user.Age.Add(1)).SaveOne(ctx)
-err = velox.User.DeleteByID(ctx, conn, ann.ID)
+err = velox.User.DeleteByID(conn, ann.ID).ExecOne(ctx)
 
 // A transaction is given where the connection is.
 err = conn.RunTx(ctx, func(tx *velox.Tx) error {

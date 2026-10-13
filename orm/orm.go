@@ -15,6 +15,17 @@ import (
 // other kinds, *velox.NotLoadedError, and velox.IsNotFound and the rest for
 // each.
 
+// GeneratedCodeIsVersion1 is what a generated tree asserts at compile time:
+//
+//	const _ = orm.GeneratedCodeIsVersion1
+//
+// A tree written by a generator older or newer than this package then fails
+// to compile on that line, which says what to do (generate the code again
+// with the velox-gen of this module), where it would fail on whatever the
+// two disagree about. The number goes up, and the old constant goes away,
+// whenever this package changes what generated code calls.
+const GeneratedCodeIsVersion1 = true
+
 // NotFound returns the error of a query or mutation of the entity that
 // matched no row: a *velox.NotFoundError, which is velox.ErrNotFound and
 // reads "velox: sales_order not found".

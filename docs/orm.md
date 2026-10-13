@@ -96,7 +96,7 @@ n, err := velox.Post.Update(conn).Set(post.ViewCount.Add(1)).Where(post.Author.H
 
 // By id; a missing row is velox.ErrNotFound.
 u, err := velox.User.Get(ctx, conn, id)
-err = velox.User.DeleteByID(ctx, conn, id)
+err = velox.User.DeleteByID(conn, id).ExecOne(ctx)
 ```
 
 - **A handle does not give the `*sql.DB` back.** `velox.Open(dialect, dsn)`
@@ -176,9 +176,12 @@ err = velox.User.DeleteByID(ctx, conn, id)
   For a query of the neighbors that is already there, built by other code,
   `user.Posts.Load(q)` is the edge loaded as that query says.
 - **`Exec` on an update or delete touches every matching row and returns the
-  count; it is not an error when that is zero.** `SaveOne` is for exactly one
-  row (`velox.ErrNotFound`, `velox.ErrNotSingular`); `DeleteByID` reports a
-  missing row. There is no `Update().Save`: in velox and Ent that spelling is
+  count; it is not an error when that is zero.** `SaveOne` and `ExecOne` are
+  for exactly one row (`velox.ErrNotFound`, `velox.ErrNotSingular`), on an
+  update and on a delete alike: `velox.User.DeleteByID(tx, id).ExecOne(ctx)`.
+  A `Where` after `UpdateByID` or `DeleteByID` is a guard, the optimistic
+  lock: `DeleteByID(tx, id).Where(todo.Version.EQ(seen)).ExecOne(ctx)`
+  answers `velox.ErrNotFound` for a row that has moved on. There is no `Update().Save`: in velox and Ent that spelling is
   the bulk update.
 - **`CreateBulk` is one statement** for all its rows, and all of them or
   none: `velox.Tag.CreateBulk(tx).Row(tag.Name.Set("go")).Row(tag.Name.Set("sql")).Save(ctx)`,
@@ -218,8 +221,9 @@ err = velox.User.DeleteByID(ctx, conn, id)
 - `tx.AfterCommit(fn)` runs `fn` once the transaction has been committed,
   and not when it is rolled back or the commit fails: for an event that must
   follow a change only when the change is certain.
-- `velox.First(q.Limit(1).IDs(ctx))` is the first of what a list read
-  returned, or `velox.ErrNotFound`.
+- `q.FirstID(ctx)` and `q.OnlyID(ctx)` are the id without the row.
+  `velox.First(vs, err)` is the first of what any list read returned, or
+  `velox.ErrNotFound`.
 - `SetNillable(p)` sets `*p`, or nothing when `p` is nil.
 - `Keep()`, on a column with an update default, leaves it as it is:
   `Set(order.Total.Set(t), order.UpdatedAt.Keep())` is a change that is not

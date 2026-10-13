@@ -812,36 +812,64 @@ func (m *MutCore) ExecOne(ctx context.Context) error {
 
 // execOne is updateOne without the read of the row afterwards.
 func (m *MutCore) execOne(ctx context.Context, c *velox.ExecutorState) error {
+	preds, err := m.oneRow(ctx, c)
+	if err != nil {
+		return err
+	}
+	n, err := (&MutCore{M: m.M, Sets: m.Sets, Preds: preds}).update(ctx, c)
+	if err == nil && n == 0 {
+		return m.M.NotFound()
+	}
+	return err
+}
+
+// oneRow returns the conditions of a write that is to touch exactly one row.
+// Conditions that name the row by its id are returned as they are: an id is
+// one row or none. Otherwise it looks first, so that several rows are refused
+// before any is written, and returns the conditions with the id of the one
+// found.
+func (m *MutCore) oneRow(ctx context.Context, c *velox.ExecutorState) ([]P, error) {
 	meta := m.M
 	if meta.id() == nil {
-		return fmt.Errorf("velox: %s has no single-column id", meta.Name)
+		return nil, fmt.Errorf("velox: %s has no single-column id", meta.Name)
 	}
-	preds := m.Preds
-	byID := false
-	for i := range preds {
-		byID = byID || (preds[i].Op == OpEQ && preds[i].Col == meta.id().Column)
-	}
-	if !byID {
-		// Not named by its id: look first, so that several rows are
-		// refused before any is written, and update the one found under
-		// the same conditions.
-		ids, err := (&QueryCore{M: meta, Preds: preds, Limit: 2}).ids(ctx, c)
-		if err != nil {
-			return err
+	for i := range m.Preds {
+		if m.Preds[i].Op == OpEQ && m.Preds[i].Col == meta.id().Column {
+			return m.Preds, nil
 		}
-		switch len(ids) {
-		case 0:
-			return meta.NotFound()
-		case 1:
-		default:
-			return meta.notSingular()
+	}
+	ids, err := (&QueryCore{M: meta, Preds: m.Preds, Limit: 2}).ids(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	switch len(ids) {
+	case 0:
+		return nil, meta.NotFound()
+	case 1:
+		return append(slices.Clone(m.Preds), P{Op: OpEQ, Col: meta.id().Column, Val: ids[0]}), nil
+	}
+	return nil, meta.notSingular()
+}
+
+// DeleteOne deletes the single matching row: ErrNotFound when no row
+// matches, which is also what a row that no longer meets a further condition
+// gives, and ErrNotSingular (and nothing deleted) when several do.
+func (m *MutCore) DeleteOne(ctx context.Context) error {
+	c, err := connOf(m.Ex, m.M)
+	if err != nil {
+		return err
+	}
+	_, err = m.mutate(ctx, c, velox.OpDeleteOne, func(ctx context.Context, m *MutCore) (any, error) {
+		preds, oneErr := m.oneRow(ctx, c)
+		if oneErr != nil {
+			return nil, oneErr
 		}
-		preds = append(slices.Clone(preds), P{Op: OpEQ, Col: meta.id().Column, Val: ids[0]})
-	}
-	n, err := (&MutCore{M: meta, Sets: m.Sets, Preds: preds}).update(ctx, c)
-	if err == nil && n == 0 {
-		return meta.NotFound()
-	}
+		n, delErr := (&MutCore{M: m.M, Preds: preds}).delete(ctx, c)
+		if delErr == nil && n == 0 {
+			delErr = m.M.NotFound()
+		}
+		return nil, delErr
+	})
 	return err
 }
 

@@ -3,3 +3,11 @@
 // Package entity holds every entity, the names of its builders and its runtime
 // description: a file per entity.
 package entity
+
+import (
+	"github.com/syssam/velox/orm"
+)
+
+// The package orm this code was generated for: if this line does not compile,
+// generate the code again with the velox-gen of the velox module in go.mod.
+const _ = orm.GeneratedCodeIsVersion1

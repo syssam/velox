@@ -135,7 +135,7 @@ next:
 		"user.Posts.HasWith(post.Status.EQ(post.StatusDraft))",
 		".Set(user.Role.Set(user.RoleAdmin), user.Nickname.Clear(), user.Age.Add(1)).SaveOne(ctx)",
 		"velox.User.UpdateByID(s.Client, id).Set(user.Name.Set(name)).ExecOne(ctx)",
-		"velox.User.DeleteByID(ctx, s.Client, id)",
+		"velox.User.DeleteByID(s.Client, id).ExecOne(ctx)",
 		".OrderBy(orderBy.Term()).Where(where.P()).Paginate(ctx, after, first, nil, nil)",
 		"s.Client.Begin(ctx)",
 		"moveAll(ctx, tx, from, to)", // a client passed as a value is the handle

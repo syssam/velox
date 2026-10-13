@@ -1383,7 +1383,7 @@ func (r *rewriter) client(call *ast.CallExpr, sel *ast.SelectorExpr, t target, n
 		if m, outer := receiverOf(call, stack); outer != nil && (m == "Exec" || m == "ExecX") {
 			return // the Exec that follows rewrites the pair
 		}
-		r.note(call.Pos(), "%s that is not run at once: DeleteByID(ctx, handle, id) runs it", name)
+		r.note(call.Pos(), "%s that is not run at once: it is DeleteByID(handle, id), with Where for a guard, ended by ExecOne(ctx)", name)
 	default:
 		// c.Order.QueryItems(o): the items of o, queried on the handle the
 		// client held.
@@ -2071,7 +2071,7 @@ func (r *rewriter) dropCount(call *ast.CallExpr, stack []ast.Node) bool {
 func (r *rewriter) deleteOne(call *ast.CallExpr, sel *ast.SelectorExpr, t target, name string) {
 	inner, ok := sel.X.(*ast.CallExpr)
 	if !ok || len(inner.Args) != 1 || len(call.Args) != 1 {
-		r.note(call.Pos(), "a delete of one row built in steps: DeleteByID(ctx, handle, id) runs it")
+		r.note(call.Pos(), "a delete of one row built in steps: it is DeleteByID(handle, id), with Where for a guard, ended by ExecOne(ctx)")
 		return
 	}
 	innerSel, ok := inner.Fun.(*ast.SelectorExpr)
@@ -2088,7 +2088,7 @@ func (r *rewriter) deleteOne(call *ast.CallExpr, sel *ast.SelectorExpr, t target
 		r.idOf(inner.Args[0])
 	}
 	id := r.render(inner.Args[0])
-	text := r.root(call.Pos()) + "." + t.ent.name + ".DeleteByID(" + r.render(call.Args[0]) + ", " + r.render(ex) + via + ", " + id + ")"
+	text := r.root(call.Pos()) + "." + t.ent.name + ".DeleteByID(" + r.render(ex) + via + ", " + id + ").ExecOne(" + r.render(call.Args[0]) + ")"
 	if name == "ExecX" {
 		text = r.app("Check", call.Pos()) + "(" + text + ")"
 		r.wrapped[call] = true

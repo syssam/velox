@@ -151,8 +151,8 @@ func TestUpdateAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	require.NoError(t, velox.User.DeleteByID(ctx, conn, ann.ID))
-	require.True(t, velox.IsNotFound(velox.User.DeleteByID(ctx, conn, ann.ID)), "it is gone")
+	require.NoError(t, velox.User.DeleteByID(conn, ann.ID).ExecOne(ctx))
+	require.True(t, velox.IsNotFound(velox.User.DeleteByID(conn, ann.ID).ExecOne(ctx)), "it is gone")
 	n, err = velox.User.Delete(conn).Where(user.Role.EQ(user.RoleGuest)).Exec(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)

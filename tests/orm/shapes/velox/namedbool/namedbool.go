@@ -10,6 +10,10 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
+// The package orm this code was generated for: if this line does not compile,
+// generate the code again with the velox-gen of the velox module in go.mod.
+const _ = orm.GeneratedCodeIsVersion1
+
 // Table is the table of NamedBool, and ModelName the name of the entity: what
 // the Type method of a query or a mutation of it returns.
 const (

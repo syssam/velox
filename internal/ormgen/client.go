@@ -68,7 +68,7 @@ func (g *Generator) client() (map[string][]byte, error) {
 	root := rootPackage(g.cfg.Package)
 	fmt.Fprintf(&out, "// Package %[1]s is where every query and mutation starts: %[1]s.<Entity>.Query(conn),\n// %[1]s.<Entity>.Create(conn), %[1]s.<Entity>.UpdateByID(conn, id). The entities are in the\n// entity package, their columns and edges in a package each.\npackage %[1]s\n\n", root)
 	out.WriteString(im.block())
-	out.WriteString("\n")
+	out.WriteString("\n" + versionGate + "\n")
 	out.WriteString(lib)
 	out.Write(b.Bytes())
 	return split(out.Bytes(), root)

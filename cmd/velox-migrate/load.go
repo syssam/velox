@@ -26,7 +26,7 @@
 //	    db.User.Query(c).Where(user.Name.EQ(n)).OrderBy(user.Name.Asc()).Exists(ctx)
 //	q.Paginate(ctx, after, first, before, last, entity.WithUserOrder(o), entity.WithUserFilter(w.Filter))
 //	    q.OrderBy(o.Term()).Where(w.P()).Paginate(ctx, after, first, before, last)
-//	c.User.DeleteOneID(id).Exec(ctx)        db.User.DeleteByID(ctx, c, id)
+//	c.User.DeleteOneID(id).Exec(ctx)        db.User.DeleteByID(c, id).ExecOne(ctx)
 //	c.User.GetX(ctx, id)                    velox.Must(db.User.Get(ctx, c, id))
 //	user.HasPostsWith(p)                    user.Posts.HasWith(p)
 //	velox.TypeUser, user.Role, *velox.Tx    user.ModelName, user.RoleEnum, *velox.Tx

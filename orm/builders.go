@@ -374,6 +374,40 @@ func (q *QueryOf[PT, E, ID]) Paginate[_ Lazy[ID]](ctx context.Context, after *ve
 	return conn, nil
 }
 
+// FirstID returns the id of the first matching row, or velox.ErrNotFound.
+//
+//go:noinline
+func (q *QueryOf[PT, E, ID]) FirstID[_ Lazy[ID]](ctx context.Context) (ID, error) {
+	return q.id(ctx, 1)
+}
+
+// OnlyID returns the id of the single matching row: velox.ErrNotFound for
+// none, velox.ErrNotSingular for more.
+//
+//go:noinline
+func (q *QueryOf[PT, E, ID]) OnlyID[_ Lazy[ID]](ctx context.Context) (ID, error) {
+	return q.id(ctx, 2)
+}
+
+// id reads at most limit ids and returns the one there is.
+//
+//go:noinline
+func (q *QueryOf[PT, E, ID]) id[_ Lazy[ID]](ctx context.Context, limit int) (ID, error) {
+	var none ID
+	c := q.c
+	c.Limit = limit
+	vs, err := c.IDs(ctx)
+	switch {
+	case err != nil:
+		return none, err
+	case len(vs) == 0:
+		return none, q.c.M.NotFound()
+	case len(vs) > 1:
+		return none, q.c.M.notSingular()
+	}
+	return as[ID](vs[0]), nil
+}
+
 // Count returns the number of matching rows.
 //
 //go:noinline
@@ -585,6 +619,16 @@ func (b *DeleteOf[E]) Where[_ Lazy[E]](ps ...E) *DeleteOf[E] {
 //go:noinline
 func (b *DeleteOf[E]) Exec[_ Lazy[E]](ctx context.Context) (int, error) { return b.c.Delete(ctx) }
 
+// ExecOne deletes the single matching row: velox.ErrNotFound when no row
+// matches, velox.ErrNotSingular (and nothing deleted) when several do. After
+// DeleteByID a further Where is a guard, and a row that no longer meets it is
+// reported as not found:
+//
+//	err := velox.Todo.DeleteByID(tx, id).Where(todo.Version.EQ(seen)).ExecOne(ctx)
+//
+//go:noinline
+func (b *DeleteOf[E]) ExecOne[_ Lazy[E]](ctx context.Context) error { return b.c.DeleteOne(ctx) }
+
 // ClientOf is where the queries and mutations of an entity start: the
 // variable of the entity in the root package of a generated tree,
 // velox.Post. A program that uses package entity without the root package
@@ -679,13 +723,11 @@ func (c *ClientOf[PT, E, ID]) UpdateByID[_ Lazy[ID]](ex velox.Executor, id ID) *
 	return c.Update(ex).Where(c.byID(id))
 }
 
-// DeleteByID deletes the row with the given id, or returns velox.ErrNotFound.
+// DeleteByID returns a builder that deletes the row with the given id. End
+// it with ExecOne, which reports a missing row; Exec returns 0 for one and no
+// error.
 //
 //go:noinline
-func (c *ClientOf[PT, E, ID]) DeleteByID[_ Lazy[ID]](ctx context.Context, ex velox.Executor, id ID) error {
-	n, err := c.Delete(ex).Where(c.byID(id)).Exec(ctx)
-	if err == nil && n == 0 {
-		err = c.Meta.NotFound()
-	}
-	return err
+func (c *ClientOf[PT, E, ID]) DeleteByID[_ Lazy[ID]](ex velox.Executor, id ID) *DeleteOf[E] {
+	return c.Delete(ex).Where(c.byID(id))
 }

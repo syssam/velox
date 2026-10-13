@@ -51,9 +51,9 @@ func TestByID_GetUpdateOneDeleteOne(t *testing.T) {
 	assert.ErrorIs(t, err, velox.ErrNotFound)
 
 	// A missing row is an error for DeleteOne; Delete().Exec reports a count.
-	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID+99), velox.ErrNotFound)
-	require.NoError(t, client.User.DeleteByID(ctx, db, u.ID))
-	assert.ErrorIs(t, client.User.DeleteByID(ctx, db, u.ID), velox.ErrNotFound)
+	assert.ErrorIs(t, client.User.DeleteByID(db, u.ID+99).ExecOne(ctx), velox.ErrNotFound)
+	require.NoError(t, client.User.DeleteByID(db, u.ID).ExecOne(ctx))
+	assert.ErrorIs(t, client.User.DeleteByID(db, u.ID).ExecOne(ctx), velox.ErrNotFound)
 }
 
 func TestSetNillable(t *testing.T) {
@@ -934,7 +934,7 @@ func TestNotFound_Text(t *testing.T) {
 	assert.EqualError(t, err, "velox: user not found")
 	_, err = client.User.Query(db).Where(user.Name.EQ("nobody")).Only(ctx)
 	assert.EqualError(t, err, "velox: user not found")
-	err = client.User.DeleteByID(ctx, db, 404)
+	err = client.User.DeleteByID(db, 404).ExecOne(ctx)
 	require.ErrorIs(t, err, velox.ErrNotFound)
 	assert.EqualError(t, err, "velox: user not found")
 	_, err = client.User.UpdateByID(db, 404).Set(user.Age.Set(1)).SaveOne(ctx)
@@ -1033,4 +1033,46 @@ func TestEscapeHatchesStartAtTheEntity(t *testing.T) {
 	assert.Contains(t, query, "ORDER BY")
 	assert.Contains(t, query, "LIMIT 2")
 	assert.Equal(t, []any{25}, args)
+}
+
+// A delete of one row is a builder, like an update of one: by id, with a
+// further Where as a guard, ended by ExecOne, which tells a row that is not
+// there (or no longer meets the guard) from one that was deleted.
+func TestDeleteOneRow(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, bob, cy := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40), newUser(t, db, "cy", 40)
+
+	// The guard does not hold: nothing is deleted, and the answer is the one
+	// a missing row gives.
+	err := client.User.DeleteByID(db, ann.ID).Where(user.Age.EQ(31)).ExecOne(ctx)
+	require.ErrorIs(t, err, velox.ErrNotFound)
+	require.Equal(t, 3, velox.Must(client.User.Query(db).Count(ctx)))
+	// It holds.
+	require.NoError(t, client.User.DeleteByID(db, ann.ID).Where(user.Age.EQ(30)).ExecOne(ctx))
+	require.ErrorIs(t, client.User.DeleteByID(db, ann.ID).ExecOne(ctx), velox.ErrNotFound)
+	// Exec on the same builder counts instead, and none is no error.
+	n, err := client.User.DeleteByID(db, ann.ID).Exec(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, n)
+
+	// Not named by id: several rows are refused before any is deleted.
+	err = client.User.Delete(db).Where(user.Age.EQ(40)).ExecOne(ctx)
+	require.ErrorIs(t, err, velox.ErrNotSingular)
+	require.Equal(t, 2, velox.Must(client.User.Query(db).Count(ctx)))
+	require.NoError(t, client.User.Delete(db).Where(user.Name.EQ("bob")).ExecOne(ctx))
+	_ = bob
+
+	// The id of a row without the row.
+	id, err := client.User.Query(db).OrderBy(user.Name.Asc()).FirstID(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, cy.ID, id)
+	id, err = client.User.Query(db).Where(user.Name.EQ("cy")).OnlyID(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, cy.ID, id)
+	_, err = client.User.Query(db).Where(user.Name.EQ("nobody")).FirstID(ctx)
+	require.ErrorIs(t, err, velox.ErrNotFound)
+	newUser(t, db, "dee", 50)
+	_, err = client.User.Query(db).OnlyID(ctx)
+	require.ErrorIs(t, err, velox.ErrNotSingular)
 }

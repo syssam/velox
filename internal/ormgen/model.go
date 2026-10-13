@@ -46,6 +46,10 @@ func relConst(r vgen.Rel) string {
 	}
 }
 
+// versionGate is the line of a generated package that fails to compile
+// against a package orm of another generation, with a name that says why.
+const versionGate = "// The package orm this code was generated for: if this line does not compile,\n// generate the code again with the velox-gen of the velox module in go.mod.\nconst _ = orm.GeneratedCodeIsVersion1\n"
+
 func (g *Generator) model() (map[string][]byte, error) {
 	im := g.Imports()
 	im.use(ormPath, "orm")
@@ -107,7 +111,7 @@ func (g *Generator) model() (map[string][]byte, error) {
 	out.WriteString(header)
 	out.WriteString("// Package entity holds every entity, the names of its builders and its runtime\n// description: a file per entity.\npackage entity\n\n")
 	out.WriteString(im.block())
-	out.WriteString("\n")
+	out.WriteString("\n" + versionGate + "\n")
 	out.Write(b.Bytes())
 	return split(out.Bytes(), "entity")
 }

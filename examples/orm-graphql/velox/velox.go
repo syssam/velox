@@ -12,7 +12,12 @@ import (
 
 	_ "example.com/orm-graphql/velox/schemainit"
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/orm"
 )
+
+// The package orm this code was generated for: if this line does not compile,
+// generate the code again with the velox-gen of the velox module in go.mod.
+const _ = orm.GeneratedCodeIsVersion1
 
 // The library's types under this package's name: a file that starts its
 // queries here needs one import. They are aliases, so velox.Tx is one type
