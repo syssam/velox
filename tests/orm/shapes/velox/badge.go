@@ -24,7 +24,8 @@ func (*BadgeClient) Query(ex velox.Executor) *entity.BadgeQuery { return entity.
 // Create returns a builder that creates a Badge.
 func (*BadgeClient) Create(ex velox.Executor) *entity.BadgeCreate { return entity.NewBadgeCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*BadgeClient) CreateBulk(ex velox.Executor, bs ...*entity.BadgeCreate) *entity.BadgeCreateBulk {
 	return entity.NewBadgeCreateBulk(ex, bs...)
 }

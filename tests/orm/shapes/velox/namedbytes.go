@@ -17,8 +17,8 @@ var NamedBytes NamedBytesClient
 // NamedBytesClient is the type of NamedBytes.
 type NamedBytesClient struct{}
 
-// Query returns a query of every NamedBytes, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every NamedBytes, to run on ex: a database handle or
+// a transaction.
 func (*NamedBytesClient) Query(ex velox.Executor) *entity.NamedBytesQuery {
 	return entity.NewNamedBytesQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*NamedBytesClient) Create(ex velox.Executor) *entity.NamedBytesCreate {
 	return entity.NewNamedBytesCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*NamedBytesClient) CreateBulk(ex velox.Executor, bs ...*entity.NamedBytesCreate) *entity.NamedBytesCreateBulk {
 	return entity.NewNamedBytesCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the NamedBytes rows its conditions match.
+// Update returns a builder that updates the NamedBytes rows its conditions
+// match.
 func (*NamedBytesClient) Update(ex velox.Executor) *entity.NamedBytesUpdate {
 	return entity.NewNamedBytesUpdate(ex)
 }
 
-// Delete returns a builder that deletes the NamedBytes rows its conditions match.
+// Delete returns a builder that deletes the NamedBytes rows its conditions
+// match.
 func (*NamedBytesClient) Delete(ex velox.Executor) *entity.NamedBytesDelete {
 	return entity.NewNamedBytesDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *NamedBytesClient) Get(ctx context.Context, ex velox.Executor, id int) (
 	return c.Query(ex).Where(predicate.NamedBytes(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the NamedBytes with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the NamedBytes with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *NamedBytesClient) UpdateByID(ex velox.Executor, id int) *entity.NamedBytesUpdate {
 	return c.Update(ex).Where(predicate.NamedBytes(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the NamedBytes with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the NamedBytes with the given id, or returns
+// velox.ErrNotFound.
 func (c *NamedBytesClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBytes(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

@@ -26,7 +26,8 @@ func (*GadgetClient) Create(ex velox.Executor) *entity.GadgetCreate {
 	return entity.NewGadgetCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*GadgetClient) CreateBulk(ex velox.Executor, bs ...*entity.GadgetCreate) *entity.GadgetCreateBulk {
 	return entity.NewGadgetCreateBulk(ex, bs...)
 }
@@ -46,13 +47,14 @@ func (c *GadgetClient) Get(ctx context.Context, ex velox.Executor, id int) (*ent
 	return c.Query(ex).Where(predicate.Gadget(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Gadget with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Gadget with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *GadgetClient) UpdateByID(ex velox.Executor, id int) *entity.GadgetUpdate {
 	return c.Update(ex).Where(predicate.Gadget(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Gadget with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Gadget with the given id, or returns
+// velox.ErrNotFound.
 func (c *GadgetClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Gadget(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

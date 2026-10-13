@@ -29,6 +29,10 @@ type NamedBoolEdges struct {
 	loaded [1]bool
 }
 
+// ptrNamedBool returns the address of the field of a NamedBool that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// NamedBoolMeta.
+//
 //go:noinline
 func ptrNamedBool(v any, i int) any {
 	e := v.(*NamedBool)
@@ -58,7 +62,8 @@ type NamedBoolConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// NamedBoolMeta is the runtime description of NamedBool. Use it through its address.
+// NamedBoolMeta is the runtime description of NamedBool. Use it through its
+// address.
 var NamedBoolMeta = orm.Meta{
 	Name:    "NamedBool",
 	Table:   "named_bools",
@@ -149,7 +154,8 @@ func (q *NamedBoolQuery) ForShare(opts ...orm.LockOption) *NamedBoolQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *NamedBoolQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -191,7 +197,8 @@ func (q *NamedBoolQuery) First(ctx context.Context) (*NamedBool, error) {
 	return r.(*NamedBool), nil
 }
 
-// Only returns the single matching NamedBool: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching NamedBool: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NamedBoolQuery) Only(ctx context.Context) (*NamedBool, error) {
@@ -320,9 +327,9 @@ type NamedBoolCreateBulk struct {
 	n  int
 }
 
-// NewNamedBoolCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewNamedBoolCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewNamedBoolCreateBulk(ex velox.Executor, bs ...*NamedBoolCreate) *NamedBoolCreateBulk {
 	return &NamedBoolCreateBulk{ex: ex, bs: bs}
 }
@@ -375,7 +382,8 @@ func (b *NamedBoolCreateBulk) Exec(ctx context.Context) error {
 // NamedBoolUpdate updates NamedBool rows.
 type NamedBoolUpdate struct{ c orm.MutCore }
 
-// NewNamedBoolUpdate returns a builder that updates the rows its predicates match.
+// NewNamedBoolUpdate returns a builder that updates the rows its predicates
+// match.
 func NewNamedBoolUpdate(ex velox.Executor) *NamedBoolUpdate {
 	return &NamedBoolUpdate{c: orm.MutCore{M: &NamedBoolMeta, Ex: ex}}
 }
@@ -441,7 +449,8 @@ func (b *NamedBoolUpdate) SaveOne(ctx context.Context) (*NamedBool, error) {
 // NamedBoolDelete deletes NamedBool rows.
 type NamedBoolDelete struct{ c orm.MutCore }
 
-// NewNamedBoolDelete returns a builder that deletes the rows its predicates match.
+// NewNamedBoolDelete returns a builder that deletes the rows its predicates
+// match.
 func NewNamedBoolDelete(ex velox.Executor) *NamedBoolDelete {
 	return &NamedBoolDelete{c: orm.MutCore{M: &NamedBoolMeta, Ex: ex}}
 }

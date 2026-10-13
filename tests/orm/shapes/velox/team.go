@@ -25,7 +25,8 @@ func (*TeamClient) Query(ex velox.Executor) *entity.TeamQuery { return entity.Ne
 // Create returns a builder that creates a Team.
 func (*TeamClient) Create(ex velox.Executor) *entity.TeamCreate { return entity.NewTeamCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TeamClient) CreateBulk(ex velox.Executor, bs ...*entity.TeamCreate) *entity.TeamCreateBulk {
 	return entity.NewTeamCreateBulk(ex, bs...)
 }

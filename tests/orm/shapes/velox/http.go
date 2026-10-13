@@ -24,7 +24,8 @@ func (*HttpClient) Query(ex velox.Executor) *entity.HttpQuery { return entity.Ne
 // Create returns a builder that creates a Http.
 func (*HttpClient) Create(ex velox.Executor) *entity.HttpCreate { return entity.NewHttpCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*HttpClient) CreateBulk(ex velox.Executor, bs ...*entity.HttpCreate) *entity.HttpCreateBulk {
 	return entity.NewHttpCreateBulk(ex, bs...)
 }

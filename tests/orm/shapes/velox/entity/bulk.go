@@ -26,6 +26,9 @@ type BulkEdges struct {
 	loaded [1]bool
 }
 
+// ptrBulk returns the address of the field of a Bulk that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of BulkMeta.
+//
 //go:noinline
 func ptrBulk(v any, i int) any {
 	e := v.(*Bulk)
@@ -138,7 +141,8 @@ func (q *BulkQuery) ForShare(opts ...orm.LockOption) *BulkQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *BulkQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *BulkQuery) First(ctx context.Context) (*Bulk, error) {
 	return r.(*Bulk), nil
 }
 
-// Only returns the single matching Bulk: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Bulk: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *BulkQuery) Only(ctx context.Context) (*Bulk, error) {
@@ -309,9 +314,9 @@ type BulkCreateBulk struct {
 	n  int
 }
 
-// NewBulkCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewBulkCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewBulkCreateBulk(ex velox.Executor, bs ...*BulkCreate) *BulkCreateBulk {
 	return &BulkCreateBulk{ex: ex, bs: bs}
 }

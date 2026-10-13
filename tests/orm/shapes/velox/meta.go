@@ -24,7 +24,8 @@ func (*MetaClient) Query(ex velox.Executor) *entity.MetaQuery { return entity.Ne
 // Create returns a builder that creates a Meta.
 func (*MetaClient) Create(ex velox.Executor) *entity.MetaCreate { return entity.NewMetaCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*MetaClient) CreateBulk(ex velox.Executor, bs ...*entity.MetaCreate) *entity.MetaCreateBulk {
 	return entity.NewMetaCreateBulk(ex, bs...)
 }

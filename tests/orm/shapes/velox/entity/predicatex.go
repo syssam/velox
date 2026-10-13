@@ -26,6 +26,10 @@ type PredicateEdges struct {
 	loaded [1]bool
 }
 
+// ptrPredicate returns the address of the field of a Predicate that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// PredicateMeta.
+//
 //go:noinline
 func ptrPredicate(v any, i int) any {
 	e := v.(*Predicate)
@@ -53,7 +57,8 @@ type PredicateConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// PredicateMeta is the runtime description of Predicate. Use it through its address.
+// PredicateMeta is the runtime description of Predicate. Use it through its
+// address.
 var PredicateMeta = orm.Meta{
 	Name:    "Predicate",
 	Table:   "predicates",
@@ -141,7 +146,8 @@ func (q *PredicateQuery) ForShare(opts ...orm.LockOption) *PredicateQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *PredicateQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *PredicateQuery) First(ctx context.Context) (*Predicate, error) {
 	return r.(*Predicate), nil
 }
 
-// Only returns the single matching Predicate: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Predicate: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PredicateQuery) Only(ctx context.Context) (*Predicate, error) {
@@ -312,9 +319,9 @@ type PredicateCreateBulk struct {
 	n  int
 }
 
-// NewPredicateCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewPredicateCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewPredicateCreateBulk(ex velox.Executor, bs ...*PredicateCreate) *PredicateCreateBulk {
 	return &PredicateCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +374,8 @@ func (b *PredicateCreateBulk) Exec(ctx context.Context) error {
 // PredicateUpdate updates Predicate rows.
 type PredicateUpdate struct{ c orm.MutCore }
 
-// NewPredicateUpdate returns a builder that updates the rows its predicates match.
+// NewPredicateUpdate returns a builder that updates the rows its predicates
+// match.
 func NewPredicateUpdate(ex velox.Executor) *PredicateUpdate {
 	return &PredicateUpdate{c: orm.MutCore{M: &PredicateMeta, Ex: ex}}
 }
@@ -433,7 +441,8 @@ func (b *PredicateUpdate) SaveOne(ctx context.Context) (*Predicate, error) {
 // PredicateDelete deletes Predicate rows.
 type PredicateDelete struct{ c orm.MutCore }
 
-// NewPredicateDelete returns a builder that deletes the rows its predicates match.
+// NewPredicateDelete returns a builder that deletes the rows its predicates
+// match.
 func NewPredicateDelete(ex velox.Executor) *PredicateDelete {
 	return &PredicateDelete{c: orm.MutCore{M: &PredicateMeta, Ex: ex}}
 }

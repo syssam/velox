@@ -29,7 +29,8 @@ type PersonEdges struct {
 	loaded [2]bool
 }
 
-// AssetsOrErr returns the assets edge, or an error when it was not loaded (velox.IsNotLoaded).
+// AssetsOrErr returns the assets edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PersonEdges) AssetsOrErr() ([]*Asset, error) {
@@ -39,7 +40,8 @@ func (e *PersonEdges) AssetsOrErr() ([]*Asset, error) {
 	return e.Assets, nil
 }
 
-// MadeOrErr returns the made edge, or an error when it was not loaded (velox.IsNotLoaded).
+// MadeOrErr returns the made edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PersonEdges) MadeOrErr() ([]*Asset, error) {
@@ -49,6 +51,10 @@ func (e *PersonEdges) MadeOrErr() ([]*Asset, error) {
 	return e.Made, nil
 }
 
+// ptrPerson returns the address of the field of a Person that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// PersonMeta.
+//
 //go:noinline
 func ptrPerson(v any, i int) any {
 	e := v.(*Person)
@@ -61,6 +67,9 @@ func ptrPerson(v any, i int) any {
 	return nil
 }
 
+// edgePerson marks the i-th edge of a Person as loaded and returns the address
+// of the field that holds its neighbors. It is the Edge of PersonMeta.
+//
 //go:noinline
 func edgePerson(v any, i int) any {
 	e := v.(*Person)
@@ -74,6 +83,10 @@ func edgePerson(v any, i int) any {
 	return nil
 }
 
+// linkPerson stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Person: all of them, or the first where
+// the edge has one. It is the Link of PersonMeta.
+//
 //go:noinline
 func linkPerson(dst any, es []any) {
 	switch d := dst.(type) {
@@ -193,7 +206,8 @@ func (q *PersonQuery) ForShare(opts ...orm.LockOption) *PersonQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *PersonQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -235,7 +249,8 @@ func (q *PersonQuery) First(ctx context.Context) (*Person, error) {
 	return r.(*Person), nil
 }
 
-// Only returns the single matching Person: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Person: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PersonQuery) Only(ctx context.Context) (*Person, error) {
@@ -364,9 +379,9 @@ type PersonCreateBulk struct {
 	n  int
 }
 
-// NewPersonCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewPersonCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewPersonCreateBulk(ex velox.Executor, bs ...*PersonCreate) *PersonCreateBulk {
 	return &PersonCreateBulk{ex: ex, bs: bs}
 }

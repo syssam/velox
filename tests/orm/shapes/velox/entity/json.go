@@ -26,6 +26,9 @@ type JsonEdges struct {
 	loaded [1]bool
 }
 
+// ptrJson returns the address of the field of a Json that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of JsonMeta.
+//
 //go:noinline
 func ptrJson(v any, i int) any {
 	e := v.(*Json)
@@ -138,7 +141,8 @@ func (q *JsonQuery) ForShare(opts ...orm.LockOption) *JsonQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *JsonQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *JsonQuery) First(ctx context.Context) (*Json, error) {
 	return r.(*Json), nil
 }
 
-// Only returns the single matching Json: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Json: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *JsonQuery) Only(ctx context.Context) (*Json, error) {
@@ -309,9 +314,9 @@ type JsonCreateBulk struct {
 	n  int
 }
 
-// NewJsonCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewJsonCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewJsonCreateBulk(ex velox.Executor, bs ...*JsonCreate) *JsonCreateBulk {
 	return &JsonCreateBulk{ex: ex, bs: bs}
 }

@@ -212,9 +212,9 @@ func (f *StringColumn) Desc() predicate.NamedBoolNilOrderTerm {
 	return predicate.NamedBoolNilOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableFlagColumn is a column of Go type types.Flag: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableFlagColumn is a column of Go type types.Flag: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableFlagColumn string
 
 // EQ matches the rows whose column equals v.

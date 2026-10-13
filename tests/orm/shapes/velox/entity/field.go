@@ -35,6 +35,10 @@ type FieldEdges struct {
 	loaded [1]bool
 }
 
+// ptrField returns the address of the field of a Field that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// FieldMeta.
+//
 //go:noinline
 func ptrField(v any, i int) any {
 	e := v.(*Field)
@@ -65,6 +69,10 @@ func ptrField(v any, i int) any {
 	return nil
 }
 
+// linkField stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Field: all of them, or the first where
+// the edge has one. It is the Link of FieldMeta.
+//
 //go:noinline
 func linkField(dst any, es []any) {
 	switch d := dst.(type) {
@@ -183,7 +191,8 @@ func (q *FieldQuery) ForShare(opts ...orm.LockOption) *FieldQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *FieldQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -225,7 +234,8 @@ func (q *FieldQuery) First(ctx context.Context) (*Field, error) {
 	return r.(*Field), nil
 }
 
-// Only returns the single matching Field: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Field: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *FieldQuery) Only(ctx context.Context) (*Field, error) {
@@ -354,9 +364,9 @@ type FieldCreateBulk struct {
 	n  int
 }
 
-// NewFieldCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewFieldCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewFieldCreateBulk(ex velox.Executor, bs ...*FieldCreate) *FieldCreateBulk {
 	return &FieldCreateBulk{ex: ex, bs: bs}
 }

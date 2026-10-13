@@ -29,7 +29,8 @@ type TagEdges struct {
 	loaded [1]bool
 }
 
-// PostsOrErr returns the posts edge, or an error when it was not loaded (velox.IsNotLoaded).
+// PostsOrErr returns the posts edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TagEdges) PostsOrErr() ([]*Post, error) {
@@ -39,6 +40,9 @@ func (e *TagEdges) PostsOrErr() ([]*Post, error) {
 	return e.Posts, nil
 }
 
+// ptrTag returns the address of the field of a Tag that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of TagMeta.
+//
 //go:noinline
 func ptrTag(v any, i int) any {
 	e := v.(*Tag)
@@ -51,6 +55,9 @@ func ptrTag(v any, i int) any {
 	return nil
 }
 
+// edgeTag marks the i-th edge of a Tag as loaded and returns the address of the
+// field that holds its neighbors. It is the Edge of TagMeta.
+//
 //go:noinline
 func edgeTag(v any, i int) any {
 	e := v.(*Tag)
@@ -62,6 +69,10 @@ func edgeTag(v any, i int) any {
 	return nil
 }
 
+// linkTag stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Tag: all of them, or the first where the
+// edge has one. It is the Link of TagMeta.
+//
 //go:noinline
 func linkTag(dst any, es []any) {
 	switch d := dst.(type) {
@@ -183,7 +194,8 @@ func (q *TagQuery) ForShare(opts ...orm.LockOption) *TagQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TagQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -225,7 +237,8 @@ func (q *TagQuery) First(ctx context.Context) (*Tag, error) {
 	return r.(*Tag), nil
 }
 
-// Only returns the single matching Tag: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Tag: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TagQuery) Only(ctx context.Context) (*Tag, error) {
@@ -354,9 +367,9 @@ type TagCreateBulk struct {
 	n  int
 }
 
-// NewTagCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTagCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTagCreateBulk(ex velox.Executor, bs ...*TagCreate) *TagCreateBulk {
 	return &TagCreateBulk{ex: ex, bs: bs}
 }

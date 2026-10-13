@@ -26,7 +26,8 @@ func (*CreateClient) Create(ex velox.Executor) *entity.CreateCreate {
 	return entity.NewCreateCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*CreateClient) CreateBulk(ex velox.Executor, bs ...*entity.CreateCreate) *entity.CreateCreateBulk {
 	return entity.NewCreateCreateBulk(ex, bs...)
 }
@@ -46,13 +47,14 @@ func (c *CreateClient) Get(ctx context.Context, ex velox.Executor, id int) (*ent
 	return c.Query(ex).Where(predicate.Create(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Create with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Create with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *CreateClient) UpdateByID(ex velox.Executor, id int) *entity.CreateUpdate {
 	return c.Update(ex).Where(predicate.Create(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Create with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Create with the given id, or returns
+// velox.ErrNotFound.
 func (c *CreateClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Create(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

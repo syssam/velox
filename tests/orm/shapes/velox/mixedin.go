@@ -28,7 +28,8 @@ func (*MixedInClient) Create(ex velox.Executor) *entity.MixedInCreate {
 	return entity.NewMixedInCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*MixedInClient) CreateBulk(ex velox.Executor, bs ...*entity.MixedInCreate) *entity.MixedInCreateBulk {
 	return entity.NewMixedInCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *MixedInClient) Get(ctx context.Context, ex velox.Executor, id int) (*en
 	return c.Query(ex).Where(predicate.MixedIn(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the MixedIn with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the MixedIn with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *MixedInClient) UpdateByID(ex velox.Executor, id int) *entity.MixedInUpdate {
 	return c.Update(ex).Where(predicate.MixedIn(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the MixedIn with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the MixedIn with the given id, or returns
+// velox.ErrNotFound.
 func (c *MixedInClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.MixedIn(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

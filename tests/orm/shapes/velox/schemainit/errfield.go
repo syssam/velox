@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the ErrField schema.
+// init stitches the defaults, validators, hooks and policy of the ErrField
+// schema.
 func init() {
 	slots.ErrField.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.ErrField{}.Fields()

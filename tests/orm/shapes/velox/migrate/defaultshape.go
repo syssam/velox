@@ -89,7 +89,8 @@ var DefaultShapeColumns = []*schema.Column{{
 	Type:     field.TypeTime,
 }}
 
-// DefaultShapeTable holds the schema information for the "default_shapes" table.
+// DefaultShapeTable holds the schema information for the "default_shapes"
+// table.
 var DefaultShapeTable = &schema.Table{
 	Columns:    DefaultShapeColumns,
 	Name:       "default_shapes",

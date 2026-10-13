@@ -24,7 +24,8 @@ func (*LoadClient) Query(ex velox.Executor) *entity.LoadQuery { return entity.Ne
 // Create returns a builder that creates a Load.
 func (*LoadClient) Create(ex velox.Executor) *entity.LoadCreate { return entity.NewLoadCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*LoadClient) CreateBulk(ex velox.Executor, bs ...*entity.LoadCreate) *entity.LoadCreateBulk {
 	return entity.NewLoadCreateBulk(ex, bs...)
 }

@@ -554,6 +554,40 @@ paid for", on a real schema: a method that returns an entity's own predicate
 type is compiled once per entity whoever writes it, and the compiler writes
 it at a higher price than the generator.
 
+### Column types of the library, as velox has them: measured, undecided
+
+The generator this one replaces writes one line per column,
+`var NameField = sql.StringField[predicate.User](FieldName)`, over generic
+types of the library, and that reads better than a `columns.go` per entity.
+The same here: thirteen generic types in package `orm`, one per set of
+methods a column has (`orm.StringColumn[string, predicate.User]`, pointer
+receivers, a string underneath), and a generated type only for a column
+whose set none of them has. Not the interface design of the section above:
+the variables are of the concrete generic types, and an application that
+passes `&user.Name` to a function generic over entities compiles unchanged.
+
+| | the tree | the 455 entity packages | 253 packages of the application's services |
+|---|---|---|---|
+| generated column types (as generated) | 1,316,306 lines | 77.9 / 80.0 CPU-s | 164.9 / 165.2; later 153.6 / 148.4 |
+| column types of the library | 858,949 lines | 107.8 / 114.1 / 115.1 | 198.6 / 214.6 |
+| the same, their methods `//go:noinline` | 858,949 lines | 102.9 / 108.2 | 178.4 / 183.5; later 183.9 |
+
+("Later" is one run of each, alternating, an hour on: compare within a
+column of runs, not across.) A third less source, and it costs both sides:
+the packages that declare columns 35-45% more, the packages that use them
+about 20% more with `//go:noinline` and 20-30% without. Why the users pay:
+a package emits the whole method set of every instantiated column type it
+touches, called or not. One service package that touches a few dozen
+(entity, Go type) pairs: 1.40 CPU-s and 6.2 MB of object with generated
+types, 1.92 CPU-s and 9.2 MB with the library's, of which 936 functions are
+column methods of `orm`.
+
+So the look of the old generator is available at about a fifth more compile
+time for an application's own packages on a schema this size, and little
+that anyone would notice on a small one. Which of the two is generated, or
+whether the generator offers both, is not decided; the trial is on the
+branch `spike/generic-columns`.
+
 ### One file for all the tables
 
 `migrate/schema.go` was the one file that was still the whole schema: 2.6 MB

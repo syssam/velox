@@ -9,9 +9,9 @@ import (
 	"github.com/syssam/velox/testschema/types"
 )
 
-// UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// UUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type UUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -206,9 +206,9 @@ func (f *StringColumn) Desc() predicate.TokenOrderTerm {
 	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TierColumn is a column of Go type types.Tier: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TierColumn is a column of Go type types.Tier: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TierColumn string
 
 // EQ matches the rows whose column equals v.
@@ -271,9 +271,9 @@ func (f *TierColumn) Desc() predicate.TokenOrderTerm {
 	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableTierColumn is a column of Go type types.Tier: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableTierColumn is a column of Go type types.Tier: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableTierColumn string
 
 // EQ matches the rows whose column equals v.
@@ -343,9 +343,9 @@ func (f *NullableTierColumn) Desc() predicate.TokenOrderTerm {
 	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
-// LabelColumn is a column of Go type types.Label: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// LabelColumn is a column of Go type types.Label: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type LabelColumn string
 
 // EQ matches the rows whose column equals v.
@@ -455,9 +455,9 @@ func (f *LabelColumn) Desc() predicate.TokenOrderTerm {
 	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableLabelColumn is a column of Go type types.Label: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableLabelColumn is a column of Go type types.Label: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableLabelColumn string
 
 // EQ matches the rows whose column equals v.
@@ -572,9 +572,9 @@ func (f *NullableLabelColumn) Desc() predicate.TokenOrderTerm {
 	return predicate.TokenOrderTerm{Col: string(*f), Desc: true}
 }
 
-// WeightColumn is a column of Go type types.Weight: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// WeightColumn is a column of Go type types.Weight: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type WeightColumn string
 
 // EQ matches the rows whose column equals v.

@@ -42,7 +42,8 @@ var Holder = &EdgeHolder{}
 // Has matches a Locker that has at least one "holder" neighbor.
 func (e *EdgeHolder) Has() predicate.Locker { return predicate.Locker{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Locker that has a "holder" neighbor satisfying the predicates.
+// HasWith matches a Locker that has a "holder" neighbor satisfying the
+// predicates.
 func (e *EdgeHolder) HasWith(ps ...predicate.Author) predicate.Locker {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -61,8 +62,9 @@ func (e *EdgeHolder) Clear() predicate.LockerSetter {
 	return predicate.LockerSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
-// EdgeMetas returns the descriptions of the edges of Locker, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Locker, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
 
 // And matches the rows every one of ps matches.

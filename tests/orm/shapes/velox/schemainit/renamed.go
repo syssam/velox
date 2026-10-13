@@ -11,7 +11,8 @@ import (
 	renamedpkg "github.com/syssam/velox/tests/orm/shapes/velox/renamed"
 )
 
-// init stitches the defaults, validators, hooks and policy of the Renamed schema.
+// init stitches the defaults, validators, hooks and policy of the Renamed
+// schema.
 func init() {
 	slots.Renamed.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Renamed{}.Fields()

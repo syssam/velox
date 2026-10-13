@@ -253,8 +253,9 @@ func (e *EdgeModel) Clear() predicate.OddSetter {
 	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
-// EdgeMetas returns the descriptions of the edges of Odd, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Odd, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
 
 // And matches the rows every one of ps matches.

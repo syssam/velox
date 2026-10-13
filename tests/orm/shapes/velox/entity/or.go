@@ -26,6 +26,9 @@ type OrEdges struct {
 	loaded [1]bool
 }
 
+// ptrOr returns the address of the field of a Or that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of OrMeta.
+//
 //go:noinline
 func ptrOr(v any, i int) any {
 	e := v.(*Or)
@@ -136,7 +139,8 @@ func (q *OrQuery) ForShare(opts ...orm.LockOption) *OrQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *OrQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -178,7 +182,8 @@ func (q *OrQuery) First(ctx context.Context) (*Or, error) {
 	return r.(*Or), nil
 }
 
-// Only returns the single matching Or: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Or: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *OrQuery) Only(ctx context.Context) (*Or, error) {
@@ -305,9 +310,9 @@ type OrCreateBulk struct {
 	n  int
 }
 
-// NewOrCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewOrCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewOrCreateBulk(ex velox.Executor, bs ...*OrCreate) *OrCreateBulk {
 	return &OrCreateBulk{ex: ex, bs: bs}
 }

@@ -37,7 +37,8 @@ type UserWhereInput struct {
 
 var userEdges = user.EdgeMetas()
 
-// userWhere says what each field of UserWhereInput means, in the order of the struct.
+// userWhere says what each field of UserWhereInput means, in the order of the
+// struct.
 var userWhere = []gqlinput.WhereField{
 	{Col: "name", Op: orm.OpEQ},                         // name
 	{Col: "name", Op: orm.OpNEQ},                        // nameNEQ
@@ -59,7 +60,8 @@ func init() {
 
 // P returns the condition the input describes: none for a nil or an empty
 // input, and one that fails the query for an input that cannot be a condition
-// (an empty input nested in not, and, or; nesting deeper than gqlinput.MaxWhereDepth).
+// (an empty input nested in not, and, or; nesting deeper than
+// gqlinput.MaxWhereDepth).
 //
 //go:noinline
 func (i *UserWhereInput) P() predicate.User { return predicate.User(gqlinput.Where(i, userWhere)) }
@@ -86,7 +88,8 @@ func (i UserWhereInput) MarshalGQL(w io.Writer) { gqlinput.WriteWhere(w, &i, use
 func (i *UserWhereInput) UnmarshalJSON(b []byte) error { return gqlinput.DecodeWhere(i, userWhere, b) }
 
 // MarshalJSON writes the document of the input: json.Marshal of an input is
-// what UnmarshalJSON reads back as the same conditions. See gqlinput.EncodeWhere.
+// what UnmarshalJSON reads back as the same conditions. See
+// gqlinput.EncodeWhere.
 //
 //go:noinline
 func (i UserWhereInput) MarshalJSON() ([]byte, error) { return gqlinput.EncodeWhere(&i, userWhere) }

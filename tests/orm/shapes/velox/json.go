@@ -24,7 +24,8 @@ func (*JsonClient) Query(ex velox.Executor) *entity.JsonQuery { return entity.Ne
 // Create returns a builder that creates a Json.
 func (*JsonClient) Create(ex velox.Executor) *entity.JsonCreate { return entity.NewJsonCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*JsonClient) CreateBulk(ex velox.Executor, bs ...*entity.JsonCreate) *entity.JsonCreateBulk {
 	return entity.NewJsonCreateBulk(ex, bs...)
 }

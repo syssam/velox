@@ -100,9 +100,9 @@ func (f *IntColumn) Desc() predicate.EnumShapeOrderTerm {
 	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// StateEnumColumn is a column of Go type StateEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// StateEnumColumn is a column of Go type StateEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type StateEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -167,9 +167,9 @@ func (f *StateEnumColumn) Desc() predicate.EnumShapeOrderTerm {
 	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableMoodEnumColumn is a column of Go type MoodEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableMoodEnumColumn is a column of Go type MoodEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableMoodEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -239,9 +239,9 @@ func (f *NullableMoodEnumColumn) Desc() predicate.EnumShapeOrderTerm {
 	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// PhaseEnumColumn is a column of Go type PhaseEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// PhaseEnumColumn is a column of Go type PhaseEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type PhaseEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -306,9 +306,9 @@ func (f *PhaseEnumColumn) Desc() predicate.EnumShapeOrderTerm {
 	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// SizeEnumColumn is a column of Go type SizeEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// SizeEnumColumn is a column of Go type SizeEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type SizeEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -373,9 +373,9 @@ func (f *SizeEnumColumn) Desc() predicate.EnumShapeOrderTerm {
 	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TierColumn is a column of Go type types.Tier: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TierColumn is a column of Go type types.Tier: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TierColumn string
 
 // EQ matches the rows whose column equals v.
@@ -440,9 +440,9 @@ func (f *TierColumn) Desc() predicate.EnumShapeOrderTerm {
 	return predicate.EnumShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableTierColumn is a column of Go type types.Tier: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableTierColumn is a column of Go type types.Tier: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableTierColumn string
 
 // EQ matches the rows whose column equals v.

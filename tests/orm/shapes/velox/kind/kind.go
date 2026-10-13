@@ -25,10 +25,12 @@ const (
 	ShapeFlat  ShapeEnum = "flat"
 )
 
-// DefaultShape returns the value of the shape field of a row created without one.
+// DefaultShape returns the value of the shape field of a row created without
+// one.
 func DefaultShape() ShapeEnum { return ShapeRound }
 
-// ShapeValues returns the values of the shape field, in the order of the schema.
+// ShapeValues returns the values of the shape field, in the order of the
+// schema.
 func ShapeValues() []ShapeEnum {
 	return []ShapeEnum{ShapeRound, ShapeFlat}
 }
@@ -59,7 +61,8 @@ var Shapes = &EdgeShapes{}
 // Has matches a Kind that has at least one "shapes" neighbor.
 func (e *EdgeShapes) Has() predicate.Kind { return predicate.Kind{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Kind that has a "shapes" neighbor satisfying the predicates.
+// HasWith matches a Kind that has a "shapes" neighbor satisfying the
+// predicates.
 func (e *EdgeShapes) HasWith(ps ...predicate.KindShape) predicate.Kind {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -91,8 +94,9 @@ func (e *EdgeShapes) Clear() predicate.KindSetter {
 	return predicate.KindSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
-// EdgeMetas returns the descriptions of the edges of Kind, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Kind, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
 
 // And matches the rows every one of ps matches.

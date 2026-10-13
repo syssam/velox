@@ -26,6 +26,10 @@ type CreateEdges struct {
 	loaded [1]bool
 }
 
+// ptrCreate returns the address of the field of a Create that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// CreateMeta.
+//
 //go:noinline
 func ptrCreate(v any, i int) any {
 	e := v.(*Create)
@@ -138,7 +142,8 @@ func (q *CreateQuery) ForShare(opts ...orm.LockOption) *CreateQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *CreateQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *CreateQuery) First(ctx context.Context) (*Create, error) {
 	return r.(*Create), nil
 }
 
-// Only returns the single matching Create: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Create: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *CreateQuery) Only(ctx context.Context) (*Create, error) {
@@ -309,9 +315,9 @@ type CreateCreateBulk struct {
 	n  int
 }
 
-// NewCreateCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewCreateCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewCreateCreateBulk(ex velox.Executor, bs ...*CreateCreate) *CreateCreateBulk {
 	return &CreateCreateBulk{ex: ex, bs: bs}
 }

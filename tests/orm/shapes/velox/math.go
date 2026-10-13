@@ -24,7 +24,8 @@ func (*MathClient) Query(ex velox.Executor) *entity.MathQuery { return entity.Ne
 // Create returns a builder that creates a Math.
 func (*MathClient) Create(ex velox.Executor) *entity.MathCreate { return entity.NewMathCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*MathClient) CreateBulk(ex velox.Executor, bs ...*entity.MathCreate) *entity.MathCreateBulk {
 	return entity.NewMathCreateBulk(ex, bs...)
 }

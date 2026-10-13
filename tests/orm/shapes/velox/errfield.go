@@ -28,7 +28,8 @@ func (*ErrFieldClient) Create(ex velox.Executor) *entity.ErrFieldCreate {
 	return entity.NewErrFieldCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*ErrFieldClient) CreateBulk(ex velox.Executor, bs ...*entity.ErrFieldCreate) *entity.ErrFieldCreateBulk {
 	return entity.NewErrFieldCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *ErrFieldClient) Get(ctx context.Context, ex velox.Executor, id int) (*e
 	return c.Query(ex).Where(predicate.ErrField(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the ErrField with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the ErrField with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *ErrFieldClient) UpdateByID(ex velox.Executor, id int) *entity.ErrFieldUpdate {
 	return c.Update(ex).Where(predicate.ErrField(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the ErrField with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the ErrField with the given id, or returns
+// velox.ErrNotFound.
 func (c *ErrFieldClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.ErrField(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

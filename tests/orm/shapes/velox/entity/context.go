@@ -26,6 +26,10 @@ type ContextEdges struct {
 	loaded [1]bool
 }
 
+// ptrContext returns the address of the field of a Context that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// ContextMeta.
+//
 //go:noinline
 func ptrContext(v any, i int) any {
 	e := v.(*Context)
@@ -53,7 +57,8 @@ type ContextConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// ContextMeta is the runtime description of Context. Use it through its address.
+// ContextMeta is the runtime description of Context. Use it through its
+// address.
 var ContextMeta = orm.Meta{
 	Name:    "Context",
 	Table:   "contexts",
@@ -138,7 +143,8 @@ func (q *ContextQuery) ForShare(opts ...orm.LockOption) *ContextQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ContextQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +186,8 @@ func (q *ContextQuery) First(ctx context.Context) (*Context, error) {
 	return r.(*Context), nil
 }
 
-// Only returns the single matching Context: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Context: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ContextQuery) Only(ctx context.Context) (*Context, error) {
@@ -309,9 +316,9 @@ type ContextCreateBulk struct {
 	n  int
 }
 
-// NewContextCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewContextCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewContextCreateBulk(ex velox.Executor, bs ...*ContextCreate) *ContextCreateBulk {
 	return &ContextCreateBulk{ex: ex, bs: bs}
 }
@@ -364,7 +371,8 @@ func (b *ContextCreateBulk) Exec(ctx context.Context) error {
 // ContextUpdate updates Context rows.
 type ContextUpdate struct{ c orm.MutCore }
 
-// NewContextUpdate returns a builder that updates the rows its predicates match.
+// NewContextUpdate returns a builder that updates the rows its predicates
+// match.
 func NewContextUpdate(ex velox.Executor) *ContextUpdate {
 	return &ContextUpdate{c: orm.MutCore{M: &ContextMeta, Ex: ex}}
 }
@@ -430,7 +438,8 @@ func (b *ContextUpdate) SaveOne(ctx context.Context) (*Context, error) {
 // ContextDelete deletes Context rows.
 type ContextDelete struct{ c orm.MutCore }
 
-// NewContextDelete returns a builder that deletes the rows its predicates match.
+// NewContextDelete returns a builder that deletes the rows its predicates
+// match.
 func NewContextDelete(ex velox.Executor) *ContextDelete {
 	return &ContextDelete{c: orm.MutCore{M: &ContextMeta, Ex: ex}}
 }

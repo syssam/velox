@@ -29,6 +29,10 @@ type StampedEdges struct {
 	loaded [1]bool
 }
 
+// ptrStamped returns the address of the field of a Stamped that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// StampedMeta.
+//
 //go:noinline
 func ptrStamped(v any, i int) any {
 	e := v.(*Stamped)
@@ -58,7 +62,8 @@ type StampedConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// StampedMeta is the runtime description of Stamped. Use it through its address.
+// StampedMeta is the runtime description of Stamped. Use it through its
+// address.
 var StampedMeta = orm.Meta{
 	Name:    "Stamped",
 	Table:   "stampeds",
@@ -144,7 +149,8 @@ func (q *StampedQuery) ForShare(opts ...orm.LockOption) *StampedQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *StampedQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -186,7 +192,8 @@ func (q *StampedQuery) First(ctx context.Context) (*Stamped, error) {
 	return r.(*Stamped), nil
 }
 
-// Only returns the single matching Stamped: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Stamped: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *StampedQuery) Only(ctx context.Context) (*Stamped, error) {
@@ -315,9 +322,9 @@ type StampedCreateBulk struct {
 	n  int
 }
 
-// NewStampedCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewStampedCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewStampedCreateBulk(ex velox.Executor, bs ...*StampedCreate) *StampedCreateBulk {
 	return &StampedCreateBulk{ex: ex, bs: bs}
 }
@@ -370,7 +377,8 @@ func (b *StampedCreateBulk) Exec(ctx context.Context) error {
 // StampedUpdate updates Stamped rows.
 type StampedUpdate struct{ c orm.MutCore }
 
-// NewStampedUpdate returns a builder that updates the rows its predicates match.
+// NewStampedUpdate returns a builder that updates the rows its predicates
+// match.
 func NewStampedUpdate(ex velox.Executor) *StampedUpdate {
 	return &StampedUpdate{c: orm.MutCore{M: &StampedMeta, Ex: ex}}
 }
@@ -436,7 +444,8 @@ func (b *StampedUpdate) SaveOne(ctx context.Context) (*Stamped, error) {
 // StampedDelete deletes Stamped rows.
 type StampedDelete struct{ c orm.MutCore }
 
-// NewStampedDelete returns a builder that deletes the rows its predicates match.
+// NewStampedDelete returns a builder that deletes the rows its predicates
+// match.
 func NewStampedDelete(ex velox.Executor) *StampedDelete {
 	return &StampedDelete{c: orm.MutCore{M: &StampedMeta, Ex: ex}}
 }

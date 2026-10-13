@@ -33,8 +33,8 @@ var meta0 = orm.EdgeMeta{Name: "courses", Index: 0, Rel: orm.M2M, Inverse: false
 // EdgeCourses is the "courses" edge of Student, from Student to Course.
 type EdgeCourses struct{}
 
-// Courses is the "courses" edge of Student: conditions on it and changes to it. A
-// query eager-loads it with WithCourses.
+// Courses is the "courses" edge of Student: conditions on it and changes to it.
+// A query eager-loads it with WithCourses.
 var Courses = &EdgeCourses{}
 
 // Has matches a Student that has at least one "courses" neighbor.
@@ -42,7 +42,8 @@ func (e *EdgeCourses) Has() predicate.Student {
 	return predicate.Student{Op: orm.OpHasEdge, Edge: &meta0}
 }
 
-// HasWith matches a Student that has a "courses" neighbor satisfying the predicates.
+// HasWith matches a Student that has a "courses" neighbor satisfying the
+// predicates.
 func (e *EdgeCourses) HasWith(ps ...predicate.Course) predicate.Student {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -76,11 +77,12 @@ func (e *EdgeCourses) Clear() predicate.StudentSetter {
 
 var meta1 = orm.EdgeMeta{Name: "enrollments", Index: 1, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "enrollments", Columns: []string{"student_id"}}
 
-// EdgeEnrollments is the "enrollments" edge of Student, from Student to Enrollment.
+// EdgeEnrollments is the "enrollments" edge of Student, from Student to
+// Enrollment.
 type EdgeEnrollments struct{}
 
-// Enrollments is the "enrollments" edge of Student: conditions on it and changes to it. A
-// query eager-loads it with WithEnrollments.
+// Enrollments is the "enrollments" edge of Student: conditions on it and
+// changes to it. A query eager-loads it with WithEnrollments.
 var Enrollments = &EdgeEnrollments{}
 
 // Has matches a Student that has at least one "enrollments" neighbor.
@@ -88,7 +90,8 @@ func (e *EdgeEnrollments) Has() predicate.Student {
 	return predicate.Student{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a Student that has a "enrollments" neighbor satisfying the predicates.
+// HasWith matches a Student that has a "enrollments" neighbor satisfying the
+// predicates.
 func (e *EdgeEnrollments) HasWith(ps ...predicate.Enrollment) predicate.Student {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -120,8 +123,9 @@ func (e *EdgeEnrollments) Clear() predicate.StudentSetter {
 	return predicate.StudentSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Student, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Student, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

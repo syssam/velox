@@ -28,7 +28,8 @@ func (*Int64KeyClient) Create(ex velox.Executor) *entity.Int64KeyCreate {
 	return entity.NewInt64KeyCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*Int64KeyClient) CreateBulk(ex velox.Executor, bs ...*entity.Int64KeyCreate) *entity.Int64KeyCreateBulk {
 	return entity.NewInt64KeyCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *Int64KeyClient) Get(ctx context.Context, ex velox.Executor, id int64) (
 	return c.Query(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Int64Key with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Int64Key with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *Int64KeyClient) UpdateByID(ex velox.Executor, id int64) *entity.Int64KeyUpdate {
 	return c.Update(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Int64Key with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Int64Key with the given id, or returns
+// velox.ErrNotFound.
 func (c *Int64KeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id int64) error {
 	n, err := c.Delete(ex).Where(predicate.Int64Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

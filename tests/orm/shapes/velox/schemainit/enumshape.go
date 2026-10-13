@@ -10,7 +10,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the EnumShape schema.
+// init stitches the defaults, validators, hooks and policy of the EnumShape
+// schema.
 func init() {
 	slots.EnumShape.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.EnumShape{}.Fields()

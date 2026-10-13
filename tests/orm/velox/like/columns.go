@@ -95,9 +95,9 @@ func (f *IntColumn) Desc() predicate.LikeOrderTerm {
 	return predicate.LikeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TimeColumn string
 
 // EQ matches the rows whose column equals v.

@@ -24,7 +24,8 @@ func (*ClashClient) Query(ex velox.Executor) *entity.ClashQuery { return entity.
 // Create returns a builder that creates a Clash.
 func (*ClashClient) Create(ex velox.Executor) *entity.ClashCreate { return entity.NewClashCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*ClashClient) CreateBulk(ex velox.Executor, bs ...*entity.ClashCreate) *entity.ClashCreateBulk {
 	return entity.NewClashCreateBulk(ex, bs...)
 }

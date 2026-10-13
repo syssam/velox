@@ -26,7 +26,8 @@ func (*PersonClient) Create(ex velox.Executor) *entity.PersonCreate {
 	return entity.NewPersonCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*PersonClient) CreateBulk(ex velox.Executor, bs ...*entity.PersonCreate) *entity.PersonCreateBulk {
 	return entity.NewPersonCreateBulk(ex, bs...)
 }
@@ -46,13 +47,14 @@ func (c *PersonClient) Get(ctx context.Context, ex velox.Executor, id int) (*ent
 	return c.Query(ex).Where(predicate.Person(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Person with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Person with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *PersonClient) UpdateByID(ex velox.Executor, id int) *entity.PersonUpdate {
 	return c.Update(ex).Where(predicate.Person(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Person with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Person with the given id, or returns
+// velox.ErrNotFound.
 func (c *PersonClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Person(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

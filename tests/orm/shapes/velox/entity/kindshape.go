@@ -29,7 +29,8 @@ type KindShapeEdges struct {
 	loaded [1]bool
 }
 
-// KindOrErr returns the kind edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// KindOrErr returns the kind edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *KindShapeEdges) KindOrErr() (*Kind, error) {
@@ -42,6 +43,10 @@ func (e *KindShapeEdges) KindOrErr() (*Kind, error) {
 	return e.Kind, nil
 }
 
+// ptrKindShape returns the address of the field of a KindShape that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// KindShapeMeta.
+//
 //go:noinline
 func ptrKindShape(v any, i int) any {
 	e := v.(*KindShape)
@@ -56,6 +61,10 @@ func ptrKindShape(v any, i int) any {
 	return nil
 }
 
+// edgeKindShape marks the i-th edge of a KindShape as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// KindShapeMeta.
+//
 //go:noinline
 func edgeKindShape(v any, i int) any {
 	e := v.(*KindShape)
@@ -67,6 +76,10 @@ func edgeKindShape(v any, i int) any {
 	return nil
 }
 
+// linkKindShape stores the neighbors an eager load read into dst, the address
+// of the field of another entity's edge to KindShape: all of them, or the first
+// where the edge has one. It is the Link of KindShapeMeta.
+//
 //go:noinline
 func linkKindShape(dst any, es []any) {
 	switch d := dst.(type) {
@@ -99,7 +112,8 @@ type KindShapeConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// KindShapeMeta is the runtime description of KindShape. Use it through its address.
+// KindShapeMeta is the runtime description of KindShape. Use it through its
+// address.
 var KindShapeMeta = orm.Meta{
 	Name:    "KindShape",
 	Table:   "kind_shapes",
@@ -189,7 +203,8 @@ func (q *KindShapeQuery) ForShare(opts ...orm.LockOption) *KindShapeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *KindShapeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -231,7 +246,8 @@ func (q *KindShapeQuery) First(ctx context.Context) (*KindShape, error) {
 	return r.(*KindShape), nil
 }
 
-// Only returns the single matching KindShape: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching KindShape: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *KindShapeQuery) Only(ctx context.Context) (*KindShape, error) {
@@ -360,9 +376,9 @@ type KindShapeCreateBulk struct {
 	n  int
 }
 
-// NewKindShapeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewKindShapeCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewKindShapeCreateBulk(ex velox.Executor, bs ...*KindShapeCreate) *KindShapeCreateBulk {
 	return &KindShapeCreateBulk{ex: ex, bs: bs}
 }
@@ -415,7 +431,8 @@ func (b *KindShapeCreateBulk) Exec(ctx context.Context) error {
 // KindShapeUpdate updates KindShape rows.
 type KindShapeUpdate struct{ c orm.MutCore }
 
-// NewKindShapeUpdate returns a builder that updates the rows its predicates match.
+// NewKindShapeUpdate returns a builder that updates the rows its predicates
+// match.
 func NewKindShapeUpdate(ex velox.Executor) *KindShapeUpdate {
 	return &KindShapeUpdate{c: orm.MutCore{M: &KindShapeMeta, Ex: ex}}
 }
@@ -481,7 +498,8 @@ func (b *KindShapeUpdate) SaveOne(ctx context.Context) (*KindShape, error) {
 // KindShapeDelete deletes KindShape rows.
 type KindShapeDelete struct{ c orm.MutCore }
 
-// NewKindShapeDelete returns a builder that deletes the rows its predicates match.
+// NewKindShapeDelete returns a builder that deletes the rows its predicates
+// match.
 func NewKindShapeDelete(ex velox.Executor) *KindShapeDelete {
 	return &KindShapeDelete{c: orm.MutCore{M: &KindShapeMeta, Ex: ex}}
 }

@@ -17,8 +17,8 @@ var QueryUser QueryUserClient
 // QueryUserClient is the type of QueryUser.
 type QueryUserClient struct{}
 
-// Query returns a query of every QueryUser, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every QueryUser, to run on ex: a database handle or
+// a transaction.
 func (*QueryUserClient) Query(ex velox.Executor) *entity.QueryUserQuery {
 	return entity.NewQueryUserQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*QueryUserClient) Create(ex velox.Executor) *entity.QueryUserCreate {
 	return entity.NewQueryUserCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*QueryUserClient) CreateBulk(ex velox.Executor, bs ...*entity.QueryUserCreate) *entity.QueryUserCreateBulk {
 	return entity.NewQueryUserCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the QueryUser rows its conditions match.
+// Update returns a builder that updates the QueryUser rows its conditions
+// match.
 func (*QueryUserClient) Update(ex velox.Executor) *entity.QueryUserUpdate {
 	return entity.NewQueryUserUpdate(ex)
 }
 
-// Delete returns a builder that deletes the QueryUser rows its conditions match.
+// Delete returns a builder that deletes the QueryUser rows its conditions
+// match.
 func (*QueryUserClient) Delete(ex velox.Executor) *entity.QueryUserDelete {
 	return entity.NewQueryUserDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *QueryUserClient) Get(ctx context.Context, ex velox.Executor, id int) (*
 	return c.Query(ex).Where(predicate.QueryUser(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the QueryUser with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the QueryUser with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *QueryUserClient) UpdateByID(ex velox.Executor, id int) *entity.QueryUserUpdate {
 	return c.Update(ex).Where(predicate.QueryUser(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the QueryUser with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the QueryUser with the given id, or returns
+// velox.ErrNotFound.
 func (c *QueryUserClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.QueryUser(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

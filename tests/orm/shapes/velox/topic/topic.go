@@ -33,14 +33,15 @@ var meta0 = orm.EdgeMeta{Name: "articles", Index: 0, Rel: orm.M2M, Inverse: true
 // EdgeArticles is the "articles" edge of Topic, from Topic to Article.
 type EdgeArticles struct{}
 
-// Articles is the "articles" edge of Topic: conditions on it and changes to it. A
-// query eager-loads it with WithArticles.
+// Articles is the "articles" edge of Topic: conditions on it and changes to it.
+// A query eager-loads it with WithArticles.
 var Articles = &EdgeArticles{}
 
 // Has matches a Topic that has at least one "articles" neighbor.
 func (e *EdgeArticles) Has() predicate.Topic { return predicate.Topic{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Topic that has a "articles" neighbor satisfying the predicates.
+// HasWith matches a Topic that has a "articles" neighbor satisfying the
+// predicates.
 func (e *EdgeArticles) HasWith(ps ...predicate.Article) predicate.Topic {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -77,14 +78,15 @@ var meta1 = orm.EdgeMeta{Name: "banned_in", Index: 1, Rel: orm.M2M, Inverse: tru
 // EdgeBannedIn is the "banned_in" edge of Topic, from Topic to Article.
 type EdgeBannedIn struct{}
 
-// BannedIn is the "banned_in" edge of Topic: conditions on it and changes to it. A
-// query eager-loads it with WithBannedIn.
+// BannedIn is the "banned_in" edge of Topic: conditions on it and changes to
+// it. A query eager-loads it with WithBannedIn.
 var BannedIn = &EdgeBannedIn{}
 
 // Has matches a Topic that has at least one "banned_in" neighbor.
 func (e *EdgeBannedIn) Has() predicate.Topic { return predicate.Topic{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a Topic that has a "banned_in" neighbor satisfying the predicates.
+// HasWith matches a Topic that has a "banned_in" neighbor satisfying the
+// predicates.
 func (e *EdgeBannedIn) HasWith(ps ...predicate.Article) predicate.Topic {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -116,8 +118,9 @@ func (e *EdgeBannedIn) Clear() predicate.TopicSetter {
 	return predicate.TopicSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Topic, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Topic, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

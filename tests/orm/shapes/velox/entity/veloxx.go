@@ -26,6 +26,10 @@ type VeloxEdges struct {
 	loaded [1]bool
 }
 
+// ptrVelox returns the address of the field of a Velox that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// VeloxMeta.
+//
 //go:noinline
 func ptrVelox(v any, i int) any {
 	e := v.(*Velox)
@@ -138,7 +142,8 @@ func (q *VeloxQuery) ForShare(opts ...orm.LockOption) *VeloxQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *VeloxQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *VeloxQuery) First(ctx context.Context) (*Velox, error) {
 	return r.(*Velox), nil
 }
 
-// Only returns the single matching Velox: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Velox: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *VeloxQuery) Only(ctx context.Context) (*Velox, error) {
@@ -309,9 +315,9 @@ type VeloxCreateBulk struct {
 	n  int
 }
 
-// NewVeloxCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewVeloxCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewVeloxCreateBulk(ex velox.Executor, bs ...*VeloxCreate) *VeloxCreateBulk {
 	return &VeloxCreateBulk{ex: ex, bs: bs}
 }

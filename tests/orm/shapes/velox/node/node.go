@@ -40,7 +40,8 @@ var Parent = &EdgeParent{}
 // Has matches a Node that has at least one "parent" neighbor.
 func (e *EdgeParent) Has() predicate.Node { return predicate.Node{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Node that has a "parent" neighbor satisfying the predicates.
+// HasWith matches a Node that has a "parent" neighbor satisfying the
+// predicates.
 func (e *EdgeParent) HasWith(ps ...predicate.Node) predicate.Node {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -64,14 +65,15 @@ var meta1 = orm.EdgeMeta{Name: "children", Index: 1, Rel: orm.O2M, Inverse: fals
 // EdgeChildren is the "children" edge of Node, from Node to Node.
 type EdgeChildren struct{}
 
-// Children is the "children" edge of Node: conditions on it and changes to it. A
-// query eager-loads it with WithChildren.
+// Children is the "children" edge of Node: conditions on it and changes to it.
+// A query eager-loads it with WithChildren.
 var Children = &EdgeChildren{}
 
 // Has matches a Node that has at least one "children" neighbor.
 func (e *EdgeChildren) Has() predicate.Node { return predicate.Node{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a Node that has a "children" neighbor satisfying the predicates.
+// HasWith matches a Node that has a "children" neighbor satisfying the
+// predicates.
 func (e *EdgeChildren) HasWith(ps ...predicate.Node) predicate.Node {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -165,8 +167,9 @@ func (e *EdgeNext) Clear() predicate.NodeSetter {
 	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
-// EdgeMetas returns the descriptions of the edges of Node, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Node, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3} }
 
 // And matches the rows every one of ps matches.

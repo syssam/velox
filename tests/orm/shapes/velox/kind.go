@@ -24,7 +24,8 @@ func (*KindClient) Query(ex velox.Executor) *entity.KindQuery { return entity.Ne
 // Create returns a builder that creates a Kind.
 func (*KindClient) Create(ex velox.Executor) *entity.KindCreate { return entity.NewKindCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*KindClient) CreateBulk(ex velox.Executor, bs ...*entity.KindCreate) *entity.KindCreateBulk {
 	return entity.NewKindCreateBulk(ex, bs...)
 }

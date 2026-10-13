@@ -24,7 +24,8 @@ func (*BareClient) Query(ex velox.Executor) *entity.BareQuery { return entity.Ne
 // Create returns a builder that creates a Bare.
 func (*BareClient) Create(ex velox.Executor) *entity.BareCreate { return entity.NewBareCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*BareClient) CreateBulk(ex velox.Executor, bs ...*entity.BareCreate) *entity.BareCreateBulk {
 	return entity.NewBareCreateBulk(ex, bs...)
 }

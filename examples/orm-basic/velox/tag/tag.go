@@ -72,8 +72,9 @@ func (e *EdgePosts) Clear() predicate.TagSetter {
 	return predicate.TagSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
-// EdgeMetas returns the descriptions of the edges of Tag, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Tag, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
 
 // And matches the rows every one of ps matches.

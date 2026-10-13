@@ -29,7 +29,8 @@ type EdgesFieldEdges struct {
 	loaded [1]bool
 }
 
-// FieldsOrErr returns the fields edge, or an error when it was not loaded (velox.IsNotLoaded).
+// FieldsOrErr returns the fields edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *EdgesFieldEdges) FieldsOrErr() ([]*Field, error) {
@@ -39,6 +40,10 @@ func (e *EdgesFieldEdges) FieldsOrErr() ([]*Field, error) {
 	return e.Fields, nil
 }
 
+// ptrEdgesField returns the address of the field of a EdgesField that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// EdgesFieldMeta.
+//
 //go:noinline
 func ptrEdgesField(v any, i int) any {
 	e := v.(*EdgesField)
@@ -51,6 +56,10 @@ func ptrEdgesField(v any, i int) any {
 	return nil
 }
 
+// edgeEdgesField marks the i-th edge of a EdgesField as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// EdgesFieldMeta.
+//
 //go:noinline
 func edgeEdgesField(v any, i int) any {
 	e := v.(*EdgesField)
@@ -77,7 +86,8 @@ type EdgesFieldConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// EdgesFieldMeta is the runtime description of EdgesField. Use it through its address.
+// EdgesFieldMeta is the runtime description of EdgesField. Use it through its
+// address.
 var EdgesFieldMeta = orm.Meta{
 	Name:    "EdgesField",
 	Table:   "edges_fields",
@@ -168,7 +178,8 @@ func (q *EdgesFieldQuery) ForShare(opts ...orm.LockOption) *EdgesFieldQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *EdgesFieldQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -210,7 +221,8 @@ func (q *EdgesFieldQuery) First(ctx context.Context) (*EdgesField, error) {
 	return r.(*EdgesField), nil
 }
 
-// Only returns the single matching EdgesField: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching EdgesField: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EdgesFieldQuery) Only(ctx context.Context) (*EdgesField, error) {
@@ -304,8 +316,8 @@ func (b *EdgesFieldCreate) Set(ss ...predicate.EdgesFieldSetter) *EdgesFieldCrea
 // Fill takes what in gives: a struct whose fields are named like those of
 // EdgesField, such as the input of an endpoint. A nil pointer gives nothing, an
 // optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of EdgesField is an error unless listed in
-// skip. A later Set wins.
+// written. A field that names nothing of EdgesField is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *EdgesFieldCreate) Fill(in any, skip ...string) *EdgesFieldCreate {
@@ -339,9 +351,9 @@ type EdgesFieldCreateBulk struct {
 	n  int
 }
 
-// NewEdgesFieldCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewEdgesFieldCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewEdgesFieldCreateBulk(ex velox.Executor, bs ...*EdgesFieldCreate) *EdgesFieldCreateBulk {
 	return &EdgesFieldCreateBulk{ex: ex, bs: bs}
 }
@@ -394,7 +406,8 @@ func (b *EdgesFieldCreateBulk) Exec(ctx context.Context) error {
 // EdgesFieldUpdate updates EdgesField rows.
 type EdgesFieldUpdate struct{ c orm.MutCore }
 
-// NewEdgesFieldUpdate returns a builder that updates the rows its predicates match.
+// NewEdgesFieldUpdate returns a builder that updates the rows its predicates
+// match.
 func NewEdgesFieldUpdate(ex velox.Executor) *EdgesFieldUpdate {
 	return &EdgesFieldUpdate{c: orm.MutCore{M: &EdgesFieldMeta, Ex: ex}}
 }
@@ -460,7 +473,8 @@ func (b *EdgesFieldUpdate) SaveOne(ctx context.Context) (*EdgesField, error) {
 // EdgesFieldDelete deletes EdgesField rows.
 type EdgesFieldDelete struct{ c orm.MutCore }
 
-// NewEdgesFieldDelete returns a builder that deletes the rows its predicates match.
+// NewEdgesFieldDelete returns a builder that deletes the rows its predicates
+// match.
 func NewEdgesFieldDelete(ex velox.Executor) *EdgesFieldDelete {
 	return &EdgesFieldDelete{c: orm.MutCore{M: &EdgesFieldMeta, Ex: ex}}
 }

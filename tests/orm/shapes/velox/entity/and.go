@@ -26,6 +26,9 @@ type AndEdges struct {
 	loaded [1]bool
 }
 
+// ptrAnd returns the address of the field of a And that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of AndMeta.
+//
 //go:noinline
 func ptrAnd(v any, i int) any {
 	e := v.(*And)
@@ -138,7 +141,8 @@ func (q *AndQuery) ForShare(opts ...orm.LockOption) *AndQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *AndQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *AndQuery) First(ctx context.Context) (*And, error) {
 	return r.(*And), nil
 }
 
-// Only returns the single matching And: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching And: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *AndQuery) Only(ctx context.Context) (*And, error) {
@@ -309,9 +314,9 @@ type AndCreateBulk struct {
 	n  int
 }
 
-// NewAndCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewAndCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewAndCreateBulk(ex velox.Executor, bs ...*AndCreate) *AndCreateBulk {
 	return &AndCreateBulk{ex: ex, bs: bs}
 }

@@ -211,9 +211,9 @@ func (f *StringColumn) Desc() predicate.ValidatedOrderTerm {
 	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float64Column is a column of Go type float64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float64Column string
 
 // EQ matches the rows whose column equals v.
@@ -947,9 +947,9 @@ func (f *Uint64Column) Desc() predicate.ValidatedOrderTerm {
 	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float32Column is a column of Go type float32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float32Column is a column of Go type float32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float32Column string
 
 // EQ matches the rows whose column equals v.
@@ -1126,9 +1126,9 @@ func (f *BytesColumn) Desc() predicate.ValidatedOrderTerm {
 	return predicate.ValidatedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.

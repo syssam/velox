@@ -9,8 +9,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Table is the table of Int64Key, and ModelName the name of the entity: what the
-// Type method of a query or a mutation of it returns.
+// Table is the table of Int64Key, and ModelName the name of the entity: what
+// the Type method of a query or a mutation of it returns.
 const (
 	Table     = "int64keys"
 	ModelName = "Int64Key"

@@ -24,7 +24,8 @@ func (*TopicClient) Query(ex velox.Executor) *entity.TopicQuery { return entity.
 // Create returns a builder that creates a Topic.
 func (*TopicClient) Create(ex velox.Executor) *entity.TopicCreate { return entity.NewTopicCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TopicClient) CreateBulk(ex velox.Executor, bs ...*entity.TopicCreate) *entity.TopicCreateBulk {
 	return entity.NewTopicCreateBulk(ex, bs...)
 }

@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the StringKey schema.
+// init stitches the defaults, validators, hooks and policy of the StringKey
+// schema.
 func init() {
 	slots.StringKey.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.StringKey{}.Fields()

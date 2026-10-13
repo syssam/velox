@@ -15,12 +15,14 @@ type Specs = types.Specs
 // MarshalSpecs returns a Specs as it is on the wire.
 func MarshalSpecs(v Specs) ([]byte, error) { return gqlinput.EncodeScalar(v) }
 
-// MarshalSpecsPtr is MarshalSpecs for a field that may hold nothing: nil is null.
+// MarshalSpecsPtr is MarshalSpecs for a field that may hold nothing: nil is
+// null.
 func MarshalSpecsPtr(v *Specs) ([]byte, error) { return gqlinput.EncodeScalarPtr(v) }
 
 // UnmarshalSpecs reads a Specs as a GraphQL engine hands it over: the value as
 // JSON decodes it, or its JSON text (see gqlinput.DecodeScalar).
 func UnmarshalSpecs(v any) (Specs, error) { return gqlinput.DecodeScalar[Specs](v) }
 
-// UnmarshalSpecsPtr is UnmarshalSpecs for a field that may hold nothing: null is nil.
+// UnmarshalSpecsPtr is UnmarshalSpecs for a field that may hold nothing: null
+// is nil.
 func UnmarshalSpecsPtr(v any) (*Specs, error) { return gqlinput.DecodeScalarPtr[Specs](v) }

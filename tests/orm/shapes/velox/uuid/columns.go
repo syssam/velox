@@ -204,9 +204,9 @@ func (f *StringColumn) Desc() predicate.UUIDOrderTerm {
 	return predicate.UUIDOrderTerm{Col: string(*f), Desc: true}
 }
 
-// UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// UUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type UUIDColumn string
 
 // EQ matches the rows whose column equals v.

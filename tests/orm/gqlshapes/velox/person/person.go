@@ -40,7 +40,8 @@ var Assets = &EdgeAssets{}
 // Has matches a Person that has at least one "assets" neighbor.
 func (e *EdgeAssets) Has() predicate.Person { return predicate.Person{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Person that has a "assets" neighbor satisfying the predicates.
+// HasWith matches a Person that has a "assets" neighbor satisfying the
+// predicates.
 func (e *EdgeAssets) HasWith(ps ...predicate.Asset) predicate.Person {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -84,7 +85,8 @@ var Made = &EdgeMade{}
 // Has matches a Person that has at least one "made" neighbor.
 func (e *EdgeMade) Has() predicate.Person { return predicate.Person{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a Person that has a "made" neighbor satisfying the predicates.
+// HasWith matches a Person that has a "made" neighbor satisfying the
+// predicates.
 func (e *EdgeMade) HasWith(ps ...predicate.Asset) predicate.Person {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -116,8 +118,9 @@ func (e *EdgeMade) Clear() predicate.PersonSetter {
 	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Person, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Person, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

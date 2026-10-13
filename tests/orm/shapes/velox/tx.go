@@ -24,7 +24,8 @@ func (*TxClient) Query(ex velox.Executor) *entity.TxQuery { return entity.NewTxQ
 // Create returns a builder that creates a Tx.
 func (*TxClient) Create(ex velox.Executor) *entity.TxCreate { return entity.NewTxCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TxClient) CreateBulk(ex velox.Executor, bs ...*entity.TxCreate) *entity.TxCreateBulk {
 	return entity.NewTxCreateBulk(ex, bs...)
 }

@@ -40,6 +40,10 @@ type GoTypeShapeEdges struct {
 	loaded [1]bool
 }
 
+// ptrGoTypeShape returns the address of the field of a GoTypeShape that holds
+// its i-th column: what a row is scanned into, and read from. It is the Ptr of
+// GoTypeShapeMeta.
+//
 //go:noinline
 func ptrGoTypeShape(v any, i int) any {
 	e := v.(*GoTypeShape)
@@ -91,7 +95,8 @@ type GoTypeShapeConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// GoTypeShapeMeta is the runtime description of GoTypeShape. Use it through its address.
+// GoTypeShapeMeta is the runtime description of GoTypeShape. Use it through its
+// address.
 var GoTypeShapeMeta = orm.Meta{
 	Name:    "GoTypeShape",
 	Table:   "go_type_shapes",
@@ -193,7 +198,8 @@ func (q *GoTypeShapeQuery) ForShare(opts ...orm.LockOption) *GoTypeShapeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *GoTypeShapeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -235,7 +241,8 @@ func (q *GoTypeShapeQuery) First(ctx context.Context) (*GoTypeShape, error) {
 	return r.(*GoTypeShape), nil
 }
 
-// Only returns the single matching GoTypeShape: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching GoTypeShape: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *GoTypeShapeQuery) Only(ctx context.Context) (*GoTypeShape, error) {
@@ -327,10 +334,10 @@ func (b *GoTypeShapeCreate) Set(ss ...predicate.GoTypeShapeSetter) *GoTypeShapeC
 }
 
 // Fill takes what in gives: a struct whose fields are named like those of
-// GoTypeShape, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of GoTypeShape is an error unless listed in
-// skip. A later Set wins.
+// GoTypeShape, such as the input of an endpoint. A nil pointer gives nothing,
+// an optional (a type with ValueOK) gives nothing when absent, anything else is
+// written. A field that names nothing of GoTypeShape is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *GoTypeShapeCreate) Fill(in any, skip ...string) *GoTypeShapeCreate {
@@ -364,9 +371,9 @@ type GoTypeShapeCreateBulk struct {
 	n  int
 }
 
-// NewGoTypeShapeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewGoTypeShapeCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewGoTypeShapeCreateBulk(ex velox.Executor, bs ...*GoTypeShapeCreate) *GoTypeShapeCreateBulk {
 	return &GoTypeShapeCreateBulk{ex: ex, bs: bs}
 }
@@ -419,7 +426,8 @@ func (b *GoTypeShapeCreateBulk) Exec(ctx context.Context) error {
 // GoTypeShapeUpdate updates GoTypeShape rows.
 type GoTypeShapeUpdate struct{ c orm.MutCore }
 
-// NewGoTypeShapeUpdate returns a builder that updates the rows its predicates match.
+// NewGoTypeShapeUpdate returns a builder that updates the rows its predicates
+// match.
 func NewGoTypeShapeUpdate(ex velox.Executor) *GoTypeShapeUpdate {
 	return &GoTypeShapeUpdate{c: orm.MutCore{M: &GoTypeShapeMeta, Ex: ex}}
 }
@@ -485,7 +493,8 @@ func (b *GoTypeShapeUpdate) SaveOne(ctx context.Context) (*GoTypeShape, error) {
 // GoTypeShapeDelete deletes GoTypeShape rows.
 type GoTypeShapeDelete struct{ c orm.MutCore }
 
-// NewGoTypeShapeDelete returns a builder that deletes the rows its predicates match.
+// NewGoTypeShapeDelete returns a builder that deletes the rows its predicates
+// match.
 func NewGoTypeShapeDelete(ex velox.Executor) *GoTypeShapeDelete {
 	return &GoTypeShapeDelete{c: orm.MutCore{M: &GoTypeShapeMeta, Ex: ex}}
 }

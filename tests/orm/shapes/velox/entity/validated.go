@@ -46,6 +46,10 @@ type ValidatedEdges struct {
 	loaded [1]bool
 }
 
+// ptrValidated returns the address of the field of a Validated that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// ValidatedMeta.
+//
 //go:noinline
 func ptrValidated(v any, i int) any {
 	e := v.(*Validated)
@@ -111,7 +115,8 @@ type ValidatedConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// ValidatedMeta is the runtime description of Validated. Use it through its address.
+// ValidatedMeta is the runtime description of Validated. Use it through its
+// address.
 var ValidatedMeta = orm.Meta{
 	Name:    "Validated",
 	Table:   "validateds",
@@ -220,7 +225,8 @@ func (q *ValidatedQuery) ForShare(opts ...orm.LockOption) *ValidatedQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ValidatedQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -262,7 +268,8 @@ func (q *ValidatedQuery) First(ctx context.Context) (*Validated, error) {
 	return r.(*Validated), nil
 }
 
-// Only returns the single matching Validated: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Validated: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ValidatedQuery) Only(ctx context.Context) (*Validated, error) {
@@ -391,9 +398,9 @@ type ValidatedCreateBulk struct {
 	n  int
 }
 
-// NewValidatedCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewValidatedCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewValidatedCreateBulk(ex velox.Executor, bs ...*ValidatedCreate) *ValidatedCreateBulk {
 	return &ValidatedCreateBulk{ex: ex, bs: bs}
 }
@@ -446,7 +453,8 @@ func (b *ValidatedCreateBulk) Exec(ctx context.Context) error {
 // ValidatedUpdate updates Validated rows.
 type ValidatedUpdate struct{ c orm.MutCore }
 
-// NewValidatedUpdate returns a builder that updates the rows its predicates match.
+// NewValidatedUpdate returns a builder that updates the rows its predicates
+// match.
 func NewValidatedUpdate(ex velox.Executor) *ValidatedUpdate {
 	return &ValidatedUpdate{c: orm.MutCore{M: &ValidatedMeta, Ex: ex}}
 }
@@ -512,7 +520,8 @@ func (b *ValidatedUpdate) SaveOne(ctx context.Context) (*Validated, error) {
 // ValidatedDelete deletes Validated rows.
 type ValidatedDelete struct{ c orm.MutCore }
 
-// NewValidatedDelete returns a builder that deletes the rows its predicates match.
+// NewValidatedDelete returns a builder that deletes the rows its predicates
+// match.
 func NewValidatedDelete(ex velox.Executor) *ValidatedDelete {
 	return &ValidatedDelete{c: orm.MutCore{M: &ValidatedMeta, Ex: ex}}
 }

@@ -78,7 +78,8 @@ type KeywordsEdges struct {
 	loaded  [5]bool
 }
 
-// FieldsOrErr returns the fields edge, or an error when it was not loaded (velox.IsNotLoaded).
+// FieldsOrErr returns the fields edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KeywordsEdges) FieldsOrErr() ([]*Field, error) {
@@ -88,7 +89,8 @@ func (e *KeywordsEdges) FieldsOrErr() ([]*Field, error) {
 	return e.Fields, nil
 }
 
-// ColumnsOrErr returns the columns edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// ColumnsOrErr returns the columns edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *KeywordsEdges) ColumnsOrErr() (*Field, error) {
@@ -101,7 +103,8 @@ func (e *KeywordsEdges) ColumnsOrErr() (*Field, error) {
 	return e.Columns, nil
 }
 
-// LoadedOrErr returns the loaded edge, or an error when it was not loaded (velox.IsNotLoaded).
+// LoadedOrErr returns the loaded edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KeywordsEdges) LoadedOrErr() ([]*Field, error) {
@@ -111,7 +114,8 @@ func (e *KeywordsEdges) LoadedOrErr() ([]*Field, error) {
 	return e.Loaded, nil
 }
 
-// WithOrErr returns the with edge, or an error when it was not loaded (velox.IsNotLoaded).
+// WithOrErr returns the with edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KeywordsEdges) WithOrErr() ([]*Field, error) {
@@ -121,7 +125,8 @@ func (e *KeywordsEdges) WithOrErr() ([]*Field, error) {
 	return e.With, nil
 }
 
-// AllOrErr returns the all edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// AllOrErr returns the all edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *KeywordsEdges) AllOrErr() (*Field, error) {
@@ -134,6 +139,10 @@ func (e *KeywordsEdges) AllOrErr() (*Field, error) {
 	return e.All, nil
 }
 
+// ptrKeywords returns the address of the field of a Keywords that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// KeywordsMeta.
+//
 //go:noinline
 func ptrKeywords(v any, i int) any {
 	e := v.(*Keywords)
@@ -236,6 +245,10 @@ func ptrKeywords(v any, i int) any {
 	return nil
 }
 
+// edgeKeywords marks the i-th edge of a Keywords as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// KeywordsMeta.
+//
 //go:noinline
 func edgeKeywords(v any, i int) any {
 	e := v.(*Keywords)
@@ -270,7 +283,8 @@ type KeywordsConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// KeywordsMeta is the runtime description of Keywords. Use it through its address.
+// KeywordsMeta is the runtime description of Keywords. Use it through its
+// address.
 var KeywordsMeta = orm.Meta{
 	Name:    "Keywords",
 	Table:   "select",
@@ -401,7 +415,8 @@ func (q *KeywordsQuery) ForShare(opts ...orm.LockOption) *KeywordsQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *KeywordsQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -443,7 +458,8 @@ func (q *KeywordsQuery) First(ctx context.Context) (*Keywords, error) {
 	return r.(*Keywords), nil
 }
 
-// Only returns the single matching Keywords: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Keywords: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *KeywordsQuery) Only(ctx context.Context) (*Keywords, error) {
@@ -572,9 +588,9 @@ type KeywordsCreateBulk struct {
 	n  int
 }
 
-// NewKeywordsCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewKeywordsCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewKeywordsCreateBulk(ex velox.Executor, bs ...*KeywordsCreate) *KeywordsCreateBulk {
 	return &KeywordsCreateBulk{ex: ex, bs: bs}
 }
@@ -627,7 +643,8 @@ func (b *KeywordsCreateBulk) Exec(ctx context.Context) error {
 // KeywordsUpdate updates Keywords rows.
 type KeywordsUpdate struct{ c orm.MutCore }
 
-// NewKeywordsUpdate returns a builder that updates the rows its predicates match.
+// NewKeywordsUpdate returns a builder that updates the rows its predicates
+// match.
 func NewKeywordsUpdate(ex velox.Executor) *KeywordsUpdate {
 	return &KeywordsUpdate{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
 }
@@ -693,7 +710,8 @@ func (b *KeywordsUpdate) SaveOne(ctx context.Context) (*Keywords, error) {
 // KeywordsDelete deletes Keywords rows.
 type KeywordsDelete struct{ c orm.MutCore }
 
-// NewKeywordsDelete returns a builder that deletes the rows its predicates match.
+// NewKeywordsDelete returns a builder that deletes the rows its predicates
+// match.
 func NewKeywordsDelete(ex velox.Executor) *KeywordsDelete {
 	return &KeywordsDelete{c: orm.MutCore{M: &KeywordsMeta, Ex: ex}}
 }
@@ -746,9 +764,9 @@ func (e *Keywords) QueryColumns(ex velox.Executor) *FieldQuery {
 	return q
 }
 
-// WithColumns eager-loads the "columns" edge: one more query, whatever the number
-// of rows. A query of Field given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Keywords.
+// WithColumns eager-loads the "columns" edge: one more query, whatever the
+// number of rows. A query of Field given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Keywords.
 //
 //go:noinline
 func (q *KeywordsQuery) WithColumns(opts ...*FieldQuery) *KeywordsQuery {

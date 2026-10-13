@@ -71,6 +71,10 @@ type ScalarEdges struct {
 	loaded [1]bool
 }
 
+// ptrScalar returns the address of the field of a Scalar that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// ScalarMeta.
+//
 //go:noinline
 func ptrScalar(v any, i int) any {
 	e := v.(*Scalar)
@@ -312,7 +316,8 @@ func (q *ScalarQuery) ForShare(opts ...orm.LockOption) *ScalarQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ScalarQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -354,7 +359,8 @@ func (q *ScalarQuery) First(ctx context.Context) (*Scalar, error) {
 	return r.(*Scalar), nil
 }
 
-// Only returns the single matching Scalar: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Scalar: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ScalarQuery) Only(ctx context.Context) (*Scalar, error) {
@@ -483,9 +489,9 @@ type ScalarCreateBulk struct {
 	n  int
 }
 
-// NewScalarCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewScalarCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewScalarCreateBulk(ex velox.Executor, bs ...*ScalarCreate) *ScalarCreateBulk {
 	return &ScalarCreateBulk{ex: ex, bs: bs}
 }

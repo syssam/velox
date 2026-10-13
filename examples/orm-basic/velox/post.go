@@ -24,7 +24,8 @@ func (*PostClient) Query(ex velox.Executor) *entity.PostQuery { return entity.Ne
 // Create returns a builder that creates a Post.
 func (*PostClient) Create(ex velox.Executor) *entity.PostCreate { return entity.NewPostCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*PostClient) CreateBulk(ex velox.Executor, bs ...*entity.PostCreate) *entity.PostCreateBulk {
 	return entity.NewPostCreateBulk(ex, bs...)
 }

@@ -29,7 +29,8 @@ func (*UUIDKeyClient) Create(ex velox.Executor) *entity.UUIDKeyCreate {
 	return entity.NewUUIDKeyCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*UUIDKeyClient) CreateBulk(ex velox.Executor, bs ...*entity.UUIDKeyCreate) *entity.UUIDKeyCreateBulk {
 	return entity.NewUUIDKeyCreateBulk(ex, bs...)
 }
@@ -49,13 +50,14 @@ func (c *UUIDKeyClient) Get(ctx context.Context, ex velox.Executor, id uuid.UUID
 	return c.Query(ex).Where(predicate.UUIDKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the UUIDKey with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the UUIDKey with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *UUIDKeyClient) UpdateByID(ex velox.Executor, id uuid.UUID) *entity.UUIDKeyUpdate {
 	return c.Update(ex).Where(predicate.UUIDKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UUIDKey with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the UUIDKey with the given id, or returns
+// velox.ErrNotFound.
 func (c *UUIDKeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id uuid.UUID) error {
 	n, err := c.Delete(ex).Where(predicate.UUIDKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

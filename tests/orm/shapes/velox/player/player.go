@@ -41,7 +41,8 @@ var Team = &EdgeTeam{}
 // Has matches a Player that has at least one "team" neighbor.
 func (e *EdgeTeam) Has() predicate.Player { return predicate.Player{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Player that has a "team" neighbor satisfying the predicates.
+// HasWith matches a Player that has a "team" neighbor satisfying the
+// predicates.
 func (e *EdgeTeam) HasWith(ps ...predicate.Team) predicate.Player {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -72,7 +73,8 @@ var FanOf = &EdgeFanOf{}
 // Has matches a Player that has at least one "fan_of" neighbor.
 func (e *EdgeFanOf) Has() predicate.Player { return predicate.Player{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a Player that has a "fan_of" neighbor satisfying the predicates.
+// HasWith matches a Player that has a "fan_of" neighbor satisfying the
+// predicates.
 func (e *EdgeFanOf) HasWith(ps ...predicate.Team) predicate.Player {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -104,8 +106,9 @@ func (e *EdgeFanOf) Clear() predicate.PlayerSetter {
 	return predicate.PlayerSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Player, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Player, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

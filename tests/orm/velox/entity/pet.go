@@ -29,7 +29,8 @@ type PetEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PetEdges) OwnerOrErr() (*User, error) {
@@ -42,6 +43,9 @@ func (e *PetEdges) OwnerOrErr() (*User, error) {
 	return e.Owner, nil
 }
 
+// ptrPet returns the address of the field of a Pet that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of PetMeta.
+//
 //go:noinline
 func ptrPet(v any, i int) any {
 	e := v.(*Pet)
@@ -56,6 +60,9 @@ func ptrPet(v any, i int) any {
 	return nil
 }
 
+// edgePet marks the i-th edge of a Pet as loaded and returns the address of the
+// field that holds its neighbors. It is the Edge of PetMeta.
+//
 //go:noinline
 func edgePet(v any, i int) any {
 	e := v.(*Pet)
@@ -67,6 +74,10 @@ func edgePet(v any, i int) any {
 	return nil
 }
 
+// linkPet stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Pet: all of them, or the first where the
+// edge has one. It is the Link of PetMeta.
+//
 //go:noinline
 func linkPet(dst any, es []any) {
 	switch d := dst.(type) {
@@ -187,7 +198,8 @@ func (q *PetQuery) ForShare(opts ...orm.LockOption) *PetQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *PetQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -229,7 +241,8 @@ func (q *PetQuery) First(ctx context.Context) (*Pet, error) {
 	return r.(*Pet), nil
 }
 
-// Only returns the single matching Pet: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Pet: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PetQuery) Only(ctx context.Context) (*Pet, error) {
@@ -358,9 +371,9 @@ type PetCreateBulk struct {
 	n  int
 }
 
-// NewPetCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewPetCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewPetCreateBulk(ex velox.Executor, bs ...*PetCreate) *PetCreateBulk {
 	return &PetCreateBulk{ex: ex, bs: bs}
 }

@@ -38,7 +38,8 @@ type PostEdges struct {
 	loaded   [3]bool
 }
 
-// AuthorOrErr returns the author edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// AuthorOrErr returns the author edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PostEdges) AuthorOrErr() (*User, error) {
@@ -51,7 +52,8 @@ func (e *PostEdges) AuthorOrErr() (*User, error) {
 	return e.Author, nil
 }
 
-// CommentsOrErr returns the comments edge, or an error when it was not loaded (velox.IsNotLoaded).
+// CommentsOrErr returns the comments edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PostEdges) CommentsOrErr() ([]*Comment, error) {
@@ -61,7 +63,8 @@ func (e *PostEdges) CommentsOrErr() ([]*Comment, error) {
 	return e.Comments, nil
 }
 
-// TagsOrErr returns the tags edge, or an error when it was not loaded (velox.IsNotLoaded).
+// TagsOrErr returns the tags edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PostEdges) TagsOrErr() ([]*Tag, error) {
@@ -71,6 +74,9 @@ func (e *PostEdges) TagsOrErr() ([]*Tag, error) {
 	return e.Tags, nil
 }
 
+// ptrPost returns the address of the field of a Post that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of PostMeta.
+//
 //go:noinline
 func ptrPost(v any, i int) any {
 	e := v.(*Post)
@@ -95,6 +101,9 @@ func ptrPost(v any, i int) any {
 	return nil
 }
 
+// edgePost marks the i-th edge of a Post as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of PostMeta.
+//
 //go:noinline
 func edgePost(v any, i int) any {
 	e := v.(*Post)
@@ -110,6 +119,10 @@ func edgePost(v any, i int) any {
 	return nil
 }
 
+// linkPost stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Post: all of them, or the first where the
+// edge has one. It is the Link of PostMeta.
+//
 //go:noinline
 func linkPost(dst any, es []any) {
 	switch d := dst.(type) {
@@ -236,7 +249,8 @@ func (q *PostQuery) ForShare(opts ...orm.LockOption) *PostQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *PostQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -278,7 +292,8 @@ func (q *PostQuery) First(ctx context.Context) (*Post, error) {
 	return r.(*Post), nil
 }
 
-// Only returns the single matching Post: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Post: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PostQuery) Only(ctx context.Context) (*Post, error) {
@@ -407,9 +422,9 @@ type PostCreateBulk struct {
 	n  int
 }
 
-// NewPostCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewPostCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewPostCreateBulk(ex velox.Executor, bs ...*PostCreate) *PostCreateBulk {
 	return &PostCreateBulk{ex: ex, bs: bs}
 }
@@ -581,9 +596,9 @@ func (e *Post) QueryComments(ex velox.Executor) *CommentQuery {
 	return q
 }
 
-// WithComments eager-loads the "comments" edge: one more query, whatever the number
-// of rows. A query of Comment given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Post.
+// WithComments eager-loads the "comments" edge: one more query, whatever the
+// number of rows. A query of Comment given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Post.
 //
 //go:noinline
 func (q *PostQuery) WithComments(opts ...*CommentQuery) *PostQuery {

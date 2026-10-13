@@ -700,7 +700,9 @@ func formatted(src *bytes.Buffer, what string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("velox: generated %s does not parse: %w\n%s", what, err, numbered(src.String()))
 	}
-	return out, nil
+	// After gofmt, which decides the indentation a comment is read at; a
+	// comment at the start of a line is the same text to it either way.
+	return reflow(out), nil
 }
 
 func numbered(s string) string {

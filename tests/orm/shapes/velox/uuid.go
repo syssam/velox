@@ -24,7 +24,8 @@ func (*UUIDClient) Query(ex velox.Executor) *entity.UUIDQuery { return entity.Ne
 // Create returns a builder that creates a UUID.
 func (*UUIDClient) Create(ex velox.Executor) *entity.UUIDCreate { return entity.NewUUIDCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*UUIDClient) CreateBulk(ex velox.Executor, bs ...*entity.UUIDCreate) *entity.UUIDCreateBulk {
 	return entity.NewUUIDCreateBulk(ex, bs...)
 }

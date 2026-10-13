@@ -28,6 +28,10 @@ type EntityxEdges struct {
 	loaded [1]bool
 }
 
+// ptrEntityx returns the address of the field of a Entityx that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// EntityxMeta.
+//
 //go:noinline
 func ptrEntityx(v any, i int) any {
 	e := v.(*Entityx)
@@ -57,7 +61,8 @@ type EntityxConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// EntityxMeta is the runtime description of Entityx. Use it through its address.
+// EntityxMeta is the runtime description of Entityx. Use it through its
+// address.
 var EntityxMeta = orm.Meta{
 	Name:    "Entityx",
 	Table:   "entityxes",
@@ -145,7 +150,8 @@ func (q *EntityxQuery) ForShare(opts ...orm.LockOption) *EntityxQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *EntityxQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -187,7 +193,8 @@ func (q *EntityxQuery) First(ctx context.Context) (*Entityx, error) {
 	return r.(*Entityx), nil
 }
 
-// Only returns the single matching Entityx: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Entityx: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EntityxQuery) Only(ctx context.Context) (*Entityx, error) {
@@ -316,9 +323,9 @@ type EntityxCreateBulk struct {
 	n  int
 }
 
-// NewEntityxCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewEntityxCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewEntityxCreateBulk(ex velox.Executor, bs ...*EntityxCreate) *EntityxCreateBulk {
 	return &EntityxCreateBulk{ex: ex, bs: bs}
 }
@@ -371,7 +378,8 @@ func (b *EntityxCreateBulk) Exec(ctx context.Context) error {
 // EntityxUpdate updates Entityx rows.
 type EntityxUpdate struct{ c orm.MutCore }
 
-// NewEntityxUpdate returns a builder that updates the rows its predicates match.
+// NewEntityxUpdate returns a builder that updates the rows its predicates
+// match.
 func NewEntityxUpdate(ex velox.Executor) *EntityxUpdate {
 	return &EntityxUpdate{c: orm.MutCore{M: &EntityxMeta, Ex: ex}}
 }
@@ -437,7 +445,8 @@ func (b *EntityxUpdate) SaveOne(ctx context.Context) (*Entityx, error) {
 // EntityxDelete deletes Entityx rows.
 type EntityxDelete struct{ c orm.MutCore }
 
-// NewEntityxDelete returns a builder that deletes the rows its predicates match.
+// NewEntityxDelete returns a builder that deletes the rows its predicates
+// match.
 func NewEntityxDelete(ex velox.Executor) *EntityxDelete {
 	return &EntityxDelete{c: orm.MutCore{M: &EntityxMeta, Ex: ex}}
 }

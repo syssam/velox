@@ -45,9 +45,9 @@ func (o *PostOrder) Term() predicate.PostOrderTerm {
 	return predicate.PostOrderTerm(orm.OrderTerm(&PostMeta, postOrderColumns, string(o.Field), o.Direction == gqlinput.OrderDirectionDesc))
 }
 
-// Author resolves the "author" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
+// Author resolves the "author" edge for a GraphQL engine: the neighbor the
+// query loaded, or else a query on the handle of the context
+// (velox.WithExecutor). An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Post) Author(ctx context.Context) (*User, error) {

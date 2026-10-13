@@ -208,9 +208,9 @@ func (f *StringColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// OrderEnumColumn is a column of Go type OrderEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// OrderEnumColumn is a column of Go type OrderEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type OrderEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -275,9 +275,9 @@ func (f *OrderEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// SetEnumColumn is a column of Go type SetEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// SetEnumColumn is a column of Go type SetEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type SetEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -342,9 +342,9 @@ func (f *SetEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// QueryEnumColumn is a column of Go type QueryEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// QueryEnumColumn is a column of Go type QueryEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type QueryEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -409,9 +409,9 @@ func (f *QueryEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// CreateEnumColumn is a column of Go type CreateEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// CreateEnumColumn is a column of Go type CreateEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type CreateEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -476,9 +476,9 @@ func (f *CreateEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// UpdateEnumColumn is a column of Go type UpdateEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// UpdateEnumColumn is a column of Go type UpdateEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type UpdateEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -543,9 +543,9 @@ func (f *UpdateEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// LoadEnumColumn is a column of Go type LoadEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// LoadEnumColumn is a column of Go type LoadEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type LoadEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -610,9 +610,9 @@ func (f *LoadEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// EdgeEnumColumn is a column of Go type EdgeEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// EdgeEnumColumn is a column of Go type EdgeEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type EdgeEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -677,9 +677,9 @@ func (f *EdgeEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// MetaEnumColumn is a column of Go type MetaEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// MetaEnumColumn is a column of Go type MetaEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type MetaEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -744,9 +744,9 @@ func (f *MetaEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// PredEnumColumn is a column of Go type PredEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// PredEnumColumn is a column of Go type PredEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type PredEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -811,9 +811,9 @@ func (f *PredEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// KindEnumColumn is a column of Go type KindEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// KindEnumColumn is a column of Go type KindEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type KindEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1012,9 +1012,9 @@ func (f *ABEnumColumn) Desc() predicate.ClashOrderTerm {
 	return predicate.ClashOrderTerm{Col: string(*f), Desc: true}
 }
 
-// DecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// DecimalColumn is a column of Go type types.Decimal: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type DecimalColumn string
 
 // EQ matches the rows whose column equals v.

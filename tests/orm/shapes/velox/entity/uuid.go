@@ -29,6 +29,9 @@ type UUIDEdges struct {
 	loaded [1]bool
 }
 
+// ptrUUID returns the address of the field of a UUID that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of UUIDMeta.
+//
 //go:noinline
 func ptrUUID(v any, i int) any {
 	e := v.(*UUID)
@@ -146,7 +149,8 @@ func (q *UUIDQuery) ForShare(opts ...orm.LockOption) *UUIDQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UUIDQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -188,7 +192,8 @@ func (q *UUIDQuery) First(ctx context.Context) (*UUID, error) {
 	return r.(*UUID), nil
 }
 
-// Only returns the single matching UUID: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching UUID: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UUIDQuery) Only(ctx context.Context) (*UUID, error) {
@@ -317,9 +322,9 @@ type UUIDCreateBulk struct {
 	n  int
 }
 
-// NewUUIDCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUUIDCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewUUIDCreateBulk(ex velox.Executor, bs ...*UUIDCreate) *UUIDCreateBulk {
 	return &UUIDCreateBulk{ex: ex, bs: bs}
 }

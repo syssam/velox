@@ -17,8 +17,8 @@ var Uint16Key Uint16KeyClient
 // Uint16KeyClient is the type of Uint16Key.
 type Uint16KeyClient struct{}
 
-// Query returns a query of every Uint16Key, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every Uint16Key, to run on ex: a database handle or
+// a transaction.
 func (*Uint16KeyClient) Query(ex velox.Executor) *entity.Uint16KeyQuery {
 	return entity.NewUint16KeyQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*Uint16KeyClient) Create(ex velox.Executor) *entity.Uint16KeyCreate {
 	return entity.NewUint16KeyCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*Uint16KeyClient) CreateBulk(ex velox.Executor, bs ...*entity.Uint16KeyCreate) *entity.Uint16KeyCreateBulk {
 	return entity.NewUint16KeyCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the Uint16Key rows its conditions match.
+// Update returns a builder that updates the Uint16Key rows its conditions
+// match.
 func (*Uint16KeyClient) Update(ex velox.Executor) *entity.Uint16KeyUpdate {
 	return entity.NewUint16KeyUpdate(ex)
 }
 
-// Delete returns a builder that deletes the Uint16Key rows its conditions match.
+// Delete returns a builder that deletes the Uint16Key rows its conditions
+// match.
 func (*Uint16KeyClient) Delete(ex velox.Executor) *entity.Uint16KeyDelete {
 	return entity.NewUint16KeyDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *Uint16KeyClient) Get(ctx context.Context, ex velox.Executor, id uint16)
 	return c.Query(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Uint16Key with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Uint16Key with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *Uint16KeyClient) UpdateByID(ex velox.Executor, id uint16) *entity.Uint16KeyUpdate {
 	return c.Update(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Uint16Key with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Uint16Key with the given id, or returns
+// velox.ErrNotFound.
 func (c *Uint16KeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id uint16) error {
 	n, err := c.Delete(ex).Where(predicate.Uint16Key(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

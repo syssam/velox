@@ -21,7 +21,8 @@ var NamedBoolNilColumns = []*schema.Column{{
 	Type:     field.TypeBool,
 }}
 
-// NamedBoolNilTable holds the schema information for the "named_bool_nils" table.
+// NamedBoolNilTable holds the schema information for the "named_bool_nils"
+// table.
 var NamedBoolNilTable = &schema.Table{
 	Columns:    NamedBoolNilColumns,
 	Name:       "named_bool_nils",

@@ -24,7 +24,8 @@ func (*TimeClient) Query(ex velox.Executor) *entity.TimeQuery { return entity.Ne
 // Create returns a builder that creates a Time.
 func (*TimeClient) Create(ex velox.Executor) *entity.TimeCreate { return entity.NewTimeCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TimeClient) CreateBulk(ex velox.Executor, bs ...*entity.TimeCreate) *entity.TimeCreateBulk {
 	return entity.NewTimeCreateBulk(ex, bs...)
 }

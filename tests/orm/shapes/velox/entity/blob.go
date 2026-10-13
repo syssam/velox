@@ -43,6 +43,9 @@ type BlobEdges struct {
 	loaded [1]bool
 }
 
+// ptrBlob returns the address of the field of a Blob that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of BlobMeta.
+//
 //go:noinline
 func ptrBlob(v any, i int) any {
 	e := v.(*Blob)
@@ -202,7 +205,8 @@ func (q *BlobQuery) ForShare(opts ...orm.LockOption) *BlobQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *BlobQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -244,7 +248,8 @@ func (q *BlobQuery) First(ctx context.Context) (*Blob, error) {
 	return r.(*Blob), nil
 }
 
-// Only returns the single matching Blob: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Blob: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *BlobQuery) Only(ctx context.Context) (*Blob, error) {
@@ -373,9 +378,9 @@ type BlobCreateBulk struct {
 	n  int
 }
 
-// NewBlobCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewBlobCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewBlobCreateBulk(ex velox.Executor, bs ...*BlobCreate) *BlobCreateBulk {
 	return &BlobCreateBulk{ex: ex, bs: bs}
 }

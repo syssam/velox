@@ -29,7 +29,8 @@ type StudentEdges struct {
 	loaded      [2]bool
 }
 
-// CoursesOrErr returns the courses edge, or an error when it was not loaded (velox.IsNotLoaded).
+// CoursesOrErr returns the courses edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *StudentEdges) CoursesOrErr() ([]*Course, error) {
@@ -39,7 +40,8 @@ func (e *StudentEdges) CoursesOrErr() ([]*Course, error) {
 	return e.Courses, nil
 }
 
-// EnrollmentsOrErr returns the enrollments edge, or an error when it was not loaded (velox.IsNotLoaded).
+// EnrollmentsOrErr returns the enrollments edge, or an error when it was not
+// loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *StudentEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
@@ -49,6 +51,10 @@ func (e *StudentEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
 	return e.Enrollments, nil
 }
 
+// ptrStudent returns the address of the field of a Student that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// StudentMeta.
+//
 //go:noinline
 func ptrStudent(v any, i int) any {
 	e := v.(*Student)
@@ -61,6 +67,9 @@ func ptrStudent(v any, i int) any {
 	return nil
 }
 
+// edgeStudent marks the i-th edge of a Student as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of StudentMeta.
+//
 //go:noinline
 func edgeStudent(v any, i int) any {
 	e := v.(*Student)
@@ -74,6 +83,10 @@ func edgeStudent(v any, i int) any {
 	return nil
 }
 
+// linkStudent stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Student: all of them, or the first
+// where the edge has one. It is the Link of StudentMeta.
+//
 //go:noinline
 func linkStudent(dst any, es []any) {
 	switch d := dst.(type) {
@@ -106,7 +119,8 @@ type StudentConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// StudentMeta is the runtime description of Student. Use it through its address.
+// StudentMeta is the runtime description of Student. Use it through its
+// address.
 var StudentMeta = orm.Meta{
 	Name:    "Student",
 	Table:   "students",
@@ -193,7 +207,8 @@ func (q *StudentQuery) ForShare(opts ...orm.LockOption) *StudentQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *StudentQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -235,7 +250,8 @@ func (q *StudentQuery) First(ctx context.Context) (*Student, error) {
 	return r.(*Student), nil
 }
 
-// Only returns the single matching Student: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Student: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *StudentQuery) Only(ctx context.Context) (*Student, error) {
@@ -364,9 +380,9 @@ type StudentCreateBulk struct {
 	n  int
 }
 
-// NewStudentCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewStudentCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewStudentCreateBulk(ex velox.Executor, bs ...*StudentCreate) *StudentCreateBulk {
 	return &StudentCreateBulk{ex: ex, bs: bs}
 }
@@ -419,7 +435,8 @@ func (b *StudentCreateBulk) Exec(ctx context.Context) error {
 // StudentUpdate updates Student rows.
 type StudentUpdate struct{ c orm.MutCore }
 
-// NewStudentUpdate returns a builder that updates the rows its predicates match.
+// NewStudentUpdate returns a builder that updates the rows its predicates
+// match.
 func NewStudentUpdate(ex velox.Executor) *StudentUpdate {
 	return &StudentUpdate{c: orm.MutCore{M: &StudentMeta, Ex: ex}}
 }
@@ -485,7 +502,8 @@ func (b *StudentUpdate) SaveOne(ctx context.Context) (*Student, error) {
 // StudentDelete deletes Student rows.
 type StudentDelete struct{ c orm.MutCore }
 
-// NewStudentDelete returns a builder that deletes the rows its predicates match.
+// NewStudentDelete returns a builder that deletes the rows its predicates
+// match.
 func NewStudentDelete(ex velox.Executor) *StudentDelete {
 	return &StudentDelete{c: orm.MutCore{M: &StudentMeta, Ex: ex}}
 }
@@ -515,9 +533,9 @@ func (e *Student) QueryCourses(ex velox.Executor) *CourseQuery {
 	return q
 }
 
-// WithCourses eager-loads the "courses" edge: one more query, whatever the number
-// of rows. A query of Course given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Student.
+// WithCourses eager-loads the "courses" edge: one more query, whatever the
+// number of rows. A query of Course given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Student.
 //
 //go:noinline
 func (q *StudentQuery) WithCourses(opts ...*CourseQuery) *StudentQuery {
@@ -538,9 +556,9 @@ func (e *Student) QueryEnrollments(ex velox.Executor) *EnrollmentQuery {
 	return q
 }
 
-// WithEnrollments eager-loads the "enrollments" edge: one more query, whatever the number
-// of rows. A query of Enrollment given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Student.
+// WithEnrollments eager-loads the "enrollments" edge: one more query, whatever
+// the number of rows. A query of Enrollment given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Student.
 //
 //go:noinline
 func (q *StudentQuery) WithEnrollments(opts ...*EnrollmentQuery) *StudentQuery {

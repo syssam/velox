@@ -29,7 +29,8 @@ type CourseEdges struct {
 	loaded      [2]bool
 }
 
-// StudentsOrErr returns the students edge, or an error when it was not loaded (velox.IsNotLoaded).
+// StudentsOrErr returns the students edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *CourseEdges) StudentsOrErr() ([]*Student, error) {
@@ -39,7 +40,8 @@ func (e *CourseEdges) StudentsOrErr() ([]*Student, error) {
 	return e.Students, nil
 }
 
-// EnrollmentsOrErr returns the enrollments edge, or an error when it was not loaded (velox.IsNotLoaded).
+// EnrollmentsOrErr returns the enrollments edge, or an error when it was not
+// loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *CourseEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
@@ -49,6 +51,10 @@ func (e *CourseEdges) EnrollmentsOrErr() ([]*Enrollment, error) {
 	return e.Enrollments, nil
 }
 
+// ptrCourse returns the address of the field of a Course that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// CourseMeta.
+//
 //go:noinline
 func ptrCourse(v any, i int) any {
 	e := v.(*Course)
@@ -61,6 +67,9 @@ func ptrCourse(v any, i int) any {
 	return nil
 }
 
+// edgeCourse marks the i-th edge of a Course as loaded and returns the address
+// of the field that holds its neighbors. It is the Edge of CourseMeta.
+//
 //go:noinline
 func edgeCourse(v any, i int) any {
 	e := v.(*Course)
@@ -74,6 +83,10 @@ func edgeCourse(v any, i int) any {
 	return nil
 }
 
+// linkCourse stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Course: all of them, or the first where
+// the edge has one. It is the Link of CourseMeta.
+//
 //go:noinline
 func linkCourse(dst any, es []any) {
 	switch d := dst.(type) {
@@ -193,7 +206,8 @@ func (q *CourseQuery) ForShare(opts ...orm.LockOption) *CourseQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *CourseQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -235,7 +249,8 @@ func (q *CourseQuery) First(ctx context.Context) (*Course, error) {
 	return r.(*Course), nil
 }
 
-// Only returns the single matching Course: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Course: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *CourseQuery) Only(ctx context.Context) (*Course, error) {
@@ -364,9 +379,9 @@ type CourseCreateBulk struct {
 	n  int
 }
 
-// NewCourseCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewCourseCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewCourseCreateBulk(ex velox.Executor, bs ...*CourseCreate) *CourseCreateBulk {
 	return &CourseCreateBulk{ex: ex, bs: bs}
 }
@@ -515,9 +530,9 @@ func (e *Course) QueryStudents(ex velox.Executor) *StudentQuery {
 	return q
 }
 
-// WithStudents eager-loads the "students" edge: one more query, whatever the number
-// of rows. A query of Student given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Course.
+// WithStudents eager-loads the "students" edge: one more query, whatever the
+// number of rows. A query of Student given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Course.
 //
 //go:noinline
 func (q *CourseQuery) WithStudents(opts ...*StudentQuery) *CourseQuery {
@@ -538,9 +553,9 @@ func (e *Course) QueryEnrollments(ex velox.Executor) *EnrollmentQuery {
 	return q
 }
 
-// WithEnrollments eager-loads the "enrollments" edge: one more query, whatever the number
-// of rows. A query of Enrollment given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Course.
+// WithEnrollments eager-loads the "enrollments" edge: one more query, whatever
+// the number of rows. A query of Enrollment given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Course.
 //
 //go:noinline
 func (q *CourseQuery) WithEnrollments(opts ...*EnrollmentQuery) *CourseQuery {

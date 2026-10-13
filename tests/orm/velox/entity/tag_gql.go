@@ -54,9 +54,9 @@ func (e *Tag) Posts(ctx context.Context, after *velox.Cursor, first *int, before
 	return q.Paginate(ctx, after, first, before, last)
 }
 
-// Parent resolves the "parent" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
+// Parent resolves the "parent" edge for a GraphQL engine: the neighbor the
+// query loaded, or else a query on the handle of the context
+// (velox.WithExecutor). An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Tag) Parent(ctx context.Context) (*Tag, error) {

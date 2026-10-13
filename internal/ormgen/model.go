@@ -147,20 +147,20 @@ func (g *Generator) model() (map[string][]byte, error) {
 		}
 
 		// The address of each column's field: the only per-field code.
-		w("func %s(v any, i int) any {\n\te := v.(*%s)\n\tswitch i {\n", n.ptr, e.Name)
+		w("// %[1]s returns the address of the field of a %[2]s that holds its i-th column:\n// what a row is scanned into, and read from. It is the Ptr of %[3]s.\nfunc %[1]s(v any, i int) any {\n\te := v.(*%[2]s)\n\tswitch i {\n", n.ptr, e.Name, n.Meta)
 		for i, f := range e.Fields {
 			w("\tcase %d:\n\t\treturn &e.%s\n", i, f.GoName)
 		}
 		w("\t}\n\treturn nil\n}\n\n")
 		if len(e.Edges) > 0 {
-			w("func %s(v any, i int) any {\n\te := v.(*%s)\n\te.Edges.loaded[i] = true\n\tswitch i {\n", n.edge, e.Name)
+			w("// %[1]s marks the i-th edge of a %[2]s as loaded and returns the address of the\n// field that holds its neighbors. It is the Edge of %[3]s.\nfunc %[1]s(v any, i int) any {\n\te := v.(*%[2]s)\n\te.Edges.loaded[i] = true\n\tswitch i {\n", n.edge, e.Name, n.Meta)
 			for _, x := range e.Edges {
 				w("\tcase %d:\n\t\treturn &e.Edges.%s\n", x.Index, x.GoName)
 			}
 			w("\t}\n\treturn nil\n}\n\n")
 		}
 		if e.linked {
-			w("func %[1]s(dst any, es []any) {\n\tswitch d := dst.(type) {\n\tcase *[]*%[2]s:\n\t\ts := make([]*%[2]s, len(es))\n\t\tfor i, e := range es {\n\t\t\ts[i] = e.(*%[2]s)\n\t\t}\n\t\t*d = s\n\tcase **%[2]s:\n\t\t*d = nil\n\t\tif len(es) > 0 {\n\t\t\t*d = es[0].(*%[2]s)\n\t\t}\n\t}\n}\n\n", n.link, e.Name)
+			w("// %[1]s stores the neighbors an eager load read into dst, the address of the\n// field of another entity's edge to %[2]s: all of them, or the first where the\n// edge has one. It is the Link of %[3]s.\nfunc %[1]s(dst any, es []any) {\n\tswitch d := dst.(type) {\n\tcase *[]*%[2]s:\n\t\ts := make([]*%[2]s, len(es))\n\t\tfor i, e := range es {\n\t\t\ts[i] = e.(*%[2]s)\n\t\t}\n\t\t*d = s\n\tcase **%[2]s:\n\t\t*d = nil\n\t\tif len(es) > 0 {\n\t\t\t*d = es[0].(*%[2]s)\n\t\t}\n\t}\n}\n\n", n.link, e.Name, n.Meta)
 		}
 
 		// One page of the entity: what Paginate returns. The shape and the

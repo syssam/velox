@@ -70,6 +70,9 @@ type WideEdges struct {
 	loaded [1]bool
 }
 
+// ptrWide returns the address of the field of a Wide that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of WideMeta.
+//
 //go:noinline
 func ptrWide(v any, i int) any {
 	e := v.(*Wide)
@@ -301,7 +304,8 @@ func (q *WideQuery) ForShare(opts ...orm.LockOption) *WideQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *WideQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -343,7 +347,8 @@ func (q *WideQuery) First(ctx context.Context) (*Wide, error) {
 	return r.(*Wide), nil
 }
 
-// Only returns the single matching Wide: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Wide: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *WideQuery) Only(ctx context.Context) (*Wide, error) {
@@ -472,9 +477,9 @@ type WideCreateBulk struct {
 	n  int
 }
 
-// NewWideCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewWideCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewWideCreateBulk(ex velox.Executor, bs ...*WideCreate) *WideCreateBulk {
 	return &WideCreateBulk{ex: ex, bs: bs}
 }

@@ -28,6 +28,9 @@ type NoteEdges struct {
 	loaded [1]bool
 }
 
+// ptrNote returns the address of the field of a Note that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of NoteMeta.
+//
 //go:noinline
 func ptrNote(v any, i int) any {
 	e := v.(*Note)
@@ -44,6 +47,10 @@ func ptrNote(v any, i int) any {
 	return nil
 }
 
+// linkNote stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Note: all of them, or the first where the
+// edge has one. It is the Link of NoteMeta.
+//
 //go:noinline
 func linkNote(dst any, es []any) {
 	switch d := dst.(type) {
@@ -162,7 +169,8 @@ func (q *NoteQuery) ForShare(opts ...orm.LockOption) *NoteQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *NoteQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -204,7 +212,8 @@ func (q *NoteQuery) First(ctx context.Context) (*Note, error) {
 	return r.(*Note), nil
 }
 
-// Only returns the single matching Note: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Note: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NoteQuery) Only(ctx context.Context) (*Note, error) {
@@ -333,9 +342,9 @@ type NoteCreateBulk struct {
 	n  int
 }
 
-// NewNoteCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewNoteCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewNoteCreateBulk(ex velox.Executor, bs ...*NoteCreate) *NoteCreateBulk {
 	return &NoteCreateBulk{ex: ex, bs: bs}
 }

@@ -16,7 +16,8 @@ var ArticleTopicsColumns = []*schema.Column{{
 	Type: field.TypeInt,
 }}
 
-// ArticleTopicsTable holds the schema information for the "article_topics" table.
+// ArticleTopicsTable holds the schema information for the "article_topics"
+// table.
 var ArticleTopicsTable = &schema.Table{
 	Columns: ArticleTopicsColumns,
 	ForeignKeys: []*schema.ForeignKey{{
@@ -97,7 +98,8 @@ var PersonFriendsColumns = []*schema.Column{{
 	Type: field.TypeInt,
 }}
 
-// PersonFriendsTable holds the schema information for the "person_friends" table.
+// PersonFriendsTable holds the schema information for the "person_friends"
+// table.
 var PersonFriendsTable = &schema.Table{
 	Columns: PersonFriendsColumns,
 	ForeignKeys: []*schema.ForeignKey{{
@@ -124,7 +126,8 @@ var PersonFollowingColumns = []*schema.Column{{
 	Type: field.TypeInt,
 }}
 
-// PersonFollowingTable holds the schema information for the "person_following" table.
+// PersonFollowingTable holds the schema information for the "person_following"
+// table.
 var PersonFollowingTable = &schema.Table{
 	Columns: PersonFollowingColumns,
 	ForeignKeys: []*schema.ForeignKey{{
@@ -233,7 +236,8 @@ var WeightKeyPeersColumns = []*schema.Column{{
 	Type: field.TypeInt,
 }}
 
-// WeightKeyPeersTable holds the schema information for the "weight_key_peers" table.
+// WeightKeyPeersTable holds the schema information for the "weight_key_peers"
+// table.
 var WeightKeyPeersTable = &schema.Table{
 	Columns: WeightKeyPeersColumns,
 	ForeignKeys: []*schema.ForeignKey{{

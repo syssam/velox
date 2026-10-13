@@ -49,6 +49,10 @@ type DefaultShapeEdges struct {
 	loaded [1]bool
 }
 
+// ptrDefaultShape returns the address of the field of a DefaultShape that holds
+// its i-th column: what a row is scanned into, and read from. It is the Ptr of
+// DefaultShapeMeta.
+//
 //go:noinline
 func ptrDefaultShape(v any, i int) any {
 	e := v.(*DefaultShape)
@@ -116,7 +120,8 @@ type DefaultShapeConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// DefaultShapeMeta is the runtime description of DefaultShape. Use it through its address.
+// DefaultShapeMeta is the runtime description of DefaultShape. Use it through
+// its address.
 var DefaultShapeMeta = orm.Meta{
 	Name:    "DefaultShape",
 	Table:   "default_shapes",
@@ -226,7 +231,8 @@ func (q *DefaultShapeQuery) ForShare(opts ...orm.LockOption) *DefaultShapeQuery 
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *DefaultShapeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -268,7 +274,8 @@ func (q *DefaultShapeQuery) First(ctx context.Context) (*DefaultShape, error) {
 	return r.(*DefaultShape), nil
 }
 
-// Only returns the single matching DefaultShape: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching DefaultShape: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *DefaultShapeQuery) Only(ctx context.Context) (*DefaultShape, error) {
@@ -360,10 +367,10 @@ func (b *DefaultShapeCreate) Set(ss ...predicate.DefaultShapeSetter) *DefaultSha
 }
 
 // Fill takes what in gives: a struct whose fields are named like those of
-// DefaultShape, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of DefaultShape is an error unless listed in
-// skip. A later Set wins.
+// DefaultShape, such as the input of an endpoint. A nil pointer gives nothing,
+// an optional (a type with ValueOK) gives nothing when absent, anything else is
+// written. A field that names nothing of DefaultShape is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *DefaultShapeCreate) Fill(in any, skip ...string) *DefaultShapeCreate {
@@ -397,9 +404,9 @@ type DefaultShapeCreateBulk struct {
 	n  int
 }
 
-// NewDefaultShapeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewDefaultShapeCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewDefaultShapeCreateBulk(ex velox.Executor, bs ...*DefaultShapeCreate) *DefaultShapeCreateBulk {
 	return &DefaultShapeCreateBulk{ex: ex, bs: bs}
 }
@@ -452,7 +459,8 @@ func (b *DefaultShapeCreateBulk) Exec(ctx context.Context) error {
 // DefaultShapeUpdate updates DefaultShape rows.
 type DefaultShapeUpdate struct{ c orm.MutCore }
 
-// NewDefaultShapeUpdate returns a builder that updates the rows its predicates match.
+// NewDefaultShapeUpdate returns a builder that updates the rows its predicates
+// match.
 func NewDefaultShapeUpdate(ex velox.Executor) *DefaultShapeUpdate {
 	return &DefaultShapeUpdate{c: orm.MutCore{M: &DefaultShapeMeta, Ex: ex}}
 }
@@ -518,7 +526,8 @@ func (b *DefaultShapeUpdate) SaveOne(ctx context.Context) (*DefaultShape, error)
 // DefaultShapeDelete deletes DefaultShape rows.
 type DefaultShapeDelete struct{ c orm.MutCore }
 
-// NewDefaultShapeDelete returns a builder that deletes the rows its predicates match.
+// NewDefaultShapeDelete returns a builder that deletes the rows its predicates
+// match.
 func NewDefaultShapeDelete(ex velox.Executor) *DefaultShapeDelete {
 	return &DefaultShapeDelete{c: orm.MutCore{M: &DefaultShapeMeta, Ex: ex}}
 }

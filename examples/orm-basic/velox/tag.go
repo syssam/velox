@@ -24,7 +24,8 @@ func (*TagClient) Query(ex velox.Executor) *entity.TagQuery { return entity.NewT
 // Create returns a builder that creates a Tag.
 func (*TagClient) Create(ex velox.Executor) *entity.TagCreate { return entity.NewTagCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TagClient) CreateBulk(ex velox.Executor, bs ...*entity.TagCreate) *entity.TagCreateBulk {
 	return entity.NewTagCreateBulk(ex, bs...)
 }

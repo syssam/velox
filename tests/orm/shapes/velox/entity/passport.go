@@ -29,7 +29,8 @@ type PassportEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PassportEdges) OwnerOrErr() (*Author, error) {
@@ -42,6 +43,10 @@ func (e *PassportEdges) OwnerOrErr() (*Author, error) {
 	return e.Owner, nil
 }
 
+// ptrPassport returns the address of the field of a Passport that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// PassportMeta.
+//
 //go:noinline
 func ptrPassport(v any, i int) any {
 	e := v.(*Passport)
@@ -56,6 +61,10 @@ func ptrPassport(v any, i int) any {
 	return nil
 }
 
+// edgePassport marks the i-th edge of a Passport as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// PassportMeta.
+//
 //go:noinline
 func edgePassport(v any, i int) any {
 	e := v.(*Passport)
@@ -67,6 +76,10 @@ func edgePassport(v any, i int) any {
 	return nil
 }
 
+// linkPassport stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Passport: all of them, or the first
+// where the edge has one. It is the Link of PassportMeta.
+//
 //go:noinline
 func linkPassport(dst any, es []any) {
 	switch d := dst.(type) {
@@ -99,7 +112,8 @@ type PassportConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// PassportMeta is the runtime description of Passport. Use it through its address.
+// PassportMeta is the runtime description of Passport. Use it through its
+// address.
 var PassportMeta = orm.Meta{
 	Name:    "Passport",
 	Table:   "passports",
@@ -186,7 +200,8 @@ func (q *PassportQuery) ForShare(opts ...orm.LockOption) *PassportQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *PassportQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -228,7 +243,8 @@ func (q *PassportQuery) First(ctx context.Context) (*Passport, error) {
 	return r.(*Passport), nil
 }
 
-// Only returns the single matching Passport: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Passport: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PassportQuery) Only(ctx context.Context) (*Passport, error) {
@@ -357,9 +373,9 @@ type PassportCreateBulk struct {
 	n  int
 }
 
-// NewPassportCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewPassportCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewPassportCreateBulk(ex velox.Executor, bs ...*PassportCreate) *PassportCreateBulk {
 	return &PassportCreateBulk{ex: ex, bs: bs}
 }
@@ -412,7 +428,8 @@ func (b *PassportCreateBulk) Exec(ctx context.Context) error {
 // PassportUpdate updates Passport rows.
 type PassportUpdate struct{ c orm.MutCore }
 
-// NewPassportUpdate returns a builder that updates the rows its predicates match.
+// NewPassportUpdate returns a builder that updates the rows its predicates
+// match.
 func NewPassportUpdate(ex velox.Executor) *PassportUpdate {
 	return &PassportUpdate{c: orm.MutCore{M: &PassportMeta, Ex: ex}}
 }
@@ -478,7 +495,8 @@ func (b *PassportUpdate) SaveOne(ctx context.Context) (*Passport, error) {
 // PassportDelete deletes Passport rows.
 type PassportDelete struct{ c orm.MutCore }
 
-// NewPassportDelete returns a builder that deletes the rows its predicates match.
+// NewPassportDelete returns a builder that deletes the rows its predicates
+// match.
 func NewPassportDelete(ex velox.Executor) *PassportDelete {
 	return &PassportDelete{c: orm.MutCore{M: &PassportMeta, Ex: ex}}
 }

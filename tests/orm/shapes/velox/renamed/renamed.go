@@ -69,7 +69,8 @@ func (e *EdgeFrozen) Has() predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpHasEdge, Edge: &meta0}
 }
 
-// HasWith matches a Renamed that has a "frozen" neighbor satisfying the predicates.
+// HasWith matches a Renamed that has a "frozen" neighbor satisfying the
+// predicates.
 func (e *EdgeFrozen) HasWith(ps ...predicate.Note) predicate.Renamed {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -103,11 +104,12 @@ func (e *EdgeFrozen) Clear() predicate.RenamedSetter {
 
 var meta1 = orm.EdgeMeta{Name: "frozen_topics", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "topics", Columns: []string{"renamed_frozen_topics"}, Immutable: true}
 
-// EdgeFrozenTopics is the "frozen_topics" edge of Renamed, from Renamed to Topic.
+// EdgeFrozenTopics is the "frozen_topics" edge of Renamed, from Renamed to
+// Topic.
 type EdgeFrozenTopics struct{}
 
-// FrozenTopics is the "frozen_topics" edge of Renamed: conditions on it and changes to it. A
-// query eager-loads it with WithFrozenTopics.
+// FrozenTopics is the "frozen_topics" edge of Renamed: conditions on it and
+// changes to it. A query eager-loads it with WithFrozenTopics.
 var FrozenTopics = &EdgeFrozenTopics{}
 
 // Has matches a Renamed that has at least one "frozen_topics" neighbor.
@@ -115,7 +117,8 @@ func (e *EdgeFrozenTopics) Has() predicate.Renamed {
 	return predicate.Renamed{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a Renamed that has a "frozen_topics" neighbor satisfying the predicates.
+// HasWith matches a Renamed that has a "frozen_topics" neighbor satisfying the
+// predicates.
 func (e *EdgeFrozenTopics) HasWith(ps ...predicate.Topic) predicate.Renamed {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -147,8 +150,9 @@ func (e *EdgeFrozenTopics) Clear() predicate.RenamedSetter {
 	return predicate.RenamedSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Renamed, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Renamed, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

@@ -17,8 +17,8 @@ var Schemainit SchemainitClient
 // SchemainitClient is the type of Schemainit.
 type SchemainitClient struct{}
 
-// Query returns a query of every Schemainit, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every Schemainit, to run on ex: a database handle or
+// a transaction.
 func (*SchemainitClient) Query(ex velox.Executor) *entity.SchemainitQuery {
 	return entity.NewSchemainitQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*SchemainitClient) Create(ex velox.Executor) *entity.SchemainitCreate {
 	return entity.NewSchemainitCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*SchemainitClient) CreateBulk(ex velox.Executor, bs ...*entity.SchemainitCreate) *entity.SchemainitCreateBulk {
 	return entity.NewSchemainitCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the Schemainit rows its conditions match.
+// Update returns a builder that updates the Schemainit rows its conditions
+// match.
 func (*SchemainitClient) Update(ex velox.Executor) *entity.SchemainitUpdate {
 	return entity.NewSchemainitUpdate(ex)
 }
 
-// Delete returns a builder that deletes the Schemainit rows its conditions match.
+// Delete returns a builder that deletes the Schemainit rows its conditions
+// match.
 func (*SchemainitClient) Delete(ex velox.Executor) *entity.SchemainitDelete {
 	return entity.NewSchemainitDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *SchemainitClient) Get(ctx context.Context, ex velox.Executor, id int) (
 	return c.Query(ex).Where(predicate.Schemainit(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Schemainit with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Schemainit with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *SchemainitClient) UpdateByID(ex velox.Executor, id int) *entity.SchemainitUpdate {
 	return c.Update(ex).Where(predicate.Schemainit(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Schemainit with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Schemainit with the given id, or returns
+// velox.ErrNotFound.
 func (c *SchemainitClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Schemainit(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

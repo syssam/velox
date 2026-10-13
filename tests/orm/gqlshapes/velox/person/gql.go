@@ -2,8 +2,8 @@
 
 package person
 
-// OrderField is a field a list of Person can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.PersonOrder.
+// OrderField is a field a list of Person can be ordered by, as the GraphQL
+// schema names it: the Field of an entity.PersonOrder.
 type OrderField string
 
 // The fields a list of Person can be ordered by.

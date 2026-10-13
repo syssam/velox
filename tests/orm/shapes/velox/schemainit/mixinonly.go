@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the MixinOnly schema.
+// init stitches the defaults, validators, hooks and policy of the MixinOnly
+// schema.
 func init() {
 	slots.MixinOnly.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.MixinOnly{}.Mixin()

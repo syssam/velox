@@ -26,6 +26,10 @@ type Int64KeyEdges struct {
 	loaded [1]bool
 }
 
+// ptrInt64Key returns the address of the field of a Int64Key that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// Int64KeyMeta.
+//
 //go:noinline
 func ptrInt64Key(v any, i int) any {
 	e := v.(*Int64Key)
@@ -53,7 +57,8 @@ type Int64KeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// Int64KeyMeta is the runtime description of Int64Key. Use it through its address.
+// Int64KeyMeta is the runtime description of Int64Key. Use it through its
+// address.
 var Int64KeyMeta = orm.Meta{
 	Name:    "Int64Key",
 	Table:   "int64keys",
@@ -138,7 +143,8 @@ func (q *Int64KeyQuery) ForShare(opts ...orm.LockOption) *Int64KeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *Int64KeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +186,8 @@ func (q *Int64KeyQuery) First(ctx context.Context) (*Int64Key, error) {
 	return r.(*Int64Key), nil
 }
 
-// Only returns the single matching Int64Key: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Int64Key: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *Int64KeyQuery) Only(ctx context.Context) (*Int64Key, error) {
@@ -309,9 +316,9 @@ type Int64KeyCreateBulk struct {
 	n  int
 }
 
-// NewInt64KeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewInt64KeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewInt64KeyCreateBulk(ex velox.Executor, bs ...*Int64KeyCreate) *Int64KeyCreateBulk {
 	return &Int64KeyCreateBulk{ex: ex, bs: bs}
 }
@@ -364,7 +371,8 @@ func (b *Int64KeyCreateBulk) Exec(ctx context.Context) error {
 // Int64KeyUpdate updates Int64Key rows.
 type Int64KeyUpdate struct{ c orm.MutCore }
 
-// NewInt64KeyUpdate returns a builder that updates the rows its predicates match.
+// NewInt64KeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewInt64KeyUpdate(ex velox.Executor) *Int64KeyUpdate {
 	return &Int64KeyUpdate{c: orm.MutCore{M: &Int64KeyMeta, Ex: ex}}
 }
@@ -430,7 +438,8 @@ func (b *Int64KeyUpdate) SaveOne(ctx context.Context) (*Int64Key, error) {
 // Int64KeyDelete deletes Int64Key rows.
 type Int64KeyDelete struct{ c orm.MutCore }
 
-// NewInt64KeyDelete returns a builder that deletes the rows its predicates match.
+// NewInt64KeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewInt64KeyDelete(ex velox.Executor) *Int64KeyDelete {
 	return &Int64KeyDelete{c: orm.MutCore{M: &Int64KeyMeta, Ex: ex}}
 }

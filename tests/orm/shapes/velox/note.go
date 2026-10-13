@@ -24,7 +24,8 @@ func (*NoteClient) Query(ex velox.Executor) *entity.NoteQuery { return entity.Ne
 // Create returns a builder that creates a Note.
 func (*NoteClient) Create(ex velox.Executor) *entity.NoteCreate { return entity.NewNoteCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*NoteClient) CreateBulk(ex velox.Executor, bs ...*entity.NoteCreate) *entity.NoteCreateBulk {
 	return entity.NewNoteCreateBulk(ex, bs...)
 }

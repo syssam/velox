@@ -24,7 +24,8 @@ func (*SetClient) Query(ex velox.Executor) *entity.SetQuery { return entity.NewS
 // Create returns a builder that creates a Set.
 func (*SetClient) Create(ex velox.Executor) *entity.SetCreate { return entity.NewSetCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*SetClient) CreateBulk(ex velox.Executor, bs ...*entity.SetCreate) *entity.SetCreateBulk {
 	return entity.NewSetCreateBulk(ex, bs...)
 }

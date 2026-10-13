@@ -24,7 +24,8 @@ func (*OrmClient) Query(ex velox.Executor) *entity.OrmQuery { return entity.NewO
 // Create returns a builder that creates a Orm.
 func (*OrmClient) Create(ex velox.Executor) *entity.OrmCreate { return entity.NewOrmCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*OrmClient) CreateBulk(ex velox.Executor, bs ...*entity.OrmCreate) *entity.OrmCreateBulk {
 	return entity.NewOrmCreateBulk(ex, bs...)
 }

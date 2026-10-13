@@ -24,7 +24,8 @@ func (*NotClient) Query(ex velox.Executor) *entity.NotQuery { return entity.NewN
 // Create returns a builder that creates a Not.
 func (*NotClient) Create(ex velox.Executor) *entity.NotCreate { return entity.NewNotCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*NotClient) CreateBulk(ex velox.Executor, bs ...*entity.NotCreate) *entity.NotCreateBulk {
 	return entity.NewNotCreateBulk(ex, bs...)
 }

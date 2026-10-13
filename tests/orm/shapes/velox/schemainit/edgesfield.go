@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the EdgesField schema.
+// init stitches the defaults, validators, hooks and policy of the EdgesField
+// schema.
 func init() {
 	slots.EdgesField.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.EdgesField{}.Fields()

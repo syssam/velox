@@ -26,6 +26,9 @@ type LoadEdges struct {
 	loaded [1]bool
 }
 
+// ptrLoad returns the address of the field of a Load that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of LoadMeta.
+//
 //go:noinline
 func ptrLoad(v any, i int) any {
 	e := v.(*Load)
@@ -138,7 +141,8 @@ func (q *LoadQuery) ForShare(opts ...orm.LockOption) *LoadQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *LoadQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *LoadQuery) First(ctx context.Context) (*Load, error) {
 	return r.(*Load), nil
 }
 
-// Only returns the single matching Load: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Load: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LoadQuery) Only(ctx context.Context) (*Load, error) {
@@ -309,9 +314,9 @@ type LoadCreateBulk struct {
 	n  int
 }
 
-// NewLoadCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewLoadCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewLoadCreateBulk(ex velox.Executor, bs ...*LoadCreate) *LoadCreateBulk {
 	return &LoadCreateBulk{ex: ex, bs: bs}
 }

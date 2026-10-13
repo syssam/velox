@@ -17,12 +17,14 @@ import (
 //go:noinline
 func (*Person) IsNode() {}
 
-// IsSearchResult marks Person as a member of the union SearchResult of the GraphQL schema.
+// IsSearchResult marks Person as a member of the union SearchResult of the
+// GraphQL schema.
 //
 //go:noinline
 func (*Person) IsSearchResult() {}
 
-// IsOwner marks Person as implementing the interface Owner of the GraphQL schema.
+// IsOwner marks Person as implementing the interface Owner of the GraphQL
+// schema.
 //
 //go:noinline
 func (*Person) IsOwner() {}
@@ -69,8 +71,9 @@ func (e *Person) Made(ctx context.Context, after *velox.Cursor, first *int, befo
 	return q.Paginate(ctx, after, first, before, last)
 }
 
-// Holdings resolves the "holdings" field, which is the "assets" edge, for a GraphQL engine: the neighbors the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
+// Holdings resolves the "holdings" field, which is the "assets" edge, for a
+// GraphQL engine: the neighbors the query loaded, or else a query on the handle
+// of the context (velox.WithExecutor).
 //
 //go:noinline
 func (e *Person) Holdings(ctx context.Context) ([]*Asset, error) {

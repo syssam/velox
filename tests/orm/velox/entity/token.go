@@ -37,7 +37,8 @@ type TokenEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *TokenEdges) OwnerOrErr() (*User, error) {
@@ -50,6 +51,10 @@ func (e *TokenEdges) OwnerOrErr() (*User, error) {
 	return e.Owner, nil
 }
 
+// ptrToken returns the address of the field of a Token that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// TokenMeta.
+//
 //go:noinline
 func ptrToken(v any, i int) any {
 	e := v.(*Token)
@@ -74,6 +79,9 @@ func ptrToken(v any, i int) any {
 	return nil
 }
 
+// edgeToken marks the i-th edge of a Token as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of TokenMeta.
+//
 //go:noinline
 func edgeToken(v any, i int) any {
 	e := v.(*Token)
@@ -85,6 +93,10 @@ func edgeToken(v any, i int) any {
 	return nil
 }
 
+// linkToken stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Token: all of them, or the first where
+// the edge has one. It is the Link of TokenMeta.
+//
 //go:noinline
 func linkToken(dst any, es []any) {
 	switch d := dst.(type) {
@@ -211,7 +223,8 @@ func (q *TokenQuery) ForShare(opts ...orm.LockOption) *TokenQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TokenQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -253,7 +266,8 @@ func (q *TokenQuery) First(ctx context.Context) (*Token, error) {
 	return r.(*Token), nil
 }
 
-// Only returns the single matching Token: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Token: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TokenQuery) Only(ctx context.Context) (*Token, error) {
@@ -382,9 +396,9 @@ type TokenCreateBulk struct {
 	n  int
 }
 
-// NewTokenCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTokenCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTokenCreateBulk(ex velox.Executor, bs ...*TokenCreate) *TokenCreateBulk {
 	return &TokenCreateBulk{ex: ex, bs: bs}
 }

@@ -2,8 +2,8 @@
 
 package comment
 
-// OrderField is a field a list of Comment can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.CommentOrder.
+// OrderField is a field a list of Comment can be ordered by, as the GraphQL
+// schema names it: the Field of an entity.CommentOrder.
 type OrderField string
 
 // The fields a list of Comment can be ordered by.

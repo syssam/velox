@@ -26,7 +26,8 @@ func (*ScalarClient) Create(ex velox.Executor) *entity.ScalarCreate {
 	return entity.NewScalarCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*ScalarClient) CreateBulk(ex velox.Executor, bs ...*entity.ScalarCreate) *entity.ScalarCreateBulk {
 	return entity.NewScalarCreateBulk(ex, bs...)
 }
@@ -46,13 +47,14 @@ func (c *ScalarClient) Get(ctx context.Context, ex velox.Executor, id int) (*ent
 	return c.Query(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Scalar with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Scalar with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *ScalarClient) UpdateByID(ex velox.Executor, id int) *entity.ScalarUpdate {
 	return c.Update(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Scalar with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Scalar with the given id, or returns
+// velox.ErrNotFound.
 func (c *ScalarClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Scalar(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

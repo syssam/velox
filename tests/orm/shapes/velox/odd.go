@@ -24,7 +24,8 @@ func (*OddClient) Query(ex velox.Executor) *entity.OddQuery { return entity.NewO
 // Create returns a builder that creates a Odd.
 func (*OddClient) Create(ex velox.Executor) *entity.OddCreate { return entity.NewOddCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*OddClient) CreateBulk(ex velox.Executor, bs ...*entity.OddCreate) *entity.OddCreateBulk {
 	return entity.NewOddCreateBulk(ex, bs...)
 }

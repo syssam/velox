@@ -17,8 +17,8 @@ var Enrollment EnrollmentClient
 // EnrollmentClient is the type of Enrollment.
 type EnrollmentClient struct{}
 
-// Query returns a query of every Enrollment, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every Enrollment, to run on ex: a database handle or
+// a transaction.
 func (*EnrollmentClient) Query(ex velox.Executor) *entity.EnrollmentQuery {
 	return entity.NewEnrollmentQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*EnrollmentClient) Create(ex velox.Executor) *entity.EnrollmentCreate {
 	return entity.NewEnrollmentCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*EnrollmentClient) CreateBulk(ex velox.Executor, bs ...*entity.EnrollmentCreate) *entity.EnrollmentCreateBulk {
 	return entity.NewEnrollmentCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the Enrollment rows its conditions match.
+// Update returns a builder that updates the Enrollment rows its conditions
+// match.
 func (*EnrollmentClient) Update(ex velox.Executor) *entity.EnrollmentUpdate {
 	return entity.NewEnrollmentUpdate(ex)
 }
 
-// Delete returns a builder that deletes the Enrollment rows its conditions match.
+// Delete returns a builder that deletes the Enrollment rows its conditions
+// match.
 func (*EnrollmentClient) Delete(ex velox.Executor) *entity.EnrollmentDelete {
 	return entity.NewEnrollmentDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *EnrollmentClient) Get(ctx context.Context, ex velox.Executor, id int) (
 	return c.Query(ex).Where(predicate.Enrollment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Enrollment with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Enrollment with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *EnrollmentClient) UpdateByID(ex velox.Executor, id int) *entity.EnrollmentUpdate {
 	return c.Update(ex).Where(predicate.Enrollment(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Enrollment with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Enrollment with the given id, or returns
+// velox.ErrNotFound.
 func (c *EnrollmentClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Enrollment(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

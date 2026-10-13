@@ -10,7 +10,8 @@ import (
 	schemapkg "github.com/syssam/velox/testschema"
 )
 
-// init stitches the defaults, validators, hooks and policy of the Comment schema.
+// init stitches the defaults, validators, hooks and policy of the Comment
+// schema.
 func init() {
 	slots.Comment.Stitch(func(m *orm.Meta) {
 		mixin := schemapkg.Comment{}.Mixin()

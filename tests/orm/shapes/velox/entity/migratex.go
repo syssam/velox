@@ -26,6 +26,10 @@ type MigrateEdges struct {
 	loaded [1]bool
 }
 
+// ptrMigrate returns the address of the field of a Migrate that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// MigrateMeta.
+//
 //go:noinline
 func ptrMigrate(v any, i int) any {
 	e := v.(*Migrate)
@@ -53,7 +57,8 @@ type MigrateConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// MigrateMeta is the runtime description of Migrate. Use it through its address.
+// MigrateMeta is the runtime description of Migrate. Use it through its
+// address.
 var MigrateMeta = orm.Meta{
 	Name:    "Migrate",
 	Table:   "migrates",
@@ -138,7 +143,8 @@ func (q *MigrateQuery) ForShare(opts ...orm.LockOption) *MigrateQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *MigrateQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +186,8 @@ func (q *MigrateQuery) First(ctx context.Context) (*Migrate, error) {
 	return r.(*Migrate), nil
 }
 
-// Only returns the single matching Migrate: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Migrate: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *MigrateQuery) Only(ctx context.Context) (*Migrate, error) {
@@ -309,9 +316,9 @@ type MigrateCreateBulk struct {
 	n  int
 }
 
-// NewMigrateCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewMigrateCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewMigrateCreateBulk(ex velox.Executor, bs ...*MigrateCreate) *MigrateCreateBulk {
 	return &MigrateCreateBulk{ex: ex, bs: bs}
 }
@@ -364,7 +371,8 @@ func (b *MigrateCreateBulk) Exec(ctx context.Context) error {
 // MigrateUpdate updates Migrate rows.
 type MigrateUpdate struct{ c orm.MutCore }
 
-// NewMigrateUpdate returns a builder that updates the rows its predicates match.
+// NewMigrateUpdate returns a builder that updates the rows its predicates
+// match.
 func NewMigrateUpdate(ex velox.Executor) *MigrateUpdate {
 	return &MigrateUpdate{c: orm.MutCore{M: &MigrateMeta, Ex: ex}}
 }
@@ -430,7 +438,8 @@ func (b *MigrateUpdate) SaveOne(ctx context.Context) (*Migrate, error) {
 // MigrateDelete deletes Migrate rows.
 type MigrateDelete struct{ c orm.MutCore }
 
-// NewMigrateDelete returns a builder that deletes the rows its predicates match.
+// NewMigrateDelete returns a builder that deletes the rows its predicates
+// match.
 func NewMigrateDelete(ex velox.Executor) *MigrateDelete {
 	return &MigrateDelete{c: orm.MutCore{M: &MigrateMeta, Ex: ex}}
 }

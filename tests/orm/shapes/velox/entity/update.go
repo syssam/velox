@@ -26,6 +26,10 @@ type UpdateEdges struct {
 	loaded [1]bool
 }
 
+// ptrUpdate returns the address of the field of a Update that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// UpdateMeta.
+//
 //go:noinline
 func ptrUpdate(v any, i int) any {
 	e := v.(*Update)
@@ -138,7 +142,8 @@ func (q *UpdateQuery) ForShare(opts ...orm.LockOption) *UpdateQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UpdateQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *UpdateQuery) First(ctx context.Context) (*Update, error) {
 	return r.(*Update), nil
 }
 
-// Only returns the single matching Update: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Update: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UpdateQuery) Only(ctx context.Context) (*Update, error) {
@@ -309,9 +315,9 @@ type UpdateCreateBulk struct {
 	n  int
 }
 
-// NewUpdateCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUpdateCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewUpdateCreateBulk(ex velox.Executor, bs ...*UpdateCreate) *UpdateCreateBulk {
 	return &UpdateCreateBulk{ex: ex, bs: bs}
 }

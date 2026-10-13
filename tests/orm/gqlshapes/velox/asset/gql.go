@@ -2,8 +2,8 @@
 
 package asset
 
-// OrderField is a field a list of Asset can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.AssetOrder.
+// OrderField is a field a list of Asset can be ordered by, as the GraphQL
+// schema names it: the Field of an entity.AssetOrder.
 type OrderField string
 
 // The fields a list of Asset can be ordered by.

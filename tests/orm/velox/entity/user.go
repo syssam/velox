@@ -41,7 +41,8 @@ type UserEdges struct {
 	loaded     [6]bool
 }
 
-// PostsOrErr returns the posts edge, or an error when it was not loaded (velox.IsNotLoaded).
+// PostsOrErr returns the posts edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *UserEdges) PostsOrErr() ([]*Post, error) {
@@ -51,7 +52,8 @@ func (e *UserEdges) PostsOrErr() ([]*Post, error) {
 	return e.Posts, nil
 }
 
-// PetsOrErr returns the pets edge, or an error when it was not loaded (velox.IsNotLoaded).
+// PetsOrErr returns the pets edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *UserEdges) PetsOrErr() ([]*Pet, error) {
@@ -61,7 +63,8 @@ func (e *UserEdges) PetsOrErr() ([]*Pet, error) {
 	return e.Pets, nil
 }
 
-// CommentsOrErr returns the comments edge, or an error when it was not loaded (velox.IsNotLoaded).
+// CommentsOrErr returns the comments edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *UserEdges) CommentsOrErr() ([]*Comment, error) {
@@ -71,7 +74,8 @@ func (e *UserEdges) CommentsOrErr() ([]*Comment, error) {
 	return e.Comments, nil
 }
 
-// TokenOrErr returns the token edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// TokenOrErr returns the token edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *UserEdges) TokenOrErr() (*Token, error) {
@@ -84,7 +88,8 @@ func (e *UserEdges) TokenOrErr() (*Token, error) {
 	return e.Token, nil
 }
 
-// LikedPostsOrErr returns the liked_posts edge, or an error when it was not loaded (velox.IsNotLoaded).
+// LikedPostsOrErr returns the liked_posts edge, or an error when it was not
+// loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *UserEdges) LikedPostsOrErr() ([]*Post, error) {
@@ -94,7 +99,8 @@ func (e *UserEdges) LikedPostsOrErr() ([]*Post, error) {
 	return e.LikedPosts, nil
 }
 
-// LikesOrErr returns the likes edge, or an error when it was not loaded (velox.IsNotLoaded).
+// LikesOrErr returns the likes edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *UserEdges) LikesOrErr() ([]*Like, error) {
@@ -104,6 +110,9 @@ func (e *UserEdges) LikesOrErr() ([]*Like, error) {
 	return e.Likes, nil
 }
 
+// ptrUser returns the address of the field of a User that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of UserMeta.
+//
 //go:noinline
 func ptrUser(v any, i int) any {
 	e := v.(*User)
@@ -128,6 +137,9 @@ func ptrUser(v any, i int) any {
 	return nil
 }
 
+// edgeUser marks the i-th edge of a User as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of UserMeta.
+//
 //go:noinline
 func edgeUser(v any, i int) any {
 	e := v.(*User)
@@ -149,6 +161,10 @@ func edgeUser(v any, i int) any {
 	return nil
 }
 
+// linkUser stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to User: all of them, or the first where the
+// edge has one. It is the Link of UserMeta.
+//
 //go:noinline
 func linkUser(dst any, es []any) {
 	switch d := dst.(type) {
@@ -276,7 +292,8 @@ func (q *UserQuery) ForShare(opts ...orm.LockOption) *UserQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UserQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -318,7 +335,8 @@ func (q *UserQuery) First(ctx context.Context) (*User, error) {
 	return r.(*User), nil
 }
 
-// Only returns the single matching User: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching User: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UserQuery) Only(ctx context.Context) (*User, error) {
@@ -447,9 +465,9 @@ type UserCreateBulk struct {
 	n  int
 }
 
-// NewUserCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUserCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewUserCreateBulk(ex velox.Executor, bs ...*UserCreate) *UserCreateBulk {
 	return &UserCreateBulk{ex: ex, bs: bs}
 }
@@ -644,9 +662,9 @@ func (e *User) QueryComments(ex velox.Executor) *CommentQuery {
 	return q
 }
 
-// WithComments eager-loads the "comments" edge: one more query, whatever the number
-// of rows. A query of Comment given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per User.
+// WithComments eager-loads the "comments" edge: one more query, whatever the
+// number of rows. A query of Comment given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per User.
 //
 //go:noinline
 func (q *UserQuery) WithComments(opts ...*CommentQuery) *UserQuery {
@@ -690,9 +708,9 @@ func (e *User) QueryLikedPosts(ex velox.Executor) *PostQuery {
 	return q
 }
 
-// WithLikedPosts eager-loads the "liked_posts" edge: one more query, whatever the number
-// of rows. A query of Post given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per User.
+// WithLikedPosts eager-loads the "liked_posts" edge: one more query, whatever
+// the number of rows. A query of Post given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per User.
 //
 //go:noinline
 func (q *UserQuery) WithLikedPosts(opts ...*PostQuery) *UserQuery {

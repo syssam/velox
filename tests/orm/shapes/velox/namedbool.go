@@ -17,8 +17,8 @@ var NamedBool NamedBoolClient
 // NamedBoolClient is the type of NamedBool.
 type NamedBoolClient struct{}
 
-// Query returns a query of every NamedBool, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every NamedBool, to run on ex: a database handle or
+// a transaction.
 func (*NamedBoolClient) Query(ex velox.Executor) *entity.NamedBoolQuery {
 	return entity.NewNamedBoolQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*NamedBoolClient) Create(ex velox.Executor) *entity.NamedBoolCreate {
 	return entity.NewNamedBoolCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*NamedBoolClient) CreateBulk(ex velox.Executor, bs ...*entity.NamedBoolCreate) *entity.NamedBoolCreateBulk {
 	return entity.NewNamedBoolCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the NamedBool rows its conditions match.
+// Update returns a builder that updates the NamedBool rows its conditions
+// match.
 func (*NamedBoolClient) Update(ex velox.Executor) *entity.NamedBoolUpdate {
 	return entity.NewNamedBoolUpdate(ex)
 }
 
-// Delete returns a builder that deletes the NamedBool rows its conditions match.
+// Delete returns a builder that deletes the NamedBool rows its conditions
+// match.
 func (*NamedBoolClient) Delete(ex velox.Executor) *entity.NamedBoolDelete {
 	return entity.NewNamedBoolDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *NamedBoolClient) Get(ctx context.Context, ex velox.Executor, id int) (*
 	return c.Query(ex).Where(predicate.NamedBool(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the NamedBool with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the NamedBool with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *NamedBoolClient) UpdateByID(ex velox.Executor, id int) *entity.NamedBoolUpdate {
 	return c.Update(ex).Where(predicate.NamedBool(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the NamedBool with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the NamedBool with the given id, or returns
+// velox.ErrNotFound.
 func (c *NamedBoolClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBool(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

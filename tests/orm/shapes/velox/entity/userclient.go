@@ -26,6 +26,10 @@ type UserClientEdges struct {
 	loaded [1]bool
 }
 
+// ptrUserClient returns the address of the field of a UserClient that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// UserClientMeta.
+//
 //go:noinline
 func ptrUserClient(v any, i int) any {
 	e := v.(*UserClient)
@@ -53,7 +57,8 @@ type UserClientConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// UserClientMeta is the runtime description of UserClient. Use it through its address.
+// UserClientMeta is the runtime description of UserClient. Use it through its
+// address.
 var UserClientMeta = orm.Meta{
 	Name:    "UserClient",
 	Table:   "user_clients",
@@ -141,7 +146,8 @@ func (q *UserClientQuery) ForShare(opts ...orm.LockOption) *UserClientQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UserClientQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *UserClientQuery) First(ctx context.Context) (*UserClient, error) {
 	return r.(*UserClient), nil
 }
 
-// Only returns the single matching UserClient: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching UserClient: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UserClientQuery) Only(ctx context.Context) (*UserClient, error) {
@@ -277,8 +284,8 @@ func (b *UserClientCreate) Set(ss ...predicate.UserClientSetter) *UserClientCrea
 // Fill takes what in gives: a struct whose fields are named like those of
 // UserClient, such as the input of an endpoint. A nil pointer gives nothing, an
 // optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of UserClient is an error unless listed in
-// skip. A later Set wins.
+// written. A field that names nothing of UserClient is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *UserClientCreate) Fill(in any, skip ...string) *UserClientCreate {
@@ -312,9 +319,9 @@ type UserClientCreateBulk struct {
 	n  int
 }
 
-// NewUserClientCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUserClientCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewUserClientCreateBulk(ex velox.Executor, bs ...*UserClientCreate) *UserClientCreateBulk {
 	return &UserClientCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +374,8 @@ func (b *UserClientCreateBulk) Exec(ctx context.Context) error {
 // UserClientUpdate updates UserClient rows.
 type UserClientUpdate struct{ c orm.MutCore }
 
-// NewUserClientUpdate returns a builder that updates the rows its predicates match.
+// NewUserClientUpdate returns a builder that updates the rows its predicates
+// match.
 func NewUserClientUpdate(ex velox.Executor) *UserClientUpdate {
 	return &UserClientUpdate{c: orm.MutCore{M: &UserClientMeta, Ex: ex}}
 }
@@ -433,7 +441,8 @@ func (b *UserClientUpdate) SaveOne(ctx context.Context) (*UserClient, error) {
 // UserClientDelete deletes UserClient rows.
 type UserClientDelete struct{ c orm.MutCore }
 
-// NewUserClientDelete returns a builder that deletes the rows its predicates match.
+// NewUserClientDelete returns a builder that deletes the rows its predicates
+// match.
 func NewUserClientDelete(ex velox.Executor) *UserClientDelete {
 	return &UserClientDelete{c: orm.MutCore{M: &UserClientMeta, Ex: ex}}
 }

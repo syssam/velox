@@ -26,6 +26,10 @@ type ErrorsEdges struct {
 	loaded [1]bool
 }
 
+// ptrErrors returns the address of the field of a Errors that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// ErrorsMeta.
+//
 //go:noinline
 func ptrErrors(v any, i int) any {
 	e := v.(*Errors)
@@ -138,7 +142,8 @@ func (q *ErrorsQuery) ForShare(opts ...orm.LockOption) *ErrorsQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ErrorsQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *ErrorsQuery) First(ctx context.Context) (*Errors, error) {
 	return r.(*Errors), nil
 }
 
-// Only returns the single matching Errors: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Errors: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ErrorsQuery) Only(ctx context.Context) (*Errors, error) {
@@ -309,9 +315,9 @@ type ErrorsCreateBulk struct {
 	n  int
 }
 
-// NewErrorsCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewErrorsCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewErrorsCreateBulk(ex velox.Executor, bs ...*ErrorsCreate) *ErrorsCreateBulk {
 	return &ErrorsCreateBulk{ex: ex, bs: bs}
 }

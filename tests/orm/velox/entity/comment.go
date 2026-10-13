@@ -35,7 +35,8 @@ type CommentEdges struct {
 	loaded [2]bool
 }
 
-// PostOrErr returns the post edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// PostOrErr returns the post edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *CommentEdges) PostOrErr() (*Post, error) {
@@ -48,7 +49,8 @@ func (e *CommentEdges) PostOrErr() (*Post, error) {
 	return e.Post, nil
 }
 
-// AuthorOrErr returns the author edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// AuthorOrErr returns the author edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *CommentEdges) AuthorOrErr() (*User, error) {
@@ -61,6 +63,10 @@ func (e *CommentEdges) AuthorOrErr() (*User, error) {
 	return e.Author, nil
 }
 
+// ptrComment returns the address of the field of a Comment that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// CommentMeta.
+//
 //go:noinline
 func ptrComment(v any, i int) any {
 	e := v.(*Comment)
@@ -81,6 +87,9 @@ func ptrComment(v any, i int) any {
 	return nil
 }
 
+// edgeComment marks the i-th edge of a Comment as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of CommentMeta.
+//
 //go:noinline
 func edgeComment(v any, i int) any {
 	e := v.(*Comment)
@@ -94,6 +103,10 @@ func edgeComment(v any, i int) any {
 	return nil
 }
 
+// linkComment stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Comment: all of them, or the first
+// where the edge has one. It is the Link of CommentMeta.
+//
 //go:noinline
 func linkComment(dst any, es []any) {
 	switch d := dst.(type) {
@@ -126,7 +139,8 @@ type CommentConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// CommentMeta is the runtime description of Comment. Use it through its address.
+// CommentMeta is the runtime description of Comment. Use it through its
+// address.
 var CommentMeta = orm.Meta{
 	Name:    "Comment",
 	Table:   "comments",
@@ -217,7 +231,8 @@ func (q *CommentQuery) ForShare(opts ...orm.LockOption) *CommentQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *CommentQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -259,7 +274,8 @@ func (q *CommentQuery) First(ctx context.Context) (*Comment, error) {
 	return r.(*Comment), nil
 }
 
-// Only returns the single matching Comment: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Comment: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *CommentQuery) Only(ctx context.Context) (*Comment, error) {
@@ -388,9 +404,9 @@ type CommentCreateBulk struct {
 	n  int
 }
 
-// NewCommentCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewCommentCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewCommentCreateBulk(ex velox.Executor, bs ...*CommentCreate) *CommentCreateBulk {
 	return &CommentCreateBulk{ex: ex, bs: bs}
 }
@@ -443,7 +459,8 @@ func (b *CommentCreateBulk) Exec(ctx context.Context) error {
 // CommentUpdate updates Comment rows.
 type CommentUpdate struct{ c orm.MutCore }
 
-// NewCommentUpdate returns a builder that updates the rows its predicates match.
+// NewCommentUpdate returns a builder that updates the rows its predicates
+// match.
 func NewCommentUpdate(ex velox.Executor) *CommentUpdate {
 	return &CommentUpdate{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
 }
@@ -509,7 +526,8 @@ func (b *CommentUpdate) SaveOne(ctx context.Context) (*Comment, error) {
 // CommentDelete deletes Comment rows.
 type CommentDelete struct{ c orm.MutCore }
 
-// NewCommentDelete returns a builder that deletes the rows its predicates match.
+// NewCommentDelete returns a builder that deletes the rows its predicates
+// match.
 func NewCommentDelete(ex velox.Executor) *CommentDelete {
 	return &CommentDelete{c: orm.MutCore{M: &CommentMeta, Ex: ex}}
 }

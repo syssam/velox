@@ -28,6 +28,10 @@ type NamedBoolNilEdges struct {
 	loaded [1]bool
 }
 
+// ptrNamedBoolNil returns the address of the field of a NamedBoolNil that holds
+// its i-th column: what a row is scanned into, and read from. It is the Ptr of
+// NamedBoolNilMeta.
+//
 //go:noinline
 func ptrNamedBoolNil(v any, i int) any {
 	e := v.(*NamedBoolNil)
@@ -57,7 +61,8 @@ type NamedBoolNilConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// NamedBoolNilMeta is the runtime description of NamedBoolNil. Use it through its address.
+// NamedBoolNilMeta is the runtime description of NamedBoolNil. Use it through
+// its address.
 var NamedBoolNilMeta = orm.Meta{
 	Name:    "NamedBoolNil",
 	Table:   "named_bool_nils",
@@ -146,7 +151,8 @@ func (q *NamedBoolNilQuery) ForShare(opts ...orm.LockOption) *NamedBoolNilQuery 
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *NamedBoolNilQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -188,7 +194,8 @@ func (q *NamedBoolNilQuery) First(ctx context.Context) (*NamedBoolNil, error) {
 	return r.(*NamedBoolNil), nil
 }
 
-// Only returns the single matching NamedBoolNil: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching NamedBoolNil: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NamedBoolNilQuery) Only(ctx context.Context) (*NamedBoolNil, error) {
@@ -280,10 +287,10 @@ func (b *NamedBoolNilCreate) Set(ss ...predicate.NamedBoolNilSetter) *NamedBoolN
 }
 
 // Fill takes what in gives: a struct whose fields are named like those of
-// NamedBoolNil, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of NamedBoolNil is an error unless listed in
-// skip. A later Set wins.
+// NamedBoolNil, such as the input of an endpoint. A nil pointer gives nothing,
+// an optional (a type with ValueOK) gives nothing when absent, anything else is
+// written. A field that names nothing of NamedBoolNil is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *NamedBoolNilCreate) Fill(in any, skip ...string) *NamedBoolNilCreate {
@@ -317,9 +324,9 @@ type NamedBoolNilCreateBulk struct {
 	n  int
 }
 
-// NewNamedBoolNilCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewNamedBoolNilCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewNamedBoolNilCreateBulk(ex velox.Executor, bs ...*NamedBoolNilCreate) *NamedBoolNilCreateBulk {
 	return &NamedBoolNilCreateBulk{ex: ex, bs: bs}
 }
@@ -372,7 +379,8 @@ func (b *NamedBoolNilCreateBulk) Exec(ctx context.Context) error {
 // NamedBoolNilUpdate updates NamedBoolNil rows.
 type NamedBoolNilUpdate struct{ c orm.MutCore }
 
-// NewNamedBoolNilUpdate returns a builder that updates the rows its predicates match.
+// NewNamedBoolNilUpdate returns a builder that updates the rows its predicates
+// match.
 func NewNamedBoolNilUpdate(ex velox.Executor) *NamedBoolNilUpdate {
 	return &NamedBoolNilUpdate{c: orm.MutCore{M: &NamedBoolNilMeta, Ex: ex}}
 }
@@ -438,7 +446,8 @@ func (b *NamedBoolNilUpdate) SaveOne(ctx context.Context) (*NamedBoolNil, error)
 // NamedBoolNilDelete deletes NamedBoolNil rows.
 type NamedBoolNilDelete struct{ c orm.MutCore }
 
-// NewNamedBoolNilDelete returns a builder that deletes the rows its predicates match.
+// NewNamedBoolNilDelete returns a builder that deletes the rows its predicates
+// match.
 func NewNamedBoolNilDelete(ex velox.Executor) *NamedBoolNilDelete {
 	return &NamedBoolNilDelete{c: orm.MutCore{M: &NamedBoolNilMeta, Ex: ex}}
 }

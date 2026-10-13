@@ -24,7 +24,8 @@ func (*OrClient) Query(ex velox.Executor) *entity.OrQuery { return entity.NewOrQ
 // Create returns a builder that creates a Or.
 func (*OrClient) Create(ex velox.Executor) *entity.OrCreate { return entity.NewOrCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*OrClient) CreateBulk(ex velox.Executor, bs ...*entity.OrCreate) *entity.OrCreateBulk {
 	return entity.NewOrCreateBulk(ex, bs...)
 }

@@ -105,14 +105,15 @@ var meta1 = orm.EdgeMeta{Name: "comments", Index: 1, Rel: orm.O2M, Inverse: fals
 // EdgeComments is the "comments" edge of User, from User to Comment.
 type EdgeComments struct{}
 
-// Comments is the "comments" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithComments.
+// Comments is the "comments" edge of User: conditions on it and changes to it.
+// A query eager-loads it with WithComments.
 var Comments = &EdgeComments{}
 
 // Has matches a User that has at least one "comments" neighbor.
 func (e *EdgeComments) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a User that has a "comments" neighbor satisfying the predicates.
+// HasWith matches a User that has a "comments" neighbor satisfying the
+// predicates.
 func (e *EdgeComments) HasWith(ps ...predicate.Comment) predicate.User {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -144,8 +145,9 @@ func (e *EdgeComments) Clear() predicate.UserSetter {
 	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of User, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of User, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

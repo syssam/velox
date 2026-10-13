@@ -26,10 +26,12 @@ const (
 	StatusDone       StatusEnum = "done"
 )
 
-// DefaultStatus returns the value of the status field of a row created without one.
+// DefaultStatus returns the value of the status field of a row created without
+// one.
 func DefaultStatus() StatusEnum { return StatusTodo }
 
-// StatusValues returns the values of the status field, in the order of the schema.
+// StatusValues returns the values of the status field, in the order of the
+// schema.
 func StatusValues() []StatusEnum {
 	return []StatusEnum{StatusTodo, StatusInProgress, StatusDone}
 }
@@ -87,8 +89,9 @@ func (e *EdgeOwner) Clear() predicate.TodoSetter {
 	return predicate.TodoSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
-// EdgeMetas returns the descriptions of the edges of Todo, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Todo, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
 
 // And matches the rows every one of ps matches.

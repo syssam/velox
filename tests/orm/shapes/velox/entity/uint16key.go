@@ -26,6 +26,10 @@ type Uint16KeyEdges struct {
 	loaded [1]bool
 }
 
+// ptrUint16Key returns the address of the field of a Uint16Key that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// Uint16KeyMeta.
+//
 //go:noinline
 func ptrUint16Key(v any, i int) any {
 	e := v.(*Uint16Key)
@@ -53,7 +57,8 @@ type Uint16KeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// Uint16KeyMeta is the runtime description of Uint16Key. Use it through its address.
+// Uint16KeyMeta is the runtime description of Uint16Key. Use it through its
+// address.
 var Uint16KeyMeta = orm.Meta{
 	Name:    "Uint16Key",
 	Table:   "uint16keys",
@@ -141,7 +146,8 @@ func (q *Uint16KeyQuery) ForShare(opts ...orm.LockOption) *Uint16KeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *Uint16KeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *Uint16KeyQuery) First(ctx context.Context) (*Uint16Key, error) {
 	return r.(*Uint16Key), nil
 }
 
-// Only returns the single matching Uint16Key: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Uint16Key: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *Uint16KeyQuery) Only(ctx context.Context) (*Uint16Key, error) {
@@ -312,9 +319,9 @@ type Uint16KeyCreateBulk struct {
 	n  int
 }
 
-// NewUint16KeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUint16KeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewUint16KeyCreateBulk(ex velox.Executor, bs ...*Uint16KeyCreate) *Uint16KeyCreateBulk {
 	return &Uint16KeyCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +374,8 @@ func (b *Uint16KeyCreateBulk) Exec(ctx context.Context) error {
 // Uint16KeyUpdate updates Uint16Key rows.
 type Uint16KeyUpdate struct{ c orm.MutCore }
 
-// NewUint16KeyUpdate returns a builder that updates the rows its predicates match.
+// NewUint16KeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewUint16KeyUpdate(ex velox.Executor) *Uint16KeyUpdate {
 	return &Uint16KeyUpdate{c: orm.MutCore{M: &Uint16KeyMeta, Ex: ex}}
 }
@@ -433,7 +441,8 @@ func (b *Uint16KeyUpdate) SaveOne(ctx context.Context) (*Uint16Key, error) {
 // Uint16KeyDelete deletes Uint16Key rows.
 type Uint16KeyDelete struct{ c orm.MutCore }
 
-// NewUint16KeyDelete returns a builder that deletes the rows its predicates match.
+// NewUint16KeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewUint16KeyDelete(ex velox.Executor) *Uint16KeyDelete {
 	return &Uint16KeyDelete{c: orm.MutCore{M: &Uint16KeyMeta, Ex: ex}}
 }

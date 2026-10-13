@@ -17,8 +17,8 @@ import (
 //go:noinline
 func (*Asset) IsNode() {}
 
-// ThumbnailOrNil returns the "thumbnail" field, or nil when it holds nothing: what a
-// GraphQL engine reads the field through, the field being a *[]byte.
+// ThumbnailOrNil returns the "thumbnail" field, or nil when it holds nothing:
+// what a GraphQL engine reads the field through, the field being a *[]byte.
 //
 //go:noinline
 func (e *Asset) ThumbnailOrNil() []byte {
@@ -65,9 +65,9 @@ func (e *Asset) Org(ctx context.Context) (*Org, error) {
 	return v, velox.MaskNotFound(err)
 }
 
-// Person resolves the "person" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
+// Person resolves the "person" edge for a GraphQL engine: the neighbor the
+// query loaded, or else a query on the handle of the context
+// (velox.WithExecutor). An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Asset) Person(ctx context.Context) (*Person, error) {
@@ -91,9 +91,10 @@ func (e *Asset) Maker(ctx context.Context) (*Person, error) {
 	return v, velox.MaskNotFound(err)
 }
 
-// Creator resolves the "creator" field, which is the "maker" edge, for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
+// Creator resolves the "creator" field, which is the "maker" edge, for a
+// GraphQL engine: the neighbor the query loaded, or else a query on the handle
+// of the context (velox.WithExecutor). An edge without a neighbor is nil, not
+// an error.
 //
 //go:noinline
 func (e *Asset) Creator(ctx context.Context) (*Person, error) {

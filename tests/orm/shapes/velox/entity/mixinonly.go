@@ -28,6 +28,10 @@ type MixinOnlyEdges struct {
 	loaded [1]bool
 }
 
+// ptrMixinOnly returns the address of the field of a MixinOnly that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// MixinOnlyMeta.
+//
 //go:noinline
 func ptrMixinOnly(v any, i int) any {
 	e := v.(*MixinOnly)
@@ -57,7 +61,8 @@ type MixinOnlyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// MixinOnlyMeta is the runtime description of MixinOnly. Use it through its address.
+// MixinOnlyMeta is the runtime description of MixinOnly. Use it through its
+// address.
 var MixinOnlyMeta = orm.Meta{
 	Name:    "MixinOnly",
 	Table:   "mixin_onlies",
@@ -148,7 +153,8 @@ func (q *MixinOnlyQuery) ForShare(opts ...orm.LockOption) *MixinOnlyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *MixinOnlyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -190,7 +196,8 @@ func (q *MixinOnlyQuery) First(ctx context.Context) (*MixinOnly, error) {
 	return r.(*MixinOnly), nil
 }
 
-// Only returns the single matching MixinOnly: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching MixinOnly: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *MixinOnlyQuery) Only(ctx context.Context) (*MixinOnly, error) {
@@ -319,9 +326,9 @@ type MixinOnlyCreateBulk struct {
 	n  int
 }
 
-// NewMixinOnlyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewMixinOnlyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewMixinOnlyCreateBulk(ex velox.Executor, bs ...*MixinOnlyCreate) *MixinOnlyCreateBulk {
 	return &MixinOnlyCreateBulk{ex: ex, bs: bs}
 }
@@ -374,7 +381,8 @@ func (b *MixinOnlyCreateBulk) Exec(ctx context.Context) error {
 // MixinOnlyUpdate updates MixinOnly rows.
 type MixinOnlyUpdate struct{ c orm.MutCore }
 
-// NewMixinOnlyUpdate returns a builder that updates the rows its predicates match.
+// NewMixinOnlyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewMixinOnlyUpdate(ex velox.Executor) *MixinOnlyUpdate {
 	return &MixinOnlyUpdate{c: orm.MutCore{M: &MixinOnlyMeta, Ex: ex}}
 }
@@ -440,7 +448,8 @@ func (b *MixinOnlyUpdate) SaveOne(ctx context.Context) (*MixinOnly, error) {
 // MixinOnlyDelete deletes MixinOnly rows.
 type MixinOnlyDelete struct{ c orm.MutCore }
 
-// NewMixinOnlyDelete returns a builder that deletes the rows its predicates match.
+// NewMixinOnlyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewMixinOnlyDelete(ex velox.Executor) *MixinOnlyDelete {
 	return &MixinOnlyDelete{c: orm.MutCore{M: &MixinOnlyMeta, Ex: ex}}
 }

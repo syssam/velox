@@ -33,7 +33,8 @@ type TeamEdges struct {
 	loaded  [4]bool
 }
 
-// PlayersOrErr returns the players edge, or an error when it was not loaded (velox.IsNotLoaded).
+// PlayersOrErr returns the players edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TeamEdges) PlayersOrErr() ([]*Player, error) {
@@ -43,7 +44,8 @@ func (e *TeamEdges) PlayersOrErr() ([]*Player, error) {
 	return e.Players, nil
 }
 
-// FansOrErr returns the fans edge, or an error when it was not loaded (velox.IsNotLoaded).
+// FansOrErr returns the fans edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TeamEdges) FansOrErr() ([]*Player, error) {
@@ -53,7 +55,8 @@ func (e *TeamEdges) FansOrErr() ([]*Player, error) {
 	return e.Fans, nil
 }
 
-// RivalsOrErr returns the rivals edge, or an error when it was not loaded (velox.IsNotLoaded).
+// RivalsOrErr returns the rivals edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TeamEdges) RivalsOrErr() ([]*Team, error) {
@@ -63,7 +66,8 @@ func (e *TeamEdges) RivalsOrErr() ([]*Team, error) {
 	return e.Rivals, nil
 }
 
-// BadgesOrErr returns the badges edge, or an error when it was not loaded (velox.IsNotLoaded).
+// BadgesOrErr returns the badges edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TeamEdges) BadgesOrErr() ([]*Badge, error) {
@@ -73,6 +77,9 @@ func (e *TeamEdges) BadgesOrErr() ([]*Badge, error) {
 	return e.Badges, nil
 }
 
+// ptrTeam returns the address of the field of a Team that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of TeamMeta.
+//
 //go:noinline
 func ptrTeam(v any, i int) any {
 	e := v.(*Team)
@@ -85,6 +92,9 @@ func ptrTeam(v any, i int) any {
 	return nil
 }
 
+// edgeTeam marks the i-th edge of a Team as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of TeamMeta.
+//
 //go:noinline
 func edgeTeam(v any, i int) any {
 	e := v.(*Team)
@@ -102,6 +112,10 @@ func edgeTeam(v any, i int) any {
 	return nil
 }
 
+// linkTeam stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Team: all of them, or the first where the
+// edge has one. It is the Link of TeamMeta.
+//
 //go:noinline
 func linkTeam(dst any, es []any) {
 	switch d := dst.(type) {
@@ -223,7 +237,8 @@ func (q *TeamQuery) ForShare(opts ...orm.LockOption) *TeamQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TeamQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -265,7 +280,8 @@ func (q *TeamQuery) First(ctx context.Context) (*Team, error) {
 	return r.(*Team), nil
 }
 
-// Only returns the single matching Team: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Team: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TeamQuery) Only(ctx context.Context) (*Team, error) {
@@ -394,9 +410,9 @@ type TeamCreateBulk struct {
 	n  int
 }
 
-// NewTeamCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTeamCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTeamCreateBulk(ex velox.Executor, bs ...*TeamCreate) *TeamCreateBulk {
 	return &TeamCreateBulk{ex: ex, bs: bs}
 }
@@ -545,9 +561,9 @@ func (e *Team) QueryPlayers(ex velox.Executor) *PlayerQuery {
 	return q
 }
 
-// WithPlayers eager-loads the "players" edge: one more query, whatever the number
-// of rows. A query of Player given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Team.
+// WithPlayers eager-loads the "players" edge: one more query, whatever the
+// number of rows. A query of Player given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Team.
 //
 //go:noinline
 func (q *TeamQuery) WithPlayers(opts ...*PlayerQuery) *TeamQuery {

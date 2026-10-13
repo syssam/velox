@@ -177,9 +177,9 @@ func (f *BytesColumn) Desc() predicate.BlobOrderTerm {
 	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableBytesColumn is a column of Go type []byte: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableBytesColumn string
 
 // EQ matches the rows whose column equals v.
@@ -269,9 +269,9 @@ func (f *NullableBytesColumn) Desc() predicate.BlobOrderTerm {
 	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.
@@ -386,9 +386,9 @@ func (f *NullableStringColumn) Desc() predicate.BlobOrderTerm {
 	return predicate.BlobOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableAddressColumn is a column of Go type types.Address: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableAddressColumn is a column of Go type types.Address: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableAddressColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -420,9 +420,9 @@ func (f *NullableAddressColumn) Clear() predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableStringListColumn is a column of Go type []string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringListColumn is a column of Go type []string: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringListColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -454,9 +454,9 @@ func (f *NullableStringListColumn) Clear() predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableMapColumn is a column of Go type map[string]int: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableMapColumn is a column of Go type map[string]int: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableMapColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -488,9 +488,9 @@ func (f *NullableMapColumn) Clear() predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// AddressColumn is a column of Go type types.Address: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// AddressColumn is a column of Go type types.Address: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type AddressColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -517,9 +517,9 @@ func (f *AddressColumn) SetNillable(v *types.Address) predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
-// NullableIntListColumn is a column of Go type []int: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableIntListColumn is a column of Go type []int: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableIntListColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -551,9 +551,9 @@ func (f *NullableIntListColumn) Clear() predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableFloat64ListColumn is a column of Go type []float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableFloat64ListColumn is a column of Go type []float64: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableFloat64ListColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -585,9 +585,9 @@ func (f *NullableFloat64ListColumn) Clear() predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableAnyColumn is a column of Go type any: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableAnyColumn is a column of Go type any: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableAnyColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -619,9 +619,9 @@ func (f *NullableAnyColumn) Clear() predicate.BlobSetter {
 	return predicate.BlobSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableMapColumn2 is a column of Go type map[string]any: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableMapColumn2 is a column of Go type map[string]any: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableMapColumn2 string
 
 // IsNil matches the rows whose column is NULL.

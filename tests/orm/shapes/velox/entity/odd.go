@@ -43,7 +43,8 @@ type OddEdges struct {
 	loaded [5]bool
 }
 
-// IDOrErr returns the id edge, or an error when it was not loaded (velox.IsNotLoaded).
+// IDOrErr returns the id edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *OddEdges) IDOrErr() ([]*Field, error) {
@@ -53,7 +54,8 @@ func (e *OddEdges) IDOrErr() ([]*Field, error) {
 	return e.ID, nil
 }
 
-// QueryOrErr returns the query edge, or an error when it was not loaded (velox.IsNotLoaded).
+// QueryOrErr returns the query edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *OddEdges) QueryOrErr() ([]*Field, error) {
@@ -63,7 +65,8 @@ func (e *OddEdges) QueryOrErr() ([]*Field, error) {
 	return e.Query, nil
 }
 
-// EdgesOrErr returns the edges edge, or an error when it was not loaded (velox.IsNotLoaded).
+// EdgesOrErr returns the edges edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *OddEdges) EdgesOrErr() ([]*Field, error) {
@@ -73,7 +76,8 @@ func (e *OddEdges) EdgesOrErr() ([]*Field, error) {
 	return e.Edges, nil
 }
 
-// TableOrErr returns the table edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// TableOrErr returns the table edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *OddEdges) TableOrErr() (*Field, error) {
@@ -86,7 +90,8 @@ func (e *OddEdges) TableOrErr() (*Field, error) {
 	return e.Table, nil
 }
 
-// ModelOrErr returns the model edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// ModelOrErr returns the model edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *OddEdges) ModelOrErr() (*Field, error) {
@@ -99,6 +104,9 @@ func (e *OddEdges) ModelOrErr() (*Field, error) {
 	return e.Model, nil
 }
 
+// ptrOdd returns the address of the field of a Odd that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of OddMeta.
+//
 //go:noinline
 func ptrOdd(v any, i int) any {
 	e := v.(*Odd)
@@ -129,6 +137,9 @@ func ptrOdd(v any, i int) any {
 	return nil
 }
 
+// edgeOdd marks the i-th edge of a Odd as loaded and returns the address of the
+// field that holds its neighbors. It is the Edge of OddMeta.
+//
 //go:noinline
 func edgeOdd(v any, i int) any {
 	e := v.(*Odd)
@@ -258,7 +269,8 @@ func (q *OddQuery) ForShare(opts ...orm.LockOption) *OddQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *OddQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -300,7 +312,8 @@ func (q *OddQuery) First(ctx context.Context) (*Odd, error) {
 	return r.(*Odd), nil
 }
 
-// Only returns the single matching Odd: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Odd: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *OddQuery) Only(ctx context.Context) (*Odd, error) {
@@ -429,9 +442,9 @@ type OddCreateBulk struct {
 	n  int
 }
 
-// NewOddCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewOddCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewOddCreateBulk(ex velox.Executor, bs ...*OddCreate) *OddCreateBulk {
 	return &OddCreateBulk{ex: ex, bs: bs}
 }

@@ -32,7 +32,8 @@ type WeightKeyEdges struct {
 	loaded [3]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *WeightKeyEdges) OwnerOrErr() (*LabelKey, error) {
@@ -45,7 +46,8 @@ func (e *WeightKeyEdges) OwnerOrErr() (*LabelKey, error) {
 	return e.Owner, nil
 }
 
-// LabelsOrErr returns the labels edge, or an error when it was not loaded (velox.IsNotLoaded).
+// LabelsOrErr returns the labels edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *WeightKeyEdges) LabelsOrErr() ([]*LabelKey, error) {
@@ -55,7 +57,8 @@ func (e *WeightKeyEdges) LabelsOrErr() ([]*LabelKey, error) {
 	return e.Labels, nil
 }
 
-// PeersOrErr returns the peers edge, or an error when it was not loaded (velox.IsNotLoaded).
+// PeersOrErr returns the peers edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *WeightKeyEdges) PeersOrErr() ([]*WeightKey, error) {
@@ -65,6 +68,10 @@ func (e *WeightKeyEdges) PeersOrErr() ([]*WeightKey, error) {
 	return e.Peers, nil
 }
 
+// ptrWeightKey returns the address of the field of a WeightKey that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// WeightKeyMeta.
+//
 //go:noinline
 func ptrWeightKey(v any, i int) any {
 	e := v.(*WeightKey)
@@ -79,6 +86,10 @@ func ptrWeightKey(v any, i int) any {
 	return nil
 }
 
+// edgeWeightKey marks the i-th edge of a WeightKey as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// WeightKeyMeta.
+//
 //go:noinline
 func edgeWeightKey(v any, i int) any {
 	e := v.(*WeightKey)
@@ -94,6 +105,10 @@ func edgeWeightKey(v any, i int) any {
 	return nil
 }
 
+// linkWeightKey stores the neighbors an eager load read into dst, the address
+// of the field of another entity's edge to WeightKey: all of them, or the first
+// where the edge has one. It is the Link of WeightKeyMeta.
+//
 //go:noinline
 func linkWeightKey(dst any, es []any) {
 	switch d := dst.(type) {
@@ -126,7 +141,8 @@ type WeightKeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// WeightKeyMeta is the runtime description of WeightKey. Use it through its address.
+// WeightKeyMeta is the runtime description of WeightKey. Use it through its
+// address.
 var WeightKeyMeta = orm.Meta{
 	Name:    "WeightKey",
 	Table:   "weight_keys",
@@ -216,7 +232,8 @@ func (q *WeightKeyQuery) ForShare(opts ...orm.LockOption) *WeightKeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *WeightKeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -258,7 +275,8 @@ func (q *WeightKeyQuery) First(ctx context.Context) (*WeightKey, error) {
 	return r.(*WeightKey), nil
 }
 
-// Only returns the single matching WeightKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching WeightKey: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *WeightKeyQuery) Only(ctx context.Context) (*WeightKey, error) {
@@ -387,9 +405,9 @@ type WeightKeyCreateBulk struct {
 	n  int
 }
 
-// NewWeightKeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewWeightKeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewWeightKeyCreateBulk(ex velox.Executor, bs ...*WeightKeyCreate) *WeightKeyCreateBulk {
 	return &WeightKeyCreateBulk{ex: ex, bs: bs}
 }
@@ -442,7 +460,8 @@ func (b *WeightKeyCreateBulk) Exec(ctx context.Context) error {
 // WeightKeyUpdate updates WeightKey rows.
 type WeightKeyUpdate struct{ c orm.MutCore }
 
-// NewWeightKeyUpdate returns a builder that updates the rows its predicates match.
+// NewWeightKeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewWeightKeyUpdate(ex velox.Executor) *WeightKeyUpdate {
 	return &WeightKeyUpdate{c: orm.MutCore{M: &WeightKeyMeta, Ex: ex}}
 }
@@ -508,7 +527,8 @@ func (b *WeightKeyUpdate) SaveOne(ctx context.Context) (*WeightKey, error) {
 // WeightKeyDelete deletes WeightKey rows.
 type WeightKeyDelete struct{ c orm.MutCore }
 
-// NewWeightKeyDelete returns a builder that deletes the rows its predicates match.
+// NewWeightKeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewWeightKeyDelete(ex velox.Executor) *WeightKeyDelete {
 	return &WeightKeyDelete{c: orm.MutCore{M: &WeightKeyMeta, Ex: ex}}
 }

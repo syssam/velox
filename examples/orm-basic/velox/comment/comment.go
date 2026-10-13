@@ -44,7 +44,8 @@ var Post = &EdgePost{}
 // Has matches a Comment that has at least one "post" neighbor.
 func (e *EdgePost) Has() predicate.Comment { return predicate.Comment{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Comment that has a "post" neighbor satisfying the predicates.
+// HasWith matches a Comment that has a "post" neighbor satisfying the
+// predicates.
 func (e *EdgePost) HasWith(ps ...predicate.Post) predicate.Comment {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -77,7 +78,8 @@ func (e *EdgeAuthor) Has() predicate.Comment {
 	return predicate.Comment{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a Comment that has a "author" neighbor satisfying the predicates.
+// HasWith matches a Comment that has a "author" neighbor satisfying the
+// predicates.
 func (e *EdgeAuthor) HasWith(ps ...predicate.User) predicate.Comment {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -96,8 +98,9 @@ func (e *EdgeAuthor) Clear() predicate.CommentSetter {
 	return predicate.CommentSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Comment, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Comment, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

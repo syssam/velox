@@ -26,6 +26,10 @@ type StringsEdges struct {
 	loaded [1]bool
 }
 
+// ptrStrings returns the address of the field of a Strings that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// StringsMeta.
+//
 //go:noinline
 func ptrStrings(v any, i int) any {
 	e := v.(*Strings)
@@ -53,7 +57,8 @@ type StringsConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// StringsMeta is the runtime description of Strings. Use it through its address.
+// StringsMeta is the runtime description of Strings. Use it through its
+// address.
 var StringsMeta = orm.Meta{
 	Name:    "Strings",
 	Table:   "strings",
@@ -138,7 +143,8 @@ func (q *StringsQuery) ForShare(opts ...orm.LockOption) *StringsQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *StringsQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +186,8 @@ func (q *StringsQuery) First(ctx context.Context) (*Strings, error) {
 	return r.(*Strings), nil
 }
 
-// Only returns the single matching Strings: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Strings: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *StringsQuery) Only(ctx context.Context) (*Strings, error) {
@@ -309,9 +316,9 @@ type StringsCreateBulk struct {
 	n  int
 }
 
-// NewStringsCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewStringsCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewStringsCreateBulk(ex velox.Executor, bs ...*StringsCreate) *StringsCreateBulk {
 	return &StringsCreateBulk{ex: ex, bs: bs}
 }
@@ -364,7 +371,8 @@ func (b *StringsCreateBulk) Exec(ctx context.Context) error {
 // StringsUpdate updates Strings rows.
 type StringsUpdate struct{ c orm.MutCore }
 
-// NewStringsUpdate returns a builder that updates the rows its predicates match.
+// NewStringsUpdate returns a builder that updates the rows its predicates
+// match.
 func NewStringsUpdate(ex velox.Executor) *StringsUpdate {
 	return &StringsUpdate{c: orm.MutCore{M: &StringsMeta, Ex: ex}}
 }
@@ -430,7 +438,8 @@ func (b *StringsUpdate) SaveOne(ctx context.Context) (*Strings, error) {
 // StringsDelete deletes Strings rows.
 type StringsDelete struct{ c orm.MutCore }
 
-// NewStringsDelete returns a builder that deletes the rows its predicates match.
+// NewStringsDelete returns a builder that deletes the rows its predicates
+// match.
 func NewStringsDelete(ex velox.Executor) *StringsDelete {
 	return &StringsDelete{c: orm.MutCore{M: &StringsMeta, Ex: ex}}
 }

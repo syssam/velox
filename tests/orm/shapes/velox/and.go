@@ -24,7 +24,8 @@ func (*AndClient) Query(ex velox.Executor) *entity.AndQuery { return entity.NewA
 // Create returns a builder that creates a And.
 func (*AndClient) Create(ex velox.Executor) *entity.AndCreate { return entity.NewAndCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*AndClient) CreateBulk(ex velox.Executor, bs ...*entity.AndCreate) *entity.AndCreateBulk {
 	return entity.NewAndCreateBulk(ex, bs...)
 }

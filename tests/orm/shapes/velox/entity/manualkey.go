@@ -27,6 +27,10 @@ type ManualKeyEdges struct {
 	loaded [1]bool
 }
 
+// ptrManualKey returns the address of the field of a ManualKey that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// ManualKeyMeta.
+//
 //go:noinline
 func ptrManualKey(v any, i int) any {
 	e := v.(*ManualKey)
@@ -54,7 +58,8 @@ type ManualKeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// ManualKeyMeta is the runtime description of ManualKey. Use it through its address.
+// ManualKeyMeta is the runtime description of ManualKey. Use it through its
+// address.
 var ManualKeyMeta = orm.Meta{
 	Name:    "ManualKey",
 	Table:   "manual_keys",
@@ -144,7 +149,8 @@ func (q *ManualKeyQuery) ForShare(opts ...orm.LockOption) *ManualKeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ManualKeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -186,7 +192,8 @@ func (q *ManualKeyQuery) First(ctx context.Context) (*ManualKey, error) {
 	return r.(*ManualKey), nil
 }
 
-// Only returns the single matching ManualKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching ManualKey: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ManualKeyQuery) Only(ctx context.Context) (*ManualKey, error) {
@@ -315,9 +322,9 @@ type ManualKeyCreateBulk struct {
 	n  int
 }
 
-// NewManualKeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewManualKeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewManualKeyCreateBulk(ex velox.Executor, bs ...*ManualKeyCreate) *ManualKeyCreateBulk {
 	return &ManualKeyCreateBulk{ex: ex, bs: bs}
 }
@@ -370,7 +377,8 @@ func (b *ManualKeyCreateBulk) Exec(ctx context.Context) error {
 // ManualKeyUpdate updates ManualKey rows.
 type ManualKeyUpdate struct{ c orm.MutCore }
 
-// NewManualKeyUpdate returns a builder that updates the rows its predicates match.
+// NewManualKeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewManualKeyUpdate(ex velox.Executor) *ManualKeyUpdate {
 	return &ManualKeyUpdate{c: orm.MutCore{M: &ManualKeyMeta, Ex: ex}}
 }
@@ -436,7 +444,8 @@ func (b *ManualKeyUpdate) SaveOne(ctx context.Context) (*ManualKey, error) {
 // ManualKeyDelete deletes ManualKey rows.
 type ManualKeyDelete struct{ c orm.MutCore }
 
-// NewManualKeyDelete returns a builder that deletes the rows its predicates match.
+// NewManualKeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewManualKeyDelete(ex velox.Executor) *ManualKeyDelete {
 	return &ManualKeyDelete{c: orm.MutCore{M: &ManualKeyMeta, Ex: ex}}
 }

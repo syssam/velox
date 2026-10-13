@@ -11,7 +11,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the DefaultShape schema.
+// init stitches the defaults, validators, hooks and policy of the DefaultShape
+// schema.
 func init() {
 	slots.DefaultShape.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.DefaultShape{}.Fields()

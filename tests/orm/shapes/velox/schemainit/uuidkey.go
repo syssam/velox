@@ -9,7 +9,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the UUIDKey schema.
+// init stitches the defaults, validators, hooks and policy of the UUIDKey
+// schema.
 func init() {
 	slots.UUIDKey.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.UUIDKey{}.Fields()

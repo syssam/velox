@@ -24,7 +24,8 @@ func (*FieldClient) Query(ex velox.Executor) *entity.FieldQuery { return entity.
 // Create returns a builder that creates a Field.
 func (*FieldClient) Create(ex velox.Executor) *entity.FieldCreate { return entity.NewFieldCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*FieldClient) CreateBulk(ex velox.Executor, bs ...*entity.FieldCreate) *entity.FieldCreateBulk {
 	return entity.NewFieldCreateBulk(ex, bs...)
 }

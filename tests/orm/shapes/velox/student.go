@@ -28,7 +28,8 @@ func (*StudentClient) Create(ex velox.Executor) *entity.StudentCreate {
 	return entity.NewStudentCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*StudentClient) CreateBulk(ex velox.Executor, bs ...*entity.StudentCreate) *entity.StudentCreateBulk {
 	return entity.NewStudentCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *StudentClient) Get(ctx context.Context, ex velox.Executor, id int) (*en
 	return c.Query(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Student with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Student with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *StudentClient) UpdateByID(ex velox.Executor, id int) *entity.StudentUpdate {
 	return c.Update(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Student with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Student with the given id, or returns
+// velox.ErrNotFound.
 func (c *StudentClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Student(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

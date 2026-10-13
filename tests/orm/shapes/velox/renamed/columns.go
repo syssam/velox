@@ -213,9 +213,9 @@ func (f *StringColumn) Desc() predicate.RenamedOrderTerm {
 	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableIntColumn is a column of Go type int: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableIntColumn is a column of Go type int: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableIntColumn string
 
 // EQ matches the rows whose column equals v.
@@ -310,9 +310,9 @@ func (f *NullableIntColumn) Desc() predicate.RenamedOrderTerm {
 	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// AutoTimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -404,9 +404,9 @@ func (f *AutoTimeColumn) Desc() predicate.RenamedOrderTerm {
 	return predicate.RenamedOrderTerm{Col: string(*f), Desc: true}
 }
 
-// KindEnumColumn is a column of Go type KindEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// KindEnumColumn is a column of Go type KindEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type KindEnumColumn string
 
 // EQ matches the rows whose column equals v.

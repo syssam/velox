@@ -50,7 +50,8 @@ func (e *EdgeAuthor) Has() predicate.Article {
 	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta0}
 }
 
-// HasWith matches a Article that has a "author" neighbor satisfying the predicates.
+// HasWith matches a Article that has a "author" neighbor satisfying the
+// predicates.
 func (e *EdgeAuthor) HasWith(ps ...predicate.Author) predicate.Article {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -83,7 +84,8 @@ func (e *EdgeEditor) Has() predicate.Article {
 	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a Article that has a "editor" neighbor satisfying the predicates.
+// HasWith matches a Article that has a "editor" neighbor satisfying the
+// predicates.
 func (e *EdgeEditor) HasWith(ps ...predicate.Author) predicate.Article {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -116,7 +118,8 @@ func (e *EdgeTopics) Has() predicate.Article {
 	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta2}
 }
 
-// HasWith matches a Article that has a "topics" neighbor satisfying the predicates.
+// HasWith matches a Article that has a "topics" neighbor satisfying the
+// predicates.
 func (e *EdgeTopics) HasWith(ps ...predicate.Topic) predicate.Article {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -150,11 +153,12 @@ func (e *EdgeTopics) Clear() predicate.ArticleSetter {
 
 var meta3 = orm.EdgeMeta{Name: "banned_topics", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
 
-// EdgeBannedTopics is the "banned_topics" edge of Article, from Article to Topic.
+// EdgeBannedTopics is the "banned_topics" edge of Article, from Article to
+// Topic.
 type EdgeBannedTopics struct{}
 
-// BannedTopics is the "banned_topics" edge of Article: conditions on it and changes to it. A
-// query eager-loads it with WithBannedTopics.
+// BannedTopics is the "banned_topics" edge of Article: conditions on it and
+// changes to it. A query eager-loads it with WithBannedTopics.
 var BannedTopics = &EdgeBannedTopics{}
 
 // Has matches a Article that has at least one "banned_topics" neighbor.
@@ -162,7 +166,8 @@ func (e *EdgeBannedTopics) Has() predicate.Article {
 	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta3}
 }
 
-// HasWith matches a Article that has a "banned_topics" neighbor satisfying the predicates.
+// HasWith matches a Article that has a "banned_topics" neighbor satisfying the
+// predicates.
 func (e *EdgeBannedTopics) HasWith(ps ...predicate.Topic) predicate.Article {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -208,7 +213,8 @@ func (e *EdgeNotes) Has() predicate.Article {
 	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta4}
 }
 
-// HasWith matches a Article that has a "notes" neighbor satisfying the predicates.
+// HasWith matches a Article that has a "notes" neighbor satisfying the
+// predicates.
 func (e *EdgeNotes) HasWith(ps ...predicate.Note) predicate.Article {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -240,8 +246,9 @@ func (e *EdgeNotes) Clear() predicate.ArticleSetter {
 	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
-// EdgeMetas returns the descriptions of the edges of Article, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Article, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
 
 // And matches the rows every one of ps matches.

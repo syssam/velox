@@ -29,6 +29,9 @@ type TimeEdges struct {
 	loaded [1]bool
 }
 
+// ptrTime returns the address of the field of a Time that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of TimeMeta.
+//
 //go:noinline
 func ptrTime(v any, i int) any {
 	e := v.(*Time)
@@ -146,7 +149,8 @@ func (q *TimeQuery) ForShare(opts ...orm.LockOption) *TimeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TimeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -188,7 +192,8 @@ func (q *TimeQuery) First(ctx context.Context) (*Time, error) {
 	return r.(*Time), nil
 }
 
-// Only returns the single matching Time: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Time: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TimeQuery) Only(ctx context.Context) (*Time, error) {
@@ -317,9 +322,9 @@ type TimeCreateBulk struct {
 	n  int
 }
 
-// NewTimeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTimeCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTimeCreateBulk(ex velox.Executor, bs ...*TimeCreate) *TimeCreateBulk {
 	return &TimeCreateBulk{ex: ex, bs: bs}
 }

@@ -41,7 +41,8 @@ var Players = &EdgePlayers{}
 // Has matches a Team that has at least one "players" neighbor.
 func (e *EdgePlayers) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Team that has a "players" neighbor satisfying the predicates.
+// HasWith matches a Team that has a "players" neighbor satisfying the
+// predicates.
 func (e *EdgePlayers) HasWith(ps ...predicate.Player) predicate.Team {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -129,7 +130,8 @@ var Rivals = &EdgeRivals{}
 // Has matches a Team that has at least one "rivals" neighbor.
 func (e *EdgeRivals) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta2} }
 
-// HasWith matches a Team that has a "rivals" neighbor satisfying the predicates.
+// HasWith matches a Team that has a "rivals" neighbor satisfying the
+// predicates.
 func (e *EdgeRivals) HasWith(ps ...predicate.Team) predicate.Team {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -173,7 +175,8 @@ var Badges = &EdgeBadges{}
 // Has matches a Team that has at least one "badges" neighbor.
 func (e *EdgeBadges) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta3} }
 
-// HasWith matches a Team that has a "badges" neighbor satisfying the predicates.
+// HasWith matches a Team that has a "badges" neighbor satisfying the
+// predicates.
 func (e *EdgeBadges) HasWith(ps ...predicate.Badge) predicate.Team {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -205,8 +208,9 @@ func (e *EdgeBadges) Clear() predicate.TeamSetter {
 	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta3}
 }
 
-// EdgeMetas returns the descriptions of the edges of Team, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Team, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3} }
 
 // And matches the rows every one of ps matches.

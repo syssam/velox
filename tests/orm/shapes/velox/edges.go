@@ -24,7 +24,8 @@ func (*EdgesClient) Query(ex velox.Executor) *entity.EdgesQuery { return entity.
 // Create returns a builder that creates a Edges.
 func (*EdgesClient) Create(ex velox.Executor) *entity.EdgesCreate { return entity.NewEdgesCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*EdgesClient) CreateBulk(ex velox.Executor, bs ...*entity.EdgesCreate) *entity.EdgesCreateBulk {
 	return entity.NewEdgesCreateBulk(ex, bs...)
 }

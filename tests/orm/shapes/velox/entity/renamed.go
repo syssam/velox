@@ -36,7 +36,8 @@ type RenamedEdges struct {
 	loaded       [2]bool
 }
 
-// FrozenOrErr returns the frozen edge, or an error when it was not loaded (velox.IsNotLoaded).
+// FrozenOrErr returns the frozen edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *RenamedEdges) FrozenOrErr() ([]*Note, error) {
@@ -46,7 +47,8 @@ func (e *RenamedEdges) FrozenOrErr() ([]*Note, error) {
 	return e.Frozen, nil
 }
 
-// FrozenTopicsOrErr returns the frozen_topics edge, or an error when it was not loaded (velox.IsNotLoaded).
+// FrozenTopicsOrErr returns the frozen_topics edge, or an error when it was not
+// loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *RenamedEdges) FrozenTopicsOrErr() ([]*Topic, error) {
@@ -56,6 +58,10 @@ func (e *RenamedEdges) FrozenTopicsOrErr() ([]*Topic, error) {
 	return e.FrozenTopics, nil
 }
 
+// ptrRenamed returns the address of the field of a Renamed that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// RenamedMeta.
+//
 //go:noinline
 func ptrRenamed(v any, i int) any {
 	e := v.(*Renamed)
@@ -78,6 +84,9 @@ func ptrRenamed(v any, i int) any {
 	return nil
 }
 
+// edgeRenamed marks the i-th edge of a Renamed as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of RenamedMeta.
+//
 //go:noinline
 func edgeRenamed(v any, i int) any {
 	e := v.(*Renamed)
@@ -106,7 +115,8 @@ type RenamedConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// RenamedMeta is the runtime description of Renamed. Use it through its address.
+// RenamedMeta is the runtime description of Renamed. Use it through its
+// address.
 var RenamedMeta = orm.Meta{
 	Name:    "Renamed",
 	Table:   "renameds",
@@ -205,7 +215,8 @@ func (q *RenamedQuery) ForShare(opts ...orm.LockOption) *RenamedQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *RenamedQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -247,7 +258,8 @@ func (q *RenamedQuery) First(ctx context.Context) (*Renamed, error) {
 	return r.(*Renamed), nil
 }
 
-// Only returns the single matching Renamed: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Renamed: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *RenamedQuery) Only(ctx context.Context) (*Renamed, error) {
@@ -376,9 +388,9 @@ type RenamedCreateBulk struct {
 	n  int
 }
 
-// NewRenamedCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewRenamedCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewRenamedCreateBulk(ex velox.Executor, bs ...*RenamedCreate) *RenamedCreateBulk {
 	return &RenamedCreateBulk{ex: ex, bs: bs}
 }
@@ -431,7 +443,8 @@ func (b *RenamedCreateBulk) Exec(ctx context.Context) error {
 // RenamedUpdate updates Renamed rows.
 type RenamedUpdate struct{ c orm.MutCore }
 
-// NewRenamedUpdate returns a builder that updates the rows its predicates match.
+// NewRenamedUpdate returns a builder that updates the rows its predicates
+// match.
 func NewRenamedUpdate(ex velox.Executor) *RenamedUpdate {
 	return &RenamedUpdate{c: orm.MutCore{M: &RenamedMeta, Ex: ex}}
 }
@@ -497,7 +510,8 @@ func (b *RenamedUpdate) SaveOne(ctx context.Context) (*Renamed, error) {
 // RenamedDelete deletes Renamed rows.
 type RenamedDelete struct{ c orm.MutCore }
 
-// NewRenamedDelete returns a builder that deletes the rows its predicates match.
+// NewRenamedDelete returns a builder that deletes the rows its predicates
+// match.
 func NewRenamedDelete(ex velox.Executor) *RenamedDelete {
 	return &RenamedDelete{c: orm.MutCore{M: &RenamedMeta, Ex: ex}}
 }
@@ -550,9 +564,9 @@ func (e *Renamed) QueryFrozenTopics(ex velox.Executor) *TopicQuery {
 	return q
 }
 
-// WithFrozenTopics eager-loads the "frozen_topics" edge: one more query, whatever the number
-// of rows. A query of Topic given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Renamed.
+// WithFrozenTopics eager-loads the "frozen_topics" edge: one more query,
+// whatever the number of rows. A query of Topic given to it describes the load:
+// its conditions, order, nested loads and its limit, which applies per Renamed.
 //
 //go:noinline
 func (q *RenamedQuery) WithFrozenTopics(opts ...*TopicQuery) *RenamedQuery {

@@ -35,7 +35,8 @@ type EnrollmentEdges struct {
 	loaded  [2]bool
 }
 
-// StudentOrErr returns the student edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// StudentOrErr returns the student edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *EnrollmentEdges) StudentOrErr() (*Student, error) {
@@ -48,7 +49,8 @@ func (e *EnrollmentEdges) StudentOrErr() (*Student, error) {
 	return e.Student, nil
 }
 
-// CourseOrErr returns the course edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// CourseOrErr returns the course edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *EnrollmentEdges) CourseOrErr() (*Course, error) {
@@ -61,6 +63,10 @@ func (e *EnrollmentEdges) CourseOrErr() (*Course, error) {
 	return e.Course, nil
 }
 
+// ptrEnrollment returns the address of the field of a Enrollment that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// EnrollmentMeta.
+//
 //go:noinline
 func ptrEnrollment(v any, i int) any {
 	e := v.(*Enrollment)
@@ -81,6 +87,10 @@ func ptrEnrollment(v any, i int) any {
 	return nil
 }
 
+// edgeEnrollment marks the i-th edge of a Enrollment as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// EnrollmentMeta.
+//
 //go:noinline
 func edgeEnrollment(v any, i int) any {
 	e := v.(*Enrollment)
@@ -94,6 +104,10 @@ func edgeEnrollment(v any, i int) any {
 	return nil
 }
 
+// linkEnrollment stores the neighbors an eager load read into dst, the address
+// of the field of another entity's edge to Enrollment: all of them, or the
+// first where the edge has one. It is the Link of EnrollmentMeta.
+//
 //go:noinline
 func linkEnrollment(dst any, es []any) {
 	switch d := dst.(type) {
@@ -126,7 +140,8 @@ type EnrollmentConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// EnrollmentMeta is the runtime description of Enrollment. Use it through its address.
+// EnrollmentMeta is the runtime description of Enrollment. Use it through its
+// address.
 var EnrollmentMeta = orm.Meta{
 	Name:    "Enrollment",
 	Table:   "enrollments",
@@ -222,7 +237,8 @@ func (q *EnrollmentQuery) ForShare(opts ...orm.LockOption) *EnrollmentQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *EnrollmentQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -264,7 +280,8 @@ func (q *EnrollmentQuery) First(ctx context.Context) (*Enrollment, error) {
 	return r.(*Enrollment), nil
 }
 
-// Only returns the single matching Enrollment: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Enrollment: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EnrollmentQuery) Only(ctx context.Context) (*Enrollment, error) {
@@ -358,8 +375,8 @@ func (b *EnrollmentCreate) Set(ss ...predicate.EnrollmentSetter) *EnrollmentCrea
 // Fill takes what in gives: a struct whose fields are named like those of
 // Enrollment, such as the input of an endpoint. A nil pointer gives nothing, an
 // optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Enrollment is an error unless listed in
-// skip. A later Set wins.
+// written. A field that names nothing of Enrollment is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *EnrollmentCreate) Fill(in any, skip ...string) *EnrollmentCreate {
@@ -393,9 +410,9 @@ type EnrollmentCreateBulk struct {
 	n  int
 }
 
-// NewEnrollmentCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewEnrollmentCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewEnrollmentCreateBulk(ex velox.Executor, bs ...*EnrollmentCreate) *EnrollmentCreateBulk {
 	return &EnrollmentCreateBulk{ex: ex, bs: bs}
 }
@@ -448,7 +465,8 @@ func (b *EnrollmentCreateBulk) Exec(ctx context.Context) error {
 // EnrollmentUpdate updates Enrollment rows.
 type EnrollmentUpdate struct{ c orm.MutCore }
 
-// NewEnrollmentUpdate returns a builder that updates the rows its predicates match.
+// NewEnrollmentUpdate returns a builder that updates the rows its predicates
+// match.
 func NewEnrollmentUpdate(ex velox.Executor) *EnrollmentUpdate {
 	return &EnrollmentUpdate{c: orm.MutCore{M: &EnrollmentMeta, Ex: ex}}
 }
@@ -514,7 +532,8 @@ func (b *EnrollmentUpdate) SaveOne(ctx context.Context) (*Enrollment, error) {
 // EnrollmentDelete deletes Enrollment rows.
 type EnrollmentDelete struct{ c orm.MutCore }
 
-// NewEnrollmentDelete returns a builder that deletes the rows its predicates match.
+// NewEnrollmentDelete returns a builder that deletes the rows its predicates
+// match.
 func NewEnrollmentDelete(ex velox.Executor) *EnrollmentDelete {
 	return &EnrollmentDelete{c: orm.MutCore{M: &EnrollmentMeta, Ex: ex}}
 }
@@ -544,9 +563,9 @@ func (e *Enrollment) QueryStudent(ex velox.Executor) *StudentQuery {
 	return q
 }
 
-// WithStudent eager-loads the "student" edge: one more query, whatever the number
-// of rows. A query of Student given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Enrollment.
+// WithStudent eager-loads the "student" edge: one more query, whatever the
+// number of rows. A query of Student given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Enrollment.
 //
 //go:noinline
 func (q *EnrollmentQuery) WithStudent(opts ...*StudentQuery) *EnrollmentQuery {

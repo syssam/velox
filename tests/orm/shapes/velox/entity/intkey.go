@@ -26,6 +26,10 @@ type IntKeyEdges struct {
 	loaded [1]bool
 }
 
+// ptrIntKey returns the address of the field of a IntKey that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// IntKeyMeta.
+//
 //go:noinline
 func ptrIntKey(v any, i int) any {
 	e := v.(*IntKey)
@@ -138,7 +142,8 @@ func (q *IntKeyQuery) ForShare(opts ...orm.LockOption) *IntKeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *IntKeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *IntKeyQuery) First(ctx context.Context) (*IntKey, error) {
 	return r.(*IntKey), nil
 }
 
-// Only returns the single matching IntKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching IntKey: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *IntKeyQuery) Only(ctx context.Context) (*IntKey, error) {
@@ -309,9 +315,9 @@ type IntKeyCreateBulk struct {
 	n  int
 }
 
-// NewIntKeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewIntKeyCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewIntKeyCreateBulk(ex velox.Executor, bs ...*IntKeyCreate) *IntKeyCreateBulk {
 	return &IntKeyCreateBulk{ex: ex, bs: bs}
 }

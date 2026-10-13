@@ -208,9 +208,9 @@ func (f *StringColumn) Desc() predicate.AssetOrderTerm {
 	return predicate.AssetOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableBytesColumn is a column of Go type []byte: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableBytesColumn string
 
 // EQ matches the rows whose column equals v.
@@ -300,9 +300,9 @@ func (f *NullableBytesColumn) Desc() predicate.AssetOrderTerm {
 	return predicate.AssetOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableSpecsColumn is a column of Go type types.Specs: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableSpecsColumn is a column of Go type types.Specs: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableSpecsColumn string
 
 // IsNil matches the rows whose column is NULL.

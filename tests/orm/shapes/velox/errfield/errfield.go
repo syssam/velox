@@ -9,8 +9,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Table is the table of ErrField, and ModelName the name of the entity: what the
-// Type method of a query or a mutation of it returns.
+// Table is the table of ErrField, and ModelName the name of the entity: what
+// the Type method of a query or a mutation of it returns.
 const (
 	Table     = "err_fields"
 	ModelName = "ErrField"

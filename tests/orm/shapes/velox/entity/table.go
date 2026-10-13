@@ -26,6 +26,10 @@ type TableEdges struct {
 	loaded [1]bool
 }
 
+// ptrTable returns the address of the field of a Table that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// TableMeta.
+//
 //go:noinline
 func ptrTable(v any, i int) any {
 	e := v.(*Table)
@@ -138,7 +142,8 @@ func (q *TableQuery) ForShare(opts ...orm.LockOption) *TableQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TableQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *TableQuery) First(ctx context.Context) (*Table, error) {
 	return r.(*Table), nil
 }
 
-// Only returns the single matching Table: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Table: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TableQuery) Only(ctx context.Context) (*Table, error) {
@@ -309,9 +315,9 @@ type TableCreateBulk struct {
 	n  int
 }
 
-// NewTableCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTableCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTableCreateBulk(ex velox.Executor, bs ...*TableCreate) *TableCreateBulk {
 	return &TableCreateBulk{ex: ex, bs: bs}
 }

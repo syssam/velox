@@ -207,9 +207,9 @@ func (f *StringColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.
@@ -369,9 +369,9 @@ func (f *BoolColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBoolColumn is a column of Go type bool: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableBoolColumn is a column of Go type bool: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableBoolColumn string
 
 // EQ matches the rows whose column equals v.
@@ -423,9 +423,9 @@ func (f *NullableBoolColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableIntColumn is a column of Go type int: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableIntColumn is a column of Go type int: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableIntColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1318,9 +1318,9 @@ func (f *Uint64Column) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float64Column is a column of Go type float64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float64Column string
 
 // EQ matches the rows whose column equals v.
@@ -1410,9 +1410,9 @@ func (f *Float64Column) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float32Column is a column of Go type float32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float32Column is a column of Go type float32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float32Column string
 
 // EQ matches the rows whose column equals v.
@@ -1502,9 +1502,9 @@ func (f *Float32Column) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableFloat64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableFloat64Column is a column of Go type float64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableFloat64Column string
 
 // EQ matches the rows whose column equals v.
@@ -1599,9 +1599,9 @@ func (f *NullableFloat64Column) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1682,9 +1682,9 @@ func (f *TimeColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableTimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableTimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1774,9 +1774,9 @@ func (f *NullableTimeColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// UUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type UUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1857,9 +1857,9 @@ func (f *UUIDColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2032,9 +2032,9 @@ func (f *BytesColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableBytesColumn is a column of Go type []byte: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableBytesColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2124,9 +2124,9 @@ func (f *NullableBytesColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// KindEnumColumn is a column of Go type KindEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// KindEnumColumn is a column of Go type KindEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type KindEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2191,9 +2191,9 @@ func (f *KindEnumColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableKind2EnumColumn is a column of Go type Kind2Enum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableKind2EnumColumn is a column of Go type Kind2Enum: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableKind2EnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2292,9 +2292,9 @@ func (f *IntListColumn) SetNillable(v *[]int) predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
-// NullableMapColumn is a column of Go type map[string]string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableMapColumn is a column of Go type map[string]string: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableMapColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -2326,9 +2326,9 @@ func (f *NullableMapColumn) Clear() predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableAddressColumn is a column of Go type types.Address: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableAddressColumn is a column of Go type types.Address: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableAddressColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -2360,9 +2360,9 @@ func (f *NullableAddressColumn) Clear() predicate.WideSetter {
 	return predicate.WideSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// LabelColumn is a column of Go type types.Label: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// LabelColumn is a column of Go type types.Label: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type LabelColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2468,9 +2468,9 @@ func (f *LabelColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// WeightColumn is a column of Go type types.Weight: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// WeightColumn is a column of Go type types.Weight: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type WeightColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2558,9 +2558,9 @@ func (f *WeightColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// DecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// DecimalColumn is a column of Go type types.Decimal: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type DecimalColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2670,9 +2670,9 @@ func (f *DecimalColumn) Desc() predicate.WideOrderTerm {
 	return predicate.WideOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TierColumn is a column of Go type types.Tier: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TierColumn is a column of Go type types.Tier: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TierColumn string
 
 // EQ matches the rows whose column equals v.

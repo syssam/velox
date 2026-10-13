@@ -26,6 +26,10 @@ type SchemainitEdges struct {
 	loaded [1]bool
 }
 
+// ptrSchemainit returns the address of the field of a Schemainit that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// SchemainitMeta.
+//
 //go:noinline
 func ptrSchemainit(v any, i int) any {
 	e := v.(*Schemainit)
@@ -53,7 +57,8 @@ type SchemainitConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// SchemainitMeta is the runtime description of Schemainit. Use it through its address.
+// SchemainitMeta is the runtime description of Schemainit. Use it through its
+// address.
 var SchemainitMeta = orm.Meta{
 	Name:    "Schemainit",
 	Table:   "schemainits",
@@ -141,7 +146,8 @@ func (q *SchemainitQuery) ForShare(opts ...orm.LockOption) *SchemainitQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *SchemainitQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *SchemainitQuery) First(ctx context.Context) (*Schemainit, error) {
 	return r.(*Schemainit), nil
 }
 
-// Only returns the single matching Schemainit: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Schemainit: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *SchemainitQuery) Only(ctx context.Context) (*Schemainit, error) {
@@ -277,8 +284,8 @@ func (b *SchemainitCreate) Set(ss ...predicate.SchemainitSetter) *SchemainitCrea
 // Fill takes what in gives: a struct whose fields are named like those of
 // Schemainit, such as the input of an endpoint. A nil pointer gives nothing, an
 // optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of Schemainit is an error unless listed in
-// skip. A later Set wins.
+// written. A field that names nothing of Schemainit is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *SchemainitCreate) Fill(in any, skip ...string) *SchemainitCreate {
@@ -312,9 +319,9 @@ type SchemainitCreateBulk struct {
 	n  int
 }
 
-// NewSchemainitCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewSchemainitCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewSchemainitCreateBulk(ex velox.Executor, bs ...*SchemainitCreate) *SchemainitCreateBulk {
 	return &SchemainitCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +374,8 @@ func (b *SchemainitCreateBulk) Exec(ctx context.Context) error {
 // SchemainitUpdate updates Schemainit rows.
 type SchemainitUpdate struct{ c orm.MutCore }
 
-// NewSchemainitUpdate returns a builder that updates the rows its predicates match.
+// NewSchemainitUpdate returns a builder that updates the rows its predicates
+// match.
 func NewSchemainitUpdate(ex velox.Executor) *SchemainitUpdate {
 	return &SchemainitUpdate{c: orm.MutCore{M: &SchemainitMeta, Ex: ex}}
 }
@@ -433,7 +441,8 @@ func (b *SchemainitUpdate) SaveOne(ctx context.Context) (*Schemainit, error) {
 // SchemainitDelete deletes Schemainit rows.
 type SchemainitDelete struct{ c orm.MutCore }
 
-// NewSchemainitDelete returns a builder that deletes the rows its predicates match.
+// NewSchemainitDelete returns a builder that deletes the rows its predicates
+// match.
 func NewSchemainitDelete(ex velox.Executor) *SchemainitDelete {
 	return &SchemainitDelete{c: orm.MutCore{M: &SchemainitMeta, Ex: ex}}
 }

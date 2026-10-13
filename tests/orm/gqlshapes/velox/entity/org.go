@@ -28,7 +28,8 @@ type OrgEdges struct {
 	loaded [1]bool
 }
 
-// AssetsOrErr returns the assets edge, or an error when it was not loaded (velox.IsNotLoaded).
+// AssetsOrErr returns the assets edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *OrgEdges) AssetsOrErr() ([]*Asset, error) {
@@ -38,6 +39,9 @@ func (e *OrgEdges) AssetsOrErr() ([]*Asset, error) {
 	return e.Assets, nil
 }
 
+// ptrOrg returns the address of the field of a Org that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of OrgMeta.
+//
 //go:noinline
 func ptrOrg(v any, i int) any {
 	e := v.(*Org)
@@ -50,6 +54,9 @@ func ptrOrg(v any, i int) any {
 	return nil
 }
 
+// edgeOrg marks the i-th edge of a Org as loaded and returns the address of the
+// field that holds its neighbors. It is the Edge of OrgMeta.
+//
 //go:noinline
 func edgeOrg(v any, i int) any {
 	e := v.(*Org)
@@ -61,6 +68,10 @@ func edgeOrg(v any, i int) any {
 	return nil
 }
 
+// linkOrg stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Org: all of them, or the first where the
+// edge has one. It is the Link of OrgMeta.
+//
 //go:noinline
 func linkOrg(dst any, es []any) {
 	switch d := dst.(type) {
@@ -180,7 +191,8 @@ func (q *OrgQuery) ForShare(opts ...orm.LockOption) *OrgQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *OrgQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -222,7 +234,8 @@ func (q *OrgQuery) First(ctx context.Context) (*Org, error) {
 	return r.(*Org), nil
 }
 
-// Only returns the single matching Org: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Org: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *OrgQuery) Only(ctx context.Context) (*Org, error) {
@@ -351,9 +364,9 @@ type OrgCreateBulk struct {
 	n  int
 }
 
-// NewOrgCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewOrgCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewOrgCreateBulk(ex velox.Executor, bs ...*OrgCreate) *OrgCreateBulk {
 	return &OrgCreateBulk{ex: ex, bs: bs}
 }

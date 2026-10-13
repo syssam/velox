@@ -36,7 +36,8 @@ type TodoEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *TodoEdges) OwnerOrErr() (*User, error) {
@@ -49,6 +50,9 @@ func (e *TodoEdges) OwnerOrErr() (*User, error) {
 	return e.Owner, nil
 }
 
+// ptrTodo returns the address of the field of a Todo that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of TodoMeta.
+//
 //go:noinline
 func ptrTodo(v any, i int) any {
 	e := v.(*Todo)
@@ -73,6 +77,9 @@ func ptrTodo(v any, i int) any {
 	return nil
 }
 
+// edgeTodo marks the i-th edge of a Todo as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of TodoMeta.
+//
 //go:noinline
 func edgeTodo(v any, i int) any {
 	e := v.(*Todo)
@@ -84,6 +91,10 @@ func edgeTodo(v any, i int) any {
 	return nil
 }
 
+// linkTodo stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Todo: all of them, or the first where the
+// edge has one. It is the Link of TodoMeta.
+//
 //go:noinline
 func linkTodo(dst any, es []any) {
 	switch d := dst.(type) {
@@ -210,7 +221,8 @@ func (q *TodoQuery) ForShare(opts ...orm.LockOption) *TodoQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TodoQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -252,7 +264,8 @@ func (q *TodoQuery) First(ctx context.Context) (*Todo, error) {
 	return r.(*Todo), nil
 }
 
-// Only returns the single matching Todo: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Todo: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TodoQuery) Only(ctx context.Context) (*Todo, error) {
@@ -381,9 +394,9 @@ type TodoCreateBulk struct {
 	n  int
 }
 
-// NewTodoCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTodoCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTodoCreateBulk(ex velox.Executor, bs ...*TodoCreate) *TodoCreateBulk {
 	return &TodoCreateBulk{ex: ex, bs: bs}
 }

@@ -214,9 +214,9 @@ func (f *StringColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.
@@ -331,9 +331,9 @@ func (f *NullableStringColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableStringColumn is a column of Go type string: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RequiredNullableStringColumn string
 
 // EQ matches the rows whose column equals v.
@@ -443,9 +443,9 @@ func (f *RequiredNullableStringColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableIntColumn is a column of Go type int: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableIntColumn is a column of Go type int: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableIntColumn string
 
 // EQ matches the rows whose column equals v.
@@ -540,9 +540,9 @@ func (f *NullableIntColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableIntColumn is a column of Go type int: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableIntColumn is a column of Go type int: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RequiredNullableIntColumn string
 
 // EQ matches the rows whose column equals v.
@@ -724,9 +724,9 @@ func (f *Int8Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableInt8Column is a column of Go type int8: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableInt8Column is a column of Go type int8: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableInt8Column string
 
 // EQ matches the rows whose column equals v.
@@ -913,9 +913,9 @@ func (f *Int16Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableInt16Column is a column of Go type int16: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableInt16Column is a column of Go type int16: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableInt16Column string
 
 // EQ matches the rows whose column equals v.
@@ -1102,9 +1102,9 @@ func (f *Int32Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableInt32Column is a column of Go type int32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableInt32Column is a column of Go type int32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableInt32Column string
 
 // EQ matches the rows whose column equals v.
@@ -1291,9 +1291,9 @@ func (f *Int64Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableInt64Column is a column of Go type int64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableInt64Column is a column of Go type int64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableInt64Column string
 
 // EQ matches the rows whose column equals v.
@@ -1480,9 +1480,9 @@ func (f *UintColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUintColumn is a column of Go type uint: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUintColumn is a column of Go type uint: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUintColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1669,9 +1669,9 @@ func (f *Uint8Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUint8Column is a column of Go type uint8: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUint8Column is a column of Go type uint8: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUint8Column string
 
 // EQ matches the rows whose column equals v.
@@ -1858,9 +1858,9 @@ func (f *Uint16Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUint16Column is a column of Go type uint16: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUint16Column is a column of Go type uint16: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUint16Column string
 
 // EQ matches the rows whose column equals v.
@@ -2047,9 +2047,9 @@ func (f *Uint32Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUint32Column is a column of Go type uint32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUint32Column is a column of Go type uint32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUint32Column string
 
 // EQ matches the rows whose column equals v.
@@ -2236,9 +2236,9 @@ func (f *Uint64Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUint64Column is a column of Go type uint64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUint64Column is a column of Go type uint64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUint64Column string
 
 // EQ matches the rows whose column equals v.
@@ -2333,9 +2333,9 @@ func (f *NullableUint64Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float64Column is a column of Go type float64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float64Column string
 
 // EQ matches the rows whose column equals v.
@@ -2425,9 +2425,9 @@ func (f *Float64Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableFloat64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableFloat64Column is a column of Go type float64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableFloat64Column string
 
 // EQ matches the rows whose column equals v.
@@ -2522,9 +2522,9 @@ func (f *NullableFloat64Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableFloat64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableFloat64Column is a column of Go type float64: its methods
+// build the predicates, assignments and order terms of that column. They have
+// pointer receivers so that the compiler emits each once.
 type RequiredNullableFloat64Column string
 
 // EQ matches the rows whose column equals v.
@@ -2614,9 +2614,9 @@ func (f *RequiredNullableFloat64Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float32Column is a column of Go type float32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float32Column is a column of Go type float32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float32Column string
 
 // EQ matches the rows whose column equals v.
@@ -2706,9 +2706,9 @@ func (f *Float32Column) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableFloat32Column is a column of Go type float32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableFloat32Column is a column of Go type float32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableFloat32Column string
 
 // EQ matches the rows whose column equals v.
@@ -2852,9 +2852,9 @@ func (f *BoolColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBoolColumn is a column of Go type bool: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableBoolColumn is a column of Go type bool: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableBoolColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2906,9 +2906,9 @@ func (f *NullableBoolColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableBoolColumn is a column of Go type bool: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableBoolColumn is a column of Go type bool: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RequiredNullableBoolColumn string
 
 // EQ matches the rows whose column equals v.
@@ -2955,9 +2955,9 @@ func (f *RequiredNullableBoolColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3042,9 +3042,9 @@ func (f *TimeColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableTimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableTimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3134,9 +3134,9 @@ func (f *NullableTimeColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableTimeColumn is a column of Go type time.Time: its methods
+// build the predicates, assignments and order terms of that column. They have
+// pointer receivers so that the compiler emits each once.
 type RequiredNullableTimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3221,9 +3221,9 @@ func (f *RequiredNullableTimeColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// UUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type UUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3308,9 +3308,9 @@ func (f *UUIDColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableUUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableUUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableUUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3400,9 +3400,9 @@ func (f *NullableUUIDColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableUUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableUUIDColumn is a column of Go type uuid.UUID: its methods
+// build the predicates, assignments and order terms of that column. They have
+// pointer receivers so that the compiler emits each once.
 type RequiredNullableUUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3574,9 +3574,9 @@ func (f *BytesColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableBytesColumn is a column of Go type []byte: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableBytesColumn is a column of Go type []byte: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableBytesColumn string
 
 // EQ matches the rows whose column equals v.
@@ -3666,9 +3666,9 @@ func (f *NullableBytesColumn) Desc() predicate.ScalarOrderTerm {
 	return predicate.ScalarOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RequiredNullableBytesColumn is a column of Go type []byte: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RequiredNullableBytesColumn is a column of Go type []byte: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RequiredNullableBytesColumn string
 
 // EQ matches the rows whose column equals v.

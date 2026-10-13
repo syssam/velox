@@ -26,10 +26,12 @@ const (
 	StatusArchived  StatusEnum = "archived"
 )
 
-// DefaultStatus returns the value of the status field of a row created without one.
+// DefaultStatus returns the value of the status field of a row created without
+// one.
 func DefaultStatus() StatusEnum { return StatusDraft }
 
-// StatusValues returns the values of the status field, in the order of the schema.
+// StatusValues returns the values of the status field, in the order of the
+// schema.
 func StatusValues() []StatusEnum {
 	return []StatusEnum{StatusDraft, StatusPublished, StatusArchived}
 }
@@ -70,7 +72,8 @@ var Author = &EdgeAuthor{}
 // Has matches a Post that has at least one "author" neighbor.
 func (e *EdgeAuthor) Has() predicate.Post { return predicate.Post{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Post that has a "author" neighbor satisfying the predicates.
+// HasWith matches a Post that has a "author" neighbor satisfying the
+// predicates.
 func (e *EdgeAuthor) HasWith(ps ...predicate.User) predicate.Post {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -94,14 +97,15 @@ var meta1 = orm.EdgeMeta{Name: "comments", Index: 1, Rel: orm.O2M, Inverse: fals
 // EdgeComments is the "comments" edge of Post, from Post to Comment.
 type EdgeComments struct{}
 
-// Comments is the "comments" edge of Post: conditions on it and changes to it. A
-// query eager-loads it with WithComments.
+// Comments is the "comments" edge of Post: conditions on it and changes to it.
+// A query eager-loads it with WithComments.
 var Comments = &EdgeComments{}
 
 // Has matches a Post that has at least one "comments" neighbor.
 func (e *EdgeComments) Has() predicate.Post { return predicate.Post{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a Post that has a "comments" neighbor satisfying the predicates.
+// HasWith matches a Post that has a "comments" neighbor satisfying the
+// predicates.
 func (e *EdgeComments) HasWith(ps ...predicate.Comment) predicate.Post {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -189,7 +193,8 @@ var Likers = &EdgeLikers{}
 // Has matches a Post that has at least one "likers" neighbor.
 func (e *EdgeLikers) Has() predicate.Post { return predicate.Post{Op: orm.OpHasEdge, Edge: &meta3} }
 
-// HasWith matches a Post that has a "likers" neighbor satisfying the predicates.
+// HasWith matches a Post that has a "likers" neighbor satisfying the
+// predicates.
 func (e *EdgeLikers) HasWith(ps ...predicate.User) predicate.Post {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -265,8 +270,9 @@ func (e *EdgeLikes) Clear() predicate.PostSetter {
 	return predicate.PostSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
-// EdgeMetas returns the descriptions of the edges of Post, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Post, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
 
 // And matches the rows every one of ps matches.

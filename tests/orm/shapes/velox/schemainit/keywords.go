@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the Keywords schema.
+// init stitches the defaults, validators, hooks and policy of the Keywords
+// schema.
 func init() {
 	slots.Keywords.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Keywords{}.Fields()

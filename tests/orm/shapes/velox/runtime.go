@@ -28,7 +28,8 @@ func (*RuntimeClient) Create(ex velox.Executor) *entity.RuntimeCreate {
 	return entity.NewRuntimeCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*RuntimeClient) CreateBulk(ex velox.Executor, bs ...*entity.RuntimeCreate) *entity.RuntimeCreateBulk {
 	return entity.NewRuntimeCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *RuntimeClient) Get(ctx context.Context, ex velox.Executor, id int) (*en
 	return c.Query(ex).Where(predicate.Runtime(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Runtime with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Runtime with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *RuntimeClient) UpdateByID(ex velox.Executor, id int) *entity.RuntimeUpdate {
 	return c.Update(ex).Where(predicate.Runtime(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Runtime with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Runtime with the given id, or returns
+// velox.ErrNotFound.
 func (c *RuntimeClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Runtime(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

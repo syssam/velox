@@ -55,12 +55,14 @@ type TodoWhereInput struct {
 
 var todoEdges = todo.EdgeMetas()
 
-// todoEnums are the values of the enums TodoWhereInput filters on, by their names in the schema.
+// todoEnums are the values of the enums TodoWhereInput filters on, by their
+// names in the schema.
 var todoEnums = [...]map[string]string{
 	{"TODO": "todo", "IN_PROGRESS": "in_progress", "DONE": "done"},
 }
 
-// todoWhere says what each field of TodoWhereInput means, in the order of the struct.
+// todoWhere says what each field of TodoWhereInput means, in the order of the
+// struct.
 var todoWhere = []gqlinput.WhereField{
 	{Col: "title", Op: orm.OpEQ},                         // title
 	{Col: "title", Op: orm.OpNEQ},                        // titleNEQ
@@ -99,7 +101,8 @@ func init() {
 
 // P returns the condition the input describes: none for a nil or an empty
 // input, and one that fails the query for an input that cannot be a condition
-// (an empty input nested in not, and, or; nesting deeper than gqlinput.MaxWhereDepth).
+// (an empty input nested in not, and, or; nesting deeper than
+// gqlinput.MaxWhereDepth).
 //
 //go:noinline
 func (i *TodoWhereInput) P() predicate.Todo { return predicate.Todo(gqlinput.Where(i, todoWhere)) }
@@ -126,7 +129,8 @@ func (i TodoWhereInput) MarshalGQL(w io.Writer) { gqlinput.WriteWhere(w, &i, tod
 func (i *TodoWhereInput) UnmarshalJSON(b []byte) error { return gqlinput.DecodeWhere(i, todoWhere, b) }
 
 // MarshalJSON writes the document of the input: json.Marshal of an input is
-// what UnmarshalJSON reads back as the same conditions. See gqlinput.EncodeWhere.
+// what UnmarshalJSON reads back as the same conditions. See
+// gqlinput.EncodeWhere.
 //
 //go:noinline
 func (i TodoWhereInput) MarshalJSON() ([]byte, error) { return gqlinput.EncodeWhere(&i, todoWhere) }

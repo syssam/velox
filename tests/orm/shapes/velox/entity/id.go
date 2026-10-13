@@ -26,6 +26,9 @@ type IdEdges struct {
 	loaded [1]bool
 }
 
+// ptrId returns the address of the field of a Id that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of IdMeta.
+//
 //go:noinline
 func ptrId(v any, i int) any {
 	e := v.(*Id)
@@ -136,7 +139,8 @@ func (q *IdQuery) ForShare(opts ...orm.LockOption) *IdQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *IdQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -178,7 +182,8 @@ func (q *IdQuery) First(ctx context.Context) (*Id, error) {
 	return r.(*Id), nil
 }
 
-// Only returns the single matching Id: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Id: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *IdQuery) Only(ctx context.Context) (*Id, error) {
@@ -305,9 +310,9 @@ type IdCreateBulk struct {
 	n  int
 }
 
-// NewIdCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewIdCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewIdCreateBulk(ex velox.Executor, bs ...*IdCreate) *IdCreateBulk {
 	return &IdCreateBulk{ex: ex, bs: bs}
 }

@@ -9,8 +9,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Table is the table of Keywords, and ModelName the name of the entity: what the
-// Type method of a query or a mutation of it returns.
+// Table is the table of Keywords, and ModelName the name of the entity: what
+// the Type method of a query or a mutation of it returns.
 const (
 	Table     = "select"
 	ModelName = "Keywords"
@@ -119,8 +119,8 @@ var meta0 = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: false,
 // EdgeFields is the "fields" edge of Keywords, from Keywords to Field.
 type EdgeFields struct{}
 
-// Fields is the "fields" edge of Keywords: conditions on it and changes to it. A
-// query eager-loads it with WithFields.
+// Fields is the "fields" edge of Keywords: conditions on it and changes to it.
+// A query eager-loads it with WithFields.
 var Fields = &EdgeFields{}
 
 // Has matches a Keywords that has at least one "fields" neighbor.
@@ -128,7 +128,8 @@ func (e *EdgeFields) Has() predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta0}
 }
 
-// HasWith matches a Keywords that has a "fields" neighbor satisfying the predicates.
+// HasWith matches a Keywords that has a "fields" neighbor satisfying the
+// predicates.
 func (e *EdgeFields) HasWith(ps ...predicate.Field) predicate.Keywords {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -165,8 +166,8 @@ var meta1 = orm.EdgeMeta{Name: "columns", Index: 1, Rel: orm.M2O, Inverse: false
 // EdgeColumns is the "columns" edge of Keywords, from Keywords to Field.
 type EdgeColumns struct{}
 
-// Columns is the "columns" edge of Keywords: conditions on it and changes to it. A
-// query eager-loads it with WithColumns.
+// Columns is the "columns" edge of Keywords: conditions on it and changes to
+// it. A query eager-loads it with WithColumns.
 var Columns = &EdgeColumns{}
 
 // Has matches a Keywords that has at least one "columns" neighbor.
@@ -174,7 +175,8 @@ func (e *EdgeColumns) Has() predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a Keywords that has a "columns" neighbor satisfying the predicates.
+// HasWith matches a Keywords that has a "columns" neighbor satisfying the
+// predicates.
 func (e *EdgeColumns) HasWith(ps ...predicate.Field) predicate.Keywords {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -198,8 +200,8 @@ var meta2 = orm.EdgeMeta{Name: "loaded", Index: 2, Rel: orm.O2M, Inverse: false,
 // EdgeLoaded is the "loaded" edge of Keywords, from Keywords to Field.
 type EdgeLoaded struct{}
 
-// Loaded is the "loaded" edge of Keywords: conditions on it and changes to it. A
-// query eager-loads it with WithLoaded.
+// Loaded is the "loaded" edge of Keywords: conditions on it and changes to it.
+// A query eager-loads it with WithLoaded.
 var Loaded = &EdgeLoaded{}
 
 // Has matches a Keywords that has at least one "loaded" neighbor.
@@ -207,7 +209,8 @@ func (e *EdgeLoaded) Has() predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta2}
 }
 
-// HasWith matches a Keywords that has a "loaded" neighbor satisfying the predicates.
+// HasWith matches a Keywords that has a "loaded" neighbor satisfying the
+// predicates.
 func (e *EdgeLoaded) HasWith(ps ...predicate.Field) predicate.Keywords {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -253,7 +256,8 @@ func (e *EdgeWith) Has() predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta3}
 }
 
-// HasWith matches a Keywords that has a "with" neighbor satisfying the predicates.
+// HasWith matches a Keywords that has a "with" neighbor satisfying the
+// predicates.
 func (e *EdgeWith) HasWith(ps ...predicate.Field) predicate.Keywords {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -299,7 +303,8 @@ func (e *EdgeAll) Has() predicate.Keywords {
 	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta4}
 }
 
-// HasWith matches a Keywords that has a "all" neighbor satisfying the predicates.
+// HasWith matches a Keywords that has a "all" neighbor satisfying the
+// predicates.
 func (e *EdgeAll) HasWith(ps ...predicate.Field) predicate.Keywords {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -318,8 +323,9 @@ func (e *EdgeAll) Clear() predicate.KeywordsSetter {
 	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta4}
 }
 
-// EdgeMetas returns the descriptions of the edges of Keywords, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Keywords, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
 
 // And matches the rows every one of ps matches.

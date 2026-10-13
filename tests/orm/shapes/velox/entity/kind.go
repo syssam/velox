@@ -30,7 +30,8 @@ type KindEdges struct {
 	loaded [1]bool
 }
 
-// ShapesOrErr returns the shapes edge, or an error when it was not loaded (velox.IsNotLoaded).
+// ShapesOrErr returns the shapes edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *KindEdges) ShapesOrErr() ([]*KindShape, error) {
@@ -40,6 +41,9 @@ func (e *KindEdges) ShapesOrErr() ([]*KindShape, error) {
 	return e.Shapes, nil
 }
 
+// ptrKind returns the address of the field of a Kind that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of KindMeta.
+//
 //go:noinline
 func ptrKind(v any, i int) any {
 	e := v.(*Kind)
@@ -54,6 +58,9 @@ func ptrKind(v any, i int) any {
 	return nil
 }
 
+// edgeKind marks the i-th edge of a Kind as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of KindMeta.
+//
 //go:noinline
 func edgeKind(v any, i int) any {
 	e := v.(*Kind)
@@ -65,6 +72,10 @@ func edgeKind(v any, i int) any {
 	return nil
 }
 
+// linkKind stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Kind: all of them, or the first where the
+// edge has one. It is the Link of KindMeta.
+//
 //go:noinline
 func linkKind(dst any, es []any) {
 	switch d := dst.(type) {
@@ -187,7 +198,8 @@ func (q *KindQuery) ForShare(opts ...orm.LockOption) *KindQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *KindQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -229,7 +241,8 @@ func (q *KindQuery) First(ctx context.Context) (*Kind, error) {
 	return r.(*Kind), nil
 }
 
-// Only returns the single matching Kind: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Kind: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *KindQuery) Only(ctx context.Context) (*Kind, error) {
@@ -358,9 +371,9 @@ type KindCreateBulk struct {
 	n  int
 }
 
-// NewKindCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewKindCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewKindCreateBulk(ex velox.Executor, bs ...*KindCreate) *KindCreateBulk {
 	return &KindCreateBulk{ex: ex, bs: bs}
 }

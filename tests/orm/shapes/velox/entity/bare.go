@@ -25,6 +25,9 @@ type BareEdges struct {
 	loaded [1]bool
 }
 
+// ptrBare returns the address of the field of a Bare that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of BareMeta.
+//
 //go:noinline
 func ptrBare(v any, i int) any {
 	e := v.(*Bare)
@@ -134,7 +137,8 @@ func (q *BareQuery) ForShare(opts ...orm.LockOption) *BareQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *BareQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -176,7 +180,8 @@ func (q *BareQuery) First(ctx context.Context) (*Bare, error) {
 	return r.(*Bare), nil
 }
 
-// Only returns the single matching Bare: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Bare: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *BareQuery) Only(ctx context.Context) (*Bare, error) {
@@ -305,9 +310,9 @@ type BareCreateBulk struct {
 	n  int
 }
 
-// NewBareCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewBareCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewBareCreateBulk(ex velox.Executor, bs ...*BareCreate) *BareCreateBulk {
 	return &BareCreateBulk{ex: ex, bs: bs}
 }

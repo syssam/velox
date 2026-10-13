@@ -94,8 +94,8 @@ func (e *User) Token(ctx context.Context) (*Token, error) {
 	return v, velox.MaskNotFound(err)
 }
 
-// LikedPosts resolves the "liked_posts" edge for a GraphQL engine: one page of the
-// neighbors, queried on the handle of the context (velox.WithExecutor).
+// LikedPosts resolves the "liked_posts" edge for a GraphQL engine: one page of
+// the neighbors, queried on the handle of the context (velox.WithExecutor).
 // where is a *filter.PostWhereInput, or nil.
 //
 //go:noinline

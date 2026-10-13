@@ -41,7 +41,8 @@ var Teams = &EdgeTeams{}
 // Has matches a Badge that has at least one "teams" neighbor.
 func (e *EdgeTeams) Has() predicate.Badge { return predicate.Badge{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Badge that has a "teams" neighbor satisfying the predicates.
+// HasWith matches a Badge that has a "teams" neighbor satisfying the
+// predicates.
 func (e *EdgeTeams) HasWith(ps ...predicate.Team) predicate.Badge {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -85,7 +86,8 @@ var Holders = &EdgeHolders{}
 // Has matches a Badge that has at least one "holders" neighbor.
 func (e *EdgeHolders) Has() predicate.Badge { return predicate.Badge{Op: orm.OpHasEdge, Edge: &meta1} }
 
-// HasWith matches a Badge that has a "holders" neighbor satisfying the predicates.
+// HasWith matches a Badge that has a "holders" neighbor satisfying the
+// predicates.
 func (e *EdgeHolders) HasWith(ps ...predicate.Person) predicate.Badge {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -117,8 +119,9 @@ func (e *EdgeHolders) Clear() predicate.BadgeSetter {
 	return predicate.BadgeSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Badge, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Badge, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

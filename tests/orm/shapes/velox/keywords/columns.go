@@ -99,9 +99,9 @@ func (f *IntColumn2) Desc() predicate.KeywordsOrderTerm {
 	return predicate.KeywordsOrderTerm{Col: string(*f), Desc: true}
 }
 
-// StringColumn2 is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// StringColumn2 is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type StringColumn2 string
 
 // EQ matches the rows whose column equals v.
@@ -211,9 +211,9 @@ func (f *StringColumn2) Desc() predicate.KeywordsOrderTerm {
 	return predicate.KeywordsOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.

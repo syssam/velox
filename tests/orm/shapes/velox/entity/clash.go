@@ -46,7 +46,8 @@ type ClashEdges struct {
 	loaded          [2]bool
 }
 
-// OthersOrErr returns the others edge, or an error when it was not loaded (velox.IsNotLoaded).
+// OthersOrErr returns the others edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *ClashEdges) OthersOrErr() ([]*Field, error) {
@@ -56,7 +57,8 @@ func (e *ClashEdges) OthersOrErr() ([]*Field, error) {
 	return e.Others, nil
 }
 
-// OthersOrErrEdgeOrErr returns the others_or_err edge, or an error when it was not loaded (velox.IsNotLoaded).
+// OthersOrErrEdgeOrErr returns the others_or_err edge, or an error when it was
+// not loaded (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *ClashEdges) OthersOrErrEdgeOrErr() ([]*Field, error) {
@@ -66,6 +68,10 @@ func (e *ClashEdges) OthersOrErrEdgeOrErr() ([]*Field, error) {
 	return e.OthersOrErrEdge, nil
 }
 
+// ptrClash returns the address of the field of a Clash that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// ClashMeta.
+//
 //go:noinline
 func ptrClash(v any, i int) any {
 	e := v.(*Clash)
@@ -108,6 +114,9 @@ func ptrClash(v any, i int) any {
 	return nil
 }
 
+// edgeClash marks the i-th edge of a Clash as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of ClashMeta.
+//
 //go:noinline
 func edgeClash(v any, i int) any {
 	e := v.(*Clash)
@@ -239,7 +248,8 @@ func (q *ClashQuery) ForShare(opts ...orm.LockOption) *ClashQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ClashQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -281,7 +291,8 @@ func (q *ClashQuery) First(ctx context.Context) (*Clash, error) {
 	return r.(*Clash), nil
 }
 
-// Only returns the single matching Clash: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Clash: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ClashQuery) Only(ctx context.Context) (*Clash, error) {
@@ -410,9 +421,9 @@ type ClashCreateBulk struct {
 	n  int
 }
 
-// NewClashCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewClashCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewClashCreateBulk(ex velox.Executor, bs ...*ClashCreate) *ClashCreateBulk {
 	return &ClashCreateBulk{ex: ex, bs: bs}
 }
@@ -584,9 +595,9 @@ func (e *Clash) QueryOthersOrErrEdge(ex velox.Executor) *FieldQuery {
 	return q
 }
 
-// WithOthersOrErrEdge eager-loads the "others_or_err" edge: one more query, whatever the number
-// of rows. A query of Field given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Clash.
+// WithOthersOrErrEdge eager-loads the "others_or_err" edge: one more query,
+// whatever the number of rows. A query of Field given to it describes the load:
+// its conditions, order, nested loads and its limit, which applies per Clash.
 //
 //go:noinline
 func (q *ClashQuery) WithOthersOrErrEdge(opts ...*FieldQuery) *ClashQuery {

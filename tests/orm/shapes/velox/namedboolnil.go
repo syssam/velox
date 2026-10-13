@@ -17,8 +17,8 @@ var NamedBoolNil NamedBoolNilClient
 // NamedBoolNilClient is the type of NamedBoolNil.
 type NamedBoolNilClient struct{}
 
-// Query returns a query of every NamedBoolNil, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every NamedBoolNil, to run on ex: a database handle
+// or a transaction.
 func (*NamedBoolNilClient) Query(ex velox.Executor) *entity.NamedBoolNilQuery {
 	return entity.NewNamedBoolNilQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*NamedBoolNilClient) Create(ex velox.Executor) *entity.NamedBoolNilCreate 
 	return entity.NewNamedBoolNilCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*NamedBoolNilClient) CreateBulk(ex velox.Executor, bs ...*entity.NamedBoolNilCreate) *entity.NamedBoolNilCreateBulk {
 	return entity.NewNamedBoolNilCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the NamedBoolNil rows its conditions match.
+// Update returns a builder that updates the NamedBoolNil rows its conditions
+// match.
 func (*NamedBoolNilClient) Update(ex velox.Executor) *entity.NamedBoolNilUpdate {
 	return entity.NewNamedBoolNilUpdate(ex)
 }
 
-// Delete returns a builder that deletes the NamedBoolNil rows its conditions match.
+// Delete returns a builder that deletes the NamedBoolNil rows its conditions
+// match.
 func (*NamedBoolNilClient) Delete(ex velox.Executor) *entity.NamedBoolNilDelete {
 	return entity.NewNamedBoolNilDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *NamedBoolNilClient) Get(ctx context.Context, ex velox.Executor, id int)
 	return c.Query(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the NamedBoolNil with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the NamedBoolNil with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *NamedBoolNilClient) UpdateByID(ex velox.Executor, id int) *entity.NamedBoolNilUpdate {
 	return c.Update(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the NamedBoolNil with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the NamedBoolNil with the given id, or returns
+// velox.ErrNotFound.
 func (c *NamedBoolNilClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.NamedBoolNil(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

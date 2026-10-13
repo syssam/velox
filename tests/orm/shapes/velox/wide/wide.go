@@ -40,7 +40,8 @@ const (
 	Kind2Y Kind2Enum = "y"
 )
 
-// Kind2Values returns the values of the kind2 field, in the order of the schema.
+// Kind2Values returns the values of the kind2 field, in the order of the
+// schema.
 func Kind2Values() []Kind2Enum {
 	return []Kind2Enum{Kind2X, Kind2Y}
 }

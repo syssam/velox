@@ -38,6 +38,10 @@ type ErrFieldEdges struct {
 	loaded [1]bool
 }
 
+// ptrErrField returns the address of the field of a ErrField that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// ErrFieldMeta.
+//
 //go:noinline
 func ptrErrField(v any, i int) any {
 	e := v.(*ErrField)
@@ -87,7 +91,8 @@ type ErrFieldConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// ErrFieldMeta is the runtime description of ErrField. Use it through its address.
+// ErrFieldMeta is the runtime description of ErrField. Use it through its
+// address.
 var ErrFieldMeta = orm.Meta{
 	Name:    "ErrField",
 	Table:   "err_fields",
@@ -185,7 +190,8 @@ func (q *ErrFieldQuery) ForShare(opts ...orm.LockOption) *ErrFieldQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *ErrFieldQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -227,7 +233,8 @@ func (q *ErrFieldQuery) First(ctx context.Context) (*ErrField, error) {
 	return r.(*ErrField), nil
 }
 
-// Only returns the single matching ErrField: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching ErrField: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *ErrFieldQuery) Only(ctx context.Context) (*ErrField, error) {
@@ -356,9 +363,9 @@ type ErrFieldCreateBulk struct {
 	n  int
 }
 
-// NewErrFieldCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewErrFieldCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewErrFieldCreateBulk(ex velox.Executor, bs ...*ErrFieldCreate) *ErrFieldCreateBulk {
 	return &ErrFieldCreateBulk{ex: ex, bs: bs}
 }
@@ -411,7 +418,8 @@ func (b *ErrFieldCreateBulk) Exec(ctx context.Context) error {
 // ErrFieldUpdate updates ErrField rows.
 type ErrFieldUpdate struct{ c orm.MutCore }
 
-// NewErrFieldUpdate returns a builder that updates the rows its predicates match.
+// NewErrFieldUpdate returns a builder that updates the rows its predicates
+// match.
 func NewErrFieldUpdate(ex velox.Executor) *ErrFieldUpdate {
 	return &ErrFieldUpdate{c: orm.MutCore{M: &ErrFieldMeta, Ex: ex}}
 }
@@ -477,7 +485,8 @@ func (b *ErrFieldUpdate) SaveOne(ctx context.Context) (*ErrField, error) {
 // ErrFieldDelete deletes ErrField rows.
 type ErrFieldDelete struct{ c orm.MutCore }
 
-// NewErrFieldDelete returns a builder that deletes the rows its predicates match.
+// NewErrFieldDelete returns a builder that deletes the rows its predicates
+// match.
 func NewErrFieldDelete(ex velox.Executor) *ErrFieldDelete {
 	return &ErrFieldDelete{c: orm.MutCore{M: &ErrFieldMeta, Ex: ex}}
 }

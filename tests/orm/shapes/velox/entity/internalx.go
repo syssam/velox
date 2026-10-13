@@ -26,6 +26,10 @@ type InternalEdges struct {
 	loaded [1]bool
 }
 
+// ptrInternal returns the address of the field of a Internal that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// InternalMeta.
+//
 //go:noinline
 func ptrInternal(v any, i int) any {
 	e := v.(*Internal)
@@ -53,7 +57,8 @@ type InternalConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// InternalMeta is the runtime description of Internal. Use it through its address.
+// InternalMeta is the runtime description of Internal. Use it through its
+// address.
 var InternalMeta = orm.Meta{
 	Name:    "Internal",
 	Table:   "internals",
@@ -138,7 +143,8 @@ func (q *InternalQuery) ForShare(opts ...orm.LockOption) *InternalQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *InternalQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +186,8 @@ func (q *InternalQuery) First(ctx context.Context) (*Internal, error) {
 	return r.(*Internal), nil
 }
 
-// Only returns the single matching Internal: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Internal: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *InternalQuery) Only(ctx context.Context) (*Internal, error) {
@@ -309,9 +316,9 @@ type InternalCreateBulk struct {
 	n  int
 }
 
-// NewInternalCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewInternalCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewInternalCreateBulk(ex velox.Executor, bs ...*InternalCreate) *InternalCreateBulk {
 	return &InternalCreateBulk{ex: ex, bs: bs}
 }
@@ -364,7 +371,8 @@ func (b *InternalCreateBulk) Exec(ctx context.Context) error {
 // InternalUpdate updates Internal rows.
 type InternalUpdate struct{ c orm.MutCore }
 
-// NewInternalUpdate returns a builder that updates the rows its predicates match.
+// NewInternalUpdate returns a builder that updates the rows its predicates
+// match.
 func NewInternalUpdate(ex velox.Executor) *InternalUpdate {
 	return &InternalUpdate{c: orm.MutCore{M: &InternalMeta, Ex: ex}}
 }
@@ -430,7 +438,8 @@ func (b *InternalUpdate) SaveOne(ctx context.Context) (*Internal, error) {
 // InternalDelete deletes Internal rows.
 type InternalDelete struct{ c orm.MutCore }
 
-// NewInternalDelete returns a builder that deletes the rows its predicates match.
+// NewInternalDelete returns a builder that deletes the rows its predicates
+// match.
 func NewInternalDelete(ex velox.Executor) *InternalDelete {
 	return &InternalDelete{c: orm.MutCore{M: &InternalMeta, Ex: ex}}
 }

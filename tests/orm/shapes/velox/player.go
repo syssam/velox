@@ -26,7 +26,8 @@ func (*PlayerClient) Create(ex velox.Executor) *entity.PlayerCreate {
 	return entity.NewPlayerCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*PlayerClient) CreateBulk(ex velox.Executor, bs ...*entity.PlayerCreate) *entity.PlayerCreateBulk {
 	return entity.NewPlayerCreateBulk(ex, bs...)
 }
@@ -46,13 +47,14 @@ func (c *PlayerClient) Get(ctx context.Context, ex velox.Executor, id string) (*
 	return c.Query(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Player with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Player with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *PlayerClient) UpdateByID(ex velox.Executor, id string) *entity.PlayerUpdate {
 	return c.Update(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Player with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Player with the given id, or returns
+// velox.ErrNotFound.
 func (c *PlayerClient) DeleteByID(ctx context.Context, ex velox.Executor, id string) error {
 	n, err := c.Delete(ex).Where(predicate.Player(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

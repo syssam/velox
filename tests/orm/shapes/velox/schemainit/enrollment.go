@@ -11,7 +11,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the Enrollment schema.
+// init stitches the defaults, validators, hooks and policy of the Enrollment
+// schema.
 func init() {
 	slots.Enrollment.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Enrollment{}.Fields()

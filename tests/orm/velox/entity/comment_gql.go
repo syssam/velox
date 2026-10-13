@@ -17,8 +17,8 @@ import (
 //go:noinline
 func (*Comment) IsNode() {}
 
-// commentOrderColumns maps each field a list of Comment can be ordered by, as the
-// schema names it (the constants of comment.OrderField), to its column.
+// commentOrderColumns maps each field a list of Comment can be ordered by, as
+// the schema names it (the constants of comment.OrderField), to its column.
 var commentOrderColumns = map[string]string{
 	"CREATED_AT": "created_at",
 	"UPDATED_AT": "updated_at",
@@ -55,9 +55,9 @@ func (e *Comment) Post(ctx context.Context) (*Post, error) {
 	return v, velox.MaskNotFound(err)
 }
 
-// Author resolves the "author" edge for a GraphQL engine: the neighbor the query
-// loaded, or else a query on the handle of the context (velox.WithExecutor).
-// An edge without a neighbor is nil, not an error.
+// Author resolves the "author" edge for a GraphQL engine: the neighbor the
+// query loaded, or else a query on the handle of the context
+// (velox.WithExecutor). An edge without a neighbor is nil, not an error.
 //
 //go:noinline
 func (e *Comment) Author(ctx context.Context) (*User, error) {

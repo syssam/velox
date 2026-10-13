@@ -29,7 +29,8 @@ type LockerEdges struct {
 	loaded [1]bool
 }
 
-// HolderOrErr returns the holder edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// HolderOrErr returns the holder edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *LockerEdges) HolderOrErr() (*Author, error) {
@@ -42,6 +43,10 @@ func (e *LockerEdges) HolderOrErr() (*Author, error) {
 	return e.Holder, nil
 }
 
+// ptrLocker returns the address of the field of a Locker that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// LockerMeta.
+//
 //go:noinline
 func ptrLocker(v any, i int) any {
 	e := v.(*Locker)
@@ -56,6 +61,9 @@ func ptrLocker(v any, i int) any {
 	return nil
 }
 
+// edgeLocker marks the i-th edge of a Locker as loaded and returns the address
+// of the field that holds its neighbors. It is the Edge of LockerMeta.
+//
 //go:noinline
 func edgeLocker(v any, i int) any {
 	e := v.(*Locker)
@@ -67,6 +75,10 @@ func edgeLocker(v any, i int) any {
 	return nil
 }
 
+// linkLocker stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Locker: all of them, or the first where
+// the edge has one. It is the Link of LockerMeta.
+//
 //go:noinline
 func linkLocker(dst any, es []any) {
 	switch d := dst.(type) {
@@ -187,7 +199,8 @@ func (q *LockerQuery) ForShare(opts ...orm.LockOption) *LockerQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *LockerQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -229,7 +242,8 @@ func (q *LockerQuery) First(ctx context.Context) (*Locker, error) {
 	return r.(*Locker), nil
 }
 
-// Only returns the single matching Locker: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Locker: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LockerQuery) Only(ctx context.Context) (*Locker, error) {
@@ -358,9 +372,9 @@ type LockerCreateBulk struct {
 	n  int
 }
 
-// NewLockerCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewLockerCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewLockerCreateBulk(ex velox.Executor, bs ...*LockerCreate) *LockerCreateBulk {
 	return &LockerCreateBulk{ex: ex, bs: bs}
 }

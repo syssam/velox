@@ -32,12 +32,14 @@ type PostWhereInput struct {
 	StatusNotIn   []post.StatusEnum `json:"statusNotIn,omitempty"`
 }
 
-// postEnums are the values of the enums PostWhereInput filters on, by their names in the schema.
+// postEnums are the values of the enums PostWhereInput filters on, by their
+// names in the schema.
 var postEnums = [...]map[string]string{
 	{"DRAFT": "draft", "PUBLISHED": "published", "ARCHIVED": "archived"},
 }
 
-// postWhere says what each field of PostWhereInput means, in the order of the struct.
+// postWhere says what each field of PostWhereInput means, in the order of the
+// struct.
 var postWhere = []gqlinput.WhereField{
 	{Col: "title", Op: orm.OpEQ},                         // title
 	{Col: "title", Op: orm.OpNEQ},                        // titleNEQ
@@ -52,7 +54,8 @@ var postWhere = []gqlinput.WhereField{
 
 // P returns the condition the input describes: none for a nil or an empty
 // input, and one that fails the query for an input that cannot be a condition
-// (an empty input nested in not, and, or; nesting deeper than gqlinput.MaxWhereDepth).
+// (an empty input nested in not, and, or; nesting deeper than
+// gqlinput.MaxWhereDepth).
 //
 //go:noinline
 func (i *PostWhereInput) P() predicate.Post { return predicate.Post(gqlinput.Where(i, postWhere)) }
@@ -79,7 +82,8 @@ func (i PostWhereInput) MarshalGQL(w io.Writer) { gqlinput.WriteWhere(w, &i, pos
 func (i *PostWhereInput) UnmarshalJSON(b []byte) error { return gqlinput.DecodeWhere(i, postWhere, b) }
 
 // MarshalJSON writes the document of the input: json.Marshal of an input is
-// what UnmarshalJSON reads back as the same conditions. See gqlinput.EncodeWhere.
+// what UnmarshalJSON reads back as the same conditions. See
+// gqlinput.EncodeWhere.
 //
 //go:noinline
 func (i PostWhereInput) MarshalJSON() ([]byte, error) { return gqlinput.EncodeWhere(&i, postWhere) }

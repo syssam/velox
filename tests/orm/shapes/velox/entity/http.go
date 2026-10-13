@@ -26,6 +26,9 @@ type HttpEdges struct {
 	loaded [1]bool
 }
 
+// ptrHttp returns the address of the field of a Http that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of HttpMeta.
+//
 //go:noinline
 func ptrHttp(v any, i int) any {
 	e := v.(*Http)
@@ -138,7 +141,8 @@ func (q *HttpQuery) ForShare(opts ...orm.LockOption) *HttpQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *HttpQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *HttpQuery) First(ctx context.Context) (*Http, error) {
 	return r.(*Http), nil
 }
 
-// Only returns the single matching Http: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Http: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *HttpQuery) Only(ctx context.Context) (*Http, error) {
@@ -309,9 +314,9 @@ type HttpCreateBulk struct {
 	n  int
 }
 
-// NewHttpCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewHttpCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewHttpCreateBulk(ex velox.Executor, bs ...*HttpCreate) *HttpCreateBulk {
 	return &HttpCreateBulk{ex: ex, bs: bs}
 }

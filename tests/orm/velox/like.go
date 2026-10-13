@@ -24,7 +24,8 @@ func (*LikeClient) Query(ex velox.Executor) *entity.LikeQuery { return entity.Ne
 // Create returns a builder that creates a Like.
 func (*LikeClient) Create(ex velox.Executor) *entity.LikeCreate { return entity.NewLikeCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*LikeClient) CreateBulk(ex velox.Executor, bs ...*entity.LikeCreate) *entity.LikeCreateBulk {
 	return entity.NewLikeCreateBulk(ex, bs...)
 }

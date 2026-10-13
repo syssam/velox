@@ -24,7 +24,8 @@ func (*TodoClient) Query(ex velox.Executor) *entity.TodoQuery { return entity.Ne
 // Create returns a builder that creates a Todo.
 func (*TodoClient) Create(ex velox.Executor) *entity.TodoCreate { return entity.NewTodoCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TodoClient) CreateBulk(ex velox.Executor, bs ...*entity.TodoCreate) *entity.TodoCreateBulk {
 	return entity.NewTodoCreateBulk(ex, bs...)
 }

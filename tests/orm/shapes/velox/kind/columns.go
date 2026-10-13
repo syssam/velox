@@ -203,9 +203,9 @@ func (f *StringColumn) Desc() predicate.KindOrderTerm {
 	return predicate.KindOrderTerm{Col: string(*f), Desc: true}
 }
 
-// ShapeEnumColumn is a column of Go type ShapeEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// ShapeEnumColumn is a column of Go type ShapeEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type ShapeEnumColumn string
 
 // EQ matches the rows whose column equals v.

@@ -30,7 +30,8 @@ type TopicEdges struct {
 	loaded   [2]bool
 }
 
-// ArticlesOrErr returns the articles edge, or an error when it was not loaded (velox.IsNotLoaded).
+// ArticlesOrErr returns the articles edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TopicEdges) ArticlesOrErr() ([]*Article, error) {
@@ -40,7 +41,8 @@ func (e *TopicEdges) ArticlesOrErr() ([]*Article, error) {
 	return e.Articles, nil
 }
 
-// BannedInOrErr returns the banned_in edge, or an error when it was not loaded (velox.IsNotLoaded).
+// BannedInOrErr returns the banned_in edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *TopicEdges) BannedInOrErr() ([]*Article, error) {
@@ -50,6 +52,10 @@ func (e *TopicEdges) BannedInOrErr() ([]*Article, error) {
 	return e.BannedIn, nil
 }
 
+// ptrTopic returns the address of the field of a Topic that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// TopicMeta.
+//
 //go:noinline
 func ptrTopic(v any, i int) any {
 	e := v.(*Topic)
@@ -64,6 +70,9 @@ func ptrTopic(v any, i int) any {
 	return nil
 }
 
+// edgeTopic marks the i-th edge of a Topic as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of TopicMeta.
+//
 //go:noinline
 func edgeTopic(v any, i int) any {
 	e := v.(*Topic)
@@ -77,6 +86,10 @@ func edgeTopic(v any, i int) any {
 	return nil
 }
 
+// linkTopic stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Topic: all of them, or the first where
+// the edge has one. It is the Link of TopicMeta.
+//
 //go:noinline
 func linkTopic(dst any, es []any) {
 	switch d := dst.(type) {
@@ -196,7 +209,8 @@ func (q *TopicQuery) ForShare(opts ...orm.LockOption) *TopicQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TopicQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -238,7 +252,8 @@ func (q *TopicQuery) First(ctx context.Context) (*Topic, error) {
 	return r.(*Topic), nil
 }
 
-// Only returns the single matching Topic: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Topic: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TopicQuery) Only(ctx context.Context) (*Topic, error) {
@@ -367,9 +382,9 @@ type TopicCreateBulk struct {
 	n  int
 }
 
-// NewTopicCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTopicCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTopicCreateBulk(ex velox.Executor, bs ...*TopicCreate) *TopicCreateBulk {
 	return &TopicCreateBulk{ex: ex, bs: bs}
 }
@@ -518,9 +533,9 @@ func (e *Topic) QueryArticles(ex velox.Executor) *ArticleQuery {
 	return q
 }
 
-// WithArticles eager-loads the "articles" edge: one more query, whatever the number
-// of rows. A query of Article given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Topic.
+// WithArticles eager-loads the "articles" edge: one more query, whatever the
+// number of rows. A query of Article given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Topic.
 //
 //go:noinline
 func (q *TopicQuery) WithArticles(opts ...*ArticleQuery) *TopicQuery {
@@ -541,9 +556,9 @@ func (e *Topic) QueryBannedIn(ex velox.Executor) *ArticleQuery {
 	return q
 }
 
-// WithBannedIn eager-loads the "banned_in" edge: one more query, whatever the number
-// of rows. A query of Article given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Topic.
+// WithBannedIn eager-loads the "banned_in" edge: one more query, whatever the
+// number of rows. A query of Article given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Topic.
 //
 //go:noinline
 func (q *TopicQuery) WithBannedIn(opts ...*ArticleQuery) *TopicQuery {

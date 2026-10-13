@@ -26,6 +26,9 @@ type EdgeEdges struct {
 	loaded [1]bool
 }
 
+// ptrEdge returns the address of the field of a Edge that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of EdgeMeta.
+//
 //go:noinline
 func ptrEdge(v any, i int) any {
 	e := v.(*Edge)
@@ -138,7 +141,8 @@ func (q *EdgeQuery) ForShare(opts ...orm.LockOption) *EdgeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *EdgeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *EdgeQuery) First(ctx context.Context) (*Edge, error) {
 	return r.(*Edge), nil
 }
 
-// Only returns the single matching Edge: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Edge: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EdgeQuery) Only(ctx context.Context) (*Edge, error) {
@@ -309,9 +314,9 @@ type EdgeCreateBulk struct {
 	n  int
 }
 
-// NewEdgeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewEdgeCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewEdgeCreateBulk(ex velox.Executor, bs ...*EdgeCreate) *EdgeCreateBulk {
 	return &EdgeCreateBulk{ex: ex, bs: bs}
 }

@@ -24,7 +24,8 @@ func (*OrderClient) Query(ex velox.Executor) *entity.OrderQuery { return entity.
 // Create returns a builder that creates a Order.
 func (*OrderClient) Create(ex velox.Executor) *entity.OrderCreate { return entity.NewOrderCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*OrderClient) CreateBulk(ex velox.Executor, bs ...*entity.OrderCreate) *entity.OrderCreateBulk {
 	return entity.NewOrderCreateBulk(ex, bs...)
 }

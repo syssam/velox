@@ -29,7 +29,8 @@ type GadgetEdges struct {
 	loaded [1]bool
 }
 
-// OwnerOrErr returns the owner edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OwnerOrErr returns the owner edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *GadgetEdges) OwnerOrErr() (*Author, error) {
@@ -42,6 +43,10 @@ func (e *GadgetEdges) OwnerOrErr() (*Author, error) {
 	return e.Owner, nil
 }
 
+// ptrGadget returns the address of the field of a Gadget that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// GadgetMeta.
+//
 //go:noinline
 func ptrGadget(v any, i int) any {
 	e := v.(*Gadget)
@@ -56,6 +61,9 @@ func ptrGadget(v any, i int) any {
 	return nil
 }
 
+// edgeGadget marks the i-th edge of a Gadget as loaded and returns the address
+// of the field that holds its neighbors. It is the Edge of GadgetMeta.
+//
 //go:noinline
 func edgeGadget(v any, i int) any {
 	e := v.(*Gadget)
@@ -67,6 +75,10 @@ func edgeGadget(v any, i int) any {
 	return nil
 }
 
+// linkGadget stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Gadget: all of them, or the first where
+// the edge has one. It is the Link of GadgetMeta.
+//
 //go:noinline
 func linkGadget(dst any, es []any) {
 	switch d := dst.(type) {
@@ -187,7 +199,8 @@ func (q *GadgetQuery) ForShare(opts ...orm.LockOption) *GadgetQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *GadgetQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -229,7 +242,8 @@ func (q *GadgetQuery) First(ctx context.Context) (*Gadget, error) {
 	return r.(*Gadget), nil
 }
 
-// Only returns the single matching Gadget: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Gadget: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *GadgetQuery) Only(ctx context.Context) (*Gadget, error) {
@@ -358,9 +372,9 @@ type GadgetCreateBulk struct {
 	n  int
 }
 
-// NewGadgetCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewGadgetCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewGadgetCreateBulk(ex velox.Executor, bs ...*GadgetCreate) *GadgetCreateBulk {
 	return &GadgetCreateBulk{ex: ex, bs: bs}
 }

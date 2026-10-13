@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the Article schema.
+// init stitches the defaults, validators, hooks and policy of the Article
+// schema.
 func init() {
 	slots.Article.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Article{}.Fields()

@@ -27,6 +27,10 @@ type StringKeyEdges struct {
 	loaded [1]bool
 }
 
+// ptrStringKey returns the address of the field of a StringKey that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// StringKeyMeta.
+//
 //go:noinline
 func ptrStringKey(v any, i int) any {
 	e := v.(*StringKey)
@@ -54,7 +58,8 @@ type StringKeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// StringKeyMeta is the runtime description of StringKey. Use it through its address.
+// StringKeyMeta is the runtime description of StringKey. Use it through its
+// address.
 var StringKeyMeta = orm.Meta{
 	Name:    "StringKey",
 	Table:   "string_keys",
@@ -144,7 +149,8 @@ func (q *StringKeyQuery) ForShare(opts ...orm.LockOption) *StringKeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *StringKeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -186,7 +192,8 @@ func (q *StringKeyQuery) First(ctx context.Context) (*StringKey, error) {
 	return r.(*StringKey), nil
 }
 
-// Only returns the single matching StringKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching StringKey: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *StringKeyQuery) Only(ctx context.Context) (*StringKey, error) {
@@ -315,9 +322,9 @@ type StringKeyCreateBulk struct {
 	n  int
 }
 
-// NewStringKeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewStringKeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewStringKeyCreateBulk(ex velox.Executor, bs ...*StringKeyCreate) *StringKeyCreateBulk {
 	return &StringKeyCreateBulk{ex: ex, bs: bs}
 }
@@ -370,7 +377,8 @@ func (b *StringKeyCreateBulk) Exec(ctx context.Context) error {
 // StringKeyUpdate updates StringKey rows.
 type StringKeyUpdate struct{ c orm.MutCore }
 
-// NewStringKeyUpdate returns a builder that updates the rows its predicates match.
+// NewStringKeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewStringKeyUpdate(ex velox.Executor) *StringKeyUpdate {
 	return &StringKeyUpdate{c: orm.MutCore{M: &StringKeyMeta, Ex: ex}}
 }
@@ -436,7 +444,8 @@ func (b *StringKeyUpdate) SaveOne(ctx context.Context) (*StringKey, error) {
 // StringKeyDelete deletes StringKey rows.
 type StringKeyDelete struct{ c orm.MutCore }
 
-// NewStringKeyDelete returns a builder that deletes the rows its predicates match.
+// NewStringKeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewStringKeyDelete(ex velox.Executor) *StringKeyDelete {
 	return &StringKeyDelete{c: orm.MutCore{M: &StringKeyMeta, Ex: ex}}
 }

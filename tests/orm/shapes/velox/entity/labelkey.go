@@ -30,7 +30,8 @@ type LabelKeyEdges struct {
 	loaded  [2]bool
 }
 
-// ItemsOrErr returns the items edge, or an error when it was not loaded (velox.IsNotLoaded).
+// ItemsOrErr returns the items edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *LabelKeyEdges) ItemsOrErr() ([]*WeightKey, error) {
@@ -40,7 +41,8 @@ func (e *LabelKeyEdges) ItemsOrErr() ([]*WeightKey, error) {
 	return e.Items, nil
 }
 
-// WeightsOrErr returns the weights edge, or an error when it was not loaded (velox.IsNotLoaded).
+// WeightsOrErr returns the weights edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *LabelKeyEdges) WeightsOrErr() ([]*WeightKey, error) {
@@ -50,6 +52,10 @@ func (e *LabelKeyEdges) WeightsOrErr() ([]*WeightKey, error) {
 	return e.Weights, nil
 }
 
+// ptrLabelKey returns the address of the field of a LabelKey that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// LabelKeyMeta.
+//
 //go:noinline
 func ptrLabelKey(v any, i int) any {
 	e := v.(*LabelKey)
@@ -62,6 +68,10 @@ func ptrLabelKey(v any, i int) any {
 	return nil
 }
 
+// edgeLabelKey marks the i-th edge of a LabelKey as loaded and returns the
+// address of the field that holds its neighbors. It is the Edge of
+// LabelKeyMeta.
+//
 //go:noinline
 func edgeLabelKey(v any, i int) any {
 	e := v.(*LabelKey)
@@ -75,6 +85,10 @@ func edgeLabelKey(v any, i int) any {
 	return nil
 }
 
+// linkLabelKey stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to LabelKey: all of them, or the first
+// where the edge has one. It is the Link of LabelKeyMeta.
+//
 //go:noinline
 func linkLabelKey(dst any, es []any) {
 	switch d := dst.(type) {
@@ -107,7 +121,8 @@ type LabelKeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// LabelKeyMeta is the runtime description of LabelKey. Use it through its address.
+// LabelKeyMeta is the runtime description of LabelKey. Use it through its
+// address.
 var LabelKeyMeta = orm.Meta{
 	Name:    "LabelKey",
 	Table:   "label_keys",
@@ -194,7 +209,8 @@ func (q *LabelKeyQuery) ForShare(opts ...orm.LockOption) *LabelKeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *LabelKeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -236,7 +252,8 @@ func (q *LabelKeyQuery) First(ctx context.Context) (*LabelKey, error) {
 	return r.(*LabelKey), nil
 }
 
-// Only returns the single matching LabelKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching LabelKey: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LabelKeyQuery) Only(ctx context.Context) (*LabelKey, error) {
@@ -365,9 +382,9 @@ type LabelKeyCreateBulk struct {
 	n  int
 }
 
-// NewLabelKeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewLabelKeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewLabelKeyCreateBulk(ex velox.Executor, bs ...*LabelKeyCreate) *LabelKeyCreateBulk {
 	return &LabelKeyCreateBulk{ex: ex, bs: bs}
 }
@@ -420,7 +437,8 @@ func (b *LabelKeyCreateBulk) Exec(ctx context.Context) error {
 // LabelKeyUpdate updates LabelKey rows.
 type LabelKeyUpdate struct{ c orm.MutCore }
 
-// NewLabelKeyUpdate returns a builder that updates the rows its predicates match.
+// NewLabelKeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewLabelKeyUpdate(ex velox.Executor) *LabelKeyUpdate {
 	return &LabelKeyUpdate{c: orm.MutCore{M: &LabelKeyMeta, Ex: ex}}
 }
@@ -486,7 +504,8 @@ func (b *LabelKeyUpdate) SaveOne(ctx context.Context) (*LabelKey, error) {
 // LabelKeyDelete deletes LabelKey rows.
 type LabelKeyDelete struct{ c orm.MutCore }
 
-// NewLabelKeyDelete returns a builder that deletes the rows its predicates match.
+// NewLabelKeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewLabelKeyDelete(ex velox.Executor) *LabelKeyDelete {
 	return &LabelKeyDelete{c: orm.MutCore{M: &LabelKeyMeta, Ex: ex}}
 }
@@ -539,9 +558,9 @@ func (e *LabelKey) QueryWeights(ex velox.Executor) *WeightKeyQuery {
 	return q
 }
 
-// WithWeights eager-loads the "weights" edge: one more query, whatever the number
-// of rows. A query of WeightKey given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per LabelKey.
+// WithWeights eager-loads the "weights" edge: one more query, whatever the
+// number of rows. A query of WeightKey given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per LabelKey.
 //
 //go:noinline
 func (q *LabelKeyQuery) WithWeights(opts ...*WeightKeyQuery) *LabelKeyQuery {

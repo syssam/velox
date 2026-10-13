@@ -42,7 +42,8 @@ var Owner = &EdgeOwner{}
 // Has matches a Gadget that has at least one "owner" neighbor.
 func (e *EdgeOwner) Has() predicate.Gadget { return predicate.Gadget{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Gadget that has a "owner" neighbor satisfying the predicates.
+// HasWith matches a Gadget that has a "owner" neighbor satisfying the
+// predicates.
 func (e *EdgeOwner) HasWith(ps ...predicate.Author) predicate.Gadget {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -61,8 +62,9 @@ func (e *EdgeOwner) Clear() predicate.GadgetSetter {
 	return predicate.GadgetSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
-// EdgeMetas returns the descriptions of the edges of Gadget, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Gadget, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
 
 // And matches the rows every one of ps matches.

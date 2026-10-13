@@ -188,9 +188,9 @@ func (f *IPColumn) Desc() predicate.NamedBytesOrderTerm {
 	return predicate.NamedBytesOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableIPColumn is a column of Go type net.IP: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableIPColumn is a column of Go type net.IP: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableIPColumn string
 
 // EQ matches the rows whose column equals v.

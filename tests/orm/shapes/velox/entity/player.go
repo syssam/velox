@@ -32,7 +32,8 @@ type PlayerEdges struct {
 	loaded [2]bool
 }
 
-// TeamOrErr returns the team edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// TeamOrErr returns the team edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *PlayerEdges) TeamOrErr() (*Team, error) {
@@ -45,7 +46,8 @@ func (e *PlayerEdges) TeamOrErr() (*Team, error) {
 	return e.Team, nil
 }
 
-// FanOfOrErr returns the fan_of edge, or an error when it was not loaded (velox.IsNotLoaded).
+// FanOfOrErr returns the fan_of edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *PlayerEdges) FanOfOrErr() ([]*Team, error) {
@@ -55,6 +57,10 @@ func (e *PlayerEdges) FanOfOrErr() ([]*Team, error) {
 	return e.FanOf, nil
 }
 
+// ptrPlayer returns the address of the field of a Player that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// PlayerMeta.
+//
 //go:noinline
 func ptrPlayer(v any, i int) any {
 	e := v.(*Player)
@@ -69,6 +75,9 @@ func ptrPlayer(v any, i int) any {
 	return nil
 }
 
+// edgePlayer marks the i-th edge of a Player as loaded and returns the address
+// of the field that holds its neighbors. It is the Edge of PlayerMeta.
+//
 //go:noinline
 func edgePlayer(v any, i int) any {
 	e := v.(*Player)
@@ -82,6 +91,10 @@ func edgePlayer(v any, i int) any {
 	return nil
 }
 
+// linkPlayer stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Player: all of them, or the first where
+// the edge has one. It is the Link of PlayerMeta.
+//
 //go:noinline
 func linkPlayer(dst any, es []any) {
 	switch d := dst.(type) {
@@ -203,7 +216,8 @@ func (q *PlayerQuery) ForShare(opts ...orm.LockOption) *PlayerQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *PlayerQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -245,7 +259,8 @@ func (q *PlayerQuery) First(ctx context.Context) (*Player, error) {
 	return r.(*Player), nil
 }
 
-// Only returns the single matching Player: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Player: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *PlayerQuery) Only(ctx context.Context) (*Player, error) {
@@ -374,9 +389,9 @@ type PlayerCreateBulk struct {
 	n  int
 }
 
-// NewPlayerCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewPlayerCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewPlayerCreateBulk(ex velox.Executor, bs ...*PlayerCreate) *PlayerCreateBulk {
 	return &PlayerCreateBulk{ex: ex, bs: bs}
 }

@@ -24,7 +24,8 @@ func (*PetClient) Query(ex velox.Executor) *entity.PetQuery { return entity.NewP
 // Create returns a builder that creates a Pet.
 func (*PetClient) Create(ex velox.Executor) *entity.PetCreate { return entity.NewPetCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*PetClient) CreateBulk(ex velox.Executor, bs ...*entity.PetCreate) *entity.PetCreateBulk {
 	return entity.NewPetCreateBulk(ex, bs...)
 }

@@ -26,6 +26,10 @@ type OrderEdges struct {
 	loaded [1]bool
 }
 
+// ptrOrder returns the address of the field of a Order that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// OrderMeta.
+//
 //go:noinline
 func ptrOrder(v any, i int) any {
 	e := v.(*Order)
@@ -138,7 +142,8 @@ func (q *OrderQuery) ForShare(opts ...orm.LockOption) *OrderQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *OrderQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *OrderQuery) First(ctx context.Context) (*Order, error) {
 	return r.(*Order), nil
 }
 
-// Only returns the single matching Order: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Order: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *OrderQuery) Only(ctx context.Context) (*Order, error) {
@@ -309,9 +315,9 @@ type OrderCreateBulk struct {
 	n  int
 }
 
-// NewOrderCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewOrderCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewOrderCreateBulk(ex velox.Executor, bs ...*OrderCreate) *OrderCreateBulk {
 	return &OrderCreateBulk{ex: ex, bs: bs}
 }

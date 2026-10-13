@@ -26,6 +26,10 @@ type UserSetterEdges struct {
 	loaded [1]bool
 }
 
+// ptrUserSetter returns the address of the field of a UserSetter that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// UserSetterMeta.
+//
 //go:noinline
 func ptrUserSetter(v any, i int) any {
 	e := v.(*UserSetter)
@@ -53,7 +57,8 @@ type UserSetterConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// UserSetterMeta is the runtime description of UserSetter. Use it through its address.
+// UserSetterMeta is the runtime description of UserSetter. Use it through its
+// address.
 var UserSetterMeta = orm.Meta{
 	Name:    "UserSetter",
 	Table:   "user_setters",
@@ -141,7 +146,8 @@ func (q *UserSetterQuery) ForShare(opts ...orm.LockOption) *UserSetterQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UserSetterQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *UserSetterQuery) First(ctx context.Context) (*UserSetter, error) {
 	return r.(*UserSetter), nil
 }
 
-// Only returns the single matching UserSetter: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching UserSetter: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UserSetterQuery) Only(ctx context.Context) (*UserSetter, error) {
@@ -277,8 +284,8 @@ func (b *UserSetterCreate) Set(ss ...predicate.UserSetterSetter) *UserSetterCrea
 // Fill takes what in gives: a struct whose fields are named like those of
 // UserSetter, such as the input of an endpoint. A nil pointer gives nothing, an
 // optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of UserSetter is an error unless listed in
-// skip. A later Set wins.
+// written. A field that names nothing of UserSetter is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *UserSetterCreate) Fill(in any, skip ...string) *UserSetterCreate {
@@ -312,9 +319,9 @@ type UserSetterCreateBulk struct {
 	n  int
 }
 
-// NewUserSetterCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUserSetterCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewUserSetterCreateBulk(ex velox.Executor, bs ...*UserSetterCreate) *UserSetterCreateBulk {
 	return &UserSetterCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +374,8 @@ func (b *UserSetterCreateBulk) Exec(ctx context.Context) error {
 // UserSetterUpdate updates UserSetter rows.
 type UserSetterUpdate struct{ c orm.MutCore }
 
-// NewUserSetterUpdate returns a builder that updates the rows its predicates match.
+// NewUserSetterUpdate returns a builder that updates the rows its predicates
+// match.
 func NewUserSetterUpdate(ex velox.Executor) *UserSetterUpdate {
 	return &UserSetterUpdate{c: orm.MutCore{M: &UserSetterMeta, Ex: ex}}
 }
@@ -433,7 +441,8 @@ func (b *UserSetterUpdate) SaveOne(ctx context.Context) (*UserSetter, error) {
 // UserSetterDelete deletes UserSetter rows.
 type UserSetterDelete struct{ c orm.MutCore }
 
-// NewUserSetterDelete returns a builder that deletes the rows its predicates match.
+// NewUserSetterDelete returns a builder that deletes the rows its predicates
+// match.
 func NewUserSetterDelete(ex velox.Executor) *UserSetterDelete {
 	return &UserSetterDelete{c: orm.MutCore{M: &UserSetterMeta, Ex: ex}}
 }

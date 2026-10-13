@@ -8,9 +8,9 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// LabelIDColumn is a column of Go type types.Label: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// LabelIDColumn is a column of Go type types.Label: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type LabelIDColumn string
 
 // EQ matches the rows whose column equals v.

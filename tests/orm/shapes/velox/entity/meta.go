@@ -26,6 +26,9 @@ type MetaEdges struct {
 	loaded [1]bool
 }
 
+// ptrMeta returns the address of the field of a Meta that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of MetaMeta.
+//
 //go:noinline
 func ptrMeta(v any, i int) any {
 	e := v.(*Meta)
@@ -138,7 +141,8 @@ func (q *MetaQuery) ForShare(opts ...orm.LockOption) *MetaQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *MetaQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *MetaQuery) First(ctx context.Context) (*Meta, error) {
 	return r.(*Meta), nil
 }
 
-// Only returns the single matching Meta: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Meta: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *MetaQuery) Only(ctx context.Context) (*Meta, error) {
@@ -309,9 +314,9 @@ type MetaCreateBulk struct {
 	n  int
 }
 
-// NewMetaCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewMetaCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewMetaCreateBulk(ex velox.Executor, bs ...*MetaCreate) *MetaCreateBulk {
 	return &MetaCreateBulk{ex: ex, bs: bs}
 }

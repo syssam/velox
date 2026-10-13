@@ -100,9 +100,9 @@ func (f *IntColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// LabelColumn is a column of Go type types.Label: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// LabelColumn is a column of Go type types.Label: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type LabelColumn string
 
 // EQ matches the rows whose column equals v.
@@ -212,9 +212,9 @@ func (f *LabelColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableLabelColumn is a column of Go type types.Label: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableLabelColumn is a column of Go type types.Label: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableLabelColumn string
 
 // EQ matches the rows whose column equals v.
@@ -329,9 +329,9 @@ func (f *NullableLabelColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// WeightColumn is a column of Go type types.Weight: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// WeightColumn is a column of Go type types.Weight: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type WeightColumn string
 
 // EQ matches the rows whose column equals v.
@@ -421,9 +421,9 @@ func (f *WeightColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RatioColumn is a column of Go type types.Ratio: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RatioColumn is a column of Go type types.Ratio: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RatioColumn string
 
 // EQ matches the rows whose column equals v.
@@ -513,9 +513,9 @@ func (f *RatioColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// DecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// DecimalColumn is a column of Go type types.Decimal: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type DecimalColumn string
 
 // EQ matches the rows whose column equals v.
@@ -625,9 +625,9 @@ func (f *DecimalColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableDecimalColumn is a column of Go type types.Decimal: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableDecimalColumn is a column of Go type types.Decimal: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableDecimalColumn string
 
 // EQ matches the rows whose column equals v.
@@ -742,9 +742,9 @@ func (f *NullableDecimalColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// PairColumn is a column of Go type types.Pair: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// PairColumn is a column of Go type types.Pair: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type PairColumn string
 
 // EQ matches the rows whose column equals v.
@@ -834,9 +834,9 @@ func (f *PairColumn) Desc() predicate.GoTypeShapeOrderTerm {
 	return predicate.GoTypeShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullablePairColumn is a column of Go type types.Pair: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullablePairColumn is a column of Go type types.Pair: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullablePairColumn string
 
 // EQ matches the rows whose column equals v.

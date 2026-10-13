@@ -115,7 +115,8 @@ var Children = &EdgeChildren{}
 // Has matches a Tag that has at least one "children" neighbor.
 func (e *EdgeChildren) Has() predicate.Tag { return predicate.Tag{Op: orm.OpHasEdge, Edge: &meta2} }
 
-// HasWith matches a Tag that has a "children" neighbor satisfying the predicates.
+// HasWith matches a Tag that has a "children" neighbor satisfying the
+// predicates.
 func (e *EdgeChildren) HasWith(ps ...predicate.Tag) predicate.Tag {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -147,8 +148,9 @@ func (e *EdgeChildren) Clear() predicate.TagSetter {
 	return predicate.TagSetter{Kind: orm.EdgeClear, Edge: &meta2}
 }
 
-// EdgeMetas returns the descriptions of the edges of Tag, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Tag, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2} }
 
 // And matches the rows every one of ps matches.

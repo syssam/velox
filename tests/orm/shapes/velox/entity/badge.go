@@ -29,7 +29,8 @@ type BadgeEdges struct {
 	loaded  [2]bool
 }
 
-// TeamsOrErr returns the teams edge, or an error when it was not loaded (velox.IsNotLoaded).
+// TeamsOrErr returns the teams edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *BadgeEdges) TeamsOrErr() ([]*Team, error) {
@@ -39,7 +40,8 @@ func (e *BadgeEdges) TeamsOrErr() ([]*Team, error) {
 	return e.Teams, nil
 }
 
-// HoldersOrErr returns the holders edge, or an error when it was not loaded (velox.IsNotLoaded).
+// HoldersOrErr returns the holders edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *BadgeEdges) HoldersOrErr() ([]*Person, error) {
@@ -49,6 +51,10 @@ func (e *BadgeEdges) HoldersOrErr() ([]*Person, error) {
 	return e.Holders, nil
 }
 
+// ptrBadge returns the address of the field of a Badge that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// BadgeMeta.
+//
 //go:noinline
 func ptrBadge(v any, i int) any {
 	e := v.(*Badge)
@@ -61,6 +67,9 @@ func ptrBadge(v any, i int) any {
 	return nil
 }
 
+// edgeBadge marks the i-th edge of a Badge as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of BadgeMeta.
+//
 //go:noinline
 func edgeBadge(v any, i int) any {
 	e := v.(*Badge)
@@ -74,6 +83,10 @@ func edgeBadge(v any, i int) any {
 	return nil
 }
 
+// linkBadge stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Badge: all of them, or the first where
+// the edge has one. It is the Link of BadgeMeta.
+//
 //go:noinline
 func linkBadge(dst any, es []any) {
 	switch d := dst.(type) {
@@ -193,7 +206,8 @@ func (q *BadgeQuery) ForShare(opts ...orm.LockOption) *BadgeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *BadgeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -235,7 +249,8 @@ func (q *BadgeQuery) First(ctx context.Context) (*Badge, error) {
 	return r.(*Badge), nil
 }
 
-// Only returns the single matching Badge: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Badge: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *BadgeQuery) Only(ctx context.Context) (*Badge, error) {
@@ -364,9 +379,9 @@ type BadgeCreateBulk struct {
 	n  int
 }
 
-// NewBadgeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewBadgeCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewBadgeCreateBulk(ex velox.Executor, bs ...*BadgeCreate) *BadgeCreateBulk {
 	return &BadgeCreateBulk{ex: ex, bs: bs}
 }
@@ -538,9 +553,9 @@ func (e *Badge) QueryHolders(ex velox.Executor) *PersonQuery {
 	return q
 }
 
-// WithHolders eager-loads the "holders" edge: one more query, whatever the number
-// of rows. A query of Person given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Badge.
+// WithHolders eager-loads the "holders" edge: one more query, whatever the
+// number of rows. A query of Person given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Badge.
 //
 //go:noinline
 func (q *BadgeQuery) WithHolders(opts ...*PersonQuery) *BadgeQuery {

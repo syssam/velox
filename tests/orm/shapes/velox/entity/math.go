@@ -26,6 +26,9 @@ type MathEdges struct {
 	loaded [1]bool
 }
 
+// ptrMath returns the address of the field of a Math that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of MathMeta.
+//
 //go:noinline
 func ptrMath(v any, i int) any {
 	e := v.(*Math)
@@ -138,7 +141,8 @@ func (q *MathQuery) ForShare(opts ...orm.LockOption) *MathQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *MathQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *MathQuery) First(ctx context.Context) (*Math, error) {
 	return r.(*Math), nil
 }
 
-// Only returns the single matching Math: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Math: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *MathQuery) Only(ctx context.Context) (*Math, error) {
@@ -309,9 +314,9 @@ type MathCreateBulk struct {
 	n  int
 }
 
-// NewMathCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewMathCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewMathCreateBulk(ex velox.Executor, bs ...*MathCreate) *MathCreateBulk {
 	return &MathCreateBulk{ex: ex, bs: bs}
 }

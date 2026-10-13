@@ -25,7 +25,8 @@ func (*TokenClient) Query(ex velox.Executor) *entity.TokenQuery { return entity.
 // Create returns a builder that creates a Token.
 func (*TokenClient) Create(ex velox.Executor) *entity.TokenCreate { return entity.NewTokenCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*TokenClient) CreateBulk(ex velox.Executor, bs ...*entity.TokenCreate) *entity.TokenCreateBulk {
 	return entity.NewTokenCreateBulk(ex, bs...)
 }

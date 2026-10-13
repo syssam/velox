@@ -26,6 +26,10 @@ type UserOrderTermEdges struct {
 	loaded [1]bool
 }
 
+// ptrUserOrderTerm returns the address of the field of a UserOrderTerm that
+// holds its i-th column: what a row is scanned into, and read from. It is the
+// Ptr of UserOrderTermMeta.
+//
 //go:noinline
 func ptrUserOrderTerm(v any, i int) any {
 	e := v.(*UserOrderTerm)
@@ -53,7 +57,8 @@ type UserOrderTermConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// UserOrderTermMeta is the runtime description of UserOrderTerm. Use it through its address.
+// UserOrderTermMeta is the runtime description of UserOrderTerm. Use it through
+// its address.
 var UserOrderTermMeta = orm.Meta{
 	Name:    "UserOrderTerm",
 	Table:   "user_order_terms",
@@ -141,7 +146,8 @@ func (q *UserOrderTermQuery) ForShare(opts ...orm.LockOption) *UserOrderTermQuer
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UserOrderTermQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *UserOrderTermQuery) First(ctx context.Context) (*UserOrderTerm, error) 
 	return r.(*UserOrderTerm), nil
 }
 
-// Only returns the single matching UserOrderTerm: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching UserOrderTerm: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UserOrderTermQuery) Only(ctx context.Context) (*UserOrderTerm, error) {
@@ -275,10 +282,10 @@ func (b *UserOrderTermCreate) Set(ss ...predicate.UserOrderTermSetter) *UserOrde
 }
 
 // Fill takes what in gives: a struct whose fields are named like those of
-// UserOrderTerm, such as the input of an endpoint. A nil pointer gives nothing, an
-// optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of UserOrderTerm is an error unless listed in
-// skip. A later Set wins.
+// UserOrderTerm, such as the input of an endpoint. A nil pointer gives nothing,
+// an optional (a type with ValueOK) gives nothing when absent, anything else is
+// written. A field that names nothing of UserOrderTerm is an error unless
+// listed in skip. A later Set wins.
 //
 //go:noinline
 func (b *UserOrderTermCreate) Fill(in any, skip ...string) *UserOrderTermCreate {
@@ -305,16 +312,17 @@ func (b *UserOrderTermCreate) Exec(ctx context.Context) error {
 	return err
 }
 
-// UserOrderTermCreateBulk creates several UserOrderTerm rows with one statement.
+// UserOrderTermCreateBulk creates several UserOrderTerm rows with one
+// statement.
 type UserOrderTermCreateBulk struct {
 	ex velox.Executor
 	bs []*UserOrderTermCreate
 	n  int
 }
 
-// NewUserOrderTermCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUserOrderTermCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewUserOrderTermCreateBulk(ex velox.Executor, bs ...*UserOrderTermCreate) *UserOrderTermCreateBulk {
 	return &UserOrderTermCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +375,8 @@ func (b *UserOrderTermCreateBulk) Exec(ctx context.Context) error {
 // UserOrderTermUpdate updates UserOrderTerm rows.
 type UserOrderTermUpdate struct{ c orm.MutCore }
 
-// NewUserOrderTermUpdate returns a builder that updates the rows its predicates match.
+// NewUserOrderTermUpdate returns a builder that updates the rows its predicates
+// match.
 func NewUserOrderTermUpdate(ex velox.Executor) *UserOrderTermUpdate {
 	return &UserOrderTermUpdate{c: orm.MutCore{M: &UserOrderTermMeta, Ex: ex}}
 }
@@ -433,7 +442,8 @@ func (b *UserOrderTermUpdate) SaveOne(ctx context.Context) (*UserOrderTerm, erro
 // UserOrderTermDelete deletes UserOrderTerm rows.
 type UserOrderTermDelete struct{ c orm.MutCore }
 
-// NewUserOrderTermDelete returns a builder that deletes the rows its predicates match.
+// NewUserOrderTermDelete returns a builder that deletes the rows its predicates
+// match.
 func NewUserOrderTermDelete(ex velox.Executor) *UserOrderTermDelete {
 	return &UserOrderTermDelete{c: orm.MutCore{M: &UserOrderTermMeta, Ex: ex}}
 }

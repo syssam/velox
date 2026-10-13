@@ -17,7 +17,8 @@ var UserOrderTermColumns = []*schema.Column{{
 	Type: field.TypeString,
 }}
 
-// UserOrderTermTable holds the schema information for the "user_order_terms" table.
+// UserOrderTermTable holds the schema information for the "user_order_terms"
+// table.
 var UserOrderTermTable = &schema.Table{
 	Columns:    UserOrderTermColumns,
 	Name:       "user_order_terms",

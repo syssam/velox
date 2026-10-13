@@ -24,7 +24,8 @@ func (*AssetClient) Query(ex velox.Executor) *entity.AssetQuery { return entity.
 // Create returns a builder that creates a Asset.
 func (*AssetClient) Create(ex velox.Executor) *entity.AssetCreate { return entity.NewAssetCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*AssetClient) CreateBulk(ex velox.Executor, bs ...*entity.AssetCreate) *entity.AssetCreateBulk {
 	return entity.NewAssetCreateBulk(ex, bs...)
 }

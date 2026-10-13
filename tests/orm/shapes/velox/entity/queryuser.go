@@ -26,6 +26,10 @@ type QueryUserEdges struct {
 	loaded [1]bool
 }
 
+// ptrQueryUser returns the address of the field of a QueryUser that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// QueryUserMeta.
+//
 //go:noinline
 func ptrQueryUser(v any, i int) any {
 	e := v.(*QueryUser)
@@ -53,7 +57,8 @@ type QueryUserConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// QueryUserMeta is the runtime description of QueryUser. Use it through its address.
+// QueryUserMeta is the runtime description of QueryUser. Use it through its
+// address.
 var QueryUserMeta = orm.Meta{
 	Name:    "QueryUser",
 	Table:   "query_users",
@@ -141,7 +146,8 @@ func (q *QueryUserQuery) ForShare(opts ...orm.LockOption) *QueryUserQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *QueryUserQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -183,7 +189,8 @@ func (q *QueryUserQuery) First(ctx context.Context) (*QueryUser, error) {
 	return r.(*QueryUser), nil
 }
 
-// Only returns the single matching QueryUser: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching QueryUser: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *QueryUserQuery) Only(ctx context.Context) (*QueryUser, error) {
@@ -312,9 +319,9 @@ type QueryUserCreateBulk struct {
 	n  int
 }
 
-// NewQueryUserCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewQueryUserCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewQueryUserCreateBulk(ex velox.Executor, bs ...*QueryUserCreate) *QueryUserCreateBulk {
 	return &QueryUserCreateBulk{ex: ex, bs: bs}
 }
@@ -367,7 +374,8 @@ func (b *QueryUserCreateBulk) Exec(ctx context.Context) error {
 // QueryUserUpdate updates QueryUser rows.
 type QueryUserUpdate struct{ c orm.MutCore }
 
-// NewQueryUserUpdate returns a builder that updates the rows its predicates match.
+// NewQueryUserUpdate returns a builder that updates the rows its predicates
+// match.
 func NewQueryUserUpdate(ex velox.Executor) *QueryUserUpdate {
 	return &QueryUserUpdate{c: orm.MutCore{M: &QueryUserMeta, Ex: ex}}
 }
@@ -433,7 +441,8 @@ func (b *QueryUserUpdate) SaveOne(ctx context.Context) (*QueryUser, error) {
 // QueryUserDelete deletes QueryUser rows.
 type QueryUserDelete struct{ c orm.MutCore }
 
-// NewQueryUserDelete returns a builder that deletes the rows its predicates match.
+// NewQueryUserDelete returns a builder that deletes the rows its predicates
+// match.
 func NewQueryUserDelete(ex velox.Executor) *QueryUserDelete {
 	return &QueryUserDelete{c: orm.MutCore{M: &QueryUserMeta, Ex: ex}}
 }

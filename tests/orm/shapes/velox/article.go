@@ -28,7 +28,8 @@ func (*ArticleClient) Create(ex velox.Executor) *entity.ArticleCreate {
 	return entity.NewArticleCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*ArticleClient) CreateBulk(ex velox.Executor, bs ...*entity.ArticleCreate) *entity.ArticleCreateBulk {
 	return entity.NewArticleCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *ArticleClient) Get(ctx context.Context, ex velox.Executor, id int) (*en
 	return c.Query(ex).Where(predicate.Article(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Article with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Article with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *ArticleClient) UpdateByID(ex velox.Executor, id int) *entity.ArticleUpdate {
 	return c.Update(ex).Where(predicate.Article(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Article with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Article with the given id, or returns
+// velox.ErrNotFound.
 func (c *ArticleClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Article(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

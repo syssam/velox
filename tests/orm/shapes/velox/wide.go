@@ -24,7 +24,8 @@ func (*WideClient) Query(ex velox.Executor) *entity.WideQuery { return entity.Ne
 // Create returns a builder that creates a Wide.
 func (*WideClient) Create(ex velox.Executor) *entity.WideCreate { return entity.NewWideCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*WideClient) CreateBulk(ex velox.Executor, bs ...*entity.WideCreate) *entity.WideCreateBulk {
 	return entity.NewWideCreateBulk(ex, bs...)
 }

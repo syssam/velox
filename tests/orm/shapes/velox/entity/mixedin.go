@@ -37,6 +37,10 @@ type MixedInEdges struct {
 	loaded [1]bool
 }
 
+// ptrMixedIn returns the address of the field of a MixedIn that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// MixedInMeta.
+//
 //go:noinline
 func ptrMixedIn(v any, i int) any {
 	e := v.(*MixedIn)
@@ -82,7 +86,8 @@ type MixedInConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// MixedInMeta is the runtime description of MixedIn. Use it through its address.
+// MixedInMeta is the runtime description of MixedIn. Use it through its
+// address.
 var MixedInMeta = orm.Meta{
 	Name:    "MixedIn",
 	Table:   "mixed_ins",
@@ -178,7 +183,8 @@ func (q *MixedInQuery) ForShare(opts ...orm.LockOption) *MixedInQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *MixedInQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -220,7 +226,8 @@ func (q *MixedInQuery) First(ctx context.Context) (*MixedIn, error) {
 	return r.(*MixedIn), nil
 }
 
-// Only returns the single matching MixedIn: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching MixedIn: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *MixedInQuery) Only(ctx context.Context) (*MixedIn, error) {
@@ -349,9 +356,9 @@ type MixedInCreateBulk struct {
 	n  int
 }
 
-// NewMixedInCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewMixedInCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewMixedInCreateBulk(ex velox.Executor, bs ...*MixedInCreate) *MixedInCreateBulk {
 	return &MixedInCreateBulk{ex: ex, bs: bs}
 }
@@ -404,7 +411,8 @@ func (b *MixedInCreateBulk) Exec(ctx context.Context) error {
 // MixedInUpdate updates MixedIn rows.
 type MixedInUpdate struct{ c orm.MutCore }
 
-// NewMixedInUpdate returns a builder that updates the rows its predicates match.
+// NewMixedInUpdate returns a builder that updates the rows its predicates
+// match.
 func NewMixedInUpdate(ex velox.Executor) *MixedInUpdate {
 	return &MixedInUpdate{c: orm.MutCore{M: &MixedInMeta, Ex: ex}}
 }
@@ -470,7 +478,8 @@ func (b *MixedInUpdate) SaveOne(ctx context.Context) (*MixedIn, error) {
 // MixedInDelete deletes MixedIn rows.
 type MixedInDelete struct{ c orm.MutCore }
 
-// NewMixedInDelete returns a builder that deletes the rows its predicates match.
+// NewMixedInDelete returns a builder that deletes the rows its predicates
+// match.
 func NewMixedInDelete(ex velox.Executor) *MixedInDelete {
 	return &MixedInDelete{c: orm.MutCore{M: &MixedInMeta, Ex: ex}}
 }

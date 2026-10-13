@@ -202,9 +202,9 @@ func (f *StringColumn) Desc() predicate.OddOrderTerm {
 	return predicate.OddOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableMapColumn is a column of Go type map[string]types.Address: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableMapColumn is a column of Go type map[string]types.Address: its
+// methods build the predicates, assignments and order terms of that column.
+// They have pointer receivers so that the compiler emits each once.
 type NullableMapColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -236,9 +236,9 @@ func (f *NullableMapColumn) Clear() predicate.OddSetter {
 	return predicate.OddSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableAddressListColumn is a column of Go type []types.Address: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableAddressListColumn is a column of Go type []types.Address: its methods
+// build the predicates, assignments and order terms of that column. They have
+// pointer receivers so that the compiler emits each once.
 type NullableAddressListColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -270,9 +270,9 @@ func (f *NullableAddressListColumn) Clear() predicate.OddSetter {
 	return predicate.OddSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// NullableAddressListColumn2 is a column of Go type []*types.Address: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableAddressListColumn2 is a column of Go type []*types.Address: its
+// methods build the predicates, assignments and order terms of that column.
+// They have pointer receivers so that the compiler emits each once.
 type NullableAddressListColumn2 string
 
 // IsNil matches the rows whose column is NULL.
@@ -304,9 +304,9 @@ func (f *NullableAddressListColumn2) Clear() predicate.OddSetter {
 	return predicate.OddSetter{Kind: orm.SetNull, Col: string(*f)}
 }
 
-// RoleEnumColumn is a column of Go type RoleEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RoleEnumColumn is a column of Go type RoleEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RoleEnumColumn string
 
 // EQ matches the rows whose column equals v.
@@ -369,9 +369,9 @@ func (f *RoleEnumColumn) Desc() predicate.OddOrderTerm {
 	return predicate.OddOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TierColumn is a column of Go type types.Tier: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TierColumn is a column of Go type types.Tier: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TierColumn string
 
 // EQ matches the rows whose column equals v.

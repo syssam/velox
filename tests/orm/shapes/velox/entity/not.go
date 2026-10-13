@@ -26,6 +26,9 @@ type NotEdges struct {
 	loaded [1]bool
 }
 
+// ptrNot returns the address of the field of a Not that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of NotMeta.
+//
 //go:noinline
 func ptrNot(v any, i int) any {
 	e := v.(*Not)
@@ -138,7 +141,8 @@ func (q *NotQuery) ForShare(opts ...orm.LockOption) *NotQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *NotQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *NotQuery) First(ctx context.Context) (*Not, error) {
 	return r.(*Not), nil
 }
 
-// Only returns the single matching Not: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Not: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NotQuery) Only(ctx context.Context) (*Not, error) {
@@ -309,9 +314,9 @@ type NotCreateBulk struct {
 	n  int
 }
 
-// NewNotCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewNotCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewNotCreateBulk(ex velox.Executor, bs ...*NotCreate) *NotCreateBulk {
 	return &NotCreateBulk{ex: ex, bs: bs}
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Table is the table of LabelKey, and ModelName the name of the entity: what the
-// Type method of a query or a mutation of it returns.
+// Table is the table of LabelKey, and ModelName the name of the entity: what
+// the Type method of a query or a mutation of it returns.
 const (
 	Table     = "label_keys"
 	ModelName = "LabelKey"
@@ -43,7 +43,8 @@ func (e *EdgeItems) Has() predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpHasEdge, Edge: &meta0}
 }
 
-// HasWith matches a LabelKey that has a "items" neighbor satisfying the predicates.
+// HasWith matches a LabelKey that has a "items" neighbor satisfying the
+// predicates.
 func (e *EdgeItems) HasWith(ps ...predicate.WeightKey) predicate.LabelKey {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -80,8 +81,8 @@ var meta1 = orm.EdgeMeta{Name: "weights", Index: 1, Rel: orm.M2M, Inverse: false
 // EdgeWeights is the "weights" edge of LabelKey, from LabelKey to WeightKey.
 type EdgeWeights struct{}
 
-// Weights is the "weights" edge of LabelKey: conditions on it and changes to it. A
-// query eager-loads it with WithWeights.
+// Weights is the "weights" edge of LabelKey: conditions on it and changes to
+// it. A query eager-loads it with WithWeights.
 var Weights = &EdgeWeights{}
 
 // Has matches a LabelKey that has at least one "weights" neighbor.
@@ -89,7 +90,8 @@ func (e *EdgeWeights) Has() predicate.LabelKey {
 	return predicate.LabelKey{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a LabelKey that has a "weights" neighbor satisfying the predicates.
+// HasWith matches a LabelKey that has a "weights" neighbor satisfying the
+// predicates.
 func (e *EdgeWeights) HasWith(ps ...predicate.WeightKey) predicate.LabelKey {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -121,8 +123,9 @@ func (e *EdgeWeights) Clear() predicate.LabelKeySetter {
 	return predicate.LabelKeySetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of LabelKey, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of LabelKey, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

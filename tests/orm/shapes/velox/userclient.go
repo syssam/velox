@@ -17,8 +17,8 @@ var UserClient UserClientClient
 // UserClientClient is the type of UserClient.
 type UserClientClient struct{}
 
-// Query returns a query of every UserClient, to run on ex: a database handle or a
-// transaction.
+// Query returns a query of every UserClient, to run on ex: a database handle or
+// a transaction.
 func (*UserClientClient) Query(ex velox.Executor) *entity.UserClientQuery {
 	return entity.NewUserClientQuery(ex)
 }
@@ -28,17 +28,20 @@ func (*UserClientClient) Create(ex velox.Executor) *entity.UserClientCreate {
 	return entity.NewUserClientCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*UserClientClient) CreateBulk(ex velox.Executor, bs ...*entity.UserClientCreate) *entity.UserClientCreateBulk {
 	return entity.NewUserClientCreateBulk(ex, bs...)
 }
 
-// Update returns a builder that updates the UserClient rows its conditions match.
+// Update returns a builder that updates the UserClient rows its conditions
+// match.
 func (*UserClientClient) Update(ex velox.Executor) *entity.UserClientUpdate {
 	return entity.NewUserClientUpdate(ex)
 }
 
-// Delete returns a builder that deletes the UserClient rows its conditions match.
+// Delete returns a builder that deletes the UserClient rows its conditions
+// match.
 func (*UserClientClient) Delete(ex velox.Executor) *entity.UserClientDelete {
 	return entity.NewUserClientDelete(ex)
 }
@@ -48,13 +51,14 @@ func (c *UserClientClient) Get(ctx context.Context, ex velox.Executor, id int) (
 	return c.Query(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the UserClient with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the UserClient with the given id;
+// end it with SaveOne, which reports a missing row.
 func (c *UserClientClient) UpdateByID(ex velox.Executor, id int) *entity.UserClientUpdate {
 	return c.Update(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the UserClient with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the UserClient with the given id, or returns
+// velox.ErrNotFound.
 func (c *UserClientClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.UserClient(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

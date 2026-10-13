@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the ManualKey schema.
+// init stitches the defaults, validators, hooks and policy of the ManualKey
+// schema.
 func init() {
 	slots.ManualKey.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.ManualKey{}.Fields()

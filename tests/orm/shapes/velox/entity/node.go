@@ -33,7 +33,8 @@ type NodeEdges struct {
 	loaded   [4]bool
 }
 
-// ParentOrErr returns the parent edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// ParentOrErr returns the parent edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *NodeEdges) ParentOrErr() (*Node, error) {
@@ -46,7 +47,8 @@ func (e *NodeEdges) ParentOrErr() (*Node, error) {
 	return e.Parent, nil
 }
 
-// ChildrenOrErr returns the children edge, or an error when it was not loaded (velox.IsNotLoaded).
+// ChildrenOrErr returns the children edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *NodeEdges) ChildrenOrErr() ([]*Node, error) {
@@ -56,7 +58,8 @@ func (e *NodeEdges) ChildrenOrErr() ([]*Node, error) {
 	return e.Children, nil
 }
 
-// PrevOrErr returns the prev edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// PrevOrErr returns the prev edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *NodeEdges) PrevOrErr() (*Node, error) {
@@ -69,7 +72,8 @@ func (e *NodeEdges) PrevOrErr() (*Node, error) {
 	return e.Prev, nil
 }
 
-// NextOrErr returns the next edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// NextOrErr returns the next edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *NodeEdges) NextOrErr() (*Node, error) {
@@ -82,6 +86,9 @@ func (e *NodeEdges) NextOrErr() (*Node, error) {
 	return e.Next, nil
 }
 
+// ptrNode returns the address of the field of a Node that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of NodeMeta.
+//
 //go:noinline
 func ptrNode(v any, i int) any {
 	e := v.(*Node)
@@ -98,6 +105,9 @@ func ptrNode(v any, i int) any {
 	return nil
 }
 
+// edgeNode marks the i-th edge of a Node as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of NodeMeta.
+//
 //go:noinline
 func edgeNode(v any, i int) any {
 	e := v.(*Node)
@@ -115,6 +125,10 @@ func edgeNode(v any, i int) any {
 	return nil
 }
 
+// linkNode stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Node: all of them, or the first where the
+// edge has one. It is the Link of NodeMeta.
+//
 //go:noinline
 func linkNode(dst any, es []any) {
 	switch d := dst.(type) {
@@ -234,7 +248,8 @@ func (q *NodeQuery) ForShare(opts ...orm.LockOption) *NodeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *NodeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -276,7 +291,8 @@ func (q *NodeQuery) First(ctx context.Context) (*Node, error) {
 	return r.(*Node), nil
 }
 
-// Only returns the single matching Node: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Node: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NodeQuery) Only(ctx context.Context) (*Node, error) {
@@ -405,9 +421,9 @@ type NodeCreateBulk struct {
 	n  int
 }
 
-// NewNodeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewNodeCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewNodeCreateBulk(ex velox.Executor, bs ...*NodeCreate) *NodeCreateBulk {
 	return &NodeCreateBulk{ex: ex, bs: bs}
 }
@@ -579,9 +595,9 @@ func (e *Node) QueryChildren(ex velox.Executor) *NodeQuery {
 	return q
 }
 
-// WithChildren eager-loads the "children" edge: one more query, whatever the number
-// of rows. A query of Node given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Node.
+// WithChildren eager-loads the "children" edge: one more query, whatever the
+// number of rows. A query of Node given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Node.
 //
 //go:noinline
 func (q *NodeQuery) WithChildren(opts ...*NodeQuery) *NodeQuery {

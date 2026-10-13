@@ -214,9 +214,9 @@ func (f *StringColumn) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -301,9 +301,9 @@ func (f *TimeColumn) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// AutoTimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -494,9 +494,9 @@ func (f *AutoIntColumn) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.
@@ -660,9 +660,9 @@ func (f *BoolColumn) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float64Column is a column of Go type float64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float64Column is a column of Go type float64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float64Column string
 
 // EQ matches the rows whose column equals v.
@@ -752,9 +752,9 @@ func (f *Float64Column) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// Float32Column is a column of Go type float32: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// Float32Column is a column of Go type float32: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type Float32Column string
 
 // EQ matches the rows whose column equals v.
@@ -1207,9 +1207,9 @@ func (f *BytesColumn) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// UUIDColumn is a column of Go type uuid.UUID: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// UUIDColumn is a column of Go type uuid.UUID: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type UUIDColumn string
 
 // EQ matches the rows whose column equals v.
@@ -1294,9 +1294,9 @@ func (f *UUIDColumn) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// StringListColumn is a column of Go type []string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// StringListColumn is a column of Go type []string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type StringListColumn string
 
 // IsNil matches the rows whose column is NULL.
@@ -1323,9 +1323,9 @@ func (f *StringListColumn) SetNillable(v *[]string) predicate.DefaultShapeSetter
 	return predicate.DefaultShapeSetter{Kind: orm.SetValue, Col: string(*f), Val: *v}
 }
 
-// AutoInt64Column is a column of Go type int64: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// AutoInt64Column is a column of Go type int64: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type AutoInt64Column string
 
 // EQ matches the rows whose column equals v.
@@ -1422,9 +1422,9 @@ func (f *AutoInt64Column) Desc() predicate.DefaultShapeOrderTerm {
 	return predicate.DefaultShapeOrderTerm{Col: string(*f), Desc: true}
 }
 
-// AutoNullableTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// AutoNullableTimeColumn is a column of Go type time.Time: its methods build
+// the predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type AutoNullableTimeColumn string
 
 // EQ matches the rows whose column equals v.

@@ -28,6 +28,10 @@ type UUIDKeyEdges struct {
 	loaded [1]bool
 }
 
+// ptrUUIDKey returns the address of the field of a UUIDKey that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// UUIDKeyMeta.
+//
 //go:noinline
 func ptrUUIDKey(v any, i int) any {
 	e := v.(*UUIDKey)
@@ -55,7 +59,8 @@ type UUIDKeyConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// UUIDKeyMeta is the runtime description of UUIDKey. Use it through its address.
+// UUIDKeyMeta is the runtime description of UUIDKey. Use it through its
+// address.
 var UUIDKeyMeta = orm.Meta{
 	Name:    "UUIDKey",
 	Table:   "uuid_keys",
@@ -142,7 +147,8 @@ func (q *UUIDKeyQuery) ForShare(opts ...orm.LockOption) *UUIDKeyQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UUIDKeyQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -184,7 +190,8 @@ func (q *UUIDKeyQuery) First(ctx context.Context) (*UUIDKey, error) {
 	return r.(*UUIDKey), nil
 }
 
-// Only returns the single matching UUIDKey: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching UUIDKey: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UUIDKeyQuery) Only(ctx context.Context) (*UUIDKey, error) {
@@ -313,9 +320,9 @@ type UUIDKeyCreateBulk struct {
 	n  int
 }
 
-// NewUUIDKeyCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUUIDKeyCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewUUIDKeyCreateBulk(ex velox.Executor, bs ...*UUIDKeyCreate) *UUIDKeyCreateBulk {
 	return &UUIDKeyCreateBulk{ex: ex, bs: bs}
 }
@@ -368,7 +375,8 @@ func (b *UUIDKeyCreateBulk) Exec(ctx context.Context) error {
 // UUIDKeyUpdate updates UUIDKey rows.
 type UUIDKeyUpdate struct{ c orm.MutCore }
 
-// NewUUIDKeyUpdate returns a builder that updates the rows its predicates match.
+// NewUUIDKeyUpdate returns a builder that updates the rows its predicates
+// match.
 func NewUUIDKeyUpdate(ex velox.Executor) *UUIDKeyUpdate {
 	return &UUIDKeyUpdate{c: orm.MutCore{M: &UUIDKeyMeta, Ex: ex}}
 }
@@ -434,7 +442,8 @@ func (b *UUIDKeyUpdate) SaveOne(ctx context.Context) (*UUIDKey, error) {
 // UUIDKeyDelete deletes UUIDKey rows.
 type UUIDKeyDelete struct{ c orm.MutCore }
 
-// NewUUIDKeyDelete returns a builder that deletes the rows its predicates match.
+// NewUUIDKeyDelete returns a builder that deletes the rows its predicates
+// match.
 func NewUUIDKeyDelete(ex velox.Executor) *UUIDKeyDelete {
 	return &UUIDKeyDelete{c: orm.MutCore{M: &UUIDKeyMeta, Ex: ex}}
 }

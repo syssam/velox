@@ -36,7 +36,8 @@ type AssetEdges struct {
 	loaded [3]bool
 }
 
-// OrgOrErr returns the org edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// OrgOrErr returns the org edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AssetEdges) OrgOrErr() (*Org, error) {
@@ -49,7 +50,8 @@ func (e *AssetEdges) OrgOrErr() (*Org, error) {
 	return e.Org, nil
 }
 
-// PersonOrErr returns the person edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// PersonOrErr returns the person edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AssetEdges) PersonOrErr() (*Person, error) {
@@ -62,7 +64,8 @@ func (e *AssetEdges) PersonOrErr() (*Person, error) {
 	return e.Person, nil
 }
 
-// MakerOrErr returns the maker edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// MakerOrErr returns the maker edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AssetEdges) MakerOrErr() (*Person, error) {
@@ -75,6 +78,10 @@ func (e *AssetEdges) MakerOrErr() (*Person, error) {
 	return e.Maker, nil
 }
 
+// ptrAsset returns the address of the field of a Asset that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// AssetMeta.
+//
 //go:noinline
 func ptrAsset(v any, i int) any {
 	e := v.(*Asset)
@@ -97,6 +104,9 @@ func ptrAsset(v any, i int) any {
 	return nil
 }
 
+// edgeAsset marks the i-th edge of a Asset as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of AssetMeta.
+//
 //go:noinline
 func edgeAsset(v any, i int) any {
 	e := v.(*Asset)
@@ -112,6 +122,10 @@ func edgeAsset(v any, i int) any {
 	return nil
 }
 
+// linkAsset stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Asset: all of them, or the first where
+// the edge has one. It is the Link of AssetMeta.
+//
 //go:noinline
 func linkAsset(dst any, es []any) {
 	switch d := dst.(type) {
@@ -233,7 +247,8 @@ func (q *AssetQuery) ForShare(opts ...orm.LockOption) *AssetQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *AssetQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -275,7 +290,8 @@ func (q *AssetQuery) First(ctx context.Context) (*Asset, error) {
 	return r.(*Asset), nil
 }
 
-// Only returns the single matching Asset: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Asset: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *AssetQuery) Only(ctx context.Context) (*Asset, error) {
@@ -404,9 +420,9 @@ type AssetCreateBulk struct {
 	n  int
 }
 
-// NewAssetCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewAssetCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewAssetCreateBulk(ex velox.Executor, bs ...*AssetCreate) *AssetCreateBulk {
 	return &AssetCreateBulk{ex: ex, bs: bs}
 }

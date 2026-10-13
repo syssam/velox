@@ -26,6 +26,10 @@ type EntityEdges struct {
 	loaded [1]bool
 }
 
+// ptrEntity returns the address of the field of a Entity that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// EntityMeta.
+//
 //go:noinline
 func ptrEntity(v any, i int) any {
 	e := v.(*Entity)
@@ -138,7 +142,8 @@ func (q *EntityQuery) ForShare(opts ...orm.LockOption) *EntityQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *EntityQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +185,8 @@ func (q *EntityQuery) First(ctx context.Context) (*Entity, error) {
 	return r.(*Entity), nil
 }
 
-// Only returns the single matching Entity: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Entity: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *EntityQuery) Only(ctx context.Context) (*Entity, error) {
@@ -309,9 +315,9 @@ type EntityCreateBulk struct {
 	n  int
 }
 
-// NewEntityCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewEntityCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewEntityCreateBulk(ex velox.Executor, bs ...*EntityCreate) *EntityCreateBulk {
 	return &EntityCreateBulk{ex: ex, bs: bs}
 }

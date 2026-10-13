@@ -26,6 +26,9 @@ type TxEdges struct {
 	loaded [1]bool
 }
 
+// ptrTx returns the address of the field of a Tx that holds its i-th column:
+// what a row is scanned into, and read from. It is the Ptr of TxMeta.
+//
 //go:noinline
 func ptrTx(v any, i int) any {
 	e := v.(*Tx)
@@ -136,7 +139,8 @@ func (q *TxQuery) ForShare(opts ...orm.LockOption) *TxQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *TxQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -178,7 +182,8 @@ func (q *TxQuery) First(ctx context.Context) (*Tx, error) {
 	return r.(*Tx), nil
 }
 
-// Only returns the single matching Tx: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Tx: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *TxQuery) Only(ctx context.Context) (*Tx, error) {
@@ -305,9 +310,9 @@ type TxCreateBulk struct {
 	n  int
 }
 
-// NewTxCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewTxCreateBulk returns a builder that creates one row per given builder, as
+// each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewTxCreateBulk(ex velox.Executor, bs ...*TxCreate) *TxCreateBulk {
 	return &TxCreateBulk{ex: ex, bs: bs}
 }

@@ -29,6 +29,10 @@ type NamedBytesEdges struct {
 	loaded [1]bool
 }
 
+// ptrNamedBytes returns the address of the field of a NamedBytes that holds its
+// i-th column: what a row is scanned into, and read from. It is the Ptr of
+// NamedBytesMeta.
+//
 //go:noinline
 func ptrNamedBytes(v any, i int) any {
 	e := v.(*NamedBytes)
@@ -60,7 +64,8 @@ type NamedBytesConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// NamedBytesMeta is the runtime description of NamedBytes. Use it through its address.
+// NamedBytesMeta is the runtime description of NamedBytes. Use it through its
+// address.
 var NamedBytesMeta = orm.Meta{
 	Name:    "NamedBytes",
 	Table:   "named_bytes",
@@ -150,7 +155,8 @@ func (q *NamedBytesQuery) ForShare(opts ...orm.LockOption) *NamedBytesQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *NamedBytesQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -192,7 +198,8 @@ func (q *NamedBytesQuery) First(ctx context.Context) (*NamedBytes, error) {
 	return r.(*NamedBytes), nil
 }
 
-// Only returns the single matching NamedBytes: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching NamedBytes: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *NamedBytesQuery) Only(ctx context.Context) (*NamedBytes, error) {
@@ -286,8 +293,8 @@ func (b *NamedBytesCreate) Set(ss ...predicate.NamedBytesSetter) *NamedBytesCrea
 // Fill takes what in gives: a struct whose fields are named like those of
 // NamedBytes, such as the input of an endpoint. A nil pointer gives nothing, an
 // optional (a type with ValueOK) gives nothing when absent, anything else is
-// written. A field that names nothing of NamedBytes is an error unless listed in
-// skip. A later Set wins.
+// written. A field that names nothing of NamedBytes is an error unless listed
+// in skip. A later Set wins.
 //
 //go:noinline
 func (b *NamedBytesCreate) Fill(in any, skip ...string) *NamedBytesCreate {
@@ -321,9 +328,9 @@ type NamedBytesCreateBulk struct {
 	n  int
 }
 
-// NewNamedBytesCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewNamedBytesCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewNamedBytesCreateBulk(ex velox.Executor, bs ...*NamedBytesCreate) *NamedBytesCreateBulk {
 	return &NamedBytesCreateBulk{ex: ex, bs: bs}
 }
@@ -376,7 +383,8 @@ func (b *NamedBytesCreateBulk) Exec(ctx context.Context) error {
 // NamedBytesUpdate updates NamedBytes rows.
 type NamedBytesUpdate struct{ c orm.MutCore }
 
-// NewNamedBytesUpdate returns a builder that updates the rows its predicates match.
+// NewNamedBytesUpdate returns a builder that updates the rows its predicates
+// match.
 func NewNamedBytesUpdate(ex velox.Executor) *NamedBytesUpdate {
 	return &NamedBytesUpdate{c: orm.MutCore{M: &NamedBytesMeta, Ex: ex}}
 }
@@ -442,7 +450,8 @@ func (b *NamedBytesUpdate) SaveOne(ctx context.Context) (*NamedBytes, error) {
 // NamedBytesDelete deletes NamedBytes rows.
 type NamedBytesDelete struct{ c orm.MutCore }
 
-// NewNamedBytesDelete returns a builder that deletes the rows its predicates match.
+// NewNamedBytesDelete returns a builder that deletes the rows its predicates
+// match.
 func NewNamedBytesDelete(ex velox.Executor) *NamedBytesDelete {
 	return &NamedBytesDelete{c: orm.MutCore{M: &NamedBytesMeta, Ex: ex}}
 }

@@ -29,7 +29,8 @@ func (*LabelKeyClient) Create(ex velox.Executor) *entity.LabelKeyCreate {
 	return entity.NewLabelKeyCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*LabelKeyClient) CreateBulk(ex velox.Executor, bs ...*entity.LabelKeyCreate) *entity.LabelKeyCreateBulk {
 	return entity.NewLabelKeyCreateBulk(ex, bs...)
 }
@@ -49,13 +50,14 @@ func (c *LabelKeyClient) Get(ctx context.Context, ex velox.Executor, id types.La
 	return c.Query(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the LabelKey with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the LabelKey with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *LabelKeyClient) UpdateByID(ex velox.Executor, id types.Label) *entity.LabelKeyUpdate {
 	return c.Update(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the LabelKey with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the LabelKey with the given id, or returns
+// velox.ErrNotFound.
 func (c *LabelKeyClient) DeleteByID(ctx context.Context, ex velox.Executor, id types.Label) error {
 	n, err := c.Delete(ex).Where(predicate.LabelKey(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

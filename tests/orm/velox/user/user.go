@@ -152,14 +152,15 @@ var meta2 = orm.EdgeMeta{Name: "comments", Index: 2, Rel: orm.O2M, Inverse: fals
 // EdgeComments is the "comments" edge of User, from User to Comment.
 type EdgeComments struct{}
 
-// Comments is the "comments" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithComments.
+// Comments is the "comments" edge of User: conditions on it and changes to it.
+// A query eager-loads it with WithComments.
 var Comments = &EdgeComments{}
 
 // Has matches a User that has at least one "comments" neighbor.
 func (e *EdgeComments) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta2} }
 
-// HasWith matches a User that has a "comments" neighbor satisfying the predicates.
+// HasWith matches a User that has a "comments" neighbor satisfying the
+// predicates.
 func (e *EdgeComments) HasWith(ps ...predicate.Comment) predicate.User {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -227,14 +228,15 @@ var meta4 = orm.EdgeMeta{Name: "liked_posts", Index: 4, Rel: orm.M2M, Inverse: f
 // EdgeLikedPosts is the "liked_posts" edge of User, from User to Post.
 type EdgeLikedPosts struct{}
 
-// LikedPosts is the "liked_posts" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithLikedPosts.
+// LikedPosts is the "liked_posts" edge of User: conditions on it and changes to
+// it. A query eager-loads it with WithLikedPosts.
 var LikedPosts = &EdgeLikedPosts{}
 
 // Has matches a User that has at least one "liked_posts" neighbor.
 func (e *EdgeLikedPosts) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta4} }
 
-// HasWith matches a User that has a "liked_posts" neighbor satisfying the predicates.
+// HasWith matches a User that has a "liked_posts" neighbor satisfying the
+// predicates.
 func (e *EdgeLikedPosts) HasWith(ps ...predicate.Post) predicate.User {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -310,8 +312,9 @@ func (e *EdgeLikes) Clear() predicate.UserSetter {
 	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta5}
 }
 
-// EdgeMetas returns the descriptions of the edges of User, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of User, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta {
 	return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4, &meta5}
 }

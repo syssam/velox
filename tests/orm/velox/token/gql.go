@@ -2,8 +2,8 @@
 
 package token
 
-// OrderField is a field a list of Token can be ordered by, as the GraphQL schema
-// names it: the Field of an entity.TokenOrder.
+// OrderField is a field a list of Token can be ordered by, as the GraphQL
+// schema names it: the Field of an entity.TokenOrder.
 type OrderField string
 
 // The fields a list of Token can be ordered by.

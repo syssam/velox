@@ -34,7 +34,8 @@ type AuthorEdges struct {
 	loaded   [5]bool
 }
 
-// ArticlesOrErr returns the articles edge, or an error when it was not loaded (velox.IsNotLoaded).
+// ArticlesOrErr returns the articles edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *AuthorEdges) ArticlesOrErr() ([]*Article, error) {
@@ -44,7 +45,8 @@ func (e *AuthorEdges) ArticlesOrErr() ([]*Article, error) {
 	return e.Articles, nil
 }
 
-// EditedOrErr returns the edited edge, or an error when it was not loaded (velox.IsNotLoaded).
+// EditedOrErr returns the edited edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *AuthorEdges) EditedOrErr() ([]*Article, error) {
@@ -54,7 +56,8 @@ func (e *AuthorEdges) EditedOrErr() ([]*Article, error) {
 	return e.Edited, nil
 }
 
-// PassportOrErr returns the passport edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// PassportOrErr returns the passport edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AuthorEdges) PassportOrErr() (*Passport, error) {
@@ -67,7 +70,8 @@ func (e *AuthorEdges) PassportOrErr() (*Passport, error) {
 	return e.Passport, nil
 }
 
-// LockerOrErr returns the locker edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// LockerOrErr returns the locker edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *AuthorEdges) LockerOrErr() (*Locker, error) {
@@ -80,7 +84,8 @@ func (e *AuthorEdges) LockerOrErr() (*Locker, error) {
 	return e.Locker, nil
 }
 
-// GadgetsOrErr returns the gadgets edge, or an error when it was not loaded (velox.IsNotLoaded).
+// GadgetsOrErr returns the gadgets edge, or an error when it was not loaded
+// (velox.IsNotLoaded).
 //
 //go:noinline
 func (e *AuthorEdges) GadgetsOrErr() ([]*Gadget, error) {
@@ -90,6 +95,10 @@ func (e *AuthorEdges) GadgetsOrErr() ([]*Gadget, error) {
 	return e.Gadgets, nil
 }
 
+// ptrAuthor returns the address of the field of a Author that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// AuthorMeta.
+//
 //go:noinline
 func ptrAuthor(v any, i int) any {
 	e := v.(*Author)
@@ -104,6 +113,9 @@ func ptrAuthor(v any, i int) any {
 	return nil
 }
 
+// edgeAuthor marks the i-th edge of a Author as loaded and returns the address
+// of the field that holds its neighbors. It is the Edge of AuthorMeta.
+//
 //go:noinline
 func edgeAuthor(v any, i int) any {
 	e := v.(*Author)
@@ -123,6 +135,10 @@ func edgeAuthor(v any, i int) any {
 	return nil
 }
 
+// linkAuthor stores the neighbors an eager load read into dst, the address of
+// the field of another entity's edge to Author: all of them, or the first where
+// the edge has one. It is the Link of AuthorMeta.
+//
 //go:noinline
 func linkAuthor(dst any, es []any) {
 	switch d := dst.(type) {
@@ -245,7 +261,8 @@ func (q *AuthorQuery) ForShare(opts ...orm.LockOption) *AuthorQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *AuthorQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -287,7 +304,8 @@ func (q *AuthorQuery) First(ctx context.Context) (*Author, error) {
 	return r.(*Author), nil
 }
 
-// Only returns the single matching Author: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Author: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *AuthorQuery) Only(ctx context.Context) (*Author, error) {
@@ -416,9 +434,9 @@ type AuthorCreateBulk struct {
 	n  int
 }
 
-// NewAuthorCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewAuthorCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewAuthorCreateBulk(ex velox.Executor, bs ...*AuthorCreate) *AuthorCreateBulk {
 	return &AuthorCreateBulk{ex: ex, bs: bs}
 }
@@ -567,9 +585,9 @@ func (e *Author) QueryArticles(ex velox.Executor) *ArticleQuery {
 	return q
 }
 
-// WithArticles eager-loads the "articles" edge: one more query, whatever the number
-// of rows. A query of Article given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Author.
+// WithArticles eager-loads the "articles" edge: one more query, whatever the
+// number of rows. A query of Article given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Author.
 //
 //go:noinline
 func (q *AuthorQuery) WithArticles(opts ...*ArticleQuery) *AuthorQuery {
@@ -613,9 +631,9 @@ func (e *Author) QueryPassport(ex velox.Executor) *PassportQuery {
 	return q
 }
 
-// WithPassport eager-loads the "passport" edge: one more query, whatever the number
-// of rows. A query of Passport given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Author.
+// WithPassport eager-loads the "passport" edge: one more query, whatever the
+// number of rows. A query of Passport given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Author.
 //
 //go:noinline
 func (q *AuthorQuery) WithPassport(opts ...*PassportQuery) *AuthorQuery {
@@ -659,9 +677,9 @@ func (e *Author) QueryGadgets(ex velox.Executor) *GadgetQuery {
 	return q
 }
 
-// WithGadgets eager-loads the "gadgets" edge: one more query, whatever the number
-// of rows. A query of Gadget given to it describes the load: its conditions,
-// order, nested loads and its limit, which applies per Author.
+// WithGadgets eager-loads the "gadgets" edge: one more query, whatever the
+// number of rows. A query of Gadget given to it describes the load: its
+// conditions, order, nested loads and its limit, which applies per Author.
 //
 //go:noinline
 func (q *AuthorQuery) WithGadgets(opts ...*GadgetQuery) *AuthorQuery {

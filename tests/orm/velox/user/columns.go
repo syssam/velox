@@ -95,9 +95,9 @@ func (f *IntColumn) Desc() predicate.UserOrderTerm {
 	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
-// TimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// TimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type TimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -178,9 +178,9 @@ func (f *TimeColumn) Desc() predicate.UserOrderTerm {
 	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
-// AutoTimeColumn is a column of Go type time.Time: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// AutoTimeColumn is a column of Go type time.Time: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type AutoTimeColumn string
 
 // EQ matches the rows whose column equals v.
@@ -382,9 +382,9 @@ func (f *StringColumn) Desc() predicate.UserOrderTerm {
 	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
-// NullableStringColumn is a column of Go type string: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// NullableStringColumn is a column of Go type string: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type NullableStringColumn string
 
 // EQ matches the rows whose column equals v.
@@ -499,9 +499,9 @@ func (f *NullableStringColumn) Desc() predicate.UserOrderTerm {
 	return predicate.UserOrderTerm{Col: string(*f), Desc: true}
 }
 
-// RoleEnumColumn is a column of Go type RoleEnum: its methods build the predicates,
-// assignments and order terms of that column. They have pointer receivers so
-// that the compiler emits each once.
+// RoleEnumColumn is a column of Go type RoleEnum: its methods build the
+// predicates, assignments and order terms of that column. They have pointer
+// receivers so that the compiler emits each once.
 type RoleEnumColumn string
 
 // EQ matches the rows whose column equals v.

@@ -26,6 +26,10 @@ type RuntimeEdges struct {
 	loaded [1]bool
 }
 
+// ptrRuntime returns the address of the field of a Runtime that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of
+// RuntimeMeta.
+//
 //go:noinline
 func ptrRuntime(v any, i int) any {
 	e := v.(*Runtime)
@@ -53,7 +57,8 @@ type RuntimeConnection struct {
 	TotalCount int `json:"totalCount"`
 }
 
-// RuntimeMeta is the runtime description of Runtime. Use it through its address.
+// RuntimeMeta is the runtime description of Runtime. Use it through its
+// address.
 var RuntimeMeta = orm.Meta{
 	Name:    "Runtime",
 	Table:   "runtimes",
@@ -138,7 +143,8 @@ func (q *RuntimeQuery) ForShare(opts ...orm.LockOption) *RuntimeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *RuntimeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +186,8 @@ func (q *RuntimeQuery) First(ctx context.Context) (*Runtime, error) {
 	return r.(*Runtime), nil
 }
 
-// Only returns the single matching Runtime: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Runtime: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *RuntimeQuery) Only(ctx context.Context) (*Runtime, error) {
@@ -309,9 +316,9 @@ type RuntimeCreateBulk struct {
 	n  int
 }
 
-// NewRuntimeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewRuntimeCreateBulk returns a builder that creates one row per given
+// builder, as each is when the rows are inserted: what is set on one after this
+// call is part of its row.
 func NewRuntimeCreateBulk(ex velox.Executor, bs ...*RuntimeCreate) *RuntimeCreateBulk {
 	return &RuntimeCreateBulk{ex: ex, bs: bs}
 }
@@ -364,7 +371,8 @@ func (b *RuntimeCreateBulk) Exec(ctx context.Context) error {
 // RuntimeUpdate updates Runtime rows.
 type RuntimeUpdate struct{ c orm.MutCore }
 
-// NewRuntimeUpdate returns a builder that updates the rows its predicates match.
+// NewRuntimeUpdate returns a builder that updates the rows its predicates
+// match.
 func NewRuntimeUpdate(ex velox.Executor) *RuntimeUpdate {
 	return &RuntimeUpdate{c: orm.MutCore{M: &RuntimeMeta, Ex: ex}}
 }
@@ -430,7 +438,8 @@ func (b *RuntimeUpdate) SaveOne(ctx context.Context) (*Runtime, error) {
 // RuntimeDelete deletes Runtime rows.
 type RuntimeDelete struct{ c orm.MutCore }
 
-// NewRuntimeDelete returns a builder that deletes the rows its predicates match.
+// NewRuntimeDelete returns a builder that deletes the rows its predicates
+// match.
 func NewRuntimeDelete(ex velox.Executor) *RuntimeDelete {
 	return &RuntimeDelete{c: orm.MutCore{M: &RuntimeMeta, Ex: ex}}
 }

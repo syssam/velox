@@ -24,7 +24,8 @@ func (*IdClient) Query(ex velox.Executor) *entity.IdQuery { return entity.NewIdQ
 // Create returns a builder that creates a Id.
 func (*IdClient) Create(ex velox.Executor) *entity.IdCreate { return entity.NewIdCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*IdClient) CreateBulk(ex velox.Executor, bs ...*entity.IdCreate) *entity.IdCreateBulk {
 	return entity.NewIdCreateBulk(ex, bs...)
 }

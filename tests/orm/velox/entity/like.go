@@ -33,7 +33,8 @@ type LikeEdges struct {
 	loaded [2]bool
 }
 
-// UserOrErr returns the user edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// UserOrErr returns the user edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *LikeEdges) UserOrErr() (*User, error) {
@@ -46,7 +47,8 @@ func (e *LikeEdges) UserOrErr() (*User, error) {
 	return e.User, nil
 }
 
-// PostOrErr returns the post edge: an error when it was not loaded (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
+// PostOrErr returns the post edge: an error when it was not loaded
+// (velox.IsNotLoaded), velox.ErrNotFound when it was loaded and is empty.
 //
 //go:noinline
 func (e *LikeEdges) PostOrErr() (*Post, error) {
@@ -59,6 +61,9 @@ func (e *LikeEdges) PostOrErr() (*Post, error) {
 	return e.Post, nil
 }
 
+// ptrLike returns the address of the field of a Like that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of LikeMeta.
+//
 //go:noinline
 func ptrLike(v any, i int) any {
 	e := v.(*Like)
@@ -75,6 +80,9 @@ func ptrLike(v any, i int) any {
 	return nil
 }
 
+// edgeLike marks the i-th edge of a Like as loaded and returns the address of
+// the field that holds its neighbors. It is the Edge of LikeMeta.
+//
 //go:noinline
 func edgeLike(v any, i int) any {
 	e := v.(*Like)
@@ -88,6 +96,10 @@ func edgeLike(v any, i int) any {
 	return nil
 }
 
+// linkLike stores the neighbors an eager load read into dst, the address of the
+// field of another entity's edge to Like: all of them, or the first where the
+// edge has one. It is the Link of LikeMeta.
+//
 //go:noinline
 func linkLike(dst any, es []any) {
 	switch d := dst.(type) {
@@ -211,7 +223,8 @@ func (q *LikeQuery) ForShare(opts ...orm.LockOption) *LikeQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *LikeQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -253,7 +266,8 @@ func (q *LikeQuery) First(ctx context.Context) (*Like, error) {
 	return r.(*Like), nil
 }
 
-// Only returns the single matching Like: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching Like: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *LikeQuery) Only(ctx context.Context) (*Like, error) {
@@ -382,9 +396,9 @@ type LikeCreateBulk struct {
 	n  int
 }
 
-// NewLikeCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewLikeCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewLikeCreateBulk(ex velox.Executor, bs ...*LikeCreate) *LikeCreateBulk {
 	return &LikeCreateBulk{ex: ex, bs: bs}
 }

@@ -28,7 +28,8 @@ func (*StringsClient) Create(ex velox.Executor) *entity.StringsCreate {
 	return entity.NewStringsCreate(ex)
 }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*StringsClient) CreateBulk(ex velox.Executor, bs ...*entity.StringsCreate) *entity.StringsCreateBulk {
 	return entity.NewStringsCreateBulk(ex, bs...)
 }
@@ -48,13 +49,14 @@ func (c *StringsClient) Get(ctx context.Context, ex velox.Executor, id int) (*en
 	return c.Query(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Only(ctx)
 }
 
-// UpdateByID returns a builder that updates the Strings with the given id; end it
-// with SaveOne, which reports a missing row.
+// UpdateByID returns a builder that updates the Strings with the given id; end
+// it with SaveOne, which reports a missing row.
 func (c *StringsClient) UpdateByID(ex velox.Executor, id int) *entity.StringsUpdate {
 	return c.Update(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id}))
 }
 
-// DeleteByID deletes the Strings with the given id, or returns velox.ErrNotFound.
+// DeleteByID deletes the Strings with the given id, or returns
+// velox.ErrNotFound.
 func (c *StringsClient) DeleteByID(ctx context.Context, ex velox.Executor, id int) error {
 	n, err := c.Delete(ex).Where(predicate.Strings(orm.P{Op: orm.OpEQ, Col: "id", Val: id})).Exec(ctx)
 	if err == nil && n == 0 {

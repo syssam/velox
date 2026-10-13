@@ -8,7 +8,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/internal/slots"
 )
 
-// init stitches the defaults, validators, hooks and policy of the Entityx schema.
+// init stitches the defaults, validators, hooks and policy of the Entityx
+// schema.
 func init() {
 	slots.Entityx.Stitch(func(m *orm.Meta) {
 		fields := schemapkg.Entityx{}.Fields()

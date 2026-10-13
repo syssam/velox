@@ -24,7 +24,8 @@ func (*PredClient) Query(ex velox.Executor) *entity.PredQuery { return entity.Ne
 // Create returns a builder that creates a Pred.
 func (*PredClient) Create(ex velox.Executor) *entity.PredCreate { return entity.NewPredCreate(ex) }
 
-// CreateBulk returns a builder that creates one row per given builder with one statement.
+// CreateBulk returns a builder that creates one row per given builder with one
+// statement.
 func (*PredClient) CreateBulk(ex velox.Executor, bs ...*entity.PredCreate) *entity.PredCreateBulk {
 	return entity.NewPredCreateBulk(ex, bs...)
 }

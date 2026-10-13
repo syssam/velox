@@ -25,10 +25,12 @@ const (
 	OrderDesc OrderEnum = "desc"
 )
 
-// DefaultOrder returns the value of the order field of a row created without one.
+// DefaultOrder returns the value of the order field of a row created without
+// one.
 func DefaultOrder() OrderEnum { return OrderAsc }
 
-// OrderValues returns the values of the order field, in the order of the schema.
+// OrderValues returns the values of the order field, in the order of the
+// schema.
 func OrderValues() []OrderEnum {
 	return []OrderEnum{OrderAsc, OrderDesc}
 }
@@ -59,10 +61,12 @@ const (
 	QueryB QueryEnum = "b"
 )
 
-// DefaultQuery returns the value of the query field of a row created without one.
+// DefaultQuery returns the value of the query field of a row created without
+// one.
 func DefaultQuery() QueryEnum { return QueryA }
 
-// QueryValues returns the values of the query field, in the order of the schema.
+// QueryValues returns the values of the query field, in the order of the
+// schema.
 func QueryValues() []QueryEnum {
 	return []QueryEnum{QueryA, QueryB}
 }
@@ -76,10 +80,12 @@ const (
 	CreateSingle CreateEnum = "single"
 )
 
-// DefaultCreate returns the value of the create field of a row created without one.
+// DefaultCreate returns the value of the create field of a row created without
+// one.
 func DefaultCreate() CreateEnum { return CreateSingle }
 
-// CreateValues returns the values of the create field, in the order of the schema.
+// CreateValues returns the values of the create field, in the order of the
+// schema.
 func CreateValues() []CreateEnum {
 	return []CreateEnum{CreateBulk, CreateSingle}
 }
@@ -93,10 +99,12 @@ const (
 	UpdateB UpdateEnum = "b"
 )
 
-// DefaultUpdate returns the value of the update field of a row created without one.
+// DefaultUpdate returns the value of the update field of a row created without
+// one.
 func DefaultUpdate() UpdateEnum { return UpdateA }
 
-// UpdateValues returns the values of the update field, in the order of the schema.
+// UpdateValues returns the values of the update field, in the order of the
+// schema.
 func UpdateValues() []UpdateEnum {
 	return []UpdateEnum{UpdateA, UpdateB}
 }
@@ -274,7 +282,8 @@ var Others = &EdgeOthers{}
 // Has matches a Clash that has at least one "others" neighbor.
 func (e *EdgeOthers) Has() predicate.Clash { return predicate.Clash{Op: orm.OpHasEdge, Edge: &meta0} }
 
-// HasWith matches a Clash that has a "others" neighbor satisfying the predicates.
+// HasWith matches a Clash that has a "others" neighbor satisfying the
+// predicates.
 func (e *EdgeOthers) HasWith(ps ...predicate.Field) predicate.Clash {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -308,11 +317,12 @@ func (e *EdgeOthers) Clear() predicate.ClashSetter {
 
 var meta1 = orm.EdgeMeta{Name: "others_or_err", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others_or_err"}}
 
-// EdgeOthersOrErrEdge is the "others_or_err" edge of Clash, from Clash to Field.
+// EdgeOthersOrErrEdge is the "others_or_err" edge of Clash, from Clash to
+// Field.
 type EdgeOthersOrErrEdge struct{}
 
-// OthersOrErrEdge is the "others_or_err" edge of Clash: conditions on it and changes to it. A
-// query eager-loads it with WithOthersOrErrEdge.
+// OthersOrErrEdge is the "others_or_err" edge of Clash: conditions on it and
+// changes to it. A query eager-loads it with WithOthersOrErrEdge.
 var OthersOrErrEdge = &EdgeOthersOrErrEdge{}
 
 // Has matches a Clash that has at least one "others_or_err" neighbor.
@@ -320,7 +330,8 @@ func (e *EdgeOthersOrErrEdge) Has() predicate.Clash {
 	return predicate.Clash{Op: orm.OpHasEdge, Edge: &meta1}
 }
 
-// HasWith matches a Clash that has a "others_or_err" neighbor satisfying the predicates.
+// HasWith matches a Clash that has a "others_or_err" neighbor satisfying the
+// predicates.
 func (e *EdgeOthersOrErrEdge) HasWith(ps ...predicate.Field) predicate.Clash {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -352,8 +363,9 @@ func (e *EdgeOthersOrErrEdge) Clear() predicate.ClashSetter {
 	return predicate.ClashSetter{Kind: orm.EdgeClear, Edge: &meta1}
 }
 
-// EdgeMetas returns the descriptions of the edges of Clash, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Clash, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
 
 // And matches the rows every one of ps matches.

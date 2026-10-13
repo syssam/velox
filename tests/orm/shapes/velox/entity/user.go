@@ -26,6 +26,9 @@ type UserEdges struct {
 	loaded [1]bool
 }
 
+// ptrUser returns the address of the field of a User that holds its i-th
+// column: what a row is scanned into, and read from. It is the Ptr of UserMeta.
+//
 //go:noinline
 func ptrUser(v any, i int) any {
 	e := v.(*User)
@@ -138,7 +141,8 @@ func (q *UserQuery) ForShare(opts ...orm.LockOption) *UserQuery {
 }
 
 // Select reads the given columns of the matching rows, and aggregates over
-// them, instead of entities: Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
+// them, instead of entities:
+// Select().GroupBy("status").Aggregate(orm.Count()).Scan(ctx, &rows).
 //
 //go:noinline
 func (q *UserQuery) Select(columns ...string) *orm.Selection { return q.c.Select(columns...) }
@@ -180,7 +184,8 @@ func (q *UserQuery) First(ctx context.Context) (*User, error) {
 	return r.(*User), nil
 }
 
-// Only returns the single matching User: velox.ErrNotFound for none, velox.ErrNotSingular for more.
+// Only returns the single matching User: velox.ErrNotFound for none,
+// velox.ErrNotSingular for more.
 //
 //go:noinline
 func (q *UserQuery) Only(ctx context.Context) (*User, error) {
@@ -309,9 +314,9 @@ type UserCreateBulk struct {
 	n  int
 }
 
-// NewUserCreateBulk returns a builder that creates one row per given builder, as each
-// is when the rows are inserted: what is set on one after this call is part
-// of its row.
+// NewUserCreateBulk returns a builder that creates one row per given builder,
+// as each is when the rows are inserted: what is set on one after this call is
+// part of its row.
 func NewUserCreateBulk(ex velox.Executor, bs ...*UserCreate) *UserCreateBulk {
 	return &UserCreateBulk{ex: ex, bs: bs}
 }

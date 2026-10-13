@@ -9,8 +9,8 @@ import (
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
-// Table is the table of Passport, and ModelName the name of the entity: what the
-// Type method of a query or a mutation of it returns.
+// Table is the table of Passport, and ModelName the name of the entity: what
+// the Type method of a query or a mutation of it returns.
 const (
 	Table     = "passports"
 	ModelName = "Passport"
@@ -42,7 +42,8 @@ func (e *EdgeOwner) Has() predicate.Passport {
 	return predicate.Passport{Op: orm.OpHasEdge, Edge: &meta0}
 }
 
-// HasWith matches a Passport that has a "owner" neighbor satisfying the predicates.
+// HasWith matches a Passport that has a "owner" neighbor satisfying the
+// predicates.
 func (e *EdgeOwner) HasWith(ps ...predicate.Author) predicate.Passport {
 	subs := make([]orm.P, len(ps))
 	for i, p := range ps {
@@ -61,8 +62,9 @@ func (e *EdgeOwner) Clear() predicate.PassportSetter {
 	return predicate.PassportSetter{Kind: orm.EdgeClear, Edge: &meta0}
 }
 
-// EdgeMetas returns the descriptions of the edges of Passport, in order. The generated
-// entity package connects them to the entities they join; nothing else needs them.
+// EdgeMetas returns the descriptions of the edges of Passport, in order. The
+// generated entity package connects them to the entities they join; nothing
+// else needs them.
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
 
 // And matches the rows every one of ps matches.
