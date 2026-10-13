@@ -714,3 +714,48 @@ method named after an edge of the schema. A builder's name in a compiler
 error is the library's (`*orm.QueryOf[*entity.Post, predicate.Post, int]`).
 gqlgen 0.17.86 binds the connection types as before
 (`entity.PostConnection` is `orm.Connection[*entity.Post]`).
+
+## What a type reaches: `reflect.Type` in `orm.Meta` (2026-10-13, load 4-10)
+
+A package compiles something for every type it can reach from the types it
+names: through fields, through pointers, and through the signatures of
+methods, unexported ones included. Measured with Go 1.27.1, as the object
+file of a package that declares one variable and nothing else:
+
+| the variable's type | object |
+|---|---|
+| `int`, `orm.Op`, `context.Context`, `sync.Once` | 2-13 KB |
+| `velox.Executor`, `*velox.Tx`, `velox.Hook`, `velox.Policy` | 21-24 KB |
+| `*sql.Selector` (the SQL builder) | 39 KB |
+| `reflect.Type`, `reflect.Value` | 169 KB |
+| `*sql.DB`, `*sql.Tx` of `database/sql` | 243 KB |
+| `orm.P`, `orm.S`, `*orm.Meta`, `orm.EdgeMeta` (before) | 219 KB |
+| `*orm.QueryCore`, `*orm.Selection` (before) | 228 KB |
+
+A predicate reached `reflect.Type`: `P.Edge` is a `*EdgeMeta`, whose `Owner`
+is a `*Meta`, which had an unexported field `typ reflect.Type` and three
+methods with a reflect type in their signature; a query reached the rows of
+`database/sql` through the signature of an unexported method of
+`Selection`. So every package of a generated tree, and every package of an
+application that names a predicate or a query, carried what `reflect.Type`
+costs, about 0.02 CPU-s each.
+
+The field is held as `any` now, read through the function `typeOf`, and the
+four methods are functions (`goType`, `convertTo`, `fillPlanOf`,
+`runSelection`):
+
+| | `orm.P` | `*orm.QueryCore` | `*orm.QueryOf[...]` | the 450 entity packages | their archives |
+|---|---|---|---|---|---|
+| before | 219 KB | 228 KB | | 38.3 / 39.1 / 39.6 CPU-s | 194 MB |
+| after | 52 KB | 60 KB | 76 KB | 28.5 / 31.0 / 31.2 CPU-s | 128 MB |
+
+(The machine was slower for this table than for the ones above: the same
+"before" tree measured 26.5 CPU-s there.) Pinned by
+`orm/reach_test.go::TestApplicationTypesDoNotReachReflect`, which compiles
+such one-variable packages and compares them with one of `reflect.Type`.
+
+The 312 services do not change (104.8-115.9 CPU-s after, 105.4-115.9 before,
+in the same runs): each holds a `*velox.DB`, and the database handle reaches
+`database/sql` by what it is for (`db.SQL()` returns the `*sql.DB`): 255 KB.
+A package that takes a `velox.Executor` or a `*velox.Tx` where it took the
+`*velox.DB` does not pay it.

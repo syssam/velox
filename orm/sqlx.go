@@ -190,14 +190,14 @@ func (s *Selection) Aggregate(aggs ...Agg) *Selection {
 //
 //go:noinline
 func (s *Selection) Scan(ctx context.Context, dest any) error {
-	return s.run(ctx, func(rows *sql.Rows) error { return sql.ScanSlice(rows, dest) })
+	return runSelection(ctx, s, func(rows *sql.Rows) error { return sql.ScanSlice(rows, dest) })
 }
 
 // Int runs the read and returns its single integer, e.g. a count or a
 // maximum: 0 when no row matches or the value is NULL.
 func (s *Selection) Int(ctx context.Context) (int, error) {
 	var v stdsql.NullInt64
-	err := s.run(ctx, func(rows *sql.Rows) error {
+	err := runSelection(ctx, s, func(rows *sql.Rows) error {
 		if !rows.Next() {
 			return rows.Err()
 		}
@@ -246,9 +246,13 @@ func (s *Selection) SQL(ctx context.Context) (query string, args []any, err erro
 	return query, args, err
 }
 
-// run executes the read under the entity's policy and the interceptors and
-// hands the rows to scan.
-func (s *Selection) run(ctx context.Context, scan func(*sql.Rows) error) error {
+// runSelection executes the read under the entity's policy and the
+// interceptors and hands the rows to scan.
+//
+// A function, not a method of Selection: the signature of a method is part of
+// what the type reaches, and the rows of database/sql there are paid for by
+// every package that names a query (see Meta.typ).
+func runSelection(ctx context.Context, s *Selection, scan func(*sql.Rows) error) error {
 	c, cerr := s.q.conn()
 	if cerr != nil {
 		return cerr

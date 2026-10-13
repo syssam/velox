@@ -43,7 +43,7 @@ func (m *MutCore) Fill(in any, update bool, skip []string) {
 		fail("velox: Fill of %s takes a struct or a pointer to one, not %T", meta.Name, in)
 		return
 	}
-	if rv.Type() == meta.typ.Elem() {
+	if rv.Type() == typeOf(meta).Elem() {
 		// An entity cannot say which of its fields are given: its Active
 		// field is false both when the caller wants false and when the
 		// caller wants the schema's default of true. Written from one, a row
@@ -51,7 +51,7 @@ func (m *MutCore) Fill(in any, update bool, skip []string) {
 		fail("velox: Fill of %[1]s takes an input struct, not a %[1]s: an entity's fields cannot say \"not given\"; give the values with Set, or in a struct whose optional fields are pointers", meta.Name)
 		return
 	}
-	plan := meta.fillPlan(rv.Type())
+	plan := fillPlanOf(meta, rv.Type())
 	for _, name := range plan.unknown {
 		if !slices.Contains(skip, name) {
 			fail("velox: Fill of %s: %s has a field %s that %s does not; name it in skip if it is not meant for the row", meta.Name, rv.Type(), name, meta.Name)
@@ -102,7 +102,7 @@ func (m *MutCore) Fill(in any, update bool, skip []string) {
 				continue
 			}
 		}
-		val, err := meta.convertTo(p.f, v)
+		val, err := convertTo(meta, p.f, v)
 		if err != nil {
 			fail("%w", err)
 			return
@@ -113,8 +113,12 @@ func (m *MutCore) Fill(in any, update bool, skip []string) {
 
 // convertTo is convert for a value still held by reflection, which also takes
 // the values convert cannot compare (a slice, a map).
-func (m *Meta) convertTo(f *FieldMeta, v reflect.Value) (any, error) {
-	t := m.goType(m.col(f.Column))
+//
+// A function, not a method of Meta: the signature of a method is part of
+// what the type reaches, and a reflect type there is paid for by every
+// package that names a predicate (see Meta.typ).
+func convertTo(m *Meta, f *FieldMeta, v reflect.Value) (any, error) {
+	t := goType(m, m.col(f.Column))
 	if v.Type() == t || v.Type().AssignableTo(t) {
 		return v.Interface(), nil
 	}
@@ -146,9 +150,13 @@ type fillKey struct {
 	t reflect.Type
 }
 
-// fillPlan maps the fields of struct type t to the fields of the entity. It
+// fillPlanOf maps the fields of struct type t to the fields of the entity. It
 // is computed once per type.
-func (m *Meta) fillPlan(t reflect.Type) *fillPlan {
+//
+// A function, not a method of Meta: the signature of a method is part of
+// what the type reaches, and a reflect type there is paid for by every
+// package that names a predicate (see Meta.typ).
+func fillPlanOf(m *Meta, t reflect.Type) *fillPlan {
 	key := fillKey{m, t}
 	if p, ok := fillPlans.Load(key); ok {
 		return p.(*fillPlan) //nolint:errcheck // stored below

@@ -313,7 +313,7 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 			}
 			continue
 		}
-		t := m.goType(m.col(k.Col))
+		t := goType(m, m.col(k.Col))
 		if t == reflect.TypeFor[time.Time]() {
 			var z zonedTime
 			if err := json.Unmarshal(c.V[i], &z); err != nil {
@@ -334,7 +334,11 @@ func (m *Meta) decodeCursor(keys []O, s string) ([]any, error) {
 
 // goType returns the Go type of the value of Columns[i], without the pointer
 // of a nillable field.
-func (m *Meta) goType(i int) reflect.Type {
+//
+// A function, not a method of Meta: the signature of a method is part of
+// what the type reaches, and a reflect type there is paid for by every
+// package that names a predicate (see Meta.typ).
+func goType(m *Meta, i int) reflect.Type {
 	t := reflect.TypeOf(m.Ptr(m.New(), i)).Elem()
 	if m.cols[i].ptr {
 		t = t.Elem()
@@ -346,7 +350,7 @@ func (m *Meta) goType(i int) reflect.Type {
 // nothing: 41.9 is not an int, and a value that overflows the field is not
 // that value.
 func (m *Meta) convert(f *FieldMeta, v any) (any, error) {
-	t := m.goType(m.col(f.Column))
+	t := goType(m, m.col(f.Column))
 	rv := reflect.ValueOf(v)
 	switch {
 	case !rv.IsValid():
@@ -403,7 +407,7 @@ func FieldPredicate(m *Meta, field string, op Op, value any) (P, error) {
 		return P{Op: op, Col: f.Column, Val: vals}, nil
 	case OpContains, OpHasPrefix, OpHasSuffix, OpEqualFold, OpContainsFold:
 		s, ok := value.(string)
-		if !ok || m.goType(m.col(f.Column)).Kind() != reflect.String {
+		if !ok || goType(m, m.col(f.Column)).Kind() != reflect.String {
 			return P{}, fmt.Errorf("velox: %s.%s: a text operator needs a text field and a string", m.Name, field)
 		}
 		return P{Op: op, Col: f.Column, Val: s}, nil

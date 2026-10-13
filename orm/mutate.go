@@ -505,7 +505,7 @@ func (m *Meta) entity(v any, err error) (any, error) {
 		return nil, err
 	}
 	m.prepare()
-	if v == nil || reflect.TypeOf(v) != m.typ {
+	if v == nil || reflect.TypeOf(v) != typeOf(m) {
 		return nil, fmt.Errorf("velox: a hook of %s returned %T instead of running the mutation", m.Name, v)
 	}
 	return v, nil

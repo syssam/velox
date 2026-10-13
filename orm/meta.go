@@ -124,7 +124,11 @@ type Meta struct {
 	byGoName map[string]*FieldMeta // by the name of the entity's struct field
 	index    map[string]int
 	cols     []column
-	typ      reflect.Type // *Entity
+	// typ is the reflect.Type of *Entity. It is held as any, and read
+	// through typeOf: with reflect.Type among the types this one reaches,
+	// every package that names a predicate (all of an application's) compiled
+	// some 200 KB of what the reflect package's types need, 0.02 CPU-s each.
+	typ any
 }
 
 // ready reports the error of running an entity whose schema runtime was not
@@ -268,6 +272,14 @@ type column struct {
 	dest destKind
 	ptr  bool // the Go field is a pointer to the value
 	zero any  // the zero value of the Go field's base type
+}
+
+// typeOf returns the type of the pointer to the entity's struct. It is a
+// function and not a method of Meta for what the field is an any for: a
+// method's signature is part of what the type reaches.
+func typeOf(m *Meta) reflect.Type {
+	t, _ := m.typ.(reflect.Type)
+	return t
 }
 
 // id returns the primary-key field.
