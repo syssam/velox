@@ -18,8 +18,12 @@ var PersonColumns = []*schema.Column{{
 }}
 
 // PersonTable holds the schema information for the "persons" table.
-var PersonTable = &schema.Table{
-	Columns:    PersonColumns,
-	Name:       "persons",
-	PrimaryKey: []*schema.Column{PersonColumns[0]},
+var PersonTable = newPersonTable()
+
+func newPersonTable() *schema.Table {
+	return &schema.Table{
+		Columns:    PersonColumns,
+		Name:       "persons",
+		PrimaryKey: []*schema.Column{PersonColumns[0]},
+	}
 }

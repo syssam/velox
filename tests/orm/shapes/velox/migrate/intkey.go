@@ -18,8 +18,12 @@ var IntKeyColumns = []*schema.Column{{
 }}
 
 // IntKeyTable holds the schema information for the "int_keys" table.
-var IntKeyTable = &schema.Table{
-	Columns:    IntKeyColumns,
-	Name:       "int_keys",
-	PrimaryKey: []*schema.Column{IntKeyColumns[0]},
+var IntKeyTable = newIntKeyTable()
+
+func newIntKeyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    IntKeyColumns,
+		Name:       "int_keys",
+		PrimaryKey: []*schema.Column{IntKeyColumns[0]},
+	}
 }

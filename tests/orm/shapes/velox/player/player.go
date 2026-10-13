@@ -49,10 +49,19 @@ var FanOf = &orm.ToMany[predicate.Player, predicate.Team, uuid.UUID]{Meta: &fanO
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&teamMeta, &fanOfMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Player) predicate.Player { return orm.And(ps...) }
+func And(ps ...predicate.Player) predicate.Player { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Player) predicate.Player { return orm.Or(ps...) }
+func Or(ps ...predicate.Player) predicate.Player { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Player) predicate.Player { return orm.Not(ps...) }
+func Not(ps ...predicate.Player) predicate.Player { return group(orm.OpNot, ps) }
+
+// group joins conditions on Player under one operator.
+func group(op orm.Op, ps []predicate.Player) predicate.Player {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Player{Op: op, Subs: subs}
+}

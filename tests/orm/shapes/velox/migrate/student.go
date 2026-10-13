@@ -18,8 +18,12 @@ var StudentColumns = []*schema.Column{{
 }}
 
 // StudentTable holds the schema information for the "students" table.
-var StudentTable = &schema.Table{
-	Columns:    StudentColumns,
-	Name:       "students",
-	PrimaryKey: []*schema.Column{StudentColumns[0]},
+var StudentTable = newStudentTable()
+
+func newStudentTable() *schema.Table {
+	return &schema.Table{
+		Columns:    StudentColumns,
+		Name:       "students",
+		PrimaryKey: []*schema.Column{StudentColumns[0]},
+	}
 }

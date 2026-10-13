@@ -18,8 +18,12 @@ var CourseColumns = []*schema.Column{{
 }}
 
 // CourseTable holds the schema information for the "courses" table.
-var CourseTable = &schema.Table{
-	Columns:    CourseColumns,
-	Name:       "courses",
-	PrimaryKey: []*schema.Column{CourseColumns[0]},
+var CourseTable = newCourseTable()
+
+func newCourseTable() *schema.Table {
+	return &schema.Table{
+		Columns:    CourseColumns,
+		Name:       "courses",
+		PrimaryKey: []*schema.Column{CourseColumns[0]},
+	}
 }

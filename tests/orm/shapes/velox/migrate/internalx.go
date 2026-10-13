@@ -18,8 +18,12 @@ var InternalColumns = []*schema.Column{{
 }}
 
 // InternalTable holds the schema information for the "internals" table.
-var InternalTable = &schema.Table{
-	Columns:    InternalColumns,
-	Name:       "internals",
-	PrimaryKey: []*schema.Column{InternalColumns[0]},
+var InternalTable = newInternalTable()
+
+func newInternalTable() *schema.Table {
+	return &schema.Table{
+		Columns:    InternalColumns,
+		Name:       "internals",
+		PrimaryKey: []*schema.Column{InternalColumns[0]},
+	}
 }

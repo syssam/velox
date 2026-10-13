@@ -23,8 +23,12 @@ var NamedBoolNilColumns = []*schema.Column{{
 
 // NamedBoolNilTable holds the schema information for the "named_bool_nils"
 // table.
-var NamedBoolNilTable = &schema.Table{
-	Columns:    NamedBoolNilColumns,
-	Name:       "named_bool_nils",
-	PrimaryKey: []*schema.Column{NamedBoolNilColumns[0]},
+var NamedBoolNilTable = newNamedBoolNilTable()
+
+func newNamedBoolNilTable() *schema.Table {
+	return &schema.Table{
+		Columns:    NamedBoolNilColumns,
+		Name:       "named_bool_nils",
+		PrimaryKey: []*schema.Column{NamedBoolNilColumns[0]},
+	}
 }

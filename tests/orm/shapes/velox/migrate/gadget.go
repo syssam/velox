@@ -22,14 +22,18 @@ var GadgetColumns = []*schema.Column{{
 }}
 
 // GadgetTable holds the schema information for the "gadgets" table.
-var GadgetTable = &schema.Table{
-	Columns: GadgetColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{GadgetColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{AuthorColumns[0]},
-		Symbol:     "gadgets_authors_gadgets",
-	}},
-	Name:       "gadgets",
-	PrimaryKey: []*schema.Column{GadgetColumns[0]},
+var GadgetTable = newGadgetTable()
+
+func newGadgetTable() *schema.Table {
+	return &schema.Table{
+		Columns: GadgetColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{GadgetColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{AuthorColumns[0]},
+			Symbol:     "gadgets_authors_gadgets",
+		}},
+		Name:       "gadgets",
+		PrimaryKey: []*schema.Column{GadgetColumns[0]},
+	}
 }

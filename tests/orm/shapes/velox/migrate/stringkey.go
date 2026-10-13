@@ -18,8 +18,12 @@ var StringKeyColumns = []*schema.Column{{
 }}
 
 // StringKeyTable holds the schema information for the "string_keys" table.
-var StringKeyTable = &schema.Table{
-	Columns:    StringKeyColumns,
-	Name:       "string_keys",
-	PrimaryKey: []*schema.Column{StringKeyColumns[0]},
+var StringKeyTable = newStringKeyTable()
+
+func newStringKeyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    StringKeyColumns,
+		Name:       "string_keys",
+		PrimaryKey: []*schema.Column{StringKeyColumns[0]},
+	}
 }

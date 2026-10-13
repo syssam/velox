@@ -209,3 +209,42 @@ func BenchmarkCreateForms(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkStatement builds a statement without running it, on one goroutine
+// and on all of them: what the ORM itself costs a request (the policy, the
+// interceptors, the SQL), and whether requests share anything that makes
+// them wait for each other. Every query reads its entity's description, so
+// a lock or a counter there would show as a parallel run that is no faster
+// per operation than the serial one.
+func BenchmarkStatement(b *testing.B) {
+	ctx := context.Background()
+	db, _, ids := benchDB(b, 1)
+	build := func(i int) error {
+		_, _, err := client.User.Query(db).
+			Where(user.ID.EQ(ids[0]), user.Age.GT(i%50)).
+			OrderBy(user.Name.Asc()).
+			Limit(10).
+			Select(user.ColumnName).
+			SQL(ctx)
+		return err
+	}
+	b.Run("serial", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; b.Loop(); i++ {
+			if err := build(i); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("parallel", func(b *testing.B) {
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			for i := 0; pb.Next(); i++ {
+				if err := build(i); err != nil {
+					b.Error(err)
+					return
+				}
+			}
+		})
+	})
+}

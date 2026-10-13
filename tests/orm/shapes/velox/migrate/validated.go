@@ -87,8 +87,12 @@ var ValidatedColumns = []*schema.Column{{
 }}
 
 // ValidatedTable holds the schema information for the "validateds" table.
-var ValidatedTable = &schema.Table{
-	Columns:    ValidatedColumns,
-	Name:       "validateds",
-	PrimaryKey: []*schema.Column{ValidatedColumns[0]},
+var ValidatedTable = newValidatedTable()
+
+func newValidatedTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ValidatedColumns,
+		Name:       "validateds",
+		PrimaryKey: []*schema.Column{ValidatedColumns[0]},
+	}
 }

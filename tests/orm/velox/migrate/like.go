@@ -24,24 +24,28 @@ var LikeColumns = []*schema.Column{{
 }}
 
 // LikeTable holds the schema information for the "likes" table.
-var LikeTable = &schema.Table{
-	Columns: LikeColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{LikeColumns[2]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{UserColumns[0]},
-		Symbol:     "likes_users_user",
-	}, {
-		Columns:    []*schema.Column{LikeColumns[3]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{PostColumns[0]},
-		Symbol:     "likes_posts_post",
-	}},
-	Indexes: []*schema.Index{{
-		Columns: []*schema.Column{LikeColumns[2], LikeColumns[3]},
-		Name:    "like_user_id_post_id",
-		Unique:  true,
-	}},
-	Name:       "likes",
-	PrimaryKey: []*schema.Column{LikeColumns[0]},
+var LikeTable = newLikeTable()
+
+func newLikeTable() *schema.Table {
+	return &schema.Table{
+		Columns: LikeColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{LikeColumns[2]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{UserColumns[0]},
+			Symbol:     "likes_users_user",
+		}, {
+			Columns:    []*schema.Column{LikeColumns[3]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{PostColumns[0]},
+			Symbol:     "likes_posts_post",
+		}},
+		Indexes: []*schema.Index{{
+			Columns: []*schema.Column{LikeColumns[2], LikeColumns[3]},
+			Name:    "like_user_id_post_id",
+			Unique:  true,
+		}},
+		Name:       "likes",
+		PrimaryKey: []*schema.Column{LikeColumns[0]},
+	}
 }

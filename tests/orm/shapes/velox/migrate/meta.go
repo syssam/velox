@@ -18,8 +18,12 @@ var MetaColumns = []*schema.Column{{
 }}
 
 // MetaTable holds the schema information for the "meta" table.
-var MetaTable = &schema.Table{
-	Columns:    MetaColumns,
-	Name:       "meta",
-	PrimaryKey: []*schema.Column{MetaColumns[0]},
+var MetaTable = newMetaTable()
+
+func newMetaTable() *schema.Table {
+	return &schema.Table{
+		Columns:    MetaColumns,
+		Name:       "meta",
+		PrimaryKey: []*schema.Column{MetaColumns[0]},
+	}
 }

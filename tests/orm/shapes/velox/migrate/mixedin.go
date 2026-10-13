@@ -52,8 +52,12 @@ var MixedInColumns = []*schema.Column{{
 }}
 
 // MixedInTable holds the schema information for the "mixed_ins" table.
-var MixedInTable = &schema.Table{
-	Columns:    MixedInColumns,
-	Name:       "mixed_ins",
-	PrimaryKey: []*schema.Column{MixedInColumns[0]},
+var MixedInTable = newMixedInTable()
+
+func newMixedInTable() *schema.Table {
+	return &schema.Table{
+		Columns:    MixedInColumns,
+		Name:       "mixed_ins",
+		PrimaryKey: []*schema.Column{MixedInColumns[0]},
+	}
 }

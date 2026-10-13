@@ -18,8 +18,12 @@ var LoadColumns = []*schema.Column{{
 }}
 
 // LoadTable holds the schema information for the "loads" table.
-var LoadTable = &schema.Table{
-	Columns:    LoadColumns,
-	Name:       "loads",
-	PrimaryKey: []*schema.Column{LoadColumns[0]},
+var LoadTable = newLoadTable()
+
+func newLoadTable() *schema.Table {
+	return &schema.Table{
+		Columns:    LoadColumns,
+		Name:       "loads",
+		PrimaryKey: []*schema.Column{LoadColumns[0]},
+	}
 }

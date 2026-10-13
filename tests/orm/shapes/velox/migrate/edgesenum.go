@@ -20,8 +20,12 @@ var EdgesEnumColumns = []*schema.Column{{
 }}
 
 // EdgesEnumTable holds the schema information for the "edges_enums" table.
-var EdgesEnumTable = &schema.Table{
-	Columns:    EdgesEnumColumns,
-	Name:       "edges_enums",
-	PrimaryKey: []*schema.Column{EdgesEnumColumns[0]},
+var EdgesEnumTable = newEdgesEnumTable()
+
+func newEdgesEnumTable() *schema.Table {
+	return &schema.Table{
+		Columns:    EdgesEnumColumns,
+		Name:       "edges_enums",
+		PrimaryKey: []*schema.Column{EdgesEnumColumns[0]},
+	}
 }

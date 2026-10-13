@@ -75,8 +75,12 @@ var BlobColumns = []*schema.Column{{
 }}
 
 // BlobTable holds the schema information for the "blobs" table.
-var BlobTable = &schema.Table{
-	Columns:    BlobColumns,
-	Name:       "blobs",
-	PrimaryKey: []*schema.Column{BlobColumns[0]},
+var BlobTable = newBlobTable()
+
+func newBlobTable() *schema.Table {
+	return &schema.Table{
+		Columns:    BlobColumns,
+		Name:       "blobs",
+		PrimaryKey: []*schema.Column{BlobColumns[0]},
+	}
 }

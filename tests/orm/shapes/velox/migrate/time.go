@@ -21,8 +21,12 @@ var TimeColumns = []*schema.Column{{
 }}
 
 // TimeTable holds the schema information for the "times" table.
-var TimeTable = &schema.Table{
-	Columns:    TimeColumns,
-	Name:       "times",
-	PrimaryKey: []*schema.Column{TimeColumns[0]},
+var TimeTable = newTimeTable()
+
+func newTimeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    TimeColumns,
+		Name:       "times",
+		PrimaryKey: []*schema.Column{TimeColumns[0]},
+	}
 }

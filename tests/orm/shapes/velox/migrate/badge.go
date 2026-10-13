@@ -18,8 +18,12 @@ var BadgeColumns = []*schema.Column{{
 }}
 
 // BadgeTable holds the schema information for the "badges" table.
-var BadgeTable = &schema.Table{
-	Columns:    BadgeColumns,
-	Name:       "badges",
-	PrimaryKey: []*schema.Column{BadgeColumns[0]},
+var BadgeTable = newBadgeTable()
+
+func newBadgeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    BadgeColumns,
+		Name:       "badges",
+		PrimaryKey: []*schema.Column{BadgeColumns[0]},
+	}
 }

@@ -22,14 +22,18 @@ var PlayerColumns = []*schema.Column{{
 }}
 
 // PlayerTable holds the schema information for the "players" table.
-var PlayerTable = &schema.Table{
-	Columns: PlayerColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PlayerColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{TeamColumns[0]},
-		Symbol:     "players_teams_players",
-	}},
-	Name:       "players",
-	PrimaryKey: []*schema.Column{PlayerColumns[0]},
+var PlayerTable = newPlayerTable()
+
+func newPlayerTable() *schema.Table {
+	return &schema.Table{
+		Columns: PlayerColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PlayerColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{TeamColumns[0]},
+			Symbol:     "players_teams_players",
+		}},
+		Name:       "players",
+		PrimaryKey: []*schema.Column{PlayerColumns[0]},
+	}
 }

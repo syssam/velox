@@ -31,19 +31,23 @@ var CommentColumns = []*schema.Column{{
 }}
 
 // CommentTable holds the schema information for the "comments" table.
-var CommentTable = &schema.Table{
-	Columns: CommentColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{CommentColumns[4]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{PostColumns[0]},
-		Symbol:     "comments_posts_comments",
-	}, {
-		Columns:    []*schema.Column{CommentColumns[5]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{UserColumns[0]},
-		Symbol:     "comments_users_comments",
-	}},
-	Name:       "comments",
-	PrimaryKey: []*schema.Column{CommentColumns[0]},
+var CommentTable = newCommentTable()
+
+func newCommentTable() *schema.Table {
+	return &schema.Table{
+		Columns: CommentColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{CommentColumns[4]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{PostColumns[0]},
+			Symbol:     "comments_posts_comments",
+		}, {
+			Columns:    []*schema.Column{CommentColumns[5]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{UserColumns[0]},
+			Symbol:     "comments_users_comments",
+		}},
+		Name:       "comments",
+		PrimaryKey: []*schema.Column{CommentColumns[0]},
+	}
 }

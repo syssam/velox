@@ -18,8 +18,12 @@ var UserSetterColumns = []*schema.Column{{
 }}
 
 // UserSetterTable holds the schema information for the "user_setters" table.
-var UserSetterTable = &schema.Table{
-	Columns:    UserSetterColumns,
-	Name:       "user_setters",
-	PrimaryKey: []*schema.Column{UserSetterColumns[0]},
+var UserSetterTable = newUserSetterTable()
+
+func newUserSetterTable() *schema.Table {
+	return &schema.Table{
+		Columns:    UserSetterColumns,
+		Name:       "user_setters",
+		PrimaryKey: []*schema.Column{UserSetterColumns[0]},
+	}
 }

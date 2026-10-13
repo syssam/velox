@@ -42,17 +42,21 @@ var UserColumns = []*schema.Column{{
 }}
 
 // UserTable holds the schema information for the "users" table.
-var UserTable = &schema.Table{
-	Columns: UserColumns,
-	Indexes: []*schema.Index{{
-		Columns: []*schema.Column{UserColumns[4]},
-		Name:    "user_email",
-		Unique:  true,
-	}, {
-		Columns: []*schema.Column{UserColumns[7], UserColumns[1]},
-		Name:    "user_role_created_at",
-		Unique:  false,
-	}},
-	Name:       "users",
-	PrimaryKey: []*schema.Column{UserColumns[0]},
+var UserTable = newUserTable()
+
+func newUserTable() *schema.Table {
+	return &schema.Table{
+		Columns: UserColumns,
+		Indexes: []*schema.Index{{
+			Columns: []*schema.Column{UserColumns[4]},
+			Name:    "user_email",
+			Unique:  true,
+		}, {
+			Columns: []*schema.Column{UserColumns[7], UserColumns[1]},
+			Name:    "user_role_created_at",
+			Unique:  false,
+		}},
+		Name:       "users",
+		PrimaryKey: []*schema.Column{UserColumns[0]},
+	}
 }

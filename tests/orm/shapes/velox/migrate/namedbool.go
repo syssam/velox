@@ -22,8 +22,12 @@ var NamedBoolColumns = []*schema.Column{{
 }}
 
 // NamedBoolTable holds the schema information for the "named_bools" table.
-var NamedBoolTable = &schema.Table{
-	Columns:    NamedBoolColumns,
-	Name:       "named_bools",
-	PrimaryKey: []*schema.Column{NamedBoolColumns[0]},
+var NamedBoolTable = newNamedBoolTable()
+
+func newNamedBoolTable() *schema.Table {
+	return &schema.Table{
+		Columns:    NamedBoolColumns,
+		Name:       "named_bools",
+		PrimaryKey: []*schema.Column{NamedBoolColumns[0]},
+	}
 }

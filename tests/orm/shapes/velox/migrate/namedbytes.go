@@ -25,8 +25,12 @@ var NamedBytesColumns = []*schema.Column{{
 }}
 
 // NamedBytesTable holds the schema information for the "named_bytes" table.
-var NamedBytesTable = &schema.Table{
-	Columns:    NamedBytesColumns,
-	Name:       "named_bytes",
-	PrimaryKey: []*schema.Column{NamedBytesColumns[0]},
+var NamedBytesTable = newNamedBytesTable()
+
+func newNamedBytesTable() *schema.Table {
+	return &schema.Table{
+		Columns:    NamedBytesColumns,
+		Name:       "named_bytes",
+		PrimaryKey: []*schema.Column{NamedBytesColumns[0]},
+	}
 }

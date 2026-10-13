@@ -54,10 +54,19 @@ var Children = &orm.ToMany[predicate.Tag, predicate.Tag, int]{Meta: &childrenMet
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&postsMeta, &parentMeta, &childrenMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Tag) predicate.Tag { return orm.And(ps...) }
+func And(ps ...predicate.Tag) predicate.Tag { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Tag) predicate.Tag { return orm.Or(ps...) }
+func Or(ps ...predicate.Tag) predicate.Tag { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Tag) predicate.Tag { return orm.Not(ps...) }
+func Not(ps ...predicate.Tag) predicate.Tag { return group(orm.OpNot, ps) }
+
+// group joins conditions on Tag under one operator.
+func group(op orm.Op, ps []predicate.Tag) predicate.Tag {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Tag{Op: op, Subs: subs}
+}

@@ -43,10 +43,19 @@ var Holder = &orm.ToOne[predicate.Locker, predicate.Author, int]{Meta: &holderMe
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&holderMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Locker) predicate.Locker { return orm.And(ps...) }
+func And(ps ...predicate.Locker) predicate.Locker { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Locker) predicate.Locker { return orm.Or(ps...) }
+func Or(ps ...predicate.Locker) predicate.Locker { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Locker) predicate.Locker { return orm.Not(ps...) }
+func Not(ps ...predicate.Locker) predicate.Locker { return group(orm.OpNot, ps) }
+
+// group joins conditions on Locker under one operator.
+func group(op orm.Op, ps []predicate.Locker) predicate.Locker {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Locker{Op: op, Subs: subs}
+}

@@ -18,8 +18,12 @@ var PredColumns = []*schema.Column{{
 }}
 
 // PredTable holds the schema information for the "preds" table.
-var PredTable = &schema.Table{
-	Columns:    PredColumns,
-	Name:       "preds",
-	PrimaryKey: []*schema.Column{PredColumns[0]},
+var PredTable = newPredTable()
+
+func newPredTable() *schema.Table {
+	return &schema.Table{
+		Columns:    PredColumns,
+		Name:       "preds",
+		PrimaryKey: []*schema.Column{PredColumns[0]},
+	}
 }

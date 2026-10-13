@@ -18,8 +18,12 @@ var MathColumns = []*schema.Column{{
 }}
 
 // MathTable holds the schema information for the "maths" table.
-var MathTable = &schema.Table{
-	Columns:    MathColumns,
-	Name:       "maths",
-	PrimaryKey: []*schema.Column{MathColumns[0]},
+var MathTable = newMathTable()
+
+func newMathTable() *schema.Table {
+	return &schema.Table{
+		Columns:    MathColumns,
+		Name:       "maths",
+		PrimaryKey: []*schema.Column{MathColumns[0]},
+	}
 }

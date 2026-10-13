@@ -18,8 +18,12 @@ var UserClientColumns = []*schema.Column{{
 }}
 
 // UserClientTable holds the schema information for the "user_clients" table.
-var UserClientTable = &schema.Table{
-	Columns:    UserClientColumns,
-	Name:       "user_clients",
-	PrimaryKey: []*schema.Column{UserClientColumns[0]},
+var UserClientTable = newUserClientTable()
+
+func newUserClientTable() *schema.Table {
+	return &schema.Table{
+		Columns:    UserClientColumns,
+		Name:       "user_clients",
+		PrimaryKey: []*schema.Column{UserClientColumns[0]},
+	}
 }

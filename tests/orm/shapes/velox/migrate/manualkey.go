@@ -18,8 +18,12 @@ var ManualKeyColumns = []*schema.Column{{
 }}
 
 // ManualKeyTable holds the schema information for the "manual_keys" table.
-var ManualKeyTable = &schema.Table{
-	Columns:    ManualKeyColumns,
-	Name:       "manual_keys",
-	PrimaryKey: []*schema.Column{ManualKeyColumns[0]},
+var ManualKeyTable = newManualKeyTable()
+
+func newManualKeyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ManualKeyColumns,
+		Name:       "manual_keys",
+		PrimaryKey: []*schema.Column{ManualKeyColumns[0]},
+	}
 }

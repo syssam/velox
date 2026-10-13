@@ -18,8 +18,12 @@ var RuntimeColumns = []*schema.Column{{
 }}
 
 // RuntimeTable holds the schema information for the "runtimes" table.
-var RuntimeTable = &schema.Table{
-	Columns:    RuntimeColumns,
-	Name:       "runtimes",
-	PrimaryKey: []*schema.Column{RuntimeColumns[0]},
+var RuntimeTable = newRuntimeTable()
+
+func newRuntimeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    RuntimeColumns,
+		Name:       "runtimes",
+		PrimaryKey: []*schema.Column{RuntimeColumns[0]},
+	}
 }

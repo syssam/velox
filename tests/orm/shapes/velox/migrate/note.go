@@ -26,19 +26,23 @@ var NoteColumns = []*schema.Column{{
 }}
 
 // NoteTable holds the schema information for the "notes" table.
-var NoteTable = &schema.Table{
-	Columns: NoteColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{NoteColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{ArticleColumns[0]},
-		Symbol:     "notes_articles_notes",
-	}, {
-		Columns:    []*schema.Column{NoteColumns[3]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{RenamedColumns[0]},
-		Symbol:     "notes_renameds_frozen",
-	}},
-	Name:       "notes",
-	PrimaryKey: []*schema.Column{NoteColumns[0]},
+var NoteTable = newNoteTable()
+
+func newNoteTable() *schema.Table {
+	return &schema.Table{
+		Columns: NoteColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{NoteColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{ArticleColumns[0]},
+			Symbol:     "notes_articles_notes",
+		}, {
+			Columns:    []*schema.Column{NoteColumns[3]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{RenamedColumns[0]},
+			Symbol:     "notes_renameds_frozen",
+		}},
+		Name:       "notes",
+		PrimaryKey: []*schema.Column{NoteColumns[0]},
+	}
 }

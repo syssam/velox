@@ -18,8 +18,12 @@ var NotColumns = []*schema.Column{{
 }}
 
 // NotTable holds the schema information for the "nots" table.
-var NotTable = &schema.Table{
-	Columns:    NotColumns,
-	Name:       "nots",
-	PrimaryKey: []*schema.Column{NotColumns[0]},
+var NotTable = newNotTable()
+
+func newNotTable() *schema.Table {
+	return &schema.Table{
+		Columns:    NotColumns,
+		Name:       "nots",
+		PrimaryKey: []*schema.Column{NotColumns[0]},
+	}
 }

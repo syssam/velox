@@ -124,6 +124,8 @@ benchmarks/fixtures/realistic/gqlschema/
 benchmarks/fixtures/realistic/gqlschema_orm/
 benchmarks/fixtures/realistic/services_velox/
 benchmarks/fixtures/realistic/services_orm/
+benchmarks/fixtures/realistic/app_velox/
+benchmarks/fixtures/realistic/app_orm/
 
 # Binaries built in place by `go build` in a command directory.
 /cmd/velox-migrate/velox-migrate

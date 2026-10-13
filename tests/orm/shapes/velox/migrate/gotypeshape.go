@@ -64,8 +64,12 @@ var GoTypeShapeColumns = []*schema.Column{{
 }}
 
 // GoTypeShapeTable holds the schema information for the "go_type_shapes" table.
-var GoTypeShapeTable = &schema.Table{
-	Columns:    GoTypeShapeColumns,
-	Name:       "go_type_shapes",
-	PrimaryKey: []*schema.Column{GoTypeShapeColumns[0]},
+var GoTypeShapeTable = newGoTypeShapeTable()
+
+func newGoTypeShapeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    GoTypeShapeColumns,
+		Name:       "go_type_shapes",
+		PrimaryKey: []*schema.Column{GoTypeShapeColumns[0]},
+	}
 }

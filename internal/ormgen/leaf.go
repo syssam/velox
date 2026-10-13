@@ -225,13 +225,20 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 		}
 	}
 
-	for _, c := range []struct{ fn, doc string }{
-		{"And", "And matches the rows every one of ps matches."},
-		{"Or", "Or matches the rows at least one of ps matches; without any, none."},
-		{"Not", "Not matches the rows that do not match all of ps; without any, none."},
+	// And, Or and Not are written out, with a helper of the package's own,
+	// where they could forward to orm.And, orm.Or and orm.Not: those are
+	// generic, and a generic function is compiled in the package that
+	// instantiates it. Forwarding took a seventh of the compile of an entity
+	// package (9 of 65 ms) and 36 KB of its object code, which every program
+	// that uses the tree links.
+	for _, c := range []struct{ fn, op, doc string }{
+		{"And", "OpAnd", "And matches the rows every one of ps matches."},
+		{"Or", "OpOr", "Or matches the rows at least one of ps matches; without any, none."},
+		{"Not", "OpNot", "Not matches the rows that do not match all of ps; without any, none."},
 	} {
-		w("// %s\nfunc %s(ps ...%s) %s { return orm.%s(ps...) }\n\n", c.doc, c.fn, pred, pred, c.fn)
+		w("// %s\nfunc %s(ps ...%s) %s { return group(orm.%s, ps) }\n\n", c.doc, c.fn, pred, pred, c.op)
 	}
+	w("// group joins conditions on %[1]s under one operator.\nfunc group(op orm.Op, ps []%[2]s) %[2]s {\n\tsubs := make([]orm.P, len(ps))\n\tfor i, p := range ps {\n\t\tsubs[i] = orm.P(p)\n\t}\n\treturn %[2]s{Op: op, Subs: subs}\n}\n\n", e.Name, pred)
 
 	var out bytes.Buffer
 	out.WriteString(header)

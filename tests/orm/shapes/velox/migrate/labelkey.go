@@ -17,8 +17,12 @@ var LabelKeyColumns = []*schema.Column{{
 }}
 
 // LabelKeyTable holds the schema information for the "label_keys" table.
-var LabelKeyTable = &schema.Table{
-	Columns:    LabelKeyColumns,
-	Name:       "label_keys",
-	PrimaryKey: []*schema.Column{LabelKeyColumns[0]},
+var LabelKeyTable = newLabelKeyTable()
+
+func newLabelKeyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    LabelKeyColumns,
+		Name:       "label_keys",
+		PrimaryKey: []*schema.Column{LabelKeyColumns[0]},
+	}
 }

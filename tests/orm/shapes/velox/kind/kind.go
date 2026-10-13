@@ -62,10 +62,19 @@ var Shapes = &orm.ToMany[predicate.Kind, predicate.KindShape, int]{Meta: &shapes
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&shapesMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Kind) predicate.Kind { return orm.And(ps...) }
+func And(ps ...predicate.Kind) predicate.Kind { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Kind) predicate.Kind { return orm.Or(ps...) }
+func Or(ps ...predicate.Kind) predicate.Kind { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Kind) predicate.Kind { return orm.Not(ps...) }
+func Not(ps ...predicate.Kind) predicate.Kind { return group(orm.OpNot, ps) }
+
+// group joins conditions on Kind under one operator.
+func group(op orm.Op, ps []predicate.Kind) predicate.Kind {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Kind{Op: op, Subs: subs}
+}

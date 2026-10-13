@@ -18,8 +18,12 @@ var OrColumns = []*schema.Column{{
 }}
 
 // OrTable holds the schema information for the "ors" table.
-var OrTable = &schema.Table{
-	Columns:    OrColumns,
-	Name:       "ors",
-	PrimaryKey: []*schema.Column{OrColumns[0]},
+var OrTable = newOrTable()
+
+func newOrTable() *schema.Table {
+	return &schema.Table{
+		Columns:    OrColumns,
+		Name:       "ors",
+		PrimaryKey: []*schema.Column{OrColumns[0]},
+	}
 }

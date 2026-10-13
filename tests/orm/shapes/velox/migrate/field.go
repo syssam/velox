@@ -54,54 +54,58 @@ var FieldColumns = []*schema.Column{{
 }}
 
 // FieldTable holds the schema information for the "fields" table.
-var FieldTable = &schema.Table{
-	Columns: FieldColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{FieldColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{ClashColumns[0]},
-		Symbol:     "fields_clashes_others",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[3]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{ClashColumns[0]},
-		Symbol:     "fields_clashes_others_or_err",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[4]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{EdgesFieldColumns[0]},
-		Symbol:     "fields_edges_fields_fields",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[5]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{KeywordsColumns[0]},
-		Symbol:     "fields_select_fields",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[6]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{KeywordsColumns[0]},
-		Symbol:     "fields_select_loaded",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[7]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{KeywordsColumns[0]},
-		Symbol:     "fields_select_with",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[8]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{OddColumns[0]},
-		Symbol:     "fields_odds_id",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[9]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{OddColumns[0]},
-		Symbol:     "fields_odds_query",
-	}, {
-		Columns:    []*schema.Column{FieldColumns[10]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{OddColumns[0]},
-		Symbol:     "fields_odds_edges",
-	}},
-	Name:       "fields",
-	PrimaryKey: []*schema.Column{FieldColumns[0]},
+var FieldTable = newFieldTable()
+
+func newFieldTable() *schema.Table {
+	return &schema.Table{
+		Columns: FieldColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{FieldColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{ClashColumns[0]},
+			Symbol:     "fields_clashes_others",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[3]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{ClashColumns[0]},
+			Symbol:     "fields_clashes_others_or_err",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[4]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{EdgesFieldColumns[0]},
+			Symbol:     "fields_edges_fields_fields",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[5]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{KeywordsColumns[0]},
+			Symbol:     "fields_select_fields",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[6]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{KeywordsColumns[0]},
+			Symbol:     "fields_select_loaded",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[7]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{KeywordsColumns[0]},
+			Symbol:     "fields_select_with",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[8]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{OddColumns[0]},
+			Symbol:     "fields_odds_id",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[9]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{OddColumns[0]},
+			Symbol:     "fields_odds_query",
+		}, {
+			Columns:    []*schema.Column{FieldColumns[10]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{OddColumns[0]},
+			Symbol:     "fields_odds_edges",
+		}},
+		Name:       "fields",
+		PrimaryKey: []*schema.Column{FieldColumns[0]},
+	}
 }

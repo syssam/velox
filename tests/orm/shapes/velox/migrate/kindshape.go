@@ -22,14 +22,18 @@ var KindShapeColumns = []*schema.Column{{
 }}
 
 // KindShapeTable holds the schema information for the "kind_shapes" table.
-var KindShapeTable = &schema.Table{
-	Columns: KindShapeColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{KindShapeColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{KindColumns[0]},
-		Symbol:     "kind_shapes_kinds_shapes",
-	}},
-	Name:       "kind_shapes",
-	PrimaryKey: []*schema.Column{KindShapeColumns[0]},
+var KindShapeTable = newKindShapeTable()
+
+func newKindShapeTable() *schema.Table {
+	return &schema.Table{
+		Columns: KindShapeColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{KindShapeColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{KindColumns[0]},
+			Symbol:     "kind_shapes_kinds_shapes",
+		}},
+		Name:       "kind_shapes",
+		PrimaryKey: []*schema.Column{KindShapeColumns[0]},
+	}
 }

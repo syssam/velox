@@ -17,8 +17,12 @@ var TeamColumns = []*schema.Column{{
 }}
 
 // TeamTable holds the schema information for the "teams" table.
-var TeamTable = &schema.Table{
-	Columns:    TeamColumns,
-	Name:       "teams",
-	PrimaryKey: []*schema.Column{TeamColumns[0]},
+var TeamTable = newTeamTable()
+
+func newTeamTable() *schema.Table {
+	return &schema.Table{
+		Columns:    TeamColumns,
+		Name:       "teams",
+		PrimaryKey: []*schema.Column{TeamColumns[0]},
+	}
 }

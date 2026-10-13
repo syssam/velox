@@ -18,8 +18,12 @@ var IdColumns = []*schema.Column{{
 }}
 
 // IdTable holds the schema information for the "ids" table.
-var IdTable = &schema.Table{
-	Columns:    IdColumns,
-	Name:       "ids",
-	PrimaryKey: []*schema.Column{IdColumns[0]},
+var IdTable = newIdTable()
+
+func newIdTable() *schema.Table {
+	return &schema.Table{
+		Columns:    IdColumns,
+		Name:       "ids",
+		PrimaryKey: []*schema.Column{IdColumns[0]},
+	}
 }

@@ -18,8 +18,12 @@ var SqlColumns = []*schema.Column{{
 }}
 
 // SqlTable holds the schema information for the "sqls" table.
-var SqlTable = &schema.Table{
-	Columns:    SqlColumns,
-	Name:       "sqls",
-	PrimaryKey: []*schema.Column{SqlColumns[0]},
+var SqlTable = newSqlTable()
+
+func newSqlTable() *schema.Table {
+	return &schema.Table{
+		Columns:    SqlColumns,
+		Name:       "sqls",
+		PrimaryKey: []*schema.Column{SqlColumns[0]},
+	}
 }

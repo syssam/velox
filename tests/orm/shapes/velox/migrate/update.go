@@ -18,8 +18,12 @@ var UpdateColumns = []*schema.Column{{
 }}
 
 // UpdateTable holds the schema information for the "updates" table.
-var UpdateTable = &schema.Table{
-	Columns:    UpdateColumns,
-	Name:       "updates",
-	PrimaryKey: []*schema.Column{UpdateColumns[0]},
+var UpdateTable = newUpdateTable()
+
+func newUpdateTable() *schema.Table {
+	return &schema.Table{
+		Columns:    UpdateColumns,
+		Name:       "updates",
+		PrimaryKey: []*schema.Column{UpdateColumns[0]},
+	}
 }

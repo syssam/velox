@@ -18,8 +18,12 @@ var OrmColumns = []*schema.Column{{
 }}
 
 // OrmTable holds the schema information for the "orms" table.
-var OrmTable = &schema.Table{
-	Columns:    OrmColumns,
-	Name:       "orms",
-	PrimaryKey: []*schema.Column{OrmColumns[0]},
+var OrmTable = newOrmTable()
+
+func newOrmTable() *schema.Table {
+	return &schema.Table{
+		Columns:    OrmColumns,
+		Name:       "orms",
+		PrimaryKey: []*schema.Column{OrmColumns[0]},
+	}
 }

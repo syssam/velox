@@ -44,8 +44,12 @@ var EnumShapeColumns = []*schema.Column{{
 }}
 
 // EnumShapeTable holds the schema information for the "enum_shapes" table.
-var EnumShapeTable = &schema.Table{
-	Columns:    EnumShapeColumns,
-	Name:       "enum_shapes",
-	PrimaryKey: []*schema.Column{EnumShapeColumns[0]},
+var EnumShapeTable = newEnumShapeTable()
+
+func newEnumShapeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    EnumShapeColumns,
+		Name:       "enum_shapes",
+		PrimaryKey: []*schema.Column{EnumShapeColumns[0]},
+	}
 }

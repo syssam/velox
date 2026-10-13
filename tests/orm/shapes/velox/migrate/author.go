@@ -22,8 +22,12 @@ var AuthorColumns = []*schema.Column{{
 }}
 
 // AuthorTable holds the schema information for the "authors" table.
-var AuthorTable = &schema.Table{
-	Columns:    AuthorColumns,
-	Name:       "authors",
-	PrimaryKey: []*schema.Column{AuthorColumns[0]},
+var AuthorTable = newAuthorTable()
+
+func newAuthorTable() *schema.Table {
+	return &schema.Table{
+		Columns:    AuthorColumns,
+		Name:       "authors",
+		PrimaryKey: []*schema.Column{AuthorColumns[0]},
+	}
 }

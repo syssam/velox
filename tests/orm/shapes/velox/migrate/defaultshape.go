@@ -91,8 +91,12 @@ var DefaultShapeColumns = []*schema.Column{{
 
 // DefaultShapeTable holds the schema information for the "default_shapes"
 // table.
-var DefaultShapeTable = &schema.Table{
-	Columns:    DefaultShapeColumns,
-	Name:       "default_shapes",
-	PrimaryKey: []*schema.Column{DefaultShapeColumns[0]},
+var DefaultShapeTable = newDefaultShapeTable()
+
+func newDefaultShapeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    DefaultShapeColumns,
+		Name:       "default_shapes",
+		PrimaryKey: []*schema.Column{DefaultShapeColumns[0]},
+	}
 }

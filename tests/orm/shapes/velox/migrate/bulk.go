@@ -18,8 +18,12 @@ var BulkColumns = []*schema.Column{{
 }}
 
 // BulkTable holds the schema information for the "bulks" table.
-var BulkTable = &schema.Table{
-	Columns:    BulkColumns,
-	Name:       "bulks",
-	PrimaryKey: []*schema.Column{BulkColumns[0]},
+var BulkTable = newBulkTable()
+
+func newBulkTable() *schema.Table {
+	return &schema.Table{
+		Columns:    BulkColumns,
+		Name:       "bulks",
+		PrimaryKey: []*schema.Column{BulkColumns[0]},
+	}
 }

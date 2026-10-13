@@ -22,14 +22,18 @@ var PassportColumns = []*schema.Column{{
 }}
 
 // PassportTable holds the schema information for the "passports" table.
-var PassportTable = &schema.Table{
-	Columns: PassportColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PassportColumns[2]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{AuthorColumns[0]},
-		Symbol:     "passports_authors_passport",
-	}},
-	Name:       "passports",
-	PrimaryKey: []*schema.Column{PassportColumns[0]},
+var PassportTable = newPassportTable()
+
+func newPassportTable() *schema.Table {
+	return &schema.Table{
+		Columns: PassportColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PassportColumns[2]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{AuthorColumns[0]},
+			Symbol:     "passports_authors_passport",
+		}},
+		Name:       "passports",
+		PrimaryKey: []*schema.Column{PassportColumns[0]},
+	}
 }

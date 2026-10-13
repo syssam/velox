@@ -91,8 +91,12 @@ var ClashColumns = []*schema.Column{{
 }}
 
 // ClashTable holds the schema information for the "clashes" table.
-var ClashTable = &schema.Table{
-	Columns:    ClashColumns,
-	Name:       "clashes",
-	PrimaryKey: []*schema.Column{ClashColumns[0]},
+var ClashTable = newClashTable()
+
+func newClashTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ClashColumns,
+		Name:       "clashes",
+		PrimaryKey: []*schema.Column{ClashColumns[0]},
+	}
 }

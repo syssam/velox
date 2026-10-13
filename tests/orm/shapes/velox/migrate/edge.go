@@ -18,8 +18,12 @@ var EdgeColumns = []*schema.Column{{
 }}
 
 // EdgeTable holds the schema information for the "edges" table.
-var EdgeTable = &schema.Table{
-	Columns:    EdgeColumns,
-	Name:       "edges",
-	PrimaryKey: []*schema.Column{EdgeColumns[0]},
+var EdgeTable = newEdgeTable()
+
+func newEdgeTable() *schema.Table {
+	return &schema.Table{
+		Columns:    EdgeColumns,
+		Name:       "edges",
+		PrimaryKey: []*schema.Column{EdgeColumns[0]},
+	}
 }

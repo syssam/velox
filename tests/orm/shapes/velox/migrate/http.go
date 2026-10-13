@@ -18,8 +18,12 @@ var HttpColumns = []*schema.Column{{
 }}
 
 // HttpTable holds the schema information for the "https" table.
-var HttpTable = &schema.Table{
-	Columns:    HttpColumns,
-	Name:       "https",
-	PrimaryKey: []*schema.Column{HttpColumns[0]},
+var HttpTable = newHttpTable()
+
+func newHttpTable() *schema.Table {
+	return &schema.Table{
+		Columns:    HttpColumns,
+		Name:       "https",
+		PrimaryKey: []*schema.Column{HttpColumns[0]},
+	}
 }

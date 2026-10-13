@@ -29,10 +29,19 @@ var (
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Int64Key) predicate.Int64Key { return orm.And(ps...) }
+func And(ps ...predicate.Int64Key) predicate.Int64Key { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Int64Key) predicate.Int64Key { return orm.Or(ps...) }
+func Or(ps ...predicate.Int64Key) predicate.Int64Key { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Int64Key) predicate.Int64Key { return orm.Not(ps...) }
+func Not(ps ...predicate.Int64Key) predicate.Int64Key { return group(orm.OpNot, ps) }
+
+// group joins conditions on Int64Key under one operator.
+func group(op orm.Op, ps []predicate.Int64Key) predicate.Int64Key {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Int64Key{Op: op, Subs: subs}
+}

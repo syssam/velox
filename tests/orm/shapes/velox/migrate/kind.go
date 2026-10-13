@@ -23,8 +23,12 @@ var KindColumns = []*schema.Column{{
 }}
 
 // KindTable holds the schema information for the "kinds" table.
-var KindTable = &schema.Table{
-	Columns:    KindColumns,
-	Name:       "kinds",
-	PrimaryKey: []*schema.Column{KindColumns[0]},
+var KindTable = newKindTable()
+
+func newKindTable() *schema.Table {
+	return &schema.Table{
+		Columns:    KindColumns,
+		Name:       "kinds",
+		PrimaryKey: []*schema.Column{KindColumns[0]},
+	}
 }

@@ -18,8 +18,12 @@ var VeloxColumns = []*schema.Column{{
 }}
 
 // VeloxTable holds the schema information for the "veloxes" table.
-var VeloxTable = &schema.Table{
-	Columns:    VeloxColumns,
-	Name:       "veloxes",
-	PrimaryKey: []*schema.Column{VeloxColumns[0]},
+var VeloxTable = newVeloxTable()
+
+func newVeloxTable() *schema.Table {
+	return &schema.Table{
+		Columns:    VeloxColumns,
+		Name:       "veloxes",
+		PrimaryKey: []*schema.Column{VeloxColumns[0]},
+	}
 }

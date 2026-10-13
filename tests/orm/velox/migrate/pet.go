@@ -22,14 +22,18 @@ var PetColumns = []*schema.Column{{
 }}
 
 // PetTable holds the schema information for the "pets" table.
-var PetTable = &schema.Table{
-	Columns: PetColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PetColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{UserColumns[0]},
-		Symbol:     "pets_users_pets",
-	}},
-	Name:       "pets",
-	PrimaryKey: []*schema.Column{PetColumns[0]},
+var PetTable = newPetTable()
+
+func newPetTable() *schema.Table {
+	return &schema.Table{
+		Columns: PetColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PetColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{UserColumns[0]},
+			Symbol:     "pets_users_pets",
+		}},
+		Name:       "pets",
+		PrimaryKey: []*schema.Column{PetColumns[0]},
+	}
 }

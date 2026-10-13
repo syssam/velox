@@ -24,14 +24,18 @@ var TagColumns = []*schema.Column{{
 }}
 
 // TagTable holds the schema information for the "tags" table.
-var TagTable = &schema.Table{
-	Columns: TagColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TagColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{TagColumns[0]},
-		Symbol:     "tags_tags_children",
-	}},
-	Name:       "tags",
-	PrimaryKey: []*schema.Column{TagColumns[0]},
+var TagTable = newTagTable()
+
+func newTagTable() *schema.Table {
+	return &schema.Table{
+		Columns: TagColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TagColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{TagColumns[0]},
+			Symbol:     "tags_tags_children",
+		}},
+		Name:       "tags",
+		PrimaryKey: []*schema.Column{TagColumns[0]},
+	}
 }

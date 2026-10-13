@@ -18,8 +18,12 @@ var TableColumns = []*schema.Column{{
 }}
 
 // TableTable holds the schema information for the "tables" table.
-var TableTable = &schema.Table{
-	Columns:    TableColumns,
-	Name:       "tables",
-	PrimaryKey: []*schema.Column{TableColumns[0]},
+var TableTable = newTableTable()
+
+func newTableTable() *schema.Table {
+	return &schema.Table{
+		Columns:    TableColumns,
+		Name:       "tables",
+		PrimaryKey: []*schema.Column{TableColumns[0]},
+	}
 }

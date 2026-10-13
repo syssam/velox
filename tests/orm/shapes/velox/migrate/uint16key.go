@@ -18,8 +18,12 @@ var Uint16KeyColumns = []*schema.Column{{
 }}
 
 // Uint16KeyTable holds the schema information for the "uint16keys" table.
-var Uint16KeyTable = &schema.Table{
-	Columns:    Uint16KeyColumns,
-	Name:       "uint16keys",
-	PrimaryKey: []*schema.Column{Uint16KeyColumns[0]},
+var Uint16KeyTable = newUint16KeyTable()
+
+func newUint16KeyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    Uint16KeyColumns,
+		Name:       "uint16keys",
+		PrimaryKey: []*schema.Column{Uint16KeyColumns[0]},
+	}
 }

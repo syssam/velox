@@ -18,8 +18,12 @@ var QueryUserColumns = []*schema.Column{{
 }}
 
 // QueryUserTable holds the schema information for the "query_users" table.
-var QueryUserTable = &schema.Table{
-	Columns:    QueryUserColumns,
-	Name:       "query_users",
-	PrimaryKey: []*schema.Column{QueryUserColumns[0]},
+var QueryUserTable = newQueryUserTable()
+
+func newQueryUserTable() *schema.Table {
+	return &schema.Table{
+		Columns:    QueryUserColumns,
+		Name:       "query_users",
+		PrimaryKey: []*schema.Column{QueryUserColumns[0]},
+	}
 }

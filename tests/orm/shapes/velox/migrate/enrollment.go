@@ -33,24 +33,28 @@ var EnrollmentColumns = []*schema.Column{{
 }}
 
 // EnrollmentTable holds the schema information for the "enrollments" table.
-var EnrollmentTable = &schema.Table{
-	Columns: EnrollmentColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{EnrollmentColumns[4]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{StudentColumns[0]},
-		Symbol:     "enrollments_students_student",
-	}, {
-		Columns:    []*schema.Column{EnrollmentColumns[5]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{CourseColumns[0]},
-		Symbol:     "enrollments_courses_course",
-	}},
-	Indexes: []*schema.Index{{
-		Columns: []*schema.Column{EnrollmentColumns[4], EnrollmentColumns[5]},
-		Name:    "enrollment_student_id_course_id",
-		Unique:  true,
-	}},
-	Name:       "enrollments",
-	PrimaryKey: []*schema.Column{EnrollmentColumns[0]},
+var EnrollmentTable = newEnrollmentTable()
+
+func newEnrollmentTable() *schema.Table {
+	return &schema.Table{
+		Columns: EnrollmentColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{EnrollmentColumns[4]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{StudentColumns[0]},
+			Symbol:     "enrollments_students_student",
+		}, {
+			Columns:    []*schema.Column{EnrollmentColumns[5]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{CourseColumns[0]},
+			Symbol:     "enrollments_courses_course",
+		}},
+		Indexes: []*schema.Index{{
+			Columns: []*schema.Column{EnrollmentColumns[4], EnrollmentColumns[5]},
+			Name:    "enrollment_student_id_course_id",
+			Unique:  true,
+		}},
+		Name:       "enrollments",
+		PrimaryKey: []*schema.Column{EnrollmentColumns[0]},
+	}
 }

@@ -23,14 +23,18 @@ var LockerColumns = []*schema.Column{{
 }}
 
 // LockerTable holds the schema information for the "lockers" table.
-var LockerTable = &schema.Table{
-	Columns: LockerColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{LockerColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{AuthorColumns[0]},
-		Symbol:     "lockers_authors_locker",
-	}},
-	Name:       "lockers",
-	PrimaryKey: []*schema.Column{LockerColumns[0]},
+var LockerTable = newLockerTable()
+
+func newLockerTable() *schema.Table {
+	return &schema.Table{
+		Columns: LockerColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{LockerColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{AuthorColumns[0]},
+			Symbol:     "lockers_authors_locker",
+		}},
+		Name:       "lockers",
+		PrimaryKey: []*schema.Column{LockerColumns[0]},
+	}
 }

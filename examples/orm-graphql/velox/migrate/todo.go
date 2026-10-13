@@ -41,14 +41,18 @@ var TodoColumns = []*schema.Column{{
 }}
 
 // TodoTable holds the schema information for the "todos" table.
-var TodoTable = &schema.Table{
-	Columns: TodoColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TodoColumns[7]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{UserColumns[0]},
-		Symbol:     "todos_users_todos",
-	}},
-	Name:       "todos",
-	PrimaryKey: []*schema.Column{TodoColumns[0]},
+var TodoTable = newTodoTable()
+
+func newTodoTable() *schema.Table {
+	return &schema.Table{
+		Columns: TodoColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TodoColumns[7]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{UserColumns[0]},
+			Symbol:     "todos_users_todos",
+		}},
+		Name:       "todos",
+		PrimaryKey: []*schema.Column{TodoColumns[0]},
+	}
 }

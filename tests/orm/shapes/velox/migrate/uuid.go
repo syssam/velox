@@ -21,8 +21,12 @@ var UUIDColumns = []*schema.Column{{
 }}
 
 // UUIDTable holds the schema information for the "uui_ds" table.
-var UUIDTable = &schema.Table{
-	Columns:    UUIDColumns,
-	Name:       "uui_ds",
-	PrimaryKey: []*schema.Column{UUIDColumns[0]},
+var UUIDTable = newUUIDTable()
+
+func newUUIDTable() *schema.Table {
+	return &schema.Table{
+		Columns:    UUIDColumns,
+		Name:       "uui_ds",
+		PrimaryKey: []*schema.Column{UUIDColumns[0]},
+	}
 }

@@ -152,8 +152,12 @@ var WideColumns = []*schema.Column{{
 }}
 
 // WideTable holds the schema information for the "wides" table.
-var WideTable = &schema.Table{
-	Columns:    WideColumns,
-	Name:       "wides",
-	PrimaryKey: []*schema.Column{WideColumns[0]},
+var WideTable = newWideTable()
+
+func newWideTable() *schema.Table {
+	return &schema.Table{
+		Columns:    WideColumns,
+		Name:       "wides",
+		PrimaryKey: []*schema.Column{WideColumns[0]},
+	}
 }

@@ -840,11 +840,19 @@ a quarter of its CPU in the garbage collector (`go tool compile` takes
 `GOGC` in the build environment, not in the program.
 
 The numbers at the top of this section are of 2026-10-09. Since then the
-column types and the builders became types of package `orm` (2026-10-13): the same tree is 337,945
-generated lines where it was 1,155,519, and with every package compiled by
-itself against the import configuration of a build, `entity` takes 3.5 CPU-s
-and 0.6 GB (13.0, 1.6 GB), the 450 entity packages 26 CPU-s (51) and the
-312 services 77-79 (92-95). The tables are in
+column types and the builders became types of package `orm` and the
+entities' description stopped reaching `reflect.Type` (2026-10-13). The same
+script now gives 22 CPU-s for the generated packages, the largest (`entity`)
+in 0.6 GB, and 94 CPU-s for the 312 services (0.28 s and 81 MB the median
+one); the tree is 337,945 generated lines where it was 1,155,519.
+
+What a large application pays beyond compiling was measured the same day
+(`compile-bench.sh orm server test1 tests`): the program that links every
+service starts in under 10 ms with 12 MB; editing one service and running
+its test is two compiles (0.4 CPU-s) and a link (0.4 CPU-s, 310 MB). That
+link is paid by every test binary and grows with the schema, 1.5 CPU-s and
+0.9 GB for 2,000 entities, because a program that uses one entity links
+them all. The tables, and a schema of 2,000 entities by package, are in
 [`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md).
 
 ## Tests

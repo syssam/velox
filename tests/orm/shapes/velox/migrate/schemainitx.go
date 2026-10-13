@@ -18,8 +18,12 @@ var SchemainitColumns = []*schema.Column{{
 }}
 
 // SchemainitTable holds the schema information for the "schemainits" table.
-var SchemainitTable = &schema.Table{
-	Columns:    SchemainitColumns,
-	Name:       "schemainits",
-	PrimaryKey: []*schema.Column{SchemainitColumns[0]},
+var SchemainitTable = newSchemainitTable()
+
+func newSchemainitTable() *schema.Table {
+	return &schema.Table{
+		Columns:    SchemainitColumns,
+		Name:       "schemainits",
+		PrimaryKey: []*schema.Column{SchemainitColumns[0]},
+	}
 }

@@ -291,10 +291,19 @@ var OthersOrErrEdge = &orm.ToMany[predicate.Clash, predicate.Field, int]{Meta: &
 func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&othersMeta, &othersOrErrEdgeMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Clash) predicate.Clash { return orm.And(ps...) }
+func And(ps ...predicate.Clash) predicate.Clash { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Clash) predicate.Clash { return orm.Or(ps...) }
+func Or(ps ...predicate.Clash) predicate.Clash { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Clash) predicate.Clash { return orm.Not(ps...) }
+func Not(ps ...predicate.Clash) predicate.Clash { return group(orm.OpNot, ps) }
+
+// group joins conditions on Clash under one operator.
+func group(op orm.Op, ps []predicate.Clash) predicate.Clash {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Clash{Op: op, Subs: subs}
+}

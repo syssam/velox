@@ -20,8 +20,12 @@ var TagColumns = []*schema.Column{{
 }}
 
 // TagTable holds the schema information for the "tags" table.
-var TagTable = &schema.Table{
-	Columns:    TagColumns,
-	Name:       "tags",
-	PrimaryKey: []*schema.Column{TagColumns[0]},
+var TagTable = newTagTable()
+
+func newTagTable() *schema.Table {
+	return &schema.Table{
+		Columns:    TagColumns,
+		Name:       "tags",
+		PrimaryKey: []*schema.Column{TagColumns[0]},
+	}
 }

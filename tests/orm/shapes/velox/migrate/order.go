@@ -18,8 +18,12 @@ var OrderColumns = []*schema.Column{{
 }}
 
 // OrderTable holds the schema information for the "orders" table.
-var OrderTable = &schema.Table{
-	Columns:    OrderColumns,
-	Name:       "orders",
-	PrimaryKey: []*schema.Column{OrderColumns[0]},
+var OrderTable = newOrderTable()
+
+func newOrderTable() *schema.Table {
+	return &schema.Table{
+		Columns:    OrderColumns,
+		Name:       "orders",
+		PrimaryKey: []*schema.Column{OrderColumns[0]},
+	}
 }

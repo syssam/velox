@@ -18,8 +18,12 @@ var JsonColumns = []*schema.Column{{
 }}
 
 // JsonTable holds the schema information for the "jsons" table.
-var JsonTable = &schema.Table{
-	Columns:    JsonColumns,
-	Name:       "jsons",
-	PrimaryKey: []*schema.Column{JsonColumns[0]},
+var JsonTable = newJsonTable()
+
+func newJsonTable() *schema.Table {
+	return &schema.Table{
+		Columns:    JsonColumns,
+		Name:       "jsons",
+		PrimaryKey: []*schema.Column{JsonColumns[0]},
+	}
 }

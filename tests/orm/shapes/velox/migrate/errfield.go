@@ -65,8 +65,12 @@ var ErrFieldColumns = []*schema.Column{{
 }}
 
 // ErrFieldTable holds the schema information for the "err_fields" table.
-var ErrFieldTable = &schema.Table{
-	Columns:    ErrFieldColumns,
-	Name:       "err_fields",
-	PrimaryKey: []*schema.Column{ErrFieldColumns[0]},
+var ErrFieldTable = newErrFieldTable()
+
+func newErrFieldTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ErrFieldColumns,
+		Name:       "err_fields",
+		PrimaryKey: []*schema.Column{ErrFieldColumns[0]},
+	}
 }

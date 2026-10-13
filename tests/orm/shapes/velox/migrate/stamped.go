@@ -21,8 +21,12 @@ var StampedColumns = []*schema.Column{{
 }}
 
 // StampedTable holds the schema information for the "stampeds" table.
-var StampedTable = &schema.Table{
-	Columns:    StampedColumns,
-	Name:       "stampeds",
-	PrimaryKey: []*schema.Column{StampedColumns[0]},
+var StampedTable = newStampedTable()
+
+func newStampedTable() *schema.Table {
+	return &schema.Table{
+		Columns:    StampedColumns,
+		Name:       "stampeds",
+		PrimaryKey: []*schema.Column{StampedColumns[0]},
+	}
 }

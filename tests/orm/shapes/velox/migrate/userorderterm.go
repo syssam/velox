@@ -19,8 +19,12 @@ var UserOrderTermColumns = []*schema.Column{{
 
 // UserOrderTermTable holds the schema information for the "user_order_terms"
 // table.
-var UserOrderTermTable = &schema.Table{
-	Columns:    UserOrderTermColumns,
-	Name:       "user_order_terms",
-	PrimaryKey: []*schema.Column{UserOrderTermColumns[0]},
+var UserOrderTermTable = newUserOrderTermTable()
+
+func newUserOrderTermTable() *schema.Table {
+	return &schema.Table{
+		Columns:    UserOrderTermColumns,
+		Name:       "user_order_terms",
+		PrimaryKey: []*schema.Column{UserOrderTermColumns[0]},
+	}
 }

@@ -18,8 +18,12 @@ var AndColumns = []*schema.Column{{
 }}
 
 // AndTable holds the schema information for the "ands" table.
-var AndTable = &schema.Table{
-	Columns:    AndColumns,
-	Name:       "ands",
-	PrimaryKey: []*schema.Column{AndColumns[0]},
+var AndTable = newAndTable()
+
+func newAndTable() *schema.Table {
+	return &schema.Table{
+		Columns:    AndColumns,
+		Name:       "ands",
+		PrimaryKey: []*schema.Column{AndColumns[0]},
+	}
 }

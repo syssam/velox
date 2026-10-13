@@ -18,8 +18,12 @@ var CreateColumns = []*schema.Column{{
 }}
 
 // CreateTable holds the schema information for the "creates" table.
-var CreateTable = &schema.Table{
-	Columns:    CreateColumns,
-	Name:       "creates",
-	PrimaryKey: []*schema.Column{CreateColumns[0]},
+var CreateTable = newCreateTable()
+
+func newCreateTable() *schema.Table {
+	return &schema.Table{
+		Columns:    CreateColumns,
+		Name:       "creates",
+		PrimaryKey: []*schema.Column{CreateColumns[0]},
+	}
 }

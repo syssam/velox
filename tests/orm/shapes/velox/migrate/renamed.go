@@ -37,8 +37,12 @@ var RenamedColumns = []*schema.Column{{
 }}
 
 // RenamedTable holds the schema information for the "renameds" table.
-var RenamedTable = &schema.Table{
-	Columns:    RenamedColumns,
-	Name:       "renameds",
-	PrimaryKey: []*schema.Column{RenamedColumns[0]},
+var RenamedTable = newRenamedTable()
+
+func newRenamedTable() *schema.Table {
+	return &schema.Table{
+		Columns:    RenamedColumns,
+		Name:       "renameds",
+		PrimaryKey: []*schema.Column{RenamedColumns[0]},
+	}
 }

@@ -27,19 +27,23 @@ var NodeColumns = []*schema.Column{{
 }}
 
 // NodeTable holds the schema information for the "nodes" table.
-var NodeTable = &schema.Table{
-	Columns: NodeColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{NodeColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{NodeColumns[0]},
-		Symbol:     "nodes_nodes_children",
-	}, {
-		Columns:    []*schema.Column{NodeColumns[3]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{NodeColumns[0]},
-		Symbol:     "nodes_nodes_next",
-	}},
-	Name:       "nodes",
-	PrimaryKey: []*schema.Column{NodeColumns[0]},
+var NodeTable = newNodeTable()
+
+func newNodeTable() *schema.Table {
+	return &schema.Table{
+		Columns: NodeColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{NodeColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{NodeColumns[0]},
+			Symbol:     "nodes_nodes_children",
+		}, {
+			Columns:    []*schema.Column{NodeColumns[3]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{NodeColumns[0]},
+			Symbol:     "nodes_nodes_next",
+		}},
+		Name:       "nodes",
+		PrimaryKey: []*schema.Column{NodeColumns[0]},
+	}
 }

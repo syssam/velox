@@ -17,21 +17,25 @@ var PostTagsColumns = []*schema.Column{{
 }}
 
 // PostTagsTable holds the schema information for the "post_tags" table.
-var PostTagsTable = &schema.Table{
-	Columns: PostTagsColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PostTagsColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{PostColumns[0]},
-		Symbol:     "post_tags_post_id",
-	}, {
-		Columns:    []*schema.Column{PostTagsColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TagColumns[0]},
-		Symbol:     "post_tags_tag_id",
-	}},
-	Name:       "post_tags",
-	PrimaryKey: []*schema.Column{PostTagsColumns[0], PostTagsColumns[1]},
+var PostTagsTable = newPostTagsTable()
+
+func newPostTagsTable() *schema.Table {
+	return &schema.Table{
+		Columns: PostTagsColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PostTagsColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{PostColumns[0]},
+			Symbol:     "post_tags_post_id",
+		}, {
+			Columns:    []*schema.Column{PostTagsColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TagColumns[0]},
+			Symbol:     "post_tags_tag_id",
+		}},
+		Name:       "post_tags",
+		PrimaryKey: []*schema.Column{PostTagsColumns[0], PostTagsColumns[1]},
+	}
 }
 
 // Tables holds all the tables in the schema.

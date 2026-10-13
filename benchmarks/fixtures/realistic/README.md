@@ -759,3 +759,86 @@ in the same runs): each holds a `*velox.DB`, and the database handle reaches
 `database/sql` by what it is for (`db.SQL()` returns the `*sql.DB`): 255 KB.
 A package that takes a `velox.Executor` or a `*velox.Tx` where it took the
 `*velox.DB` does not pay it.
+
+## The application around the services: a server, tests, 2,000 entities (2026-10-13, load 5-50)
+
+What a large codebase pays for every day is not only the compile of the
+packages that changed. `gen_services.go` now writes, around the 312
+services, a test per service, a layer of handlers (one over every four
+services) and one server that links them all, and `compile-bench.sh` has
+three more scenarios:
+
+```sh
+benchmarks/compile-bench.sh orm cold app server test1 tests
+```
+
+| scenario | what it is | measured (`-p 6`, load 20) |
+|---|---|---|
+| `cold` | every generated package, empty cache | 456 packages, 22.3 CPU-s, 9.5 s wall, largest 608 MB (`entity`) |
+| `app` | the 312 services | 94.4 CPU-s, 13.0 s wall; median 0.28 s and 81 MB a service |
+| `server` | link of the program with every handler | 0.8 CPU-s, 541 MB; binary 23.9 MB; starts in under 10 ms with 12 MB (58 package inits, 0.5 ms, 698 allocations) |
+| `test1` | one service edited, then `go test` of it | 1.6 s wall: 2 compiles 0.38 CPU-s, link 0.42 CPU-s and 310 MB |
+| `tests` | `go test` of 40 services | 40 links, 0.36 CPU-s and 311 MB each (14.4 CPU-s), beside 18.3 CPU-s of compiles |
+
+(`cold` and `app` were 88-100 and 138 CPU-s with the same script on
+2026-10-09, before the column types, the builders and `reflect.Type` went.)
+
+### The link of a test binary grows with the schema
+
+In the developer's loop the link is now the larger half, and it is paid by
+every test binary of the application. As `go test` links them (no debug
+information), on a quiet machine:
+
+| the test's package imports | link | linker's memory |
+|---|---|---|
+| nothing | 0.07-0.11 CPU-s | 90 MB |
+| one entity's package, or `predicate` | 0.10 CPU-s | 119 MB |
+| `entity` | 0.26-0.30 CPU-s | 240 MB |
+| `schemainit` (and so the schema) | 0.28 CPU-s | 250 MB |
+| the root package (both) | 0.39-0.41 CPU-s | 313 MB |
+
+`entity` imports every entity's package and the root package links
+`schemainit`, whose init functions keep every entity's code reachable: a
+binary that uses one entity links all 450 (616,528 symbols loaded, 247,404
+kept; `go build -ldflags="-v -benchmark=cpu"` gives the linker's phases).
+The symbols come from the entities' packages (370 each, 166,000 in all),
+`entity` (66,000), the schema itself (64,000), `schemainit` (7,400) and
+`predicate` (4,100). This is not fixed: it is what one `entity` package
+costs, and the next thing to work on.
+
+### A schema of 2,000 entities
+
+The same generator on `gen_schema.go -n 2000` (1,553,670 generated lines in
+10,007 files; generation 9.9 s and 644 MB):
+
+| | 450 entities | 2,000 entities |
+|---|---|---|
+| the entities' packages | 26 CPU-s | 68.1 CPU-s (34 ms each) |
+| `entity` | 3.5 CPU-s, 0.6 GB | 24.5 CPU-s, 2.4 GB |
+| `schemainit` | 3.3 CPU-s, 0.5 GB | 19.9 CPU-s, 1.6 GB |
+| `migrate` | 1.4 CPU-s | **40.2 CPU-s**, 1.2 GB; after the fix below 11.5 |
+| root package | 0.3 CPU-s | 1.9 CPU-s |
+| link of a test binary using it | 0.39-0.41 CPU-s, 313 MB | 1.52-1.65 CPU-s, 925 MB |
+
+(The 2,000 column was measured under a load of 20-50, which adds to CPU
+time; a profile of the compiler on `entity` and `schemainit` there shows
+the garbage collector and the ordinary phases, nothing that grows faster
+than the package.)
+
+`migrate` did grow faster than the schema. Every table was a package-level
+variable whose initializer indexes the columns (`Rec000Columns[63]`), so
+all of them were compiled into the one function that initializes the
+package's variables, and the assembler's branch fix-up is quadratic in the
+size of a function (26 of the 45 CPU-s in `arm64.span7`). A table is now
+built by a function of its own (`var PostTable = newPostTable()`), and what
+connects the foreign keys is cut into init functions of 64 statements.
+
+### `And`, `Or`, `Not` of an entity's package
+
+They forwarded to the generic `orm.And`, `orm.Or`, `orm.Not`, and a generic
+function is compiled in the package that instantiates it: 9 of the 65 ms an
+entity's package took, and 36 KB of its object code. They are written out
+now, over a helper of the package's own (`group`). The edges' one ordinary
+method (`loadOf`, what lets `With` take an edge) costs 4-5 ms and 53 KB of
+the same package and stays: without it `With(post.Author)` cannot be
+written.

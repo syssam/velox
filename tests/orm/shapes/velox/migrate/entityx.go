@@ -22,8 +22,12 @@ var EntityxColumns = []*schema.Column{{
 }}
 
 // EntityxTable holds the schema information for the "entityxes" table.
-var EntityxTable = &schema.Table{
-	Columns:    EntityxColumns,
-	Name:       "entityxes",
-	PrimaryKey: []*schema.Column{EntityxColumns[0]},
+var EntityxTable = newEntityxTable()
+
+func newEntityxTable() *schema.Table {
+	return &schema.Table{
+		Columns:    EntityxColumns,
+		Name:       "entityxes",
+		PrimaryKey: []*schema.Column{EntityxColumns[0]},
+	}
 }

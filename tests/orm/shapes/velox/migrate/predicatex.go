@@ -18,8 +18,12 @@ var PredicateColumns = []*schema.Column{{
 }}
 
 // PredicateTable holds the schema information for the "predicates" table.
-var PredicateTable = &schema.Table{
-	Columns:    PredicateColumns,
-	Name:       "predicates",
-	PrimaryKey: []*schema.Column{PredicateColumns[0]},
+var PredicateTable = newPredicateTable()
+
+func newPredicateTable() *schema.Table {
+	return &schema.Table{
+		Columns:    PredicateColumns,
+		Name:       "predicates",
+		PrimaryKey: []*schema.Column{PredicateColumns[0]},
+	}
 }

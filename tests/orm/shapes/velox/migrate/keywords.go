@@ -199,19 +199,23 @@ var KeywordsColumns = []*schema.Column{{
 }}
 
 // KeywordsTable holds the schema information for the "select" table.
-var KeywordsTable = &schema.Table{
-	Columns: KeywordsColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{KeywordsColumns[45]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{FieldColumns[0]},
-		Symbol:     "select_fields_columns",
-	}, {
-		Columns:    []*schema.Column{KeywordsColumns[46]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{FieldColumns[0]},
-		Symbol:     "select_fields_all",
-	}},
-	Name:       "select",
-	PrimaryKey: []*schema.Column{KeywordsColumns[0]},
+var KeywordsTable = newKeywordsTable()
+
+func newKeywordsTable() *schema.Table {
+	return &schema.Table{
+		Columns: KeywordsColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{KeywordsColumns[45]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{FieldColumns[0]},
+			Symbol:     "select_fields_columns",
+		}, {
+			Columns:    []*schema.Column{KeywordsColumns[46]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{FieldColumns[0]},
+			Symbol:     "select_fields_all",
+		}},
+		Name:       "select",
+		PrimaryKey: []*schema.Column{KeywordsColumns[0]},
+	}
 }

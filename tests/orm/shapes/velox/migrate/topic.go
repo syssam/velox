@@ -23,14 +23,18 @@ var TopicColumns = []*schema.Column{{
 }}
 
 // TopicTable holds the schema information for the "topics" table.
-var TopicTable = &schema.Table{
-	Columns: TopicColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TopicColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{RenamedColumns[0]},
-		Symbol:     "topics_renameds_frozen_topics",
-	}},
-	Name:       "topics",
-	PrimaryKey: []*schema.Column{TopicColumns[0]},
+var TopicTable = newTopicTable()
+
+func newTopicTable() *schema.Table {
+	return &schema.Table{
+		Columns: TopicColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TopicColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{RenamedColumns[0]},
+			Symbol:     "topics_renameds_frozen_topics",
+		}},
+		Name:       "topics",
+		PrimaryKey: []*schema.Column{TopicColumns[0]},
+	}
 }

@@ -57,19 +57,23 @@ var OddColumns = []*schema.Column{{
 }}
 
 // OddTable holds the schema information for the "odds" table.
-var OddTable = &schema.Table{
-	Columns: OddColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{OddColumns[9]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{FieldColumns[0]},
-		Symbol:     "odds_fields_table",
-	}, {
-		Columns:    []*schema.Column{OddColumns[10]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{FieldColumns[0]},
-		Symbol:     "odds_fields_model",
-	}},
-	Name:       "odds",
-	PrimaryKey: []*schema.Column{OddColumns[0]},
+var OddTable = newOddTable()
+
+func newOddTable() *schema.Table {
+	return &schema.Table{
+		Columns: OddColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{OddColumns[9]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{FieldColumns[0]},
+			Symbol:     "odds_fields_table",
+		}, {
+			Columns:    []*schema.Column{OddColumns[10]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{FieldColumns[0]},
+			Symbol:     "odds_fields_model",
+		}},
+		Name:       "odds",
+		PrimaryKey: []*schema.Column{OddColumns[0]},
+	}
 }

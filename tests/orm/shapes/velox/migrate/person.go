@@ -27,19 +27,23 @@ var PersonColumns = []*schema.Column{{
 }}
 
 // PersonTable holds the schema information for the "persons" table.
-var PersonTable = &schema.Table{
-	Columns: PersonColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PersonColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{BadgeColumns[0]},
-		Symbol:     "persons_badges_holders",
-	}, {
-		Columns:    []*schema.Column{PersonColumns[3]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "persons_persons_spouse",
-	}},
-	Name:       "persons",
-	PrimaryKey: []*schema.Column{PersonColumns[0]},
+var PersonTable = newPersonTable()
+
+func newPersonTable() *schema.Table {
+	return &schema.Table{
+		Columns: PersonColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PersonColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{BadgeColumns[0]},
+			Symbol:     "persons_badges_holders",
+		}, {
+			Columns:    []*schema.Column{PersonColumns[3]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "persons_persons_spouse",
+		}},
+		Name:       "persons",
+		PrimaryKey: []*schema.Column{PersonColumns[0]},
+	}
 }

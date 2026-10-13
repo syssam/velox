@@ -38,24 +38,28 @@ var AssetColumns = []*schema.Column{{
 }}
 
 // AssetTable holds the schema information for the "assets" table.
-var AssetTable = &schema.Table{
-	Columns: AssetColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{AssetColumns[4]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{OrgColumns[0]},
-		Symbol:     "assets_orgs_assets",
-	}, {
-		Columns:    []*schema.Column{AssetColumns[5]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "assets_persons_assets",
-	}, {
-		Columns:    []*schema.Column{AssetColumns[6]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "assets_persons_made",
-	}},
-	Name:       "assets",
-	PrimaryKey: []*schema.Column{AssetColumns[0]},
+var AssetTable = newAssetTable()
+
+func newAssetTable() *schema.Table {
+	return &schema.Table{
+		Columns: AssetColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{AssetColumns[4]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{OrgColumns[0]},
+			Symbol:     "assets_orgs_assets",
+		}, {
+			Columns:    []*schema.Column{AssetColumns[5]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "assets_persons_assets",
+		}, {
+			Columns:    []*schema.Column{AssetColumns[6]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "assets_persons_made",
+		}},
+		Name:       "assets",
+		PrimaryKey: []*schema.Column{AssetColumns[0]},
+	}
 }

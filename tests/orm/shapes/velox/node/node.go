@@ -62,10 +62,19 @@ func EdgeMetas() []*orm.EdgeMeta {
 }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Node) predicate.Node { return orm.And(ps...) }
+func And(ps ...predicate.Node) predicate.Node { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Node) predicate.Node { return orm.Or(ps...) }
+func Or(ps ...predicate.Node) predicate.Node { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Node) predicate.Node { return orm.Not(ps...) }
+func Not(ps ...predicate.Node) predicate.Node { return group(orm.OpNot, ps) }
+
+// group joins conditions on Node under one operator.
+func group(op orm.Op, ps []predicate.Node) predicate.Node {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Node{Op: op, Subs: subs}
+}

@@ -18,8 +18,12 @@ var OrgColumns = []*schema.Column{{
 }}
 
 // OrgTable holds the schema information for the "orgs" table.
-var OrgTable = &schema.Table{
-	Columns:    OrgColumns,
-	Name:       "orgs",
-	PrimaryKey: []*schema.Column{OrgColumns[0]},
+var OrgTable = newOrgTable()
+
+func newOrgTable() *schema.Table {
+	return &schema.Table{
+		Columns:    OrgColumns,
+		Name:       "orgs",
+		PrimaryKey: []*schema.Column{OrgColumns[0]},
+	}
 }

@@ -22,14 +22,18 @@ var WeightKeyColumns = []*schema.Column{{
 }}
 
 // WeightKeyTable holds the schema information for the "weight_keys" table.
-var WeightKeyTable = &schema.Table{
-	Columns: WeightKeyColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{WeightKeyColumns[2]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{LabelKeyColumns[0]},
-		Symbol:     "weight_keys_label_keys_items",
-	}},
-	Name:       "weight_keys",
-	PrimaryKey: []*schema.Column{WeightKeyColumns[0]},
+var WeightKeyTable = newWeightKeyTable()
+
+func newWeightKeyTable() *schema.Table {
+	return &schema.Table{
+		Columns: WeightKeyColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{WeightKeyColumns[2]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{LabelKeyColumns[0]},
+			Symbol:     "weight_keys_label_keys_items",
+		}},
+		Name:       "weight_keys",
+		PrimaryKey: []*schema.Column{WeightKeyColumns[0]},
+	}
 }

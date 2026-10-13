@@ -175,8 +175,12 @@ var ScalarColumns = []*schema.Column{{
 }}
 
 // ScalarTable holds the schema information for the "scalars" table.
-var ScalarTable = &schema.Table{
-	Columns:    ScalarColumns,
-	Name:       "scalars",
-	PrimaryKey: []*schema.Column{ScalarColumns[0]},
+var ScalarTable = newScalarTable()
+
+func newScalarTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ScalarColumns,
+		Name:       "scalars",
+		PrimaryKey: []*schema.Column{ScalarColumns[0]},
+	}
 }

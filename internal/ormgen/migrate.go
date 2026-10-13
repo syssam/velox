@@ -9,6 +9,10 @@ import (
 	vsql "github.com/syssam/velox/compiler/gen/sql"
 )
 
+// tableVarRx matches the line that declares the table of an entity or of a
+// join.
+var tableVarRx = regexp.MustCompile(`^var (\w+Table) = &schema\.Table\{\n$`)
+
 // tableRx matches the line velox's migration generator starts the columns
 // of a table with, which is where the table's declarations start.
 var tableRx = regexp.MustCompile(`^// \w+ holds the columns for the "([^"]+)" table\.`)
@@ -48,13 +52,57 @@ func (g *Generator) migrate(graph *vgen.Graph, files map[string][]byte) error {
 		tableFile[e.T.Table()] = fileName(e)
 	}
 	var marked bytes.Buffer
+	// What connects the foreign keys is one statement per key, in one init
+	// function as velox writes it: 2,900 statements for a schema of 2,000
+	// entities, and a function of that size is what the compiler is slow on
+	// (the package took 40 CPU-s there, against 1.4 for 450 entities). It is
+	// cut into functions of initChunk statements; a package may have any
+	// number of init functions, run in order.
+	//
+	// A table is built by a function of its own for the same reason: as a
+	// variable's initializer its expression (which indexes the columns of
+	// this table and of the ones its keys point at) is compiled into the one
+	// function that initializes the package's variables, and that function
+	// was the 40 CPU-s.
+	const initChunk = 64
+	inInit, depth, stmts := false, 0, 0
+	inTable := false
 	for _, line := range bytes.SplitAfter(src, []byte("\n")) {
+		if m := tableVarRx.FindSubmatch(line); m != nil {
+			fmt.Fprintf(&marked, "var %[1]s = new%[1]s()\n\nfunc new%[1]s() *schema.Table {\n\treturn &schema.Table{\n", m[1])
+			inTable = true
+			continue
+		}
+		if inTable && bytes.HasPrefix(line, []byte("}")) {
+			marked.WriteString("}\n}\n")
+			inTable = false
+			continue
+		}
 		switch {
 		case tableRx.Match(line):
 			// Empty for a table of no entity: back to schema.go.
 			fmt.Fprintf(&marked, "%s%s\n", fileMarker, tableFile[string(tableRx.FindSubmatch(line)[1])])
-		case bytes.HasPrefix(line, []byte("// Tables holds ")), bytes.HasPrefix(line, []byte("func init()")):
+		case bytes.HasPrefix(line, []byte("// Tables holds ")):
 			fmt.Fprintf(&marked, "%s\n", fileMarker)
+		case bytes.HasPrefix(line, []byte("func init()")):
+			fmt.Fprintf(&marked, "%s\n", fileMarker)
+			inInit, depth, stmts = true, 0, 0
+			marked.Write(line)
+			continue
+		}
+		if inInit {
+			if depth == 0 && bytes.HasPrefix(line, []byte("}")) {
+				inInit = false
+			} else {
+				if depth == 0 && stmts == initChunk {
+					marked.WriteString("}\n\nfunc init() {\n")
+					stmts = 0
+				}
+				depth += bytes.Count(line, []byte("{")) - bytes.Count(line, []byte("}"))
+				if depth == 0 {
+					stmts++
+				}
+			}
 		}
 		marked.Write(line)
 	}

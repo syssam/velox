@@ -33,19 +33,23 @@ var ArticleColumns = []*schema.Column{{
 }}
 
 // ArticleTable holds the schema information for the "articles" table.
-var ArticleTable = &schema.Table{
-	Columns: ArticleColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{ArticleColumns[4]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{AuthorColumns[0]},
-		Symbol:     "articles_authors_articles",
-	}, {
-		Columns:    []*schema.Column{ArticleColumns[5]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{AuthorColumns[0]},
-		Symbol:     "articles_authors_edited",
-	}},
-	Name:       "articles",
-	PrimaryKey: []*schema.Column{ArticleColumns[0]},
+var ArticleTable = newArticleTable()
+
+func newArticleTable() *schema.Table {
+	return &schema.Table{
+		Columns: ArticleColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{ArticleColumns[4]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{AuthorColumns[0]},
+			Symbol:     "articles_authors_articles",
+		}, {
+			Columns:    []*schema.Column{ArticleColumns[5]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{AuthorColumns[0]},
+			Symbol:     "articles_authors_edited",
+		}},
+		Name:       "articles",
+		PrimaryKey: []*schema.Column{ArticleColumns[0]},
+	}
 }

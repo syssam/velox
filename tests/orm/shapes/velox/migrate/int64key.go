@@ -18,8 +18,12 @@ var Int64KeyColumns = []*schema.Column{{
 }}
 
 // Int64KeyTable holds the schema information for the "int64keys" table.
-var Int64KeyTable = &schema.Table{
-	Columns:    Int64KeyColumns,
-	Name:       "int64keys",
-	PrimaryKey: []*schema.Column{Int64KeyColumns[0]},
+var Int64KeyTable = newInt64KeyTable()
+
+func newInt64KeyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    Int64KeyColumns,
+		Name:       "int64keys",
+		PrimaryKey: []*schema.Column{Int64KeyColumns[0]},
+	}
 }

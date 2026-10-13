@@ -18,8 +18,12 @@ var ErrorsColumns = []*schema.Column{{
 }}
 
 // ErrorsTable holds the schema information for the "errors" table.
-var ErrorsTable = &schema.Table{
-	Columns:    ErrorsColumns,
-	Name:       "errors",
-	PrimaryKey: []*schema.Column{ErrorsColumns[0]},
+var ErrorsTable = newErrorsTable()
+
+func newErrorsTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ErrorsColumns,
+		Name:       "errors",
+		PrimaryKey: []*schema.Column{ErrorsColumns[0]},
+	}
 }

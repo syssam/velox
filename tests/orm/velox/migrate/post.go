@@ -45,14 +45,18 @@ var PostColumns = []*schema.Column{{
 }}
 
 // PostTable holds the schema information for the "posts" table.
-var PostTable = &schema.Table{
-	Columns: PostColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PostColumns[8]},
-		OnDelete:   schema.NoAction,
-		RefColumns: []*schema.Column{UserColumns[0]},
-		Symbol:     "posts_users_posts",
-	}},
-	Name:       "posts",
-	PrimaryKey: []*schema.Column{PostColumns[0]},
+var PostTable = newPostTable()
+
+func newPostTable() *schema.Table {
+	return &schema.Table{
+		Columns: PostColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PostColumns[8]},
+			OnDelete:   schema.NoAction,
+			RefColumns: []*schema.Column{UserColumns[0]},
+			Symbol:     "posts_users_posts",
+		}},
+		Name:       "posts",
+		PrimaryKey: []*schema.Column{PostColumns[0]},
+	}
 }

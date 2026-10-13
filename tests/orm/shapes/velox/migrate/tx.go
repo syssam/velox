@@ -18,8 +18,12 @@ var TxColumns = []*schema.Column{{
 }}
 
 // TxTable holds the schema information for the "txes" table.
-var TxTable = &schema.Table{
-	Columns:    TxColumns,
-	Name:       "txes",
-	PrimaryKey: []*schema.Column{TxColumns[0]},
+var TxTable = newTxTable()
+
+func newTxTable() *schema.Table {
+	return &schema.Table{
+		Columns:    TxColumns,
+		Name:       "txes",
+		PrimaryKey: []*schema.Column{TxColumns[0]},
+	}
 }

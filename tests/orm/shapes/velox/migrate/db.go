@@ -18,8 +18,12 @@ var DbColumns = []*schema.Column{{
 }}
 
 // DbTable holds the schema information for the "dbs" table.
-var DbTable = &schema.Table{
-	Columns:    DbColumns,
-	Name:       "dbs",
-	PrimaryKey: []*schema.Column{DbColumns[0]},
+var DbTable = newDbTable()
+
+func newDbTable() *schema.Table {
+	return &schema.Table{
+		Columns:    DbColumns,
+		Name:       "dbs",
+		PrimaryKey: []*schema.Column{DbColumns[0]},
+	}
 }

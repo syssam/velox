@@ -18,8 +18,12 @@ var ContextColumns = []*schema.Column{{
 }}
 
 // ContextTable holds the schema information for the "contexts" table.
-var ContextTable = &schema.Table{
-	Columns:    ContextColumns,
-	Name:       "contexts",
-	PrimaryKey: []*schema.Column{ContextColumns[0]},
+var ContextTable = newContextTable()
+
+func newContextTable() *schema.Table {
+	return &schema.Table{
+		Columns:    ContextColumns,
+		Name:       "contexts",
+		PrimaryKey: []*schema.Column{ContextColumns[0]},
+	}
 }

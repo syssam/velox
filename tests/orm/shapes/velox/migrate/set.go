@@ -18,8 +18,12 @@ var SetColumns = []*schema.Column{{
 }}
 
 // SetTable holds the schema information for the "sets" table.
-var SetTable = &schema.Table{
-	Columns:    SetColumns,
-	Name:       "sets",
-	PrimaryKey: []*schema.Column{SetColumns[0]},
+var SetTable = newSetTable()
+
+func newSetTable() *schema.Table {
+	return &schema.Table{
+		Columns:    SetColumns,
+		Name:       "sets",
+		PrimaryKey: []*schema.Column{SetColumns[0]},
+	}
 }

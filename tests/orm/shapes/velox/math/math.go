@@ -29,10 +29,19 @@ var (
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Math) predicate.Math { return orm.And(ps...) }
+func And(ps ...predicate.Math) predicate.Math { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Math) predicate.Math { return orm.Or(ps...) }
+func Or(ps ...predicate.Math) predicate.Math { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Math) predicate.Math { return orm.Not(ps...) }
+func Not(ps ...predicate.Math) predicate.Math { return group(orm.OpNot, ps) }
+
+// group joins conditions on Math under one operator.
+func group(op orm.Op, ps []predicate.Math) predicate.Math {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Math{Op: op, Subs: subs}
+}

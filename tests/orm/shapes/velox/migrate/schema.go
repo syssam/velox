@@ -18,21 +18,25 @@ var ArticleTopicsColumns = []*schema.Column{{
 
 // ArticleTopicsTable holds the schema information for the "article_topics"
 // table.
-var ArticleTopicsTable = &schema.Table{
-	Columns: ArticleTopicsColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{ArticleTopicsColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{ArticleColumns[0]},
-		Symbol:     "article_topics_article_id",
-	}, {
-		Columns:    []*schema.Column{ArticleTopicsColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TopicColumns[0]},
-		Symbol:     "article_topics_topic_id",
-	}},
-	Name:       "article_topics",
-	PrimaryKey: []*schema.Column{ArticleTopicsColumns[0], ArticleTopicsColumns[1]},
+var ArticleTopicsTable = newArticleTopicsTable()
+
+func newArticleTopicsTable() *schema.Table {
+	return &schema.Table{
+		Columns: ArticleTopicsColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{ArticleTopicsColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{ArticleColumns[0]},
+			Symbol:     "article_topics_article_id",
+		}, {
+			Columns:    []*schema.Column{ArticleTopicsColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TopicColumns[0]},
+			Symbol:     "article_topics_topic_id",
+		}},
+		Name:       "article_topics",
+		PrimaryKey: []*schema.Column{ArticleTopicsColumns[0], ArticleTopicsColumns[1]},
+	}
 }
 
 // ArticleBansColumns holds the columns for the "article_bans" table.
@@ -45,21 +49,25 @@ var ArticleBansColumns = []*schema.Column{{
 }}
 
 // ArticleBansTable holds the schema information for the "article_bans" table.
-var ArticleBansTable = &schema.Table{
-	Columns: ArticleBansColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{ArticleBansColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{ArticleColumns[0]},
-		Symbol:     "article_bans_art",
-	}, {
-		Columns:    []*schema.Column{ArticleBansColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TopicColumns[0]},
-		Symbol:     "article_bans_top",
-	}},
-	Name:       "article_bans",
-	PrimaryKey: []*schema.Column{ArticleBansColumns[0], ArticleBansColumns[1]},
+var ArticleBansTable = newArticleBansTable()
+
+func newArticleBansTable() *schema.Table {
+	return &schema.Table{
+		Columns: ArticleBansColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{ArticleBansColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{ArticleColumns[0]},
+			Symbol:     "article_bans_art",
+		}, {
+			Columns:    []*schema.Column{ArticleBansColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TopicColumns[0]},
+			Symbol:     "article_bans_top",
+		}},
+		Name:       "article_bans",
+		PrimaryKey: []*schema.Column{ArticleBansColumns[0], ArticleBansColumns[1]},
+	}
 }
 
 // LabelWeightsColumns holds the columns for the "label_weights" table.
@@ -72,21 +80,25 @@ var LabelWeightsColumns = []*schema.Column{{
 }}
 
 // LabelWeightsTable holds the schema information for the "label_weights" table.
-var LabelWeightsTable = &schema.Table{
-	Columns: LabelWeightsColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{LabelWeightsColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{LabelKeyColumns[0]},
-		Symbol:     "label_weights_label_key_id",
-	}, {
-		Columns:    []*schema.Column{LabelWeightsColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{WeightKeyColumns[0]},
-		Symbol:     "label_weights_weight_key_id",
-	}},
-	Name:       "label_weights",
-	PrimaryKey: []*schema.Column{LabelWeightsColumns[0], LabelWeightsColumns[1]},
+var LabelWeightsTable = newLabelWeightsTable()
+
+func newLabelWeightsTable() *schema.Table {
+	return &schema.Table{
+		Columns: LabelWeightsColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{LabelWeightsColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{LabelKeyColumns[0]},
+			Symbol:     "label_weights_label_key_id",
+		}, {
+			Columns:    []*schema.Column{LabelWeightsColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{WeightKeyColumns[0]},
+			Symbol:     "label_weights_weight_key_id",
+		}},
+		Name:       "label_weights",
+		PrimaryKey: []*schema.Column{LabelWeightsColumns[0], LabelWeightsColumns[1]},
+	}
 }
 
 // PersonFriendsColumns holds the columns for the "person_friends" table.
@@ -100,21 +112,25 @@ var PersonFriendsColumns = []*schema.Column{{
 
 // PersonFriendsTable holds the schema information for the "person_friends"
 // table.
-var PersonFriendsTable = &schema.Table{
-	Columns: PersonFriendsColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PersonFriendsColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "person_friends_person_id",
-	}, {
-		Columns:    []*schema.Column{PersonFriendsColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "person_friends_friend_id",
-	}},
-	Name:       "person_friends",
-	PrimaryKey: []*schema.Column{PersonFriendsColumns[0], PersonFriendsColumns[1]},
+var PersonFriendsTable = newPersonFriendsTable()
+
+func newPersonFriendsTable() *schema.Table {
+	return &schema.Table{
+		Columns: PersonFriendsColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PersonFriendsColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "person_friends_person_id",
+		}, {
+			Columns:    []*schema.Column{PersonFriendsColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "person_friends_friend_id",
+		}},
+		Name:       "person_friends",
+		PrimaryKey: []*schema.Column{PersonFriendsColumns[0], PersonFriendsColumns[1]},
+	}
 }
 
 // PersonFollowingColumns holds the columns for the "person_following" table.
@@ -128,21 +144,25 @@ var PersonFollowingColumns = []*schema.Column{{
 
 // PersonFollowingTable holds the schema information for the "person_following"
 // table.
-var PersonFollowingTable = &schema.Table{
-	Columns: PersonFollowingColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{PersonFollowingColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "person_following_person_id",
-	}, {
-		Columns:    []*schema.Column{PersonFollowingColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{PersonColumns[0]},
-		Symbol:     "person_following_follower_id",
-	}},
-	Name:       "person_following",
-	PrimaryKey: []*schema.Column{PersonFollowingColumns[0], PersonFollowingColumns[1]},
+var PersonFollowingTable = newPersonFollowingTable()
+
+func newPersonFollowingTable() *schema.Table {
+	return &schema.Table{
+		Columns: PersonFollowingColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{PersonFollowingColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "person_following_person_id",
+		}, {
+			Columns:    []*schema.Column{PersonFollowingColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{PersonColumns[0]},
+			Symbol:     "person_following_follower_id",
+		}},
+		Name:       "person_following",
+		PrimaryKey: []*schema.Column{PersonFollowingColumns[0], PersonFollowingColumns[1]},
+	}
 }
 
 // TeamFansColumns holds the columns for the "team_fans" table.
@@ -156,21 +176,25 @@ var TeamFansColumns = []*schema.Column{{
 }}
 
 // TeamFansTable holds the schema information for the "team_fans" table.
-var TeamFansTable = &schema.Table{
-	Columns: TeamFansColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TeamFansColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TeamColumns[0]},
-		Symbol:     "team_fans_team_id",
-	}, {
-		Columns:    []*schema.Column{TeamFansColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{PlayerColumns[0]},
-		Symbol:     "team_fans_player_id",
-	}},
-	Name:       "team_fans",
-	PrimaryKey: []*schema.Column{TeamFansColumns[0], TeamFansColumns[1]},
+var TeamFansTable = newTeamFansTable()
+
+func newTeamFansTable() *schema.Table {
+	return &schema.Table{
+		Columns: TeamFansColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TeamFansColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TeamColumns[0]},
+			Symbol:     "team_fans_team_id",
+		}, {
+			Columns:    []*schema.Column{TeamFansColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{PlayerColumns[0]},
+			Symbol:     "team_fans_player_id",
+		}},
+		Name:       "team_fans",
+		PrimaryKey: []*schema.Column{TeamFansColumns[0], TeamFansColumns[1]},
+	}
 }
 
 // TeamRivalsColumns holds the columns for the "team_rivals" table.
@@ -183,21 +207,25 @@ var TeamRivalsColumns = []*schema.Column{{
 }}
 
 // TeamRivalsTable holds the schema information for the "team_rivals" table.
-var TeamRivalsTable = &schema.Table{
-	Columns: TeamRivalsColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TeamRivalsColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TeamColumns[0]},
-		Symbol:     "team_rivals_team_id",
-	}, {
-		Columns:    []*schema.Column{TeamRivalsColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TeamColumns[0]},
-		Symbol:     "team_rivals_rival_id",
-	}},
-	Name:       "team_rivals",
-	PrimaryKey: []*schema.Column{TeamRivalsColumns[0], TeamRivalsColumns[1]},
+var TeamRivalsTable = newTeamRivalsTable()
+
+func newTeamRivalsTable() *schema.Table {
+	return &schema.Table{
+		Columns: TeamRivalsColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TeamRivalsColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TeamColumns[0]},
+			Symbol:     "team_rivals_team_id",
+		}, {
+			Columns:    []*schema.Column{TeamRivalsColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TeamColumns[0]},
+			Symbol:     "team_rivals_rival_id",
+		}},
+		Name:       "team_rivals",
+		PrimaryKey: []*schema.Column{TeamRivalsColumns[0], TeamRivalsColumns[1]},
+	}
 }
 
 // TeamBadgesColumns holds the columns for the "team_badges" table.
@@ -210,21 +238,25 @@ var TeamBadgesColumns = []*schema.Column{{
 }}
 
 // TeamBadgesTable holds the schema information for the "team_badges" table.
-var TeamBadgesTable = &schema.Table{
-	Columns: TeamBadgesColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TeamBadgesColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{TeamColumns[0]},
-		Symbol:     "team_badges_team_id",
-	}, {
-		Columns:    []*schema.Column{TeamBadgesColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{BadgeColumns[0]},
-		Symbol:     "team_badges_badge_id",
-	}},
-	Name:       "team_badges",
-	PrimaryKey: []*schema.Column{TeamBadgesColumns[0], TeamBadgesColumns[1]},
+var TeamBadgesTable = newTeamBadgesTable()
+
+func newTeamBadgesTable() *schema.Table {
+	return &schema.Table{
+		Columns: TeamBadgesColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TeamBadgesColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{TeamColumns[0]},
+			Symbol:     "team_badges_team_id",
+		}, {
+			Columns:    []*schema.Column{TeamBadgesColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{BadgeColumns[0]},
+			Symbol:     "team_badges_badge_id",
+		}},
+		Name:       "team_badges",
+		PrimaryKey: []*schema.Column{TeamBadgesColumns[0], TeamBadgesColumns[1]},
+	}
 }
 
 // WeightKeyPeersColumns holds the columns for the "weight_key_peers" table.
@@ -238,21 +270,25 @@ var WeightKeyPeersColumns = []*schema.Column{{
 
 // WeightKeyPeersTable holds the schema information for the "weight_key_peers"
 // table.
-var WeightKeyPeersTable = &schema.Table{
-	Columns: WeightKeyPeersColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{WeightKeyPeersColumns[0]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{WeightKeyColumns[0]},
-		Symbol:     "weight_key_peers_weight_key_id",
-	}, {
-		Columns:    []*schema.Column{WeightKeyPeersColumns[1]},
-		OnDelete:   schema.Cascade,
-		RefColumns: []*schema.Column{WeightKeyColumns[0]},
-		Symbol:     "weight_key_peers_peer_id",
-	}},
-	Name:       "weight_key_peers",
-	PrimaryKey: []*schema.Column{WeightKeyPeersColumns[0], WeightKeyPeersColumns[1]},
+var WeightKeyPeersTable = newWeightKeyPeersTable()
+
+func newWeightKeyPeersTable() *schema.Table {
+	return &schema.Table{
+		Columns: WeightKeyPeersColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{WeightKeyPeersColumns[0]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{WeightKeyColumns[0]},
+			Symbol:     "weight_key_peers_weight_key_id",
+		}, {
+			Columns:    []*schema.Column{WeightKeyPeersColumns[1]},
+			OnDelete:   schema.Cascade,
+			RefColumns: []*schema.Column{WeightKeyColumns[0]},
+			Symbol:     "weight_key_peers_peer_id",
+		}},
+		Name:       "weight_key_peers",
+		PrimaryKey: []*schema.Column{WeightKeyPeersColumns[0], WeightKeyPeersColumns[1]},
+	}
 }
 
 // Tables holds all the tables in the schema.

@@ -15,8 +15,12 @@ var BareColumns = []*schema.Column{{
 }}
 
 // BareTable holds the schema information for the "bares" table.
-var BareTable = &schema.Table{
-	Columns:    BareColumns,
-	Name:       "bares",
-	PrimaryKey: []*schema.Column{BareColumns[0]},
+var BareTable = newBareTable()
+
+func newBareTable() *schema.Table {
+	return &schema.Table{
+		Columns:    BareColumns,
+		Name:       "bares",
+		PrimaryKey: []*schema.Column{BareColumns[0]},
+	}
 }

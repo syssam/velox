@@ -18,8 +18,12 @@ var MigrateColumns = []*schema.Column{{
 }}
 
 // MigrateTable holds the schema information for the "migrates" table.
-var MigrateTable = &schema.Table{
-	Columns:    MigrateColumns,
-	Name:       "migrates",
-	PrimaryKey: []*schema.Column{MigrateColumns[0]},
+var MigrateTable = newMigrateTable()
+
+func newMigrateTable() *schema.Table {
+	return &schema.Table{
+		Columns:    MigrateColumns,
+		Name:       "migrates",
+		PrimaryKey: []*schema.Column{MigrateColumns[0]},
+	}
 }

@@ -23,8 +23,12 @@ var MixinOnlyColumns = []*schema.Column{{
 }}
 
 // MixinOnlyTable holds the schema information for the "mixin_onlies" table.
-var MixinOnlyTable = &schema.Table{
-	Columns:    MixinOnlyColumns,
-	Name:       "mixin_onlies",
-	PrimaryKey: []*schema.Column{MixinOnlyColumns[0]},
+var MixinOnlyTable = newMixinOnlyTable()
+
+func newMixinOnlyTable() *schema.Table {
+	return &schema.Table{
+		Columns:    MixinOnlyColumns,
+		Name:       "mixin_onlies",
+		PrimaryKey: []*schema.Column{MixinOnlyColumns[0]},
+	}
 }

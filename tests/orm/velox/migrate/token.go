@@ -47,14 +47,18 @@ var TokenColumns = []*schema.Column{{
 }}
 
 // TokenTable holds the schema information for the "tokens" table.
-var TokenTable = &schema.Table{
-	Columns: TokenColumns,
-	ForeignKeys: []*schema.ForeignKey{{
-		Columns:    []*schema.Column{TokenColumns[7]},
-		OnDelete:   schema.SetNull,
-		RefColumns: []*schema.Column{UserColumns[0]},
-		Symbol:     "tokens_users_token",
-	}},
-	Name:       "tokens",
-	PrimaryKey: []*schema.Column{TokenColumns[0]},
+var TokenTable = newTokenTable()
+
+func newTokenTable() *schema.Table {
+	return &schema.Table{
+		Columns: TokenColumns,
+		ForeignKeys: []*schema.ForeignKey{{
+			Columns:    []*schema.Column{TokenColumns[7]},
+			OnDelete:   schema.SetNull,
+			RefColumns: []*schema.Column{UserColumns[0]},
+			Symbol:     "tokens_users_token",
+		}},
+		Name:       "tokens",
+		PrimaryKey: []*schema.Column{TokenColumns[0]},
+	}
 }

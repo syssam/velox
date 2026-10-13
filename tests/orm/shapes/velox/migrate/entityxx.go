@@ -18,8 +18,12 @@ var EntityColumns = []*schema.Column{{
 }}
 
 // EntityTable holds the schema information for the "entities" table.
-var EntityTable = &schema.Table{
-	Columns:    EntityColumns,
-	Name:       "entities",
-	PrimaryKey: []*schema.Column{EntityColumns[0]},
+var EntityTable = newEntityTable()
+
+func newEntityTable() *schema.Table {
+	return &schema.Table{
+		Columns:    EntityColumns,
+		Name:       "entities",
+		PrimaryKey: []*schema.Column{EntityColumns[0]},
+	}
 }

@@ -29,10 +29,19 @@ var (
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Context) predicate.Context { return orm.And(ps...) }
+func And(ps ...predicate.Context) predicate.Context { return group(orm.OpAnd, ps) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Context) predicate.Context { return orm.Or(ps...) }
+func Or(ps ...predicate.Context) predicate.Context { return group(orm.OpOr, ps) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Context) predicate.Context { return orm.Not(ps...) }
+func Not(ps ...predicate.Context) predicate.Context { return group(orm.OpNot, ps) }
+
+// group joins conditions on Context under one operator.
+func group(op orm.Op, ps []predicate.Context) predicate.Context {
+	subs := make([]orm.P, len(ps))
+	for i, p := range ps {
+		subs[i] = orm.P(p)
+	}
+	return predicate.Context{Op: op, Subs: subs}
+}
