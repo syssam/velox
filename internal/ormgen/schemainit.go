@@ -69,6 +69,85 @@ func scansDefault(f *vgen.Field) bool {
 	return false
 }
 
+// fieldRow returns the row of orm.FieldCode that stitches field f of e, and
+// the expression of the list of descriptors the row indexes: the Fields of
+// the schema, or of the mixin the field comes from.
+//
+// A row names, for the default, the update default and the validators the
+// field has, the function of package orm that makes of what the descriptor
+// holds what the runtime calls. Which function is decided by the field's Go
+// type (full) against the basic type the descriptor holds its values at:
+//
+//   - the same type: orm.DefaultOf, orm.Validators;
+//   - a default that is a function: orm.DefaultFunc, whatever the type;
+//   - an enum generated here (a named string): orm.DefaultString,
+//     orm.ValidatorsString;
+//   - a Go type that scans its default, or a named type over another basic
+//     type: a function written out in the row, the one case with code.
+func (g *Generator) fieldRow(im *Imports, e *Entity, f *Field, schemaPkg string) (src, row string, err error) {
+	full := f.Base
+	if f.Enum != "" {
+		_, types, _, _ := g.enumNames(e)
+		full = im.use(g.cfg.Package+"/"+e.Pkg, e.Pkg+"pkg") + "." + types[f]
+	} else {
+		ref, err := goTypeOf(f.F)
+		if err != nil {
+			return "", "", err
+		}
+		if ref.PkgPath != "" {
+			im.use(ref.PkgPath, ref.PkgName)
+		}
+	}
+	basic := basicType(f.F, full)
+	switch basic {
+	case "time.Time":
+		im.use("time", "time")
+	case "uuid.UUID":
+		im.use("github.com/google/uuid", "uuid")
+	}
+	src = fmt.Sprintf("%s.%s{}.Fields()", schemaPkg, e.T.Name)
+	idx := 0
+	if p := f.F.Position; p != nil {
+		idx = p.Index
+		if p.MixedIn {
+			src = fmt.Sprintf("mixin[%d].Fields()", p.MixinIndex)
+		}
+	}
+	row = fmt.Sprintf("{Index: %d, Column: %q", idx, f.Col)
+	named := f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther()
+	if f.F.Default {
+		switch {
+		case f.F.DefaultFunc():
+			row += fmt.Sprintf(", Default: orm.DefaultFunc[%s]", full)
+		case f.Enum != "":
+			row += fmt.Sprintf(", Default: orm.DefaultString[%s]", full)
+		case named && scansDefault(f.F):
+			// The Go type is not a named form of the basic type (a
+			// decimal stored as a string): it parses the default the
+			// way it parses a column value.
+			row += fmt.Sprintf(", Default: func(v any) func() any {\n\tvar def %s\n\tif err := (&def).Scan(v); err != nil {\n\t\tpanic(\"velox: default of %s.%s: \" + err.Error())\n\t}\n\treturn orm.DefaultValue(def)\n}", full, e.Name, f.F.Name)
+		case named:
+			row += fmt.Sprintf(", Default: func(v any) func() any { return orm.DefaultValue(%s(v.(%s))) }", full, basic)
+		default:
+			row += fmt.Sprintf(", Default: orm.DefaultOf[%s]", full)
+		}
+	}
+	if f.F.UpdateDefault {
+		row += fmt.Sprintf(", UpdateDefault: orm.DefaultFunc[%s]", full)
+	}
+	if f.F.Validators > 0 {
+		switch {
+		case basic == full:
+			row += fmt.Sprintf(", Validate: orm.Validators[%s]", full)
+		case basic == "string" && f.Enum != "":
+			row += fmt.Sprintf(", Validate: orm.ValidatorsString[%s]", full)
+		default:
+			row += fmt.Sprintf(", Validate: func(checks []any) func(any) error {\n\treturn orm.ValidatorsOf(checks, func(v %s) %s { return %s(v) })\n}", full, basic, basic)
+		}
+	}
+	return src, row + "},", nil
+}
+
 // schemaInit generates the one package that imports the user's schema: per
 // entity an init() that reads default values, update defaults and validators
 // from the schema descriptors and stores them in the entity's runtime table.
@@ -148,70 +227,14 @@ func (g *Generator) schemaInit(graph *vgen.Graph) (map[string][]byte, error) {
 		rows := map[string][]string{}
 		var sources []string
 		for _, f := range fields {
-			full := f.Base
-			if f.Enum != "" {
-				_, types, _, _ := g.enumNames(e)
-				full = im.use(g.cfg.Package+"/"+e.Pkg, e.Pkg+"pkg") + "." + types[f]
-			} else {
-				ref, err := goTypeOf(f.F)
-				if err != nil {
-					return nil, err
-				}
-				if ref.PkgPath != "" {
-					im.use(ref.PkgPath, ref.PkgName)
-				}
-			}
-			basic := basicType(f.F, full)
-			switch basic {
-			case "time.Time":
-				im.use("time", "time")
-			case "uuid.UUID":
-				im.use("github.com/google/uuid", "uuid")
-			}
-			src := fmt.Sprintf("%s.%s{}.Fields()", schemaPkg, t.Name)
-			idx := 0
-			if p := f.F.Position; p != nil {
-				idx = p.Index
-				if p.MixedIn {
-					src = fmt.Sprintf("mixin[%d].Fields()", p.MixinIndex)
-				}
-			}
-			row := fmt.Sprintf("{Index: %d, Column: %q", idx, f.Col)
-			named := f.F.HasGoType() && !f.F.IsJSON() && !f.F.IsOther()
-			if f.F.Default {
-				switch {
-				case f.F.DefaultFunc():
-					row += fmt.Sprintf(", Default: orm.DefaultFunc[%s]", full)
-				case f.Enum != "":
-					row += fmt.Sprintf(", Default: orm.DefaultString[%s]", full)
-				case named && scansDefault(f.F):
-					// The Go type is not a named form of the basic type (a
-					// decimal stored as a string): it parses the default the
-					// way it parses a column value.
-					row += fmt.Sprintf(", Default: func(v any) func() any {\n\tvar def %s\n\tif err := (&def).Scan(v); err != nil {\n\t\tpanic(\"velox: default of %s.%s: \" + err.Error())\n\t}\n\treturn orm.DefaultValue(def)\n}", full, e.Name, f.F.Name)
-				case named:
-					row += fmt.Sprintf(", Default: func(v any) func() any { return orm.DefaultValue(%s(v.(%s))) }", full, basic)
-				default:
-					row += fmt.Sprintf(", Default: orm.DefaultOf[%s]", full)
-				}
-			}
-			if f.F.UpdateDefault {
-				row += fmt.Sprintf(", UpdateDefault: orm.DefaultFunc[%s]", full)
-			}
-			if f.F.Validators > 0 {
-				switch {
-				case basic == full:
-					row += fmt.Sprintf(", Validate: orm.Validators[%s]", full)
-				case basic == "string" && f.Enum != "":
-					row += fmt.Sprintf(", Validate: orm.ValidatorsString[%s]", full)
-				default:
-					row += fmt.Sprintf(", Validate: func(checks []any) func(any) error {\n\treturn orm.ValidatorsOf(checks, func(v %s) %s { return %s(v) })\n}", full, basic, basic)
-				}
+			src, row, err := g.fieldRow(im, e, f, schemaPkg)
+			if err != nil {
+				return nil, err
 			}
 			if _, seen := rows[src]; !seen {
 				sources = append(sources, src)
 			}
-			rows[src] = append(rows[src], row+"},")
+			rows[src] = append(rows[src], row)
 		}
 		for _, src := range sources {
 			w("\torm.StitchFields(m, %s, []orm.FieldCode{\n\t\t%s\n\t})\n", src, strings.Join(rows[src], "\n\t\t"))

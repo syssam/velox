@@ -135,40 +135,7 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		ops := f.F.Ops()
-		// The key of an edge is compared against a bound like any other
-		// column of its type. velox (as Ent) lists only equality for an
-		// edge field, and its generic column types had the rest anyway:
-		// code that applies one numeric filter to every int64 column,
-		// keys included, was written against that.
-		isKey := f.F.IsEdgeField()
-		if isKey && !slices.Contains(ops, vgen.GT) && f.F.Type != nil {
-			switch t := f.F.Type.Type; {
-			case t.Numeric(), t == field.TypeString, t == field.TypeTime, t == field.TypeUUID:
-				ops = append(slices.Clone(ops), vgen.GT)
-			}
-		}
-		// Every column can be asked whether it is NULL, one that cannot be
-		// included (it never is): code written once for every column of a
-		// type, a filter chosen at run time, asks without knowing which it
-		// has. Only a column that accepts NULL can be cleared.
-		level := "Value"
-		switch {
-		case slices.Contains(ops, vgen.Contains):
-			level = "String"
-		case slices.Contains(ops, vgen.GT):
-			level = "Ordered"
-			// A number that is not the key of an edge can be added to. Add on
-			// the id is refused when it runs.
-			if !isKey && f.F.Type != nil && (f.F.Type.Numeric() || f.F.IsOther()) {
-				level = "Number"
-			}
-		case slices.Contains(ops, vgen.In):
-			level = "Enum"
-		case slices.Contains(ops, vgen.EQ):
-			level = "Bool"
-		}
-		colType[f] = fmt.Sprintf("orm.%s[%s, %s]", colgen.Name(level, f.Null && f.F.Optional, f.F.UpdateDefault), gt, e.pred())
+		colType[f] = fmt.Sprintf("orm.%s[%s, %s]", colgen.Name(columnLevel(f.F), f.Null && f.F.Optional, f.F.UpdateDefault), gt, e.pred())
 	}
 
 	w("// Table is the table of %s, and ModelName the name of the entity: what the\n// Type method of a query or a mutation of it returns.\nconst (\n\tTable = %q\n\tModelName = %q\n)\n\n", e.Name, e.T.Table(), e.Name)
@@ -246,6 +213,45 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 	out.WriteString("\n")
 	out.Write(b.Bytes())
 	return split(out.Bytes(), fileName(e))
+}
+
+// columnLevel returns the level of the column type of a field: what its
+// values can be asked (orm/columns.go has a type per level). It follows the
+// operators velox lists for the field, with two additions.
+func columnLevel(f *vgen.Field) string {
+	ops := f.Ops()
+	// The key of an edge is compared against a bound like any other
+	// column of its type. velox (as Ent) lists only equality for an
+	// edge field, and its generic column types had the rest anyway:
+	// code that applies one numeric filter to every int64 column,
+	// keys included, was written against that.
+	isKey := f.IsEdgeField()
+	if isKey && !slices.Contains(ops, vgen.GT) && f.Type != nil {
+		switch t := f.Type.Type; {
+		case t.Numeric(), t == field.TypeString, t == field.TypeTime, t == field.TypeUUID:
+			ops = append(slices.Clone(ops), vgen.GT)
+		}
+	}
+	// Every column can be asked whether it is NULL, one that cannot be
+	// included (it never is): code written once for every column of a
+	// type, a filter chosen at run time, asks without knowing which it
+	// has. Only a column that accepts NULL can be cleared.
+	switch {
+	case slices.Contains(ops, vgen.Contains):
+		return "String"
+	case slices.Contains(ops, vgen.GT):
+		// A number that is not the key of an edge can be added to. Add on
+		// the id is refused when it runs.
+		if !isKey && f.Type != nil && (f.Type.Numeric() || f.IsOther()) {
+			return "Number"
+		}
+		return "Ordered"
+	case slices.Contains(ops, vgen.In):
+		return "Enum"
+	case slices.Contains(ops, vgen.EQ):
+		return "Bool"
+	}
+	return "Value"
 }
 
 // leafEdges writes the description and the descriptor of each edge of e. The
