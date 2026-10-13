@@ -556,7 +556,12 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
   `velox.MarshalSpecs` returns the bytes and `velox.UnmarshalSpecs` takes the
   value as an engine hands it over (the object as JSON decodes it, or its
   text); neither names an engine's types, so a server binds the scalar with
-  whatever its engine has for one.
+  whatever its engine has for one. gqlgen wants a `graphql.Marshaler` from a
+  scalar's Marshal function, which is a few lines around this one, in a
+  package of the application's that the scalar is bound to in `gqlgen.yml`.
+  That was the one thing gqlgen 0.17.86 did not bind by itself of the schema
+  of `tests/orm/gqlshapes`: the entities, their edges and connections, the
+  inputs, `Node`, the interface and the union autobind.
 - Not there yet, and refused at generation with a message that says so: an
   entity whose GraphQL type is renamed (`graphql.Type` on the entity),
   ordering by the number of neighbors on an edge, filters on the elements of
