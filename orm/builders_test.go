@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"strings"
 	"testing"
 )
 
@@ -80,4 +81,17 @@ func TestWith(t *testing.T) {
 	if l := q.c.With[2]; l.Edge != posts.Meta || l.Preds != nil {
 		t.Errorf("a nil query describes nothing: %+v", l)
 	}
+}
+
+// What a builder is given back is of its types by construction. When it is
+// not (a client declared with the Meta of another entity than its types
+// name), the panic says what to do.
+func TestBuilderOfAnotherEntitysMeta(t *testing.T) {
+	defer func() {
+		msg, _ := recover().(string)
+		if !strings.Contains(msg, "the engine read a string where the builder's type is *int") || !strings.Contains(msg, "generate the code again") {
+			t.Errorf("panic: %q", msg)
+		}
+	}()
+	as[*int]("a row")
 }

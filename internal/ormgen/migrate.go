@@ -17,6 +17,83 @@ var tableVarRx = regexp.MustCompile(`^var (\w+Table) = &schema\.Table\{\n$`)
 // of a table with, which is where the table's declarations start.
 var tableRx = regexp.MustCompile(`^// \w+ holds the columns for the "([^"]+)" table\.`)
 
+// initChunk is how many statements an init function of the migrate package
+// has at most.
+const initChunk = 64
+
+// arrangeTables rewrites what velox's migration generator wrote, which is one
+// file, into what the migrate package is here. It works on the text, line by
+// line, because that generator is the old one's and is not changed for this:
+// what it relies on of the text is checked, and a table it does not
+// recognize is an error and not a table left as it was.
+//
+//   - The declarations of a table go to the file of its entity (tableFile, by
+//     table name), behind a file marker for split. What is no entity's stays
+//     in schema.go: the tables that join two entities, the list of them all,
+//     and what connects the foreign keys.
+//
+//   - A table is built by a function of its own. As a variable's initializer
+//     its expression, which indexes the columns of this table and of the ones
+//     its keys point at, is compiled into the one function that initializes
+//     the package's variables, and the compiler is quadratic in the size of a
+//     function: the package took 1.4 CPU-s for 450 entities and 45 for 2,000.
+//
+//   - What connects the foreign keys is one statement per key in one init
+//     function, 2,900 statements for 2,000 entities. It is cut into functions
+//     of initChunk statements, for the same reason; a package may have any
+//     number of init functions, and they run in order.
+func arrangeTables(src []byte, tableFile map[string]string) ([]byte, error) {
+	var out bytes.Buffer
+	inInit, depth, stmts := false, 0, 0
+	inTable := false
+	declared, built := 0, 0
+	for _, line := range bytes.SplitAfter(src, []byte("\n")) {
+		if m := tableVarRx.FindSubmatch(line); m != nil {
+			fmt.Fprintf(&out, "var %[1]s = new%[1]s()\n\nfunc new%[1]s() *schema.Table {\n\treturn &schema.Table{\n", m[1])
+			inTable = true
+			built++
+			continue
+		}
+		if inTable && bytes.HasPrefix(line, []byte("}")) {
+			out.WriteString("}\n}\n")
+			inTable = false
+			continue
+		}
+		switch {
+		case tableRx.Match(line):
+			// Empty for a table of no entity: back to schema.go.
+			fmt.Fprintf(&out, "%s%s\n", fileMarker, tableFile[string(tableRx.FindSubmatch(line)[1])])
+			declared++
+		case bytes.HasPrefix(line, []byte("// Tables holds ")):
+			fmt.Fprintf(&out, "%s\n", fileMarker)
+		case bytes.HasPrefix(line, []byte("func init()")):
+			fmt.Fprintf(&out, "%s\n", fileMarker)
+			inInit, depth, stmts = true, 0, 0
+			out.Write(line)
+			continue
+		}
+		if inInit {
+			if depth == 0 && bytes.HasPrefix(line, []byte("}")) {
+				inInit = false
+			} else {
+				if depth == 0 && stmts == initChunk {
+					out.WriteString("}\n\nfunc init() {\n")
+					stmts = 0
+				}
+				depth += bytes.Count(line, []byte("{")) - bytes.Count(line, []byte("}"))
+				if depth == 0 {
+					stmts++
+				}
+			}
+		}
+		out.Write(line)
+	}
+	if declared != built || declared < len(tableFile) {
+		return nil, fmt.Errorf("the migration generator's output was not recognized: %d tables announced, %d declared, %d entities", declared, built, len(tableFile))
+	}
+	return out.Bytes(), nil
+}
+
 // migrate generates the migrate package: the tables of the schema and the
 // functions that create them.
 //
@@ -51,62 +128,11 @@ func (g *Generator) migrate(graph *vgen.Graph, files map[string][]byte) error {
 	for _, e := range g.ents {
 		tableFile[e.T.Table()] = fileName(e)
 	}
-	var marked bytes.Buffer
-	// What connects the foreign keys is one statement per key, in one init
-	// function as velox writes it: 2,900 statements for a schema of 2,000
-	// entities, and a function of that size is what the compiler is slow on
-	// (the package took 40 CPU-s there, against 1.4 for 450 entities). It is
-	// cut into functions of initChunk statements; a package may have any
-	// number of init functions, run in order.
-	//
-	// A table is built by a function of its own for the same reason: as a
-	// variable's initializer its expression (which indexes the columns of
-	// this table and of the ones its keys point at) is compiled into the one
-	// function that initializes the package's variables, and that function
-	// was the 40 CPU-s.
-	const initChunk = 64
-	inInit, depth, stmts := false, 0, 0
-	inTable := false
-	for _, line := range bytes.SplitAfter(src, []byte("\n")) {
-		if m := tableVarRx.FindSubmatch(line); m != nil {
-			fmt.Fprintf(&marked, "var %[1]s = new%[1]s()\n\nfunc new%[1]s() *schema.Table {\n\treturn &schema.Table{\n", m[1])
-			inTable = true
-			continue
-		}
-		if inTable && bytes.HasPrefix(line, []byte("}")) {
-			marked.WriteString("}\n}\n")
-			inTable = false
-			continue
-		}
-		switch {
-		case tableRx.Match(line):
-			// Empty for a table of no entity: back to schema.go.
-			fmt.Fprintf(&marked, "%s%s\n", fileMarker, tableFile[string(tableRx.FindSubmatch(line)[1])])
-		case bytes.HasPrefix(line, []byte("// Tables holds ")):
-			fmt.Fprintf(&marked, "%s\n", fileMarker)
-		case bytes.HasPrefix(line, []byte("func init()")):
-			fmt.Fprintf(&marked, "%s\n", fileMarker)
-			inInit, depth, stmts = true, 0, 0
-			marked.Write(line)
-			continue
-		}
-		if inInit {
-			if depth == 0 && bytes.HasPrefix(line, []byte("}")) {
-				inInit = false
-			} else {
-				if depth == 0 && stmts == initChunk {
-					marked.WriteString("}\n\nfunc init() {\n")
-					stmts = 0
-				}
-				depth += bytes.Count(line, []byte("{")) - bytes.Count(line, []byte("}"))
-				if depth == 0 {
-					stmts++
-				}
-			}
-		}
-		marked.Write(line)
+	marked, err := arrangeTables(src, tableFile)
+	if err != nil {
+		return fmt.Errorf("velox: migrate: %w", err)
 	}
-	parts, err := split(marked.Bytes(), "schema")
+	parts, err := split(marked, "schema")
 	if err != nil {
 		return fmt.Errorf("velox: migrate: %w", err)
 	}

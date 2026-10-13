@@ -1,6 +1,6 @@
 package orm
 
-//go:generate go run ../internal/colgen/cmd columns.go
+//go:generate go run ../internal/colgen/cmd columns.go columns_calls_test.go
 
 // ToOne is an edge of an entity to at most one neighbor, as a generated
 // entity package declares it,

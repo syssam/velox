@@ -110,8 +110,30 @@ jobs:
           check_pkg "github.com/syssam/velox/dialect/sql/schema" 80    # actual 82.6%
           check_pkg "github.com/syssam/velox/dialect/sql/sqlgraph" 80  # actual 82.0%
           check_pkg "github.com/syssam/velox/compiler/load" 75         # actual 75.8%
+          # The generator and runtime that replace the ones above (measured
+          # 2026-10-13). Package orm itself is not here: its tests are in
+          # tests/orm, against a generated tree, and are counted by the
+          # step below.
+          check_pkg "github.com/syssam/velox/internal/ormgen" 80         # actual 84.2%
+          check_pkg "github.com/syssam/velox/contrib/graphql/ormgql" 85  # actual 88.3%
+          check_pkg "github.com/syssam/velox/contrib/graphql/gqlinput" 85 # actual 87.2%
+          check_pkg "github.com/syssam/velox/cmd/velox-migrate" 75       # actual 79.3%
           if [ "${failed}" -eq 1 ]; then
             echo "::error::Some packages are below their coverage threshold"
+            exit 1
+          fi
+      - name: Check coverage of package orm
+        # Package orm runs every entity of a generated tree, so what tests it
+        # is tests/orm (three generated trees, SQLite). Its own tests alone
+        # cover a sixth of it, which is why it has a step of its own: the
+        # statements of orm that any of these tests reach.
+        if: matrix.go-version == 'stable'
+        run: |
+          go test -coverpkg=github.com/syssam/velox/orm -coverprofile=orm.out ./orm/ ./tests/orm/... >/dev/null
+          cov=$(go tool cover -func=orm.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
+          echo "github.com/syssam/velox/orm: ${cov}% (threshold: 90%)"  # actual 95.7%
+          if awk "BEGIN {exit !(${cov} < 90)}"; then
+            echo "::error::package orm coverage ${cov}% is below 90%"
             exit 1
           fi
       - uses: codecov/codecov-action@v7

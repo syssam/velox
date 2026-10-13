@@ -85,8 +85,7 @@ func (g *Generator) enumNames(e *Entity) (*Namer, map[*Field]string, map[*Field]
 // db.User.Query(tx).Where(user.Name.EQ(...), user.Posts.Has()). The
 // builders are reached through the root package, not from here.
 //
-// It returns the files of the package by name: the entity's own, and the one
-// of its column types.
+// It returns the package's one file, by name.
 //
 // It imports the predicate package and not package entity (nor another entity's package): a
 // change to one entity rebuilds its package, package entity and what uses them,

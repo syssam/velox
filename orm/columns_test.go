@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,16 +13,86 @@ import (
 
 // columns.go is what its generator writes.
 func TestColumnsFileIsCurrent(t *testing.T) {
-	want, err := colgen.Source()
-	if err != nil {
-		t.Fatal(err)
+	for file, source := range map[string]func() ([]byte, error){"columns.go": colgen.Source, "columns_calls_test.go": colgen.Calls} {
+		want, err := source()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s is not what internal/colgen writes: go generate ./orm", file)
+		}
 	}
-	got, err := os.ReadFile("columns.go")
-	if err != nil {
-		t.Fatal(err)
+}
+
+// TestEveryMethodOfEveryColumnType calls all of them. The column types are
+// twenty-four with the same few methods, each written by the generator from
+// one line: a wrong operator in one, or a type that has a method it should
+// not, is a mistake nothing else would show. What a method returns and which
+// methods a type has are said here, apart from the generator.
+func TestEveryMethodOfEveryColumnType(t *testing.T) {
+	cmp := func(op Op) any { return P{Op: op, Col: "c", Val: 1} }
+	txt := func(op Op) any { return P{Op: op, Col: "c", Val: "x"} }
+	want := map[string]any{
+		"EQ": cmp(OpEQ), "NEQ": cmp(OpNEQ), "GT": cmp(OpGT), "GTE": cmp(OpGTE), "LT": cmp(OpLT), "LTE": cmp(OpLTE),
+		"In": P{Op: OpIn, Col: "c", Val: []any{1, 2}}, "NotIn": P{Op: OpNotIn, Col: "c", Val: []any{1, 2}},
+		"Contains": txt(OpContains), "HasPrefix": txt(OpHasPrefix), "HasSuffix": txt(OpHasSuffix),
+		"EqualFold": txt(OpEqualFold), "ContainsFold": txt(OpContainsFold),
+		"IsNil": P{Op: OpIsNil, Col: "c"}, "NotNil": P{Op: OpNotNil, Col: "c"},
+		"Set":                SetterOf[P]{Kind: SetValue, Col: "c", Val: 1},
+		"SetNillable":        SetterOf[P]{Kind: SetValue, Col: "c", Val: 1},
+		"SetNillable of nil": SetterOf[P]{},
+		"Clear":              SetterOf[P]{Kind: SetNull, Col: "c"},
+		"Keep":               SetterOf[P]{Kind: SetKeep, Col: "c"},
+		"Add":                SetterOf[P]{Kind: SetAdd, Col: "c", Val: 1},
+		"Asc":                OrderOf[P]{Col: "c"},
+		"Desc":               OrderOf[P]{Col: "c", Desc: true},
+		"AsValue":            "c", "AsBool": "c", "AsEnum": "c", "AsOrdered": "c", "AsNumber": "c", "AsString": "c",
 	}
-	if !bytes.Equal(got, want) {
-		t.Fatal("columns.go is not what internal/colgen writes: go generate ./orm")
+	// The methods of a level: those of the level below it, and its own.
+	equal := []string{"EQ", "NEQ", "Asc", "Desc", "AsBool"}
+	set := append(slices.Clone(equal), "In", "NotIn", "AsEnum")
+	ordered := append(slices.Clone(set), "GT", "GTE", "LT", "LTE", "AsOrdered")
+	levels := map[string][]string{
+		"Value":   nil,
+		"Bool":    equal,
+		"Enum":    set,
+		"Ordered": ordered,
+		"Number":  append(slices.Clone(ordered), "Add", "AsNumber"),
+		"String":  append(slices.Clone(ordered), "Contains", "HasPrefix", "HasSuffix", "EqualFold", "ContainsFold", "AsString"),
+	}
+	got := map[string][]string{}
+	eachColumnMethod(func(typ, method string, v any) {
+		got[typ] = append(got[typ], method)
+		if w, ok := want[method]; !ok || !reflect.DeepEqual(v, w) {
+			t.Errorf("%s.%s: %#v, want %#v", typ, method, v, w)
+		}
+	})
+	types := 0
+	for level, methods := range levels {
+		for _, nullable := range []bool{false, true} {
+			for _, auto := range []bool{false, true} {
+				typ, has := level+"Column", append(slices.Clone(methods), "IsNil", "NotNil", "Set", "SetNillable", "SetNillable of nil", "AsValue")
+				if auto {
+					typ, has = "Auto"+typ, append(has, "Keep")
+				}
+				if nullable {
+					typ, has = "Nullable"+typ, append(has, "Clear")
+				}
+				types++
+				slices.Sort(has)
+				slices.Sort(got[typ])
+				if !slices.Equal(got[typ], has) {
+					t.Errorf("%s has the methods %v, want %v", typ, got[typ], has)
+				}
+			}
+		}
+	}
+	if len(got) != types {
+		t.Errorf("%d column types were called, %d are expected", len(got), types)
 	}
 }
 

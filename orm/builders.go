@@ -51,6 +51,25 @@ func mismatch(got, want any) {
 	panic(fmt.Sprintf("velox: the engine read a %T where the builder's type is %T: generate the code again", got, want))
 }
 
+// conditions adds the predicates of an entity to those a builder holds, as
+// the engine holds them.
+func conditions[E Predicate](held []P, ps []E) []P {
+	held = slices.Grow(held, len(ps))
+	for _, p := range ps {
+		held = append(held, P(p))
+	}
+	return held
+}
+
+// assignments adds the setters of an entity to those a builder holds.
+func assignments[E Predicate](held []S, ss []SetterOf[E]) []S {
+	held = slices.Grow(held, len(ss))
+	for _, s := range ss {
+		held = append(held, S(s))
+	}
+	return held
+}
+
 // QueryOf is the query of an entity.
 type QueryOf[PT any, E Predicate, ID any] struct{ c QueryCore }
 
@@ -64,10 +83,7 @@ func Neighbors[PT any, E Predicate, ID any](edge *EdgeMeta, of any, ex velox.Exe
 //
 //go:noinline
 func (q *QueryOf[PT, E, ID]) Where[_ Lazy[ID]](ps ...E) *QueryOf[PT, E, ID] {
-	q.c.Preds = slices.Grow(q.c.Preds, len(ps))
-	for _, p := range ps {
-		q.c.Preds = append(q.c.Preds, P(p))
-	}
+	q.c.Preds = conditions(q.c.Preds, ps)
 	return q
 }
 
@@ -317,10 +333,7 @@ type CreateOf[PT any, E Predicate] struct{ c MutCore }
 //
 //go:noinline
 func (b *CreateOf[PT, E]) Set[_ Lazy[PT]](ss ...SetterOf[E]) *CreateOf[PT, E] {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, S(s))
-	}
+	b.c.Sets = assignments(b.c.Sets, ss)
 	return b
 }
 
@@ -416,10 +429,7 @@ type UpdateOf[PT any, E Predicate] struct{ c MutCore }
 //
 //go:noinline
 func (b *UpdateOf[PT, E]) Set[_ Lazy[PT]](ss ...SetterOf[E]) *UpdateOf[PT, E] {
-	b.c.Sets = slices.Grow(b.c.Sets, len(ss))
-	for _, s := range ss {
-		b.c.Sets = append(b.c.Sets, S(s))
-	}
+	b.c.Sets = assignments(b.c.Sets, ss)
 	return b
 }
 
@@ -427,10 +437,7 @@ func (b *UpdateOf[PT, E]) Set[_ Lazy[PT]](ss ...SetterOf[E]) *UpdateOf[PT, E] {
 //
 //go:noinline
 func (b *UpdateOf[PT, E]) Where[_ Lazy[PT]](ps ...E) *UpdateOf[PT, E] {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, P(p))
-	}
+	b.c.Preds = conditions(b.c.Preds, ps)
 	return b
 }
 
@@ -478,10 +485,7 @@ type DeleteOf[E Predicate] struct{ c MutCore }
 //
 //go:noinline
 func (b *DeleteOf[E]) Where[_ Lazy[E]](ps ...E) *DeleteOf[E] {
-	b.c.Preds = slices.Grow(b.c.Preds, len(ps))
-	for _, p := range ps {
-		b.c.Preds = append(b.c.Preds, P(p))
-	}
+	b.c.Preds = conditions(b.c.Preds, ps)
 	return b
 }
 
