@@ -67,6 +67,9 @@ const (
 	SkipLocked
 	// NoWait fails at once instead of waiting.
 	NoWait
+	// lockConflict is what several different options amount to: an error
+	// when the query runs.
+	lockConflict
 )
 
 func (q *QueryCore) lock(s *sql.Selector) {
@@ -75,6 +78,9 @@ func (q *QueryCore) lock(s *sql.Selector) {
 	}
 	var opts []sql.LockOption
 	switch q.LockOpt {
+	case lockConflict:
+		s.AddError(fmt.Errorf("velox: a locking read of %s was given both SkipLocked and NoWait: it skips the rows that are locked or fails on them", q.M.Name))
+		return
 	case SkipLocked:
 		opts = append(opts, sql.WithLockAction(sql.SkipLocked))
 	case NoWait:
@@ -93,6 +99,12 @@ func (q *QueryCore) SetLock(l Lock, opts []LockOption) {
 	q.Lock = l
 	q.LockOpt = LockWait
 	for _, o := range opts {
+		// A read skips the rows that are locked or fails on them: both
+		// was the last one given, with nothing said.
+		if q.LockOpt != LockWait && o != q.LockOpt {
+			q.LockOpt = lockConflict
+			return
+		}
 		q.LockOpt = o
 	}
 }

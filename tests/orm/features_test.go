@@ -1133,3 +1133,36 @@ func TestApplicationNamesTheRootPackageOnly(t *testing.T) {
 	require.ErrorContains(t, err, "no posts here")
 	assert.Equal(t, 3, velox.Must(client.User.Query(db).Count(ctx)), "the first handle is not narrowed")
 }
+
+// What a refused value says: the entity, the field or edge, and the reason.
+// "validator failed" is said only when a validator of the schema ran.
+func TestRefusedValuesSayWhy(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann := newUser(t, db, "ann", 30)
+
+	var invalid *velox.ValidationError
+	_, err := client.User.Create(db).Set(user.Email.Set("x@example.com"), user.Age.Set(1)).Save(ctx)
+	require.ErrorAs(t, err, &invalid)
+	assert.Equal(t, "velox: User.name: missing required field", err.Error())
+	assert.Equal(t, "name", invalid.Name)
+	assert.Equal(t, "User", invalid.Entity)
+
+	_, err = client.Post.Create(db).Set(post.Title.Set("t")).Save(ctx)
+	require.ErrorAs(t, err, &invalid)
+	assert.Equal(t, "velox: Post.author: missing required edge", err.Error())
+
+	_, err = client.User.Create(db).Set(user.Name.Set(""), user.Email.Set("y@example.com"), user.Age.Set(1)).Save(ctx)
+	require.ErrorAs(t, err, &invalid)
+	assert.Contains(t, err.Error(), `velox: validator failed for field "name"`)
+
+	_, err = client.User.UpdateByID(db, ann.ID).Set(user.Role.Set("emperor")).SaveOne(ctx)
+	require.ErrorAs(t, err, &invalid)
+	assert.Equal(t, `velox: User.role: "emperor" is not one of its values`, err.Error())
+
+	// Two answers to "the row is locked" are a mistake, not the last one.
+	_, _, err = client.User.Query(db).ForUpdate(client.SkipLocked, client.NoWait).SQL(ctx)
+	require.ErrorContains(t, err, "both SkipLocked and NoWait")
+	_, _, err = client.User.Query(db).ForUpdate(client.SkipLocked, client.SkipLocked).SQL(ctx)
+	require.NoError(t, err)
+}

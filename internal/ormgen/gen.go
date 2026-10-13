@@ -171,7 +171,7 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 		g.by[t.Name] = e
 	}
 	switch root := rootPackage(cfg.Package); root {
-	case "entity", "predicate", "migrate", "schemainit", "orm", "context":
+	case "entity", "predicate", "migrate", "schemainit", "veloxtest", "orm", "context":
 		return fmt.Errorf("velox: the output directory cannot be called %q: the root package would be named like a package it imports or contains", root)
 	}
 	g.packages()
@@ -240,7 +240,10 @@ func Generate(graph *vgen.Graph, cfg Config) error {
 	if slots != nil {
 		files["internal/slots/slots.go"] = slots
 	}
-	if err := g.migrate(graph, files); err != nil {
+	if err = g.migrate(graph, files); err != nil {
+		return err
+	}
+	if files["veloxtest/veloxtest.go"], err = g.testing(); err != nil {
 		return err
 	}
 	for _, x := range cfg.Extensions {
@@ -388,7 +391,7 @@ var goKeywords = map[string]bool{
 	"const": true, "fallthrough": true, "if": true, "range": true, "type": true, "continue": true, "for": true,
 	"import": true, "return": true, "var": true,
 	// Names the generated packages themselves use.
-	"entity": true, "orm": true, "init": true, "main": true, "schemainit": true, "predicate": true, "migrate": true, "filter": true,
+	"entity": true, "orm": true, "init": true, "main": true, "schemainit": true, "predicate": true, "migrate": true, "filter": true, "veloxtest": true,
 	// The library's root package, which generated code and the application
 	// import for the database handle and the errors.
 	"velox": true,

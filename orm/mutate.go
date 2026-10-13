@@ -44,7 +44,7 @@ func validate(m *Meta, f *FieldMeta, v any) error {
 	m.stitch()
 	if len(f.Enums) > 0 {
 		if s := fmt.Sprint(v); !slices.Contains(f.Enums, s) {
-			return m.invalid(f.Name, fmt.Errorf("invalid enum value %q", s))
+			return m.refused(f.Name, fmt.Sprintf("%q is not one of its values", s))
 		}
 	}
 	if f.Validate != nil {
@@ -192,7 +192,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 		v, ok := vals[f.Column]
 		if !ok && null[f.Column] {
 			if !f.Optional || f.NotNull {
-				return nil, nil, m.invalid(f.Name, errors.New("the field cannot be NULL"))
+				return nil, nil, m.refused(f.Name, "the field cannot be NULL")
 			}
 			// An explicit NULL, so that a column DEFAULT does not fill it. A
 			// JSON column is left out instead: the SQL layer would encode a
@@ -219,7 +219,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 			case writtenByEdge(edges, f.Column):
 				// A required column may be written by an edge setter.
 			default:
-				return nil, nil, m.invalid(f.Name, fmt.Errorf("missing required field %q", m.Name+"."+f.Name))
+				return nil, nil, m.refused(f.Name, "missing required field")
 			}
 			continue
 		}
@@ -243,7 +243,7 @@ func createSpec(m *Meta, sets []S) (*sqlgraph.CreateSpec, map[string]any, error)
 	for _, e := range m.Edges {
 		if e.Required && e.fkOnOwner() && m.Field(e.Columns[0]) == nil &&
 			!slices.ContainsFunc(edges, func(s S) bool { return s.Edge == e }) {
-			return nil, nil, m.invalid(e.Name, fmt.Errorf("missing required edge %q", m.Name+"."+e.Name))
+			return nil, nil, m.refused(e.Name, "missing required edge")
 		}
 	}
 	for _, s := range edges {
@@ -597,10 +597,10 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 				return nil, fmt.Errorf("velox: updating %s: unknown column %q", meta.Name, s.Col)
 			}
 			if f == meta.id() {
-				return nil, meta.invalid(f.Name, errors.New("the id cannot be changed"))
+				return nil, meta.refused(f.Name, "the id cannot be changed")
 			}
 			if f.Immutable {
-				return nil, meta.invalid(f.Name, errors.New("field is immutable"))
+				return nil, meta.refused(f.Name, "the field is immutable")
 			}
 			touched[s.Col] = true
 			switch s.Kind {
@@ -613,7 +613,7 @@ func (m *MutCore) updateSpec() (*sqlgraph.UpdateSpec, error) {
 				spec.AddField(f.Column, f.Type, s.Val)
 			default:
 				if f.NotNull || !f.Optional {
-					return nil, meta.invalid(f.Name, errors.New("the field cannot be NULL"))
+					return nil, meta.refused(f.Name, "the field cannot be NULL")
 				}
 				spec.ClearField(f.Column, f.Type)
 			}
@@ -703,7 +703,7 @@ func (m *MutCore) orderedSets() ([]S, error) {
 		}
 		e := s.Edge
 		if e.Immutable {
-			return nil, meta.invalid(e.Name, errors.New("edge is immutable"))
+			return nil, meta.refused(e.Name, "the edge is immutable")
 		}
 		c := of(e)
 		switch s.Kind {
@@ -730,7 +730,7 @@ func (m *MutCore) orderedSets() ([]S, error) {
 			// it would write the same column twice.
 		case c.cleared:
 			if c.e.Required && len(c.add) == 0 {
-				return nil, meta.invalid(c.e.Name, errors.New("a required edge cannot be cleared"))
+				return nil, meta.refused(c.e.Name, "a required edge cannot be cleared")
 			}
 			out = append(out, S{Kind: EdgeClear, Edge: c.e})
 		case len(c.remove) > 0:

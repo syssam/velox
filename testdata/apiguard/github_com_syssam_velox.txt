@@ -160,6 +160,7 @@ func IsValidationError(error) bool
 func MaskNotFound(error) error
 func Must[T any](T, error) T
 func NewConstraintError(string, error) *ConstraintError
+func NewFieldError(string, string, error) *ValidationError
 func NewNotFoundError(string) *NotFoundError
 func NewNotLoadedError(string) *NotLoadedError
 func NewNotSingularError(string) *NotSingularError

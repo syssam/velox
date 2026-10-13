@@ -42,6 +42,7 @@ This writes, under `velox`:
 | `velox/entity` | the entities, and the names of their builders (`entity.UserQuery`), which are types of package `orm` |
 | `velox/user`, ... | one small package per entity: its columns, enum values and edges |
 | `velox/migrate` | the tables, and `migrate.Create(ctx, conn)` |
+| `velox/veloxtest` | a database for a test: `veloxtest.Open(t, "sqlite", dsn)` opens it, creates the tables and closes it when the test ends |
 | `velox/predicate` | the types that keep one entity's conditions out of another's query |
 | `velox/schemainit` | the schema's defaults, validators, hooks and policies; `velox` links it |
 | `velox/filter`, `*_gql.go`, `gql.go` | with `-graphql`: the GraphQL layer, in files of its own (see [GraphQL](#graphql)) |
@@ -101,6 +102,15 @@ u, err := velox.User.Get(ctx, conn, id)
 err = velox.User.DeleteByID(conn, id).ExecOne(ctx)
 ```
 
+- **What a refused value says** is the entity, the field or edge and the
+  reason: `velox: User.name: missing required field`,
+  `velox: Post.author: missing required edge`,
+  `velox: User.role: "emperor" is not one of its values`. It is a
+  `*velox.ValidationError` (`Entity`, `Name`); "validator failed for field"
+  is said only when a validator of the schema ran.
+- A locking read is told once what to do about a locked row:
+  `ForUpdate(velox.SkipLocked)` or `ForUpdate(velox.NoWait)`. Both is an
+  error when the query runs.
 - **A handle does not give the `*sql.DB` back.** `velox.Open(dialect, dsn)`
   opens one and keeps it to itself. A program that wants it, for the settings
   of its pool, its statistics, or to have tracing wrap it first, opens it and

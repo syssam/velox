@@ -197,3 +197,51 @@ func WriteTo(ctx context.Context, db *velox.DB, w io.Writer, opts ...schema.Migr
 	files["migrate/migrate.go"] = b.Bytes()
 	return nil
 }
+
+// testing generates package veloxtest: a database for a test in one call,
+// with the tables of the schema, closed when the test ends. Every test of an
+// application otherwise starts with the same five lines, and the copy that
+// forgets to close, or to fail the test when the tables cannot be created,
+// is found late. (Ent generates enttest for the same reason.)
+//
+// It is a package of its own so that only tests link the migrate package.
+func (g *Generator) testing() ([]byte, error) {
+	var out bytes.Buffer
+	out.WriteString(header)
+	fmt.Fprintf(&out, `// Package veloxtest opens a database for a test.
+package veloxtest
+
+import (
+	"context"
+	"testing"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sql/schema"
+
+	"%[1]s/migrate"
+)
+
+// Open opens a database for the test, creates the tables of the schema in it,
+// and closes it when the test and its subtests end. A failure of either is
+// the test's: it stops there.
+//
+//	db := veloxtest.Open(t, "sqlite", "file:orders?mode=memory&cache=shared&_pragma=foreign_keys(1)")
+//
+// The driver of the dialect is the test's to import, as for velox.Open. A
+// test that must not share rows with another gives each a data source name
+// of its own.
+func Open(t testing.TB, dialectName, dsn string, opts ...schema.MigrateOption) *velox.DB {
+	t.Helper()
+	db, err := velox.Open(dialectName, dsn)
+	if err != nil {
+		t.Fatalf("veloxtest: opening the database: %%v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := migrate.Create(context.Background(), db, opts...); err != nil {
+		t.Fatalf("veloxtest: creating the tables: %%v", err)
+	}
+	return db
+}
+`, g.cfg.Package)
+	return formatted(&out, "veloxtest")
+}

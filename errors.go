@@ -267,10 +267,22 @@ type ValidationError struct {
 	Err    error  // Underlying validation error
 	Entity string // Entity type name (e.g., "User")
 	Field  string // Field name (e.g., "name") — same as Name for field validations
+
+	// refused says that no validator of the schema ran: the value of the
+	// field or edge is refused for what it is (missing though required,
+	// set though immutable). NewFieldError sets it, and the message then
+	// names the field and gives the reason, without "validator failed".
+	refused bool
 }
 
 // Error returns the error string.
 func (e *ValidationError) Error() string {
+	if e.refused {
+		if e.Entity != "" {
+			return fmt.Sprintf("velox: %s.%s: %s", e.Entity, e.Name, e.Err)
+		}
+		return fmt.Sprintf("velox: %s: %s", e.Name, e.Err)
+	}
 	return fmt.Sprintf("velox: validator failed for field %q: %s", e.Name, e.Err)
 }
 
@@ -282,6 +294,15 @@ func (e *ValidationError) Unwrap() error {
 // NewValidationError returns a new ValidationError for the given field.
 func NewValidationError(name string, err error) *ValidationError {
 	return &ValidationError{Name: name, Err: err}
+}
+
+// NewFieldError returns the ValidationError of a field or an edge of an
+// entity whose value is refused before it reaches the database for another
+// reason than a validator of the schema: a required one that is missing, an
+// immutable one that is set, a value that is none of an enum's. It reads
+// "velox: User.name: missing required field".
+func NewFieldError(entity, name string, err error) *ValidationError {
+	return &ValidationError{Entity: entity, Name: name, Field: name, Err: err, refused: true}
 }
 
 // IsValidationError returns true if the error is a ValidationError.

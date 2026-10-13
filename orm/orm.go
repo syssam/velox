@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"errors"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -34,10 +35,17 @@ func (m *Meta) NotFound() error { return velox.NewNotFoundError(m.label()) }
 // notSingular is the error of a read or write of one row that matched more.
 func (m *Meta) notSingular() error { return velox.NewNotSingularError(m.label()) }
 
-// invalid is the error of a value of a field or an edge refused before it
-// reached the database.
+// invalid is the error of a value of a field that a validator of the schema
+// refused.
 func (m *Meta) invalid(name string, err error) error {
 	return &velox.ValidationError{Entity: m.Name, Field: name, Name: name, Err: err}
+}
+
+// refused is the error of a field or an edge whose value is refused for what
+// it is, no validator having run: missing though required, set though
+// immutable. It reads "velox: User.name: missing required field".
+func (m *Meta) refused(name, reason string) error {
+	return velox.NewFieldError(m.Name, name, errors.New(reason))
 }
 
 // label is the entity as an error names it.

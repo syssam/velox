@@ -15,10 +15,10 @@ import (
 
 	"example.com/orm-basic/velox"
 	"example.com/orm-basic/velox/entity"
-	"example.com/orm-basic/velox/migrate"
 	"example.com/orm-basic/velox/post"
 	"example.com/orm-basic/velox/tag"
 	"example.com/orm-basic/velox/user"
+	"example.com/orm-basic/velox/veloxtest"
 
 	_ "modernc.org/sqlite"
 )
@@ -32,11 +32,7 @@ var (
 // schema. A *velox.DB is the whole connection: it has no field per entity.
 func open(t *testing.T) *velox.DB {
 	t.Helper()
-	conn, err := velox.Open("sqlite", fmt.Sprintf("file:ormbasic%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", seq.Add(1)))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close() })
-	require.NoError(t, migrate.Create(ctx, conn))
-	return conn
+	return veloxtest.Open(t, "sqlite", fmt.Sprintf("file:ormbasic%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", seq.Add(1)))
 }
 
 func newUser(t *testing.T, ex velox.Executor, name string, age int) *entity.User {
