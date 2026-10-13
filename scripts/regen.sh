@@ -142,6 +142,17 @@ fi
 if [[ ${#HANDWRITTEN[@]} -gt 0 ]]; then
     gofmt -s -w "${HANDWRITTEN[@]}"
     if command -v goimports >/dev/null 2>&1; then
+        # goimports parses with the Go it was built with. Package orm has
+        # methods with type parameters (Go 1.27), which an older build
+        # rejects file by file ("method must have no type parameters") and
+        # then leaves the tree half formatted: say what to do instead.
+        built="$(go version -m "$(command -v goimports)" 2>/dev/null | awk 'NR==1 {print $2}')"
+        need="go$(awk '$1 == "go" {print $2; exit}' go.mod | cut -d. -f1,2)"
+        if [[ -n "${built}" && "$(printf '%s\n%s\n' "${need}" "${built}" | sort -V | head -1)" != "${need}" ]]; then
+            echo "error: goimports was built with ${built}; this module needs ${need} or later." >&2
+            echo "       go install golang.org/x/tools/cmd/goimports@v0.28.0   # the version CI pins" >&2
+            exit 1
+        fi
         goimports -w "${HANDWRITTEN[@]}"
     else
         echo "warning: goimports not installed; skipping import ordering" >&2
