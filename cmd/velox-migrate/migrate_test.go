@@ -130,7 +130,7 @@ next:
 		"velox.User.Create(s.Client).",
 		"user.Nickname.SetNillable(nick),", // setters joined into one Set
 		"return predicate.User{}",          // a nil predicate
-		"!orm.IsZero(p)",
+		"!velox.IsZero(p)",
 		"predicate.User(orm.Raw(func(s *sql.Selector) {",
 		"user.Posts.HasWith(post.Status.EQ(post.StatusDraft))",
 		".Set(user.Role.Set(user.RoleAdmin), user.Nickname.Clear(), user.Age.Add(1)).SaveOne(ctx)",
@@ -148,9 +148,9 @@ next:
 		"opts := make([]func(*entity.UserQuery), 0, 3)", // options kept in a slice
 		"q.OrderBy(o.Term())",
 		"p = predicate.User(orm.Invalid(err))",
-		"orm.Apply(q, opts...).Paginate(ctx, nil, first, nil, nil)",
+		"velox.Apply(q, opts...).Paginate(ctx, nil, first, nil, nil)",
 		"q, ok := velox.User.Query(s.Client), true",
-		`.Select().GroupBy(post.ColumnStatus).Aggregate(orm.Count().As("n")).Scan(ctx, &rows)`,
+		`.Select().GroupBy(post.ColumnStatus).Aggregate(velox.Count().As("n")).Scan(ctx, &rows)`,
 		"u.QueryPosts(s.Client).OrderBy(post.Title.Asc()).All(ctx)", // the handle the entity was read on
 		"p.QueryAuthor(s.Client).Only(ctx)",                         // through the loop over what a query returned
 		"func(v string) *entity.UserUpdate {",                       // a setter passed as a value
@@ -158,12 +158,12 @@ next:
 		"func(v user.RoleEnum) *entity.UserUpdate {",
 		"guarded(where, func(w *filter.PostWhereInput) (predicate.Post, error) { return w.P(), nil })", // P as a value
 		"late := func() (predicate.Post, error) { return where.P(), nil }",
-		"func idIn[P orm.Predicate](id *orm.OrderedColumn[int, P], ids ...int) P {", // generic over entities
+		"func idIn[P velox.Predicate](id *velox.OrderedColumn[int, P], ids ...int) P {", // generic over entities
 		"return *new(P)",
-		"func both[P orm.Predicate](ps ...P) P {",
-		"return P(orm.And(ps...))",
-		"Text *orm.StringColumn[string, P]",
-		"if p := idIn(user.ID.AsOrdered(), ids...); !orm.IsZero(p) {", // a column passed as a value
+		"func both[P velox.Predicate](ps ...P) P {",
+		"return P(velox.And(ps...))",
+		"Text *velox.StringColumn[string, P]",
+		"if p := idIn(user.ID.AsOrdered(), ids...); !velox.IsZero(p) {", // a column passed as a value
 		"titled[predicate.Post]{Text: post.Title.AsString()}",
 		"var rename = func(b *entity.UserUpdate, v string) *entity.UserUpdate {", // a method expression
 		"return u.QueryPosts(velox.ExecutorFrom(ctx)).Count(ctx)",                // an entity handed over: the context's handle
@@ -204,11 +204,11 @@ next:
 			`"github.com/syssam/velox/tests/orm/velox/entity"`,
 		},
 		"more_test.go": {
-			`require.True(t, orm.IsZero(Scope(true, "ann")))`,
-			`require.False(t, orm.IsZero(Scope(false, "ann")))`,
-			`checks.True(orm.IsZero(Scope(true, "ann")), "sees all")`,
-			`checks.Falsef(orm.IsZero(Scope(false, "ann")), "narrowed to %s", "ann")`,
-			`assert.False(unheard{}, orm.IsZero(Scope(true, "ann")))`,
+			`require.True(t, velox.IsZero(Scope(true, "ann")))`,
+			`require.False(t, velox.IsZero(Scope(false, "ann")))`,
+			`checks.True(velox.IsZero(Scope(true, "ann")), "sees all")`,
+			`checks.Falsef(velox.IsZero(Scope(false, "ann")), "narrowed to %s", "ann")`,
+			`assert.False(unheard{}, velox.IsZero(Scope(true, "ann")))`,
 		},
 	} {
 		text, err := os.ReadFile(filepath.Join(app, file)) //nolint:gosec // written by the run above
@@ -334,7 +334,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		`OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { s.OrderBy(s.C(user.ColumnNickname) + " NULLS LAST") })), predicate.UserOrderTerm{Col: column, Desc: true}).All(ctx)`,
 		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { for _, f := range fs { f(s) } }))).All(ctx)",
 		// A predicate where a function on a selector is wanted.
-		"func asFunction(p predicate.User) func(*sql.Selector) { return orm.Compile(p) }",
+		"func asFunction(p predicate.User) func(*sql.Selector) { return velox.Compile(p) }",
 		// The where input's own additions, and Filter.
 		"where.Predicates = append(where.Predicates, user.Age.GT(1)) return where.P(), error(nil)",
 		// A client that is only queried on.
@@ -343,14 +343,14 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func begins(ctx context.Context, c *velox.DB) error {",
 		"func countIfAny(ctx context.Context, c *velox.DB) (int, error) {",
 		// An option kept in a variable shapes the query it is given.
-		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return velox.User.Query(c).With(user.Posts.Load(orm.Apply(velox.Post.Query(nil), opt))).All(ctx) }",
+		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return velox.User.Query(c).With(user.Posts.Load(velox.Apply(velox.Post.Query(nil), opt))).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",
-		"Owner *orm.OrderedColumn[int, P]", // every column can be asked IsNil
+		"Owner *velox.OrderedColumn[int, P]", // every column can be asked IsNil
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
 		"func tables(ctx context.Context, c *velox.DB) error { return migrate.Create(ctx, c) }",
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
 		"return velox.First(velox.User.Query(c).Limit(1).IDs(ctx))",
-		"return velox.User.Query(c).ForUpdate(orm.SkipLocked).All(ctx)",
+		"return velox.User.Query(c).ForUpdate(velox.SkipLocked).All(ctx)",
 		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(sql.OrderByField(user.ColumnNickname, sql.OrderAsc(), sql.OrderNullsFirst()).ToFunc())), user.ID.Asc()).All(ctx)",
 		"return who.QueryPosts(c).All(ctx)",
 		`func noField(o *entity.PostOrder) bool { return o == nil || o.Field == "" }`,
@@ -372,7 +372,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"return velox.Post.Query(c).OrderBy(b.Term()).Paginate(ctx, nil, nil, nil, nil) //",
 		"return velox.Post.Query(c).Paginate(ctx, nil, nil, nil, nil) }",
 		// The adapter of package intercept, called.
-		"return orm.TraverseFunc(func(ctx context.Context, q *orm.Query) error { q.Limit(100)",
+		"return orm.TraverseFunc(func(ctx context.Context, q *velox.EntityQuery) error { q.Limit(100)",
 		// A parameter that does not capture the builder.
 		"return func(v_ string) *entity.UserUpdate { return v.Set(user.Name.Set(v_)) }",
 		// A first argument that is itself rewritten.

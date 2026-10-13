@@ -65,17 +65,42 @@ func TestRootNames_AreDeclared(t *testing.T) {
 		}
 		return out
 	}
-	generated, library := declared("../../tests/orm/velox"), declared("../..")
+	generated, library, engine := declared("../../tests/orm/velox"), declared("../.."), declared("../../orm")
 	names := RootNames()
 	if len(names) < 40 {
 		t.Fatalf("only %d names", len(names))
 	}
+	ofLibrary := map[string]bool{}
+	for _, n := range libraryNames() {
+		ofLibrary[n] = true
+	}
+	// A name the generated root gives is the library's, or one of package
+	// orm's under the same name; three of the engine's have a name of their
+	// own there, because the library has the plain one.
+	renamed := map[string]string{"EntityQuery": "Query", "EntityMutation": "Mutation", "Traverse": "TraverseFunc", "BeforeQuery": "InterceptFunc"}
 	for _, n := range names {
 		if !generated[n] {
 			t.Errorf("tests/orm/velox does not declare %s", n)
 		}
-		if !library[n] {
-			t.Errorf("package velox does not declare %s", n)
+		switch {
+		case ofLibrary[n]:
+			if !library[n] {
+				t.Errorf("package velox does not declare %s", n)
+			}
+		case renamed[n] != "":
+			if !engine[renamed[n]] {
+				t.Errorf("package orm does not declare %s, which the root gives as %s", renamed[n], n)
+			}
+			if library[n] {
+				t.Errorf("the library declares %s too: the generated root would give two things one name", n)
+			}
+		default:
+			if !engine[n] {
+				t.Errorf("package orm does not declare %s", n)
+			}
+			if library[n] {
+				t.Errorf("the library declares %s too: the generated root would give two things one name", n)
+			}
 		}
 	}
 	// The shapes schema has an entity called Tx.

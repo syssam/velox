@@ -3,8 +3,10 @@
 The next generator and runtime of velox, for large schemas: `cmd/velox-gen`
 writes the code, package `orm` runs it. An application names package `velox`
 for nearly everything (`velox.DB`, `velox.Tx`, `velox.Executor`,
-`velox.IsNotFound`, `velox.Cursor`, `velox.Must`) and package `orm` only for
-what the typed API cannot say (`orm.Raw`, `orm.And`, `orm.Sum`). They read velox schemas unchanged and
+`velox.IsNotFound`, `velox.Cursor`, `velox.Must`, `velox.Sum`, `velox.Opt`):
+the generated root package has the library's and the engine's
+application-facing names under its own, so a file of an application imports
+it and the packages of its entities, and never package `orm`. They read velox schemas unchanged and
 generate far less code for the Go compiler to chew on: on a 450-entity schema
 the generated packages compile in about a tenth of the CPU time and a quarter
 of the memory of those the current generator (`cmd/velox`, package `runtime`)
@@ -105,7 +107,7 @@ err = velox.User.DeleteByID(conn, id).ExecOne(ctx)
   hands it over, and keeps it:
   `pool, err := sql.Open("pgx", dsn); pool.SetMaxOpenConns(20); conn := velox.OpenDB("postgres", pool)`.
   A statement that goes around the ORM runs on the handle or a transaction
-  with `orm.ExecSQL` and `orm.QuerySQL`.
+  with `velox.ExecSQL` and `velox.QuerySQL`.
 - **What a query or mutation runs on is given where it starts and travels
   with the builder**: a database handle or a transaction. A function can build
   a query and another run it. A builder made from `nil` or from a nil
@@ -141,7 +143,7 @@ err = velox.User.DeleteByID(conn, id).ExecOne(ctx)
   another thing, the order a GraphQL request asks for; its `Term()` makes
   the order term.
 - A column is a variable of one of the column types of package `orm`,
-  declared in one line: `Title = orm.StringColumn[string, predicate.Post](ColumnTitle)`.
+  declared in one line: `Title = velox.StringColumn[string, predicate.Post](ColumnTitle)`.
   The type says what the column can be asked: the level (`ValueColumn`,
   `BoolColumn`, `EnumColumn`, `OrderedColumn`, `NumberColumn` with `Add`,
   `StringColumn` with `Contains`), `Nullable` when it has `Clear`, `Auto`
@@ -243,7 +245,7 @@ err = velox.User.DeleteByID(conn, id).ExecOne(ctx)
   such as `Where(x.UpdatedAt.EQ(u.UpdatedAt))` matches the row it was read
   from on every database.
 - The zero predicate, `predicate.User{}`, is no condition: what a function
-  returns when it has nothing to add (`orm.IsZero(p)` tells). An update
+  returns when it has nothing to add (`velox.IsZero(p)` tells). An update
   or a delete refuses it, so that a forgotten condition is not a statement
   over every row.
 - There is no `SaveX`, `GetX` or `ExecX`. In a test, `velox.Must(q.Save(ctx))`
@@ -378,19 +380,19 @@ page, err := velox.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, nil, 
 page, err = velox.User.Query(conn).OrderBy(user.Age.Desc()).Paginate(ctx, page.PageInfo.EndCursor, &size, nil, nil)
 
 // Columns and aggregates instead of entities; a column that does not exist is an error.
-total, err := velox.User.Query(conn).Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+total, err := velox.User.Query(conn).Aggregate(velox.Sum(user.ColumnAge)).Int(ctx)
 var rows []struct{ Role string `json:"role"`; N int `json:"n"` }
-err = velox.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.Count().As("n")).Scan(ctx, &rows)
+err = velox.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(velox.Count().As("n")).Scan(ctx, &rows)
 
 // The statement a query would run, and its arguments, without running it.
 query, args, err := velox.User.Query(conn).Where(user.Age.GT(18)).SQL(ctx)
 
 // A condition written against the SQL builder, and one that arrives at run time.
 p := velox.User.Raw(func(s *sql.Selector) { ... })
-q, err := velox.User.FieldPredicate("age", orm.OpGT, 18)
+q, err := velox.User.FieldPredicate("age", velox.OpGT, 18)
 // A typed predicate as a selector function (for a privacy filter or interceptor).
 // The zero predicate, which is no condition, is no function: nil.
-fn := orm.Compile(user.Age.GT(18))
+fn := velox.Compile(user.Age.GT(18))
 // Plain statements, on the transaction when given one.
 _, err = velox.ExecSQL(ctx, tx, "SELECT pg_advisory_xact_lock($1)", key)
 ```
@@ -566,7 +568,7 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
   response). Without it they return `velox.ErrNoExecutor`. A to-one edge the
   query already loaded is returned without a query.
 - `Paginate` counts the rows of the whole query for `TotalCount`.
-  `orm.WithoutTotal(ctx)` skips the count (it is then -1): for a request that
+  `velox.WithoutTotal(ctx)` skips the count (it is then -1): for a request that
   does not select `totalCount`.
 - `velox.NodeTypes()` is what a `node(id:)` field goes by when an id does not
   say its type: each type's name, table, and a `Get(ctx, ex, id)` that takes
@@ -614,7 +616,7 @@ What it costs to compile is in `benchmarks/fixtures/realistic/README.md`.
 ## Hooks, policies, interceptors
 
 The schema's `Hooks()` and `Policy()` (and its mixins') are used as they are.
-A hook receives `*orm.Mutation`, one type for every entity, through the
+A hook receives `*velox.EntityMutation`, one type for every entity, through the
 `velox.Mutation` interface: `m.Field("workspace_id")`,
 `m.SetField("workspace_id", id)`, `m.OldField(ctx, "status")`.
 
@@ -649,14 +651,15 @@ A hook that decides by rows narrows the statement with `m.WhereP(...)` and
 reads which rows it is about to touch from `m.PredicatesFuncs()`, the
 mutation's conditions as functions a query of the entity takes
 (`velox.User.Raw(f)`). `WhereP` of a mutation refuses a nil
-function, which is what `orm.Compile` makes of the zero predicate: a rule
+function, which is what `velox.Compile` makes of the zero predicate: a rule
 that meant to narrow a statement and narrowed it by nothing fails it, and
 does not let it run on every row. In a query a nil function is no condition.
 
 `conn.Use(hooks...)` and `conn.Intercept(interceptors...)` register on the
-handle, at start-up. An interceptor is handed `*orm.Query`, one type for
-every entity (`Type()`, `HasColumn`, `WhereP`, `Limit`); `orm.TraverseFunc`
-and `orm.InterceptFunc` make one of a function of it. A policy covers every read (terminals, eager loads,
+handle, at start-up. An interceptor is handed `*velox.EntityQuery`, one type for
+every entity (`Type()`, `HasColumn`, `WhereP`, `Limit`); `velox.Traverse(f)`
+makes an interceptor of a function that may narrow the read, a default
+filter, and `velox.BeforeQuery(f)` of one that may refuse it. A policy covers every read (terminals, eager loads,
 traversals, edge predicates) and every create, update and delete of its own
 entity; an interceptor covers reads only, so rules about which rows a caller
 may touch belong in the policy. As in Ent, changing an edge writes the other
@@ -676,7 +679,7 @@ row of its join table). Getting it means calling the schema's `Fields`,
 program with a large schema would pay each time it starts, a test binary
 included (measured in
 [`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md)).
-`orm.StitchAll()` does it for all of them at once: call it at start to learn
+`velox.StitchAll()` does it for all of them at once: call it at start to learn
 there, and not at a first request, that the generated code is the schema's (a
 schema edited without generating again panics where its default or validator
 is no longer of the type the generated code expects).
@@ -684,15 +687,15 @@ is no longer of the type the generated code expects).
 ## Code written once for several entities
 
 A function that builds predicates for whichever entity it is used with is
-generic over the predicate type, under the constraint `orm.Predicate`, and
+generic over the predicate type, under the constraint `velox.Predicate`, and
 takes a column as the plain column type of the level it needs:
-`*orm.ValueColumn[T, P]`, `*orm.BoolColumn[T, P]`, `*orm.EnumColumn[T, P]`,
-`*orm.OrderedColumn[T, P]`, `*orm.NumberColumn[T, P]`,
-`*orm.StringColumn[T, P]`.
+`*velox.ValueColumn[T, P]`, `*velox.BoolColumn[T, P]`, `*velox.EnumColumn[T, P]`,
+`*velox.OrderedColumn[T, P]`, `*velox.NumberColumn[T, P]`,
+`*velox.StringColumn[T, P]`.
 
 ```go
-func recent[P orm.Predicate](created *orm.OrderedColumn[time.Time, P], since time.Time, more ...P) P {
-    return orm.And(append(more, created.GTE(since))...)
+func recent[P velox.Predicate](created *velox.OrderedColumn[time.Time, P], since time.Time, more ...P) P {
+    return velox.And(append(more, created.GTE(since))...)
 }
 
 posts, err := velox.Post.Query(conn).Where(recent(post.UpdatedAt.AsOrdered(), since)).All(ctx)
@@ -703,10 +706,11 @@ Every column has an `As` method for each level it has (`AsOrdered`,
 type says (that it can be cleared, that it has an update default). The
 predicate type is inferred from the column, so the
 result is a `predicate.Post` that a query of users does not accept.
-`orm.And`, `orm.Or` and `orm.Not` are the entity packages' own, for any
-entity; under the constraint a predicate converts to `orm.P` and back, which
-is how such a function wraps a condition on the SQL builder
-(`P(orm.Raw(f))`) or returns none (`*new(P)`).
+`velox.And`, `velox.Or` and `velox.Not` are the entity packages' own, for
+any entity. A function that needs more of a predicate than that (to wrap a
+condition on the SQL builder, `P(orm.Raw(f))`) is the one kind of code that
+names package `orm`: under the constraint a predicate converts to `orm.P`
+and back.
 
 ## Moving an application from velox
 
@@ -737,13 +741,13 @@ first:
 
 | Reported | Why |
 |---|---|
-| a value asserted to the query or mutation type of one entity | every entity's is `*orm.Query` and `*orm.Mutation` now: the assertion holds for all of them, or for none; test `Type()` |
+| a value asserted to the query or mutation type of one entity | every entity's is `*velox.EntityQuery` and `*velox.EntityMutation` now: the assertion holds for all of them, or for none; test `Type()` |
 | a mutation asserted to an interface with a method velox generated per entity (`SetOwnerID`, `Where(...predicate.X)`) | no mutation has it now: the assertion never holds, anywhere in the application, and what the hook did it does for no entity. `velox-gen` refuses this in the schema's own packages; the tool reports it everywhere else |
-| `Or` or `Not` of a list that may be empty, or taken as a value | velox's matched every row, `orm.Or()` matches none |
+| `Or` or `Not` of a list that may be empty, or taken as a value | velox's matched every row, `velox.Or()` matches none |
 | `p, err := where.P()` | an input with no condition was an error and is no condition now |
 | `Limit` in the option of an eager load | it was over all neighbors read, and is for each parent now |
 | a method value (`b.SetName`, `c.User.Get`) whose receiver is not a variable assigned once, unless it is handed straight to a call from a variable | the function in its place evaluates the receiver when called |
-| `velox.QueryFromContext(ctx)` in an interceptor | package `orm` puts no query context there: it reads nil. The interceptor is handed the query itself, a `*orm.Query` |
+| `velox.QueryFromContext(ctx)` in an interceptor | package `orm` puts no query context there: it reads nil. The interceptor is handed the query itself, a `*velox.EntityQuery` |
 | a package of the generated tree the new one does not have (`hook`, something of the application's own kept there) | once, at its first reference; the summary of the run counts the rest |
 | several orders or filters given to `Paginate` | velox used the last of each |
 | `tx.Client()` handed on as a value | it is the transaction; what takes it must take `velox.Executor` |
@@ -758,13 +762,13 @@ through the generated package wherever the file's package imports it, so a
 file that was written against the generated `velox` keeps its one import;
 a name the generated package does not give (`velox.Field`) keeps the
 library, which such a file then imports as `veloxpkg`. `CreateBulk(...).BatchSize(n)` is the same call. testify's `Nil` and `NotNil` of a
-predicate become `True` and `False` of `orm.IsZero(p)`, like `p == nil`: a
+predicate become `True` and `False` of `velox.IsZero(p)`, like `p == nil`: a
 predicate was a function, nil when it was no condition, and is data now,
 which is never nil, so that `NotNil` left alone would pass for every
 predicate. A predicate that reaches a nil check by another way is not seen:
 as an `any`, as a type the application defined over a predicate type, or
 through `assert.NotNil` taken as a value. A predicate converted to a
-function keeps what it was to a nil check: `orm.Compile` of no condition is
+function keeps what it was to a nil check: `velox.Compile` of no condition is
 nil. An edge query is given the handle its entity was read on
 only when the text settles it: the entity's variable is given its value in
 one place, before the query; `Unwrap` is not called on it; when what is
@@ -832,7 +836,7 @@ entity the schema calls `Http` stays `Http`. Where it departs, on purpose:
 - The schema's hooks and policies reach the entities through package-level
   variables filled by an `init`, linked by a blank import: the
   `database/sql` driver pattern. They are not changed after start-up.
-- `orm.Opt` has value and pointer receivers, as `time.Time` has: decoding
+- `velox.Opt` has value and pointer receivers, as `time.Time` has: decoding
   needs the pointer.
 
 ## Building

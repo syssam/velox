@@ -61,7 +61,14 @@ func (g *Generator) client() (map[string][]byte, error) {
 	for n := range g.rootTaken {
 		taken[n] = true
 	}
-	lib := reexports(taken, im.use(veloxPath, "velox"), ctxPkg, im.use("database/sql", "sql"))
+	libPkg := im.use(veloxPath, "velox")
+	lib := reexports(taken, libPkg, ctxPkg, im.use("database/sql", "sql"))
+	// The library's names come first: one of the engine's that is spelled
+	// like one of them gives way.
+	for _, n := range libraryNames() {
+		taken[n] = true
+	}
+	lib += engineForwards(taken, im.use(ormPath, "orm"), libPkg, ctxPkg, im.use("github.com/syssam/velox/dialect/sql", "dsql"))
 
 	var out bytes.Buffer
 	out.WriteString(header)

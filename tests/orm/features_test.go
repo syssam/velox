@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	stdsql "database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -1075,4 +1076,60 @@ func TestDeleteOneRow(t *testing.T) {
 	newUser(t, db, "dee", 50)
 	_, err = client.User.Query(db).OnlyID(ctx)
 	require.ErrorIs(t, err, velox.ErrNotSingular)
+}
+
+// olderThan is written once for whichever entity has an age, with nothing
+// but the generated root package's names.
+func olderThan[P client.Predicate](age *client.OrderedColumn[int, P], n int) P {
+	return client.And(age.GT(n))
+}
+
+// An application names the generated root package and its entities'
+// packages, and never package orm: aggregates, the operators of a filter
+// that arrives at run time, an interceptor, a function over any entity.
+func TestApplicationNamesTheRootPackageOnly(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	for i, name := range []string{"ann", "bob", "cy"} {
+		newUser(t, db, name, 20+10*i)
+	}
+
+	n, err := client.User.Query(db).Aggregate(client.Count()).Int(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+	var rows []struct {
+		Oldest int `json:"oldest"`
+	}
+	require.NoError(t, client.User.Query(db).Aggregate(client.Max(user.ColumnAge).As("oldest")).Scan(ctx, &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, 40, rows[0].Oldest)
+
+	p, err := client.User.FieldPredicate("age", client.OpGTE, 30)
+	require.NoError(t, err)
+	assert.Equal(t, 2, velox.Must(client.User.Query(db).Where(p).Count(ctx)))
+	assert.Equal(t, 1, velox.Must(client.User.Query(db).Where(olderThan(user.Age.AsOrdered(), 30)).Count(ctx)))
+	assert.True(t, client.IsZero(predicate.User{}))
+	assert.Nil(t, client.Compile(predicate.User{}))
+
+	// An interceptor that narrows every read of users, and one that refuses
+	// reads of posts, on a handle of their own.
+	scoped := velox.OpenDB(db.Dialect(), db.Driver().(*sql.Driver).DB())
+	scoped.Intercept(
+		client.Traverse(func(_ context.Context, q *client.EntityQuery) error {
+			if q.Type() == user.ModelName {
+				q.WhereP(client.Compile(user.Age.LT(40)))
+			}
+			return nil
+		}),
+		client.BeforeQuery(func(_ context.Context, q *client.EntityQuery) error {
+			if q.Type() == post.ModelName {
+				return errors.New("no posts here")
+			}
+			return nil
+		}),
+	)
+	assert.Equal(t, 2, velox.Must(client.User.Query(scoped).Count(ctx)))
+	_, err = client.Post.Query(scoped).Count(ctx)
+	require.ErrorContains(t, err, "no posts here")
+	assert.Equal(t, 3, velox.Must(client.User.Query(db).Count(ctx)), "the first handle is not narrowed")
 }

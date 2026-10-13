@@ -58,8 +58,8 @@ type TodoWhereInput struct {
 
 // what each field means, in the order of the struct
 var todoWhere = []gqlinput.WhereField{
-    {Col: "title", Op: orm.OpEQ},   // title
-    {Col: "title", Op: orm.OpNEQ},  // titleNEQ
+    {Col: "title", Op: velox.OpEQ},   // title
+    {Col: "title", Op: velox.OpNEQ},  // titleNEQ
     ...
 }
 

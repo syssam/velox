@@ -10,7 +10,6 @@ import (
 	db "github.com/syssam/velox/tests/orm/velox"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/entity"
 	"github.com/syssam/velox/tests/orm/velox/migrate"
 	"github.com/syssam/velox/tests/orm/velox/post"
@@ -204,7 +203,7 @@ func Example_iter() {
 	fmt.Println(len(page.Edges), page.PageInfo.HasNextPage)
 
 	// Columns and aggregates instead of entities.
-	total, err := db.User.Query(conn).Aggregate(orm.Sum(user.ColumnAge)).Int(ctx)
+	total, err := db.User.Query(conn).Aggregate(db.Sum(user.ColumnAge)).Int(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -212,14 +211,14 @@ func Example_iter() {
 		Role string `json:"role"`
 		N    int    `json:"n"`
 	}
-	if err := db.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(orm.Count().As("n")).Scan(ctx, &rows); err != nil {
+	if err := db.User.Query(conn).Select().GroupBy(user.ColumnRole).Aggregate(db.Count().As("n")).Scan(ctx, &rows); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(total, rows)
 
 	// A condition that arrives at run time, as the filter of a list endpoint
 	// does; a typed one as a function on the SQL builder.
-	p, err := db.User.FieldPredicate("age", orm.OpGT, 22)
+	p, err := db.User.FieldPredicate("age", db.OpGT, 22)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -227,7 +226,7 @@ func Example_iter() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = orm.Compile(user.Age.GT(18))
+	_ = db.Compile(user.Age.GT(18))
 	exists, err := db.User.Query(conn).Where(user.Name.EQ("u0")).Exists(ctx)
 	if err != nil {
 		log.Fatal(err)

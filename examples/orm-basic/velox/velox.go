@@ -12,6 +12,7 @@ import (
 
 	_ "example.com/orm-basic/velox/schemainit"
 	"github.com/syssam/velox"
+	dsql "github.com/syssam/velox/dialect/sql"
 	"github.com/syssam/velox/orm"
 )
 
@@ -160,3 +161,112 @@ func NewConstraintError(msg string, wrap error) *velox.ConstraintError {
 func NewValidationError(name string, err error) *velox.ValidationError {
 	return velox.NewValidationError(name, err)
 }
+
+// What an application names of the engine, under this package's name: a file
+// of an application imports this package and the packages of its entities,
+// and never package orm.
+type (
+	// Agg is an aggregate of a grouped read: Count, Sum, Min, Max, Mean, named in
+	// the result with its As.
+	Agg = orm.Agg
+	// EntityQuery is a read as an interceptor is handed it (Traverse, BeforeQuery):
+	// its entity, its conditions, and WhereP to add one.
+	EntityQuery = orm.Query
+	// EntityMutation is a write as a hook finds it behind the Mutation it is handed:
+	// the fields and edges it sets, and WhereP to narrow it.
+	EntityMutation = orm.Mutation
+	// Predicate is the constraint of a function written once for the predicates of
+	// several entities: func recent[E velox.Predicate](...) E.
+	Predicate = orm.Predicate
+)
+
+// The plain column types: what a function written once for several entities
+// takes, and what a column's As<Level> returns (user.Age.AsOrdered()).
+type (
+	ValueColumn[T any, E orm.Predicate]   = orm.ValueColumn[T, E]
+	BoolColumn[T any, E orm.Predicate]    = orm.BoolColumn[T, E]
+	EnumColumn[T any, E orm.Predicate]    = orm.EnumColumn[T, E]
+	OrderedColumn[T any, E orm.Predicate] = orm.OrderedColumn[T, E]
+	NumberColumn[T any, E orm.Predicate]  = orm.NumberColumn[T, E]
+	StringColumn[T any, E orm.Predicate]  = orm.StringColumn[T, E]
+)
+
+// The operators of a condition on a field named at run time (FieldPredicate),
+// and what a locking read does about a row that is already locked.
+const (
+	OpEQ           = orm.OpEQ
+	OpNEQ          = orm.OpNEQ
+	OpGT           = orm.OpGT
+	OpGTE          = orm.OpGTE
+	OpLT           = orm.OpLT
+	OpLTE          = orm.OpLTE
+	OpIn           = orm.OpIn
+	OpNotIn        = orm.OpNotIn
+	OpIsNil        = orm.OpIsNil
+	OpNotNil       = orm.OpNotNil
+	OpContains     = orm.OpContains
+	OpHasPrefix    = orm.OpHasPrefix
+	OpHasSuffix    = orm.OpHasSuffix
+	OpEqualFold    = orm.OpEqualFold
+	OpContainsFold = orm.OpContainsFold
+	SkipLocked     = orm.SkipLocked
+	NoWait         = orm.NoWait
+)
+
+// Count counts rows: an aggregate.
+func Count() orm.Agg { return orm.Count() }
+
+// Sum adds up a column: an aggregate.
+func Sum(column string) orm.Agg { return orm.Sum(column) }
+
+// Min is the smallest value of a column: an aggregate.
+func Min(column string) orm.Agg { return orm.Min(column) }
+
+// Max is the largest value of a column: an aggregate.
+func Max(column string) orm.Agg { return orm.Max(column) }
+
+// Mean is the average of a column: an aggregate.
+func Mean(column string) orm.Agg { return orm.Mean(column) }
+
+// And matches the rows every one of ps matches, for the predicates of any
+// entity.
+func And[T orm.Predicate](ps ...T) T { return orm.And(ps...) }
+
+// Or matches the rows at least one of ps matches, for the predicates of any
+// entity.
+func Or[T orm.Predicate](ps ...T) T { return orm.Or(ps...) }
+
+// Not matches the rows p does not match, for the predicates of any entity.
+func Not[T orm.Predicate](p T) T { return orm.Not(p) }
+
+// IsZero reports whether p is the zero predicate: no condition.
+func IsZero[T orm.Predicate](p T) bool { return orm.IsZero(p) }
+
+// Compile returns a predicate as a function on a selector of its entity's
+// table, or nil for the zero predicate.
+func Compile[T orm.Predicate](p T) func(*dsql.Selector) { return orm.Compile(p) }
+
+// Apply calls each function on q and returns q: for the parts of a query that
+// were collected before it was built.
+func Apply[Q any](q Q, fns ...func(Q)) Q { return orm.Apply(q, fns...) }
+
+// Traverse makes an interceptor of a function that is handed every read before
+// it runs and may narrow it: a default filter. Register it with a handle's
+// Intercept.
+func Traverse(f func(context.Context, *orm.Query) error) velox.Interceptor {
+	return orm.TraverseFunc(f)
+}
+
+// BeforeQuery makes an interceptor of a function that is handed every read
+// before it runs and may refuse it.
+func BeforeQuery(f func(context.Context, *orm.Query) error) velox.Interceptor {
+	return orm.InterceptFunc(f)
+}
+
+// WithoutTotal makes Paginate skip the count of all matching rows: the page's
+// TotalCount is then -1.
+func WithoutTotal(ctx context.Context) context.Context { return orm.WithoutTotal(ctx) }
+
+// StitchAll gives every entity the code of its schema now, where each gets it
+// when it is first used.
+func StitchAll() { orm.StitchAll() }

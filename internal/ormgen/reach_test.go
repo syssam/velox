@@ -71,6 +71,12 @@ func TestNoGenericTypeWithMethodsInSignatures(t *testing.T) {
 	// functions Some and Null. A package pays for it when it has a field
 	// of velox.Opt[string] itself.
 	allowed["velox.Opt"] = true
+	// The plain column types have only methods with a type parameter of
+	// their own (orm's TestMethodsOfGenericTypesAreGeneric), and the root
+	// package names them in aliases, which instantiate nothing.
+	for _, name := range engineColumns {
+		allowed["orm."+name] = true
+	}
 	for _, dir := range []string{"../../tests/orm/velox/entity", "../../tests/orm/velox", "../../tests/orm/shapes/velox/entity", "../../tests/orm/shapes/velox"} {
 		paths, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(paths) == 0 {
@@ -210,5 +216,27 @@ func TestPackageEntityDoesNotImportTheFilters(t *testing.T) {
 	}
 	if whereEdges == 0 {
 		t.Error("no edge method of tests/orm/velox/entity takes a filter: the test tree no longer covers this")
+	}
+}
+
+// TestApplicationsDoNotImportTheEngine pins what the generated root package
+// forwards the engine's names for: the files that show how an application is
+// written name the root package and the packages of the entities, and have
+// no import of package orm.
+func TestApplicationsDoNotImportTheEngine(t *testing.T) {
+	for _, path := range []string{
+		"../../tests/orm/example_test.go",
+		"../../examples/orm-basic/walkthrough_test.go",
+		"../../examples/orm-graphql/walkthrough_test.go",
+	} {
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, im := range f.Imports {
+			if strings.HasSuffix(strings.Trim(im.Path.Value, `"`), "/velox/orm") {
+				t.Errorf("%s imports package orm: what it uses of it belongs among the names the generated root package forwards (reexport.go)", path)
+			}
+		}
 	}
 }

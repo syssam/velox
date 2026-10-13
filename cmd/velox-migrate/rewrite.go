@@ -84,6 +84,34 @@ func (r *rewriter) velox(pos token.Pos) string { return r.ref(r.lib, "velox", po
 // there needs one import; that is the name written wherever the file can
 // import the generated root. A package the schema imports cannot, and names
 // the library.
+// engine returns a name of package orm as the file writes it: under the
+// generated root package's name where that package forwards it and the file
+// can import it, so that an application has no import of package orm, and as
+// package orm's otherwise.
+func (r *rewriter) engine(name string, pos token.Pos) string {
+	forward := name
+	switch name {
+	case "Query":
+		forward = "EntityQuery"
+	case "Mutation":
+		forward = "EntityMutation"
+	}
+	if engineForwarded[forward] && r.s.gives(forward) && r.reachesRoot() {
+		return r.root(pos) + "." + forward
+	}
+	return r.orm(pos) + "." + name
+}
+
+// engineForwarded are the names of package orm the generated root package
+// forwards (internal/ormgen/reexport.go).
+var engineForwarded = map[string]bool{
+	"Agg": true, "EntityQuery": true, "EntityMutation": true, "Predicate": true,
+	"ValueColumn": true, "BoolColumn": true, "EnumColumn": true, "OrderedColumn": true, "NumberColumn": true, "StringColumn": true,
+	"Count": true, "Sum": true, "Min": true, "Max": true, "Mean": true,
+	"And": true, "Or": true, "Not": true, "IsZero": true, "Compile": true, "Apply": true,
+	"SkipLocked": true, "NoWait": true,
+}
+
 func (r *rewriter) app(name string, pos token.Pos) string {
 	if r.s.gives(name) && r.reachesRoot() {
 		return r.root(pos) + "." + name
@@ -444,7 +472,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 		case "UpdateOne":
 			r.replace(sel.Pos(), sel.End(), r.entity(sel.Pos())+"."+ent.name+"Update")
 		case "Mutation":
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".Mutation")
+			r.replace(sel.Pos(), sel.End(), r.engine("Mutation", sel.Pos()))
 		case "Client":
 			// A client was a handle bound to an entity; what is passed
 			// around now is the handle.
@@ -504,7 +532,7 @@ func (r *rewriter) selector(sel *ast.SelectorExpr, stack []ast.Node) {
 		r.count("privacy")
 	default:
 		if obj.Pkg().Path() == r.lib+"/dialect/sql" && name == "PredicateFunc" {
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".Predicate")
+			r.replace(sel.Pos(), sel.End(), r.engine("Predicate", sel.Pos()))
 			r.count("predicate constraint")
 			return
 		}
@@ -530,7 +558,7 @@ func (r *rewriter) intercept(sel *ast.SelectorExpr, name string) {
 	case "TraverseFunc":
 		r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+".TraverseFunc")
 	case "Query":
-		r.replace(sel.Pos(), sel.End(), "*"+r.orm(sel.Pos())+".Query")
+		r.replace(sel.Pos(), sel.End(), "*"+r.engine("Query", sel.Pos()))
 	default:
 		r.note(sel.Pos(), "intercept.%s: an interceptor is handed *orm.Query, whatever the entity", name)
 		return
@@ -1300,7 +1328,7 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 		case "Sum", "Count", "Max", "Min", "Mean":
 			// The aggregates of a grouped read; the read around them is
 			// rewritten by hand (see the note on GroupBy and Aggregate).
-			r.replace(sel.Pos(), sel.End(), r.orm(sel.Pos())+"."+name)
+			r.replace(sel.Pos(), sel.End(), r.engine(name, sel.Pos()))
 			r.count("aggregate")
 		default:
 			if !r.repeated(sel, obj) {
@@ -2114,7 +2142,7 @@ func (r *rewriter) query(call *ast.CallExpr, sel *ast.SelectorExpr, t target, na
 			if ok {
 				if fn, isSel := opt.Fun.(*ast.SelectorExpr); isSel && fn.Sel.Name == "WithLockAction" && len(opt.Args) == 1 {
 					if v, isSel := opt.Args[0].(*ast.SelectorExpr); isSel && (v.Sel.Name == "SkipLocked" || v.Sel.Name == "NoWait") {
-						r.replace(a.Pos(), a.End(), r.orm(a.Pos())+"."+v.Sel.Name)
+						r.replace(a.Pos(), a.End(), r.engine(v.Sel.Name, a.Pos()))
 						r.count("lock option")
 						continue
 					}
@@ -2285,7 +2313,7 @@ func (r *rewriter) applyOption(call *ast.CallExpr) bool {
 	if target == nil || call.Ellipsis.IsValid() {
 		return false
 	}
-	r.open(call.Args[0].Pos(), r.orm(call.Pos())+".Apply("+r.root(call.Pos())+"."+target.name+".Query(nil), ")
+	r.open(call.Args[0].Pos(), r.engine("Apply", call.Pos())+"("+r.root(call.Pos())+"."+target.name+".Query(nil), ")
 	r.insert(call.Args[len(call.Args)-1].End(), ")")
 	r.count("load option")
 	return true
@@ -2435,7 +2463,7 @@ func (r *rewriter) paginate(call *ast.CallExpr, sel *ast.SelectorExpr) {
 	}
 	recv := r.render(sel.X) + chain
 	if len(applied) > 0 {
-		recv = r.orm(call.Pos()) + ".Apply(" + recv + ", " + strings.Join(applied, ", ") + ")"
+		recv = r.engine("Apply", call.Pos()) + "(" + recv + ", " + strings.Join(applied, ", ") + ")"
 	}
 	r.replace(sel.X.Pos(), sel.X.End(), recv)
 	r.replace(call.Args[4].End(), call.Rparen, "")
@@ -2632,7 +2660,7 @@ func (r *rewriter) into(e ast.Expr, target types.Type) {
 		// selector (a predicate was one, so it went in as it was).
 		if r.selectorFunc(target) {
 			if tv, ok := r.info.Types[e]; ok && !tv.IsNil() && r.predicateOf(tv.Type) != "" {
-				r.open(e.Pos(), r.orm(e.Pos())+".Compile(")
+				r.open(e.Pos(), r.engine("Compile", e.Pos())+"(")
 				r.insert(e.End(), ")")
 				r.count("Compile")
 			}
@@ -2785,14 +2813,14 @@ func (r *rewriter) combinator(call *ast.CallExpr) bool {
 	if to != "And" {
 		r.emptyList(call, to)
 	}
-	r.replace(call.Fun.Pos(), call.Fun.End(), r.orm(call.Pos())+"."+to)
+	r.replace(call.Fun.Pos(), call.Fun.End(), r.engine(to, call.Pos()))
 	// orm.Not takes one condition: what velox negated was the conjunction
 	// of a list.
 	if to == "Not" && (len(call.Args) != 1 || call.Ellipsis.IsValid()) {
 		if len(call.Args) == 0 {
 			r.note(call.Pos(), "Not of no predicate: orm.Not takes one condition; of none, velox's matched no row")
 		} else {
-			r.open(call.Args[0].Pos(), r.orm(call.Pos())+".And(")
+			r.open(call.Args[0].Pos(), r.engine("And", call.Pos())+"(")
 			r.insert(call.Rparen, ")")
 		}
 	}
@@ -2833,7 +2861,8 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	if !isType || obj.Pkg() == nil || obj.Pkg().Path() != r.lib+"/dialect/sql" || !strings.HasSuffix(obj.Name(), "Field") || len(args) == 0 {
 		return
 	}
-	pkg := r.orm(n.Pos())
+	// The plain column types are forwarded by the generated root package.
+	pkg := strings.TrimSuffix(r.engine("StringColumn", n.Pos()), ".StringColumn")
 	p := r.render(args[0])
 	// The second type argument, of the column types that have one.
 	value := ""
@@ -2878,7 +2907,7 @@ func (r *rewriter) funcConstraint(u *ast.UnaryExpr) {
 	if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != r.lib+"/dialect/sql" || named.Obj().Name() != "Selector" {
 		return
 	}
-	r.replace(u.Pos(), u.End(), r.orm(u.Pos())+".Predicate")
+	r.replace(u.Pos(), u.End(), r.engine("Predicate", u.Pos()))
 	r.count("predicate constraint")
 }
 
@@ -2914,7 +2943,7 @@ func (r *rewriter) compareNil(bin *ast.BinaryExpr) {
 		}
 		return
 	}
-	text := r.orm(bin.Pos()) + ".IsZero(" + r.render(other) + ")"
+	text := r.engine("IsZero", bin.Pos()) + "(" + r.render(other) + ")"
 	if bin.Op == token.NEQ {
 		text = "!" + text
 	}
@@ -2953,7 +2982,7 @@ func (r *rewriter) nilAsserted(call *ast.CallExpr) bool {
 	}
 	arg := call.Args[at]
 	r.replace(sel.Sel.Pos(), sel.Sel.End(), want)
-	r.replace(arg.Pos(), arg.End(), r.orm(arg.Pos())+".IsZero("+r.render(arg)+")")
+	r.replace(arg.Pos(), arg.End(), r.engine("IsZero", arg.Pos())+"("+r.render(arg)+")")
 	r.count("zero predicate")
 	return true
 }
