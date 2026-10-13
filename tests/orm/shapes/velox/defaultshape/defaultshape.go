@@ -5,6 +5,9 @@
 package defaultshape
 
 import (
+	"time"
+
+	uuid "github.com/google/uuid"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
@@ -44,53 +47,35 @@ const (
 
 // The columns of DefaultShape.
 var (
-	ID        = IntColumn(ColumnID)
-	Name      = StringColumn(ColumnName)
-	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
-	Revision  = AutoIntColumn(ColumnRevision)
-	Note      = StringColumn(ColumnNote)
-	OptNote   = StringColumn(ColumnOptNote)
-	NilNote   = NullableStringColumn(ColumnNilNote)
-	Active    = BoolColumn(ColumnActive)
-	Ratio     = Float64Column(ColumnRatio)
-	Ratio32   = Float32Column(ColumnRatio32)
-	Tiny      = Int8Column(ColumnTiny)
-	Big       = Int64Column(ColumnBig)
-	Mask      = Uint32Column(ColumnMask)
-	Blob      = BytesColumn(ColumnBlob)
-	UID       = UUIDColumn(ColumnUID)
-	Token     = StringColumn(ColumnToken)
-	Counter   = IntColumn(ColumnCounter)
-	Tags      = StringListColumn(ColumnTags)
-	Code      = StringColumn(ColumnCode)
-	Touched   = AutoInt64Column(ColumnTouched)
-	Seen      = AutoNullableTimeColumn(ColumnSeen)
+	ID        = orm.NumberColumn[int, predicate.DefaultShape](ColumnID)
+	Name      = orm.StringColumn[string, predicate.DefaultShape](ColumnName)
+	CreatedAt = orm.OrderedColumn[time.Time, predicate.DefaultShape](ColumnCreatedAt)
+	UpdatedAt = orm.AutoOrderedColumn[time.Time, predicate.DefaultShape](ColumnUpdatedAt)
+	Revision  = orm.AutoNumberColumn[int, predicate.DefaultShape](ColumnRevision)
+	Note      = orm.StringColumn[string, predicate.DefaultShape](ColumnNote)
+	OptNote   = orm.StringColumn[string, predicate.DefaultShape](ColumnOptNote)
+	NilNote   = orm.NullableStringColumn[string, predicate.DefaultShape](ColumnNilNote)
+	Active    = orm.BoolColumn[bool, predicate.DefaultShape](ColumnActive)
+	Ratio     = orm.NumberColumn[float64, predicate.DefaultShape](ColumnRatio)
+	Ratio32   = orm.NumberColumn[float32, predicate.DefaultShape](ColumnRatio32)
+	Tiny      = orm.NumberColumn[int8, predicate.DefaultShape](ColumnTiny)
+	Big       = orm.NumberColumn[int64, predicate.DefaultShape](ColumnBig)
+	Mask      = orm.NumberColumn[uint32, predicate.DefaultShape](ColumnMask)
+	Blob      = orm.OrderedColumn[[]byte, predicate.DefaultShape](ColumnBlob)
+	UID       = orm.OrderedColumn[uuid.UUID, predicate.DefaultShape](ColumnUID)
+	Token     = orm.StringColumn[string, predicate.DefaultShape](ColumnToken)
+	Counter   = orm.NumberColumn[int, predicate.DefaultShape](ColumnCounter)
+	Tags      = orm.ValueColumn[[]string, predicate.DefaultShape](ColumnTags)
+	Code      = orm.StringColumn[string, predicate.DefaultShape](ColumnCode)
+	Touched   = orm.AutoNumberColumn[int64, predicate.DefaultShape](ColumnTouched)
+	Seen      = orm.NullableAutoOrderedColumn[time.Time, predicate.DefaultShape](ColumnSeen)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.DefaultShape) predicate.DefaultShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.DefaultShape{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.DefaultShape) predicate.DefaultShape { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.DefaultShape) predicate.DefaultShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.DefaultShape{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.DefaultShape) predicate.DefaultShape { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.DefaultShape) predicate.DefaultShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.DefaultShape{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.DefaultShape) predicate.DefaultShape { return orm.Not(ps...) }

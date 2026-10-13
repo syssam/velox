@@ -12,10 +12,10 @@ import "github.com/syssam/velox/orm"
 type Todo orm.P
 
 // TodoSetter is an assignment of a mutation of Todo.
-type TodoSetter orm.S
+type TodoSetter = orm.SetterOf[Todo]
 
 // TodoOrderTerm is an order term of a query of Todo.
-type TodoOrderTerm orm.O
+type TodoOrderTerm = orm.OrderOf[Todo]
 
 // User is a predicate of User. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -23,7 +23,7 @@ type TodoOrderTerm orm.O
 type User orm.P
 
 // UserSetter is an assignment of a mutation of User.
-type UserSetter orm.S
+type UserSetter = orm.SetterOf[User]
 
 // UserOrderTerm is an order term of a query of User.
-type UserOrderTerm orm.O
+type UserOrderTerm = orm.OrderOf[User]

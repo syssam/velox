@@ -6,6 +6,7 @@ package namedboolnil
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -25,34 +26,16 @@ const (
 
 // The columns of NamedBoolNil.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
-	Flag  = NullableFlagColumn(ColumnFlag)
+	ID    = orm.NumberColumn[int, predicate.NamedBoolNil](ColumnID)
+	Label = orm.StringColumn[string, predicate.NamedBoolNil](ColumnLabel)
+	Flag  = orm.NullableBoolColumn[types.Flag, predicate.NamedBoolNil](ColumnFlag)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.NamedBoolNil) predicate.NamedBoolNil {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.NamedBoolNil{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.NamedBoolNil) predicate.NamedBoolNil { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.NamedBoolNil) predicate.NamedBoolNil {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.NamedBoolNil{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.NamedBoolNil) predicate.NamedBoolNil { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.NamedBoolNil) predicate.NamedBoolNil {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.NamedBoolNil{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.NamedBoolNil) predicate.NamedBoolNil { return orm.Not(ps...) }

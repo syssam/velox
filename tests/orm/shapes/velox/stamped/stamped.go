@@ -5,7 +5,10 @@
 package stamped
 
 import (
+	"time"
+
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -25,34 +28,16 @@ const (
 
 // The columns of Stamped.
 var (
-	ID    = IntColumn(ColumnID)
-	At    = StampColumn(ColumnAt)
-	Plain = TimeColumn(ColumnPlain)
+	ID    = orm.NumberColumn[int, predicate.Stamped](ColumnID)
+	At    = orm.OrderedColumn[types.Stamp, predicate.Stamped](ColumnAt)
+	Plain = orm.OrderedColumn[time.Time, predicate.Stamped](ColumnPlain)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Stamped) predicate.Stamped {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Stamped{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Stamped) predicate.Stamped { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Stamped) predicate.Stamped {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Stamped{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Stamped) predicate.Stamped { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Stamped) predicate.Stamped {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Stamped{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Stamped) predicate.Stamped { return orm.Not(ps...) }

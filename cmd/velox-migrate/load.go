@@ -51,9 +51,9 @@
 //
 // Code generic over entities is rewritten with it: the constraint
 // sql.PredicateFunc (or ~func(*sql.Selector)) becomes orm.Predicate, a
-// parameter of type sql.Int64Field[P] becomes orm.OrderedColumn[int64, P], a
-// column passed to one is passed by its address, and sql.AndPredicates
-// becomes orm.And.
+// parameter of type sql.Int64Field[P] becomes *orm.OrderedColumn[int64, P], a
+// column passed to one is passed as that type (user.Age.AsOrdered()), and
+// sql.AndPredicates becomes orm.And.
 //
 // What it leaves to a person: a query changed through Modify, the
 // application's own plumbing around the client, cursors built by hand, and

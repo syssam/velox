@@ -6,6 +6,7 @@ package gotypeshape
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -36,45 +37,27 @@ const (
 
 // The columns of GoTypeShape.
 var (
-	ID      = IntColumn(ColumnID)
-	Label   = LabelColumn(ColumnLabel)
-	Alias   = NullableLabelColumn(ColumnAlias)
-	Nick    = LabelColumn(ColumnNick)
-	Weight  = WeightColumn(ColumnWeight)
-	Bonus   = WeightColumn(ColumnBonus)
-	Extra   = WeightColumn(ColumnExtra)
-	Ratio   = RatioColumn(ColumnRatio)
-	Price   = DecimalColumn(ColumnPrice)
-	Cost    = DecimalColumn(ColumnCost)
-	Fee     = NullableDecimalColumn(ColumnFee)
-	Tax     = DecimalColumn(ColumnTax)
-	Pair    = PairColumn(ColumnPair)
-	PairNil = NullablePairColumn(ColumnPairNil)
+	ID      = orm.NumberColumn[int, predicate.GoTypeShape](ColumnID)
+	Label   = orm.StringColumn[types.Label, predicate.GoTypeShape](ColumnLabel)
+	Alias   = orm.NullableStringColumn[types.Label, predicate.GoTypeShape](ColumnAlias)
+	Nick    = orm.StringColumn[types.Label, predicate.GoTypeShape](ColumnNick)
+	Weight  = orm.NumberColumn[types.Weight, predicate.GoTypeShape](ColumnWeight)
+	Bonus   = orm.NumberColumn[types.Weight, predicate.GoTypeShape](ColumnBonus)
+	Extra   = orm.NumberColumn[types.Weight, predicate.GoTypeShape](ColumnExtra)
+	Ratio   = orm.NumberColumn[types.Ratio, predicate.GoTypeShape](ColumnRatio)
+	Price   = orm.StringColumn[types.Decimal, predicate.GoTypeShape](ColumnPrice)
+	Cost    = orm.StringColumn[types.Decimal, predicate.GoTypeShape](ColumnCost)
+	Fee     = orm.NullableStringColumn[types.Decimal, predicate.GoTypeShape](ColumnFee)
+	Tax     = orm.StringColumn[types.Decimal, predicate.GoTypeShape](ColumnTax)
+	Pair    = orm.NumberColumn[types.Pair, predicate.GoTypeShape](ColumnPair)
+	PairNil = orm.NullableNumberColumn[types.Pair, predicate.GoTypeShape](ColumnPairNil)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.GoTypeShape) predicate.GoTypeShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.GoTypeShape{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.GoTypeShape) predicate.GoTypeShape { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.GoTypeShape) predicate.GoTypeShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.GoTypeShape{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.GoTypeShape) predicate.GoTypeShape { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.GoTypeShape) predicate.GoTypeShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.GoTypeShape{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.GoTypeShape) predicate.GoTypeShape { return orm.Not(ps...) }

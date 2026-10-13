@@ -686,12 +686,12 @@ func TestQuery_Columns(t *testing.T) {
 }
 
 // Code written once for several entities: orm.Predicate as the constraint,
-// a column as an interface, passed by its address.
-func between[T, P any](col orm.OrderedColumn[T, P], lo, hi T) []P {
-	return []P{col.GTE(lo), col.LTE(hi)}
+// a column as the plain column type of the level the code needs.
+func between[T any, E orm.Predicate](col *orm.OrderedColumn[T, E], lo, hi T) []E {
+	return []E{col.GTE(lo), col.LTE(hi)}
 }
 
-func named[P orm.Predicate](col orm.TextColumn[P], prefix string, raw func(*sql.Selector)) P {
+func named[P orm.Predicate](col *orm.StringColumn[string, P], prefix string, raw func(*sql.Selector)) P {
 	parts := []P{col.HasPrefix(prefix)}
 	if raw != nil {
 		parts = append(parts, P(orm.Raw(raw)))
@@ -708,14 +708,14 @@ func TestGenericOverEntities(t *testing.T) {
 
 	// The predicate type is inferred from the column: these are a
 	// predicate.User and a predicate.Post, and do not mix.
-	us, err := client.User.Query(db).Where(between(&user.Age, 35, 45)...).All(ctx)
+	us, err := client.User.Query(db).Where(between(user.Age.AsOrdered(), 35, 45)...).All(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"bob"}, names(us))
-	ps, err := client.Post.Query(db).Where(named(&post.Title, "a", nil)).All(ctx)
+	ps, err := client.Post.Query(db).Where(named(post.Title.AsString(), "a", nil)).All(ctx)
 	require.NoError(t, err)
 	require.Len(t, ps, 1)
 	assert.Equal(t, "a1", ps[0].Title)
-	us, err = client.User.Query(db).Where(named(&user.Name, "", sql.FieldGT("age", 35))).All(ctx)
+	us, err = client.User.Query(db).Where(named(user.Name.AsString(), "", sql.FieldGT("age", 35))).All(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"bob"}, names(us))
 
@@ -735,8 +735,9 @@ func TestGenericOverEntities(t *testing.T) {
 	}
 
 	// A nullable column, and an enum's.
-	var _ orm.NullableColumn[predicate.User] = &user.Nickname
-	var role orm.Column[user.RoleEnum, predicate.User] = &user.Role
+	isNull := func(c *orm.ValueColumn[string, predicate.User]) predicate.User { return c.IsNil() }
+	assert.Equal(t, user.Nickname.IsNil(), isNull(user.Nickname.AsValue()))
+	role := user.Role.AsEnum()
 	n, err := client.User.Query(db).Where(role.In(user.RoleUser, user.RoleAdmin)).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)

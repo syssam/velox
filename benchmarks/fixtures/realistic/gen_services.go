@@ -236,7 +236,7 @@ func renderList(flavor string, p *service) string {
 	if flavor == "velox" {
 		w("\t\"%[1]s/velox/entity\"\n\t\"%[1]s/velox/filter\"\n\tgqlrelay \"github.com/syssam/velox/contrib/graphql/gqlrelay\"\n)\n", module)
 	} else {
-		w("\tclient \"%[1]s/db\"\n\t\"%[1]s/db/entity\"\n\t\"%[1]s/db/filter\"\n\t\"github.com/syssam/velox/orm\"\n)\n", module)
+		w("\tclient \"%[1]s/db\"\n\t\"%[1]s/db/entity\"\n\t\"%[1]s/db/filter\"\n\t\"github.com/syssam/velox\"\n)\n", module)
 	}
 	for _, e := range p.used {
 		if flavor == "velox" {
@@ -258,7 +258,7 @@ func render(flavor string, p *service) string {
 			w("\t\"%s/velox/%s\"\n", module, e.pkg)
 		}
 	} else {
-		w("\t\"github.com/syssam/velox/orm\"\n\tclient \"%s/db\"\n\t\"%s/db/entity\"\n", module, module)
+		w("\t\"github.com/syssam/velox\"\n\tclient \"%s/db\"\n\t\"%s/db/entity\"\n", module, module)
 		for _, e := range p.used {
 			w("\t\"%s/db/%s\"\n", module, e.pkg)
 		}

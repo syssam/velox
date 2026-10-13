@@ -25,71 +25,28 @@ const (
 
 // The columns of Locker.
 var (
-	ID       = IntColumn(ColumnID)
-	Code     = StringColumn(ColumnCode)
-	HolderID = NullableIntKeyColumn(ColumnHolderID)
+	ID       = orm.NumberColumn[int, predicate.Locker](ColumnID)
+	Code     = orm.StringColumn[string, predicate.Locker](ColumnCode)
+	HolderID = orm.NullableOrderedColumn[int, predicate.Locker](ColumnHolderID)
 )
 
-var meta0 = orm.EdgeMeta{Name: "holder", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "lockers", Columns: []string{"holder_id"}}
+var holderMeta = orm.EdgeMeta{Name: "holder", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "lockers", Columns: []string{"holder_id"}}
 
-// EdgeHolder is the "holder" edge of Locker, from Locker to Author.
-type EdgeHolder struct{}
-
-// Holder is the "holder" edge of Locker: conditions on it and changes to it. A
-// query eager-loads it with WithHolder.
-var Holder = &EdgeHolder{}
-
-// Has matches a Locker that has at least one "holder" neighbor.
-func (e *EdgeHolder) Has() predicate.Locker { return predicate.Locker{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Locker that has a "holder" neighbor satisfying the
-// predicates.
-func (e *EdgeHolder) HasWith(ps ...predicate.Author) predicate.Locker {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Locker{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Locker to the Author with the given id.
-func (e *EdgeHolder) Set(id int) predicate.LockerSetter {
-	return predicate.LockerSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Locker from every "holder" neighbor.
-func (e *EdgeHolder) Clear() predicate.LockerSetter {
-	return predicate.LockerSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Holder is the "holder" edge of Locker, to Author: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithHolder.
+var Holder = &orm.ToOne[predicate.Locker, predicate.Author, int]{Meta: &holderMeta}
 
 // EdgeMetas returns the descriptions of the edges of Locker, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&holderMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Locker) predicate.Locker {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Locker{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Locker) predicate.Locker { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Locker) predicate.Locker {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Locker{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Locker) predicate.Locker { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Locker) predicate.Locker {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Locker{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Locker) predicate.Locker { return orm.Not(ps...) }

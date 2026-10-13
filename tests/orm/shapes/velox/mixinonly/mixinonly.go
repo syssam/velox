@@ -25,34 +25,16 @@ const (
 
 // The columns of MixinOnly.
 var (
-	ID        = IntColumn(ColumnID)
-	CreatedBy = StringColumn(ColumnCreatedBy)
-	Version   = AutoIntColumn(ColumnVersion)
+	ID        = orm.NumberColumn[int, predicate.MixinOnly](ColumnID)
+	CreatedBy = orm.StringColumn[string, predicate.MixinOnly](ColumnCreatedBy)
+	Version   = orm.AutoNumberColumn[int, predicate.MixinOnly](ColumnVersion)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.MixinOnly) predicate.MixinOnly {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.MixinOnly{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.MixinOnly) predicate.MixinOnly { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.MixinOnly) predicate.MixinOnly {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.MixinOnly{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.MixinOnly) predicate.MixinOnly { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.MixinOnly) predicate.MixinOnly {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.MixinOnly{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.MixinOnly) predicate.MixinOnly { return orm.Not(ps...) }

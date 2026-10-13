@@ -43,33 +43,15 @@ const (
 
 // The columns of EdgesEnum.
 var (
-	ID         = IntColumn(ColumnID)
-	EdgesField = EdgesEnumColumn(ColumnEdgesField)
+	ID         = orm.NumberColumn[int, predicate.EdgesEnum](ColumnID)
+	EdgesField = orm.EnumColumn[EdgesEnum, predicate.EdgesEnum](ColumnEdgesField)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.EdgesEnum) predicate.EdgesEnum {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesEnum{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.EdgesEnum) predicate.EdgesEnum { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.EdgesEnum) predicate.EdgesEnum {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesEnum{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.EdgesEnum) predicate.EdgesEnum { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.EdgesEnum) predicate.EdgesEnum {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesEnum{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.EdgesEnum) predicate.EdgesEnum { return orm.Not(ps...) }

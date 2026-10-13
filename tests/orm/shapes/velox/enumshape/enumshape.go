@@ -6,6 +6,7 @@ package enumshape
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -97,38 +98,20 @@ const (
 
 // The columns of EnumShape.
 var (
-	ID    = IntColumn(ColumnID)
-	State = StateEnumColumn(ColumnState)
-	Mood  = NullableMoodEnumColumn(ColumnMood)
-	Phase = PhaseEnumColumn(ColumnPhase)
-	Size  = SizeEnumColumn(ColumnSize)
-	Tier  = TierColumn(ColumnTier)
-	Grade = NullableTierColumn(ColumnGrade)
+	ID    = orm.NumberColumn[int, predicate.EnumShape](ColumnID)
+	State = orm.EnumColumn[StateEnum, predicate.EnumShape](ColumnState)
+	Mood  = orm.NullableEnumColumn[MoodEnum, predicate.EnumShape](ColumnMood)
+	Phase = orm.EnumColumn[PhaseEnum, predicate.EnumShape](ColumnPhase)
+	Size  = orm.EnumColumn[SizeEnum, predicate.EnumShape](ColumnSize)
+	Tier  = orm.EnumColumn[types.Tier, predicate.EnumShape](ColumnTier)
+	Grade = orm.NullableEnumColumn[types.Tier, predicate.EnumShape](ColumnGrade)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.EnumShape) predicate.EnumShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EnumShape{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.EnumShape) predicate.EnumShape { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.EnumShape) predicate.EnumShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EnumShape{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.EnumShape) predicate.EnumShape { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.EnumShape) predicate.EnumShape {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EnumShape{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.EnumShape) predicate.EnumShape { return orm.Not(ps...) }

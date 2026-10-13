@@ -24,211 +24,50 @@ const (
 
 // The columns of Person.
 var (
-	ID   = IntColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.NumberColumn[int, predicate.Person](ColumnID)
+	Name = orm.StringColumn[string, predicate.Person](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "spouse", Index: 0, Rel: orm.O2O, Inverse: false, Bidi: true, Table: "persons", Columns: []string{"person_spouse"}}
+var spouseMeta = orm.EdgeMeta{Name: "spouse", Index: 0, Rel: orm.O2O, Inverse: false, Bidi: true, Table: "persons", Columns: []string{"person_spouse"}}
 
-// EdgeSpouse is the "spouse" edge of Person, from Person to Person.
-type EdgeSpouse struct{}
+// Spouse is the "spouse" edge of Person, to Person: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithSpouse.
+var Spouse = &orm.ToOne[predicate.Person, predicate.Person, int]{Meta: &spouseMeta}
 
-// Spouse is the "spouse" edge of Person: conditions on it and changes to it. A
-// query eager-loads it with WithSpouse.
-var Spouse = &EdgeSpouse{}
+var friendsMeta = orm.EdgeMeta{Name: "friends", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "person_friends", Columns: []string{"person_id", "friend_id"}}
 
-// Has matches a Person that has at least one "spouse" neighbor.
-func (e *EdgeSpouse) Has() predicate.Person { return predicate.Person{Op: orm.OpHasEdge, Edge: &meta0} }
+// Friends is the "friends" edge of Person, to Person: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithFriends.
+var Friends = &orm.ToMany[predicate.Person, predicate.Person, int]{Meta: &friendsMeta}
 
-// HasWith matches a Person that has a "spouse" neighbor satisfying the
-// predicates.
-func (e *EdgeSpouse) HasWith(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var followersMeta = orm.EdgeMeta{Name: "followers", Index: 2, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
 
-// Set connects the Person to the Person with the given id.
-func (e *EdgeSpouse) Set(id int) predicate.PersonSetter {
-	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
+// Followers is the "followers" edge of Person, to Person: conditions on it
+// (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it
+// with WithFollowers.
+var Followers = &orm.ToMany[predicate.Person, predicate.Person, int]{Meta: &followersMeta}
 
-// Clear disconnects the Person from every "spouse" neighbor.
-func (e *EdgeSpouse) Clear() predicate.PersonSetter {
-	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+var followingMeta = orm.EdgeMeta{Name: "following", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
 
-var meta1 = orm.EdgeMeta{Name: "friends", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "person_friends", Columns: []string{"person_id", "friend_id"}}
-
-// EdgeFriends is the "friends" edge of Person, from Person to Person.
-type EdgeFriends struct{}
-
-// Friends is the "friends" edge of Person: conditions on it and changes to it.
-// A query eager-loads it with WithFriends.
-var Friends = &EdgeFriends{}
-
-// Has matches a Person that has at least one "friends" neighbor.
-func (e *EdgeFriends) Has() predicate.Person {
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Person that has a "friends" neighbor satisfying the
-// predicates.
-func (e *EdgeFriends) HasWith(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Person to the Person rows with the given ids.
-func (e *EdgeFriends) Add(ids ...int) predicate.PersonSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Person from the Person rows with the given ids.
-func (e *EdgeFriends) Remove(ids ...int) predicate.PersonSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.PersonSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Person from every "friends" neighbor.
-func (e *EdgeFriends) Clear() predicate.PersonSetter {
-	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "followers", Index: 2, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
-
-// EdgeFollowers is the "followers" edge of Person, from Person to Person.
-type EdgeFollowers struct{}
-
-// Followers is the "followers" edge of Person: conditions on it and changes to
-// it. A query eager-loads it with WithFollowers.
-var Followers = &EdgeFollowers{}
-
-// Has matches a Person that has at least one "followers" neighbor.
-func (e *EdgeFollowers) Has() predicate.Person {
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta2}
-}
-
-// HasWith matches a Person that has a "followers" neighbor satisfying the
-// predicates.
-func (e *EdgeFollowers) HasWith(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Add connects the Person to the Person rows with the given ids.
-func (e *EdgeFollowers) Add(ids ...int) predicate.PersonSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
-}
-
-// Remove disconnects the Person from the Person rows with the given ids.
-func (e *EdgeFollowers) Remove(ids ...int) predicate.PersonSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.PersonSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
-}
-
-// Clear disconnects the Person from every "followers" neighbor.
-func (e *EdgeFollowers) Clear() predicate.PersonSetter {
-	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "following", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "person_following", Columns: []string{"person_id", "follower_id"}}
-
-// EdgeFollowing is the "following" edge of Person, from Person to Person.
-type EdgeFollowing struct{}
-
-// Following is the "following" edge of Person: conditions on it and changes to
-// it. A query eager-loads it with WithFollowing.
-var Following = &EdgeFollowing{}
-
-// Has matches a Person that has at least one "following" neighbor.
-func (e *EdgeFollowing) Has() predicate.Person {
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta3}
-}
-
-// HasWith matches a Person that has a "following" neighbor satisfying the
-// predicates.
-func (e *EdgeFollowing) HasWith(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Add connects the Person to the Person rows with the given ids.
-func (e *EdgeFollowing) Add(ids ...int) predicate.PersonSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.PersonSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
-}
-
-// Remove disconnects the Person from the Person rows with the given ids.
-func (e *EdgeFollowing) Remove(ids ...int) predicate.PersonSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.PersonSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
-}
-
-// Clear disconnects the Person from every "following" neighbor.
-func (e *EdgeFollowing) Clear() predicate.PersonSetter {
-	return predicate.PersonSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
+// Following is the "following" edge of Person, to Person: conditions on it
+// (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it
+// with WithFollowing.
+var Following = &orm.ToMany[predicate.Person, predicate.Person, int]{Meta: &followingMeta}
 
 // EdgeMetas returns the descriptions of the edges of Person, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3} }
+func EdgeMetas() []*orm.EdgeMeta {
+	return []*orm.EdgeMeta{&spouseMeta, &friendsMeta, &followersMeta, &followingMeta}
+}
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Person) predicate.Person { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Person) predicate.Person { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Person) predicate.Person {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Person{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Person) predicate.Person { return orm.Not(ps...) }

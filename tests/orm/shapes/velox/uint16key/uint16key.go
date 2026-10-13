@@ -24,33 +24,15 @@ const (
 
 // The columns of Uint16Key.
 var (
-	ID   = Uint16Column(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.NumberColumn[uint16, predicate.Uint16Key](ColumnID)
+	Name = orm.StringColumn[string, predicate.Uint16Key](ColumnName)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Uint16Key) predicate.Uint16Key {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Uint16Key{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Uint16Key) predicate.Uint16Key { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Uint16Key) predicate.Uint16Key {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Uint16Key{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Uint16Key) predicate.Uint16Key { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Uint16Key) predicate.Uint16Key {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Uint16Key{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Uint16Key) predicate.Uint16Key { return orm.Not(ps...) }

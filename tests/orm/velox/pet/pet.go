@@ -25,70 +25,27 @@ const (
 
 // The columns of Pet.
 var (
-	ID      = IntColumn(ColumnID)
-	Name    = StringColumn(ColumnName)
-	OwnerID = NullableIntKeyColumn(ColumnOwnerID)
+	ID      = orm.NumberColumn[int, predicate.Pet](ColumnID)
+	Name    = orm.StringColumn[string, predicate.Pet](ColumnName)
+	OwnerID = orm.NullableOrderedColumn[int, predicate.Pet](ColumnOwnerID)
 )
 
-var meta0 = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "pets", Columns: []string{"owner_id"}}
+var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "pets", Columns: []string{"owner_id"}}
 
-// EdgeOwner is the "owner" edge of Pet, from Pet to User.
-type EdgeOwner struct{}
-
-// Owner is the "owner" edge of Pet: conditions on it and changes to it. A
-// query eager-loads it with WithOwner.
-var Owner = &EdgeOwner{}
-
-// Has matches a Pet that has at least one "owner" neighbor.
-func (e *EdgeOwner) Has() predicate.Pet { return predicate.Pet{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Pet that has a "owner" neighbor satisfying the predicates.
-func (e *EdgeOwner) HasWith(ps ...predicate.User) predicate.Pet {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Pet{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Pet to the User with the given id.
-func (e *EdgeOwner) Set(id int) predicate.PetSetter {
-	return predicate.PetSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Pet from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.PetSetter {
-	return predicate.PetSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Owner is the "owner" edge of Pet, to User: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithOwner.
+var Owner = &orm.ToOne[predicate.Pet, predicate.User, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Pet, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&ownerMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Pet) predicate.Pet {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Pet{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Pet) predicate.Pet { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Pet) predicate.Pet {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Pet{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Pet) predicate.Pet { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Pet) predicate.Pet {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Pet{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Pet) predicate.Pet { return orm.Not(ps...) }

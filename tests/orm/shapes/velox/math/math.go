@@ -24,33 +24,15 @@ const (
 
 // The columns of Math.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
+	ID    = orm.NumberColumn[int, predicate.Math](ColumnID)
+	Label = orm.StringColumn[string, predicate.Math](ColumnLabel)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Math) predicate.Math {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Math{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Math) predicate.Math { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Math) predicate.Math {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Math{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Math) predicate.Math { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Math) predicate.Math {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Math{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Math) predicate.Math { return orm.Not(ps...) }

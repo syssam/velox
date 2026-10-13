@@ -6,6 +6,7 @@ package clash
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -251,146 +252,49 @@ const (
 
 // The columns of Clash.
 var (
-	ID               = IntColumn(ColumnID)
-	Label            = StringColumn(ColumnLabel)
-	Order            = OrderEnumColumn(ColumnOrder)
-	Set              = SetEnumColumn(ColumnSet)
-	Query            = QueryEnumColumn(ColumnQuery)
-	Create           = CreateEnumColumn(ColumnCreate)
-	Update           = UpdateEnumColumn(ColumnUpdate)
-	Load             = LoadEnumColumn(ColumnLoad)
-	Edge             = EdgeEnumColumn(ColumnEdge)
-	Meta             = MetaEnumColumn(ColumnMeta)
-	Pred             = PredEnumColumn(ColumnPred)
-	Kind             = KindEnumColumn(ColumnKind)
-	A                = AEnumColumn(ColumnA)
-	AB               = ABEnumColumn(ColumnAB)
-	UserName         = StringColumn(ColumnUserName)
-	QueryOthersField = StringColumn(ColumnQueryOthersField)
-	Price            = DecimalColumn(ColumnPrice)
+	ID               = orm.NumberColumn[int, predicate.Clash](ColumnID)
+	Label            = orm.StringColumn[string, predicate.Clash](ColumnLabel)
+	Order            = orm.EnumColumn[OrderEnum, predicate.Clash](ColumnOrder)
+	Set              = orm.EnumColumn[SetEnum, predicate.Clash](ColumnSet)
+	Query            = orm.EnumColumn[QueryEnum, predicate.Clash](ColumnQuery)
+	Create           = orm.EnumColumn[CreateEnum, predicate.Clash](ColumnCreate)
+	Update           = orm.EnumColumn[UpdateEnum, predicate.Clash](ColumnUpdate)
+	Load             = orm.EnumColumn[LoadEnum, predicate.Clash](ColumnLoad)
+	Edge             = orm.EnumColumn[EdgeEnum, predicate.Clash](ColumnEdge)
+	Meta             = orm.EnumColumn[MetaEnum, predicate.Clash](ColumnMeta)
+	Pred             = orm.EnumColumn[PredEnum, predicate.Clash](ColumnPred)
+	Kind             = orm.EnumColumn[KindEnum, predicate.Clash](ColumnKind)
+	A                = orm.EnumColumn[AEnum, predicate.Clash](ColumnA)
+	AB               = orm.EnumColumn[ABEnum, predicate.Clash](ColumnAB)
+	UserName         = orm.StringColumn[string, predicate.Clash](ColumnUserName)
+	QueryOthersField = orm.StringColumn[string, predicate.Clash](ColumnQueryOthersField)
+	Price            = orm.StringColumn[types.Decimal, predicate.Clash](ColumnPrice)
 )
 
-var meta0 = orm.EdgeMeta{Name: "others", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others"}}
+var othersMeta = orm.EdgeMeta{Name: "others", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others"}}
 
-// EdgeOthers is the "others" edge of Clash, from Clash to Field.
-type EdgeOthers struct{}
+// Others is the "others" edge of Clash, to Field: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithOthers.
+var Others = &orm.ToMany[predicate.Clash, predicate.Field, int]{Meta: &othersMeta}
 
-// Others is the "others" edge of Clash: conditions on it and changes to it. A
-// query eager-loads it with WithOthers.
-var Others = &EdgeOthers{}
+var othersOrErrEdgeMeta = orm.EdgeMeta{Name: "others_or_err", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others_or_err"}}
 
-// Has matches a Clash that has at least one "others" neighbor.
-func (e *EdgeOthers) Has() predicate.Clash { return predicate.Clash{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Clash that has a "others" neighbor satisfying the
-// predicates.
-func (e *EdgeOthers) HasWith(ps ...predicate.Field) predicate.Clash {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Clash{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the Clash to the Field rows with the given ids.
-func (e *EdgeOthers) Add(ids ...int) predicate.ClashSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ClashSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the Clash from the Field rows with the given ids.
-func (e *EdgeOthers) Remove(ids ...int) predicate.ClashSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ClashSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the Clash from every "others" neighbor.
-func (e *EdgeOthers) Clear() predicate.ClashSetter {
-	return predicate.ClashSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "others_or_err", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"clash_others_or_err"}}
-
-// EdgeOthersOrErrEdge is the "others_or_err" edge of Clash, from Clash to
-// Field.
-type EdgeOthersOrErrEdge struct{}
-
-// OthersOrErrEdge is the "others_or_err" edge of Clash: conditions on it and
-// changes to it. A query eager-loads it with WithOthersOrErrEdge.
-var OthersOrErrEdge = &EdgeOthersOrErrEdge{}
-
-// Has matches a Clash that has at least one "others_or_err" neighbor.
-func (e *EdgeOthersOrErrEdge) Has() predicate.Clash {
-	return predicate.Clash{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Clash that has a "others_or_err" neighbor satisfying the
-// predicates.
-func (e *EdgeOthersOrErrEdge) HasWith(ps ...predicate.Field) predicate.Clash {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Clash{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Clash to the Field rows with the given ids.
-func (e *EdgeOthersOrErrEdge) Add(ids ...int) predicate.ClashSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ClashSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Clash from the Field rows with the given ids.
-func (e *EdgeOthersOrErrEdge) Remove(ids ...int) predicate.ClashSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ClashSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Clash from every "others_or_err" neighbor.
-func (e *EdgeOthersOrErrEdge) Clear() predicate.ClashSetter {
-	return predicate.ClashSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// OthersOrErrEdge is the "others_or_err" edge of Clash, to Field: conditions on
+// it (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads
+// it with WithOthersOrErrEdge.
+var OthersOrErrEdge = &orm.ToMany[predicate.Clash, predicate.Field, int]{Meta: &othersOrErrEdgeMeta}
 
 // EdgeMetas returns the descriptions of the edges of Clash, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&othersMeta, &othersOrErrEdgeMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Clash) predicate.Clash {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Clash{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Clash) predicate.Clash { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Clash) predicate.Clash {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Clash{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Clash) predicate.Clash { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Clash) predicate.Clash {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Clash{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Clash) predicate.Clash { return orm.Not(ps...) }

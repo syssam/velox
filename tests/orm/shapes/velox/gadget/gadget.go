@@ -25,71 +25,28 @@ const (
 
 // The columns of Gadget.
 var (
-	ID      = IntColumn(ColumnID)
-	Name    = StringColumn(ColumnName)
-	OwnerID = NullableIntKeyColumn(ColumnOwnerID)
+	ID      = orm.NumberColumn[int, predicate.Gadget](ColumnID)
+	Name    = orm.StringColumn[string, predicate.Gadget](ColumnName)
+	OwnerID = orm.NullableOrderedColumn[int, predicate.Gadget](ColumnOwnerID)
 )
 
-var meta0 = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "gadgets", Columns: []string{"owner_id"}}
+var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "gadgets", Columns: []string{"owner_id"}}
 
-// EdgeOwner is the "owner" edge of Gadget, from Gadget to Author.
-type EdgeOwner struct{}
-
-// Owner is the "owner" edge of Gadget: conditions on it and changes to it. A
-// query eager-loads it with WithOwner.
-var Owner = &EdgeOwner{}
-
-// Has matches a Gadget that has at least one "owner" neighbor.
-func (e *EdgeOwner) Has() predicate.Gadget { return predicate.Gadget{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Gadget that has a "owner" neighbor satisfying the
-// predicates.
-func (e *EdgeOwner) HasWith(ps ...predicate.Author) predicate.Gadget {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Gadget{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Gadget to the Author with the given id.
-func (e *EdgeOwner) Set(id int) predicate.GadgetSetter {
-	return predicate.GadgetSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Gadget from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.GadgetSetter {
-	return predicate.GadgetSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Owner is the "owner" edge of Gadget, to Author: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithOwner.
+var Owner = &orm.ToOne[predicate.Gadget, predicate.Author, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Gadget, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&ownerMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Gadget) predicate.Gadget {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Gadget{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Gadget) predicate.Gadget { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Gadget) predicate.Gadget {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Gadget{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Gadget) predicate.Gadget { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Gadget) predicate.Gadget {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Gadget{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Gadget) predicate.Gadget { return orm.Not(ps...) }

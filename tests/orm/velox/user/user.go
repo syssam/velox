@@ -5,6 +5,8 @@
 package user
 
 import (
+	"time"
+
 	uuid "github.com/google/uuid"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
@@ -49,299 +51,68 @@ const (
 
 // The columns of User.
 var (
-	ID        = IntColumn(ColumnID)
-	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
-	Name      = StringColumn(ColumnName)
-	Email     = StringColumn(ColumnEmail)
-	Age       = IntColumn(ColumnAge)
-	Nickname  = NullableStringColumn(ColumnNickname)
-	Role      = RoleEnumColumn(ColumnRole)
+	ID        = orm.NumberColumn[int, predicate.User](ColumnID)
+	CreatedAt = orm.OrderedColumn[time.Time, predicate.User](ColumnCreatedAt)
+	UpdatedAt = orm.AutoOrderedColumn[time.Time, predicate.User](ColumnUpdatedAt)
+	Name      = orm.StringColumn[string, predicate.User](ColumnName)
+	Email     = orm.StringColumn[string, predicate.User](ColumnEmail)
+	Age       = orm.NumberColumn[int, predicate.User](ColumnAge)
+	Nickname  = orm.NullableStringColumn[string, predicate.User](ColumnNickname)
+	Role      = orm.EnumColumn[RoleEnum, predicate.User](ColumnRole)
 )
 
-var meta0 = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "posts", Columns: []string{"user_posts"}}
+var postsMeta = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "posts", Columns: []string{"user_posts"}}
 
-// EdgePosts is the "posts" edge of User, from User to Post.
-type EdgePosts struct{}
+// Posts is the "posts" edge of User, to Post: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithPosts.
+var Posts = &orm.ToMany[predicate.User, predicate.Post, int]{Meta: &postsMeta}
 
-// Posts is the "posts" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithPosts.
-var Posts = &EdgePosts{}
+var petsMeta = orm.EdgeMeta{Name: "pets", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "pets", Columns: []string{"owner_id"}}
 
-// Has matches a User that has at least one "posts" neighbor.
-func (e *EdgePosts) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta0} }
+// Pets is the "pets" edge of User, to Pet: conditions on it (Has, HasWith) and
+// changes to it (Add, Remove, Clear). A query eager-loads it with WithPets.
+var Pets = &orm.ToMany[predicate.User, predicate.Pet, int]{Meta: &petsMeta}
 
-// HasWith matches a User that has a "posts" neighbor satisfying the predicates.
-func (e *EdgePosts) HasWith(ps ...predicate.Post) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var commentsMeta = orm.EdgeMeta{Name: "comments", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "comments", Columns: []string{"user_comments"}}
 
-// Add connects the User to the Post rows with the given ids.
-func (e *EdgePosts) Add(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
+// Comments is the "comments" edge of User, to Comment: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithComments.
+var Comments = &orm.ToMany[predicate.User, predicate.Comment, int]{Meta: &commentsMeta}
 
-// Remove disconnects the User from the Post rows with the given ids.
-func (e *EdgePosts) Remove(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
+var tokenMeta = orm.EdgeMeta{Name: "token", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
 
-// Clear disconnects the User from every "posts" neighbor.
-func (e *EdgePosts) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Token is the "token" edge of User, to Token: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithToken.
+var Token = &orm.ToOne[predicate.User, predicate.Token, uuid.UUID]{Meta: &tokenMeta}
 
-var meta1 = orm.EdgeMeta{Name: "pets", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "pets", Columns: []string{"owner_id"}}
+var likedPostsMeta = orm.EdgeMeta{Name: "liked_posts", Index: 4, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id", "post_id"}}
 
-// EdgePets is the "pets" edge of User, from User to Pet.
-type EdgePets struct{}
+// LikedPosts is the "liked_posts" edge of User, to Post: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithLikedPosts.
+var LikedPosts = &orm.ToMany[predicate.User, predicate.Post, int]{Meta: &likedPostsMeta}
 
-// Pets is the "pets" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithPets.
-var Pets = &EdgePets{}
+var likesMeta = orm.EdgeMeta{Name: "likes", Index: 5, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "likes", Columns: []string{"user_id"}}
 
-// Has matches a User that has at least one "pets" neighbor.
-func (e *EdgePets) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a User that has a "pets" neighbor satisfying the predicates.
-func (e *EdgePets) HasWith(ps ...predicate.Pet) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the User to the Pet rows with the given ids.
-func (e *EdgePets) Add(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the User from the Pet rows with the given ids.
-func (e *EdgePets) Remove(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the User from every "pets" neighbor.
-func (e *EdgePets) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "comments", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "comments", Columns: []string{"user_comments"}}
-
-// EdgeComments is the "comments" edge of User, from User to Comment.
-type EdgeComments struct{}
-
-// Comments is the "comments" edge of User: conditions on it and changes to it.
-// A query eager-loads it with WithComments.
-var Comments = &EdgeComments{}
-
-// Has matches a User that has at least one "comments" neighbor.
-func (e *EdgeComments) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta2} }
-
-// HasWith matches a User that has a "comments" neighbor satisfying the
-// predicates.
-func (e *EdgeComments) HasWith(ps ...predicate.Comment) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Add connects the User to the Comment rows with the given ids.
-func (e *EdgeComments) Add(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
-}
-
-// Remove disconnects the User from the Comment rows with the given ids.
-func (e *EdgeComments) Remove(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
-}
-
-// Clear disconnects the User from every "comments" neighbor.
-func (e *EdgeComments) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "token", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
-
-// EdgeToken is the "token" edge of User, from User to Token.
-type EdgeToken struct{}
-
-// Token is the "token" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithToken.
-var Token = &EdgeToken{}
-
-// Has matches a User that has at least one "token" neighbor.
-func (e *EdgeToken) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta3} }
-
-// HasWith matches a User that has a "token" neighbor satisfying the predicates.
-func (e *EdgeToken) HasWith(ps ...predicate.Token) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Set connects the User to the Token with the given id.
-func (e *EdgeToken) Set(id uuid.UUID) predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
-}
-
-// Clear disconnects the User from every "token" neighbor.
-func (e *EdgeToken) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
-
-var meta4 = orm.EdgeMeta{Name: "liked_posts", Index: 4, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id", "post_id"}}
-
-// EdgeLikedPosts is the "liked_posts" edge of User, from User to Post.
-type EdgeLikedPosts struct{}
-
-// LikedPosts is the "liked_posts" edge of User: conditions on it and changes to
-// it. A query eager-loads it with WithLikedPosts.
-var LikedPosts = &EdgeLikedPosts{}
-
-// Has matches a User that has at least one "liked_posts" neighbor.
-func (e *EdgeLikedPosts) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta4} }
-
-// HasWith matches a User that has a "liked_posts" neighbor satisfying the
-// predicates.
-func (e *EdgeLikedPosts) HasWith(ps ...predicate.Post) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta4, Subs: subs}
-}
-
-// Add connects the User to the Post rows with the given ids.
-func (e *EdgeLikedPosts) Add(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
-}
-
-// Remove disconnects the User from the Post rows with the given ids.
-func (e *EdgeLikedPosts) Remove(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
-}
-
-// Clear disconnects the User from every "liked_posts" neighbor.
-func (e *EdgeLikedPosts) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta4}
-}
-
-var meta5 = orm.EdgeMeta{Name: "likes", Index: 5, Rel: orm.O2M, Inverse: true, Bidi: false, Table: "likes", Columns: []string{"user_id"}}
-
-// EdgeLikes is the "likes" edge of User, from User to Like.
-type EdgeLikes struct{}
-
-// Likes is the "likes" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithLikes.
-var Likes = &EdgeLikes{}
-
-// Has matches a User that has at least one "likes" neighbor.
-func (e *EdgeLikes) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta5} }
-
-// HasWith matches a User that has a "likes" neighbor satisfying the predicates.
-func (e *EdgeLikes) HasWith(ps ...predicate.Like) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta5, Subs: subs}
-}
-
-// Add connects the User to the Like rows with the given ids.
-func (e *EdgeLikes) Add(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta5, IDs: vs}
-}
-
-// Remove disconnects the User from the Like rows with the given ids.
-func (e *EdgeLikes) Remove(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta5, IDs: vs}
-}
-
-// Clear disconnects the User from every "likes" neighbor.
-func (e *EdgeLikes) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta5}
-}
+// Likes is the "likes" edge of User, to Like: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithLikes.
+var Likes = &orm.ToMany[predicate.User, predicate.Like, int]{Meta: &likesMeta}
 
 // EdgeMetas returns the descriptions of the edges of User, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
 func EdgeMetas() []*orm.EdgeMeta {
-	return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4, &meta5}
+	return []*orm.EdgeMeta{&postsMeta, &petsMeta, &commentsMeta, &tokenMeta, &likedPostsMeta, &likesMeta}
 }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.User) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.User) predicate.User { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.User) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.User) predicate.User { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.User) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.User) predicate.User { return orm.Not(ps...) }

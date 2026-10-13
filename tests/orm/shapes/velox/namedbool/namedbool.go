@@ -6,6 +6,7 @@ package namedbool
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -25,34 +26,16 @@ const (
 
 // The columns of NamedBool.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
-	Flag  = FlagColumn(ColumnFlag)
+	ID    = orm.NumberColumn[int, predicate.NamedBool](ColumnID)
+	Label = orm.StringColumn[string, predicate.NamedBool](ColumnLabel)
+	Flag  = orm.BoolColumn[types.Flag, predicate.NamedBool](ColumnFlag)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.NamedBool) predicate.NamedBool {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.NamedBool{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.NamedBool) predicate.NamedBool { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.NamedBool) predicate.NamedBool {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.NamedBool{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.NamedBool) predicate.NamedBool { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.NamedBool) predicate.NamedBool {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.NamedBool{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.NamedBool) predicate.NamedBool { return orm.Not(ps...) }

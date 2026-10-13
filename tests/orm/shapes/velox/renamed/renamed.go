@@ -5,6 +5,8 @@
 package renamed
 
 import (
+	"time"
+
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
@@ -46,138 +48,39 @@ const (
 
 // The columns of Renamed.
 var (
-	ID     = IntColumn(ColumnID)
-	Title  = StringColumn(ColumnTitle)
-	Count  = NullableIntColumn(ColumnCount)
-	SeenAt = AutoTimeColumn(ColumnSeenAt)
-	Kind   = KindEnumColumn(ColumnKind)
-	Secret = StringColumn(ColumnSecret)
-	Alias  = StringColumn(ColumnAlias)
+	ID     = orm.NumberColumn[int, predicate.Renamed](ColumnID)
+	Title  = orm.StringColumn[string, predicate.Renamed](ColumnTitle)
+	Count  = orm.NullableNumberColumn[int, predicate.Renamed](ColumnCount)
+	SeenAt = orm.AutoOrderedColumn[time.Time, predicate.Renamed](ColumnSeenAt)
+	Kind   = orm.EnumColumn[KindEnum, predicate.Renamed](ColumnKind)
+	Secret = orm.StringColumn[string, predicate.Renamed](ColumnSecret)
+	Alias  = orm.StringColumn[string, predicate.Renamed](ColumnAlias)
 )
 
-var meta0 = orm.EdgeMeta{Name: "frozen", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "notes", Columns: []string{"renamed_frozen"}, Immutable: true}
+var frozenMeta = orm.EdgeMeta{Name: "frozen", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "notes", Columns: []string{"renamed_frozen"}, Immutable: true}
 
-// EdgeFrozen is the "frozen" edge of Renamed, from Renamed to Note.
-type EdgeFrozen struct{}
+// Frozen is the "frozen" edge of Renamed, to Note: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithFrozen.
+var Frozen = &orm.ToMany[predicate.Renamed, predicate.Note, int]{Meta: &frozenMeta}
 
-// Frozen is the "frozen" edge of Renamed: conditions on it and changes to it. A
-// query eager-loads it with WithFrozen.
-var Frozen = &EdgeFrozen{}
+var frozenTopicsMeta = orm.EdgeMeta{Name: "frozen_topics", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "topics", Columns: []string{"renamed_frozen_topics"}, Immutable: true}
 
-// Has matches a Renamed that has at least one "frozen" neighbor.
-func (e *EdgeFrozen) Has() predicate.Renamed {
-	return predicate.Renamed{Op: orm.OpHasEdge, Edge: &meta0}
-}
-
-// HasWith matches a Renamed that has a "frozen" neighbor satisfying the
-// predicates.
-func (e *EdgeFrozen) HasWith(ps ...predicate.Note) predicate.Renamed {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Renamed{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the Renamed to the Note rows with the given ids.
-func (e *EdgeFrozen) Add(ids ...int) predicate.RenamedSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.RenamedSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the Renamed from the Note rows with the given ids.
-func (e *EdgeFrozen) Remove(ids ...int) predicate.RenamedSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.RenamedSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the Renamed from every "frozen" neighbor.
-func (e *EdgeFrozen) Clear() predicate.RenamedSetter {
-	return predicate.RenamedSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "frozen_topics", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "topics", Columns: []string{"renamed_frozen_topics"}, Immutable: true}
-
-// EdgeFrozenTopics is the "frozen_topics" edge of Renamed, from Renamed to
-// Topic.
-type EdgeFrozenTopics struct{}
-
-// FrozenTopics is the "frozen_topics" edge of Renamed: conditions on it and
-// changes to it. A query eager-loads it with WithFrozenTopics.
-var FrozenTopics = &EdgeFrozenTopics{}
-
-// Has matches a Renamed that has at least one "frozen_topics" neighbor.
-func (e *EdgeFrozenTopics) Has() predicate.Renamed {
-	return predicate.Renamed{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Renamed that has a "frozen_topics" neighbor satisfying the
-// predicates.
-func (e *EdgeFrozenTopics) HasWith(ps ...predicate.Topic) predicate.Renamed {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Renamed{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Renamed to the Topic rows with the given ids.
-func (e *EdgeFrozenTopics) Add(ids ...int) predicate.RenamedSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.RenamedSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Renamed from the Topic rows with the given ids.
-func (e *EdgeFrozenTopics) Remove(ids ...int) predicate.RenamedSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.RenamedSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Renamed from every "frozen_topics" neighbor.
-func (e *EdgeFrozenTopics) Clear() predicate.RenamedSetter {
-	return predicate.RenamedSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// FrozenTopics is the "frozen_topics" edge of Renamed, to Topic: conditions on
+// it (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads
+// it with WithFrozenTopics.
+var FrozenTopics = &orm.ToMany[predicate.Renamed, predicate.Topic, int]{Meta: &frozenTopicsMeta}
 
 // EdgeMetas returns the descriptions of the edges of Renamed, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&frozenMeta, &frozenTopicsMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Renamed) predicate.Renamed {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Renamed{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Renamed) predicate.Renamed { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Renamed) predicate.Renamed {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Renamed{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Renamed) predicate.Renamed { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Renamed) predicate.Renamed {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Renamed{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Renamed) predicate.Renamed { return orm.Not(ps...) }

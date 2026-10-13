@@ -821,10 +821,11 @@ func (r *rewriter) leafName(sel *ast.SelectorExpr, obj types.Object, e *entityIn
 	case *types.Var:
 		if f, ok := strings.CutSuffix(name, "Field"); ok && e.fields[f] {
 			rename(f, "column")
-			// Passed on as a value rather than asked for a predicate: the
-			// methods of a column have pointer receivers.
+			// Passed on as a value rather than asked for a predicate: as the
+			// plain column type of its level, which is what the parameter
+			// it is passed to has become (columnType).
 			if up, ok := parent(stack, 1).(*ast.SelectorExpr); !ok || up.X != ast.Expr(sel) {
-				r.open(sel.Pos(), "&")
+				r.insert(sel.End(), ".As"+columnLevel(obj.Type())+"()")
 			}
 			return
 		}
@@ -2768,8 +2769,29 @@ func (r *rewriter) combinator(call *ast.CallExpr) bool {
 	return true
 }
 
+// columnLevel returns the level of the column type of package orm that a
+// column of velox's generic type t is: String, Bool, Enum, Ordered, or Value
+// for a type whose values are only stored.
+func columnLevel(t types.Type) string {
+	name := ""
+	if n, ok := types.Unalias(t).(*types.Named); ok {
+		name = strings.TrimSuffix(n.Obj().Name(), "Field")
+	}
+	switch {
+	case name == "String":
+		return "String"
+	case name == "Bool":
+		return "Bool"
+	case name == "Enum":
+		return "Enum"
+	case name == "Time" || name == "Other" || name == "UUID" || strings.HasPrefix(name, "Int") || strings.HasPrefix(name, "Uint") || strings.HasPrefix(name, "Float"):
+		return "Ordered"
+	}
+	return "Value"
+}
+
 // columnType rewrites the library's generic column types where code generic
-// over entities names them: sql.Int64Field[P] is orm.OrderedColumn[int64, P].
+// over entities names them: sql.Int64Field[P] is *orm.OrderedColumn[int64, P].
 func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	sel, ok := x.(*ast.SelectorExpr)
 	if !ok {
@@ -2789,17 +2811,17 @@ func (r *rewriter) columnType(n, x ast.Expr, args []ast.Expr) {
 	var text string
 	switch base := strings.TrimSuffix(obj.Name(), "Field"); {
 	case base == "String":
-		text = pkg + ".TextColumn[" + p + "]"
+		text = "*" + pkg + ".StringColumn[string, " + p + "]"
 	case base == "Bool":
-		text = pkg + ".Column[bool, " + p + "]"
+		text = "*" + pkg + ".BoolColumn[bool, " + p + "]"
 	case base == "Enum" && value != "":
-		text = pkg + ".Column[" + value + ", " + p + "]"
+		text = "*" + pkg + ".EnumColumn[" + value + ", " + p + "]"
 	case (base == "Time" || base == "Other" || base == "UUID") && value != "":
-		text = pkg + ".OrderedColumn[" + value + ", " + p + "]"
+		text = "*" + pkg + ".OrderedColumn[" + value + ", " + p + "]"
 	case strings.HasPrefix(base, "Int") || strings.HasPrefix(base, "Uint") || strings.HasPrefix(base, "Float"):
-		text = pkg + ".OrderedColumn[" + strings.ToLower(base) + ", " + p + "]"
+		text = "*" + pkg + ".OrderedColumn[" + strings.ToLower(base) + ", " + p + "]"
 	default:
-		r.note(n.Pos(), "the column type sql.%s: declare what the code needs of a column with orm.Column or orm.OrderedColumn", obj.Name())
+		r.note(n.Pos(), "the column type sql.%s: declare what the code needs of a column with a column type of package orm (orm.ValueColumn, orm.EnumColumn, orm.OrderedColumn, ...)", obj.Name())
 		return
 	}
 	r.replace(n.Pos(), n.End(), text)

@@ -5,6 +5,7 @@
 package uuidkey
 
 import (
+	uuid "github.com/google/uuid"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
@@ -24,33 +25,15 @@ const (
 
 // The columns of UUIDKey.
 var (
-	ID   = UUIDColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.OrderedColumn[uuid.UUID, predicate.UUIDKey](ColumnID)
+	Name = orm.StringColumn[string, predicate.UUIDKey](ColumnName)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.UUIDKey) predicate.UUIDKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.UUIDKey{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.UUIDKey) predicate.UUIDKey { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.UUIDKey) predicate.UUIDKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.UUIDKey{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.UUIDKey) predicate.UUIDKey { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.UUIDKey) predicate.UUIDKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.UUIDKey{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.UUIDKey) predicate.UUIDKey { return orm.Not(ps...) }

@@ -6,6 +6,7 @@ package blob
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -39,48 +40,30 @@ const (
 
 // The columns of Blob.
 var (
-	ID       = IntColumn(ColumnID)
-	Seq      = IntColumn(ColumnSeq)
-	Data     = BytesColumn(ColumnData)
-	Opt      = BytesColumn(ColumnOpt)
-	Optd     = BytesColumn(ColumnOptd)
-	Nilb     = NullableBytesColumn(ColumnNilb)
-	Nils     = NullableStringColumn(ColumnNils)
-	Addr     = NullableAddressColumn(ColumnAddr)
-	AddrPtr  = NullableAddressColumn(ColumnAddrPtr)
-	Tags     = NullableStringListColumn(ColumnTags)
-	Attrs    = NullableMapColumn(ColumnAttrs)
-	Req      = AddressColumn(ColumnReq)
-	Strs     = NullableStringListColumn(ColumnStrs)
-	Ints     = NullableIntListColumn(ColumnInts)
-	Floats   = NullableFloat64ListColumn(ColumnFloats)
-	Anything = NullableAnyColumn(ColumnAnything)
-	Free     = NullableMapColumn2(ColumnFree)
+	ID       = orm.NumberColumn[int, predicate.Blob](ColumnID)
+	Seq      = orm.NumberColumn[int, predicate.Blob](ColumnSeq)
+	Data     = orm.OrderedColumn[[]byte, predicate.Blob](ColumnData)
+	Opt      = orm.OrderedColumn[[]byte, predicate.Blob](ColumnOpt)
+	Optd     = orm.OrderedColumn[[]byte, predicate.Blob](ColumnOptd)
+	Nilb     = orm.NullableOrderedColumn[[]byte, predicate.Blob](ColumnNilb)
+	Nils     = orm.NullableStringColumn[string, predicate.Blob](ColumnNils)
+	Addr     = orm.NullableValueColumn[types.Address, predicate.Blob](ColumnAddr)
+	AddrPtr  = orm.NullableValueColumn[types.Address, predicate.Blob](ColumnAddrPtr)
+	Tags     = orm.NullableValueColumn[[]string, predicate.Blob](ColumnTags)
+	Attrs    = orm.NullableValueColumn[map[string]int, predicate.Blob](ColumnAttrs)
+	Req      = orm.ValueColumn[types.Address, predicate.Blob](ColumnReq)
+	Strs     = orm.NullableValueColumn[[]string, predicate.Blob](ColumnStrs)
+	Ints     = orm.NullableValueColumn[[]int, predicate.Blob](ColumnInts)
+	Floats   = orm.NullableValueColumn[[]float64, predicate.Blob](ColumnFloats)
+	Anything = orm.NullableValueColumn[any, predicate.Blob](ColumnAnything)
+	Free     = orm.NullableValueColumn[map[string]any, predicate.Blob](ColumnFree)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Blob) predicate.Blob {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Blob{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Blob) predicate.Blob { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Blob) predicate.Blob {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Blob{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Blob) predicate.Blob { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Blob) predicate.Blob {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Blob{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Blob) predicate.Blob { return orm.Not(ps...) }

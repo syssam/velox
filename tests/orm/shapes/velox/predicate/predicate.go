@@ -12,10 +12,10 @@ import "github.com/syssam/velox/orm"
 type And orm.P
 
 // AndSetter is an assignment of a mutation of And.
-type AndSetter orm.S
+type AndSetter = orm.SetterOf[And]
 
 // AndOrderTerm is an order term of a query of And.
-type AndOrderTerm orm.O
+type AndOrderTerm = orm.OrderOf[And]
 
 // Article is a predicate of Article. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -23,10 +23,10 @@ type AndOrderTerm orm.O
 type Article orm.P
 
 // ArticleSetter is an assignment of a mutation of Article.
-type ArticleSetter orm.S
+type ArticleSetter = orm.SetterOf[Article]
 
 // ArticleOrderTerm is an order term of a query of Article.
-type ArticleOrderTerm orm.O
+type ArticleOrderTerm = orm.OrderOf[Article]
 
 // Author is a predicate of Author. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -34,10 +34,10 @@ type ArticleOrderTerm orm.O
 type Author orm.P
 
 // AuthorSetter is an assignment of a mutation of Author.
-type AuthorSetter orm.S
+type AuthorSetter = orm.SetterOf[Author]
 
 // AuthorOrderTerm is an order term of a query of Author.
-type AuthorOrderTerm orm.O
+type AuthorOrderTerm = orm.OrderOf[Author]
 
 // Badge is a predicate of Badge. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -45,10 +45,10 @@ type AuthorOrderTerm orm.O
 type Badge orm.P
 
 // BadgeSetter is an assignment of a mutation of Badge.
-type BadgeSetter orm.S
+type BadgeSetter = orm.SetterOf[Badge]
 
 // BadgeOrderTerm is an order term of a query of Badge.
-type BadgeOrderTerm orm.O
+type BadgeOrderTerm = orm.OrderOf[Badge]
 
 // Bare is a predicate of Bare. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -56,10 +56,10 @@ type BadgeOrderTerm orm.O
 type Bare orm.P
 
 // BareSetter is an assignment of a mutation of Bare.
-type BareSetter orm.S
+type BareSetter = orm.SetterOf[Bare]
 
 // BareOrderTerm is an order term of a query of Bare.
-type BareOrderTerm orm.O
+type BareOrderTerm = orm.OrderOf[Bare]
 
 // Blob is a predicate of Blob. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -67,10 +67,10 @@ type BareOrderTerm orm.O
 type Blob orm.P
 
 // BlobSetter is an assignment of a mutation of Blob.
-type BlobSetter orm.S
+type BlobSetter = orm.SetterOf[Blob]
 
 // BlobOrderTerm is an order term of a query of Blob.
-type BlobOrderTerm orm.O
+type BlobOrderTerm = orm.OrderOf[Blob]
 
 // Bulk is a predicate of Bulk. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -78,10 +78,10 @@ type BlobOrderTerm orm.O
 type Bulk orm.P
 
 // BulkSetter is an assignment of a mutation of Bulk.
-type BulkSetter orm.S
+type BulkSetter = orm.SetterOf[Bulk]
 
 // BulkOrderTerm is an order term of a query of Bulk.
-type BulkOrderTerm orm.O
+type BulkOrderTerm = orm.OrderOf[Bulk]
 
 // Clash is a predicate of Clash. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -89,10 +89,10 @@ type BulkOrderTerm orm.O
 type Clash orm.P
 
 // ClashSetter is an assignment of a mutation of Clash.
-type ClashSetter orm.S
+type ClashSetter = orm.SetterOf[Clash]
 
 // ClashOrderTerm is an order term of a query of Clash.
-type ClashOrderTerm orm.O
+type ClashOrderTerm = orm.OrderOf[Clash]
 
 // Context is a predicate of Context. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -100,10 +100,10 @@ type ClashOrderTerm orm.O
 type Context orm.P
 
 // ContextSetter is an assignment of a mutation of Context.
-type ContextSetter orm.S
+type ContextSetter = orm.SetterOf[Context]
 
 // ContextOrderTerm is an order term of a query of Context.
-type ContextOrderTerm orm.O
+type ContextOrderTerm = orm.OrderOf[Context]
 
 // Course is a predicate of Course. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -111,10 +111,10 @@ type ContextOrderTerm orm.O
 type Course orm.P
 
 // CourseSetter is an assignment of a mutation of Course.
-type CourseSetter orm.S
+type CourseSetter = orm.SetterOf[Course]
 
 // CourseOrderTerm is an order term of a query of Course.
-type CourseOrderTerm orm.O
+type CourseOrderTerm = orm.OrderOf[Course]
 
 // Create is a predicate of Create. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -122,10 +122,10 @@ type CourseOrderTerm orm.O
 type Create orm.P
 
 // CreateSetter is an assignment of a mutation of Create.
-type CreateSetter orm.S
+type CreateSetter = orm.SetterOf[Create]
 
 // CreateOrderTerm is an order term of a query of Create.
-type CreateOrderTerm orm.O
+type CreateOrderTerm = orm.OrderOf[Create]
 
 // Db is a predicate of Db. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -133,10 +133,10 @@ type CreateOrderTerm orm.O
 type Db orm.P
 
 // DbSetter is an assignment of a mutation of Db.
-type DbSetter orm.S
+type DbSetter = orm.SetterOf[Db]
 
 // DbOrderTerm is an order term of a query of Db.
-type DbOrderTerm orm.O
+type DbOrderTerm = orm.OrderOf[Db]
 
 // DefaultShape is a predicate of DefaultShape. It is a type of its own, as are
 // the assignments and order terms below, so those of another entity do not
@@ -144,10 +144,10 @@ type DbOrderTerm orm.O
 type DefaultShape orm.P
 
 // DefaultShapeSetter is an assignment of a mutation of DefaultShape.
-type DefaultShapeSetter orm.S
+type DefaultShapeSetter = orm.SetterOf[DefaultShape]
 
 // DefaultShapeOrderTerm is an order term of a query of DefaultShape.
-type DefaultShapeOrderTerm orm.O
+type DefaultShapeOrderTerm = orm.OrderOf[DefaultShape]
 
 // Edge is a predicate of Edge. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -155,10 +155,10 @@ type DefaultShapeOrderTerm orm.O
 type Edge orm.P
 
 // EdgeSetter is an assignment of a mutation of Edge.
-type EdgeSetter orm.S
+type EdgeSetter = orm.SetterOf[Edge]
 
 // EdgeOrderTerm is an order term of a query of Edge.
-type EdgeOrderTerm orm.O
+type EdgeOrderTerm = orm.OrderOf[Edge]
 
 // Edges is a predicate of Edges. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -166,10 +166,10 @@ type EdgeOrderTerm orm.O
 type Edges orm.P
 
 // EdgesSetter is an assignment of a mutation of Edges.
-type EdgesSetter orm.S
+type EdgesSetter = orm.SetterOf[Edges]
 
 // EdgesOrderTerm is an order term of a query of Edges.
-type EdgesOrderTerm orm.O
+type EdgesOrderTerm = orm.OrderOf[Edges]
 
 // EdgesEnum is a predicate of EdgesEnum. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -177,10 +177,10 @@ type EdgesOrderTerm orm.O
 type EdgesEnum orm.P
 
 // EdgesEnumSetter is an assignment of a mutation of EdgesEnum.
-type EdgesEnumSetter orm.S
+type EdgesEnumSetter = orm.SetterOf[EdgesEnum]
 
 // EdgesEnumOrderTerm is an order term of a query of EdgesEnum.
-type EdgesEnumOrderTerm orm.O
+type EdgesEnumOrderTerm = orm.OrderOf[EdgesEnum]
 
 // EdgesField is a predicate of EdgesField. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -188,10 +188,10 @@ type EdgesEnumOrderTerm orm.O
 type EdgesField orm.P
 
 // EdgesFieldSetter is an assignment of a mutation of EdgesField.
-type EdgesFieldSetter orm.S
+type EdgesFieldSetter = orm.SetterOf[EdgesField]
 
 // EdgesFieldOrderTerm is an order term of a query of EdgesField.
-type EdgesFieldOrderTerm orm.O
+type EdgesFieldOrderTerm = orm.OrderOf[EdgesField]
 
 // Enrollment is a predicate of Enrollment. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -199,10 +199,10 @@ type EdgesFieldOrderTerm orm.O
 type Enrollment orm.P
 
 // EnrollmentSetter is an assignment of a mutation of Enrollment.
-type EnrollmentSetter orm.S
+type EnrollmentSetter = orm.SetterOf[Enrollment]
 
 // EnrollmentOrderTerm is an order term of a query of Enrollment.
-type EnrollmentOrderTerm orm.O
+type EnrollmentOrderTerm = orm.OrderOf[Enrollment]
 
 // Entity is a predicate of Entity. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -210,10 +210,10 @@ type EnrollmentOrderTerm orm.O
 type Entity orm.P
 
 // EntitySetter is an assignment of a mutation of Entity.
-type EntitySetter orm.S
+type EntitySetter = orm.SetterOf[Entity]
 
 // EntityOrderTerm is an order term of a query of Entity.
-type EntityOrderTerm orm.O
+type EntityOrderTerm = orm.OrderOf[Entity]
 
 // Entityx is a predicate of Entityx. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -221,10 +221,10 @@ type EntityOrderTerm orm.O
 type Entityx orm.P
 
 // EntityxSetter is an assignment of a mutation of Entityx.
-type EntityxSetter orm.S
+type EntityxSetter = orm.SetterOf[Entityx]
 
 // EntityxOrderTerm is an order term of a query of Entityx.
-type EntityxOrderTerm orm.O
+type EntityxOrderTerm = orm.OrderOf[Entityx]
 
 // EnumShape is a predicate of EnumShape. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -232,10 +232,10 @@ type EntityxOrderTerm orm.O
 type EnumShape orm.P
 
 // EnumShapeSetter is an assignment of a mutation of EnumShape.
-type EnumShapeSetter orm.S
+type EnumShapeSetter = orm.SetterOf[EnumShape]
 
 // EnumShapeOrderTerm is an order term of a query of EnumShape.
-type EnumShapeOrderTerm orm.O
+type EnumShapeOrderTerm = orm.OrderOf[EnumShape]
 
 // ErrField is a predicate of ErrField. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -243,10 +243,10 @@ type EnumShapeOrderTerm orm.O
 type ErrField orm.P
 
 // ErrFieldSetter is an assignment of a mutation of ErrField.
-type ErrFieldSetter orm.S
+type ErrFieldSetter = orm.SetterOf[ErrField]
 
 // ErrFieldOrderTerm is an order term of a query of ErrField.
-type ErrFieldOrderTerm orm.O
+type ErrFieldOrderTerm = orm.OrderOf[ErrField]
 
 // Errors is a predicate of Errors. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -254,10 +254,10 @@ type ErrFieldOrderTerm orm.O
 type Errors orm.P
 
 // ErrorsSetter is an assignment of a mutation of Errors.
-type ErrorsSetter orm.S
+type ErrorsSetter = orm.SetterOf[Errors]
 
 // ErrorsOrderTerm is an order term of a query of Errors.
-type ErrorsOrderTerm orm.O
+type ErrorsOrderTerm = orm.OrderOf[Errors]
 
 // Field is a predicate of Field. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -265,10 +265,10 @@ type ErrorsOrderTerm orm.O
 type Field orm.P
 
 // FieldSetter is an assignment of a mutation of Field.
-type FieldSetter orm.S
+type FieldSetter = orm.SetterOf[Field]
 
 // FieldOrderTerm is an order term of a query of Field.
-type FieldOrderTerm orm.O
+type FieldOrderTerm = orm.OrderOf[Field]
 
 // Gadget is a predicate of Gadget. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -276,10 +276,10 @@ type FieldOrderTerm orm.O
 type Gadget orm.P
 
 // GadgetSetter is an assignment of a mutation of Gadget.
-type GadgetSetter orm.S
+type GadgetSetter = orm.SetterOf[Gadget]
 
 // GadgetOrderTerm is an order term of a query of Gadget.
-type GadgetOrderTerm orm.O
+type GadgetOrderTerm = orm.OrderOf[Gadget]
 
 // GoTypeShape is a predicate of GoTypeShape. It is a type of its own, as are
 // the assignments and order terms below, so those of another entity do not
@@ -287,10 +287,10 @@ type GadgetOrderTerm orm.O
 type GoTypeShape orm.P
 
 // GoTypeShapeSetter is an assignment of a mutation of GoTypeShape.
-type GoTypeShapeSetter orm.S
+type GoTypeShapeSetter = orm.SetterOf[GoTypeShape]
 
 // GoTypeShapeOrderTerm is an order term of a query of GoTypeShape.
-type GoTypeShapeOrderTerm orm.O
+type GoTypeShapeOrderTerm = orm.OrderOf[GoTypeShape]
 
 // Http is a predicate of Http. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -298,10 +298,10 @@ type GoTypeShapeOrderTerm orm.O
 type Http orm.P
 
 // HttpSetter is an assignment of a mutation of Http.
-type HttpSetter orm.S
+type HttpSetter = orm.SetterOf[Http]
 
 // HttpOrderTerm is an order term of a query of Http.
-type HttpOrderTerm orm.O
+type HttpOrderTerm = orm.OrderOf[Http]
 
 // Id is a predicate of Id. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -309,10 +309,10 @@ type HttpOrderTerm orm.O
 type Id orm.P
 
 // IdSetter is an assignment of a mutation of Id.
-type IdSetter orm.S
+type IdSetter = orm.SetterOf[Id]
 
 // IdOrderTerm is an order term of a query of Id.
-type IdOrderTerm orm.O
+type IdOrderTerm = orm.OrderOf[Id]
 
 // Int64Key is a predicate of Int64Key. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -320,10 +320,10 @@ type IdOrderTerm orm.O
 type Int64Key orm.P
 
 // Int64KeySetter is an assignment of a mutation of Int64Key.
-type Int64KeySetter orm.S
+type Int64KeySetter = orm.SetterOf[Int64Key]
 
 // Int64KeyOrderTerm is an order term of a query of Int64Key.
-type Int64KeyOrderTerm orm.O
+type Int64KeyOrderTerm = orm.OrderOf[Int64Key]
 
 // IntKey is a predicate of IntKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -331,10 +331,10 @@ type Int64KeyOrderTerm orm.O
 type IntKey orm.P
 
 // IntKeySetter is an assignment of a mutation of IntKey.
-type IntKeySetter orm.S
+type IntKeySetter = orm.SetterOf[IntKey]
 
 // IntKeyOrderTerm is an order term of a query of IntKey.
-type IntKeyOrderTerm orm.O
+type IntKeyOrderTerm = orm.OrderOf[IntKey]
 
 // Internal is a predicate of Internal. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -342,10 +342,10 @@ type IntKeyOrderTerm orm.O
 type Internal orm.P
 
 // InternalSetter is an assignment of a mutation of Internal.
-type InternalSetter orm.S
+type InternalSetter = orm.SetterOf[Internal]
 
 // InternalOrderTerm is an order term of a query of Internal.
-type InternalOrderTerm orm.O
+type InternalOrderTerm = orm.OrderOf[Internal]
 
 // Json is a predicate of Json. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -353,10 +353,10 @@ type InternalOrderTerm orm.O
 type Json orm.P
 
 // JsonSetter is an assignment of a mutation of Json.
-type JsonSetter orm.S
+type JsonSetter = orm.SetterOf[Json]
 
 // JsonOrderTerm is an order term of a query of Json.
-type JsonOrderTerm orm.O
+type JsonOrderTerm = orm.OrderOf[Json]
 
 // Keywords is a predicate of Keywords. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -364,10 +364,10 @@ type JsonOrderTerm orm.O
 type Keywords orm.P
 
 // KeywordsSetter is an assignment of a mutation of Keywords.
-type KeywordsSetter orm.S
+type KeywordsSetter = orm.SetterOf[Keywords]
 
 // KeywordsOrderTerm is an order term of a query of Keywords.
-type KeywordsOrderTerm orm.O
+type KeywordsOrderTerm = orm.OrderOf[Keywords]
 
 // Kind is a predicate of Kind. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -375,10 +375,10 @@ type KeywordsOrderTerm orm.O
 type Kind orm.P
 
 // KindSetter is an assignment of a mutation of Kind.
-type KindSetter orm.S
+type KindSetter = orm.SetterOf[Kind]
 
 // KindOrderTerm is an order term of a query of Kind.
-type KindOrderTerm orm.O
+type KindOrderTerm = orm.OrderOf[Kind]
 
 // KindShape is a predicate of KindShape. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -386,10 +386,10 @@ type KindOrderTerm orm.O
 type KindShape orm.P
 
 // KindShapeSetter is an assignment of a mutation of KindShape.
-type KindShapeSetter orm.S
+type KindShapeSetter = orm.SetterOf[KindShape]
 
 // KindShapeOrderTerm is an order term of a query of KindShape.
-type KindShapeOrderTerm orm.O
+type KindShapeOrderTerm = orm.OrderOf[KindShape]
 
 // LabelKey is a predicate of LabelKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -397,10 +397,10 @@ type KindShapeOrderTerm orm.O
 type LabelKey orm.P
 
 // LabelKeySetter is an assignment of a mutation of LabelKey.
-type LabelKeySetter orm.S
+type LabelKeySetter = orm.SetterOf[LabelKey]
 
 // LabelKeyOrderTerm is an order term of a query of LabelKey.
-type LabelKeyOrderTerm orm.O
+type LabelKeyOrderTerm = orm.OrderOf[LabelKey]
 
 // Load is a predicate of Load. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -408,10 +408,10 @@ type LabelKeyOrderTerm orm.O
 type Load orm.P
 
 // LoadSetter is an assignment of a mutation of Load.
-type LoadSetter orm.S
+type LoadSetter = orm.SetterOf[Load]
 
 // LoadOrderTerm is an order term of a query of Load.
-type LoadOrderTerm orm.O
+type LoadOrderTerm = orm.OrderOf[Load]
 
 // Locker is a predicate of Locker. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -419,10 +419,10 @@ type LoadOrderTerm orm.O
 type Locker orm.P
 
 // LockerSetter is an assignment of a mutation of Locker.
-type LockerSetter orm.S
+type LockerSetter = orm.SetterOf[Locker]
 
 // LockerOrderTerm is an order term of a query of Locker.
-type LockerOrderTerm orm.O
+type LockerOrderTerm = orm.OrderOf[Locker]
 
 // ManualKey is a predicate of ManualKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -430,10 +430,10 @@ type LockerOrderTerm orm.O
 type ManualKey orm.P
 
 // ManualKeySetter is an assignment of a mutation of ManualKey.
-type ManualKeySetter orm.S
+type ManualKeySetter = orm.SetterOf[ManualKey]
 
 // ManualKeyOrderTerm is an order term of a query of ManualKey.
-type ManualKeyOrderTerm orm.O
+type ManualKeyOrderTerm = orm.OrderOf[ManualKey]
 
 // Math is a predicate of Math. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -441,10 +441,10 @@ type ManualKeyOrderTerm orm.O
 type Math orm.P
 
 // MathSetter is an assignment of a mutation of Math.
-type MathSetter orm.S
+type MathSetter = orm.SetterOf[Math]
 
 // MathOrderTerm is an order term of a query of Math.
-type MathOrderTerm orm.O
+type MathOrderTerm = orm.OrderOf[Math]
 
 // Meta is a predicate of Meta. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -452,10 +452,10 @@ type MathOrderTerm orm.O
 type Meta orm.P
 
 // MetaSetter is an assignment of a mutation of Meta.
-type MetaSetter orm.S
+type MetaSetter = orm.SetterOf[Meta]
 
 // MetaOrderTerm is an order term of a query of Meta.
-type MetaOrderTerm orm.O
+type MetaOrderTerm = orm.OrderOf[Meta]
 
 // Migrate is a predicate of Migrate. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -463,10 +463,10 @@ type MetaOrderTerm orm.O
 type Migrate orm.P
 
 // MigrateSetter is an assignment of a mutation of Migrate.
-type MigrateSetter orm.S
+type MigrateSetter = orm.SetterOf[Migrate]
 
 // MigrateOrderTerm is an order term of a query of Migrate.
-type MigrateOrderTerm orm.O
+type MigrateOrderTerm = orm.OrderOf[Migrate]
 
 // MixedIn is a predicate of MixedIn. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -474,10 +474,10 @@ type MigrateOrderTerm orm.O
 type MixedIn orm.P
 
 // MixedInSetter is an assignment of a mutation of MixedIn.
-type MixedInSetter orm.S
+type MixedInSetter = orm.SetterOf[MixedIn]
 
 // MixedInOrderTerm is an order term of a query of MixedIn.
-type MixedInOrderTerm orm.O
+type MixedInOrderTerm = orm.OrderOf[MixedIn]
 
 // MixinOnly is a predicate of MixinOnly. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -485,10 +485,10 @@ type MixedInOrderTerm orm.O
 type MixinOnly orm.P
 
 // MixinOnlySetter is an assignment of a mutation of MixinOnly.
-type MixinOnlySetter orm.S
+type MixinOnlySetter = orm.SetterOf[MixinOnly]
 
 // MixinOnlyOrderTerm is an order term of a query of MixinOnly.
-type MixinOnlyOrderTerm orm.O
+type MixinOnlyOrderTerm = orm.OrderOf[MixinOnly]
 
 // NamedBool is a predicate of NamedBool. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -496,10 +496,10 @@ type MixinOnlyOrderTerm orm.O
 type NamedBool orm.P
 
 // NamedBoolSetter is an assignment of a mutation of NamedBool.
-type NamedBoolSetter orm.S
+type NamedBoolSetter = orm.SetterOf[NamedBool]
 
 // NamedBoolOrderTerm is an order term of a query of NamedBool.
-type NamedBoolOrderTerm orm.O
+type NamedBoolOrderTerm = orm.OrderOf[NamedBool]
 
 // NamedBoolNil is a predicate of NamedBoolNil. It is a type of its own, as are
 // the assignments and order terms below, so those of another entity do not
@@ -507,10 +507,10 @@ type NamedBoolOrderTerm orm.O
 type NamedBoolNil orm.P
 
 // NamedBoolNilSetter is an assignment of a mutation of NamedBoolNil.
-type NamedBoolNilSetter orm.S
+type NamedBoolNilSetter = orm.SetterOf[NamedBoolNil]
 
 // NamedBoolNilOrderTerm is an order term of a query of NamedBoolNil.
-type NamedBoolNilOrderTerm orm.O
+type NamedBoolNilOrderTerm = orm.OrderOf[NamedBoolNil]
 
 // NamedBytes is a predicate of NamedBytes. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -518,10 +518,10 @@ type NamedBoolNilOrderTerm orm.O
 type NamedBytes orm.P
 
 // NamedBytesSetter is an assignment of a mutation of NamedBytes.
-type NamedBytesSetter orm.S
+type NamedBytesSetter = orm.SetterOf[NamedBytes]
 
 // NamedBytesOrderTerm is an order term of a query of NamedBytes.
-type NamedBytesOrderTerm orm.O
+type NamedBytesOrderTerm = orm.OrderOf[NamedBytes]
 
 // Node is a predicate of Node. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -529,10 +529,10 @@ type NamedBytesOrderTerm orm.O
 type Node orm.P
 
 // NodeSetter is an assignment of a mutation of Node.
-type NodeSetter orm.S
+type NodeSetter = orm.SetterOf[Node]
 
 // NodeOrderTerm is an order term of a query of Node.
-type NodeOrderTerm orm.O
+type NodeOrderTerm = orm.OrderOf[Node]
 
 // Not is a predicate of Not. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -540,10 +540,10 @@ type NodeOrderTerm orm.O
 type Not orm.P
 
 // NotSetter is an assignment of a mutation of Not.
-type NotSetter orm.S
+type NotSetter = orm.SetterOf[Not]
 
 // NotOrderTerm is an order term of a query of Not.
-type NotOrderTerm orm.O
+type NotOrderTerm = orm.OrderOf[Not]
 
 // Note is a predicate of Note. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -551,10 +551,10 @@ type NotOrderTerm orm.O
 type Note orm.P
 
 // NoteSetter is an assignment of a mutation of Note.
-type NoteSetter orm.S
+type NoteSetter = orm.SetterOf[Note]
 
 // NoteOrderTerm is an order term of a query of Note.
-type NoteOrderTerm orm.O
+type NoteOrderTerm = orm.OrderOf[Note]
 
 // Odd is a predicate of Odd. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -562,10 +562,10 @@ type NoteOrderTerm orm.O
 type Odd orm.P
 
 // OddSetter is an assignment of a mutation of Odd.
-type OddSetter orm.S
+type OddSetter = orm.SetterOf[Odd]
 
 // OddOrderTerm is an order term of a query of Odd.
-type OddOrderTerm orm.O
+type OddOrderTerm = orm.OrderOf[Odd]
 
 // Or is a predicate of Or. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -573,10 +573,10 @@ type OddOrderTerm orm.O
 type Or orm.P
 
 // OrSetter is an assignment of a mutation of Or.
-type OrSetter orm.S
+type OrSetter = orm.SetterOf[Or]
 
 // OrOrderTerm is an order term of a query of Or.
-type OrOrderTerm orm.O
+type OrOrderTerm = orm.OrderOf[Or]
 
 // Order is a predicate of Order. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -584,10 +584,10 @@ type OrOrderTerm orm.O
 type Order orm.P
 
 // OrderSetter is an assignment of a mutation of Order.
-type OrderSetter orm.S
+type OrderSetter = orm.SetterOf[Order]
 
 // OrderOrderTerm is an order term of a query of Order.
-type OrderOrderTerm orm.O
+type OrderOrderTerm = orm.OrderOf[Order]
 
 // Orm is a predicate of Orm. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -595,10 +595,10 @@ type OrderOrderTerm orm.O
 type Orm orm.P
 
 // OrmSetter is an assignment of a mutation of Orm.
-type OrmSetter orm.S
+type OrmSetter = orm.SetterOf[Orm]
 
 // OrmOrderTerm is an order term of a query of Orm.
-type OrmOrderTerm orm.O
+type OrmOrderTerm = orm.OrderOf[Orm]
 
 // Passport is a predicate of Passport. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -606,10 +606,10 @@ type OrmOrderTerm orm.O
 type Passport orm.P
 
 // PassportSetter is an assignment of a mutation of Passport.
-type PassportSetter orm.S
+type PassportSetter = orm.SetterOf[Passport]
 
 // PassportOrderTerm is an order term of a query of Passport.
-type PassportOrderTerm orm.O
+type PassportOrderTerm = orm.OrderOf[Passport]
 
 // Person is a predicate of Person. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -617,10 +617,10 @@ type PassportOrderTerm orm.O
 type Person orm.P
 
 // PersonSetter is an assignment of a mutation of Person.
-type PersonSetter orm.S
+type PersonSetter = orm.SetterOf[Person]
 
 // PersonOrderTerm is an order term of a query of Person.
-type PersonOrderTerm orm.O
+type PersonOrderTerm = orm.OrderOf[Person]
 
 // Player is a predicate of Player. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -628,10 +628,10 @@ type PersonOrderTerm orm.O
 type Player orm.P
 
 // PlayerSetter is an assignment of a mutation of Player.
-type PlayerSetter orm.S
+type PlayerSetter = orm.SetterOf[Player]
 
 // PlayerOrderTerm is an order term of a query of Player.
-type PlayerOrderTerm orm.O
+type PlayerOrderTerm = orm.OrderOf[Player]
 
 // Pred is a predicate of Pred. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -639,10 +639,10 @@ type PlayerOrderTerm orm.O
 type Pred orm.P
 
 // PredSetter is an assignment of a mutation of Pred.
-type PredSetter orm.S
+type PredSetter = orm.SetterOf[Pred]
 
 // PredOrderTerm is an order term of a query of Pred.
-type PredOrderTerm orm.O
+type PredOrderTerm = orm.OrderOf[Pred]
 
 // Predicate is a predicate of Predicate. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -650,10 +650,10 @@ type PredOrderTerm orm.O
 type Predicate orm.P
 
 // PredicateSetter is an assignment of a mutation of Predicate.
-type PredicateSetter orm.S
+type PredicateSetter = orm.SetterOf[Predicate]
 
 // PredicateOrderTerm is an order term of a query of Predicate.
-type PredicateOrderTerm orm.O
+type PredicateOrderTerm = orm.OrderOf[Predicate]
 
 // QueryUser is a predicate of QueryUser. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -661,10 +661,10 @@ type PredicateOrderTerm orm.O
 type QueryUser orm.P
 
 // QueryUserSetter is an assignment of a mutation of QueryUser.
-type QueryUserSetter orm.S
+type QueryUserSetter = orm.SetterOf[QueryUser]
 
 // QueryUserOrderTerm is an order term of a query of QueryUser.
-type QueryUserOrderTerm orm.O
+type QueryUserOrderTerm = orm.OrderOf[QueryUser]
 
 // Renamed is a predicate of Renamed. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -672,10 +672,10 @@ type QueryUserOrderTerm orm.O
 type Renamed orm.P
 
 // RenamedSetter is an assignment of a mutation of Renamed.
-type RenamedSetter orm.S
+type RenamedSetter = orm.SetterOf[Renamed]
 
 // RenamedOrderTerm is an order term of a query of Renamed.
-type RenamedOrderTerm orm.O
+type RenamedOrderTerm = orm.OrderOf[Renamed]
 
 // Runtime is a predicate of Runtime. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -683,10 +683,10 @@ type RenamedOrderTerm orm.O
 type Runtime orm.P
 
 // RuntimeSetter is an assignment of a mutation of Runtime.
-type RuntimeSetter orm.S
+type RuntimeSetter = orm.SetterOf[Runtime]
 
 // RuntimeOrderTerm is an order term of a query of Runtime.
-type RuntimeOrderTerm orm.O
+type RuntimeOrderTerm = orm.OrderOf[Runtime]
 
 // Scalar is a predicate of Scalar. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -694,10 +694,10 @@ type RuntimeOrderTerm orm.O
 type Scalar orm.P
 
 // ScalarSetter is an assignment of a mutation of Scalar.
-type ScalarSetter orm.S
+type ScalarSetter = orm.SetterOf[Scalar]
 
 // ScalarOrderTerm is an order term of a query of Scalar.
-type ScalarOrderTerm orm.O
+type ScalarOrderTerm = orm.OrderOf[Scalar]
 
 // Schemainit is a predicate of Schemainit. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -705,10 +705,10 @@ type ScalarOrderTerm orm.O
 type Schemainit orm.P
 
 // SchemainitSetter is an assignment of a mutation of Schemainit.
-type SchemainitSetter orm.S
+type SchemainitSetter = orm.SetterOf[Schemainit]
 
 // SchemainitOrderTerm is an order term of a query of Schemainit.
-type SchemainitOrderTerm orm.O
+type SchemainitOrderTerm = orm.OrderOf[Schemainit]
 
 // Set is a predicate of Set. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -716,10 +716,10 @@ type SchemainitOrderTerm orm.O
 type Set orm.P
 
 // SetSetter is an assignment of a mutation of Set.
-type SetSetter orm.S
+type SetSetter = orm.SetterOf[Set]
 
 // SetOrderTerm is an order term of a query of Set.
-type SetOrderTerm orm.O
+type SetOrderTerm = orm.OrderOf[Set]
 
 // Sql is a predicate of Sql. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -727,10 +727,10 @@ type SetOrderTerm orm.O
 type Sql orm.P
 
 // SqlSetter is an assignment of a mutation of Sql.
-type SqlSetter orm.S
+type SqlSetter = orm.SetterOf[Sql]
 
 // SqlOrderTerm is an order term of a query of Sql.
-type SqlOrderTerm orm.O
+type SqlOrderTerm = orm.OrderOf[Sql]
 
 // Stamped is a predicate of Stamped. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -738,10 +738,10 @@ type SqlOrderTerm orm.O
 type Stamped orm.P
 
 // StampedSetter is an assignment of a mutation of Stamped.
-type StampedSetter orm.S
+type StampedSetter = orm.SetterOf[Stamped]
 
 // StampedOrderTerm is an order term of a query of Stamped.
-type StampedOrderTerm orm.O
+type StampedOrderTerm = orm.OrderOf[Stamped]
 
 // StringKey is a predicate of StringKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -749,10 +749,10 @@ type StampedOrderTerm orm.O
 type StringKey orm.P
 
 // StringKeySetter is an assignment of a mutation of StringKey.
-type StringKeySetter orm.S
+type StringKeySetter = orm.SetterOf[StringKey]
 
 // StringKeyOrderTerm is an order term of a query of StringKey.
-type StringKeyOrderTerm orm.O
+type StringKeyOrderTerm = orm.OrderOf[StringKey]
 
 // Strings is a predicate of Strings. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -760,10 +760,10 @@ type StringKeyOrderTerm orm.O
 type Strings orm.P
 
 // StringsSetter is an assignment of a mutation of Strings.
-type StringsSetter orm.S
+type StringsSetter = orm.SetterOf[Strings]
 
 // StringsOrderTerm is an order term of a query of Strings.
-type StringsOrderTerm orm.O
+type StringsOrderTerm = orm.OrderOf[Strings]
 
 // Student is a predicate of Student. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -771,10 +771,10 @@ type StringsOrderTerm orm.O
 type Student orm.P
 
 // StudentSetter is an assignment of a mutation of Student.
-type StudentSetter orm.S
+type StudentSetter = orm.SetterOf[Student]
 
 // StudentOrderTerm is an order term of a query of Student.
-type StudentOrderTerm orm.O
+type StudentOrderTerm = orm.OrderOf[Student]
 
 // Table is a predicate of Table. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -782,10 +782,10 @@ type StudentOrderTerm orm.O
 type Table orm.P
 
 // TableSetter is an assignment of a mutation of Table.
-type TableSetter orm.S
+type TableSetter = orm.SetterOf[Table]
 
 // TableOrderTerm is an order term of a query of Table.
-type TableOrderTerm orm.O
+type TableOrderTerm = orm.OrderOf[Table]
 
 // Team is a predicate of Team. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -793,10 +793,10 @@ type TableOrderTerm orm.O
 type Team orm.P
 
 // TeamSetter is an assignment of a mutation of Team.
-type TeamSetter orm.S
+type TeamSetter = orm.SetterOf[Team]
 
 // TeamOrderTerm is an order term of a query of Team.
-type TeamOrderTerm orm.O
+type TeamOrderTerm = orm.OrderOf[Team]
 
 // Time is a predicate of Time. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -804,10 +804,10 @@ type TeamOrderTerm orm.O
 type Time orm.P
 
 // TimeSetter is an assignment of a mutation of Time.
-type TimeSetter orm.S
+type TimeSetter = orm.SetterOf[Time]
 
 // TimeOrderTerm is an order term of a query of Time.
-type TimeOrderTerm orm.O
+type TimeOrderTerm = orm.OrderOf[Time]
 
 // Topic is a predicate of Topic. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -815,10 +815,10 @@ type TimeOrderTerm orm.O
 type Topic orm.P
 
 // TopicSetter is an assignment of a mutation of Topic.
-type TopicSetter orm.S
+type TopicSetter = orm.SetterOf[Topic]
 
 // TopicOrderTerm is an order term of a query of Topic.
-type TopicOrderTerm orm.O
+type TopicOrderTerm = orm.OrderOf[Topic]
 
 // Tx is a predicate of Tx. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -826,10 +826,10 @@ type TopicOrderTerm orm.O
 type Tx orm.P
 
 // TxSetter is an assignment of a mutation of Tx.
-type TxSetter orm.S
+type TxSetter = orm.SetterOf[Tx]
 
 // TxOrderTerm is an order term of a query of Tx.
-type TxOrderTerm orm.O
+type TxOrderTerm = orm.OrderOf[Tx]
 
 // UUID is a predicate of UUID. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -837,10 +837,10 @@ type TxOrderTerm orm.O
 type UUID orm.P
 
 // UUIDSetter is an assignment of a mutation of UUID.
-type UUIDSetter orm.S
+type UUIDSetter = orm.SetterOf[UUID]
 
 // UUIDOrderTerm is an order term of a query of UUID.
-type UUIDOrderTerm orm.O
+type UUIDOrderTerm = orm.OrderOf[UUID]
 
 // UUIDKey is a predicate of UUIDKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -848,10 +848,10 @@ type UUIDOrderTerm orm.O
 type UUIDKey orm.P
 
 // UUIDKeySetter is an assignment of a mutation of UUIDKey.
-type UUIDKeySetter orm.S
+type UUIDKeySetter = orm.SetterOf[UUIDKey]
 
 // UUIDKeyOrderTerm is an order term of a query of UUIDKey.
-type UUIDKeyOrderTerm orm.O
+type UUIDKeyOrderTerm = orm.OrderOf[UUIDKey]
 
 // Uint16Key is a predicate of Uint16Key. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -859,10 +859,10 @@ type UUIDKeyOrderTerm orm.O
 type Uint16Key orm.P
 
 // Uint16KeySetter is an assignment of a mutation of Uint16Key.
-type Uint16KeySetter orm.S
+type Uint16KeySetter = orm.SetterOf[Uint16Key]
 
 // Uint16KeyOrderTerm is an order term of a query of Uint16Key.
-type Uint16KeyOrderTerm orm.O
+type Uint16KeyOrderTerm = orm.OrderOf[Uint16Key]
 
 // Update is a predicate of Update. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -870,10 +870,10 @@ type Uint16KeyOrderTerm orm.O
 type Update orm.P
 
 // UpdateSetter is an assignment of a mutation of Update.
-type UpdateSetter orm.S
+type UpdateSetter = orm.SetterOf[Update]
 
 // UpdateOrderTerm is an order term of a query of Update.
-type UpdateOrderTerm orm.O
+type UpdateOrderTerm = orm.OrderOf[Update]
 
 // User is a predicate of User. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -881,10 +881,10 @@ type UpdateOrderTerm orm.O
 type User orm.P
 
 // UserSetterType is an assignment of a mutation of User.
-type UserSetterType orm.S
+type UserSetterType = orm.SetterOf[User]
 
 // UserOrderTermType is an order term of a query of User.
-type UserOrderTermType orm.O
+type UserOrderTermType = orm.OrderOf[User]
 
 // UserClient is a predicate of UserClient. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -892,10 +892,10 @@ type UserOrderTermType orm.O
 type UserClient orm.P
 
 // UserClientSetter is an assignment of a mutation of UserClient.
-type UserClientSetter orm.S
+type UserClientSetter = orm.SetterOf[UserClient]
 
 // UserClientOrderTerm is an order term of a query of UserClient.
-type UserClientOrderTerm orm.O
+type UserClientOrderTerm = orm.OrderOf[UserClient]
 
 // UserOrderTerm is a predicate of UserOrderTerm. It is a type of its own, as
 // are the assignments and order terms below, so those of another entity do not
@@ -903,10 +903,10 @@ type UserClientOrderTerm orm.O
 type UserOrderTerm orm.P
 
 // UserOrderTermSetter is an assignment of a mutation of UserOrderTerm.
-type UserOrderTermSetter orm.S
+type UserOrderTermSetter = orm.SetterOf[UserOrderTerm]
 
 // UserOrderTermOrderTerm is an order term of a query of UserOrderTerm.
-type UserOrderTermOrderTerm orm.O
+type UserOrderTermOrderTerm = orm.OrderOf[UserOrderTerm]
 
 // UserSetter is a predicate of UserSetter. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -914,10 +914,10 @@ type UserOrderTermOrderTerm orm.O
 type UserSetter orm.P
 
 // UserSetterSetter is an assignment of a mutation of UserSetter.
-type UserSetterSetter orm.S
+type UserSetterSetter = orm.SetterOf[UserSetter]
 
 // UserSetterOrderTerm is an order term of a query of UserSetter.
-type UserSetterOrderTerm orm.O
+type UserSetterOrderTerm = orm.OrderOf[UserSetter]
 
 // Validated is a predicate of Validated. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -925,10 +925,10 @@ type UserSetterOrderTerm orm.O
 type Validated orm.P
 
 // ValidatedSetter is an assignment of a mutation of Validated.
-type ValidatedSetter orm.S
+type ValidatedSetter = orm.SetterOf[Validated]
 
 // ValidatedOrderTerm is an order term of a query of Validated.
-type ValidatedOrderTerm orm.O
+type ValidatedOrderTerm = orm.OrderOf[Validated]
 
 // Velox is a predicate of Velox. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -936,10 +936,10 @@ type ValidatedOrderTerm orm.O
 type Velox orm.P
 
 // VeloxSetter is an assignment of a mutation of Velox.
-type VeloxSetter orm.S
+type VeloxSetter = orm.SetterOf[Velox]
 
 // VeloxOrderTerm is an order term of a query of Velox.
-type VeloxOrderTerm orm.O
+type VeloxOrderTerm = orm.OrderOf[Velox]
 
 // WeightKey is a predicate of WeightKey. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -947,10 +947,10 @@ type VeloxOrderTerm orm.O
 type WeightKey orm.P
 
 // WeightKeySetter is an assignment of a mutation of WeightKey.
-type WeightKeySetter orm.S
+type WeightKeySetter = orm.SetterOf[WeightKey]
 
 // WeightKeyOrderTerm is an order term of a query of WeightKey.
-type WeightKeyOrderTerm orm.O
+type WeightKeyOrderTerm = orm.OrderOf[WeightKey]
 
 // Wide is a predicate of Wide. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -958,7 +958,7 @@ type WeightKeyOrderTerm orm.O
 type Wide orm.P
 
 // WideSetter is an assignment of a mutation of Wide.
-type WideSetter orm.S
+type WideSetter = orm.SetterOf[Wide]
 
 // WideOrderTerm is an order term of a query of Wide.
-type WideOrderTerm orm.O
+type WideOrderTerm = orm.OrderOf[Wide]

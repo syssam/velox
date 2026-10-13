@@ -24,82 +24,27 @@ const (
 
 // The columns of Tag.
 var (
-	ID   = IntColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.NumberColumn[int, predicate.Tag](ColumnID)
+	Name = orm.StringColumn[string, predicate.Tag](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "post_tags", Columns: []string{"post_id", "tag_id"}}
+var postsMeta = orm.EdgeMeta{Name: "posts", Index: 0, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "post_tags", Columns: []string{"post_id", "tag_id"}}
 
-// EdgePosts is the "posts" edge of Tag, from Tag to Post.
-type EdgePosts struct{}
-
-// Posts is the "posts" edge of Tag: conditions on it and changes to it. A
-// query eager-loads it with WithPosts.
-var Posts = &EdgePosts{}
-
-// Has matches a Tag that has at least one "posts" neighbor.
-func (e *EdgePosts) Has() predicate.Tag { return predicate.Tag{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Tag that has a "posts" neighbor satisfying the predicates.
-func (e *EdgePosts) HasWith(ps ...predicate.Post) predicate.Tag {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Tag{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the Tag to the Post rows with the given ids.
-func (e *EdgePosts) Add(ids ...int) predicate.TagSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TagSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the Tag from the Post rows with the given ids.
-func (e *EdgePosts) Remove(ids ...int) predicate.TagSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TagSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the Tag from every "posts" neighbor.
-func (e *EdgePosts) Clear() predicate.TagSetter {
-	return predicate.TagSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Posts is the "posts" edge of Tag, to Post: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithPosts.
+var Posts = &orm.ToMany[predicate.Tag, predicate.Post, int]{Meta: &postsMeta}
 
 // EdgeMetas returns the descriptions of the edges of Tag, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&postsMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Tag) predicate.Tag {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Tag{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Tag) predicate.Tag { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Tag) predicate.Tag {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Tag{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Tag) predicate.Tag { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Tag) predicate.Tag {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Tag{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Tag) predicate.Tag { return orm.Not(ps...) }

@@ -5,6 +5,8 @@
 package mixedin
 
 import (
+	"time"
+
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
@@ -33,42 +35,24 @@ const (
 
 // The columns of MixedIn.
 var (
-	ID         = IntColumn(ColumnID)
-	CreatedAt  = TimeColumn(ColumnCreatedAt)
-	UpdatedAt  = AutoTimeColumn(ColumnUpdatedAt)
-	CreatedBy  = StringColumn(ColumnCreatedBy)
-	Version    = AutoIntColumn(ColumnVersion)
-	Archived   = BoolColumn(ColumnArchived)
-	ArchivedAt = NullableTimeColumn(ColumnArchivedAt)
-	Reason     = StringColumn(ColumnReason)
-	Name       = StringColumn(ColumnName)
-	Slug       = StringColumn(ColumnSlug)
-	Due        = TimeColumn(ColumnDue)
+	ID         = orm.NumberColumn[int, predicate.MixedIn](ColumnID)
+	CreatedAt  = orm.OrderedColumn[time.Time, predicate.MixedIn](ColumnCreatedAt)
+	UpdatedAt  = orm.AutoOrderedColumn[time.Time, predicate.MixedIn](ColumnUpdatedAt)
+	CreatedBy  = orm.StringColumn[string, predicate.MixedIn](ColumnCreatedBy)
+	Version    = orm.AutoNumberColumn[int, predicate.MixedIn](ColumnVersion)
+	Archived   = orm.BoolColumn[bool, predicate.MixedIn](ColumnArchived)
+	ArchivedAt = orm.NullableOrderedColumn[time.Time, predicate.MixedIn](ColumnArchivedAt)
+	Reason     = orm.StringColumn[string, predicate.MixedIn](ColumnReason)
+	Name       = orm.StringColumn[string, predicate.MixedIn](ColumnName)
+	Slug       = orm.StringColumn[string, predicate.MixedIn](ColumnSlug)
+	Due        = orm.OrderedColumn[time.Time, predicate.MixedIn](ColumnDue)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.MixedIn) predicate.MixedIn {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.MixedIn{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.MixedIn) predicate.MixedIn { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.MixedIn) predicate.MixedIn {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.MixedIn{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.MixedIn) predicate.MixedIn { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.MixedIn) predicate.MixedIn {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.MixedIn{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.MixedIn) predicate.MixedIn { return orm.Not(ps...) }

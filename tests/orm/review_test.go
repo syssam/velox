@@ -426,7 +426,7 @@ func TestKeyColumn_Comparisons(t *testing.T) {
 	n, err = client.Like.Query(db).Where(like.UserID.LTE(bob.ID), like.PostID.GTE(p.ID)).Count(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
-	var ranged orm.OrderedColumn[int, predicate.Like] = &like.UserID
+	ranged := like.UserID.AsOrdered()
 	n, err = client.Like.Query(db).Where(ranged.LT(bob.ID)).Count(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)

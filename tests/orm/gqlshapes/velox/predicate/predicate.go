@@ -12,10 +12,10 @@ import "github.com/syssam/velox/orm"
 type Asset orm.P
 
 // AssetSetter is an assignment of a mutation of Asset.
-type AssetSetter orm.S
+type AssetSetter = orm.SetterOf[Asset]
 
 // AssetOrderTerm is an order term of a query of Asset.
-type AssetOrderTerm orm.O
+type AssetOrderTerm = orm.OrderOf[Asset]
 
 // Org is a predicate of Org. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -23,10 +23,10 @@ type AssetOrderTerm orm.O
 type Org orm.P
 
 // OrgSetter is an assignment of a mutation of Org.
-type OrgSetter orm.S
+type OrgSetter = orm.SetterOf[Org]
 
 // OrgOrderTerm is an order term of a query of Org.
-type OrgOrderTerm orm.O
+type OrgOrderTerm = orm.OrderOf[Org]
 
 // Person is a predicate of Person. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -34,7 +34,7 @@ type OrgOrderTerm orm.O
 type Person orm.P
 
 // PersonSetter is an assignment of a mutation of Person.
-type PersonSetter orm.S
+type PersonSetter = orm.SetterOf[Person]
 
 // PersonOrderTerm is an order term of a query of Person.
-type PersonOrderTerm orm.O
+type PersonOrderTerm = orm.OrderOf[Person]

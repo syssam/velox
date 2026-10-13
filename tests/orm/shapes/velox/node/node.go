@@ -24,177 +24,47 @@ const (
 
 // The columns of Node.
 var (
-	ID   = IntColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.NumberColumn[int, predicate.Node](ColumnID)
+	Name = orm.StringColumn[string, predicate.Node](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "parent", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
+var parentMeta = orm.EdgeMeta{Name: "parent", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
 
-// EdgeParent is the "parent" edge of Node, from Node to Node.
-type EdgeParent struct{}
+// Parent is the "parent" edge of Node, to Node: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithParent.
+var Parent = &orm.ToOne[predicate.Node, predicate.Node, int]{Meta: &parentMeta}
 
-// Parent is the "parent" edge of Node: conditions on it and changes to it. A
-// query eager-loads it with WithParent.
-var Parent = &EdgeParent{}
+var childrenMeta = orm.EdgeMeta{Name: "children", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
 
-// Has matches a Node that has at least one "parent" neighbor.
-func (e *EdgeParent) Has() predicate.Node { return predicate.Node{Op: orm.OpHasEdge, Edge: &meta0} }
+// Children is the "children" edge of Node, to Node: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithChildren.
+var Children = &orm.ToMany[predicate.Node, predicate.Node, int]{Meta: &childrenMeta}
 
-// HasWith matches a Node that has a "parent" neighbor satisfying the
-// predicates.
-func (e *EdgeParent) HasWith(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var prevMeta = orm.EdgeMeta{Name: "prev", Index: 2, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
 
-// Set connects the Node to the Node with the given id.
-func (e *EdgeParent) Set(id int) predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
+// Prev is the "prev" edge of Node, to Node: conditions on it (Has, HasWith) and
+// changes to it (Set, Clear). A query eager-loads it with WithPrev.
+var Prev = &orm.ToOne[predicate.Node, predicate.Node, int]{Meta: &prevMeta}
 
-// Clear disconnects the Node from every "parent" neighbor.
-func (e *EdgeParent) Clear() predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+var nextMeta = orm.EdgeMeta{Name: "next", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
 
-var meta1 = orm.EdgeMeta{Name: "children", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_children"}}
-
-// EdgeChildren is the "children" edge of Node, from Node to Node.
-type EdgeChildren struct{}
-
-// Children is the "children" edge of Node: conditions on it and changes to it.
-// A query eager-loads it with WithChildren.
-var Children = &EdgeChildren{}
-
-// Has matches a Node that has at least one "children" neighbor.
-func (e *EdgeChildren) Has() predicate.Node { return predicate.Node{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Node that has a "children" neighbor satisfying the
-// predicates.
-func (e *EdgeChildren) HasWith(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Node to the Node rows with the given ids.
-func (e *EdgeChildren) Add(ids ...int) predicate.NodeSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Node from the Node rows with the given ids.
-func (e *EdgeChildren) Remove(ids ...int) predicate.NodeSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.NodeSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Node from every "children" neighbor.
-func (e *EdgeChildren) Clear() predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "prev", Index: 2, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
-
-// EdgePrev is the "prev" edge of Node, from Node to Node.
-type EdgePrev struct{}
-
-// Prev is the "prev" edge of Node: conditions on it and changes to it. A
-// query eager-loads it with WithPrev.
-var Prev = &EdgePrev{}
-
-// Has matches a Node that has at least one "prev" neighbor.
-func (e *EdgePrev) Has() predicate.Node { return predicate.Node{Op: orm.OpHasEdge, Edge: &meta2} }
-
-// HasWith matches a Node that has a "prev" neighbor satisfying the predicates.
-func (e *EdgePrev) HasWith(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Set connects the Node to the Node with the given id.
-func (e *EdgePrev) Set(id int) predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: []any{id}}
-}
-
-// Clear disconnects the Node from every "prev" neighbor.
-func (e *EdgePrev) Clear() predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "next", Index: 3, Rel: orm.O2O, Inverse: false, Bidi: false, Table: "nodes", Columns: []string{"node_next"}}
-
-// EdgeNext is the "next" edge of Node, from Node to Node.
-type EdgeNext struct{}
-
-// Next is the "next" edge of Node: conditions on it and changes to it. A
-// query eager-loads it with WithNext.
-var Next = &EdgeNext{}
-
-// Has matches a Node that has at least one "next" neighbor.
-func (e *EdgeNext) Has() predicate.Node { return predicate.Node{Op: orm.OpHasEdge, Edge: &meta3} }
-
-// HasWith matches a Node that has a "next" neighbor satisfying the predicates.
-func (e *EdgeNext) HasWith(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Set connects the Node to the Node with the given id.
-func (e *EdgeNext) Set(id int) predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
-}
-
-// Clear disconnects the Node from every "next" neighbor.
-func (e *EdgeNext) Clear() predicate.NodeSetter {
-	return predicate.NodeSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
+// Next is the "next" edge of Node, to Node: conditions on it (Has, HasWith) and
+// changes to it (Set, Clear). A query eager-loads it with WithNext.
+var Next = &orm.ToOne[predicate.Node, predicate.Node, int]{Meta: &nextMeta}
 
 // EdgeMetas returns the descriptions of the edges of Node, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3} }
+func EdgeMetas() []*orm.EdgeMeta {
+	return []*orm.EdgeMeta{&parentMeta, &childrenMeta, &prevMeta, &nextMeta}
+}
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Node) predicate.Node { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Node) predicate.Node { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Node) predicate.Node {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Node{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Node) predicate.Node { return orm.Not(ps...) }

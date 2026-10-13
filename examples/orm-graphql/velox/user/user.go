@@ -5,6 +5,8 @@
 package user
 
 import (
+	"time"
+
 	"example.com/orm-graphql/velox/predicate"
 	"github.com/syssam/velox/orm"
 )
@@ -27,85 +29,30 @@ const (
 
 // The columns of User.
 var (
-	ID        = IntColumn(ColumnID)
-	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
-	Name      = StringColumn(ColumnName)
-	Email     = StringColumn(ColumnEmail)
+	ID        = orm.NumberColumn[int, predicate.User](ColumnID)
+	CreatedAt = orm.OrderedColumn[time.Time, predicate.User](ColumnCreatedAt)
+	UpdatedAt = orm.AutoOrderedColumn[time.Time, predicate.User](ColumnUpdatedAt)
+	Name      = orm.StringColumn[string, predicate.User](ColumnName)
+	Email     = orm.StringColumn[string, predicate.User](ColumnEmail)
 )
 
-var meta0 = orm.EdgeMeta{Name: "todos", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "todos", Columns: []string{"user_todos"}}
+var todosMeta = orm.EdgeMeta{Name: "todos", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "todos", Columns: []string{"user_todos"}}
 
-// EdgeTodos is the "todos" edge of User, from User to Todo.
-type EdgeTodos struct{}
-
-// Todos is the "todos" edge of User: conditions on it and changes to it. A
-// query eager-loads it with WithTodos.
-var Todos = &EdgeTodos{}
-
-// Has matches a User that has at least one "todos" neighbor.
-func (e *EdgeTodos) Has() predicate.User { return predicate.User{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a User that has a "todos" neighbor satisfying the predicates.
-func (e *EdgeTodos) HasWith(ps ...predicate.Todo) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the User to the Todo rows with the given ids.
-func (e *EdgeTodos) Add(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the User from the Todo rows with the given ids.
-func (e *EdgeTodos) Remove(ids ...int) predicate.UserSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.UserSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the User from every "todos" neighbor.
-func (e *EdgeTodos) Clear() predicate.UserSetter {
-	return predicate.UserSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Todos is the "todos" edge of User, to Todo: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithTodos.
+var Todos = &orm.ToMany[predicate.User, predicate.Todo, int]{Meta: &todosMeta}
 
 // EdgeMetas returns the descriptions of the edges of User, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&todosMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.User) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.User) predicate.User { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.User) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.User) predicate.User { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.User) predicate.User {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.User{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.User) predicate.User { return orm.Not(ps...) }

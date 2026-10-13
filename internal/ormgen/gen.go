@@ -74,7 +74,6 @@ type Edge struct {
 	E      *vgen.Edge
 	GoName string // struct field name in Edges
 	Target *Entity
-	Type   string // per-edge descriptor type in the entity package
 	Desc   string // descriptor variable name in the entity package
 	Index  int
 }

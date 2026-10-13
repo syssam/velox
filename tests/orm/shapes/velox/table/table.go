@@ -24,33 +24,15 @@ const (
 
 // The columns of Table.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
+	ID    = orm.NumberColumn[int, predicate.Table](ColumnID)
+	Label = orm.StringColumn[string, predicate.Table](ColumnLabel)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Table) predicate.Table {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Table{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Table) predicate.Table { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Table) predicate.Table {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Table{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Table) predicate.Table { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Table) predicate.Table {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Table{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Table) predicate.Table { return orm.Not(ps...) }

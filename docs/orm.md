@@ -133,12 +133,19 @@ err = velox.User.DeleteByID(ctx, conn, id)
   `predicate.UserOrderTerm` an order term (`OrderBy`). `entity.UserOrder` is
   another thing, the order a GraphQL request asks for; its `Term()` makes
   the order term.
-- A column's own type is named for what it holds and what it offers, so that
-  an error message or an editor's hover says it: `StringColumn`,
-  `NullableStringColumn` (it has `Clear`), `AutoTimeColumn` (an
-  update default: it has `Keep`), `IntKeyColumn` (the key of an edge: no
-  `GT`), `StringIDColumn`. Application code has no reason to write these
-  names.
+- A column is a variable of one of the column types of package `orm`,
+  declared in one line: `Title = orm.StringColumn[string, predicate.Post](ColumnTitle)`.
+  The type says what the column can be asked: the level (`ValueColumn`,
+  `BoolColumn`, `EnumColumn`, `OrderedColumn`, `NumberColumn` with `Add`,
+  `StringColumn` with `Contains`), `Nullable` when it has `Clear`, `Auto`
+  when it has an update default and so `Keep`. An edge is a variable of
+  `orm.ToOne` or `orm.ToMany`. An entity's package has no types of its own
+  for them, and no methods: the generator wrote a type per Go type per
+  entity until 2026-10-13, which was half of the generated tree. The types
+  need Go 1.27: their methods have a type parameter of their own
+  (`orm.Lazy`), which is what keeps a package from compiling the methods it
+  does not call (the numbers are in
+  [`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md)).
 - A predicate, setter or order term of one entity does not compile in a query
   or mutation of another, nor does `WithPosts` on a query of an entity without
   that edge.
@@ -648,22 +655,25 @@ is no longer of the type the generated code expects).
 
 ## Code written once for several entities
 
-The generated code has no generic types. A function that builds predicates
-for whichever entity it is used with is generic over the predicate type,
-under the constraint `orm.Predicate`, and sees a column as an interface of
-the methods the column types share: `orm.Column[T, P]`,
-`orm.OrderedColumn[T, P]`, `orm.TextColumn[P]`, `orm.NullableColumn[P]`.
+A function that builds predicates for whichever entity it is used with is
+generic over the predicate type, under the constraint `orm.Predicate`, and
+takes a column as the plain column type of the level it needs:
+`*orm.ValueColumn[T, P]`, `*orm.BoolColumn[T, P]`, `*orm.EnumColumn[T, P]`,
+`*orm.OrderedColumn[T, P]`, `*orm.NumberColumn[T, P]`,
+`*orm.StringColumn[T, P]`.
 
 ```go
-func recent[P orm.Predicate](created orm.OrderedColumn[time.Time, P], since time.Time, more ...P) P {
+func recent[P orm.Predicate](created *orm.OrderedColumn[time.Time, P], since time.Time, more ...P) P {
     return orm.And(append(more, created.GTE(since))...)
 }
 
-posts, err := velox.Post.Query(conn).Where(recent(&post.CreatedAt, since)).All(ctx)
+posts, err := velox.Post.Query(conn).Where(recent(post.UpdatedAt.AsOrdered(), since)).All(ctx)
 ```
 
-A column is passed by its address (the methods of a column type have
-pointer receivers), and the predicate type is inferred from it, so the
+Every column has an `As` method for each level it has (`AsOrdered`,
+`AsString`, ...), which gives it as that plain type whatever else its own
+type says (that it can be cleared, that it has an update default). The
+predicate type is inferred from the column, so the
 result is a `predicate.Post` that a query of users does not accept.
 `orm.And`, `orm.Or` and `orm.Not` are the entity packages' own, for any
 entity; under the constraint a predicate converts to `orm.P` and back, which

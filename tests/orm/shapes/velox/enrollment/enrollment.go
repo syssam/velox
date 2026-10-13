@@ -5,6 +5,8 @@
 package enrollment
 
 import (
+	"time"
+
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
@@ -47,110 +49,38 @@ const (
 
 // The columns of Enrollment.
 var (
-	ID         = IntColumn(ColumnID)
-	EnrolledAt = TimeColumn(ColumnEnrolledAt)
-	Status     = StatusEnumColumn(ColumnStatus)
-	Credits    = IntColumn(ColumnCredits)
-	StudentID  = IntKeyColumn(ColumnStudentID)
-	CourseID   = IntKeyColumn(ColumnCourseID)
+	ID         = orm.NumberColumn[int, predicate.Enrollment](ColumnID)
+	EnrolledAt = orm.OrderedColumn[time.Time, predicate.Enrollment](ColumnEnrolledAt)
+	Status     = orm.EnumColumn[StatusEnum, predicate.Enrollment](ColumnStatus)
+	Credits    = orm.NumberColumn[int, predicate.Enrollment](ColumnCredits)
+	StudentID  = orm.OrderedColumn[int, predicate.Enrollment](ColumnStudentID)
+	CourseID   = orm.OrderedColumn[int, predicate.Enrollment](ColumnCourseID)
 )
 
-var meta0 = orm.EdgeMeta{Name: "student", Index: 0, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "enrollments", Columns: []string{"student_id"}, Immutable: true, Required: true}
+var studentMeta = orm.EdgeMeta{Name: "student", Index: 0, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "enrollments", Columns: []string{"student_id"}, Immutable: true, Required: true}
 
-// EdgeStudent is the "student" edge of Enrollment, from Enrollment to Student.
-type EdgeStudent struct{}
+// Student is the "student" edge of Enrollment, to Student: conditions on it
+// (Has, HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithStudent.
+var Student = &orm.ToOne[predicate.Enrollment, predicate.Student, int]{Meta: &studentMeta}
 
-// Student is the "student" edge of Enrollment: conditions on it and changes to
-// it. A query eager-loads it with WithStudent.
-var Student = &EdgeStudent{}
+var courseMeta = orm.EdgeMeta{Name: "course", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "enrollments", Columns: []string{"course_id"}, Immutable: true, Required: true}
 
-// Has matches a Enrollment that has at least one "student" neighbor.
-func (e *EdgeStudent) Has() predicate.Enrollment {
-	return predicate.Enrollment{Op: orm.OpHasEdge, Edge: &meta0}
-}
-
-// HasWith matches a Enrollment that has a "student" neighbor satisfying the
-// predicates.
-func (e *EdgeStudent) HasWith(ps ...predicate.Student) predicate.Enrollment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Enrollment{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Enrollment to the Student with the given id.
-func (e *EdgeStudent) Set(id int) predicate.EnrollmentSetter {
-	return predicate.EnrollmentSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Enrollment from every "student" neighbor.
-func (e *EdgeStudent) Clear() predicate.EnrollmentSetter {
-	return predicate.EnrollmentSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "course", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "enrollments", Columns: []string{"course_id"}, Immutable: true, Required: true}
-
-// EdgeCourse is the "course" edge of Enrollment, from Enrollment to Course.
-type EdgeCourse struct{}
-
-// Course is the "course" edge of Enrollment: conditions on it and changes to
-// it. A query eager-loads it with WithCourse.
-var Course = &EdgeCourse{}
-
-// Has matches a Enrollment that has at least one "course" neighbor.
-func (e *EdgeCourse) Has() predicate.Enrollment {
-	return predicate.Enrollment{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Enrollment that has a "course" neighbor satisfying the
-// predicates.
-func (e *EdgeCourse) HasWith(ps ...predicate.Course) predicate.Enrollment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Enrollment{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Set connects the Enrollment to the Course with the given id.
-func (e *EdgeCourse) Set(id int) predicate.EnrollmentSetter {
-	return predicate.EnrollmentSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
-}
-
-// Clear disconnects the Enrollment from every "course" neighbor.
-func (e *EdgeCourse) Clear() predicate.EnrollmentSetter {
-	return predicate.EnrollmentSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// Course is the "course" edge of Enrollment, to Course: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithCourse.
+var Course = &orm.ToOne[predicate.Enrollment, predicate.Course, int]{Meta: &courseMeta}
 
 // EdgeMetas returns the descriptions of the edges of Enrollment, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&studentMeta, &courseMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Enrollment) predicate.Enrollment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Enrollment{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Enrollment) predicate.Enrollment { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Enrollment) predicate.Enrollment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Enrollment{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Enrollment) predicate.Enrollment { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Enrollment) predicate.Enrollment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Enrollment{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Enrollment) predicate.Enrollment { return orm.Not(ps...) }

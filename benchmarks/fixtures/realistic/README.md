@@ -554,7 +554,7 @@ paid for", on a real schema: a method that returns an entity's own predicate
 type is compiled once per entity whoever writes it, and the compiler writes
 it at a higher price than the generator.
 
-### Column types of the library, as velox has them: measured, undecided
+### Column types of the library, with ordinary methods: measured, not adopted
 
 The generator this one replaces writes one line per column,
 `var NameField = sql.StringField[predicate.User](FieldName)`, over generic
@@ -582,11 +582,10 @@ touches, called or not. One service package that touches a few dozen
 types, 1.92 CPU-s and 9.2 MB with the library's, of which 936 functions are
 column methods of `orm`.
 
-So the look of the old generator is available at about a fifth more compile
-time for an application's own packages on a schema this size, and little
-that anyone would notice on a small one. Which of the two is generated, or
-whether the generator offers both, is not decided; the trial is on the
-branch `spike/generic-columns`.
+So the look of the old generator, with ordinary methods, costs about a fifth
+more compile time for an application's own packages on a schema this size.
+What was adopted is the next section: the same types with methods that are
+compiled where they are called.
 
 ### One file for all the tables
 
@@ -594,3 +593,55 @@ branch `spike/generic-columns`.
 and 89,000 lines. It is a file per entity now, like `entity`, the root
 package and `schemainit`, and `schema.go` keeps what is no entity's (the join
 tables, the list of tables, the foreign keys' wiring): 64 KB.
+
+## Column types whose methods are generic methods (2026-10-13, load 3-7)
+
+Measured on this fixture, each variant generated and built, then every
+package of a kind compiled alone with `go tool compile` against the import
+configuration of that build (CPU = user + sys; the 312 services were
+generated again for the current API first).
+
+A method of a generic type is compiled, with every other method of the type,
+in each package that touches a variable of the type: that is what the two
+sections above measured. A method that has a type parameter of its own is
+compiled where it is called, like a generic function. Go 1.27 has such
+methods, and the type parameter can be one a call never writes, because it
+is inferred from the receiver's:
+
+```go
+type Lazy[T any] interface{ *T }
+
+func (c *StringColumn[T, E]) EQ[_ Lazy[T]](v T) E { ... }
+
+post.Title.EQ("a") // no type argument
+```
+
+| | generated lines | the 450 entity packages | the 312 services |
+|---|---|---|---|
+| generated column and edge types (before) | 1,155,519 | 50.7 / 50.7 / 52.0 CPU-s | 92.2 / 92.3 / 92.5 / 94.5 CPU-s |
+| column types of `orm`, generic methods; edges still generated | 613,537 | 24.6 / 25.4 | 95.3 / 95.8 |
+| the same, the methods `//go:noinline` | 613,537 | 25.5 | 96.9 |
+| column and edge types of `orm`, generic methods (as generated now) | 564,135 | 25.4 | 95.7 |
+
+Half the generated code, half the compile of the entities' packages (what
+is left of it is what a package costs to compile at all, 0.056 s), and 1 to
+4% more for the packages that use the columns: a service emits the methods
+it calls and no others (16 functions in one that the ordinary-method variant
+gave several hundred). `entity`, the root package and `schemainit` do not
+change (13.0, 2.3 and 3.3 CPU-s).
+
+At run time a predicate is built with the same allocations and about 1.5 ns
+more (benchmark of both forms side by side, three runs):
+
+| | generated type | `orm` type, generic method | allocations |
+|---|---|---|---|
+| `name.EQ(v)` | 9.5-9.8 ns | 11.2-11.3 ns | 1, 16 B |
+| `age.GT(v)` | 3.6 ns | 5.0-5.1 ns | 0 |
+| `name.In(a, b, c)` | 43.8-44.5 ns | 45.6-45.7 ns | 5, 120 B |
+| `name.Set(v)` | 22.2-22.7 ns | 23.0-23.2 ns | 2, 96 B |
+| three conditions into a slice | 85.9-86.6 ns | 87.6-88.2 ns | 6, 392 B |
+
+What it costs: Go 1.27, and a method with a type parameter does not satisfy
+an interface, so code written once for several entities takes a column as a
+concrete column type (`*orm.OrderedColumn[T, E]`, through the column's
+`AsOrdered`) where it took an interface.

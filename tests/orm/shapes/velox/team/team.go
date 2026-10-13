@@ -25,217 +25,49 @@ const (
 
 // The columns of Team.
 var (
-	ID   = UUIDColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.OrderedColumn[uuid.UUID, predicate.Team](ColumnID)
+	Name = orm.StringColumn[string, predicate.Team](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "players", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "players", Columns: []string{"team_players"}}
+var playersMeta = orm.EdgeMeta{Name: "players", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "players", Columns: []string{"team_players"}}
 
-// EdgePlayers is the "players" edge of Team, from Team to Player.
-type EdgePlayers struct{}
+// Players is the "players" edge of Team, to Player: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithPlayers.
+var Players = &orm.ToMany[predicate.Team, predicate.Player, string]{Meta: &playersMeta}
 
-// Players is the "players" edge of Team: conditions on it and changes to it. A
-// query eager-loads it with WithPlayers.
-var Players = &EdgePlayers{}
+var fansMeta = orm.EdgeMeta{Name: "fans", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_fans", Columns: []string{"team_id", "player_id"}}
 
-// Has matches a Team that has at least one "players" neighbor.
-func (e *EdgePlayers) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta0} }
+// Fans is the "fans" edge of Team, to Player: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with WithFans.
+var Fans = &orm.ToMany[predicate.Team, predicate.Player, string]{Meta: &fansMeta}
 
-// HasWith matches a Team that has a "players" neighbor satisfying the
-// predicates.
-func (e *EdgePlayers) HasWith(ps ...predicate.Player) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var rivalsMeta = orm.EdgeMeta{Name: "rivals", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "team_rivals", Columns: []string{"team_id", "rival_id"}}
 
-// Add connects the Team to the Player rows with the given ids.
-func (e *EdgePlayers) Add(ids ...string) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
+// Rivals is the "rivals" edge of Team, to Team: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithRivals.
+var Rivals = &orm.ToMany[predicate.Team, predicate.Team, uuid.UUID]{Meta: &rivalsMeta}
 
-// Remove disconnects the Team from the Player rows with the given ids.
-func (e *EdgePlayers) Remove(ids ...string) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
+var badgesMeta = orm.EdgeMeta{Name: "badges", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_badges", Columns: []string{"team_id", "badge_id"}}
 
-// Clear disconnects the Team from every "players" neighbor.
-func (e *EdgePlayers) Clear() predicate.TeamSetter {
-	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "fans", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_fans", Columns: []string{"team_id", "player_id"}}
-
-// EdgeFans is the "fans" edge of Team, from Team to Player.
-type EdgeFans struct{}
-
-// Fans is the "fans" edge of Team: conditions on it and changes to it. A
-// query eager-loads it with WithFans.
-var Fans = &EdgeFans{}
-
-// Has matches a Team that has at least one "fans" neighbor.
-func (e *EdgeFans) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Team that has a "fans" neighbor satisfying the predicates.
-func (e *EdgeFans) HasWith(ps ...predicate.Player) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Team to the Player rows with the given ids.
-func (e *EdgeFans) Add(ids ...string) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Team from the Player rows with the given ids.
-func (e *EdgeFans) Remove(ids ...string) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Team from every "fans" neighbor.
-func (e *EdgeFans) Clear() predicate.TeamSetter {
-	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "rivals", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: true, Table: "team_rivals", Columns: []string{"team_id", "rival_id"}}
-
-// EdgeRivals is the "rivals" edge of Team, from Team to Team.
-type EdgeRivals struct{}
-
-// Rivals is the "rivals" edge of Team: conditions on it and changes to it. A
-// query eager-loads it with WithRivals.
-var Rivals = &EdgeRivals{}
-
-// Has matches a Team that has at least one "rivals" neighbor.
-func (e *EdgeRivals) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta2} }
-
-// HasWith matches a Team that has a "rivals" neighbor satisfying the
-// predicates.
-func (e *EdgeRivals) HasWith(ps ...predicate.Team) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Add connects the Team to the Team rows with the given ids.
-func (e *EdgeRivals) Add(ids ...uuid.UUID) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
-}
-
-// Remove disconnects the Team from the Team rows with the given ids.
-func (e *EdgeRivals) Remove(ids ...uuid.UUID) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
-}
-
-// Clear disconnects the Team from every "rivals" neighbor.
-func (e *EdgeRivals) Clear() predicate.TeamSetter {
-	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "badges", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "team_badges", Columns: []string{"team_id", "badge_id"}}
-
-// EdgeBadges is the "badges" edge of Team, from Team to Badge.
-type EdgeBadges struct{}
-
-// Badges is the "badges" edge of Team: conditions on it and changes to it. A
-// query eager-loads it with WithBadges.
-var Badges = &EdgeBadges{}
-
-// Has matches a Team that has at least one "badges" neighbor.
-func (e *EdgeBadges) Has() predicate.Team { return predicate.Team{Op: orm.OpHasEdge, Edge: &meta3} }
-
-// HasWith matches a Team that has a "badges" neighbor satisfying the
-// predicates.
-func (e *EdgeBadges) HasWith(ps ...predicate.Badge) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Add connects the Team to the Badge rows with the given ids.
-func (e *EdgeBadges) Add(ids ...uint16) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
-}
-
-// Remove disconnects the Team from the Badge rows with the given ids.
-func (e *EdgeBadges) Remove(ids ...uint16) predicate.TeamSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TeamSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
-}
-
-// Clear disconnects the Team from every "badges" neighbor.
-func (e *EdgeBadges) Clear() predicate.TeamSetter {
-	return predicate.TeamSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
+// Badges is the "badges" edge of Team, to Badge: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithBadges.
+var Badges = &orm.ToMany[predicate.Team, predicate.Badge, uint16]{Meta: &badgesMeta}
 
 // EdgeMetas returns the descriptions of the edges of Team, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3} }
+func EdgeMetas() []*orm.EdgeMeta {
+	return []*orm.EdgeMeta{&playersMeta, &fansMeta, &rivalsMeta, &badgesMeta}
+}
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Team) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Team) predicate.Team { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Team) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Team) predicate.Team { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Team) predicate.Team {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Team{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Team) predicate.Team { return orm.Not(ps...) }

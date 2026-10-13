@@ -25,132 +25,34 @@ const (
 
 // The columns of LabelKey.
 var (
-	ID   = LabelIDColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.OrderedColumn[types.Label, predicate.LabelKey](ColumnID)
+	Name = orm.StringColumn[string, predicate.LabelKey](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "items", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "weight_keys", Columns: []string{"label_key_items"}}
+var itemsMeta = orm.EdgeMeta{Name: "items", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "weight_keys", Columns: []string{"label_key_items"}}
 
-// EdgeItems is the "items" edge of LabelKey, from LabelKey to WeightKey.
-type EdgeItems struct{}
+// Items is the "items" edge of LabelKey, to WeightKey: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithItems.
+var Items = &orm.ToMany[predicate.LabelKey, predicate.WeightKey, types.Weight]{Meta: &itemsMeta}
 
-// Items is the "items" edge of LabelKey: conditions on it and changes to it. A
-// query eager-loads it with WithItems.
-var Items = &EdgeItems{}
+var weightsMeta = orm.EdgeMeta{Name: "weights", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "label_weights", Columns: []string{"label_key_id", "weight_key_id"}}
 
-// Has matches a LabelKey that has at least one "items" neighbor.
-func (e *EdgeItems) Has() predicate.LabelKey {
-	return predicate.LabelKey{Op: orm.OpHasEdge, Edge: &meta0}
-}
-
-// HasWith matches a LabelKey that has a "items" neighbor satisfying the
-// predicates.
-func (e *EdgeItems) HasWith(ps ...predicate.WeightKey) predicate.LabelKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.LabelKey{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the LabelKey to the WeightKey rows with the given ids.
-func (e *EdgeItems) Add(ids ...types.Weight) predicate.LabelKeySetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.LabelKeySetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the LabelKey from the WeightKey rows with the given ids.
-func (e *EdgeItems) Remove(ids ...types.Weight) predicate.LabelKeySetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.LabelKeySetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the LabelKey from every "items" neighbor.
-func (e *EdgeItems) Clear() predicate.LabelKeySetter {
-	return predicate.LabelKeySetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "weights", Index: 1, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "label_weights", Columns: []string{"label_key_id", "weight_key_id"}}
-
-// EdgeWeights is the "weights" edge of LabelKey, from LabelKey to WeightKey.
-type EdgeWeights struct{}
-
-// Weights is the "weights" edge of LabelKey: conditions on it and changes to
-// it. A query eager-loads it with WithWeights.
-var Weights = &EdgeWeights{}
-
-// Has matches a LabelKey that has at least one "weights" neighbor.
-func (e *EdgeWeights) Has() predicate.LabelKey {
-	return predicate.LabelKey{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a LabelKey that has a "weights" neighbor satisfying the
-// predicates.
-func (e *EdgeWeights) HasWith(ps ...predicate.WeightKey) predicate.LabelKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.LabelKey{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the LabelKey to the WeightKey rows with the given ids.
-func (e *EdgeWeights) Add(ids ...types.Weight) predicate.LabelKeySetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.LabelKeySetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the LabelKey from the WeightKey rows with the given ids.
-func (e *EdgeWeights) Remove(ids ...types.Weight) predicate.LabelKeySetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.LabelKeySetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the LabelKey from every "weights" neighbor.
-func (e *EdgeWeights) Clear() predicate.LabelKeySetter {
-	return predicate.LabelKeySetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// Weights is the "weights" edge of LabelKey, to WeightKey: conditions on it
+// (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it
+// with WithWeights.
+var Weights = &orm.ToMany[predicate.LabelKey, predicate.WeightKey, types.Weight]{Meta: &weightsMeta}
 
 // EdgeMetas returns the descriptions of the edges of LabelKey, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&itemsMeta, &weightsMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.LabelKey) predicate.LabelKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.LabelKey{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.LabelKey) predicate.LabelKey { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.LabelKey) predicate.LabelKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.LabelKey{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.LabelKey) predicate.LabelKey { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.LabelKey) predicate.LabelKey {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.LabelKey{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.LabelKey) predicate.LabelKey { return orm.Not(ps...) }

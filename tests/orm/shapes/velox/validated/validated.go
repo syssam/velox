@@ -43,52 +43,34 @@ const (
 
 // The columns of Validated.
 var (
-	ID     = IntColumn(ColumnID)
-	One    = StringColumn(ColumnOne)
-	Two    = StringColumn(ColumnTwo)
-	Three  = StringColumn(ColumnThree)
-	Score  = IntColumn(ColumnScore)
-	Rank   = IntColumn(ColumnRank)
-	Even   = IntColumn(ColumnEven)
-	Ratio  = Float64Column(ColumnRatio)
-	I8     = Int8Column(ColumnI8)
-	I16    = Int16Column(ColumnI16)
-	I32    = Int32Column(ColumnI32)
-	I64    = Int64Column(ColumnI64)
-	U      = UintColumn(ColumnU)
-	U8     = Uint8Column(ColumnU8)
-	U64    = Uint64Column(ColumnU64)
-	F32    = Float32Column(ColumnF32)
-	Raw    = BytesColumn(ColumnRaw)
-	Opt    = NullableStringColumn(ColumnOpt)
-	OptPos = IntColumn(ColumnOptPos)
-	OptNe  = StringColumn(ColumnOptNe)
-	OptRaw = BytesColumn(ColumnOptRaw)
+	ID     = orm.NumberColumn[int, predicate.Validated](ColumnID)
+	One    = orm.StringColumn[string, predicate.Validated](ColumnOne)
+	Two    = orm.StringColumn[string, predicate.Validated](ColumnTwo)
+	Three  = orm.StringColumn[string, predicate.Validated](ColumnThree)
+	Score  = orm.NumberColumn[int, predicate.Validated](ColumnScore)
+	Rank   = orm.NumberColumn[int, predicate.Validated](ColumnRank)
+	Even   = orm.NumberColumn[int, predicate.Validated](ColumnEven)
+	Ratio  = orm.NumberColumn[float64, predicate.Validated](ColumnRatio)
+	I8     = orm.NumberColumn[int8, predicate.Validated](ColumnI8)
+	I16    = orm.NumberColumn[int16, predicate.Validated](ColumnI16)
+	I32    = orm.NumberColumn[int32, predicate.Validated](ColumnI32)
+	I64    = orm.NumberColumn[int64, predicate.Validated](ColumnI64)
+	U      = orm.NumberColumn[uint, predicate.Validated](ColumnU)
+	U8     = orm.NumberColumn[uint8, predicate.Validated](ColumnU8)
+	U64    = orm.NumberColumn[uint64, predicate.Validated](ColumnU64)
+	F32    = orm.NumberColumn[float32, predicate.Validated](ColumnF32)
+	Raw    = orm.OrderedColumn[[]byte, predicate.Validated](ColumnRaw)
+	Opt    = orm.NullableStringColumn[string, predicate.Validated](ColumnOpt)
+	OptPos = orm.NumberColumn[int, predicate.Validated](ColumnOptPos)
+	OptNe  = orm.StringColumn[string, predicate.Validated](ColumnOptNe)
+	OptRaw = orm.OrderedColumn[[]byte, predicate.Validated](ColumnOptRaw)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Validated) predicate.Validated {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Validated{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Validated) predicate.Validated { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Validated) predicate.Validated {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Validated{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Validated) predicate.Validated { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Validated) predicate.Validated {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Validated{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Validated) predicate.Validated { return orm.Not(ps...) }

@@ -5,6 +5,8 @@
 package todo
 
 import (
+	"time"
+
 	"example.com/orm-graphql/velox/predicate"
 	"github.com/syssam/velox/orm"
 )
@@ -49,74 +51,31 @@ const (
 
 // The columns of Todo.
 var (
-	ID        = IntColumn(ColumnID)
-	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
-	Title     = StringColumn(ColumnTitle)
-	Status    = StatusEnumColumn(ColumnStatus)
-	Priority  = IntColumn(ColumnPriority)
-	DueDate   = NullableTimeColumn(ColumnDueDate)
+	ID        = orm.NumberColumn[int, predicate.Todo](ColumnID)
+	CreatedAt = orm.OrderedColumn[time.Time, predicate.Todo](ColumnCreatedAt)
+	UpdatedAt = orm.AutoOrderedColumn[time.Time, predicate.Todo](ColumnUpdatedAt)
+	Title     = orm.StringColumn[string, predicate.Todo](ColumnTitle)
+	Status    = orm.EnumColumn[StatusEnum, predicate.Todo](ColumnStatus)
+	Priority  = orm.NumberColumn[int, predicate.Todo](ColumnPriority)
+	DueDate   = orm.NullableOrderedColumn[time.Time, predicate.Todo](ColumnDueDate)
 )
 
-var meta0 = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "todos", Columns: []string{"user_todos"}, Required: true}
+var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "todos", Columns: []string{"user_todos"}, Required: true}
 
-// EdgeOwner is the "owner" edge of Todo, from Todo to User.
-type EdgeOwner struct{}
-
-// Owner is the "owner" edge of Todo: conditions on it and changes to it. A
-// query eager-loads it with WithOwner.
-var Owner = &EdgeOwner{}
-
-// Has matches a Todo that has at least one "owner" neighbor.
-func (e *EdgeOwner) Has() predicate.Todo { return predicate.Todo{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Todo that has a "owner" neighbor satisfying the predicates.
-func (e *EdgeOwner) HasWith(ps ...predicate.User) predicate.Todo {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Todo{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Todo to the User with the given id.
-func (e *EdgeOwner) Set(id int) predicate.TodoSetter {
-	return predicate.TodoSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Todo from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.TodoSetter {
-	return predicate.TodoSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Owner is the "owner" edge of Todo, to User: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithOwner.
+var Owner = &orm.ToOne[predicate.Todo, predicate.User, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Todo, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&ownerMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Todo) predicate.Todo {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Todo{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Todo) predicate.Todo { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Todo) predicate.Todo {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Todo{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Todo) predicate.Todo { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Todo) predicate.Todo {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Todo{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Todo) predicate.Todo { return orm.Not(ps...) }

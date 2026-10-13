@@ -12,10 +12,10 @@ import "github.com/syssam/velox/orm"
 type Comment orm.P
 
 // CommentSetter is an assignment of a mutation of Comment.
-type CommentSetter orm.S
+type CommentSetter = orm.SetterOf[Comment]
 
 // CommentOrderTerm is an order term of a query of Comment.
-type CommentOrderTerm orm.O
+type CommentOrderTerm = orm.OrderOf[Comment]
 
 // Post is a predicate of Post. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -23,10 +23,10 @@ type CommentOrderTerm orm.O
 type Post orm.P
 
 // PostSetter is an assignment of a mutation of Post.
-type PostSetter orm.S
+type PostSetter = orm.SetterOf[Post]
 
 // PostOrderTerm is an order term of a query of Post.
-type PostOrderTerm orm.O
+type PostOrderTerm = orm.OrderOf[Post]
 
 // Tag is a predicate of Tag. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -34,10 +34,10 @@ type PostOrderTerm orm.O
 type Tag orm.P
 
 // TagSetter is an assignment of a mutation of Tag.
-type TagSetter orm.S
+type TagSetter = orm.SetterOf[Tag]
 
 // TagOrderTerm is an order term of a query of Tag.
-type TagOrderTerm orm.O
+type TagOrderTerm = orm.OrderOf[Tag]
 
 // User is a predicate of User. It is a type of its own, as are the
 // assignments and order terms below, so those of another entity do not
@@ -45,7 +45,7 @@ type TagOrderTerm orm.O
 type User orm.P
 
 // UserSetter is an assignment of a mutation of User.
-type UserSetter orm.S
+type UserSetter = orm.SetterOf[User]
 
 // UserOrderTerm is an order term of a query of User.
-type UserOrderTerm orm.O
+type UserOrderTerm = orm.OrderOf[User]

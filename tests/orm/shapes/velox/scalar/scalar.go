@@ -5,6 +5,9 @@
 package scalar
 
 import (
+	"time"
+
+	uuid "github.com/google/uuid"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
@@ -67,76 +70,58 @@ const (
 
 // The columns of Scalar.
 var (
-	ID         = IntColumn(ColumnID)
-	Seq        = IntColumn(ColumnSeq)
-	StringOpt  = StringColumn(ColumnStringOpt)
-	StringNil  = NullableStringColumn(ColumnStringNil)
-	StringPtr  = RequiredNullableStringColumn(ColumnStringPtr)
-	TextOpt    = StringColumn(ColumnTextOpt)
-	TextNil    = NullableStringColumn(ColumnTextNil)
-	IntOpt     = IntColumn(ColumnIntOpt)
-	IntNil     = NullableIntColumn(ColumnIntNil)
-	IntPtr     = RequiredNullableIntColumn(ColumnIntPtr)
-	Int8Opt    = Int8Column(ColumnInt8Opt)
-	Int8Nil    = NullableInt8Column(ColumnInt8Nil)
-	Int16Opt   = Int16Column(ColumnInt16Opt)
-	Int16Nil   = NullableInt16Column(ColumnInt16Nil)
-	Int32Opt   = Int32Column(ColumnInt32Opt)
-	Int32Nil   = NullableInt32Column(ColumnInt32Nil)
-	Int64Opt   = Int64Column(ColumnInt64Opt)
-	Int64Nil   = NullableInt64Column(ColumnInt64Nil)
-	UintOpt    = UintColumn(ColumnUintOpt)
-	UintNil    = NullableUintColumn(ColumnUintNil)
-	Uint8Opt   = Uint8Column(ColumnUint8Opt)
-	Uint8Nil   = NullableUint8Column(ColumnUint8Nil)
-	Uint16Opt  = Uint16Column(ColumnUint16Opt)
-	Uint16Nil  = NullableUint16Column(ColumnUint16Nil)
-	Uint32Opt  = Uint32Column(ColumnUint32Opt)
-	Uint32Nil  = NullableUint32Column(ColumnUint32Nil)
-	Uint64Opt  = Uint64Column(ColumnUint64Opt)
-	Uint64Nil  = NullableUint64Column(ColumnUint64Nil)
-	FloatOpt   = Float64Column(ColumnFloatOpt)
-	FloatNil   = NullableFloat64Column(ColumnFloatNil)
-	FloatPtr   = RequiredNullableFloat64Column(ColumnFloatPtr)
-	Float32Opt = Float32Column(ColumnFloat32Opt)
-	Float32Nil = NullableFloat32Column(ColumnFloat32Nil)
-	BoolOpt    = BoolColumn(ColumnBoolOpt)
-	BoolNil    = NullableBoolColumn(ColumnBoolNil)
-	BoolPtr    = RequiredNullableBoolColumn(ColumnBoolPtr)
-	TimeOpt    = TimeColumn(ColumnTimeOpt)
-	TimeNil    = NullableTimeColumn(ColumnTimeNil)
-	TimePtr    = RequiredNullableTimeColumn(ColumnTimePtr)
-	UUIDOpt    = UUIDColumn(ColumnUUIDOpt)
-	UUIDNil    = NullableUUIDColumn(ColumnUUIDNil)
-	UUIDPtr    = RequiredNullableUUIDColumn(ColumnUUIDPtr)
-	BytesOpt   = BytesColumn(ColumnBytesOpt)
-	BytesNil   = NullableBytesColumn(ColumnBytesNil)
-	BytesPtr   = RequiredNullableBytesColumn(ColumnBytesPtr)
+	ID         = orm.NumberColumn[int, predicate.Scalar](ColumnID)
+	Seq        = orm.NumberColumn[int, predicate.Scalar](ColumnSeq)
+	StringOpt  = orm.StringColumn[string, predicate.Scalar](ColumnStringOpt)
+	StringNil  = orm.NullableStringColumn[string, predicate.Scalar](ColumnStringNil)
+	StringPtr  = orm.StringColumn[string, predicate.Scalar](ColumnStringPtr)
+	TextOpt    = orm.StringColumn[string, predicate.Scalar](ColumnTextOpt)
+	TextNil    = orm.NullableStringColumn[string, predicate.Scalar](ColumnTextNil)
+	IntOpt     = orm.NumberColumn[int, predicate.Scalar](ColumnIntOpt)
+	IntNil     = orm.NullableNumberColumn[int, predicate.Scalar](ColumnIntNil)
+	IntPtr     = orm.NumberColumn[int, predicate.Scalar](ColumnIntPtr)
+	Int8Opt    = orm.NumberColumn[int8, predicate.Scalar](ColumnInt8Opt)
+	Int8Nil    = orm.NullableNumberColumn[int8, predicate.Scalar](ColumnInt8Nil)
+	Int16Opt   = orm.NumberColumn[int16, predicate.Scalar](ColumnInt16Opt)
+	Int16Nil   = orm.NullableNumberColumn[int16, predicate.Scalar](ColumnInt16Nil)
+	Int32Opt   = orm.NumberColumn[int32, predicate.Scalar](ColumnInt32Opt)
+	Int32Nil   = orm.NullableNumberColumn[int32, predicate.Scalar](ColumnInt32Nil)
+	Int64Opt   = orm.NumberColumn[int64, predicate.Scalar](ColumnInt64Opt)
+	Int64Nil   = orm.NullableNumberColumn[int64, predicate.Scalar](ColumnInt64Nil)
+	UintOpt    = orm.NumberColumn[uint, predicate.Scalar](ColumnUintOpt)
+	UintNil    = orm.NullableNumberColumn[uint, predicate.Scalar](ColumnUintNil)
+	Uint8Opt   = orm.NumberColumn[uint8, predicate.Scalar](ColumnUint8Opt)
+	Uint8Nil   = orm.NullableNumberColumn[uint8, predicate.Scalar](ColumnUint8Nil)
+	Uint16Opt  = orm.NumberColumn[uint16, predicate.Scalar](ColumnUint16Opt)
+	Uint16Nil  = orm.NullableNumberColumn[uint16, predicate.Scalar](ColumnUint16Nil)
+	Uint32Opt  = orm.NumberColumn[uint32, predicate.Scalar](ColumnUint32Opt)
+	Uint32Nil  = orm.NullableNumberColumn[uint32, predicate.Scalar](ColumnUint32Nil)
+	Uint64Opt  = orm.NumberColumn[uint64, predicate.Scalar](ColumnUint64Opt)
+	Uint64Nil  = orm.NullableNumberColumn[uint64, predicate.Scalar](ColumnUint64Nil)
+	FloatOpt   = orm.NumberColumn[float64, predicate.Scalar](ColumnFloatOpt)
+	FloatNil   = orm.NullableNumberColumn[float64, predicate.Scalar](ColumnFloatNil)
+	FloatPtr   = orm.NumberColumn[float64, predicate.Scalar](ColumnFloatPtr)
+	Float32Opt = orm.NumberColumn[float32, predicate.Scalar](ColumnFloat32Opt)
+	Float32Nil = orm.NullableNumberColumn[float32, predicate.Scalar](ColumnFloat32Nil)
+	BoolOpt    = orm.BoolColumn[bool, predicate.Scalar](ColumnBoolOpt)
+	BoolNil    = orm.NullableBoolColumn[bool, predicate.Scalar](ColumnBoolNil)
+	BoolPtr    = orm.BoolColumn[bool, predicate.Scalar](ColumnBoolPtr)
+	TimeOpt    = orm.OrderedColumn[time.Time, predicate.Scalar](ColumnTimeOpt)
+	TimeNil    = orm.NullableOrderedColumn[time.Time, predicate.Scalar](ColumnTimeNil)
+	TimePtr    = orm.OrderedColumn[time.Time, predicate.Scalar](ColumnTimePtr)
+	UUIDOpt    = orm.OrderedColumn[uuid.UUID, predicate.Scalar](ColumnUUIDOpt)
+	UUIDNil    = orm.NullableOrderedColumn[uuid.UUID, predicate.Scalar](ColumnUUIDNil)
+	UUIDPtr    = orm.OrderedColumn[uuid.UUID, predicate.Scalar](ColumnUUIDPtr)
+	BytesOpt   = orm.OrderedColumn[[]byte, predicate.Scalar](ColumnBytesOpt)
+	BytesNil   = orm.NullableOrderedColumn[[]byte, predicate.Scalar](ColumnBytesNil)
+	BytesPtr   = orm.OrderedColumn[[]byte, predicate.Scalar](ColumnBytesPtr)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Scalar) predicate.Scalar {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Scalar{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Scalar) predicate.Scalar { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Scalar) predicate.Scalar {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Scalar{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Scalar) predicate.Scalar { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Scalar) predicate.Scalar {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Scalar{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Scalar) predicate.Scalar { return orm.Not(ps...) }

@@ -67,290 +67,99 @@ const (
 
 // The columns of Keywords.
 var (
-	ID           = IntColumn2(ColumnID)
-	Type         = StringColumn2(ColumnType)
-	Func         = StringColumn2(ColumnFunc)
-	Range        = StringColumn2(ColumnRange)
-	Select       = StringColumn2(ColumnSelect)
-	From         = StringColumn2(ColumnFrom)
-	Where        = StringColumn2(ColumnWhere)
-	Order        = StringColumn2(ColumnOrder)
-	Group        = StringColumn2(ColumnGroup)
-	Default      = StringColumn2(ColumnDefault)
-	TableField   = StringColumn2(ColumnTable)
-	Index        = StringColumn2(ColumnIndex)
-	Key          = StringColumn2(ColumnKey)
-	Values       = StringColumn2(ColumnValues)
-	Query        = StringColumn2(ColumnQuery)
-	Create       = StringColumn2(ColumnCreate)
-	CreateBulk   = StringColumn2(ColumnCreateBulk)
-	Update       = StringColumn2(ColumnUpdate)
-	Delete       = StringColumn2(ColumnDelete)
-	Set          = StringColumn2(ColumnSet)
-	AndField     = StringColumn2(ColumnAnd)
-	OrField      = StringColumn2(ColumnOr)
-	NotField     = StringColumn2(ColumnNot)
-	Meta         = StringColumn2(ColumnMeta)
-	Load         = StringColumn2(ColumnLoad)
-	Pred         = StringColumn2(ColumnPred)
-	Edge         = StringColumn2(ColumnEdge)
-	Model        = StringColumn2(ColumnModel)
-	Orm          = StringColumn2(ColumnOrm)
-	Context      = StringColumn2(ColumnContext)
-	Tx           = StringColumn2(ColumnTx)
-	String       = StringColumn2(ColumnString)
-	Int          = IntColumn2(ColumnInt)
-	Error        = StringColumn2(ColumnError)
-	Len          = StringColumn2(ColumnLen)
-	New          = StringColumn2(ColumnNew)
-	StringColumn = StringColumn2(ColumnStringColumn)
-	IntColumn    = IntColumn2(ColumnIntColumn)
-	To           = StringColumn2(ColumnTo)
-	Clear        = NullableStringColumn(ColumnClear)
-	Asc          = StringColumn2(ColumnAsc)
-	Desc         = StringColumn2(ColumnDesc)
-	Eq           = StringColumn2(ColumnEq)
-	In           = StringColumn2(ColumnIn)
-	Has          = StringColumn2(ColumnHas)
+	ID           = orm.NumberColumn[int, predicate.Keywords](ColumnID)
+	Type         = orm.StringColumn[string, predicate.Keywords](ColumnType)
+	Func         = orm.StringColumn[string, predicate.Keywords](ColumnFunc)
+	Range        = orm.StringColumn[string, predicate.Keywords](ColumnRange)
+	Select       = orm.StringColumn[string, predicate.Keywords](ColumnSelect)
+	From         = orm.StringColumn[string, predicate.Keywords](ColumnFrom)
+	Where        = orm.StringColumn[string, predicate.Keywords](ColumnWhere)
+	Order        = orm.StringColumn[string, predicate.Keywords](ColumnOrder)
+	Group        = orm.StringColumn[string, predicate.Keywords](ColumnGroup)
+	Default      = orm.StringColumn[string, predicate.Keywords](ColumnDefault)
+	TableField   = orm.StringColumn[string, predicate.Keywords](ColumnTable)
+	Index        = orm.StringColumn[string, predicate.Keywords](ColumnIndex)
+	Key          = orm.StringColumn[string, predicate.Keywords](ColumnKey)
+	Values       = orm.StringColumn[string, predicate.Keywords](ColumnValues)
+	Query        = orm.StringColumn[string, predicate.Keywords](ColumnQuery)
+	Create       = orm.StringColumn[string, predicate.Keywords](ColumnCreate)
+	CreateBulk   = orm.StringColumn[string, predicate.Keywords](ColumnCreateBulk)
+	Update       = orm.StringColumn[string, predicate.Keywords](ColumnUpdate)
+	Delete       = orm.StringColumn[string, predicate.Keywords](ColumnDelete)
+	Set          = orm.StringColumn[string, predicate.Keywords](ColumnSet)
+	AndField     = orm.StringColumn[string, predicate.Keywords](ColumnAnd)
+	OrField      = orm.StringColumn[string, predicate.Keywords](ColumnOr)
+	NotField     = orm.StringColumn[string, predicate.Keywords](ColumnNot)
+	Meta         = orm.StringColumn[string, predicate.Keywords](ColumnMeta)
+	Load         = orm.StringColumn[string, predicate.Keywords](ColumnLoad)
+	Pred         = orm.StringColumn[string, predicate.Keywords](ColumnPred)
+	Edge         = orm.StringColumn[string, predicate.Keywords](ColumnEdge)
+	Model        = orm.StringColumn[string, predicate.Keywords](ColumnModel)
+	Orm          = orm.StringColumn[string, predicate.Keywords](ColumnOrm)
+	Context      = orm.StringColumn[string, predicate.Keywords](ColumnContext)
+	Tx           = orm.StringColumn[string, predicate.Keywords](ColumnTx)
+	String       = orm.StringColumn[string, predicate.Keywords](ColumnString)
+	Int          = orm.NumberColumn[int, predicate.Keywords](ColumnInt)
+	Error        = orm.StringColumn[string, predicate.Keywords](ColumnError)
+	Len          = orm.StringColumn[string, predicate.Keywords](ColumnLen)
+	New          = orm.StringColumn[string, predicate.Keywords](ColumnNew)
+	StringColumn = orm.StringColumn[string, predicate.Keywords](ColumnStringColumn)
+	IntColumn    = orm.NumberColumn[int, predicate.Keywords](ColumnIntColumn)
+	To           = orm.StringColumn[string, predicate.Keywords](ColumnTo)
+	Clear        = orm.NullableStringColumn[string, predicate.Keywords](ColumnClear)
+	Asc          = orm.StringColumn[string, predicate.Keywords](ColumnAsc)
+	Desc         = orm.StringColumn[string, predicate.Keywords](ColumnDesc)
+	Eq           = orm.StringColumn[string, predicate.Keywords](ColumnEq)
+	In           = orm.StringColumn[string, predicate.Keywords](ColumnIn)
+	Has          = orm.StringColumn[string, predicate.Keywords](ColumnHas)
 )
 
-var meta0 = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_fields"}}
+var fieldsMeta = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_fields"}}
 
-// EdgeFields is the "fields" edge of Keywords, from Keywords to Field.
-type EdgeFields struct{}
+// Fields is the "fields" edge of Keywords, to Field: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithFields.
+var Fields = &orm.ToMany[predicate.Keywords, predicate.Field, int]{Meta: &fieldsMeta}
 
-// Fields is the "fields" edge of Keywords: conditions on it and changes to it.
-// A query eager-loads it with WithFields.
-var Fields = &EdgeFields{}
+var columnsMeta = orm.EdgeMeta{Name: "columns", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_columns"}}
 
-// Has matches a Keywords that has at least one "fields" neighbor.
-func (e *EdgeFields) Has() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta0}
-}
+// Columns is the "columns" edge of Keywords, to Field: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithColumns.
+var Columns = &orm.ToOne[predicate.Keywords, predicate.Field, int]{Meta: &columnsMeta}
 
-// HasWith matches a Keywords that has a "fields" neighbor satisfying the
-// predicates.
-func (e *EdgeFields) HasWith(ps ...predicate.Field) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var loadedMeta = orm.EdgeMeta{Name: "loaded", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_loaded"}}
 
-// Add connects the Keywords to the Field rows with the given ids.
-func (e *EdgeFields) Add(ids ...int) predicate.KeywordsSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
+// Loaded is the "loaded" edge of Keywords, to Field: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithLoaded.
+var Loaded = &orm.ToMany[predicate.Keywords, predicate.Field, int]{Meta: &loadedMeta}
 
-// Remove disconnects the Keywords from the Field rows with the given ids.
-func (e *EdgeFields) Remove(ids ...int) predicate.KeywordsSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KeywordsSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
+var withMeta = orm.EdgeMeta{Name: "with", Index: 3, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_with"}}
 
-// Clear disconnects the Keywords from every "fields" neighbor.
-func (e *EdgeFields) Clear() predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// With is the "with" edge of Keywords, to Field: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithWith.
+var With = &orm.ToMany[predicate.Keywords, predicate.Field, int]{Meta: &withMeta}
 
-var meta1 = orm.EdgeMeta{Name: "columns", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_columns"}}
+var allMeta = orm.EdgeMeta{Name: "all", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_all"}}
 
-// EdgeColumns is the "columns" edge of Keywords, from Keywords to Field.
-type EdgeColumns struct{}
-
-// Columns is the "columns" edge of Keywords: conditions on it and changes to
-// it. A query eager-loads it with WithColumns.
-var Columns = &EdgeColumns{}
-
-// Has matches a Keywords that has at least one "columns" neighbor.
-func (e *EdgeColumns) Has() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Keywords that has a "columns" neighbor satisfying the
-// predicates.
-func (e *EdgeColumns) HasWith(ps ...predicate.Field) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Set connects the Keywords to the Field with the given id.
-func (e *EdgeColumns) Set(id int) predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
-}
-
-// Clear disconnects the Keywords from every "columns" neighbor.
-func (e *EdgeColumns) Clear() predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "loaded", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_loaded"}}
-
-// EdgeLoaded is the "loaded" edge of Keywords, from Keywords to Field.
-type EdgeLoaded struct{}
-
-// Loaded is the "loaded" edge of Keywords: conditions on it and changes to it.
-// A query eager-loads it with WithLoaded.
-var Loaded = &EdgeLoaded{}
-
-// Has matches a Keywords that has at least one "loaded" neighbor.
-func (e *EdgeLoaded) Has() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta2}
-}
-
-// HasWith matches a Keywords that has a "loaded" neighbor satisfying the
-// predicates.
-func (e *EdgeLoaded) HasWith(ps ...predicate.Field) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Add connects the Keywords to the Field rows with the given ids.
-func (e *EdgeLoaded) Add(ids ...int) predicate.KeywordsSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
-}
-
-// Remove disconnects the Keywords from the Field rows with the given ids.
-func (e *EdgeLoaded) Remove(ids ...int) predicate.KeywordsSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KeywordsSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
-}
-
-// Clear disconnects the Keywords from every "loaded" neighbor.
-func (e *EdgeLoaded) Clear() predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "with", Index: 3, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"keywords_with"}}
-
-// EdgeWith is the "with" edge of Keywords, from Keywords to Field.
-type EdgeWith struct{}
-
-// With is the "with" edge of Keywords: conditions on it and changes to it. A
-// query eager-loads it with WithWith.
-var With = &EdgeWith{}
-
-// Has matches a Keywords that has at least one "with" neighbor.
-func (e *EdgeWith) Has() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta3}
-}
-
-// HasWith matches a Keywords that has a "with" neighbor satisfying the
-// predicates.
-func (e *EdgeWith) HasWith(ps ...predicate.Field) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Add connects the Keywords to the Field rows with the given ids.
-func (e *EdgeWith) Add(ids ...int) predicate.KeywordsSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
-}
-
-// Remove disconnects the Keywords from the Field rows with the given ids.
-func (e *EdgeWith) Remove(ids ...int) predicate.KeywordsSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KeywordsSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
-}
-
-// Clear disconnects the Keywords from every "with" neighbor.
-func (e *EdgeWith) Clear() predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
-
-var meta4 = orm.EdgeMeta{Name: "all", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "select", Columns: []string{"keywords_all"}}
-
-// EdgeAll is the "all" edge of Keywords, from Keywords to Field.
-type EdgeAll struct{}
-
-// All is the "all" edge of Keywords: conditions on it and changes to it. A
-// query eager-loads it with WithAll.
-var All = &EdgeAll{}
-
-// Has matches a Keywords that has at least one "all" neighbor.
-func (e *EdgeAll) Has() predicate.Keywords {
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta4}
-}
-
-// HasWith matches a Keywords that has a "all" neighbor satisfying the
-// predicates.
-func (e *EdgeAll) HasWith(ps ...predicate.Field) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpHasEdge, Edge: &meta4, Subs: subs}
-}
-
-// Set connects the Keywords to the Field with the given id.
-func (e *EdgeAll) Set(id int) predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: []any{id}}
-}
-
-// Clear disconnects the Keywords from every "all" neighbor.
-func (e *EdgeAll) Clear() predicate.KeywordsSetter {
-	return predicate.KeywordsSetter{Kind: orm.EdgeClear, Edge: &meta4}
-}
+// All is the "all" edge of Keywords, to Field: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithAll.
+var All = &orm.ToOne[predicate.Keywords, predicate.Field, int]{Meta: &allMeta}
 
 // EdgeMetas returns the descriptions of the edges of Keywords, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
+func EdgeMetas() []*orm.EdgeMeta {
+	return []*orm.EdgeMeta{&fieldsMeta, &columnsMeta, &loadedMeta, &withMeta, &allMeta}
+}
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Keywords) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Keywords) predicate.Keywords { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Keywords) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Keywords) predicate.Keywords { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Keywords) predicate.Keywords {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Keywords{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Keywords) predicate.Keywords { return orm.Not(ps...) }

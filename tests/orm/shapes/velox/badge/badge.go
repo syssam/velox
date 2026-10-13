@@ -25,128 +25,34 @@ const (
 
 // The columns of Badge.
 var (
-	ID   = Uint16Column(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.NumberColumn[uint16, predicate.Badge](ColumnID)
+	Name = orm.StringColumn[string, predicate.Badge](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "teams", Index: 0, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "team_badges", Columns: []string{"team_id", "badge_id"}}
+var teamsMeta = orm.EdgeMeta{Name: "teams", Index: 0, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "team_badges", Columns: []string{"team_id", "badge_id"}}
 
-// EdgeTeams is the "teams" edge of Badge, from Badge to Team.
-type EdgeTeams struct{}
+// Teams is the "teams" edge of Badge, to Team: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithTeams.
+var Teams = &orm.ToMany[predicate.Badge, predicate.Team, uuid.UUID]{Meta: &teamsMeta}
 
-// Teams is the "teams" edge of Badge: conditions on it and changes to it. A
-// query eager-loads it with WithTeams.
-var Teams = &EdgeTeams{}
+var holdersMeta = orm.EdgeMeta{Name: "holders", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "persons", Columns: []string{"badge_holders"}}
 
-// Has matches a Badge that has at least one "teams" neighbor.
-func (e *EdgeTeams) Has() predicate.Badge { return predicate.Badge{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Badge that has a "teams" neighbor satisfying the
-// predicates.
-func (e *EdgeTeams) HasWith(ps ...predicate.Team) predicate.Badge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Badge{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the Badge to the Team rows with the given ids.
-func (e *EdgeTeams) Add(ids ...uuid.UUID) predicate.BadgeSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.BadgeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the Badge from the Team rows with the given ids.
-func (e *EdgeTeams) Remove(ids ...uuid.UUID) predicate.BadgeSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.BadgeSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the Badge from every "teams" neighbor.
-func (e *EdgeTeams) Clear() predicate.BadgeSetter {
-	return predicate.BadgeSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "holders", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "persons", Columns: []string{"badge_holders"}}
-
-// EdgeHolders is the "holders" edge of Badge, from Badge to Person.
-type EdgeHolders struct{}
-
-// Holders is the "holders" edge of Badge: conditions on it and changes to it. A
-// query eager-loads it with WithHolders.
-var Holders = &EdgeHolders{}
-
-// Has matches a Badge that has at least one "holders" neighbor.
-func (e *EdgeHolders) Has() predicate.Badge { return predicate.Badge{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Badge that has a "holders" neighbor satisfying the
-// predicates.
-func (e *EdgeHolders) HasWith(ps ...predicate.Person) predicate.Badge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Badge{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Badge to the Person rows with the given ids.
-func (e *EdgeHolders) Add(ids ...int) predicate.BadgeSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.BadgeSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Badge from the Person rows with the given ids.
-func (e *EdgeHolders) Remove(ids ...int) predicate.BadgeSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.BadgeSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Badge from every "holders" neighbor.
-func (e *EdgeHolders) Clear() predicate.BadgeSetter {
-	return predicate.BadgeSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// Holders is the "holders" edge of Badge, to Person: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithHolders.
+var Holders = &orm.ToMany[predicate.Badge, predicate.Person, int]{Meta: &holdersMeta}
 
 // EdgeMetas returns the descriptions of the edges of Badge, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&teamsMeta, &holdersMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Badge) predicate.Badge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Badge{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Badge) predicate.Badge { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Badge) predicate.Badge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Badge{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Badge) predicate.Badge { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Badge) predicate.Badge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Badge{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Badge) predicate.Badge { return orm.Not(ps...) }

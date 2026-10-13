@@ -5,7 +5,11 @@
 package wide
 
 import (
+	"time"
+
+	uuid "github.com/google/uuid"
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -93,72 +97,54 @@ const (
 
 // The columns of Wide.
 var (
-	ID     = IntColumn(ColumnID)
-	Key    = StringColumn(ColumnKey)
-	S1     = StringColumn(ColumnS1)
-	S2     = StringColumn(ColumnS2)
-	S3     = NullableStringColumn(ColumnS3)
-	T1     = StringColumn(ColumnT1)
-	B1     = BoolColumn(ColumnB1)
-	B2     = NullableBoolColumn(ColumnB2)
-	I1     = IntColumn(ColumnI1)
-	I2     = NullableIntColumn(ColumnI2)
-	I8     = Int8Column(ColumnI8)
-	I16    = Int16Column(ColumnI16)
-	I32    = Int32Column(ColumnI32)
-	I64    = Int64Column(ColumnI64)
-	U1     = UintColumn(ColumnU1)
-	U8     = Uint8Column(ColumnU8)
-	U16    = Uint16Column(ColumnU16)
-	U32    = Uint32Column(ColumnU32)
-	U64    = Uint64Column(ColumnU64)
-	F64    = Float64Column(ColumnF64)
-	F32    = Float32Column(ColumnF32)
-	F3     = NullableFloat64Column(ColumnF3)
-	At     = TimeColumn(ColumnAt)
-	At2    = NullableTimeColumn(ColumnAt2)
-	UID    = UUIDColumn(ColumnUID)
-	Uid2   = NullableUUIDColumn(ColumnUid2)
-	Raw    = BytesColumn(ColumnRaw)
-	Raw2   = NullableBytesColumn(ColumnRaw2)
-	Kind   = KindEnumColumn(ColumnKind)
-	Kind2  = NullableKind2EnumColumn(ColumnKind2)
-	List   = IntListColumn(ColumnList)
-	Dict   = NullableMapColumn(ColumnDict)
-	Addr   = NullableAddressColumn(ColumnAddr)
-	Label  = LabelColumn(ColumnLabel)
-	Weight = WeightColumn(ColumnWeight)
-	Dflt   = StringColumn(ColumnDflt)
-	Price  = DecimalColumn(ColumnPrice)
-	Tier   = TierColumn(ColumnTier)
-	N1     = IntColumn(ColumnN1)
-	N2     = IntColumn(ColumnN2)
-	Tail   = StringColumn(ColumnTail)
+	ID     = orm.NumberColumn[int, predicate.Wide](ColumnID)
+	Key    = orm.StringColumn[string, predicate.Wide](ColumnKey)
+	S1     = orm.StringColumn[string, predicate.Wide](ColumnS1)
+	S2     = orm.StringColumn[string, predicate.Wide](ColumnS2)
+	S3     = orm.NullableStringColumn[string, predicate.Wide](ColumnS3)
+	T1     = orm.StringColumn[string, predicate.Wide](ColumnT1)
+	B1     = orm.BoolColumn[bool, predicate.Wide](ColumnB1)
+	B2     = orm.NullableBoolColumn[bool, predicate.Wide](ColumnB2)
+	I1     = orm.NumberColumn[int, predicate.Wide](ColumnI1)
+	I2     = orm.NullableNumberColumn[int, predicate.Wide](ColumnI2)
+	I8     = orm.NumberColumn[int8, predicate.Wide](ColumnI8)
+	I16    = orm.NumberColumn[int16, predicate.Wide](ColumnI16)
+	I32    = orm.NumberColumn[int32, predicate.Wide](ColumnI32)
+	I64    = orm.NumberColumn[int64, predicate.Wide](ColumnI64)
+	U1     = orm.NumberColumn[uint, predicate.Wide](ColumnU1)
+	U8     = orm.NumberColumn[uint8, predicate.Wide](ColumnU8)
+	U16    = orm.NumberColumn[uint16, predicate.Wide](ColumnU16)
+	U32    = orm.NumberColumn[uint32, predicate.Wide](ColumnU32)
+	U64    = orm.NumberColumn[uint64, predicate.Wide](ColumnU64)
+	F64    = orm.NumberColumn[float64, predicate.Wide](ColumnF64)
+	F32    = orm.NumberColumn[float32, predicate.Wide](ColumnF32)
+	F3     = orm.NullableNumberColumn[float64, predicate.Wide](ColumnF3)
+	At     = orm.OrderedColumn[time.Time, predicate.Wide](ColumnAt)
+	At2    = orm.NullableOrderedColumn[time.Time, predicate.Wide](ColumnAt2)
+	UID    = orm.OrderedColumn[uuid.UUID, predicate.Wide](ColumnUID)
+	Uid2   = orm.NullableOrderedColumn[uuid.UUID, predicate.Wide](ColumnUid2)
+	Raw    = orm.OrderedColumn[[]byte, predicate.Wide](ColumnRaw)
+	Raw2   = orm.NullableOrderedColumn[[]byte, predicate.Wide](ColumnRaw2)
+	Kind   = orm.EnumColumn[KindEnum, predicate.Wide](ColumnKind)
+	Kind2  = orm.NullableEnumColumn[Kind2Enum, predicate.Wide](ColumnKind2)
+	List   = orm.ValueColumn[[]int, predicate.Wide](ColumnList)
+	Dict   = orm.NullableValueColumn[map[string]string, predicate.Wide](ColumnDict)
+	Addr   = orm.NullableValueColumn[types.Address, predicate.Wide](ColumnAddr)
+	Label  = orm.StringColumn[types.Label, predicate.Wide](ColumnLabel)
+	Weight = orm.NumberColumn[types.Weight, predicate.Wide](ColumnWeight)
+	Dflt   = orm.StringColumn[string, predicate.Wide](ColumnDflt)
+	Price  = orm.StringColumn[types.Decimal, predicate.Wide](ColumnPrice)
+	Tier   = orm.EnumColumn[types.Tier, predicate.Wide](ColumnTier)
+	N1     = orm.NumberColumn[int, predicate.Wide](ColumnN1)
+	N2     = orm.NumberColumn[int, predicate.Wide](ColumnN2)
+	Tail   = orm.StringColumn[string, predicate.Wide](ColumnTail)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Wide) predicate.Wide {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Wide{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Wide) predicate.Wide { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Wide) predicate.Wide {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Wide{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Wide) predicate.Wide { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Wide) predicate.Wide {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Wide{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Wide) predicate.Wide { return orm.Not(ps...) }

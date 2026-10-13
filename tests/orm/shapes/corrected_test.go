@@ -59,11 +59,10 @@ import (
 // known_gaps_runtime_test.go and has been corrected since. Each keeps the
 // hard case that showed the gap.
 
-// The field descriptor types of an entity package are exported, so a helper
-// can take one.
+// The type of a column is a type of package orm, so a helper can take one.
 var (
-	_ scalar.NullableStringColumn = scalar.StringNil
-	_ scalar.IntColumn            = scalar.ID
+	_ orm.NullableStringColumn[string, predicate.Scalar] = scalar.StringNil
+	_ orm.NumberColumn[int, predicate.Scalar]            = scalar.ID
 )
 
 // A bool with a named Go type, required and nillable: a NULL between a true
@@ -922,9 +921,9 @@ func TestIsNilOnEveryColumn(t *testing.T) {
 	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(scalar.IntOpt.IsNil()).Count(ctx)), "after NULL was stored by something else")
 	assert.Equal(t, 2, must(client.Scalar.Query(db).Where(scalar.IntOpt.NotNil(), scalar.StringOpt.NotNil()).Count(ctx)))
 	// And as code written once for any column sees it.
-	isNull := func(c orm.NullableColumn[predicate.Scalar]) predicate.Scalar { return c.IsNil() }
-	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(isNull(&scalar.IntOpt)).Count(ctx)))
-	assert.Equal(t, 0, must(client.Scalar.Query(db).Where(isNull(&scalar.ID)).Count(ctx)))
-	var ordered orm.OrderedColumn[int, predicate.Scalar] = &scalar.IntOpt
+	isNull := func(c *orm.ValueColumn[int, predicate.Scalar]) predicate.Scalar { return c.IsNil() }
+	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(isNull(scalar.IntOpt.AsValue())).Count(ctx)))
+	assert.Equal(t, 0, must(client.Scalar.Query(db).Where(isNull(scalar.ID.AsValue())).Count(ctx)))
+	ordered := scalar.IntOpt.AsOrdered()
 	assert.Equal(t, 1, must(client.Scalar.Query(db).Where(ordered.IsNil()).Count(ctx)))
 }

@@ -35,44 +35,26 @@ const (
 
 // The columns of ErrField.
 var (
-	ID     = IntColumn(ColumnID)
-	Err    = StringColumn(ColumnErr)
-	Errs   = IntColumn(ColumnErrs)
-	Fn     = StringColumn(ColumnFn)
-	Fns    = StringColumn(ColumnFns)
-	Def    = StringColumn(ColumnDef)
-	Checks = StringColumn(ColumnChecks)
-	M      = StringColumn(ColumnM)
-	D      = StringColumn(ColumnD)
-	F      = StringColumn(ColumnF)
-	V      = StringColumn(ColumnV)
-	Fields = StringColumn(ColumnFields)
-	Mixin  = StringColumn(ColumnMixin)
+	ID     = orm.NumberColumn[int, predicate.ErrField](ColumnID)
+	Err    = orm.StringColumn[string, predicate.ErrField](ColumnErr)
+	Errs   = orm.NumberColumn[int, predicate.ErrField](ColumnErrs)
+	Fn     = orm.StringColumn[string, predicate.ErrField](ColumnFn)
+	Fns    = orm.StringColumn[string, predicate.ErrField](ColumnFns)
+	Def    = orm.StringColumn[string, predicate.ErrField](ColumnDef)
+	Checks = orm.StringColumn[string, predicate.ErrField](ColumnChecks)
+	M      = orm.StringColumn[string, predicate.ErrField](ColumnM)
+	D      = orm.StringColumn[string, predicate.ErrField](ColumnD)
+	F      = orm.StringColumn[string, predicate.ErrField](ColumnF)
+	V      = orm.StringColumn[string, predicate.ErrField](ColumnV)
+	Fields = orm.StringColumn[string, predicate.ErrField](ColumnFields)
+	Mixin  = orm.StringColumn[string, predicate.ErrField](ColumnMixin)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.ErrField) predicate.ErrField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.ErrField{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.ErrField) predicate.ErrField { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.ErrField) predicate.ErrField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.ErrField{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.ErrField) predicate.ErrField { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.ErrField) predicate.ErrField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.ErrField{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.ErrField) predicate.ErrField { return orm.Not(ps...) }

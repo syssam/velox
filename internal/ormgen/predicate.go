@@ -19,10 +19,10 @@ func (g *Generator) predicates() ([]byte, error) {
 type %[1]s orm.P
 
 // %[2]s is an assignment of a mutation of %[1]s.
-type %[2]s orm.S
+type %[2]s = orm.SetterOf[%[1]s]
 
 // %[3]s is an order term of a query of %[1]s.
-type %[3]s orm.O
+type %[3]s = orm.OrderOf[%[1]s]
 
 `, e.Name, e.pnames[0], e.pnames[1])
 	}

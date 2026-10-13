@@ -769,8 +769,8 @@ func (Thing) Fields() []velox.Field {
 }
 `,
 		want: generateFails, wantSubstr: "a method String"},
-	// A string id of a named Go type is told apart from another column of
-	// that type by its name, not by a number.
+	// A string id of a named Go type is ordered and not searched, as an id
+	// is; another column of that type is a string column.
 	{name: "a string id of a named type next to a field of that type",
 		schema: `
 type Thing struct{ velox.Schema }
@@ -779,7 +779,10 @@ func (Thing) Fields() []velox.Field {
 	return []velox.Field{field.String("id").GoType(types.Label("")), field.String("label").GoType(types.Label(""))}
 }
 `,
-		want: builds, generated: map[string][]string{"thing/columns.go": {"type LabelIDColumn string", "type LabelColumn string"}}},
+		want: builds, generated: map[string][]string{"thing/thing.go": {
+			"ID = orm.OrderedColumn[types.Label, predicate.Thing](ColumnID)",
+			"Label = orm.StringColumn[types.Label, predicate.Thing](ColumnLabel)",
+		}}},
 	// An entity nothing can be ordered by has no order in the schema: lists
 	// of it take no orderBy, and the edge to it has none either. (velox's
 	// schema generator wrote an order enum without values, and refused its

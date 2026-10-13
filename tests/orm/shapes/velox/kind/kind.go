@@ -44,84 +44,28 @@ const (
 
 // The columns of Kind.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
-	Shape = ShapeEnumColumn(ColumnShape)
+	ID    = orm.NumberColumn[int, predicate.Kind](ColumnID)
+	Label = orm.StringColumn[string, predicate.Kind](ColumnLabel)
+	Shape = orm.EnumColumn[ShapeEnum, predicate.Kind](ColumnShape)
 )
 
-var meta0 = orm.EdgeMeta{Name: "shapes", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "kind_shapes", Columns: []string{"kind_shapes"}}
+var shapesMeta = orm.EdgeMeta{Name: "shapes", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "kind_shapes", Columns: []string{"kind_shapes"}}
 
-// EdgeShapes is the "shapes" edge of Kind, from Kind to KindShape.
-type EdgeShapes struct{}
-
-// Shapes is the "shapes" edge of Kind: conditions on it and changes to it. A
-// query eager-loads it with WithShapes.
-var Shapes = &EdgeShapes{}
-
-// Has matches a Kind that has at least one "shapes" neighbor.
-func (e *EdgeShapes) Has() predicate.Kind { return predicate.Kind{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Kind that has a "shapes" neighbor satisfying the
-// predicates.
-func (e *EdgeShapes) HasWith(ps ...predicate.KindShape) predicate.Kind {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Kind{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the Kind to the KindShape rows with the given ids.
-func (e *EdgeShapes) Add(ids ...int) predicate.KindSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KindSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the Kind from the KindShape rows with the given ids.
-func (e *EdgeShapes) Remove(ids ...int) predicate.KindSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.KindSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the Kind from every "shapes" neighbor.
-func (e *EdgeShapes) Clear() predicate.KindSetter {
-	return predicate.KindSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Shapes is the "shapes" edge of Kind, to KindShape: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithShapes.
+var Shapes = &orm.ToMany[predicate.Kind, predicate.KindShape, int]{Meta: &shapesMeta}
 
 // EdgeMetas returns the descriptions of the edges of Kind, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&shapesMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Kind) predicate.Kind {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Kind{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Kind) predicate.Kind { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Kind) predicate.Kind {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Kind{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Kind) predicate.Kind { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Kind) predicate.Kind {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Kind{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Kind) predicate.Kind { return orm.Not(ps...) }

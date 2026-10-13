@@ -5,6 +5,8 @@
 package comment
 
 import (
+	"time"
+
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
@@ -26,106 +28,35 @@ const (
 
 // The columns of Comment.
 var (
-	ID        = IntColumn(ColumnID)
-	CreatedAt = TimeColumn(ColumnCreatedAt)
-	UpdatedAt = AutoTimeColumn(ColumnUpdatedAt)
-	Content   = StringColumn(ColumnContent)
+	ID        = orm.NumberColumn[int, predicate.Comment](ColumnID)
+	CreatedAt = orm.OrderedColumn[time.Time, predicate.Comment](ColumnCreatedAt)
+	UpdatedAt = orm.AutoOrderedColumn[time.Time, predicate.Comment](ColumnUpdatedAt)
+	Content   = orm.StringColumn[string, predicate.Comment](ColumnContent)
 )
 
-var meta0 = orm.EdgeMeta{Name: "post", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"post_comments"}, Required: true}
+var postMeta = orm.EdgeMeta{Name: "post", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"post_comments"}, Required: true}
 
-// EdgePost is the "post" edge of Comment, from Comment to Post.
-type EdgePost struct{}
+// Post is the "post" edge of Comment, to Post: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithPost.
+var Post = &orm.ToOne[predicate.Comment, predicate.Post, int]{Meta: &postMeta}
 
-// Post is the "post" edge of Comment: conditions on it and changes to it. A
-// query eager-loads it with WithPost.
-var Post = &EdgePost{}
+var authorMeta = orm.EdgeMeta{Name: "author", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"user_comments"}, Required: true}
 
-// Has matches a Comment that has at least one "post" neighbor.
-func (e *EdgePost) Has() predicate.Comment { return predicate.Comment{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Comment that has a "post" neighbor satisfying the
-// predicates.
-func (e *EdgePost) HasWith(ps ...predicate.Post) predicate.Comment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Comment{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Comment to the Post with the given id.
-func (e *EdgePost) Set(id int) predicate.CommentSetter {
-	return predicate.CommentSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Comment from every "post" neighbor.
-func (e *EdgePost) Clear() predicate.CommentSetter {
-	return predicate.CommentSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "author", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "comments", Columns: []string{"user_comments"}, Required: true}
-
-// EdgeAuthor is the "author" edge of Comment, from Comment to User.
-type EdgeAuthor struct{}
-
-// Author is the "author" edge of Comment: conditions on it and changes to it. A
-// query eager-loads it with WithAuthor.
-var Author = &EdgeAuthor{}
-
-// Has matches a Comment that has at least one "author" neighbor.
-func (e *EdgeAuthor) Has() predicate.Comment {
-	return predicate.Comment{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Comment that has a "author" neighbor satisfying the
-// predicates.
-func (e *EdgeAuthor) HasWith(ps ...predicate.User) predicate.Comment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Comment{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Set connects the Comment to the User with the given id.
-func (e *EdgeAuthor) Set(id int) predicate.CommentSetter {
-	return predicate.CommentSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
-}
-
-// Clear disconnects the Comment from every "author" neighbor.
-func (e *EdgeAuthor) Clear() predicate.CommentSetter {
-	return predicate.CommentSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// Author is the "author" edge of Comment, to User: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithAuthor.
+var Author = &orm.ToOne[predicate.Comment, predicate.User, int]{Meta: &authorMeta}
 
 // EdgeMetas returns the descriptions of the edges of Comment, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&postMeta, &authorMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Comment) predicate.Comment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Comment{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Comment) predicate.Comment { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Comment) predicate.Comment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Comment{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Comment) predicate.Comment { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Comment) predicate.Comment {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Comment{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Comment) predicate.Comment { return orm.Not(ps...) }

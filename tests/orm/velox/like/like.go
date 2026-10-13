@@ -5,6 +5,8 @@
 package like
 
 import (
+	"time"
+
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
 )
@@ -26,102 +28,34 @@ const (
 
 // The columns of Like.
 var (
-	ID      = IntColumn(ColumnID)
-	LikedAt = TimeColumn(ColumnLikedAt)
-	UserID  = IntKeyColumn(ColumnUserID)
-	PostID  = IntKeyColumn(ColumnPostID)
+	ID      = orm.NumberColumn[int, predicate.Like](ColumnID)
+	LikedAt = orm.OrderedColumn[time.Time, predicate.Like](ColumnLikedAt)
+	UserID  = orm.OrderedColumn[int, predicate.Like](ColumnUserID)
+	PostID  = orm.OrderedColumn[int, predicate.Like](ColumnPostID)
 )
 
-var meta0 = orm.EdgeMeta{Name: "user", Index: 0, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id"}, Immutable: true, Required: true}
+var userMeta = orm.EdgeMeta{Name: "user", Index: 0, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"user_id"}, Immutable: true, Required: true}
 
-// EdgeUser is the "user" edge of Like, from Like to User.
-type EdgeUser struct{}
+// User is the "user" edge of Like, to User: conditions on it (Has, HasWith) and
+// changes to it (Set, Clear). A query eager-loads it with WithUser.
+var User = &orm.ToOne[predicate.Like, predicate.User, int]{Meta: &userMeta}
 
-// User is the "user" edge of Like: conditions on it and changes to it. A
-// query eager-loads it with WithUser.
-var User = &EdgeUser{}
+var postMeta = orm.EdgeMeta{Name: "post", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"post_id"}, Immutable: true, Required: true}
 
-// Has matches a Like that has at least one "user" neighbor.
-func (e *EdgeUser) Has() predicate.Like { return predicate.Like{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Like that has a "user" neighbor satisfying the predicates.
-func (e *EdgeUser) HasWith(ps ...predicate.User) predicate.Like {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Like{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Like to the User with the given id.
-func (e *EdgeUser) Set(id int) predicate.LikeSetter {
-	return predicate.LikeSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Like from every "user" neighbor.
-func (e *EdgeUser) Clear() predicate.LikeSetter {
-	return predicate.LikeSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "post", Index: 1, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "likes", Columns: []string{"post_id"}, Immutable: true, Required: true}
-
-// EdgePost is the "post" edge of Like, from Like to Post.
-type EdgePost struct{}
-
-// Post is the "post" edge of Like: conditions on it and changes to it. A
-// query eager-loads it with WithPost.
-var Post = &EdgePost{}
-
-// Has matches a Like that has at least one "post" neighbor.
-func (e *EdgePost) Has() predicate.Like { return predicate.Like{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Like that has a "post" neighbor satisfying the predicates.
-func (e *EdgePost) HasWith(ps ...predicate.Post) predicate.Like {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Like{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Set connects the Like to the Post with the given id.
-func (e *EdgePost) Set(id int) predicate.LikeSetter {
-	return predicate.LikeSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
-}
-
-// Clear disconnects the Like from every "post" neighbor.
-func (e *EdgePost) Clear() predicate.LikeSetter {
-	return predicate.LikeSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// Post is the "post" edge of Like, to Post: conditions on it (Has, HasWith) and
+// changes to it (Set, Clear). A query eager-loads it with WithPost.
+var Post = &orm.ToOne[predicate.Like, predicate.Post, int]{Meta: &postMeta}
 
 // EdgeMetas returns the descriptions of the edges of Like, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&userMeta, &postMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Like) predicate.Like {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Like{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Like) predicate.Like { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Like) predicate.Like {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Like{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Like) predicate.Like { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Like) predicate.Like {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Like{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Like) predicate.Like { return orm.Not(ps...) }

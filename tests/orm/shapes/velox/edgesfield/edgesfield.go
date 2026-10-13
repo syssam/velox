@@ -24,85 +24,27 @@ const (
 
 // The columns of EdgesField.
 var (
-	ID         = IntColumn(ColumnID)
-	EdgesField = StringColumn(ColumnEdgesField)
+	ID         = orm.NumberColumn[int, predicate.EdgesField](ColumnID)
+	EdgesField = orm.StringColumn[string, predicate.EdgesField](ColumnEdgesField)
 )
 
-var meta0 = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"edges_field_fields"}}
+var fieldsMeta = orm.EdgeMeta{Name: "fields", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"edges_field_fields"}}
 
-// EdgeFields is the "fields" edge of EdgesField, from EdgesField to Field.
-type EdgeFields struct{}
-
-// Fields is the "fields" edge of EdgesField: conditions on it and changes to
-// it. A query eager-loads it with WithFields.
-var Fields = &EdgeFields{}
-
-// Has matches a EdgesField that has at least one "fields" neighbor.
-func (e *EdgeFields) Has() predicate.EdgesField {
-	return predicate.EdgesField{Op: orm.OpHasEdge, Edge: &meta0}
-}
-
-// HasWith matches a EdgesField that has a "fields" neighbor satisfying the
-// predicates.
-func (e *EdgeFields) HasWith(ps ...predicate.Field) predicate.EdgesField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesField{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the EdgesField to the Field rows with the given ids.
-func (e *EdgeFields) Add(ids ...int) predicate.EdgesFieldSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.EdgesFieldSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the EdgesField from the Field rows with the given ids.
-func (e *EdgeFields) Remove(ids ...int) predicate.EdgesFieldSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.EdgesFieldSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the EdgesField from every "fields" neighbor.
-func (e *EdgeFields) Clear() predicate.EdgesFieldSetter {
-	return predicate.EdgesFieldSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Fields is the "fields" edge of EdgesField, to Field: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithFields.
+var Fields = &orm.ToMany[predicate.EdgesField, predicate.Field, int]{Meta: &fieldsMeta}
 
 // EdgeMetas returns the descriptions of the edges of EdgesField, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&fieldsMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.EdgesField) predicate.EdgesField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesField{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.EdgesField) predicate.EdgesField { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.EdgesField) predicate.EdgesField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesField{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.EdgesField) predicate.EdgesField { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.EdgesField) predicate.EdgesField {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.EdgesField{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.EdgesField) predicate.EdgesField { return orm.Not(ps...) }

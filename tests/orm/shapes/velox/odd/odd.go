@@ -6,6 +6,7 @@ package odd
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/shapes/types"
 	"github.com/syssam/velox/tests/orm/shapes/velox/predicate"
 )
 
@@ -48,239 +49,62 @@ const (
 
 // The columns of Odd.
 var (
-	ID        = IntColumn(ColumnID)
-	Label     = StringColumn(ColumnLabel)
-	ByName    = NullableMapColumn(ColumnByName)
-	List      = NullableAddressListColumn(ColumnList)
-	Ptrs      = NullableAddressListColumn2(ColumnPtrs)
-	Role      = RoleEnumColumn(ColumnRole)
-	RoleType  = StringColumn(ColumnRoleType)
-	RoleAdmin = StringColumn(ColumnRoleAdmin)
-	Tier      = TierColumn(ColumnTier)
+	ID        = orm.NumberColumn[int, predicate.Odd](ColumnID)
+	Label     = orm.StringColumn[string, predicate.Odd](ColumnLabel)
+	ByName    = orm.NullableValueColumn[map[string]types.Address, predicate.Odd](ColumnByName)
+	List      = orm.NullableValueColumn[[]types.Address, predicate.Odd](ColumnList)
+	Ptrs      = orm.NullableValueColumn[[]*types.Address, predicate.Odd](ColumnPtrs)
+	Role      = orm.EnumColumn[RoleEnum, predicate.Odd](ColumnRole)
+	RoleType  = orm.StringColumn[string, predicate.Odd](ColumnRoleType)
+	RoleAdmin = orm.StringColumn[string, predicate.Odd](ColumnRoleAdmin)
+	Tier      = orm.EnumColumn[types.Tier, predicate.Odd](ColumnTier)
 )
 
-var meta0 = orm.EdgeMeta{Name: "id", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_id"}}
+var iDEdgeMeta = orm.EdgeMeta{Name: "id", Index: 0, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_id"}}
 
-// EdgeID is the "id" edge of Odd, from Odd to Field.
-type EdgeID struct{}
+// IDEdge is the "id" edge of Odd, to Field: conditions on it (Has, HasWith) and
+// changes to it (Add, Remove, Clear). A query eager-loads it with WithID.
+var IDEdge = &orm.ToMany[predicate.Odd, predicate.Field, int]{Meta: &iDEdgeMeta}
 
-// IDEdge is the "id" edge of Odd: conditions on it and changes to it. A
-// query eager-loads it with WithID.
-var IDEdge = &EdgeID{}
+var queryMeta = orm.EdgeMeta{Name: "query", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_query"}}
 
-// Has matches a Odd that has at least one "id" neighbor.
-func (e *EdgeID) Has() predicate.Odd { return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta0} }
+// Query is the "query" edge of Odd, to Field: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithQuery.
+var Query = &orm.ToMany[predicate.Odd, predicate.Field, int]{Meta: &queryMeta}
 
-// HasWith matches a Odd that has a "id" neighbor satisfying the predicates.
-func (e *EdgeID) HasWith(ps ...predicate.Field) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var edgesMeta = orm.EdgeMeta{Name: "edges", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_edges"}}
 
-// Add connects the Odd to the Field rows with the given ids.
-func (e *EdgeID) Add(ids ...int) predicate.OddSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
+// Edges is the "edges" edge of Odd, to Field: conditions on it (Has, HasWith)
+// and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithEdges.
+var Edges = &orm.ToMany[predicate.Odd, predicate.Field, int]{Meta: &edgesMeta}
 
-// Remove disconnects the Odd from the Field rows with the given ids.
-func (e *EdgeID) Remove(ids ...int) predicate.OddSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.OddSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
+var tableEdgeMeta = orm.EdgeMeta{Name: "table", Index: 3, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_table"}}
 
-// Clear disconnects the Odd from every "id" neighbor.
-func (e *EdgeID) Clear() predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// TableEdge is the "table" edge of Odd, to Field: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithTable.
+var TableEdge = &orm.ToOne[predicate.Odd, predicate.Field, int]{Meta: &tableEdgeMeta}
 
-var meta1 = orm.EdgeMeta{Name: "query", Index: 1, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_query"}}
+var modelMeta = orm.EdgeMeta{Name: "model", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_model"}}
 
-// EdgeQuery is the "query" edge of Odd, from Odd to Field.
-type EdgeQuery struct{}
-
-// Query is the "query" edge of Odd: conditions on it and changes to it. A
-// query eager-loads it with WithQuery.
-var Query = &EdgeQuery{}
-
-// Has matches a Odd that has at least one "query" neighbor.
-func (e *EdgeQuery) Has() predicate.Odd { return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Odd that has a "query" neighbor satisfying the predicates.
-func (e *EdgeQuery) HasWith(ps ...predicate.Field) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Odd to the Field rows with the given ids.
-func (e *EdgeQuery) Add(ids ...int) predicate.OddSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Odd from the Field rows with the given ids.
-func (e *EdgeQuery) Remove(ids ...int) predicate.OddSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.OddSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Odd from every "query" neighbor.
-func (e *EdgeQuery) Clear() predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "edges", Index: 2, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "fields", Columns: []string{"odd_edges"}}
-
-// EdgeEdges is the "edges" edge of Odd, from Odd to Field.
-type EdgeEdges struct{}
-
-// Edges is the "edges" edge of Odd: conditions on it and changes to it. A
-// query eager-loads it with WithEdges.
-var Edges = &EdgeEdges{}
-
-// Has matches a Odd that has at least one "edges" neighbor.
-func (e *EdgeEdges) Has() predicate.Odd { return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta2} }
-
-// HasWith matches a Odd that has a "edges" neighbor satisfying the predicates.
-func (e *EdgeEdges) HasWith(ps ...predicate.Field) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Add connects the Odd to the Field rows with the given ids.
-func (e *EdgeEdges) Add(ids ...int) predicate.OddSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
-}
-
-// Remove disconnects the Odd from the Field rows with the given ids.
-func (e *EdgeEdges) Remove(ids ...int) predicate.OddSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.OddSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
-}
-
-// Clear disconnects the Odd from every "edges" neighbor.
-func (e *EdgeEdges) Clear() predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "table", Index: 3, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_table"}}
-
-// EdgeTable is the "table" edge of Odd, from Odd to Field.
-type EdgeTable struct{}
-
-// TableEdge is the "table" edge of Odd: conditions on it and changes to it. A
-// query eager-loads it with WithTable.
-var TableEdge = &EdgeTable{}
-
-// Has matches a Odd that has at least one "table" neighbor.
-func (e *EdgeTable) Has() predicate.Odd { return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta3} }
-
-// HasWith matches a Odd that has a "table" neighbor satisfying the predicates.
-func (e *EdgeTable) HasWith(ps ...predicate.Field) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Set connects the Odd to the Field with the given id.
-func (e *EdgeTable) Set(id int) predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: []any{id}}
-}
-
-// Clear disconnects the Odd from every "table" neighbor.
-func (e *EdgeTable) Clear() predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
-
-var meta4 = orm.EdgeMeta{Name: "model", Index: 4, Rel: orm.M2O, Inverse: false, Bidi: false, Table: "odds", Columns: []string{"odd_model"}}
-
-// EdgeModel is the "model" edge of Odd, from Odd to Field.
-type EdgeModel struct{}
-
-// Model is the "model" edge of Odd: conditions on it and changes to it. A
-// query eager-loads it with WithModel.
-var Model = &EdgeModel{}
-
-// Has matches a Odd that has at least one "model" neighbor.
-func (e *EdgeModel) Has() predicate.Odd { return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta4} }
-
-// HasWith matches a Odd that has a "model" neighbor satisfying the predicates.
-func (e *EdgeModel) HasWith(ps ...predicate.Field) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpHasEdge, Edge: &meta4, Subs: subs}
-}
-
-// Set connects the Odd to the Field with the given id.
-func (e *EdgeModel) Set(id int) predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: []any{id}}
-}
-
-// Clear disconnects the Odd from every "model" neighbor.
-func (e *EdgeModel) Clear() predicate.OddSetter {
-	return predicate.OddSetter{Kind: orm.EdgeClear, Edge: &meta4}
-}
+// Model is the "model" edge of Odd, to Field: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithModel.
+var Model = &orm.ToOne[predicate.Odd, predicate.Field, int]{Meta: &modelMeta}
 
 // EdgeMetas returns the descriptions of the edges of Odd, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
+func EdgeMetas() []*orm.EdgeMeta {
+	return []*orm.EdgeMeta{&iDEdgeMeta, &queryMeta, &edgesMeta, &tableEdgeMeta, &modelMeta}
+}
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Odd) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Odd) predicate.Odd { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Odd) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Odd) predicate.Odd { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Odd) predicate.Odd {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Odd{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Odd) predicate.Odd { return orm.Not(ps...) }

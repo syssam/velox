@@ -6,6 +6,7 @@ package asset
 
 import (
 	"github.com/syssam/velox/orm"
+	"github.com/syssam/velox/tests/orm/gqlshapes/types"
 	"github.com/syssam/velox/tests/orm/gqlshapes/velox/predicate"
 )
 
@@ -26,135 +27,42 @@ const (
 
 // The columns of Asset.
 var (
-	ID        = IntColumn(ColumnID)
-	Label     = StringColumn(ColumnLabel)
-	Thumbnail = NullableBytesColumn(ColumnThumbnail)
-	Specs     = NullableSpecsColumn(ColumnSpecs)
+	ID        = orm.NumberColumn[int, predicate.Asset](ColumnID)
+	Label     = orm.StringColumn[string, predicate.Asset](ColumnLabel)
+	Thumbnail = orm.NullableOrderedColumn[[]byte, predicate.Asset](ColumnThumbnail)
+	Specs     = orm.NullableValueColumn[types.Specs, predicate.Asset](ColumnSpecs)
 )
 
-var meta0 = orm.EdgeMeta{Name: "org", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"org_assets"}}
+var orgMeta = orm.EdgeMeta{Name: "org", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"org_assets"}}
 
-// EdgeOrg is the "org" edge of Asset, from Asset to Org.
-type EdgeOrg struct{}
+// Org is the "org" edge of Asset, to Org: conditions on it (Has, HasWith) and
+// changes to it (Set, Clear). A query eager-loads it with WithOrg.
+var Org = &orm.ToOne[predicate.Asset, predicate.Org, int]{Meta: &orgMeta}
 
-// Org is the "org" edge of Asset: conditions on it and changes to it. A
-// query eager-loads it with WithOrg.
-var Org = &EdgeOrg{}
+var personMeta = orm.EdgeMeta{Name: "person", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"person_assets"}}
 
-// Has matches a Asset that has at least one "org" neighbor.
-func (e *EdgeOrg) Has() predicate.Asset { return predicate.Asset{Op: orm.OpHasEdge, Edge: &meta0} }
+// Person is the "person" edge of Asset, to Person: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithPerson.
+var Person = &orm.ToOne[predicate.Asset, predicate.Person, int]{Meta: &personMeta}
 
-// HasWith matches a Asset that has a "org" neighbor satisfying the predicates.
-func (e *EdgeOrg) HasWith(ps ...predicate.Org) predicate.Asset {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Asset{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var makerMeta = orm.EdgeMeta{Name: "maker", Index: 2, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"person_made"}}
 
-// Set connects the Asset to the Org with the given id.
-func (e *EdgeOrg) Set(id int) predicate.AssetSetter {
-	return predicate.AssetSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Asset from every "org" neighbor.
-func (e *EdgeOrg) Clear() predicate.AssetSetter {
-	return predicate.AssetSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "person", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"person_assets"}}
-
-// EdgePerson is the "person" edge of Asset, from Asset to Person.
-type EdgePerson struct{}
-
-// Person is the "person" edge of Asset: conditions on it and changes to it. A
-// query eager-loads it with WithPerson.
-var Person = &EdgePerson{}
-
-// Has matches a Asset that has at least one "person" neighbor.
-func (e *EdgePerson) Has() predicate.Asset { return predicate.Asset{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Asset that has a "person" neighbor satisfying the
-// predicates.
-func (e *EdgePerson) HasWith(ps ...predicate.Person) predicate.Asset {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Asset{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Set connects the Asset to the Person with the given id.
-func (e *EdgePerson) Set(id int) predicate.AssetSetter {
-	return predicate.AssetSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
-}
-
-// Clear disconnects the Asset from every "person" neighbor.
-func (e *EdgePerson) Clear() predicate.AssetSetter {
-	return predicate.AssetSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "maker", Index: 2, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "assets", Columns: []string{"person_made"}}
-
-// EdgeMaker is the "maker" edge of Asset, from Asset to Person.
-type EdgeMaker struct{}
-
-// Maker is the "maker" edge of Asset: conditions on it and changes to it. A
-// query eager-loads it with WithMaker.
-var Maker = &EdgeMaker{}
-
-// Has matches a Asset that has at least one "maker" neighbor.
-func (e *EdgeMaker) Has() predicate.Asset { return predicate.Asset{Op: orm.OpHasEdge, Edge: &meta2} }
-
-// HasWith matches a Asset that has a "maker" neighbor satisfying the
-// predicates.
-func (e *EdgeMaker) HasWith(ps ...predicate.Person) predicate.Asset {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Asset{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Set connects the Asset to the Person with the given id.
-func (e *EdgeMaker) Set(id int) predicate.AssetSetter {
-	return predicate.AssetSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: []any{id}}
-}
-
-// Clear disconnects the Asset from every "maker" neighbor.
-func (e *EdgeMaker) Clear() predicate.AssetSetter {
-	return predicate.AssetSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
+// Maker is the "maker" edge of Asset, to Person: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithMaker.
+var Maker = &orm.ToOne[predicate.Asset, predicate.Person, int]{Meta: &makerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Asset, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&orgMeta, &personMeta, &makerMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Asset) predicate.Asset {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Asset{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Asset) predicate.Asset { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Asset) predicate.Asset {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Asset{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Asset) predicate.Asset { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Asset) predicate.Asset {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Asset{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Asset) predicate.Asset { return orm.Not(ps...) }

@@ -24,128 +24,34 @@ const (
 
 // The columns of Topic.
 var (
-	ID   = IntColumn(ColumnID)
-	Name = StringColumn(ColumnName)
+	ID   = orm.NumberColumn[int, predicate.Topic](ColumnID)
+	Name = orm.StringColumn[string, predicate.Topic](ColumnName)
 )
 
-var meta0 = orm.EdgeMeta{Name: "articles", Index: 0, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "article_topics", Columns: []string{"article_id", "topic_id"}}
+var articlesMeta = orm.EdgeMeta{Name: "articles", Index: 0, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "article_topics", Columns: []string{"article_id", "topic_id"}}
 
-// EdgeArticles is the "articles" edge of Topic, from Topic to Article.
-type EdgeArticles struct{}
+// Articles is the "articles" edge of Topic, to Article: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithArticles.
+var Articles = &orm.ToMany[predicate.Topic, predicate.Article, int]{Meta: &articlesMeta}
 
-// Articles is the "articles" edge of Topic: conditions on it and changes to it.
-// A query eager-loads it with WithArticles.
-var Articles = &EdgeArticles{}
+var bannedInMeta = orm.EdgeMeta{Name: "banned_in", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
 
-// Has matches a Topic that has at least one "articles" neighbor.
-func (e *EdgeArticles) Has() predicate.Topic { return predicate.Topic{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Topic that has a "articles" neighbor satisfying the
-// predicates.
-func (e *EdgeArticles) HasWith(ps ...predicate.Article) predicate.Topic {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Topic{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Add connects the Topic to the Article rows with the given ids.
-func (e *EdgeArticles) Add(ids ...int) predicate.TopicSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TopicSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: vs}
-}
-
-// Remove disconnects the Topic from the Article rows with the given ids.
-func (e *EdgeArticles) Remove(ids ...int) predicate.TopicSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TopicSetter{Kind: orm.EdgeRemove, Edge: &meta0, IDs: vs}
-}
-
-// Clear disconnects the Topic from every "articles" neighbor.
-func (e *EdgeArticles) Clear() predicate.TopicSetter {
-	return predicate.TopicSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
-
-var meta1 = orm.EdgeMeta{Name: "banned_in", Index: 1, Rel: orm.M2M, Inverse: true, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
-
-// EdgeBannedIn is the "banned_in" edge of Topic, from Topic to Article.
-type EdgeBannedIn struct{}
-
-// BannedIn is the "banned_in" edge of Topic: conditions on it and changes to
-// it. A query eager-loads it with WithBannedIn.
-var BannedIn = &EdgeBannedIn{}
-
-// Has matches a Topic that has at least one "banned_in" neighbor.
-func (e *EdgeBannedIn) Has() predicate.Topic { return predicate.Topic{Op: orm.OpHasEdge, Edge: &meta1} }
-
-// HasWith matches a Topic that has a "banned_in" neighbor satisfying the
-// predicates.
-func (e *EdgeBannedIn) HasWith(ps ...predicate.Article) predicate.Topic {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Topic{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Add connects the Topic to the Article rows with the given ids.
-func (e *EdgeBannedIn) Add(ids ...int) predicate.TopicSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TopicSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: vs}
-}
-
-// Remove disconnects the Topic from the Article rows with the given ids.
-func (e *EdgeBannedIn) Remove(ids ...int) predicate.TopicSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.TopicSetter{Kind: orm.EdgeRemove, Edge: &meta1, IDs: vs}
-}
-
-// Clear disconnects the Topic from every "banned_in" neighbor.
-func (e *EdgeBannedIn) Clear() predicate.TopicSetter {
-	return predicate.TopicSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
+// BannedIn is the "banned_in" edge of Topic, to Article: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithBannedIn.
+var BannedIn = &orm.ToMany[predicate.Topic, predicate.Article, int]{Meta: &bannedInMeta}
 
 // EdgeMetas returns the descriptions of the edges of Topic, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&articlesMeta, &bannedInMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Topic) predicate.Topic {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Topic{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Topic) predicate.Topic { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Topic) predicate.Topic {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Topic{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Topic) predicate.Topic { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Topic) predicate.Topic {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Topic{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Topic) predicate.Topic { return orm.Not(ps...) }

@@ -158,13 +158,13 @@ next:
 		"func(v user.RoleEnum) *entity.UserUpdate {",
 		"guarded(where, func(w *filter.PostWhereInput) (predicate.Post, error) { return w.P(), nil })", // P as a value
 		"late := func() (predicate.Post, error) { return where.P(), nil }",
-		"func idIn[P orm.Predicate](id orm.OrderedColumn[int, P], ids ...int) P {", // generic over entities
+		"func idIn[P orm.Predicate](id *orm.OrderedColumn[int, P], ids ...int) P {", // generic over entities
 		"return *new(P)",
 		"func both[P orm.Predicate](ps ...P) P {",
 		"return P(orm.And(ps...))",
-		"Text orm.TextColumn[P]",
-		"if p := idIn(&user.ID, ids...); !orm.IsZero(p) {", // a column passed as a value
-		"titled[predicate.Post]{Text: &post.Title}",
+		"Text *orm.StringColumn[string, P]",
+		"if p := idIn(user.ID.AsOrdered(), ids...); !orm.IsZero(p) {", // a column passed as a value
+		"titled[predicate.Post]{Text: post.Title.AsString()}",
 		"var rename = func(b *entity.UserUpdate, v string) *entity.UserUpdate {", // a method expression
 		"return u.QueryPosts(velox.ExecutorFrom(ctx)).Count(ctx)",                // an entity handed over: the context's handle
 		".OrderBy(user.Name.Asc()).Columns(user.ColumnName).All(ctx)",            // entities with some columns
@@ -345,7 +345,7 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		// An option kept in a variable shapes the query it is given.
 		"func loadWith(ctx context.Context, c velox.Executor, opt func(*entity.PostQuery)) ([]*entity.User, error) { return velox.User.Query(c).WithPosts(orm.Apply(velox.Post.Query(nil), opt)).All(ctx) }",
 		"type exister interface { Exists(ctx context.Context) (bool, error) }",
-		"Owner orm.OrderedColumn[int, P]", // every column can be asked IsNil
+		"Owner *orm.OrderedColumn[int, P]", // every column can be asked IsNil
 		"func orderField() *postpkg.OrderField { return new(postpkg.OrderField) }",
 		"func tables(ctx context.Context, c *velox.DB) error { return migrate.Create(ctx, c) }",
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",

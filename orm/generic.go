@@ -2,25 +2,24 @@ package orm
 
 // This file is for code written once for several entities: a filter
 // translated from a request for whichever entity it names, a rule about who
-// owns a row that many entities share. The generated code has no generic
-// types (a package pays for the methods of every generic type it can reach,
-// instantiated or not), so what such code is generic over is declared here:
-// the predicate types as a constraint, and a column as an interface of the
-// methods the column types have in common.
+// owns a row that many entities share. Such code is generic over the
+// predicate type of an entity, under the constraint Predicate, and takes a
+// column as one of the column types (columns.go).
 
 // Predicate is the predicate type of any entity (predicate.User,
 // predicate.Post): the constraint of a function that builds predicates for
 // whichever entity it is used with. Under it a predicate converts to P and
 // back, so such a function can use everything here:
 //
-//	func recent[T orm.Predicate](created orm.OrderedColumn[time.Time, T], since time.Time) T {
-//		return orm.And(created.GTE(since), T(orm.Raw(notArchived)))
+//	func recent[E orm.Predicate](created *orm.OrderedColumn[time.Time, E], since time.Time) E {
+//		return orm.And(created.GTE(since), E(orm.Raw(notArchived)))
 //	}
 //
-//	db.Post.Query(conn).Where(recent(&post.CreatedAt, since))
+//	velox.Post.Query(conn).Where(recent(post.UpdatedAt.AsOrdered(), since))
 //
-// A column is passed by its address: the methods of a column type have
-// pointer receivers.
+// A column is given as the plain type of the level the function needs
+// (AsOrdered, AsString, ...): the type a column is declared with also says
+// whether it can be cleared and whether it has an update default.
 type Predicate interface {
 	~struct {
 		Op   Op
@@ -59,42 +58,3 @@ func Not[T Predicate](ps ...T) T { return group(OpNot, ps) }
 //
 //	if p := olderThan(age); !orm.IsZero(p) { q.Where(p) }
 func IsZero[T Predicate](p T) bool { return P(p).IsZero() }
-
-// Column is a column of values of type T, of an entity whose predicate type
-// is P, as code generic over entities sees it: &user.Role is a
-// Column[user.RoleEnum, predicate.User]. Every column type has these.
-type Column[T, P any] interface {
-	EQ(T) P
-	NEQ(T) P
-	In(...T) P
-	NotIn(...T) P
-	NullableColumn[P]
-}
-
-// OrderedColumn is a column whose values compare: numbers, times, strings.
-type OrderedColumn[T, P any] interface {
-	Column[T, P]
-	GT(T) P
-	GTE(T) P
-	LT(T) P
-	LTE(T) P
-}
-
-// TextColumn is a string column.
-type TextColumn[P any] interface {
-	OrderedColumn[string, P]
-	Contains(string) P
-	HasPrefix(string) P
-	HasSuffix(string) P
-	EqualFold(string) P
-	ContainsFold(string) P
-}
-
-// NullableColumn is the part of a column that asks whether it is NULL.
-// Every column has it, one that cannot be NULL too (it never is): Column
-// includes it. On its own it is the constraint for code that asks nothing
-// else, of a column of any type.
-type NullableColumn[P any] interface {
-	IsNil() P
-	NotNil() P
-}

@@ -5,8 +5,10 @@
 package token
 
 import (
+	uuid "github.com/google/uuid"
 	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/velox/predicate"
+	"github.com/syssam/velox/testschema/types"
 )
 
 // Table is the table of Token, and ModelName the name of the entity: what the
@@ -29,75 +31,31 @@ const (
 
 // The columns of Token.
 var (
-	ID     = UUIDColumn(ColumnID)
-	Name   = StringColumn(ColumnName)
-	Tier   = TierColumn(ColumnTier)
-	Grade  = NullableTierColumn(ColumnGrade)
-	Label  = LabelColumn(ColumnLabel)
-	Alias  = NullableLabelColumn(ColumnAlias)
-	Weight = WeightColumn(ColumnWeight)
+	ID     = orm.OrderedColumn[uuid.UUID, predicate.Token](ColumnID)
+	Name   = orm.StringColumn[string, predicate.Token](ColumnName)
+	Tier   = orm.EnumColumn[types.Tier, predicate.Token](ColumnTier)
+	Grade  = orm.NullableEnumColumn[types.Tier, predicate.Token](ColumnGrade)
+	Label  = orm.StringColumn[types.Label, predicate.Token](ColumnLabel)
+	Alias  = orm.NullableStringColumn[types.Label, predicate.Token](ColumnAlias)
+	Weight = orm.NumberColumn[types.Weight, predicate.Token](ColumnWeight)
 )
 
-var meta0 = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
+var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "tokens", Columns: []string{"user_token"}}
 
-// EdgeOwner is the "owner" edge of Token, from Token to User.
-type EdgeOwner struct{}
-
-// Owner is the "owner" edge of Token: conditions on it and changes to it. A
-// query eager-loads it with WithOwner.
-var Owner = &EdgeOwner{}
-
-// Has matches a Token that has at least one "owner" neighbor.
-func (e *EdgeOwner) Has() predicate.Token { return predicate.Token{Op: orm.OpHasEdge, Edge: &meta0} }
-
-// HasWith matches a Token that has a "owner" neighbor satisfying the
-// predicates.
-func (e *EdgeOwner) HasWith(ps ...predicate.User) predicate.Token {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Token{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Token to the User with the given id.
-func (e *EdgeOwner) Set(id int) predicate.TokenSetter {
-	return predicate.TokenSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Token from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.TokenSetter {
-	return predicate.TokenSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Owner is the "owner" edge of Token, to User: conditions on it (Has, HasWith)
+// and changes to it (Set, Clear). A query eager-loads it with WithOwner.
+var Owner = &orm.ToOne[predicate.Token, predicate.User, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Token, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&ownerMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Token) predicate.Token {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Token{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Token) predicate.Token { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Token) predicate.Token {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Token{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Token) predicate.Token { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Token) predicate.Token {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Token{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Token) predicate.Token { return orm.Not(ps...) }

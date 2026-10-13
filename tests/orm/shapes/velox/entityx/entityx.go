@@ -25,34 +25,16 @@ const (
 
 // The columns of Entityx.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
-	Other = StringColumn(ColumnOther)
+	ID    = orm.NumberColumn[int, predicate.Entityx](ColumnID)
+	Label = orm.StringColumn[string, predicate.Entityx](ColumnLabel)
+	Other = orm.StringColumn[string, predicate.Entityx](ColumnOther)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Entityx) predicate.Entityx {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Entityx{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Entityx) predicate.Entityx { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Entityx) predicate.Entityx {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Entityx{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Entityx) predicate.Entityx { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Entityx) predicate.Entityx {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Entityx{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Entityx) predicate.Entityx { return orm.Not(ps...) }

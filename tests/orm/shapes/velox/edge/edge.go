@@ -24,33 +24,15 @@ const (
 
 // The columns of Edge.
 var (
-	ID    = IntColumn(ColumnID)
-	Label = StringColumn(ColumnLabel)
+	ID    = orm.NumberColumn[int, predicate.Edge](ColumnID)
+	Label = orm.StringColumn[string, predicate.Edge](ColumnLabel)
 )
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Edge) predicate.Edge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Edge{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Edge) predicate.Edge { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Edge) predicate.Edge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Edge{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Edge) predicate.Edge { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Edge) predicate.Edge {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Edge{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Edge) predicate.Edge { return orm.Not(ps...) }

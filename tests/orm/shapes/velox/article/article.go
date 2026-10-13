@@ -28,252 +28,61 @@ const (
 
 // The columns of Article.
 var (
-	ID       = IntColumn(ColumnID)
-	Title    = StringColumn(ColumnTitle)
-	Words    = IntColumn(ColumnWords)
-	Section  = StringColumn(ColumnSection)
-	AuthorID = IntKeyColumn(ColumnAuthorID)
-	EditorID = NullableIntKeyColumn(ColumnEditorID)
+	ID       = orm.NumberColumn[int, predicate.Article](ColumnID)
+	Title    = orm.StringColumn[string, predicate.Article](ColumnTitle)
+	Words    = orm.NumberColumn[int, predicate.Article](ColumnWords)
+	Section  = orm.StringColumn[string, predicate.Article](ColumnSection)
+	AuthorID = orm.OrderedColumn[int, predicate.Article](ColumnAuthorID)
+	EditorID = orm.NullableOrderedColumn[int, predicate.Article](ColumnEditorID)
 )
 
-var meta0 = orm.EdgeMeta{Name: "author", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "articles", Columns: []string{"author_id"}, Required: true}
+var authorMeta = orm.EdgeMeta{Name: "author", Index: 0, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "articles", Columns: []string{"author_id"}, Required: true}
 
-// EdgeAuthor is the "author" edge of Article, from Article to Author.
-type EdgeAuthor struct{}
+// Author is the "author" edge of Article, to Author: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithAuthor.
+var Author = &orm.ToOne[predicate.Article, predicate.Author, int]{Meta: &authorMeta}
 
-// Author is the "author" edge of Article: conditions on it and changes to it. A
-// query eager-loads it with WithAuthor.
-var Author = &EdgeAuthor{}
+var editorMeta = orm.EdgeMeta{Name: "editor", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "articles", Columns: []string{"editor_id"}}
 
-// Has matches a Article that has at least one "author" neighbor.
-func (e *EdgeAuthor) Has() predicate.Article {
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta0}
-}
+// Editor is the "editor" edge of Article, to Author: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithEditor.
+var Editor = &orm.ToOne[predicate.Article, predicate.Author, int]{Meta: &editorMeta}
 
-// HasWith matches a Article that has a "author" neighbor satisfying the
-// predicates.
-func (e *EdgeAuthor) HasWith(ps ...predicate.Author) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
+var topicsMeta = orm.EdgeMeta{Name: "topics", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_topics", Columns: []string{"article_id", "topic_id"}}
 
-// Set connects the Article to the Author with the given id.
-func (e *EdgeAuthor) Set(id int) predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
+// Topics is the "topics" edge of Article, to Topic: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithTopics.
+var Topics = &orm.ToMany[predicate.Article, predicate.Topic, int]{Meta: &topicsMeta}
 
-// Clear disconnects the Article from every "author" neighbor.
-func (e *EdgeAuthor) Clear() predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+var bannedTopicsMeta = orm.EdgeMeta{Name: "banned_topics", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
 
-var meta1 = orm.EdgeMeta{Name: "editor", Index: 1, Rel: orm.M2O, Inverse: true, Bidi: false, Table: "articles", Columns: []string{"editor_id"}}
+// BannedTopics is the "banned_topics" edge of Article, to Topic: conditions on
+// it (Has, HasWith) and changes to it (Add, Remove, Clear). A query eager-loads
+// it with WithBannedTopics.
+var BannedTopics = &orm.ToMany[predicate.Article, predicate.Topic, int]{Meta: &bannedTopicsMeta}
 
-// EdgeEditor is the "editor" edge of Article, from Article to Author.
-type EdgeEditor struct{}
+var notesMeta = orm.EdgeMeta{Name: "notes", Index: 4, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "notes", Columns: []string{"article_ref"}}
 
-// Editor is the "editor" edge of Article: conditions on it and changes to it. A
-// query eager-loads it with WithEditor.
-var Editor = &EdgeEditor{}
-
-// Has matches a Article that has at least one "editor" neighbor.
-func (e *EdgeEditor) Has() predicate.Article {
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta1}
-}
-
-// HasWith matches a Article that has a "editor" neighbor satisfying the
-// predicates.
-func (e *EdgeEditor) HasWith(ps ...predicate.Author) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta1, Subs: subs}
-}
-
-// Set connects the Article to the Author with the given id.
-func (e *EdgeEditor) Set(id int) predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta1, IDs: []any{id}}
-}
-
-// Clear disconnects the Article from every "editor" neighbor.
-func (e *EdgeEditor) Clear() predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta1}
-}
-
-var meta2 = orm.EdgeMeta{Name: "topics", Index: 2, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_topics", Columns: []string{"article_id", "topic_id"}}
-
-// EdgeTopics is the "topics" edge of Article, from Article to Topic.
-type EdgeTopics struct{}
-
-// Topics is the "topics" edge of Article: conditions on it and changes to it. A
-// query eager-loads it with WithTopics.
-var Topics = &EdgeTopics{}
-
-// Has matches a Article that has at least one "topics" neighbor.
-func (e *EdgeTopics) Has() predicate.Article {
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta2}
-}
-
-// HasWith matches a Article that has a "topics" neighbor satisfying the
-// predicates.
-func (e *EdgeTopics) HasWith(ps ...predicate.Topic) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta2, Subs: subs}
-}
-
-// Add connects the Article to the Topic rows with the given ids.
-func (e *EdgeTopics) Add(ids ...int) predicate.ArticleSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta2, IDs: vs}
-}
-
-// Remove disconnects the Article from the Topic rows with the given ids.
-func (e *EdgeTopics) Remove(ids ...int) predicate.ArticleSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ArticleSetter{Kind: orm.EdgeRemove, Edge: &meta2, IDs: vs}
-}
-
-// Clear disconnects the Article from every "topics" neighbor.
-func (e *EdgeTopics) Clear() predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta2}
-}
-
-var meta3 = orm.EdgeMeta{Name: "banned_topics", Index: 3, Rel: orm.M2M, Inverse: false, Bidi: false, Table: "article_bans", Columns: []string{"art", "top"}}
-
-// EdgeBannedTopics is the "banned_topics" edge of Article, from Article to
-// Topic.
-type EdgeBannedTopics struct{}
-
-// BannedTopics is the "banned_topics" edge of Article: conditions on it and
-// changes to it. A query eager-loads it with WithBannedTopics.
-var BannedTopics = &EdgeBannedTopics{}
-
-// Has matches a Article that has at least one "banned_topics" neighbor.
-func (e *EdgeBannedTopics) Has() predicate.Article {
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta3}
-}
-
-// HasWith matches a Article that has a "banned_topics" neighbor satisfying the
-// predicates.
-func (e *EdgeBannedTopics) HasWith(ps ...predicate.Topic) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta3, Subs: subs}
-}
-
-// Add connects the Article to the Topic rows with the given ids.
-func (e *EdgeBannedTopics) Add(ids ...int) predicate.ArticleSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta3, IDs: vs}
-}
-
-// Remove disconnects the Article from the Topic rows with the given ids.
-func (e *EdgeBannedTopics) Remove(ids ...int) predicate.ArticleSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ArticleSetter{Kind: orm.EdgeRemove, Edge: &meta3, IDs: vs}
-}
-
-// Clear disconnects the Article from every "banned_topics" neighbor.
-func (e *EdgeBannedTopics) Clear() predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta3}
-}
-
-var meta4 = orm.EdgeMeta{Name: "notes", Index: 4, Rel: orm.O2M, Inverse: false, Bidi: false, Table: "notes", Columns: []string{"article_ref"}}
-
-// EdgeNotes is the "notes" edge of Article, from Article to Note.
-type EdgeNotes struct{}
-
-// Notes is the "notes" edge of Article: conditions on it and changes to it. A
-// query eager-loads it with WithNotes.
-var Notes = &EdgeNotes{}
-
-// Has matches a Article that has at least one "notes" neighbor.
-func (e *EdgeNotes) Has() predicate.Article {
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta4}
-}
-
-// HasWith matches a Article that has a "notes" neighbor satisfying the
-// predicates.
-func (e *EdgeNotes) HasWith(ps ...predicate.Note) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpHasEdge, Edge: &meta4, Subs: subs}
-}
-
-// Add connects the Article to the Note rows with the given ids.
-func (e *EdgeNotes) Add(ids ...int) predicate.ArticleSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ArticleSetter{Kind: orm.EdgeAdd, Edge: &meta4, IDs: vs}
-}
-
-// Remove disconnects the Article from the Note rows with the given ids.
-func (e *EdgeNotes) Remove(ids ...int) predicate.ArticleSetter {
-	vs := make([]any, len(ids))
-	for i, id := range ids {
-		vs[i] = id
-	}
-	return predicate.ArticleSetter{Kind: orm.EdgeRemove, Edge: &meta4, IDs: vs}
-}
-
-// Clear disconnects the Article from every "notes" neighbor.
-func (e *EdgeNotes) Clear() predicate.ArticleSetter {
-	return predicate.ArticleSetter{Kind: orm.EdgeClear, Edge: &meta4}
-}
+// Notes is the "notes" edge of Article, to Note: conditions on it (Has,
+// HasWith) and changes to it (Add, Remove, Clear). A query eager-loads it with
+// WithNotes.
+var Notes = &orm.ToMany[predicate.Article, predicate.Note, int]{Meta: &notesMeta}
 
 // EdgeMetas returns the descriptions of the edges of Article, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0, &meta1, &meta2, &meta3, &meta4} }
+func EdgeMetas() []*orm.EdgeMeta {
+	return []*orm.EdgeMeta{&authorMeta, &editorMeta, &topicsMeta, &bannedTopicsMeta, &notesMeta}
+}
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Article) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Article) predicate.Article { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Article) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Article) predicate.Article { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Article) predicate.Article {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Article{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Article) predicate.Article { return orm.Not(ps...) }

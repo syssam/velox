@@ -24,72 +24,27 @@ const (
 
 // The columns of Passport.
 var (
-	ID     = IntColumn(ColumnID)
-	Number = StringColumn(ColumnNumber)
+	ID     = orm.NumberColumn[int, predicate.Passport](ColumnID)
+	Number = orm.StringColumn[string, predicate.Passport](ColumnNumber)
 )
 
-var meta0 = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "passports", Columns: []string{"author_passport"}, Required: true}
+var ownerMeta = orm.EdgeMeta{Name: "owner", Index: 0, Rel: orm.O2O, Inverse: true, Bidi: false, Table: "passports", Columns: []string{"author_passport"}, Required: true}
 
-// EdgeOwner is the "owner" edge of Passport, from Passport to Author.
-type EdgeOwner struct{}
-
-// Owner is the "owner" edge of Passport: conditions on it and changes to it. A
-// query eager-loads it with WithOwner.
-var Owner = &EdgeOwner{}
-
-// Has matches a Passport that has at least one "owner" neighbor.
-func (e *EdgeOwner) Has() predicate.Passport {
-	return predicate.Passport{Op: orm.OpHasEdge, Edge: &meta0}
-}
-
-// HasWith matches a Passport that has a "owner" neighbor satisfying the
-// predicates.
-func (e *EdgeOwner) HasWith(ps ...predicate.Author) predicate.Passport {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Passport{Op: orm.OpHasEdge, Edge: &meta0, Subs: subs}
-}
-
-// Set connects the Passport to the Author with the given id.
-func (e *EdgeOwner) Set(id int) predicate.PassportSetter {
-	return predicate.PassportSetter{Kind: orm.EdgeAdd, Edge: &meta0, IDs: []any{id}}
-}
-
-// Clear disconnects the Passport from every "owner" neighbor.
-func (e *EdgeOwner) Clear() predicate.PassportSetter {
-	return predicate.PassportSetter{Kind: orm.EdgeClear, Edge: &meta0}
-}
+// Owner is the "owner" edge of Passport, to Author: conditions on it (Has,
+// HasWith) and changes to it (Set, Clear). A query eager-loads it with
+// WithOwner.
+var Owner = &orm.ToOne[predicate.Passport, predicate.Author, int]{Meta: &ownerMeta}
 
 // EdgeMetas returns the descriptions of the edges of Passport, in order. The
 // generated entity package connects them to the entities they join; nothing
 // else needs them.
-func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&meta0} }
+func EdgeMetas() []*orm.EdgeMeta { return []*orm.EdgeMeta{&ownerMeta} }
 
 // And matches the rows every one of ps matches.
-func And(ps ...predicate.Passport) predicate.Passport {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Passport{Op: orm.OpAnd, Subs: subs}
-}
+func And(ps ...predicate.Passport) predicate.Passport { return orm.And(ps...) }
 
 // Or matches the rows at least one of ps matches; without any, none.
-func Or(ps ...predicate.Passport) predicate.Passport {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Passport{Op: orm.OpOr, Subs: subs}
-}
+func Or(ps ...predicate.Passport) predicate.Passport { return orm.Or(ps...) }
 
 // Not matches the rows that do not match all of ps; without any, none.
-func Not(ps ...predicate.Passport) predicate.Passport {
-	subs := make([]orm.P, len(ps))
-	for i, p := range ps {
-		subs[i] = orm.P(p)
-	}
-	return predicate.Passport{Op: orm.OpNot, Subs: subs}
-}
+func Not(ps ...predicate.Passport) predicate.Passport { return orm.Not(ps...) }
