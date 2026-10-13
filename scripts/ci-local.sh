@@ -263,10 +263,10 @@ else
     tail -20 /tmp/ci-local-vuln.log
     # govulncheck reports against the LOCAL Go toolchain. Stdlib findings
     # "Fixed in: goX.Y.Z" usually mean your Go is behind CI's, not a real
-    # velox issue — CI pins go-version '1.26' (latest 1.26.x). If every
+    # velox issue — CI pins go-version '1.27' (latest 1.27.x). If every
     # finding is "Standard library", update Go to match CI and re-run.
     echo "  note: local toolchain is $(go version | awk '{print $3}'); if findings are"
-    echo "        stdlib-only ('Fixed in: goX.Y.Z'), update Go to CI's 1.26.x and re-run."
+    echo "        stdlib-only ('Fixed in: goX.Y.Z'), update Go to CI's 1.27.x and re-run."
     record_fail "security"
 fi
 

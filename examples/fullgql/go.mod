@@ -1,6 +1,6 @@
 module example.com/fullgql
 
-go 1.26
+go 1.27.0
 
 require (
 	github.com/99designs/gqlgen v0.17.86

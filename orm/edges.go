@@ -1,5 +1,3 @@
-//go:build go1.27
-
 package orm
 
 //go:generate go run ../internal/colgen/cmd columns.go

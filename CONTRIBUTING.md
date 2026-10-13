@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Velox! This guide will help you g
 
 ### Prerequisites
 
-- Go 1.25 or later (the root `go.mod` minimum; the example and test submodules under `examples/` and `tests/` need Go 1.26)
+- Go 1.27 or later (the `go.mod` minimum of the root module and of every submodule)
 - golangci-lint (for linting)
 
 ### Getting Started

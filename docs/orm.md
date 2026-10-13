@@ -142,7 +142,7 @@ err = velox.User.DeleteByID(ctx, conn, id)
   `orm.ToOne` or `orm.ToMany`. An entity's package has no types of its own
   for them, and no methods: the generator wrote a type per Go type per
   entity until 2026-10-13, which was half of the generated tree. The types
-  need Go 1.27: their methods have a type parameter of their own
+  are why the module needs Go 1.27: their methods have a type parameter of their own
   (`orm.Lazy`), which is what keeps a package from compiling the methods it
   does not call (the numbers are in
   [`benchmarks/fixtures/realistic/README.md`](../benchmarks/fixtures/realistic/README.md)).

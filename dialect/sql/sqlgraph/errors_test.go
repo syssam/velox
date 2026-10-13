@@ -63,7 +63,12 @@ func TestIsConstraintError_Extended(t *testing.T) {
 
 	t.Run("wrapped ConstraintError", func(t *testing.T) {
 		t.Parallel()
-		err := fmt.Errorf("wrap: %w", &ConstraintError{msg: "test"})
+		// A pointer, as sqlgraph returns it: IsConstraintError looks for
+		// the pointer type. (Held as an error first: go vet of Go 1.27
+		// reports a pointer to a type with a value-receiver Error method
+		// as a %w operand.)
+		var inner error = &ConstraintError{msg: "test"}
+		err := fmt.Errorf("wrap: %w", inner)
 		assert.True(t, IsConstraintError(err))
 	})
 

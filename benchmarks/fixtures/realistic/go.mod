@@ -1,6 +1,6 @@
 module example.com/realistic
 
-go 1.25.0
+go 1.27.0
 
 require github.com/syssam/velox v0.0.0
 

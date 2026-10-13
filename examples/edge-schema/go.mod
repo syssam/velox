@@ -1,6 +1,6 @@
 module example.com/edge-schema
 
-go 1.26
+go 1.27.0
 
 require (
 	github.com/stretchr/testify v1.11.1

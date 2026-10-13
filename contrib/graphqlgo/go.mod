@@ -1,6 +1,6 @@
 module github.com/syssam/velox/contrib/graphqlgo
 
-go 1.27
+go 1.27.0
 
 // Isolated module: graphql-go and its Go 1.27 floor stay out of the root
 // velox module, so gqlgen users neither download it nor need that Go.

@@ -1,6 +1,6 @@
 module github.com/syssam/velox/contrib/otelvelox
 
-go 1.25.0
+go 1.27.0
 
 // Isolated module: the OpenTelemetry + otelsql dependencies stay out of the root
 // velox module so velox users who don't want tracing don't pull them in.

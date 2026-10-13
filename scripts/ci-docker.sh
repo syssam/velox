@@ -41,7 +41,7 @@ export CI_MYSQL_PORT="${CI_MYSQL_PORT:-53306}"
 COMPOSE=(docker compose -f docker-compose.ci.yml)
 
 # resolve_go prints the toolchain to use. ci.yml pins a minor version
-# ('1.26'), which setup-go resolves to its newest patch release; do the same.
+# ('1.27'), which setup-go resolves to its newest patch release; do the same.
 resolve_go() {
     if [[ -n "${CI_GO:-}" ]]; then
         echo "${CI_GO}"

@@ -4,7 +4,7 @@ This guide walks you through creating a simple application with Velox ORM.
 
 ## Prerequisites
 
-- Go 1.25+ (see `go.mod` for exact version)
+- Go 1.27+ (see `go.mod` for exact version)
 - A database: PostgreSQL, MySQL, or SQLite (no setup needed)
 
 ## Project Setup

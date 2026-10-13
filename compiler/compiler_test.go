@@ -508,9 +508,11 @@ func TestMayRecover_BuildError_InvalidSchemaDir(t *testing.T) {
 		Target:   t.TempDir(),
 		Features: []gen.Feature{gen.FeatureSnapshot},
 	}
-	pkgErr := fmt.Errorf("velox/load: parse schema dir: %w", &packages.Error{
-		Pos: "", Msg: "syntax error", Kind: packages.ListError,
-	})
+	// A pointer, which is what mayRecover looks for. (Held as an error
+	// first: go vet of Go 1.27 reports a pointer to a type with a
+	// value-receiver Error method as a %w operand.)
+	var loadErr error = &packages.Error{Pos: "", Msg: "syntax error", Kind: packages.ListError}
+	pkgErr := fmt.Errorf("velox/load: parse schema dir: %w", loadErr)
 	err := mayRecover(pkgErr, "/nonexistent/schema/path", cfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "schema failure")
