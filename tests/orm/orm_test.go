@@ -250,6 +250,31 @@ func TestCreateBulk(t *testing.T) {
 	n, err := client.User.Query(db).Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 5, n)
+
+	// Rows said by what they set, after the rows given as builders, in the
+	// order they were added; each gets the schema's defaults and is checked
+	// like any other.
+	bulk := client.User.CreateBulk(db, client.User.Create(db).Set(user.Name.Set("first"), user.Email.Set("first@example.com"), user.Age.Set(1)))
+	for i, name := range []string{"second", "third"} {
+		bulk.Row(user.Name.Set(name), user.Email.Set(name+"@example.com"), user.Age.Set(i+2))
+	}
+	rows, err := bulk.Save(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	for i, name := range []string{"first", "second", "third"} {
+		got := ref.User.GetX(ctx, rows[i].ID)
+		assert.Equal(t, name, got.Name)
+		assert.Equal(t, i+1, got.Age)
+		assert.Equal(t, user.RoleUser, rows[i].Role, "the default of the schema")
+	}
+	_, err = client.User.CreateBulk(db).
+		Row(user.Name.Set("fine"), user.Email.Set("fine@example.com"), user.Age.Set(1)).
+		Row(user.Name.Set(""), user.Email.Set("empty@example.com"), user.Age.Set(1)).
+		Save(ctx)
+	require.ErrorAs(t, err, &verr)
+	n, err = client.User.Query(db).Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 8, n, "a row that is not valid fails the whole create")
 }
 
 func TestEdges_EagerLoadEveryKind(t *testing.T) {

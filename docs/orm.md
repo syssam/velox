@@ -174,7 +174,9 @@ err = velox.User.DeleteByID(ctx, conn, id)
   missing row. There is no `Update().Save`: in velox and Ent that spelling is
   the bulk update.
 - **`CreateBulk` is one statement** for all its rows, and all of them or
-  none. A statement has a limit on its parameters (65,535 on Postgres, and a
+  none: `velox.Tag.CreateBulk(tx).Row(tag.Name.Set("go")).Row(tag.Name.Set("sql")).Save(ctx)`,
+  a `Row` per row, or builders that are already there
+  (`CreateBulk(tx, builders...)`). A statement has a limit on its parameters (65,535 on Postgres, and a
   row takes one for each column), so a create of many rows says how many go
   into one: `velox.Log.CreateBulk(tx, rows...).BatchSize(500).Save(ctx)`. The
   statements are then one transaction only when the handle is one. On a

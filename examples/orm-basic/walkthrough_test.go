@@ -65,10 +65,10 @@ func TestCreate(t *testing.T) {
 	assert.False(t, ann.CreatedAt.IsZero(), "the time mixin")
 
 	// Several rows with one statement.
-	tags, err := velox.Tag.CreateBulk(conn,
-		velox.Tag.Create(conn).Set(tag.Name.Set("go")),
-		velox.Tag.Create(conn).Set(tag.Name.Set("sql")),
-	).Save(ctx)
+	tags, err := velox.Tag.CreateBulk(conn).
+		Row(tag.Name.Set("go")).
+		Row(tag.Name.Set("sql")).
+		Save(ctx)
 	require.NoError(t, err)
 	assert.Len(t, tags, 2)
 }

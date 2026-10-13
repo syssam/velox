@@ -428,19 +428,33 @@ func (b *CreateOf[PT, E]) Exec[_ Lazy[PT]](ctx context.Context) error {
 
 // CreateBulkOf creates several rows of an entity with one statement.
 type CreateBulkOf[PT any, E Predicate] struct {
-	m  *Meta
-	ex velox.Executor
-	bs []*CreateOf[PT, E]
-	n  int
+	m    *Meta
+	ex   velox.Executor
+	bs   []*CreateOf[PT, E]
+	rows [][]S // the rows given to Row, after those of bs
+	n    int
 }
 
 //go:noinline
 func (b *CreateBulkOf[PT, E]) sets[_ Lazy[PT]]() [][]S {
-	rows := make([][]S, len(b.bs))
-	for i, c := range b.bs {
-		rows[i] = c.c.Sets
+	rows := make([][]S, 0, len(b.bs)+len(b.rows))
+	for _, c := range b.bs {
+		rows = append(rows, c.c.Sets)
 	}
-	return rows
+	return append(rows, b.rows...)
+}
+
+// Row adds a row, by what it sets:
+//
+//	velox.Tag.CreateBulk(conn).Row(tag.Name.Set("go")).Row(tag.Name.Set("sql")).Save(ctx)
+//
+// It is the short form for rows written in place or added in a loop. Rows
+// given as builders to the client's CreateBulk come first.
+//
+//go:noinline
+func (b *CreateBulkOf[PT, E]) Row[_ Lazy[PT]](ss ...SetterOf[E]) *CreateBulkOf[PT, E] {
+	b.rows = append(b.rows, assignments(nil, ss))
+	return b
 }
 
 // BatchSize makes Save and Exec insert the rows n at a time, with a statement
@@ -568,9 +582,10 @@ func (c *ClientOf[PT, E, ID]) Create[_ Lazy[ID]](ex velox.Executor) *CreateOf[PT
 	return &CreateOf[PT, E]{c: MutCore{M: c.Meta, Ex: ex}}
 }
 
-// CreateBulk returns a builder that creates one row per given builder with
-// one statement, each as it is when the rows are inserted: what is set on a
-// builder after this call is part of its row.
+// CreateBulk returns a builder that creates several rows with one statement:
+// one per given builder, each as it is when the rows are inserted (what is
+// set on a builder after this call is part of its row), and one per call of
+// the builder's Row.
 func (c *ClientOf[PT, E, ID]) CreateBulk[_ Lazy[ID]](ex velox.Executor, bs ...*CreateOf[PT, E]) *CreateBulkOf[PT, E] {
 	return &CreateBulkOf[PT, E]{m: c.Meta, ex: ex, bs: bs}
 }
