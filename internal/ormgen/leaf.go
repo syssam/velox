@@ -338,6 +338,50 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 	// reader looks for. What the entity is (its columns, its enums, its
 	// edges) stays in the file named after it.
 	typesFrom := b.Len()
+	colType := map[*shape]string{}
+	if genericColumns {
+		var keep []*shape
+		for _, s := range order {
+			level := "Value"
+			for _, o := range s.ops {
+				switch o {
+				case vgen.EQ:
+					if level == "Value" {
+						level = "Bool"
+					}
+				case vgen.In:
+					if level == "Bool" {
+						level = "Enum"
+					}
+				case vgen.GT:
+					level = "Ord"
+				case vgen.Contains:
+					level = "String"
+				}
+			}
+			name := ""
+			switch {
+			case s.order != (level != "Value"):
+			case level == "Ord" && s.keep && !s.add && !s.clear:
+				name = "AutoColumn"
+			case s.keep:
+			case level == "Ord" && s.add:
+				name = "NumberColumn"
+			case s.add:
+			default:
+				name = level + "Column"
+			}
+			if name == "" {
+				keep = append(keep, s) // no column type of package orm has these methods: generated
+				continue
+			}
+			if s.clear {
+				name = "Nullable" + name
+			}
+			colType[s] = fmt.Sprintf("orm.%s[%s, %s]", name, s.gotype, pred)
+		}
+		order = keep
+	}
 	for _, s := range order {
 		w("// %s is a column of Go type %s: its methods build the predicates,\n// assignments and order terms of that column. They have pointer receivers so\n// that the compiler emits each once.\ntype %s string\n\n", s.name, s.gotype, s.name)
 		for _, o := range s.ops {
@@ -390,6 +434,10 @@ func (g *Generator) leaf(e *Entity) (map[string][]byte, error) {
 			continue
 		}
 		f.Desc = columns[f]
+		if t := colType[desc[f]]; t != "" {
+			w("\t%s = %s(%s)\n", f.Desc, t, consts[f])
+			continue
+		}
 		w("\t%s = %s(%s)\n", f.Desc, desc[f].name, consts[f])
 	}
 	w(")\n\n")
