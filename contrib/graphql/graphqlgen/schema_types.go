@@ -20,6 +20,7 @@ type typedJSONScalar struct {
 	ScalarName  string // GraphQL scalar name (e.g., "Address")
 	GoType      string // Full Go type path for @goModel (e.g., "example.com/myapp/velox.Address")
 	OrigPkgPath string // Original package path (e.g., "example.com/myapp/schema")
+	OrigPkgName string // Name of that package (e.g., "schema")
 	TypeName    string // Type name without package (e.g., "Address")
 }
 
@@ -102,6 +103,7 @@ func (g *Generator) collectTypedJSONScalars() map[string]typedJSONScalar {
 					ScalarName:  scalarName,
 					GoType:      goType,
 					OrigPkgPath: origPkgPath,
+					OrigPkgName: f.Type.PkgName,
 					TypeName:    typeName,
 				}
 			}

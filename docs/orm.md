@@ -417,8 +417,10 @@ others: the tree with the layer is the tree without it, plus these.
 |---|---|
 | `velox/filter/` | a where input per entity |
 | `velox/entity/<entity>_gql.go` | the order input, `IsNode`, and a method per edge an engine resolves it by |
+| `velox/entity/entity_gql.go` | the interfaces of the schema (`graphql.InterfaceField`) |
 | `velox/<entity>/gql.go` | the fields a list of the entity can be ordered by |
 | `velox/node_gql.go` | `Noder`, `NodeTypes` |
+| `velox/scalars_gql.go` | the scalar of each JSON field's Go type |
 
 What this code calls at run time is `contrib/graphql/gqlinput`: the where
 input as a condition and as a document, the direction of an order input, the
@@ -437,6 +439,12 @@ not import it.
 | `input PostWhereInput` | `filter.PostWhereInput` |
 | `enum PostStatus` | `post.StatusEnum` and its constants |
 | `interface Node` | `velox.Noder`; each entity has `IsNode()`, and `velox.NodeTypes()` lists them |
+| `creator: Person`, an edge under another name (`graphql.InterfaceField` on one edge) | a method like the edge's own: `(*Asset).Creator(ctx)` |
+| `owner: Owner`, one field for several edges (`graphql.InterfaceField` on each) | `(*Asset).Owner(ctx) (entity.Owner, error)`: the neighbor on the first edge that has one, or nil |
+| `interface Owner`, which the schema defines when every implementor has a field under one name | `entity.Owner`; each implementor has `IsOwner()` |
+| a member of `union SearchResult` (`graphql.UnionMember`; the union's text is the application's) | the entity has `IsSearchResult()` |
+| `thumbnail: Bytes` of a nillable bytes field | `(*Asset).ThumbnailOrNil() []byte`: the field is a `*[]byte` |
+| `scalar Specs`, for `field.JSON("specs", types.Specs{})` | `velox.Specs`, an alias of the Go type, with `velox.MarshalSpecs`, `UnmarshalSpecs` and their `Ptr` forms |
 
 A list resolver is a query like any other; the inputs turn into what `Where`
 and `OrderBy` take:
@@ -537,12 +545,23 @@ func (s *service) List(ctx context.Context, after *velox.Cursor, first *int, bef
 - `scalar Bytes`, which the schema has when an entity has a bytes field, is
   left for the engine to bind, as `Time` is (velox binds it to a type of its
   gqlgen runtime).
+- A field of several edges asks them in the order of the schema and gives
+  the first neighbor it finds, each from what the query loaded or else by a
+  query of its own: an asset whose owner is on the last of three edges costs
+  three queries when none was loaded. The interface it is typed as is
+  declared in package `entity` whether the schema defines it or the
+  application does; an interface no such field names, and that the schema
+  does not define, is left to the application entirely.
+- The scalar of a JSON field's Go type is written and read as JSON.
+  `velox.MarshalSpecs` returns the bytes and `velox.UnmarshalSpecs` takes the
+  value as an engine hands it over (the object as JSON decodes it, or its
+  text); neither names an engine's types, so a server binds the scalar with
+  whatever its engine has for one.
 - Not there yet, and refused at generation with a message that says so: an
   entity whose GraphQL type is renamed (`graphql.Type` on the entity),
   ordering by the number of neighbors on an edge, filters on the elements of
-  a JSON array, and whatever else the schema would bind to Go this generator
-  does not write (the interface of `graphql.InterfaceField`, the scalar of a
-  typed JSON field, the accessor of a nillable bytes field). Every `@goModel`
+  a JSON array, and a list over the edges of several types
+  (`graphql.InterfaceField` on edges that are not unique). Every `@goModel`
   that names a package this generator writes, and every `@goField(name:)` of
   an entity's type, is checked against what was generated; a package of the
   application's own under the same directory is not this check's business. An entity with nothing a list could be ordered by
@@ -785,9 +804,11 @@ VELOX_ORM_TEST_POSTGRES='postgres://...' go test ./tests/orm/     # Postgres
 `tests/orm/` compares against the current generator's code on the same
 schema (a randomized differential test, and the JSON of the same rows) and
 runs the examples above; `tests/orm/shapes/` runs 85 schema shapes, what must
-not compile, and the schemas the generator refuses; the generator's own
-tests (`internal/ormgen`, `contrib/graphql/ormgql`) regenerate both trees
+not compile, and the schemas the generator refuses; `tests/orm/gqlshapes/`
+runs what the GraphQL layer writes beyond inputs and edges (an interface, a
+field of several edges, a union, a JSON scalar); the generator's own
+tests (`internal/ormgen`, `contrib/graphql/ormgql`) regenerate the trees
 in-process and fail when the checked-in code is not what the generator
 writes; `tests/orm/bench_test.go` compares allocations between the
 two. The suites cover 94% of the statements of `orm`, 85% of the generator
-(`internal/ormgen`) and 87% of its GraphQL extension.
+(`internal/ormgen`) and 88% of its GraphQL extension.

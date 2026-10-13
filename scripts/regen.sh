@@ -33,6 +33,7 @@ echo "==> regenerating tests/orm fixtures (velox-gen)"
 go run ./cmd/velox-gen -schema github.com/syssam/velox/testschema -target ./tests/orm/velox \
     -package github.com/syssam/velox/tests/orm/velox -graphql ./tests/orm/graphql/velox.graphql
 go generate ./tests/orm/shapes/
+go generate ./tests/orm/gqlshapes/
 
 # Directories that participate in drift-check. Each regenerates into a local
 # ./velox/ output that's gitignored — so `git diff` alone can't detect when the

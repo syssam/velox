@@ -3,6 +3,8 @@ package graphqlgen
 import (
 	"fmt"
 	"path"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/syssam/velox/compiler/gen"
@@ -95,6 +97,116 @@ func (g *Generator) WhereFields(t *gen.Type) []WhereField {
 			WhereField{Name: "has" + pascal(e.Name), Edge: e},
 			WhereField{Name: "has" + pascal(e.Name) + "With", Edge: e, With: true})
 	}
+	return out
+}
+
+// JSONScalar is a scalar the schema declares for the Go type of a JSON field:
+// scalar Address, for field.JSON("address", schema.Address{}).
+type JSONScalar struct {
+	// Name is the scalar's, and of the Go type the schema binds it to in the
+	// root package of the generated tree.
+	Name string
+	// TypeName is the Go type the field holds, in the package PkgPath,
+	// which is called PkgName.
+	PkgPath, PkgName, TypeName string
+}
+
+// JSONScalars returns the scalars of the schema that stand for the Go type
+// of a JSON field, ordered by name.
+func (g *Generator) JSONScalars() []JSONScalar {
+	out := make([]JSONScalar, 0, len(g.typedJSONScalars))
+	for _, s := range g.typedJSONScalars {
+		out = append(out, JSONScalar{Name: s.ScalarName, PkgPath: s.OrigPkgPath, PkgName: s.OrigPkgName, TypeName: s.TypeName})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].PkgPath < out[j].PkgPath
+	})
+	return out
+}
+
+// InterfaceField is a field of an entity's type that graphql.InterfaceField
+// puts on its edges.
+type InterfaceField struct {
+	// Name is the field's name in the schema.
+	Name string
+	// Interface is the interface the field is typed as, for a name several
+	// edges carry; "" for one edge under another name, typed as its target.
+	Interface string
+	// Edges are the edges that carry the name, in the order of the schema.
+	Edges []*gen.Edge
+}
+
+// InterfaceFields returns the fields graphql.InterfaceField gives t's type,
+// in the order the schema lists them.
+func (g *Generator) InterfaceFields(t *gen.Type) ([]InterfaceField, error) {
+	groups, err := g.interfaceFieldGroups(t)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InterfaceField, 0, len(groups))
+	for _, ifc := range groups {
+		out = append(out, InterfaceField{Name: ifc.FieldName, Interface: ifc.InterfaceName, Edges: ifc.Edges})
+	}
+	return out, nil
+}
+
+// Interface is an interface the schema defines itself: one every implementor
+// has a field of, by graphql.InterfaceField.
+type Interface struct {
+	Name string
+	// Implementors are the entities whose types implement it, ordered by
+	// name.
+	Implementors []*gen.Type
+}
+
+// Interfaces returns the interfaces the schema defines itself, ordered by
+// name. An interface an entity names with graphql.Implements and the schema
+// does not define is the application's own.
+func (g *Generator) Interfaces() ([]Interface, error) {
+	ifaces, err := g.generatedInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Interface, 0, len(ifaces))
+	for _, gi := range ifaces {
+		out = append(out, Interface{Name: gi.Name, Implementors: gi.ImplementorTypes})
+	}
+	return out, nil
+}
+
+// Implementors returns the entities whose types implement the interface by
+// graphql.Implements, ordered by name: the ones Interfaces lists for an
+// interface the schema defines.
+func (g *Generator) Implementors(iface string) []*gen.Type {
+	var out []*gen.Type
+	for _, n := range g.graph.Nodes {
+		ann := g.getTypeAnnotation(n)
+		if n.IsView() || ann.Skip.Is(graphql.SkipType) {
+			continue
+		}
+		if slices.Contains(ann.GetImplements(), iface) {
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// Unions returns the unions t's type is a member of by graphql.UnionMember,
+// ordered by name. The schema does not define them: union X = A | B is the
+// application's own text, and what an engine needs of the Go is that each
+// member has the method IsX.
+func (g *Generator) Unions(t *gen.Type) []string {
+	var out []string
+	for _, name := range g.getTypeAnnotation(t).GetUnions() {
+		if name != "" && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 

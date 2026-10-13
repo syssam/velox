@@ -3,6 +3,9 @@ package ormgql
 import (
 	"bytes"
 	"fmt"
+	"slices"
+	"sort"
+	"strings"
 
 	"github.com/syssam/velox/internal/ormgen"
 )
@@ -12,8 +15,13 @@ import (
 // be left out of the build by their names.
 func gqlFile(e *ormgen.Entity) string { return ormgen.FileName(e) + "_gql" }
 
+// commonFile is the file of the layer in package entity that is no entity's:
+// the interfaces of the schema. No entity's file has the name, as none has
+// the name of the package's own common file, entity.go.
+const commonFile = "entity_gql"
+
 // entities generates the files of the layer in package entity: one per
-// entity that has something of it.
+// entity that has something of it, and one for the interfaces.
 func (ext *extension) entities() (map[string][]byte, error) {
 	g := ext.g
 	im := g.Imports()
@@ -24,6 +32,7 @@ func (ext *extension) entities() (map[string][]byte, error) {
 	im.Use(g.Package()+"/predicate", "predicate")
 	var b bytes.Buffer
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
+	ext.interfaces(w)
 	for _, e := range g.Entities() {
 		q := ext.ents[e]
 		if q == nil {
@@ -47,12 +56,39 @@ func (ext *extension) entities() (map[string][]byte, error) {
 	out.WriteString("\n")
 	// As the rest of the package: see ormgen.NoInline.
 	out.Write(ormgen.NoInline(b.Bytes()))
-	// Every declaration is in the file of its entity; the common file of
-	// the split is empty.
-	const common = "gql"
-	files, err := ormgen.Split(out.Bytes(), common)
-	delete(files, common+".go")
+	// Every declaration but the interfaces is in the file of its entity:
+	// without interfaces the common file of the split is empty.
+	files, err := ormgen.Split(out.Bytes(), commonFile)
+	if len(ext.ifaces) == 0 {
+		delete(files, commonFile+".go")
+	}
 	return files, err
+}
+
+// interfaces writes the interfaces of the schema that package entity
+// declares: the ones the schema defines itself, which it binds to these, and
+// the ones a field of several edges is typed as. An entity is of one by its
+// method IsName, which is how an engine tells the type of a value.
+func (ext *extension) interfaces(w func(string, ...any)) {
+	names := make([]string, 0, len(ext.ifaces))
+	for name := range ext.ifaces {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		var impls []string
+		for _, e := range ext.g.Entities() {
+			if q := ext.ents[e]; q != nil && slices.ContainsFunc(q.Marks, func(m gqlMark) bool { return m.Method == "Is"+name }) {
+				impls = append(impls, e.Name)
+			}
+		}
+		sort.Strings(impls)
+		w("// %[1]s is the interface %[1]s of the GraphQL schema", name)
+		if len(impls) > 0 {
+			w(": %s", strings.Join(impls, ", "))
+		}
+		w(".\ntype %[1]s interface{ Is%[1]s() }\n\n", name)
+	}
 }
 
 // entity writes what package entity holds of an entity's GraphQL layer:
@@ -76,6 +112,21 @@ func (ext *extension) entity(w func(string, ...any), e *ormgen.Entity, q *gqlEnt
 	n := ext.g.Names(e)
 	if q.Node {
 		w("// IsNode marks %[1]s as a node of the GraphQL schema.\nfunc (*%[1]s) IsNode() {}\n\n", e.Name)
+	}
+	for _, m := range q.Marks {
+		w("// %s %s\nfunc (*%s) %s() {}\n\n", m.Method, m.Doc, e.Name, m.Method)
+	}
+	for _, c := range q.Bytes {
+		w(`// %[1]sOrNil returns the %[2]q field, or nil when it holds nothing: what a
+// GraphQL engine reads the field through, the field being a *[]byte.
+func (e *%[3]s) %[1]sOrNil() []byte {
+	if e.%[1]s == nil {
+		return nil
+	}
+	return *e.%[1]s
+}
+
+`, c.GoName, c.F.Name, e.Name)
 	}
 	if q.HasOrder {
 		// The fields the list can be ordered by are in the entity's own
@@ -107,9 +158,13 @@ func (o *%[1]sOrder) Term() %[2]s {
 	}
 	for _, x := range q.Edges {
 		t := x.X.Target
+		what := fmt.Sprintf("%q edge", x.X.E.Name)
+		if x.Name != "" {
+			what = fmt.Sprintf("%q field, which is the %q edge,", x.Name, x.X.E.Name)
+		}
 		switch x.Kind {
 		case gqlOne:
-			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbor the query
+			w(`// %[1]s resolves the %[2]s for a GraphQL engine: the neighbor the query
 // loaded, or else a query on the handle of the context (velox.WithExecutor).
 // An edge without a neighbor is nil, not an error.
 func (e *%[3]s) %[1]s(ctx context.Context) (*%[4]s, error) {
@@ -120,9 +175,9 @@ func (e *%[3]s) %[1]s(ctx context.Context) (*%[4]s, error) {
 	return v, %[6]s.MaskNotFound(err)
 }
 
-`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, veloxPkg)
+`, x.Method, what, e.Name, t.Name, x.X.GoName, veloxPkg)
 		case gqlList:
-			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: the neighbors the query
+			w(`// %[1]s resolves the %[2]s for a GraphQL engine: the neighbors the query
 // loaded, or else a query on the handle of the context (velox.WithExecutor).
 func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
 	if v, err := e.Edges.%[5]sOrErr(); !%[6]s.IsNotLoaded(err) {
@@ -131,7 +186,7 @@ func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
 	return e.Query%[5]s(velox.ExecutorFrom(ctx)).All(ctx)
 }
 
-`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, veloxPkg)
+`, x.Method, what, e.Name, t.Name, x.X.GoName, veloxPkg)
 		case gqlConnection:
 			params, chain := "", ""
 			switch x.Order {
@@ -148,11 +203,11 @@ func (e *%[3]s) %[1]s(ctx context.Context) ([]*%[4]s, error) {
 				params += ", where interface{ P() " + t.Predicate() + " }"
 				doc = fmt.Sprintf("\n// where is a *filter.%sWhereInput, or nil.", t.Name)
 			}
-			w(`// %[1]s resolves the %[2]q edge for a GraphQL engine: one page of the
+			w(`// %[1]s resolves the %[2]s for a GraphQL engine: one page of the
 // neighbors, queried on the handle of the context (velox.WithExecutor).%[8]s
 func (e *%[3]s) %[1]s(ctx context.Context, after *velox.Cursor, first *int, before *velox.Cursor, last *int%[6]s) (*%[4]sConnection, error) {
 	q := e.Query%[5]s(velox.ExecutorFrom(ctx))%[7]s
-`, x.Method, x.X.E.Name, e.Name, t.Name, x.X.GoName, params, chain, doc)
+`, x.Method, what, e.Name, t.Name, x.X.GoName, params, chain, doc)
 			if x.Where {
 				w("\tif where != nil {\n\t\tq.Where(where.P())\n\t}\n")
 			}
@@ -161,5 +216,35 @@ func (e *%[3]s) %[1]s(ctx context.Context, after *velox.Cursor, first *int, befo
 			}
 			w("\treturn q.Paginate(ctx, after, first, before, last)\n}\n\n")
 		}
+	}
+	for _, p := range q.Polys {
+		names := make([]string, len(p.Edges))
+		for i, x := range p.Edges {
+			names[i] = x.E.Name
+		}
+		w(`// %[1]s resolves the %[2]q field for a GraphQL engine: the neighbor on the
+// first of the edges %[3]s that has one, or nil. Each is the neighbor the
+// query loaded, or else a query on the handle of the context
+// (velox.WithExecutor).
+func (e *%[4]s) %[1]s(ctx context.Context) (%[5]s, error) {
+`, p.Method, p.Name, strings.Join(names, ", "), e.Name, p.Interface)
+		for _, x := range p.Edges {
+			// A nil neighbor is not returned as it is: in the interface it
+			// would not be nil.
+			w(`	{
+		v, err := e.Edges.%[1]sOrErr()
+		if %[2]s.IsNotLoaded(err) {
+			v, err = e.Query%[1]s(velox.ExecutorFrom(ctx)).Only(ctx)
+		}
+		if err = %[2]s.MaskNotFound(err); err != nil {
+			return nil, err
+		}
+		if v != nil {
+			return v, nil
+		}
+	}
+`, x.GoName, veloxPkg)
+		}
+		w("\treturn nil, nil\n}\n\n")
 	}
 }

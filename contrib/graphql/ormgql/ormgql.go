@@ -20,10 +20,18 @@
 // Everything it writes is in files of its own, so that the tree without
 // them is the tree of an application that has no GraphQL:
 //
-//	<target>/filter/            a where input per entity
-//	<target>/entity/<e>_gql.go  the order input, and a method per edge an engine resolves it by
-//	<target>/<e>/gql.go         the fields a list of the entity can be ordered by
-//	<target>/node_gql.go        the types of node, for a node(id:) field
+//	<target>/filter/               a where input per entity
+//	<target>/entity/<e>_gql.go     the order input, and a method per edge an engine resolves it by
+//	<target>/entity/entity_gql.go  the interfaces of the schema
+//	<target>/<e>/gql.go            the fields a list of the entity can be ordered by
+//	<target>/node_gql.go           the types of node, for a node(id:) field
+//	<target>/scalars_gql.go        the scalar of each JSON field's Go type
+//
+// Beside an edge's method, an entity's file holds what else the schema
+// resolves by one: an edge under another name and a field of several edges
+// (graphql.InterfaceField), the accessor of a nillable bytes field, and the
+// methods by which an engine tells that the entity is a node, of an
+// interface, or a member of a union (graphql.UnionMember).
 //
 // What the generated code calls at run time is package gqlinput.
 package ormgql
@@ -68,6 +76,11 @@ type extension struct {
 	filterIm  *ormgen.Imports
 	// schema are the schema files by name.
 	schema map[string]string
+	// scalars are the scalars of the schema that stand for the Go type of a
+	// JSON field.
+	scalars []graphqlgen.JSONScalar
+	// ifaces are the interfaces of the schema that package entity declares.
+	ifaces map[string]bool
 }
 
 // Begin generates the schema text and reads from it what Go each entity
@@ -90,13 +103,14 @@ func (ext *extension) Begin(g *ormgen.Generator, graph *vgen.Graph) error {
 		return err
 	}
 	ext.schema = schema
+	nodes := false
 	for _, q := range ext.ents {
-		if q.Node {
-			g.ReserveRoot("Noder", "NodeType", "NodeTypes")
-			break
-		}
+		nodes = nodes || q.Node
 	}
-	return nil
+	if nodes {
+		g.ReserveRoot("Noder", "NodeType", "NodeTypes")
+	}
+	return ext.scalarNames(nodes)
 }
 
 // LeafNames takes, in the package of every entity, the name of the type of
@@ -115,17 +129,21 @@ func (ext *extension) LeafNames(e *ormgen.Entity, n *ormgen.Namer) {
 // Files returns the Go of the layer.
 func (ext *extension) Files() (map[string][]byte, error) {
 	files := map[string][]byte{}
-	for dir, gen := range map[string]func() (map[string][]byte, error){
-		"filter": ext.filters,
-		"entity": ext.entities,
-		"":       ext.nodes,
+	for _, part := range []struct {
+		dir string
+		gen func() (map[string][]byte, error)
+	}{
+		{"filter", ext.filters},
+		{"entity", ext.entities},
+		{"", ext.nodes},
+		{"", ext.scalarFiles},
 	} {
-		part, err := gen()
+		got, err := part.gen()
 		if err != nil {
 			return nil, err
 		}
-		for name, src := range part {
-			files[filepath.Join(dir, name)] = src
+		for name, src := range got {
+			files[filepath.Join(part.dir, name)] = src
 		}
 	}
 	for _, e := range ext.g.Entities() {

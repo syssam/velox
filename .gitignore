@@ -16,6 +16,7 @@ velox
 # So do the trees the tests of package orm run against.
 !/tests/orm/velox/
 !/tests/orm/shapes/velox/
+!/tests/orm/gqlshapes/velox/
 testgen
 
 # Test binary

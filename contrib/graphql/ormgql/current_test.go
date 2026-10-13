@@ -33,6 +33,7 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 		sdl string
 	}{
 		{"testschema", "github.com/syssam/velox/testschema", "../../../tests/orm/velox", ormgen.Config{Package: "github.com/syssam/velox/tests/orm/velox"}, "../../../tests/orm/graphql"},
+		{"gqlshapes", "github.com/syssam/velox/tests/orm/gqlshapes/schema", "../../../tests/orm/gqlshapes/velox", ormgen.Config{Package: "github.com/syssam/velox/tests/orm/gqlshapes/velox"}, "../../../tests/orm/gqlshapes/graphql"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			out := t.TempDir()
@@ -67,7 +68,7 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 						t.Errorf("%s in %s is no longer generated: regenerate", rel, c.sdl)
 					}
 				}
-				if len(wantSDL) < 5 {
+				if len(wantSDL) < 4 {
 					t.Errorf("only %d schema files were generated", len(wantSDL))
 				}
 			}
@@ -158,50 +159,69 @@ func TestGraphQLLayerIsInFilesOfItsOwn(t *testing.T) {
 	if testing.Short() {
 		t.Skip("loads and generates a schema")
 	}
-	const pkg, tracked = "github.com/syssam/velox/tests/orm/velox", "../../../tests/orm/velox"
-	out := t.TempDir()
-	vcfg, err := vgen.NewConfig(vgen.WithTarget(out), vgen.WithPackage(pkg))
-	if err != nil {
-		t.Fatal(err)
-	}
-	graph, err := compiler.LoadGraph("github.com/syssam/velox/testschema", vcfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ormgen.Generate(graph, ormgen.Config{Target: out, Package: pkg}); err != nil {
-		t.Fatal(err)
-	}
-	plain, with := files(t, out, ".go"), files(t, tracked, ".go")
-	if len(plain) < 10 {
-		t.Fatalf("only %d files were generated", len(plain))
-	}
-	for rel, src := range plain {
-		if !bytes.Equal(with[rel], src) {
-			t.Errorf("%s is not the same file with the GraphQL layer as without it", rel)
-		}
-	}
-	kinds := map[string]int{}
-	for rel := range with {
-		if _, ok := plain[rel]; ok {
-			continue
-		}
-		dir, base := filepath.Split(filepath.ToSlash(rel))
-		switch {
-		case dir == "filter/":
-			kinds["filter"]++
-		case dir == "entity/" && strings.HasSuffix(base, "_gql.go"):
-			kinds["entity"]++
-		case dir == "" && base == "node_gql.go":
-			kinds["root"]++
-		case base == "gql.go":
-			kinds["leaf"]++
-		default:
-			t.Errorf("%s is written with the GraphQL layer only, and is not named as a file of it", rel)
-		}
-	}
-	for _, kind := range []string{"filter", "entity", "root", "leaf"} {
-		if kinds[kind] == 0 {
-			t.Errorf("the tracked tree has no file of the layer in %s: the test no longer covers it", kind)
-		}
+	for _, c := range []struct {
+		name, schema, pkg, tracked string
+		// kinds are the kinds of file of the layer the tree must have, for
+		// the test to cover them.
+		kinds []string
+	}{
+		{"testschema", "github.com/syssam/velox/testschema", "github.com/syssam/velox/tests/orm/velox", "../../../tests/orm/velox",
+			[]string{"filter", "entity", "nodes", "leaf"}},
+		// The shapes that need more: an interface of the schema, and the
+		// scalar of a JSON field's Go type.
+		{"gqlshapes", "github.com/syssam/velox/tests/orm/gqlshapes/schema", "github.com/syssam/velox/tests/orm/gqlshapes/velox", "../../../tests/orm/gqlshapes/velox",
+			[]string{"entity", "interfaces", "nodes", "scalars", "leaf"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out := t.TempDir()
+			vcfg, err := vgen.NewConfig(vgen.WithTarget(out), vgen.WithPackage(c.pkg))
+			if err != nil {
+				t.Fatal(err)
+			}
+			graph, err := compiler.LoadGraph(c.schema, vcfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ormgen.Generate(graph, ormgen.Config{Target: out, Package: c.pkg}); err != nil {
+				t.Fatal(err)
+			}
+			plain, with := files(t, out, ".go"), files(t, c.tracked, ".go")
+			if len(plain) < 10 {
+				t.Fatalf("only %d files were generated", len(plain))
+			}
+			for rel, src := range plain {
+				if !bytes.Equal(with[rel], src) {
+					t.Errorf("%s is not the same file with the GraphQL layer as without it", rel)
+				}
+			}
+			kinds := map[string]int{}
+			for rel := range with {
+				if _, ok := plain[rel]; ok {
+					continue
+				}
+				dir, base := filepath.Split(filepath.ToSlash(rel))
+				switch {
+				case dir == "filter/":
+					kinds["filter"]++
+				case dir == "entity/" && base == "entity_gql.go":
+					kinds["interfaces"]++
+				case dir == "entity/" && strings.HasSuffix(base, "_gql.go"):
+					kinds["entity"]++
+				case dir == "" && base == "node_gql.go":
+					kinds["nodes"]++
+				case dir == "" && base == "scalars_gql.go":
+					kinds["scalars"]++
+				case base == "gql.go":
+					kinds["leaf"]++
+				default:
+					t.Errorf("%s is written with the GraphQL layer only, and is not named as a file of it", rel)
+				}
+			}
+			for _, kind := range c.kinds {
+				if kinds[kind] == 0 {
+					t.Errorf("the tracked tree has no file of the layer of the kind %q: the test no longer covers it", kind)
+				}
+			}
+		})
 	}
 }

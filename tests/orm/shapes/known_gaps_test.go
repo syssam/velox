@@ -126,6 +126,52 @@ func (Other) Fields() []velox.Field { return []velox.Field{field.String("label")
 `, fields, edges)
 }
 
+// holders declares A and B, which hold things and implement the interface
+// Holder (the schema defines it: both give their things as "stuff"), and
+// Thing with the given edges. aFields are fields of A before its label.
+func holders(thingEdges, aFields string) string {
+	return fmt.Sprintf(`
+type A struct{ velox.Schema }
+
+func (A) Fields() []velox.Field { return []velox.Field{%[2]sfield.String("label")} }
+
+func (A) Edges() []velox.Edge {
+	return []velox.Edge{
+		edge.To("things", Thing.Type).Annotations(graphql.InterfaceField("stuff")),
+		edge.To("firsts", Thing.Type),
+	}
+}
+
+func (A) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection(), graphql.Implements("Holder")}
+}
+
+type B struct{ velox.Schema }
+
+func (B) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (B) Edges() []velox.Edge {
+	return []velox.Edge{edge.To("things", Thing.Type).Annotations(graphql.InterfaceField("stuff"))}
+}
+
+func (B) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection(), graphql.Implements("Holder")}
+}
+
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Thing) Edges() []velox.Edge {
+	return []velox.Edge{
+		%[1]s
+	}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`, thingEdges, aFields)
+}
+
 var gapCases = []gapCase{
 	// --- Intended: pinned so that the positive matrix documents why the
 	// shape is absent.
@@ -441,9 +487,10 @@ func (Time) Fields() []velox.Field { return []velox.Field{field.Time("at")} }
 func (Time) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
 		want: generateFails, wantSubstr: "Time is defined twice"},
-	// What the schema would name and this generator does not write is said
-	// at generation, not found by an engine's build.
-	{name: "the schema binds an accessor that is not generated", graphql: true,
+	// A nillable bytes field is a *[]byte, which the schema reads through an
+	// accessor. (It was refused: the schema named the accessor and nothing
+	// wrote it.)
+	{name: "a nillable bytes field in a GraphQL schema", graphql: true,
 		schema: `
 type Thing struct{ velox.Schema }
 
@@ -453,7 +500,107 @@ func (Thing) Fields() []velox.Field {
 
 func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
 `,
-		want: generateFails, wantSubstr: "binds Thing.blob to Thing.BlobOrNil"},
+		want: builds, generated: map[string][]string{
+			"entity/thing_gql.go":        {"func (e *Thing) BlobOrNil() []byte {"},
+			"../gql/velox_thing.graphql": {`blob: Bytes @goField(name: "BlobOrNil")`},
+		}},
+	// The accessor is a method of the entity, and so is a field of its name.
+	{name: "a nillable bytes field next to a field called as its accessor", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.Bytes("blob").Optional().Nillable(), field.String("blob_or_nil")}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "Thing needs a method BlobOrNil"},
+	// A JSON field of a Go type is a scalar of the schema, bound to a type
+	// of the root package that is declared with what writes and reads it.
+	{name: "a JSON field of a Go type in a GraphQL schema", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field {
+	return []velox.Field{field.String("label"), field.JSON("address", types.Address{}), field.JSON("former", []types.Address{}).Optional()}
+}
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: builds, generated: map[string][]string{
+			"scalars_gql.go": {
+				"type Address = types.Address",
+				"func MarshalAddress(v Address) ([]byte, error)",
+				"func UnmarshalAddressPtr(v any) (*Address, error)",
+			},
+			"../gql/velox.graphql": {"scalar Address @goModel(model:", "/db.Address\")"},
+		}},
+	// The scalar's functions are names of the root package, where every
+	// entity is one too.
+	{name: "an entity named as what a scalar's function is", graphql: true,
+		schema: labelEntities("MarshalAddress") + `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field { return []velox.Field{field.JSON("address", types.Address{})} }
+
+func (Thing) Annotations() []schema.Annotation { return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection()} }
+`,
+		want: generateFails, wantSubstr: "the scalar Address needs the name MarshalAddress in the root package, which is the entity MarshalAddress"},
+	// graphql.InterfaceField: an edge under another name, several edges
+	// under one, and the interface the schema defines for what every
+	// implementor gives under one name.
+	{name: "interface fields in a GraphQL schema", graphql: true,
+		schema: holders(`edge.From("a", A.Type).Ref("things").Unique().Annotations(graphql.InterfaceField("holder")),
+		edge.From("b", B.Type).Ref("things").Unique().Annotations(graphql.InterfaceField("holder")),
+		edge.From("first", A.Type).Ref("firsts").Unique().Annotations(graphql.InterfaceField("origin")),`, ``),
+		want: builds, generated: map[string][]string{
+			"entity/entity_gql.go": {"type Holder interface{ IsHolder() }"},
+			"entity/a_gql.go":      {"func (*A) IsHolder() {}", "func (e *A) Stuff(ctx context.Context) ([]*Thing, error)"},
+			"entity/thing_gql.go": {
+				"func (e *Thing) Holder(ctx context.Context) (Holder, error)",
+				"func (e *Thing) Origin(ctx context.Context) (*A, error)",
+			},
+			"../gql/velox.graphql":       {"interface Holder @goModel(model:", "/db/entity.Holder\")"},
+			"../gql/velox_thing.graphql": {"holder: Holder", "origin: A"},
+		}},
+	// A list over the edges of several types has no one query behind it.
+	{name: "an interface field over edges that are not unique", graphql: true,
+		schema: holders(`edge.From("as", A.Type).Ref("things").Annotations(graphql.InterfaceField("holders")),
+		edge.From("bs", B.Type).Ref("things").Annotations(graphql.InterfaceField("holders")),
+		edge.From("first", A.Type).Ref("firsts").Unique(),`, ``),
+		want: generateFails, wantSubstr: "Thing.holders is a list over the edges of several types"},
+	// The method that says an entity is of an interface, and a field of its
+	// name.
+	{name: "an implementor with a field called as the interface's method", graphql: true,
+		schema: holders(`edge.From("a", A.Type).Ref("things").Unique(),
+		edge.From("b", B.Type).Ref("things").Unique(),
+		edge.From("first", A.Type).Ref("firsts").Unique(),`, `field.Bool("is_holder"), `),
+		want: generateFails, wantSubstr: "A needs a method IsHolder"},
+	// A union is the application's own text; what it needs of the entities
+	// is the method an engine tells its members by.
+	{name: "members of a union", graphql: true,
+		schema: `
+type Thing struct{ velox.Schema }
+
+func (Thing) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Thing) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection(), graphql.UnionMember("Hit")}
+}
+
+type Other struct{ velox.Schema }
+
+func (Other) Fields() []velox.Field { return []velox.Field{field.String("label")} }
+
+func (Other) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField(), graphql.RelayConnection(), graphql.UnionMember("Hit")}
+}
+`,
+		want: builds, generated: map[string][]string{
+			"entity/thing_gql.go": {"func (*Thing) IsHit() {}"},
+			"entity/other_gql.go": {"func (*Other) IsHit() {}"},
+		}},
 	// A bytes field that is not nillable: the schema has the scalar Bytes,
 	// which velox binds to a type of its gqlgen runtime and this generator
 	// leaves for the engine to bind. (Refusing every binding into velox's

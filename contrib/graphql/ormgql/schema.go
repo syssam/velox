@@ -3,6 +3,7 @@ package ormgql
 import (
 	"bytes"
 	"fmt"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 	vgen "github.com/syssam/velox/compiler/gen"
 	"github.com/syssam/velox/contrib/graphql/graphqlgen"
 	"github.com/syssam/velox/internal/ormgen"
+	"github.com/syssam/velox/schema/field"
 )
 
 // gqlWhere is one field of a where input.
@@ -33,11 +35,16 @@ const (
 )
 
 type gqlEdge struct {
-	X      *ormgen.Edge
+	X *ormgen.Edge
+	// Method is the edge's name in Go, or the name graphql.InterfaceField
+	// gives it in the schema.
 	Method string
-	Kind   int
-	Order  int // 0: no orderBy argument, 1: one order, 2: a list of them
-	Where  bool
+	// Name is the field's name in the schema, where graphql.InterfaceField
+	// gives the edge another than its own.
+	Name  string
+	Kind  int
+	Order int // 0: no orderBy argument, 1: one order, 2: a list of them
+	Where bool
 }
 
 type gqlOrder struct{ Value, Const, Column string }
@@ -49,12 +56,28 @@ type gqlNeighbor struct {
 	Target *ormgen.Entity
 }
 
+// gqlMark is a method without a body by which an engine tells that an
+// entity is of an interface or a union: IsPrincipal.
+type gqlMark struct{ Method, Doc string }
+
+// gqlPoly is a field several edges resolve, typed as an interface their
+// targets implement: the neighbor on the first edge that has one.
+type gqlPoly struct {
+	Name      string // of the field in the schema
+	Method    string
+	Interface string
+	Edges     []*ormgen.Edge
+}
+
 // gqlEnt is what the schema says of one entity.
 type gqlEnt struct {
 	Neighbors []gqlNeighbor
 	Node      bool
-	HasWhere  bool
-	Where     []gqlWhere
+	// Typed says the entity has a type in the schema, and not only a where
+	// input.
+	Typed    bool
+	HasWhere bool
+	Where    []gqlWhere
 	// Enums are the enum fields the where input filters on: the values of
 	// each by name in the schema, in the schema's order.
 	Enums    [][]graphqlgen.EnumValue
@@ -64,6 +87,25 @@ type gqlEnt struct {
 	OrderType string
 	Order     []gqlOrder
 	Edges     []gqlEdge
+	// Bytes are the nillable bytes fields the schema reads through an
+	// accessor.
+	Bytes []*ormgen.Field
+	Marks []gqlMark
+	Polys []gqlPoly
+	// members are the fields and methods of the entity's struct, those of
+	// the layer among them.
+	members map[string]bool
+}
+
+// mark gives the entity the method IsName.
+func (q *gqlEnt) mark(e *ormgen.Entity, name, doc string) error {
+	m := "Is" + name
+	if q.members[m] {
+		return fmt.Errorf("velox: graphql: %s needs a method %s, and has a field or method of that name", e.Name, m)
+	}
+	q.members[m] = true
+	q.Marks = append(q.Marks, gqlMark{Method: m, Doc: doc})
+	return nil
 }
 
 func normalized(s string) string { return strings.ToLower(strings.ReplaceAll(s, "_", "")) }
@@ -104,6 +146,17 @@ func (ext *extension) read(graph *vgen.Graph) (map[string]string, error) {
 	files, err := sdlGen.SchemaFiles()
 	if err != nil {
 		return nil, fmt.Errorf("velox: graphql schema: %w", err)
+	}
+	ext.scalars = sdlGen.JSONScalars()
+	// The interfaces package entity declares: the ones the schema defines,
+	// and the ones a field of several edges is typed as (gqlEdges).
+	ext.ifaces = map[string]bool{}
+	defined, err := sdlGen.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("velox: graphql schema: %w", err)
+	}
+	for _, i := range defined {
+		ext.ifaces[i.Name] = true
 	}
 
 	// The Go types of this tree, where the schema names velox's.
@@ -209,6 +262,7 @@ func (ext *extension) read(graph *vgen.Graph) (map[string]string, error) {
 		if d == nil {
 			continue
 		}
+		q.Typed = true
 		q.Node = contains(d.Interfaces, "Node")
 		if q.Node {
 			for _, f := range e.Fields {
@@ -217,12 +271,40 @@ func (ext *extension) read(graph *vgen.Graph) (map[string]string, error) {
 				}
 			}
 		}
-		if err := ext.gqlEdges(e, q, d, typeOf); err != nil {
+		if err := ext.gqlEdges(e, q, d, typeOf, sdlGen); err != nil {
 			return nil, err
+		}
+		for _, u := range sdlGen.Unions(e.T) {
+			if err := q.mark(e, u, fmt.Sprintf("marks %s as a member of the union %s of the GraphQL schema.", e.Name, u)); err != nil {
+				return nil, err
+			}
 		}
 		if od := defs[e.Name+"OrderField"]; od != nil && od.Kind == ast.Enum {
 			if err := ext.gqlOrder(e, q, od, sdlGen); err != nil {
 				return nil, err
+			}
+		}
+	}
+	// The interfaces after every entity's fields are read: a field of several
+	// edges names one.
+	ifaces := make([]string, 0, len(ext.ifaces))
+	for name := range ext.ifaces {
+		ifaces = append(ifaces, name)
+	}
+	sort.Strings(ifaces)
+	for _, name := range ifaces {
+		if !token.IsExported(name) {
+			return nil, fmt.Errorf("velox: graphql: the interface %s would be a type of package entity that nothing outside it can name; give it a name that starts with a capital", name)
+		}
+		if !ext.g.Reserve(name) {
+			return nil, fmt.Errorf("velox: graphql: the interface %s collides with another generated name of package entity", name)
+		}
+		for _, t := range sdlGen.Implementors(name) {
+			e := ext.g.Entity(t.Name)
+			if q := ext.ents[e]; e != nil && q != nil && q.Typed {
+				if err := q.mark(e, name, fmt.Sprintf("marks %s as implementing the interface %s of the GraphQL schema.", e.Name, name)); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -242,11 +324,11 @@ func (ext *extension) read(graph *vgen.Graph) (map[string]string, error) {
 }
 
 // gqlBindings checks that the schema binds nothing of this tree that the
-// generator does not write. The schema text is velox's, and velox generates
-// Go this generator does not have (an interface for graphql.InterfaceField,
-// a scalar type for a typed JSON field, an OrNil accessor for nillable
-// bytes): left alone, the schema would name them, and the first to find out
-// would be an engine's build.
+// generator does not write. The schema text is velox's, whose own generator
+// writes the Go it names; what this one writes is read back from the text
+// (an interface, the scalar of a JSON field's Go type, the accessor of a
+// nillable bytes field). Whatever the text names beyond that would be found
+// missing by an engine's build first: it is said here.
 func (ext *extension) gqlBindings(defs map[string]*ast.Definition, typeOf map[string]*ormgen.Entity) error {
 	pkg := ext.g.Package()
 	known := map[string]bool{}
@@ -269,6 +351,12 @@ func (ext *extension) gqlBindings(defs map[string]*ast.Definition, typeOf map[st
 				known[pkg+"/filter."+e.Name+"WhereInput"] = true
 			}
 		}
+	}
+	for name := range ext.ifaces {
+		known[pkg+"/entity."+name] = true
+	}
+	for _, s := range ext.scalars {
+		known[pkg+"."+s.Name] = true
 	}
 	if nodes {
 		known[pkg+".Noder"] = true
@@ -313,6 +401,9 @@ func (ext *extension) gqlBindings(defs map[string]*ast.Definition, typeOf map[st
 			for _, x := range q.Edges {
 				members[x.Method] = true
 			}
+			for _, c := range q.Bytes {
+				members[c.GoName+"OrNil"] = true
+			}
 		}
 		for _, f := range d.Fields {
 			dir := f.Directives.ForName("goField")
@@ -336,33 +427,87 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// gqlEdges reads which edges of e the schema exposes, and how.
-func (ext *extension) gqlEdges(e *ormgen.Entity, q *gqlEnt, d *ast.Definition, typeOf map[string]*ormgen.Entity) error {
+// forced reports whether the schema leaves a field to a resolver of the
+// application's.
+func forced(f *ast.FieldDefinition) bool {
+	dir := f.Directives.ForName("goField")
+	if dir == nil {
+		return false
+	}
+	arg := dir.Arguments.ForName("forceResolver")
+	return arg != nil && arg.Value != nil && arg.Value.Raw == "true"
+}
+
+// gqlEdges reads which edges of e the schema exposes, and how, and what else
+// of e's type is resolved by a method: an edge under another name or several
+// under one (graphql.InterfaceField), and a nillable bytes field.
+func (ext *extension) gqlEdges(e *ormgen.Entity, q *gqlEnt, d *ast.Definition, typeOf map[string]*ormgen.Entity, sdl *graphqlgen.Generator) error {
 	edges := map[string]*ormgen.Edge{}
+	byEdge := map[*vgen.Edge]*ormgen.Edge{}
 	for _, x := range e.Edges {
 		edges[normalized(x.E.Name)] = x
+		byEdge[x.E] = x
+	}
+	named := map[string]graphqlgen.InterfaceField{}
+	ifields, err := sdl.InterfaceFields(e.T)
+	if err != nil {
+		return fmt.Errorf("velox: graphql schema: %w", err)
+	}
+	for _, f := range ifields {
+		named[f.Name] = f
 	}
 	members := map[string]bool{"Edges": true, "IsNode": true}
+	q.members = members
 	for _, f := range e.Fields {
 		if f.F.Sensitive() {
 			members["String"] = true // the entity has the method then
 		}
 	}
+	bytesFields := map[string]*ormgen.Field{}
 	for _, f := range e.Fields {
 		members[f.GoName] = true
+		if !f.Hidden && f.Ptr && f.F.Type != nil && f.F.Type.Type == field.TypeBytes {
+			bytesFields[f.GoName+"OrNil"] = f
+		}
 	}
 	for _, x := range e.Edges {
 		members["Query"+x.GoName] = true
 	}
+	take := func(method, what string) error {
+		if members[method] {
+			return fmt.Errorf("velox: graphql: %s needs a method %s to resolve %s, and has a field or method of that name", e.Name, method, what)
+		}
+		members[method] = true
+		return nil
+	}
 	for _, f := range d.Fields {
 		x := edges[normalized(f.Name)]
 		if x == nil {
-			continue // a column, or a field the application resolves itself
-		}
-		if dir := f.Directives.ForName("goField"); dir != nil {
-			if arg := dir.Arguments.ForName("forceResolver"); arg != nil && arg.Value != nil && arg.Value.Raw == "true" {
+			if forced(f) {
 				continue
 			}
+			if ifc, ok := named[f.Name]; ok {
+				if err := ext.gqlNamed(e, q, f, ifc, byEdge, typeOf, take); err != nil {
+					return err
+				}
+				continue
+			}
+			// A nillable bytes field is a *[]byte, which the schema reads
+			// through an accessor that returns the bytes or nil.
+			if dir := f.Directives.ForName("goField"); dir != nil {
+				if arg := dir.Arguments.ForName("name"); arg != nil && arg.Value != nil {
+					if c := bytesFields[arg.Value.Raw]; c != nil {
+						if err := take(arg.Value.Raw, fmt.Sprintf("the field %q", c.F.Name)); err != nil {
+							return err
+						}
+						q.Bytes = append(q.Bytes, c)
+					}
+				}
+			}
+			continue // a column, or a field the application resolves itself
+		}
+		if forced(f) {
+			continue
 		}
 		ge := gqlEdge{X: x, Method: x.GoName}
 		target := f.Type.Name()
@@ -397,12 +542,54 @@ func (ext *extension) gqlEdges(e *ormgen.Entity, q *gqlEnt, d *ast.Definition, t
 		default:
 			ge.Kind = gqlOne
 		}
-		if members[ge.Method] {
-			return fmt.Errorf("velox: graphql: %s needs a method %s to resolve the edge %q, and has a field or method of that name", e.Name, ge.Method, x.E.Name)
+		if err := take(ge.Method, fmt.Sprintf("the edge %q", x.E.Name)); err != nil {
+			return err
 		}
-		members[ge.Method] = true
 		q.Edges = append(q.Edges, ge)
 	}
+	return nil
+}
+
+// gqlNamed reads a field graphql.InterfaceField puts on edges of e: one edge
+// under another name, resolved as the edge is, or several under one, typed
+// as an interface and resolved by the first that has a neighbor.
+func (ext *extension) gqlNamed(e *ormgen.Entity, q *gqlEnt, f *ast.FieldDefinition, ifc graphqlgen.InterfaceField, byEdge map[*vgen.Edge]*ormgen.Edge, typeOf map[string]*ormgen.Entity, take func(method, what string) error) error {
+	method := vgen.Pascal(ifc.Name)
+	xs := make([]*ormgen.Edge, 0, len(ifc.Edges))
+	for _, ge := range ifc.Edges {
+		x := byEdge[ge]
+		if x == nil {
+			return fmt.Errorf("velox: graphql: %s.%s is the edge %q, which %s does not have here", e.Name, f.Name, ge.Name, e.Name)
+		}
+		xs = append(xs, x)
+	}
+	what := fmt.Sprintf("the field %q", f.Name)
+	if ifc.Interface == "" {
+		x := xs[0]
+		if typeOf[f.Type.Name()] != x.Target {
+			return nil // of a type that is not this tree's: the application's to resolve
+		}
+		ge := gqlEdge{X: x, Method: method, Name: f.Name, Kind: gqlOne}
+		if f.Type.Elem != nil {
+			ge.Kind = gqlList
+		}
+		if err := take(method, what); err != nil {
+			return err
+		}
+		q.Edges = append(q.Edges, ge)
+		return nil
+	}
+	if len(f.Arguments) > 0 || f.Type.Elem != nil {
+		return fmt.Errorf("velox: graphql: %s.%s is a list over the edges of several types (graphql.InterfaceField on edges that are not unique), which is not supported yet", e.Name, f.Name)
+	}
+	if f.Type.Name() != ifc.Interface {
+		return fmt.Errorf("velox: graphql: %s.%s is a %s in the schema, and the interface of its edges is %s", e.Name, f.Name, f.Type.Name(), ifc.Interface)
+	}
+	if err := take(method, what); err != nil {
+		return err
+	}
+	ext.ifaces[ifc.Interface] = true
+	q.Polys = append(q.Polys, gqlPoly{Name: f.Name, Method: method, Interface: ifc.Interface, Edges: xs})
 	return nil
 }
 
