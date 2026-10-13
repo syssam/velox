@@ -12,13 +12,14 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/orm"
 	"github.com/syssam/velox/tests/orm/shapes/velox/migrate"
 )
 
 // ddlOf returns the statement that created every table and index of db.
-func ddlOf(t *testing.T, db *stdsql.DB) map[string]string {
+func ddlOf(t *testing.T, db *velox.DB) map[string]string {
 	t.Helper()
-	rows, err := db.Query("SELECT type || ' ' || name, COALESCE(sql, '') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+	rows, err := orm.QuerySQL(context.Background(), db, "SELECT type || ' ' || name, COALESCE(sql, '') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
 	require.NoError(t, err)
 	defer func() { _ = rows.Close() }()
 	out := map[string]string{}
@@ -37,7 +38,7 @@ func ddlOf(t *testing.T, db *stdsql.DB) map[string]string {
 // its database already up to date.
 func TestGeneratedMigrate(t *testing.T) {
 	ctx := context.Background()
-	want := ddlOf(t, velox.SQLDB(open(t)))
+	want := ddlOf(t, open(t))
 	require.NotEmpty(t, want)
 
 	raw, err := stdsql.Open("sqlite", fmt.Sprintf("file:migrate_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", dbSeq.Add(1)))
@@ -49,10 +50,10 @@ func TestGeneratedMigrate(t *testing.T) {
 	var plan bytes.Buffer
 	require.NoError(t, migrate.WriteTo(ctx, db, &plan))
 	assert.Contains(t, plan.String(), "CREATE TABLE")
-	assert.Empty(t, ddlOf(t, raw), "WriteTo changed the database")
+	assert.Empty(t, ddlOf(t, db), "WriteTo changed the database")
 
 	require.NoError(t, migrate.Create(ctx, db))
-	got := ddlOf(t, raw)
+	got := ddlOf(t, db)
 	assert.Len(t, got, len(want))
 	for name, ddl := range want {
 		assert.Equal(t, ddl, got[name], name)
@@ -64,5 +65,5 @@ func TestGeneratedMigrate(t *testing.T) {
 	assert.NotContains(t, plan.String(), "CREATE", "a second migration of the same schema is not empty")
 	assert.NotContains(t, plan.String(), "ALTER", "a second migration of the same schema is not empty")
 	require.NoError(t, migrate.Create(ctx, db))
-	assert.Equal(t, got, ddlOf(t, raw))
+	assert.Equal(t, got, ddlOf(t, db))
 }

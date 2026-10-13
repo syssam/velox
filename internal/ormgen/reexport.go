@@ -35,7 +35,6 @@ var (
 	rootFuncs = []struct{ name, sig, call string }{
 		{"Open", "(dialectName, dsn string) (*%[1]s.DB, error)", "(dialectName, dsn)"},
 		{"OpenDB", "(dialectName string, db *%[3]s.DB) *%[1]s.DB", "(dialectName, db)"},
-		{"SQLDB", "(db *%[1]s.DB) *%[3]s.DB", "(db)"},
 		{"WithExecutor", "(ctx %[2]s.Context, ex %[1]s.Executor) %[2]s.Context", "(ctx, ex)"},
 		{"ExecutorFrom", "(ctx %[2]s.Context) %[1]s.Executor", "(ctx)"},
 		{"TxFrom", "(ctx %[2]s.Context) *%[1]s.Tx", "(ctx)"},

@@ -876,8 +876,9 @@ what is left of that half of the link is the schema package itself.
 ## The database handle (2026-10-14, load 3-9)
 
 `*velox.DB` reached `database/sql` through one method, `SQL() *sql.DB`, and
-through the type of the field it kept the driver in. The method is the
-function `velox.SQLDB(db)` now and the field an interface of this package:
+through the type of the field it kept the driver in. The method is gone (a
+program that wants the `*sql.DB` opens it and gives it to `velox.OpenDB`)
+and the field is an interface of this package:
 
 | | a package with one variable of `*velox.DB` | the 312 services |
 |---|---|---|

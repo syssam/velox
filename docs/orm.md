@@ -99,6 +99,13 @@ u, err := velox.User.Get(ctx, conn, id)
 err = velox.User.DeleteByID(ctx, conn, id)
 ```
 
+- **A handle does not give the `*sql.DB` back.** `velox.Open(dialect, dsn)`
+  opens one and keeps it to itself. A program that wants it, for the settings
+  of its pool, its statistics, or to have tracing wrap it first, opens it and
+  hands it over, and keeps it:
+  `pool, err := sql.Open("pgx", dsn); pool.SetMaxOpenConns(20); conn := velox.OpenDB("postgres", pool)`.
+  A statement that goes around the ORM runs on the handle or a transaction
+  with `orm.ExecSQL` and `orm.QuerySQL`.
 - **What a query or mutation runs on is given where it starts and travels
   with the builder**: a database handle or a transaction. A function can build
   a query and another run it. A builder made from `nil` or from a nil

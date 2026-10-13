@@ -68,8 +68,9 @@ func (s *ExecutorState) Interceptors() []Interceptor {
 // something for every type the types it names can reach, and for the handles
 // of database/sql that is 240 KB of object code (package orm's
 // TestApplicationTypesDoNotReachReflect).
-// A service that holds the *DB would pay it. So the database/sql handle is
-// what a function returns, SQLDB, and not a method.
+// A service that holds the *DB would pay it. So a DB does not hand the
+// database/sql handle back: a program that wants it (the settings of the
+// pool, its statistics) opens it and gives it to OpenDB, and keeps it.
 type DB struct {
 	c   ExecutorState
 	raw rawDriver
@@ -92,7 +93,13 @@ func Open(dialectName, dsn string) (*DB, error) {
 	return &DB{c: ExecutorState{drv: drv, ext: &extensions{}}, raw: drv}, nil
 }
 
-// OpenDB wraps an existing database/sql handle.
+// OpenDB wraps a database/sql handle the caller opened, and keeps: for the
+// settings of its pool, its statistics, or a handle that something else
+// wraps first (tracing).
+//
+//	pool, err := sql.Open("pgx", dsn)
+//	pool.SetMaxOpenConns(20)
+//	db := velox.OpenDB("postgres", pool)
 func OpenDB(dialectName string, db *stdsql.DB) *DB {
 	drv := sql.OpenDB(dialectName, db)
 	return &DB{c: ExecutorState{drv: drv, ext: &extensions{}}, raw: drv}
@@ -130,17 +137,6 @@ func (db *DB) Use(hooks ...Hook) {
 // which rows a caller may touch belongs in the schema's Policy.
 func (db *DB) Intercept(inters ...Interceptor) {
 	db.c.ext.inters = append(db.c.ext.inters, inters...)
-}
-
-// SQLDB returns the database/sql handle under db: for the settings of its
-// pool (SetMaxOpenConns), its statistics, or a statement that goes around
-// the ORM. It is a function and not a method of DB for what DB's comment
-// says.
-func SQLDB(db *DB) *stdsql.DB {
-	if d, ok := db.raw.(*sql.Driver); ok {
-		return d.DB()
-	}
-	return nil
 }
 
 // Tx is an open transaction. Pass it wherever a *DB is accepted to run inside it.

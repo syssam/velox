@@ -11,23 +11,37 @@
 //   - a condition, an order or a statement written against the SQL builder:
 //     Raw, RawOrder, Compile, ExecSQL, QuerySQL;
 //   - conditions built at run time or over any entity: FieldPredicate,
-//     FieldOrder, And, Or, Not, IsZero, and the Column interfaces;
+//     FieldOrder, And, Or, Not, IsZero, and a column as the plain column
+//     type of its level (*OrderedColumn[T, E], through the column's
+//     AsOrdered);
 //   - a grouped read: Count, Sum, Min, Max, Mean, As;
+//   - an input field that may be absent or null: Opt, Some, Null;
+//   - a page without its total: WithoutTotal;
 //   - a hook or an interceptor that works on the query or the mutation
 //     itself: Query, Mutation, TraverseFunc, InterceptFunc.
 //
+// What an application calls without naming it is here too: the methods of
+// the builders (QueryOf, CreateOf, CreateBulkOf, UpdateOf, DeleteOf), of the
+// columns (StringColumn and the others of columns.go) and of the edges
+// (ToOne, ToMany, LoadOf). A generated tree gives them the entity's names:
+// entity.UserQuery, user.Name, user.Posts.
+//
 // The rest is for generated code: Meta, FieldMeta and EdgeMeta describe an
-// entity; QueryCore and MutCore are what its query and mutation types wrap;
-// P, S and O are a condition, an assignment and an order term as data.
+// entity; QueryCore and MutCore are what a query and a mutation hold; P, S
+// and O are a condition, an assignment and an order term as data; ClientOf
+// is the variable of an entity in the generated root package; FieldCode,
+// StitchFields and the Default and Validators functions are what the
+// generated schemainit package gives an entity the code of its schema with.
 //
 // Nothing here knows GraphQL. What the generated GraphQL layer needs at run
 // time (its where and order inputs, the id of a node) is in
 // contrib/graphql/gqlinput, which is built on this package.
 //
-// The exported types here are deliberately small and mention no SQL-builder
-// type. Generated code names them in signatures, and the Go compiler writes
-// every type a signature reaches into each package's export data; a wide
-// type here would be paid for in every package of the application.
+// The exported types here are deliberately small, and reach no type of the
+// SQL builder, of reflect or of database/sql by a field or by the signature
+// of a method. A package compiles something for every type the types it
+// names can reach, so a wide type here would be paid for in every package
+// of the application (reach_test.go measures it).
 package orm
 
 import (
