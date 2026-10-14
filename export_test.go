@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -13,11 +14,12 @@ import (
 // it was sent. Queries may run on it concurrently; read its fields only when
 // none is running.
 type FakeExec struct {
-	mu    sync.Mutex
-	Rows  [][]any
-	SQL   string
-	Args  []any
-	Calls int
+	mu      sync.Mutex
+	Rows    [][]any
+	Results [][][]any // the rows of successive queries; Rows once they run out
+	SQL     string
+	Args    []any
+	Calls   int
 	// Closed counts the rows values returned by query that have been closed.
 	Closed int
 	// Scanned counts the rows scanned, across queries.
@@ -58,7 +60,11 @@ func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error
 	if err := e.next(); err != nil {
 		return nil, err
 	}
-	return &fakeRows{data: e.Rows, e: e}, nil
+	data := e.Rows
+	if len(e.Results) > 0 {
+		data, e.Results = e.Results[0], e.Results[1:]
+	}
+	return &fakeRows{data: data, e: e}, nil
 }
 
 func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {
@@ -175,8 +181,37 @@ func assign(dst, src any) error {
 			*d = &v
 		}
 	default:
+		return assignReflect(dst, src)
+	}
+	return nil
+}
+
+// assignReflect scans src into any pointer dst: a named type, or a pointer
+// field (nil src sets it to nil).
+func assignReflect(dst, src any) error {
+	dv := reflect.ValueOf(dst)
+	if dv.Kind() != reflect.Pointer || dv.IsNil() {
 		return fmt.Errorf("fake: cannot scan into %T", dst)
 	}
+	dv = dv.Elem()
+	if src == nil {
+		dv.SetZero()
+		return nil
+	}
+	sv := reflect.ValueOf(src)
+	if dv.Kind() == reflect.Pointer {
+		p := reflect.New(dv.Type().Elem())
+		if !sv.CanConvert(p.Elem().Type()) {
+			return fmt.Errorf("fake: cannot scan %T into %T", src, dst)
+		}
+		p.Elem().Set(sv.Convert(p.Elem().Type()))
+		dv.Set(p)
+		return nil
+	}
+	if !sv.CanConvert(dv.Type()) {
+		return fmt.Errorf("fake: cannot scan %T into %T", src, dst)
+	}
+	dv.Set(sv.Convert(dv.Type()))
 	return nil
 }
 

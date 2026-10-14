@@ -9,9 +9,25 @@ import (
 	"testing"
 )
 
+// recvName is the name of the generic type a method's receiver type names.
+func recvName(rt ast.Expr) string {
+	var x ast.Expr
+	switch r := rt.(type) {
+	case *ast.IndexExpr:
+		x = r.X
+	case *ast.IndexListExpr:
+		x = r.X
+	}
+	if id, ok := x.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
+}
+
 // TestMethodsOfGenericTypesAreGeneric enforces design §3 rule 1: a method of
 // a generic type is a generic method, compiled only where it is called. The
-// one exception is column, which makes a handle a Column[E].
+// exceptions are column, which makes a handle a Column[E], and the MarshalJSON
+// of One and Many.
 func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 	fset := token.NewFileSet()
 	files, err := filepath.Glob("*.go")
@@ -41,6 +57,11 @@ func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 				continue
 			}
 			if fd.Name.Name == "column" {
+				continue
+			}
+			// One and Many have an ordinary MarshalJSON: encoding/json finds
+			// it by name (spec §3).
+			if fd.Name.Name == "MarshalJSON" && (recvName(rt) == "One" || recvName(rt) == "Many") {
 				continue
 			}
 			if fd.Type.TypeParams == nil || fd.Type.TypeParams.NumFields() == 0 {

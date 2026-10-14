@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"slices"
+	"unsafe"
 )
 
 // Query is a SELECT on entity E, built by chaining and run by All, One, Iter
@@ -14,10 +15,11 @@ import (
 // in several ways, from several goroutines. Running a query does not change
 // it either, so it can run again.
 type Query[E any] struct {
-	db   *DB
-	meta *Meta[E]
-	st   Statement
-	err  error // a condition's error, returned by every way of running the query
+	db    *DB
+	meta  *Meta[E]
+	st    Statement
+	err   error      // a condition's error, returned by every way of running the query
+	loads []loadSpec // the relations All loads
 }
 
 // Query starts a query on entity E:
@@ -42,6 +44,15 @@ func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 			}
 		}
 	}
+	return q
+}
+
+// With returns the query also loading relation r of every entity it returns,
+// with one more query per relation (chunked under the dialect's parameter
+// limit). Chain With for several relations; r's With loads nested ones.
+// Nothing is ever loaded lazily.
+func (q Query[E]) With[T any](r Rel[E, T]) Query[E] {
+	q.loads = append(slices.Clip(q.loads), r.spec())
 	return q
 }
 
@@ -190,6 +201,15 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(q.loads) > 0 && len(out) > 0 {
+		ptrs := make([]unsafe.Pointer, len(out))
+		for i := range out {
+			ptrs[i] = unsafe.Pointer(&out[i])
+		}
+		if err := loadRelations(ctx, q.db, q.meta.info, ptrs, q.loads); err != nil {
+			return nil, err
+		}
+	}
 	return out, nil
 }
 
@@ -258,6 +278,10 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		}
 		if q.err != nil {
 			yield(zero, q.err)
+			return
+		}
+		if len(q.loads) > 0 {
+			yield(zero, fmt.Errorf("velox: %s: Iter does not load relations; use All", q.meta.info.Name))
 			return
 		}
 		var err error

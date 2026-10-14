@@ -1,16 +1,28 @@
 package velox
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
 )
 
-// kit is replaced in Task 3.
-type kit struct{}
+// kit is the code velox needs to handle an entity whose type it does not
+// know at the point of use: loading a relation to it. MetaOnce.Get builds it,
+// so it is compiled once, in the entity's own package.
+type kit struct {
+	value func(p unsafe.Pointer, col int) any       // the value of column col of the entity at p
+	scan  func(r rows) (any, error)                 // every row, into a new []E
+	join  func(parts []any) (any, []unsafe.Pointer) // one []E of the parts, and a pointer to each element
+	pick  func(all any, idx []int) any              // a new []E of all's elements at idx
+	ptr   func(all any, i int) any                  // &all[i], as *E
+	empty func() any                                // []E{}
+}
 
 // One holds a to-one relation, filled by With. Its zero value means not
 // loaded. The value is held as any so that an entity's type does not reach
@@ -211,10 +223,60 @@ func targetName(t reflect.Type) string {
 }
 
 // Rel is the handle of a relation of entity E to entity T, written by
-// velox-gen: its I is the relation's index in E's shape.
+// velox-gen: I is the relation's index in E's shape. Passed to Query.With it
+// loads the relation; its Where, OrderBy and With say what to load. Like a
+// Query it is a value: each method returns a new Rel.
 type Rel[E, T any] struct {
-	I int32
+	I     int32
+	where []Predicate
+	order []OrderTerm
+	with  []loadSpec
+	err   error
 }
+
+// Where returns the relation loading only the related entities that meet
+// every condition.
+func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T] {
+	r.where = slices.Clip(r.where)
+	for _, p := range ps {
+		if r.err == nil {
+			r.err = predErr(p.n)
+		}
+		r.where = append(r.where, Predicate(p))
+	}
+	return r
+}
+
+// OrderBy returns the relation loading its entities in this order within
+// each owner. The default is the target's primary key.
+func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
+	r.order = slices.Clip(r.order)
+	for _, o := range os {
+		r.order = append(r.order, o.t)
+	}
+	return r
+}
+
+// With returns the relation also loading a relation of each loaded entity.
+func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
+	r.with = append(slices.Clip(r.with), next.spec())
+	return r
+}
+
+// spec is the relation's load options, without types.
+func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
+	return loadSpec{rel: r.I, where: r.where, order: r.order, with: r.with, err: r.err}
+}
+
+// MarshalJSON writes the related entity, or null when there is none or it
+// was not loaded. Tag the field json:",omitzero" to leave a relation that was
+// not loaded out. (An ordinary method on a generic type, against design §3
+// rule 1, because encoding/json looks for it by name; its body is one call.)
+func (o One[T]) MarshalJSON() ([]byte, error) { return json.Marshal(o.v) }
+
+// MarshalJSON writes the related entities, or null when they were not
+// loaded; see One.MarshalJSON.
+func (m Many[T]) MarshalJSON() ([]byte, error) { return json.Marshal(m.v) }
 
 // relLink resolves relation i of entity E.
 func relLink[E any](i int32) (link, error) {

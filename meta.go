@@ -25,7 +25,7 @@ type EntityInfo struct {
 	Tenant     int   // index into Columns; -1 when the entity has none
 	Indexes    []IndexInfo
 	rels       []*relation // in the order of the generated shape
-	kit        *kit        // set by MetaOnce.Get (Task 3); nil in tests that call buildInfo
+	kit        *kit        // set by MetaOnce.Get; nil in tests that call buildInfo
 }
 
 // Column returns the index of the column with the given name.
@@ -100,6 +100,9 @@ func (o *MetaOnce[E]) Get[_ Lazy[E]](shape func() Shape[E]) *Meta[E] {
 			err = &SchemaError{Entity: t.String(), Reason: "the generated code has no scan plan (Shape.Addr is nil); run go tool velox-gen"}
 		}
 		o.m = &Meta[E]{info: info, addr: sh.Addr, err: err}
+		if info != nil && sh.Addr != nil {
+			info.kit = kitOf(info, sh.Addr)
+		}
 	})
 	return o.m
 }
@@ -306,6 +309,48 @@ func CheckEntity[E any, PE Entity[E]]() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// kitOf builds entity E's kit from its scan plan.
+func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
+	m := &Meta[E]{info: info, addr: addr}
+	return &kit{
+		value: func(p unsafe.Pointer, col int) any {
+			return reflect.ValueOf(addr((*E)(p), col)).Elem().Interface()
+		},
+		scan: func(r rows) (any, error) {
+			dst := make([]any, len(info.Columns))
+			var part []E
+			for r.Next() {
+				part = append(part, *new(E))
+				if err := scanRow(r, m, nil, dst, &part[len(part)-1]); err != nil {
+					return nil, err
+				}
+			}
+			return part, nil
+		},
+		join: func(parts []any) (any, []unsafe.Pointer) {
+			var all []E
+			for _, p := range parts {
+				all = append(all, p.([]E)...)
+			}
+			ptrs := make([]unsafe.Pointer, len(all))
+			for i := range all {
+				ptrs[i] = unsafe.Pointer(&all[i])
+			}
+			return all, ptrs
+		},
+		pick: func(all any, idx []int) any {
+			s := all.([]E)
+			out := make([]E, len(idx))
+			for i, j := range idx {
+				out[i] = s[j]
+			}
+			return out
+		},
+		ptr:   func(all any, i int) any { return &all.([]E)[i] },
+		empty: func() any { return []E{} },
+	}
 }
 
 // metaOf returns entity E's Meta, for generic code that cannot name E's
