@@ -57,3 +57,14 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - Naming edge cases: the plural of names ending in an uppercase S or X ("DNSs"), a digit before y, and lowerCamel of "IDs" ("iDs").
 - `resolved` does not look inside func, chan or struct types; registered types take precedence over the underlying kind (untested).
 - verify's messages start `velox-gen verify: `, and a compile failure of its program is not explained beyond the compiler's output.
+
+## Left by plan 3 (writes)
+
+- Detached rollbacks have no timeout, and RetrySerializable retries immediately, with no backoff and no context check between attempts.
+- A rollback or savepoint error after the statement ran: sqlExecutor.exec returns an error when RowsAffected fails although the statement ran; begin on a transaction executor would dereference nil (unreachable: nested Tx uses savepoints).
+- Error classification: MySQL 1364 (NOT NULL without default, strict mode) and MariaDB's 4025 are not classified; a typed-nil driver error would panic; SQLite's NOT NULL names "table.column" while PostgreSQL and MySQL name the column.
+- Static slice or map Defaults are shared by every inserted entity (pointer defaults are copied).
+- An UPDATE or DELETE with neither Where nor All runs on every row until sub-project 2's guardrails raise ErrNoWhere.
+- InsertAll batches of many distinct sizes each add a render-cache shape.
+- Test gaps: value semantics of UpdateQuery/DeleteQuery extended twice; Save on a composite key; a named numeric type (type Cents int64) under the Default rule; a uint64 key read back through RETURNING; a look-alike driver error type from another package; cache keys that differ only in Conflict/Update/Returning/Set columns; schema-qualified INSERT and UPDATE golden SQL; that ErrTxDone/ErrTxClosed from rollback is not joined.
+- CI tests MySQL 8.4 only, while the spec supports 8.0.19 and later.

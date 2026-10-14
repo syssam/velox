@@ -93,3 +93,71 @@ func TestSave(t *testing.T) {
 		t.Errorf("no columns: %v", err)
 	}
 }
+
+func TestSaveStoresOnUpdateOnlyAfterSuccess(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{ID: 3, Number: "X", UpdatedAt: t0}
+
+	e.Err = errors.New("boom")
+	if err := db.Save(ctx, &inv, I.Number); err == nil {
+		t.Fatal("want the driver's error")
+	}
+	if !inv.UpdatedAt.Equal(t0) {
+		t.Errorf("a failed Save changed UpdatedAt to %v", inv.UpdatedAt)
+	}
+
+	e.Err, e.Affected = nil, 0
+	if err := db.Save(ctx, &inv, I.Number); !errors.Is(err, velox.ErrNotFound) {
+		t.Fatalf("no row: %v", err)
+	}
+	if !inv.UpdatedAt.Equal(t0) {
+		t.Errorf("a Save that found no row changed UpdatedAt to %v", inv.UpdatedAt)
+	}
+
+	e.Affected = 1
+	if err := db.Save(ctx, &inv, I.Number); err != nil {
+		t.Fatal(err)
+	}
+	if inv.UpdatedAt.Equal(t0) || e.Args[1] != inv.UpdatedAt {
+		t.Errorf("UpdatedAt %v, sent %v", inv.UpdatedAt, e.Args[1])
+	}
+}
+
+func TestAColumnAssignedTwiceIsRefused(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{ID: 3}
+	want := "velox: testmodel.Invoice: column number is assigned twice"
+	if err := db.Save(ctx, &inv, I.Number, I.Number); err == nil || err.Error() != want || e.Calls != 0 {
+		t.Errorf("Save: %v, calls %d", err, e.Calls)
+	}
+	u := db.Update[testmodel.Invoice]().Set(I.Total.Add(1), I.Total.Set(2)).Where(I.ID.EQ(1))
+	want = "velox: testmodel.Invoice: column total is assigned twice"
+	if _, err := u.Exec(ctx); err == nil || err.Error() != want || e.Calls != 0 {
+		t.Errorf("Exec: %v, calls %d", err, e.Calls)
+	}
+	if text, _ := u.SQL(); text != "" {
+		t.Errorf("SQL() %q", text)
+	}
+	// Set called twice is the same thing.
+	u = db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Set(2))
+	if _, err := u.Exec(ctx); err == nil || err.Error() != want {
+		t.Errorf("two Set calls: %v", err)
+	}
+}
+
+func TestSaveRefusesNil(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if err := db.Save[testmodel.Invoice](ctx, nil, I.Number); err == nil || err.Error() != "velox: testmodel.Invoice: Save of a nil pointer" {
+		t.Errorf("nil pointer: %v", err)
+	}
+	inv := testmodel.Invoice{ID: 3}
+	if err := db.Save(ctx, &inv, I.Number, nil); err == nil || err.Error() != "velox: testmodel.Invoice: Save names a nil column" {
+		t.Errorf("nil column: %v", err)
+	}
+	if e.Calls != 0 {
+		t.Errorf("calls %d", e.Calls)
+	}
+}

@@ -128,15 +128,22 @@ func (e pgxExecutor) exec(ctx context.Context, s string, args []any) (result, er
 }
 
 func (e pgxExecutor) begin(ctx context.Context, o txOptions) (executor, txControl, error) {
-	mode := pgx.ReadWrite
-	if o.readOnly {
-		mode = pgx.ReadOnly
-	}
-	tx, err := e.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgxIsolation(o.isolation), AccessMode: mode})
+	tx, err := e.pool.BeginTx(ctx, pgxTxOptions(o))
 	if err != nil {
 		return nil, nil, err
 	}
 	return pgxExecutor{c: tx}, pgxTx{tx}, nil
+}
+
+// pgxTxOptions is what BeginTx is given. The access mode is sent only for a
+// read-only transaction: otherwise the server's (or the role's)
+// default_transaction_read_only stays in force, as with database/sql.
+func pgxTxOptions(o txOptions) pgx.TxOptions {
+	opts := pgx.TxOptions{IsoLevel: pgxIsolation(o.isolation)}
+	if o.readOnly {
+		opts.AccessMode = pgx.ReadOnly
+	}
+	return opts
 }
 
 // pgxIsolation maps database/sql's isolation levels to pgx's; the default

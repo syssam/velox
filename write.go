@@ -49,7 +49,8 @@ func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E] {
 }
 
 // statement is the UPDATE Exec and SQL run: Set's assignments, then one for
-// every column with OnUpdate that Set did not name.
+// every column with OnUpdate that Set did not name. A column assigned twice
+// is an error.
 func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if u.meta.err != nil {
 		return Statement{}, u.meta.err
@@ -57,12 +58,16 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if len(u.st.Set) == 0 {
 		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.info.Name)
 	}
+	if err := checkAssignedOnce(u.meta.info, u.st.Set); err != nil {
+		return Statement{}, err
+	}
 	st := cloneStatement(&u.st)
-	st.Set = withOnUpdate(u.meta.info, st.Set, nil)
+	st.Set = withOnUpdate(u.meta.info, st.Set)
 	return st, nil
 }
 
-// Exec runs the update and returns the number of rows it changed.
+// Exec runs the update and returns the number of rows it matched (on MySQL,
+// with clientFoundRows=true; without it, the rows whose values changed).
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	st, err := u.statement()
 	if err != nil {
@@ -132,26 +137,38 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]]() (string, []any) {
 }
 
 // Save writes the named columns of *x to the row with x's primary key, and
-// every column with OnUpdate, whose new value it also stores in *x. Its error
-// wraps ErrNotFound when no row has that key. On MySQL, open the database with
-// clientFoundRows=true: otherwise a row whose values did not change counts as
-// not found.
+// every column with OnUpdate. Once the row was written, it stores the OnUpdate
+// values it sent in *x; after an error, including ErrNotFound, *x is as it was.
+// Its error wraps ErrNotFound when no row has that key. Naming a column twice
+// is an error. On MySQL, open the database with clientFoundRows=true:
+// otherwise a row whose values did not change counts as not found.
 func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Column[E]) error {
-	m := x.VeloxMeta()
+	m := x.VeloxMeta() // works on a nil x
 	if m.err != nil {
 		return m.err
 	}
 	in := m.info
+	if x == nil {
+		return fmt.Errorf("velox: %s: Save of a nil pointer", in.Name)
+	}
 	if len(cols) == 0 {
 		return fmt.Errorf("velox: %s: Save names no columns", in.Name)
 	}
 	p := (*E)(x)
 	st := Statement{Op: OpUpdate, Entity: in, InTx: db.inTx}
 	for _, c := range cols {
+		if c == nil {
+			return fmt.Errorf("velox: %s: Save names a nil column", in.Name)
+		}
 		i := int(c.column(nil))
 		st.Set = append(st.Set, Assignment{Column: i, Op: AssignSet, Value: fieldValue(m, p, i)})
 	}
-	st.Set = withOnUpdate(in, st.Set, func(i int, v any) { setField(m, p, i, v) })
+	if err := checkAssignedOnce(in, st.Set); err != nil {
+		return err
+	}
+	named := len(st.Set)
+	st.Set = withOnUpdate(in, st.Set)
+	stored := slices.Clone(st.Set[named:]) // what *x gets, if the write succeeds
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(m, p, k)))
 	}
@@ -162,12 +179,28 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 	if res.affected == 0 {
 		return fmt.Errorf("%w: %s", ErrNotFound, in.Name)
 	}
+	for _, a := range stored {
+		setField(m, p, a.Column, a.Value)
+	}
+	return nil
+}
+
+// checkAssignedOnce refuses a column assigned twice: PostgreSQL rejects it
+// while MySQL and SQLite accept it, so velox refuses it everywhere.
+func checkAssignedOnce(info *EntityInfo, set []Assignment) error {
+	seen := make(map[int]bool, len(set))
+	for _, a := range set {
+		if seen[a.Column] {
+			return fmt.Errorf("velox: %s: column %s is assigned twice", info.Name, info.Columns[a.Column].Name)
+		}
+		seen[a.Column] = true
+	}
 	return nil
 }
 
 // withOnUpdate appends an assignment for every column with OnUpdate that set
-// does not assign, passing each value to apply when it is not nil.
-func withOnUpdate(info *EntityInfo, set []Assignment, apply func(col int, v any)) []Assignment {
+// does not assign.
+func withOnUpdate(info *EntityInfo, set []Assignment) []Assignment {
 	named := make(map[int]bool, len(set))
 	for _, a := range set {
 		named[a.Column] = true
@@ -175,11 +208,7 @@ func withOnUpdate(info *EntityInfo, set []Assignment, apply func(col int, v any)
 	out := slices.Clip(set)
 	for i := range info.Columns {
 		if f := info.Columns[i].OnUpdate; f != nil && !named[i] {
-			v := f()
-			if apply != nil {
-				apply(i, v)
-			}
-			out = append(out, Assignment{Column: i, Op: AssignSet, Value: v})
+			out = append(out, Assignment{Column: i, Op: AssignSet, Value: f()})
 		}
 	}
 	return out
