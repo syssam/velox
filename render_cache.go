@@ -7,9 +7,13 @@ import (
 
 // maxShapes bounds the cache: the number of shapes it holds, across all
 // entities. Programs have a fixed set of query shapes, except that In lists
-// of every length are shapes of their own; past the bound, statements are
-// rendered without the cache.
+// of every length are shapes of their own. maxShapes and maxCacheBytes both
+// apply; past either bound, statements are rendered without the cache.
 var maxShapes = 4096
+
+// maxCacheBytes bounds the cache's memory: the bytes of keys and texts it
+// holds, across entities. In lists of many lengths are the shapes that grow it.
+var maxCacheBytes = 4 << 20
 
 // renderCache keeps the SQL text of each statement shape: everything about a
 // statement except its argument values. A statement whose shape is cached
@@ -20,9 +24,10 @@ var maxShapes = 4096
 // for another. DB.run does not use the cache for a statement whose entity a
 // rewrite hook replaced, so a hook's per-statement EntityInfo never fills it.
 type renderCache struct {
-	mu sync.RWMutex
-	m  map[*EntityInfo]map[string]string // entity, then shape
-	n  int                               // shapes held, across entities
+	mu    sync.RWMutex
+	m     map[*EntityInfo]map[string]string // entity, then shape
+	n     int                               // shapes held, across entities
+	bytes int                               // key and text bytes held
 }
 
 func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
@@ -38,7 +43,7 @@ func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
 	}
 	text, args := render(d, st)
 	c.mu.Lock()
-	if c.n < maxShapes {
+	if c.n < maxShapes && c.bytes+len(key)+len(text) <= maxCacheBytes {
 		if c.m == nil {
 			c.m = make(map[*EntityInfo]map[string]string)
 		}
@@ -50,6 +55,7 @@ func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
 		if _, dup := shapes[string(key)]; !dup { // another goroutine may have added it
 			shapes[string(key)] = text
 			c.n++
+			c.bytes += len(key) + len(text)
 		}
 	}
 	c.mu.Unlock()

@@ -195,6 +195,18 @@ func TestRewriteCanReplaceTheEntity(t *testing.T) {
 	if wrong > 0 {
 		t.Errorf("%d of 3000 queries named the wrong table", wrong)
 	}
+
+	// The statement whose entity a hook replaced is rendered without the
+	// cache: running it again does not grow the cache.
+	before := velox.CacheSize(db)
+	for range 3 {
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if after := velox.CacheSize(db); after != before {
+		t.Errorf("cache grew from %d to %d shapes for statements whose entity a hook replaced", before, after)
+	}
 }
 
 // TestAroundWrapsReadingTheRows: next runs the statement and reads all its

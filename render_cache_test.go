@@ -131,3 +131,58 @@ func TestCacheKeepsWriteShapesApart(t *testing.T) {
 		}
 	}
 }
+
+// TestCacheBoundedInBytes is Review Focus 3: In lists of many lengths cannot
+// grow the cache past its byte bound, and statements past it still render
+// right.
+func TestCacheBoundedInBytes(t *testing.T) {
+	defer func(n int) { maxCacheBytes = n }(maxCacheBytes)
+	maxCacheBytes = 2000
+	var c renderCache
+	for n := 1; n <= 200; n++ {
+		vs := make([]any, n)
+		for i := range vs {
+			vs[i] = int64(i)
+		}
+		st := &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opIn, col: 0, v: vs}}}}
+		got, args := c.render(Postgres, st)
+		want, wantArgs := render(Postgres, st)
+		if got != want || len(args) != len(wantArgs) {
+			t.Fatalf("n=%d: cached render differs", n)
+		}
+	}
+	if c.bytes > maxCacheBytes {
+		t.Errorf("cache holds %d bytes, over its bound %d", c.bytes, maxCacheBytes)
+	}
+}
+
+func TestCacheKeysMoreShapes(t *testing.T) {
+	var c renderCache
+	base := func() *Statement { return &Statement{Op: OpSelect, Entity: invInfo} }
+	variants := []func(*Statement){
+		func(st *Statement) {},
+		func(st *Statement) { st.Limit = 1 },
+		func(st *Statement) { st.Offset = 1 },
+		func(st *Statement) { st.OrderBy = []OrderTerm{{Column: 0}, {Column: 1}} },
+		func(st *Statement) { st.OrderBy = []OrderTerm{{Column: 1}, {Column: 0}} },
+		func(st *Statement) {
+			st.Where = []Predicate{{node{op: opAnd, kids: []node{{op: opEQ, col: 0, v: 1}, {op: opOr, kids: []node{{op: opEQ, col: 1, v: 1}}}}}}}
+		},
+		func(st *Statement) {
+			st.Where = []Predicate{{node{op: opAnd, kids: []node{{op: opOr, kids: []node{{op: opEQ, col: 0, v: 1}}}, {op: opEQ, col: 1, v: 1}}}}}
+		},
+	}
+	seen := map[string]int{}
+	for i, v := range variants {
+		st := base()
+		v(st)
+		got, _ := c.render(Postgres, st)
+		if j, dup := seen[got]; dup {
+			t.Errorf("variants %d and %d share SQL %q", j, i, got)
+		}
+		seen[got] = i
+		if again, _ := c.render(Postgres, st); again != got {
+			t.Errorf("variant %d: the cache answered %q for %q", i, again, got)
+		}
+	}
+}

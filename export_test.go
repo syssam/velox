@@ -227,3 +227,6 @@ func SetMaxParams(d Dialect, n int) (restore func()) {
 	maxParams[d] = n
 	return func() { maxParams[d] = old }
 }
+
+// CacheSize returns the number of shapes db's render cache holds.
+func CacheSize(db *DB) int { return db.cfg.cache.size() }
