@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2/internal/tempmod"
@@ -107,6 +108,21 @@ func Use(ctx context.Context, db *velox.DB, e *E) error {
 }
 `
 
+// entityPolicySrc is entityUseSrc with a Policy and all three entity hooks
+// declared in its Schema: what they add to an entity's package is measured
+// against entityUseSrc (policy design §7).
+var entityPolicySrc = strings.Replace(entityUseSrc, `	s.Many(&x.Kids).ForeignKey(func(k *E) **int64 { return &k.ParentID })
+`, `	s.Many(&x.Kids).ForeignKey(func(k *E) **int64 { return &k.ParentID })
+	s.Policy(velox.Policy[E]{
+		Read:   func(context.Context) (velox.Pred[E], error) { return eName.EQ("r"), nil },
+		Write:  func(context.Context) (velox.Pred[E], error) { return velox.Pred[E]{}, nil },
+		Insert: func(_ context.Context, x *E) error { return nil },
+	})
+	s.BeforeInsert(func(_ context.Context, x *E) error { x.Name = "i"; return nil })
+	s.BeforeUpdate(func(_ context.Context, m *velox.Mutation[E]) error { m.Set(eName.Set("u")); return nil })
+	s.BeforeDelete(func(_ context.Context, m *velox.Mutation[E]) error { m.Where(eID.EQ(1)); return nil })
+`, 1)
+
 // genericObjects is one unexported variable of each exported generic type,
 // and of the non-generic types generated code reaches, as a package would
 // declare it (or, with src, a whole package), and the most bytes its compiled
@@ -153,7 +169,25 @@ var genericObjects = []struct {
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	{"entity", "", entitySrc, 123904},                               // measured 98878
 	{"entityUse", "", entityUseSrc, 740352},                         // measured 673936
+	{"Policy", "velox.Policy[E]", "", 8192},                         // measured 4050
+	{"Mutation", "velox.Mutation[E]", "", 8192},                     // measured 3874
 }
+
+// policyGrowthSpec is policy design §7's budget for the bytes a Policy and
+// the three entity hooks add to an entity's package (entityPolicySrc over
+// entityUseSrc). It is not met: on 2026-10-15, darwin/arm64, Go 1.27.1, they
+// add 98988. Measured in packages with a shorter import path they add 92266,
+// of which the six functions alone, assigned to variables instead of
+// declared, take 41948, and velox's generic Policy, BeforeInsert,
+// BeforeUpdate, BeforeDelete and mutationHook, instantiated for E with their
+// closures, the other 50318. Bodies barely count (a Read returning Pred[E]{}
+// costs as much as one returning a condition); every instantiated symbol's
+// name spells out E's shape and package path.
+const policyGrowthSpec = 8192
+
+// policyGrowthMax is the bound enforced meanwhile: the measured growth plus
+// genericObjects' margin, so that it still catches a regression.
+const policyGrowthMax = 123904 // measured 98988
 
 // TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one
 // package: it measures each row's own object cost, the bytes its package
@@ -175,11 +209,12 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 		}
 		files[g.name+"/p.go"] = src
 	}
+	files["entityPolicy/p.go"] = entityPolicySrc
 	if err := tempmod.Write(dir, repoRoot(), files); err != nil {
 		t.Fatal(err)
 	}
 	size := func(t *testing.T, pkg string) int64 {
-		out := filepath.Join(dir, pkg+".a")
+		out := filepath.Join(t.TempDir(), pkg+".a") // a package may be built by two subtests at once
 		if _, err := tempmod.Go(dir, "build", "-o", out, "./"+pkg); err != nil {
 			t.Fatal(err)
 		}
@@ -204,4 +239,12 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 			}
 		})
 	}
+	t.Run("policy and hooks", func(t *testing.T) {
+		t.Parallel()
+		got := size(t, "entityPolicy") - size(t, "entityUse")
+		t.Logf("policy and hooks: +%d bytes; policy design §7's budget is %d", got, policyGrowthSpec)
+		if got > policyGrowthMax {
+			t.Errorf("a Policy and the three entity hooks add %d bytes to an entity's package, over the recorded %d (policy design §7)", got, policyGrowthMax)
+		}
+	})
 }

@@ -45,6 +45,7 @@ jobs:
         run: |
           go test -run XXX -fuzz FuzzRender -fuzztime 20s .
           go test -run XXX -fuzz FuzzQuote -fuzztime 10s .
+          go test -run XXX -fuzz FuzzScope -fuzztime 10s .
       - name: generated files are current and every entity is valid
         run: |
           go -C cmd/velox-gen build -o "$PWD/bin/velox-gen" .

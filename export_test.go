@@ -267,3 +267,25 @@ func PolicyBypass(ctx context.Context) string { return policyBypass(ctx) }
 
 // InfoOf returns entity E's metadata.
 func InfoOf[E any, PE Entity[E]]() *EntityInfo { return PE(nil).VeloxMeta().info }
+
+// Prepare runs db's stages before execution on st, as run does: guard,
+// entity hooks, Rewrite hooks, scope, row cap and rendering.
+func Prepare(db *DB, ctx context.Context, st *Statement) error { return db.prepare(ctx, st) }
+
+// Kids returns p's sub-conditions: the operands of an And, Or or Not, or the
+// conditions an EXISTS puts on its target.
+func Kids(p Predicate) []Predicate {
+	out := make([]Predicate, len(p.n.kids))
+	for i, k := range p.n.kids {
+		out[i] = Predicate{k}
+	}
+	return out
+}
+
+// ExistsOn returns the target of an EXISTS; nil for any other condition.
+func ExistsOn(p Predicate) *EntityInfo {
+	if p.n.op != opExists {
+		return nil
+	}
+	return p.n.v.(link).target
+}

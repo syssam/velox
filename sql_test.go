@@ -220,3 +220,90 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 		t.Errorf("empty InsertAll: %q %v %v", text, args, err)
 	}
 }
+
+// TestScopedSQLGolden pins the SQL of Ticket's statements as ann under tenant
+// 7: the tenant and owner conditions follow the caller's, and an EXISTS on
+// Ticket gets both among its own; an UPDATE or DELETE gets the Read and the
+// Write condition (both the owner's), a DELETE the BeforeDelete hook's
+// condition, and an upsert's update branch the Read and Write conditions on
+// the existing row.
+func TestScopedSQLGolden(t *testing.T) {
+	const (
+		pgCols    = `"created_by", "id", "org_id", "owner", "title", "done", "invoice_id", "parent_id"`
+		mysqlCols = "`created_by`, `id`, `org_id`, `owner`, `title`, `done`, `invoice_id`, `parent_id`"
+	)
+	type golden struct {
+		sql  string
+		args []any
+	}
+	ctx := annIn7()
+	for _, c := range []struct {
+		d                                     velox.Dialect
+		selectHas, count, update, del, upsert golden
+	}{
+		{d: velox.Postgres,
+			selectHas: golden{`SELECT ` + pgCols + ` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = $1 AND "owner" = $2) AND "org_id" = $3 AND "owner" = $4 LIMIT $5`,
+				[]any{int64(7), "ann", int64(7), "ann", 10}},
+			count: golden{`SELECT COUNT(*) FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3`,
+				[]any{false, int64(7), "ann"}},
+			update: golden{`UPDATE "tickets" SET "title" = $1 WHERE "id" = $2 AND "org_id" = $3 AND "owner" = $4 AND "owner" = $5`,
+				[]any{"new", int64(1), int64(7), "ann", "ann"}},
+			del: golden{`DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3 AND "owner" = $4 AND "owner" = $5`,
+				[]any{int64(1), true, int64(7), "ann", "ann"}},
+			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."owner" = $9 AND "tickets"."owner" = $10`,
+				[]any{"ann", int64(1), int64(7), "ann", "t", false, int64(2), (*int64)(nil), "ann", "ann"}},
+		},
+		{d: velox.MySQL,
+			selectHas: golden{"SELECT " + mysqlCols + " FROM `tickets` WHERE EXISTS (SELECT 1 FROM `tickets` AS `vx1` WHERE `vx1`.`id` = `tickets`.`parent_id` AND `org_id` = ? AND `owner` = ?) AND `org_id` = ? AND `owner` = ? LIMIT ?",
+				[]any{int64(7), "ann", int64(7), "ann", 10}},
+			count: golden{"SELECT COUNT(*) FROM `tickets` WHERE `done` = ? AND `org_id` = ? AND `owner` = ?",
+				[]any{false, int64(7), "ann"}},
+			update: golden{"UPDATE `tickets` SET `title` = ? WHERE `id` = ? AND `org_id` = ? AND `owner` = ? AND `owner` = ?",
+				[]any{"new", int64(1), int64(7), "ann", "ann"}},
+			del: golden{"DELETE FROM `tickets` WHERE `id` = ? AND `done` = ? AND `org_id` = ? AND `owner` = ? AND `owner` = ?",
+				[]any{int64(1), true, int64(7), "ann", "ann"}},
+			// MySQL refuses this upsert (TestUpsertOnMySQL).
+		},
+		{d: velox.SQLite,
+			selectHas: golden{`SELECT ` + pgCols + ` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = ? AND "owner" = ?) AND "org_id" = ? AND "owner" = ? LIMIT ?`,
+				[]any{int64(7), "ann", int64(7), "ann", 10}},
+			count: golden{`SELECT COUNT(*) FROM "tickets" WHERE "done" = ? AND "org_id" = ? AND "owner" = ?`,
+				[]any{false, int64(7), "ann"}},
+			update: golden{`UPDATE "tickets" SET "title" = ? WHERE "id" = ? AND "org_id" = ? AND "owner" = ? AND "owner" = ?`,
+				[]any{"new", int64(1), int64(7), "ann", "ann"}},
+			del: golden{`DELETE FROM "tickets" WHERE "id" = ? AND "done" = ? AND "org_id" = ? AND "owner" = ? AND "owner" = ?`,
+				[]any{int64(1), true, int64(7), "ann", "ann"}},
+			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."owner" = ? AND "tickets"."owner" = ?`,
+				[]any{"ann", int64(1), int64(7), "ann", "t", false, int64(2), (*int64)(nil), "ann", "ann"}},
+		},
+	} {
+		t.Run(c.d.String(), func(t *testing.T) {
+			e := &velox.FakeExec{Rows: [][]any{{int64(3)}}}
+			db := velox.OpenFake(c.d, e)
+			check := func(what string, want golden, text string, args []any, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("%s: %v", what, err)
+				}
+				if text != want.sql || !reflect.DeepEqual(args, want.args) {
+					t.Errorf("%s:\n got %s %#v\nwant %s %#v", what, text, args, want.sql, want.args)
+				}
+			}
+			text, args, err := db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).Limit(10).SQL(ctx)
+			check("select with Has(Parent)", c.selectHas, text, args, err)
+			// Count has no SQL(ctx): pin what it sends.
+			_, err = db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Count(ctx)
+			check("count", c.count, e.SQL, e.Args, err)
+			text, args, err = db.Update[testmodel.Ticket]().Set(Tk.Title.Set("new")).Where(Tk.ID.EQ(1)).SQL(ctx)
+			check("update", c.update, text, args, err)
+			text, args, err = db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(1)).SQL(ctx)
+			check("delete", c.del, text, args, err)
+			if c.upsert.sql == "" {
+				return
+			}
+			tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t", InvoiceID: 2}
+			text, args, err = db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).SQL(ctx)
+			check("upsert", c.upsert, text, args, err)
+		})
+	}
+}
