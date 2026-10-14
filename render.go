@@ -90,7 +90,27 @@ func (w *writer) selectStmt(st *Statement) {
 	}
 }
 
+// isNilArg reports a value that SQL compares with IS NULL, not =.
+func isNilArg(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case []byte:
+		return x == nil
+	}
+	return false
+}
+
 func (w *writer) pred(n node) {
+	if (n.op == opEQ || n.op == opNEQ) && isNilArg(n.v) {
+		w.col(n.col)
+		if n.op == opEQ {
+			w.str(" IS NULL")
+		} else {
+			w.str(" IS NOT NULL")
+		}
+		return
+	}
 	switch n.op {
 	case opEQ, opNEQ, opGT, opGTE, opLT, opLTE:
 		w.col(n.col)

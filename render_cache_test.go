@@ -50,6 +50,24 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	}
 }
 
+// TestCacheKeepsNilApartFromAValue: EQ(nil) renders IS NULL and EQ(1) renders
+// "= $1"; the two must not share a cached shape.
+func TestCacheKeepsNilApartFromAValue(t *testing.T) {
+	var c renderCache
+	nilSt := func() *Statement { return stmt(Pred[inv]{node{op: opEQ, col: 1, v: nil}}) }
+	valSt := func() *Statement { return stmt(hOrg.EQ(1)) }
+	for range 2 {
+		n, nargs := c.render(Postgres, nilSt())
+		v, vargs := c.render(Postgres, valSt())
+		if n != `SELECT `+pgCols+` FROM "invoices" WHERE "org_id" IS NULL` || len(nargs) != 0 {
+			t.Errorf("nil: %s %v", n, nargs)
+		}
+		if v != `SELECT `+pgCols+` FROM "invoices" WHERE "org_id" = $1` || len(vargs) != 1 {
+			t.Errorf("value: %s %v", v, vargs)
+		}
+	}
+}
+
 // TestCacheIsSafeForConcurrentUse is Review Focus 5; run it with -race.
 func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 	var c renderCache

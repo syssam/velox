@@ -20,6 +20,7 @@ type Query[E any] struct {
 	st    Statement
 	err   error      // a condition's error, returned by every way of running the query
 	loads []loadSpec // the relations All loads
+	after *E         // After's row, copied
 }
 
 // Query starts a query on entity E:
@@ -126,6 +127,71 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 	return q
 }
 
+// After returns the query continuing after x, the last row of the previous
+// page: keyset pagination, which unlike Offset neither skips nor repeats rows
+// when rows are added between pages, and costs the same on every page. The
+// query's OrderBy must include every column of the primary key or of a
+// unique index, and no nullable column.
+func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
+	c := *x
+	q.after = &c
+	return q
+}
+
+// prepare is the statement a run sends: the query's, with After's condition.
+func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
+	st := cloneStatement(&q.st)
+	if q.after == nil {
+		return st, nil
+	}
+	in := q.meta.info
+	if len(st.OrderBy) == 0 {
+		return st, fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
+	}
+	ordered := make(map[int]bool, len(st.OrderBy))
+	for _, o := range st.OrderBy {
+		if in.Columns[o.Column].Nullable {
+			return st, fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, in.Columns[o.Column].Name)
+		}
+		ordered[o.Column] = true
+	}
+	covers := func(cols []int) bool {
+		for _, c := range cols {
+			if !ordered[c] {
+				return false
+			}
+		}
+		return len(cols) > 0
+	}
+	unique := covers(in.PrimaryKey)
+	for _, ix := range in.Indexes {
+		unique = unique || (ix.Unique && covers(ix.Columns))
+	}
+	if !unique {
+		return st, fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
+	}
+	// (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending columns.
+	var or []node
+	for i, o := range st.OrderBy {
+		var and []node
+		for _, prev := range st.OrderBy[:i] {
+			and = append(and, node{op: opEQ, col: int32(prev.Column), v: fieldValue(q.meta, q.after, prev.Column)})
+		}
+		cmp := opGT
+		if o.Desc {
+			cmp = opLT
+		}
+		and = append(and, node{op: cmp, col: int32(o.Column), v: fieldValue(q.meta, q.after, o.Column)})
+		if len(and) == 1 {
+			or = append(or, and[0])
+		} else {
+			or = append(or, node{op: opAnd, kids: and})
+		}
+	}
+	st.Where = append(st.Where, Predicate{node{op: opOr, kids: or}})
+	return st, nil
+}
+
 // cloneStatement copies a query's statement for one run, with its slices
 // capped so that anything velox itself appends to them (a rewrite hook's
 // condition, say) cannot reach the query's slices. It does not copy their
@@ -200,14 +266,17 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 			return nil, err
 		}
 	}
+	st, err := q.prepare()
+	if err != nil {
+		return nil, err
+	}
 	var out []E
-	var err error
 	if q.db.hooked() {
-		a := &allRun[E]{st: cloneStatement(&q.st), m: q.meta}
+		a := &allRun[E]{st: st, m: q.meta}
 		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) }, nil)
 		out = a.out
 	} else {
-		a := allRun[E]{st: cloneStatement(&q.st), m: q.meta}
+		a := allRun[E]{st: st, m: q.meta}
 		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) }, nil)
 		out = a.out
 	}
@@ -297,14 +366,18 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, fmt.Errorf("velox: %s: Iter does not load relations; use All", q.meta.info.Name))
 			return
 		}
-		var err error
+		st, err := q.prepare()
+		if err != nil {
+			yield(zero, err)
+			return
+		}
 		var stopped bool
 		if q.db.hooked() {
-			it := &iterRun[E]{st: cloneStatement(&q.st), m: q.meta, yield: yield}
+			it := &iterRun[E]{st: st, m: q.meta, yield: yield}
 			err = q.db.run(ctx, &it.st, func(r rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
-			it := iterRun[E]{st: cloneStatement(&q.st), m: q.meta, yield: yield}
+			it := iterRun[E]{st: st, m: q.meta, yield: yield}
 			err = q.db.plain(ctx, &it.st, func(r rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}
@@ -337,10 +410,12 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if q.err != nil {
 		return 0, q.err
 	}
-	st := cloneStatement(&q.st)
+	st, err := q.prepare()
+	if err != nil {
+		return 0, err
+	}
 	st.Count, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 0, 0
 	var n int64
-	var err error
 	if q.db.hooked() {
 		c := &countRun{st: st}
 		err = q.db.run(ctx, &c.st, func(r rows) error { return readCount(c, r) }, nil)
@@ -359,7 +434,7 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 // SQL returns the statement and arguments the query would send, without a
 // database. Rewrite hooks have not run on it, so a condition a hook adds (a
 // tenant's, for example) is not shown. It returns "" when the entity's
-// metadata or a condition is invalid; All returns that error.
+// metadata, a condition or After is invalid; All returns that error.
 func (q Query[E]) SQL[_ Lazy[E]]() (string, []any) {
 	if q.meta.err != nil {
 		return "", nil
@@ -367,6 +442,9 @@ func (q Query[E]) SQL[_ Lazy[E]]() (string, []any) {
 	if q.err != nil {
 		return "", nil
 	}
-	st := cloneStatement(&q.st)
+	st, err := q.prepare()
+	if err != nil {
+		return "", nil
+	}
 	return render(q.db.d, &st)
 }

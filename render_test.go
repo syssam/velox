@@ -76,6 +76,13 @@ type renderCase struct {
 
 func renderCases() []renderCase {
 	return []renderCase{
+		{"eq nil", func() *Statement {
+			return stmt(Pred[inv]{node{op: opEQ, col: 4, v: nil}}, Pred[inv]{node{op: opNEQ, col: 4, v: []byte(nil)}})
+		}, map[Dialect]string{
+			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "paid_at" IS NULL AND "paid_at" IS NOT NULL`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `paid_at` IS NULL AND `paid_at` IS NOT NULL",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "paid_at" IS NULL AND "paid_at" IS NOT NULL`,
+		}, nil},
 		{"every row", func() *Statement { return stmt() }, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices"`,
 			MySQL:    "SELECT " + mysqlCols + " FROM `invoices`",

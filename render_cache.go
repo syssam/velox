@@ -118,6 +118,9 @@ func appendInts(k []byte, xs []int) []byte {
 func nodeKey(k []byte, n node) []byte {
 	k = append(k, byte(n.op))
 	k = binary.AppendUvarint(k, uint64(n.col))
+	if n.op == opEQ || n.op == opNEQ {
+		k = append(k, flag(isNilArg(n.v)))
+	}
 	if n.op == opIn || n.op == opNotIn {
 		k = binary.AppendUvarint(k, uint64(len(n.v.([]any))))
 	}

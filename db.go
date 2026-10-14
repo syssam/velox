@@ -245,6 +245,9 @@ func checkColumns(st *Statement) error {
 // with a nil read it sends a statement that returns no rows and fills *res.
 // Errors from the database, the driver or read name the entity.
 func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, res *result) (err error) {
+	if lim := maxParams[db.d]; len(st.Args) > lim {
+		return fmt.Errorf("velox: %s: the statement has %d parameters; %s allows %d", st.Entity.Name, len(st.Args), db.d, lim)
+	}
 	if read == nil {
 		r, err := db.ex.exec(ctx, st.SQL, st.Args)
 		if err != nil {
