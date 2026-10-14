@@ -48,7 +48,7 @@ type ConflictClause struct {
 type Statement struct {
 	Op        Op
 	Entity    *EntityInfo // shared and read-only: replace it, never edit it
-	Count     bool        // SELECT COUNT(*) instead of columns
+	Count     bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook that sets them gets them rendered
 	Columns   []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
 	Where     []Predicate // all must hold
 	OrderBy   []OrderTerm

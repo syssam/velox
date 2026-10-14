@@ -30,11 +30,23 @@ type config struct {
 // Option configures a DB's pipeline.
 type Option func(*config)
 
-// WithRewrite adds a rewrite hook. Rewrite hooks run in the order given.
-func WithRewrite(r Rewrite) Option { return func(c *config) { c.rewrites = append(c.rewrites, r) } }
+// WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A
+// nil hook panics.
+func WithRewrite(r Rewrite) Option {
+	if r == nil {
+		panic("velox: WithRewrite(nil)")
+	}
+	return func(c *config) { c.rewrites = append(c.rewrites, r) }
+}
 
-// WithAround adds an around hook. The first one given is the outermost.
-func WithAround(a Around) Option { return func(c *config) { c.arounds = append(c.arounds, a) } }
+// WithAround adds an around hook. The first one given is the outermost. A nil
+// hook panics.
+func WithAround(a Around) Option {
+	if a == nil {
+		panic("velox: WithAround(nil)")
+	}
+	return func(c *config) { c.arounds = append(c.arounds, a) }
+}
 
 // Open returns a DB that runs statements through db, a *sql.DB the
 // application opened with a driver for dialect d. For PostgreSQL, OpenPgx is
@@ -88,6 +100,9 @@ func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arou
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+	if err := db.guard(st); err != nil {
+		return err
+	}
 	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
 	return db.exec(ctx, st, read, res)
 }
@@ -99,6 +114,9 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 // before it returns, on every path. Hooks may keep the statement, and next
 // (which holds read), so both escape; a DB with no hooks uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+	if err := db.guard(st); err != nil {
+		return err
+	}
 	if db.hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
@@ -129,6 +147,14 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 	}
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
+	}
+	switch {
+	case st.Entity == nil:
+		return fmt.Errorf("velox: %s: a Rewrite hook set the statement's Entity to nil", entity.Name)
+	case st.Entity != entity && (st.Entity.kit != entity.kit || len(st.Entity.Columns) != len(entity.Columns)):
+		// A copy (info := *st.Entity) keeps the scan plan; anything else
+		// would scan rows into the wrong fields.
+		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with %s, which is not a copy of it", entity.Name, st.Entity.Name)
 	}
 	if len(db.cfg.rewrites) > 0 {
 		if err := checkColumns(st); err != nil {
@@ -217,6 +243,8 @@ func checkColumns(st *Statement) error {
 	var walk func(nd node) error
 	walk = func(nd node) error {
 		switch nd.op {
+		case 0:
+			return errZeroPredicate(st.Entity.Name)
 		case opAnd, opOr, opNot:
 			for _, k := range nd.kids {
 				if err := walk(k); err != nil {

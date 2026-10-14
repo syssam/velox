@@ -88,7 +88,7 @@ func TestHooksOnWrites(t *testing.T) {
 }
 
 // TestHooksAndConditionsOfRelations: a rewrite hook that points the statement
-// at an entity too small for an EXISTS, or appends a condition that carries an
+// at an entity other than a copy of its own, or appends a condition that carries an
 // error, gets an error, not a panic or a malformed statement.
 func TestHooksAndConditionsOfRelations(t *testing.T) {
 	ctx := context.Background()
@@ -105,7 +105,7 @@ func TestHooksAndConditionsOfRelations(t *testing.T) {
 		"smaller entity": {func(_ context.Context, st *Statement) error {
 			st.Entity = &EntityInfo{Name: "tiny"}
 			return nil
-		}, "the entity has 0 columns"},
+		}, "not a copy of it"},
 		"invalid predicate": {func(_ context.Context, st *Statement) error {
 			st.Where = append(st.Where, Predicate{node{op: opInvalid, v: broken}})
 			return nil
