@@ -112,6 +112,9 @@ func appendInts(k []byte, xs []int) []byte {
 	return k
 }
 
+// nodeKey encodes a condition. For opExists, op, col (the relation index) and
+// the kids are enough: the outer entity keys the map, and the relation index
+// then fixes the target.
 func nodeKey(k []byte, n node) []byte {
 	k = append(k, byte(n.op))
 	k = binary.AppendUvarint(k, uint64(n.col))

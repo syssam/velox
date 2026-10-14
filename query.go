@@ -17,6 +17,7 @@ type Query[E any] struct {
 	db   *DB
 	meta *Meta[E]
 	st   Statement
+	err  error // a condition's error, returned by every way of running the query
 }
 
 // Query starts a query on entity E:
@@ -35,6 +36,11 @@ func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 	q.st.Where = slices.Clip(q.st.Where)
 	for _, p := range ps {
 		q.st.Where = append(q.st.Where, Predicate(p))
+		if q.err == nil {
+			if err := predErr(p.n); err != nil {
+				q.err = err
+			}
+		}
 	}
 	return q
 }
@@ -167,6 +173,9 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if q.meta.err != nil {
 		return nil, q.meta.err
 	}
+	if q.err != nil {
+		return nil, q.err
+	}
 	var out []E
 	var err error
 	if q.db.hooked() {
@@ -247,6 +256,10 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, q.meta.err)
 			return
 		}
+		if q.err != nil {
+			yield(zero, q.err)
+			return
+		}
 		var err error
 		var stopped bool
 		if q.db.hooked() {
@@ -284,6 +297,9 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if q.meta.err != nil {
 		return 0, q.meta.err
 	}
+	if q.err != nil {
+		return 0, q.err
+	}
 	st := cloneStatement(&q.st)
 	st.Count, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 0, 0
 	var n int64
@@ -309,6 +325,9 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 // metadata is invalid; All returns that error.
 func (q Query[E]) SQL[_ Lazy[E]]() (string, []any) {
 	if q.meta.err != nil {
+		return "", nil
+	}
+	if q.err != nil {
 		return "", nil
 	}
 	st := cloneStatement(&q.st)

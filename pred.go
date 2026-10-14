@@ -21,6 +21,8 @@ const (
 	opAnd
 	opOr
 	opNot
+	opExists  // col is the relation index, v its link, kids the target's conditions
+	opInvalid // v is the error
 )
 
 // node is a condition, typed by nothing: the generic API wraps it.
@@ -69,6 +71,23 @@ func Or[E any](ps ...Pred[E]) Pred[E] { return Pred[E]{node{op: opOr, kids: node
 
 // Not is true when p is false.
 func Not[E any](p Pred[E]) Pred[E] { return Pred[E]{node{op: opNot, kids: []node{p.n}}} }
+
+// predErr returns the error a condition carries: a relation that could not be
+// resolved when the condition was made.
+func predErr(n node) error {
+	if n.op == opInvalid {
+		return n.v.(error)
+	}
+	if n.op == opExists {
+		return nil // its kids were checked when HasWhere made it
+	}
+	for _, k := range n.kids {
+		if err := predErr(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func nodes[E any](ps []Pred[E]) []node {
 	out := make([]node, len(ps))

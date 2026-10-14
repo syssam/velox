@@ -2,6 +2,7 @@ package velox
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -14,6 +15,8 @@ type writer struct {
 	b        strings.Builder
 	args     []any
 	argsOnly bool
+	alias    string // the alias of the subquery being written, and its nesting
+	depth    int
 }
 
 func (w *writer) str(s string) {
@@ -164,7 +167,48 @@ func (w *writer) pred(n node) {
 		w.str("NOT (")
 		w.pred(n.kids[0])
 		w.str(")")
+	case opExists:
+		w.exists(n)
 	}
+}
+
+// exists writes EXISTS over a relation. The subquery's table is aliased
+// vx<depth>, so it is told apart from the outer table even when they are the
+// same table; the correlation names the outer side by its alias, or by its
+// table at the top; the target's conditions are unqualified and bind to the
+// innermost table.
+func (w *writer) exists(n node) {
+	l := n.v.(link)
+	owner, outer := w.in, w.alias
+	w.depth++
+	alias := "vx" + strconv.Itoa(w.depth)
+	w.str("EXISTS (SELECT 1 FROM ")
+	w.in = l.target
+	w.table()
+	w.str(" AS ")
+	w.ident(alias)
+	w.str(" WHERE ")
+	w.ident(alias)
+	w.str(".")
+	w.col(int32(l.targetCol))
+	w.str(" = ")
+	if outer != "" {
+		w.ident(outer)
+	} else {
+		w.in = owner
+		w.table()
+		w.in = l.target
+	}
+	w.str(".")
+	w.ident(owner.Columns[l.ownerCol].Name)
+	w.alias = alias
+	for _, k := range n.kids {
+		w.str(" AND ")
+		w.pred(k)
+	}
+	w.str(")")
+	w.in, w.alias = owner, outer
+	w.depth--
 }
 
 // render returns a statement's SQL and arguments.

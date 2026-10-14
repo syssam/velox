@@ -18,6 +18,7 @@ var (
 	ctx = context.Background()
 	t0  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	I   = testmodel.Invoices
+	It  = testmodel.Items
 )
 
 const allCols = `"created_at", "updated_at", "id", "org_id", "number", "total", "paid", "paid_at", "note", "data"`
@@ -315,5 +316,29 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 	})
 	if e.Calls != 0 {
 		t.Errorf("%d queries reached the database", e.Calls)
+	}
+}
+
+func TestHasThroughTheAPI(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	text, args := db.Query[testmodel.Invoice]().Where(I.Items.HasWhere(It.Qty.GT(2)), velox.Not(I.Items.Has())).Limit(5).SQL()
+	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT $2`
+	if text != want || len(args) != 2 {
+		t.Errorf("\n got %s\nwant %s", text, want)
+	}
+	if _, err := db.Delete[testmodel.Invoice]().Where(I.Items.Has()).Exec(ctx); err != nil || !strings.Contains(e.SQL, `DELETE FROM "invoices" WHERE EXISTS`) {
+		t.Errorf("%v %s", err, e.SQL)
+	}
+}
+
+func TestABrokenRelationIsAnError(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	bad := velox.Rel[testmodel.Invoice, testmodel.Item]{I: 9}
+	if _, err := db.Query[testmodel.Invoice]().Where(bad.Has()).Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "has no relation 9") {
+		t.Errorf("%v", err)
+	}
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(bad.Has()).Exec(ctx); err == nil {
+		t.Error("Update accepted a broken relation")
 	}
 }

@@ -224,6 +224,8 @@ func checkColumns(st *Statement) error {
 				}
 			}
 			return nil
+		case opExists:
+			return nil // its kids are conditions on the target, made by HasWhere
 		}
 		return bad(int(nd.col))
 	}

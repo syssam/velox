@@ -13,6 +13,7 @@ type UpdateQuery[E any] struct {
 	db   *DB
 	meta *Meta[E]
 	st   Statement
+	err  error // a condition's error, as in Query
 }
 
 // Update starts an UPDATE of entity E:
@@ -37,6 +38,11 @@ func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E] {
 	u.st.Where = slices.Clip(u.st.Where)
 	for _, p := range ps {
 		u.st.Where = append(u.st.Where, Predicate(p))
+		if u.err == nil {
+			if err := predErr(p.n); err != nil {
+				u.err = err
+			}
+		}
 	}
 	return u
 }
@@ -54,6 +60,9 @@ func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E] {
 func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if u.meta.err != nil {
 		return Statement{}, u.meta.err
+	}
+	if u.err != nil {
+		return Statement{}, u.err
 	}
 	if len(u.st.Set) == 0 {
 		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.info.Name)
@@ -92,6 +101,7 @@ type DeleteQuery[E any] struct {
 	db   *DB
 	meta *Meta[E]
 	st   Statement
+	err  error // a condition's error, as in Query
 }
 
 // Delete starts a DELETE of entity E.
@@ -105,6 +115,11 @@ func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E] {
 	d.st.Where = slices.Clip(d.st.Where)
 	for _, p := range ps {
 		d.st.Where = append(d.st.Where, Predicate(p))
+		if d.err == nil {
+			if err := predErr(p.n); err != nil {
+				d.err = err
+			}
+		}
 	}
 	return d
 }
@@ -121,6 +136,9 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if d.meta.err != nil {
 		return 0, d.meta.err
 	}
+	if d.err != nil {
+		return 0, d.err
+	}
 	st := cloneStatement(&d.st)
 	res, err := execWrite(ctx, d.db, &st)
 	return res.affected, err
@@ -130,6 +148,9 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // database and before rewrite hooks.
 func (d DeleteQuery[E]) SQL[_ Lazy[E]]() (string, []any) {
 	if d.meta.err != nil {
+		return "", nil
+	}
+	if d.err != nil {
 		return "", nil
 	}
 	st := cloneStatement(&d.st)
