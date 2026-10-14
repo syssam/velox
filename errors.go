@@ -28,6 +28,25 @@ var (
 	ErrTimeout = errors.New("deadline set by velox passed")
 	// ErrStale: an entity's struct changed after velox-gen last ran.
 	ErrStale = errors.New("generated code is out of date")
+	// ErrNoTenant: a statement on a tenant-scoped entity whose context has
+	// neither WithTenant nor AllTenants.
+	ErrNoTenant = errors.New("no tenant in the context")
+	// ErrTenantMismatch: the context's tenant is not of the tenant column's
+	// type, or an inserted row names another tenant.
+	ErrTenantMismatch = errors.New("tenant does not match")
+	// ErrTenantImmutable: a statement assigns another tenant to the tenant
+	// column.
+	ErrTenantImmutable = errors.New("tenant column cannot change")
+	// ErrTenantUpsert: an upsert that updates could change another tenant's
+	// row.
+	ErrTenantUpsert = errors.New("upsert could cross tenants")
+	// ErrDenied: a policy refused the statement. Every *PolicyError matches
+	// it.
+	ErrDenied = errors.New("denied by policy")
+	// ErrPolicyUpsert: an upsert that updates, on MySQL, of an entity whose
+	// policy has a Read or Write predicate, which MySQL cannot apply to the
+	// update.
+	ErrPolicyUpsert = errors.New("upsert cannot apply the policy")
 )
 
 // SchemaError reports a mistake in an entity's Schema method or in a

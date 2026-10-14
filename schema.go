@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"unsafe"
@@ -39,6 +40,17 @@ type Schema struct {
 	idx    []IndexInfo
 	errs   []error
 	rels   []*relation
+
+	// mixin is the reflect.Type, as any, of the mixin whose Mixin is running,
+	// and mixinOff its offset in the entity; nil and 0 in the entity's Schema.
+	mixin    any
+	mixinOff uintptr
+
+	policy       *policy
+	mixinInsert  []func(ctx context.Context, p unsafe.Pointer) error // the mixins' BeforeInsert hooks
+	beforeInsert []func(ctx context.Context, p unsafe.Pointer) error // the entity's
+	beforeUpdate []func(ctx context.Context, st *Statement) error
+	beforeDelete []func(ctx context.Context, st *Statement) error
 }
 
 func (s *Schema) fail(fieldName, format string, args ...any) {
@@ -291,4 +303,116 @@ func (d *RelDef[T]) References[V any](p *V) *RelDef[T] {
 		d.r.ref = -2 // the error is recorded; keep resolution from guessing
 	}
 	return d
+}
+
+// Policy declares the entity's row-level policy (see Policy). It is declared
+// at most once, in the entity's own Schema method: not in a mixin.
+func (s *Schema) Policy[E any](p Policy[E]) {
+	pol := &policy{}
+	if r := p.Read; r != nil {
+		pol.read = func(ctx context.Context) (Predicate, error) { q, err := r(ctx); return Predicate(q), err }
+	}
+	if w := p.Write; w != nil {
+		pol.write = func(ctx context.Context) (Predicate, error) { q, err := w(ctx); return Predicate(q), err }
+	}
+	if ins := p.Insert; ins != nil {
+		pol.insert = func(ctx context.Context, x unsafe.Pointer) error { return ins(ctx, (*E)(x)) }
+	}
+	s.setPolicy(elemType((*E)(nil)), pol)
+}
+
+// BeforeInsert declares a hook that runs on every row an insert or upsert
+// writes, after the defaults and the tenant are filled; its error refuses the
+// statement. In a mixin's Mixin method, f takes the mixin's own struct, and
+// is given the one embedded in the row; the mixins' hooks run before the
+// entity's, each kind in the order declared.
+func (s *Schema) BeforeInsert[E any](f func(ctx context.Context, x *E) error) {
+	var h func(context.Context, unsafe.Pointer) error
+	if f != nil {
+		off := s.mixinOff
+		h = func(ctx context.Context, p unsafe.Pointer) error { return f(ctx, (*E)(unsafe.Add(p, off))) }
+	}
+	s.addBeforeInsert(elemType((*E)(nil)), h)
+}
+
+// BeforeUpdate declares a hook that runs on every update and Save of the
+// entity, before the statement is scoped and rendered. It may read and change
+// the assignments and narrow the rows through m; its error refuses the
+// statement. A mixin cannot declare one.
+func (s *Schema) BeforeUpdate[E any](f func(ctx context.Context, m *Mutation[E]) error) {
+	s.addMutationHook("BeforeUpdate", elemType((*E)(nil)), mutationHook(f), &s.beforeUpdate)
+}
+
+// BeforeDelete declares a hook that runs on every delete of the entity,
+// before the statement is scoped and rendered. It may narrow the rows through
+// m; its error refuses the statement. A mixin cannot declare one.
+func (s *Schema) BeforeDelete[E any](f func(ctx context.Context, m *Mutation[E]) error) {
+	s.addMutationHook("BeforeDelete", elemType((*E)(nil)), mutationHook(f), &s.beforeDelete)
+}
+
+// mutationHook wraps f over a statement: each call gets a fresh Mutation,
+// and an error the Mutation recorded fails it once f returns nil. A nil f
+// gives nil.
+func mutationHook[E any](f func(context.Context, *Mutation[E]) error) func(context.Context, *Statement) error {
+	if f == nil {
+		return nil
+	}
+	return func(ctx context.Context, st *Statement) error {
+		m := &Mutation[E]{st: st}
+		if err := f(ctx, m); err != nil {
+			return err
+		}
+		return m.err
+	}
+}
+
+// hookOn reports whether a hook declared by what, typed on t (a reflect.Type
+// as any), may be declared here: on the entity in its Schema method, on the
+// mixin in a Mixin method. Otherwise it records why not.
+func (s *Schema) hookOn(what string, t any) bool {
+	switch {
+	case s.mixin != nil && t != s.mixin:
+		s.fail("", "%s in mixin %v is typed on %v; a mixin's hook takes the mixin's own struct", what, s.mixin, t)
+	case s.mixin == nil && t != s.typ:
+		s.fail("", "%s is typed on %v, not on %v", what, t, s.typ)
+	default:
+		return true
+	}
+	return false
+}
+
+func (s *Schema) setPolicy(t any, p *policy) {
+	switch {
+	case s.mixin != nil:
+		s.fail("", "Policy is declared in mixin %v; declare it in the entity's Schema", s.mixin)
+	case !s.hookOn("Policy", t):
+	case s.policy != nil:
+		s.fail("", "Policy is declared twice")
+	default:
+		s.policy = p
+	}
+}
+
+func (s *Schema) addBeforeInsert(t any, h func(context.Context, unsafe.Pointer) error) {
+	switch {
+	case !s.hookOn("BeforeInsert", t):
+	case h == nil:
+		s.fail("", "BeforeInsert is given a nil function")
+	case s.mixin != nil:
+		s.mixinInsert = append(s.mixinInsert, h)
+	default:
+		s.beforeInsert = append(s.beforeInsert, h)
+	}
+}
+
+func (s *Schema) addMutationHook(what string, t any, h func(context.Context, *Statement) error, to *[]func(context.Context, *Statement) error) {
+	switch {
+	case s.mixin != nil:
+		s.fail("", "%s is declared in mixin %v; a mixin may declare only BeforeInsert", what, s.mixin)
+	case !s.hookOn(what, t):
+	case h == nil:
+		s.fail("", "%s is given a nil function", what)
+	default:
+		*to = append(*to, h)
+	}
 }

@@ -258,3 +258,12 @@ func SetMaxParams(d Dialect, n int) (restore func()) {
 
 // CacheSize returns the number of shapes db's render cache holds.
 func CacheSize(db *DB) int { return db.cfg.cache.size() }
+
+// TenantOf returns the context's tenant state, as scope reads it.
+func TenantOf(ctx context.Context) (id any, all string) { return tenantOf(ctx) }
+
+// PolicyBypass returns the context's SkipPolicy reason.
+func PolicyBypass(ctx context.Context) string { return policyBypass(ctx) }
+
+// InfoOf returns entity E's metadata.
+func InfoOf[E any, PE Entity[E]]() *EntityInfo { return PE(nil).VeloxMeta().info }

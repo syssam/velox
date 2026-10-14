@@ -24,8 +24,8 @@ func TestTestmodelIsReproduced(t *testing.T) {
 	if len(probs) > 0 {
 		t.Fatal(probs)
 	}
-	if len(res.write) != 4 || len(res.remove) != 0 {
-		t.Errorf("writes %d files and removes %v; want 4 (invoice, item, line, sample) and none", len(res.write), res.remove)
+	if len(res.write) != 5 || len(res.remove) != 0 {
+		t.Errorf("writes %d files and removes %v; want 5 (invoice, item, line, sample, ticket) and none", len(res.write), res.remove)
 	}
 	for path, want := range res.write {
 		if *update {

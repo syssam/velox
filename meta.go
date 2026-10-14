@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -26,6 +27,19 @@ type EntityInfo struct {
 	Indexes    []IndexInfo
 	rels       []*relation // in the order of the generated shape
 	kit        *kit        // set by MetaOnce.Get; nil in tests that call buildInfo
+
+	// The entity's policy and hooks, wrapped once by the generic Schema
+	// methods into functions over the entity's address and its statement.
+	policy       *policy                                             // nil when none
+	beforeInsert []func(ctx context.Context, p unsafe.Pointer) error // mixins' first, in declaration order
+	beforeUpdate []func(ctx context.Context, st *Statement) error
+	beforeDelete []func(ctx context.Context, st *Statement) error
+}
+
+// policy is an entity's Policy, with E erased.
+type policy struct {
+	read, write func(ctx context.Context) (Predicate, error) // nil when not declared
+	insert      func(ctx context.Context, p unsafe.Pointer) error
 }
 
 // Column returns the index of the column with the given name.
@@ -233,6 +247,8 @@ func checkShape(entity string, fs, rs []field, cols []string, rels []Relation) e
 }
 
 // applyMixins calls Mixin on every Mixer embedded directly in the entity.
+// While a Mixin runs, s knows the mixin's type and offset, to check and place
+// its hooks.
 func applyMixins(s *Schema, t reflect.Type, base unsafe.Pointer) {
 	for i := range t.NumField() {
 		f := t.Field(i)
@@ -240,7 +256,9 @@ func applyMixins(s *Schema, t reflect.Type, base unsafe.Pointer) {
 			continue
 		}
 		if reflect.PointerTo(f.Type).Implements(mixerType) {
+			s.mixin, s.mixinOff = f.Type, f.Offset
 			reflect.NewAt(f.Type, unsafe.Add(base, f.Offset)).Interface().(Mixer).Mixin(s)
+			s.mixin, s.mixinOff = nil, 0
 		}
 	}
 }
@@ -275,7 +293,8 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols []string, rels [
 	if len(s.errs) > 0 {
 		return nil, errors.Join(s.errs...)
 	}
-	info := &EntityInfo{Name: name, Table: s.table, Schema: s.schema, Columns: s.cols, PrimaryKey: s.pk, Tenant: s.tenant, Indexes: s.idx, rels: s.rels}
+	info := &EntityInfo{Name: name, Table: s.table, Schema: s.schema, Columns: s.cols, PrimaryKey: s.pk, Tenant: s.tenant, Indexes: s.idx, rels: s.rels,
+		policy: s.policy, beforeInsert: append(s.mixinInsert, s.beforeInsert...), beforeUpdate: s.beforeUpdate, beforeDelete: s.beforeDelete}
 	if info.Table == "" {
 		info.Table = snake(t.Name())
 	}
@@ -296,7 +315,8 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols []string, rels [
 }
 
 // validate refuses metadata that would render wrong SQL: two columns of one
-// name, and a key or index that names no field or one field twice.
+// name, a key or index that names no field or one field twice, and a tenant
+// column that cannot be compared or filled safely.
 func validate(info *EntityInfo) error {
 	var errs []error
 	fail := func(field, format string, args ...any) {
@@ -321,6 +341,11 @@ func validate(info *EntityInfo) error {
 				fail(info.Columns[c].Field, "%s names the field twice", what)
 			}
 			named[c] = true
+		}
+	}
+	if info.Tenant >= 0 {
+		if c := info.Columns[info.Tenant]; rtype(c.Type).Kind() == reflect.Pointer || !rtype(c.Type).Comparable() {
+			fail(c.Field, "the tenant column must be NOT NULL and comparable")
 		}
 	}
 	set("the primary key", info.PrimaryKey)

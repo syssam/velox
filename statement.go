@@ -13,6 +13,22 @@ const (
 	OpDelete
 )
 
+// String returns the operation's SQL verb in lower case: "select", "insert",
+// "update" or "delete".
+func (o Op) String() string {
+	switch o {
+	case OpSelect:
+		return "select"
+	case OpInsert:
+		return "insert"
+	case OpUpdate:
+		return "update"
+	case OpDelete:
+		return "delete"
+	}
+	return "unknown"
+}
+
 // AssignOp is how an UPDATE assigns a column.
 type AssignOp uint8
 
@@ -35,6 +51,10 @@ type ConflictClause struct {
 	Columns   []int // the unique key whose conflict the insert resolves
 	Update    []int // columns overwritten with the inserted row's values
 	DoNothing bool  // keep the existing row; also what an empty Update means
+	// Where is the condition of the update branch, on the existing row: a
+	// conflicting row it rejects is neither updated nor replaced. PostgreSQL
+	// and SQLite render it; velox refuses it on MySQL.
+	Where []Predicate
 }
 
 // Statement is one operation on its way to the database. Every query becomes
@@ -46,24 +66,28 @@ type ConflictClause struct {
 // Entity at an EntityInfo of its own (a copy with another Table, say), but
 // must never change the shared one.
 type Statement struct {
-	Op        Op
-	Entity    *EntityInfo // shared and read-only: replace it, never edit it
-	Count     bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook that sets them gets them rendered
-	Columns   []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
-	Where     []Predicate // all must hold
-	OrderBy   []OrderTerm
-	Limit     int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
-	Offset    int
-	Unbounded bool            // the query said Unbounded
-	MaxRows   int             // SELECT: the most rows it may return; 0: the DB's WithMaxRows
-	Set       []Assignment    // UPDATE: the assignments
-	Rows      [][]any         // INSERT: the rows, one value per Columns entry
-	Conflict  *ConflictClause // INSERT: the upsert clause, if any
-	Returning []int           // INSERT: columns read back (PostgreSQL and SQLite)
-	AllRows   bool            // UPDATE and DELETE: the statement said All
-	InTx      bool
-	SQL       string // set by rendering, after the rewrite hooks
-	Args      []any  // set by rendering
+	Op           Op
+	Entity       *EntityInfo // shared and read-only: replace it, never edit it
+	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook that sets them gets them rendered
+	Columns      []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
+	Where        []Predicate // all must hold
+	OrderBy      []OrderTerm
+	Limit        int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
+	Offset       int
+	Unbounded    bool            // the query said Unbounded
+	MaxRows      int             // SELECT: the most rows it may return; 0: the DB's WithMaxRows
+	Set          []Assignment    // UPDATE: the assignments
+	Rows         [][]any         // INSERT: the rows, one value per Columns entry
+	Conflict     *ConflictClause // INSERT: the upsert clause, if any
+	Returning    []int           // INSERT: columns read back (PostgreSQL and SQLite)
+	AllRows      bool            // UPDATE and DELETE: the statement said All
+	Tenant       any             // the tenant scope applied; nil when unscoped
+	TenantBypass string          // the AllTenants reason, when it applied
+	PolicyBypass string          // the SkipPolicy reason, when it applied
+	DryRun       bool            // built for SQL(ctx), not sent
+	InTx         bool
+	SQL          string // set by rendering, after the rewrite hooks
+	Args         []any  // set by rendering
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or
