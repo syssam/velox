@@ -287,17 +287,24 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 		return nil, err
 	}
 	var out []E
+	var ran []int // the columns the statement was run with, as the hooks left it
 	if q.db.hooked() {
 		a := &allRun[E]{st: st, m: q.meta}
 		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) }, nil)
-		out = a.out
+		out, ran = a.out, a.st.Columns
 	} else {
 		a := allRun[E]{st: st, m: q.meta}
 		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) }, nil)
-		out = a.out
+		out, ran = a.out, a.st.Columns
 	}
 	if err != nil {
 		return nil, err
+	}
+	// A Rewrite hook may have narrowed the columns after the loads were checked.
+	if len(q.loads) > 0 && ran != nil {
+		if err := checkLoads(q.meta.info, ran, q.loads); err != nil {
+			return nil, err
+		}
 	}
 	if len(q.loads) > 0 && len(out) > 0 {
 		ptrs := make([]unsafe.Pointer, len(out))

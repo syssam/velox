@@ -315,3 +315,55 @@ func TestWithRelationQueryErrorIsWrapped(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+// TestWithRewriteCannotDropOwnerKeys: a Rewrite hook that narrows a statement's
+// columns after the loads were checked must not leave out the column a loaded
+// relation is keyed by; the keys would read as zero values and the relation
+// would load empty without an error.
+func TestWithRewriteCannotDropOwnerKeys(t *testing.T) {
+	t.Run("owner query", func(t *testing.T) {
+		e := &velox.FakeExec{Results: [][][]any{{{"INV-1"}}, {}}}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Entity.Name == "testmodel.Invoice" {
+				st.Columns = []int{4} // number: leaves out id
+			}
+			return nil
+		}))
+		_, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
+		if err == nil || !strings.Contains(err.Error(), "needs the column id selected") || e.Calls != 1 {
+			t.Errorf("%v, calls %d", err, e.Calls)
+		}
+	})
+	t.Run("relation query, key the load is fetched by", func(t *testing.T) {
+		e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {{"A"}}, {}}}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Entity.Name == "testmodel.Item" {
+				st.Columns = []int{2} // sku: leaves out invoice_id
+			}
+			return nil
+		}))
+		_, err := db.Query[testmodel.Invoice]().With(I.Items.With(It.Invoice)).Limit(1).All(ctx)
+		if err == nil || !strings.HasPrefix(err.Error(), "velox: ") {
+			t.Errorf("%v", err)
+		}
+	})
+	t.Run("relation query, key a nested load needs", func(t *testing.T) {
+		// Sample.Parent twice: the second Sample statement is keyed by id and
+		// the nested load by parent_id, which the hook leaves out.
+		e := &velox.FakeExec{Results: [][][]any{{sampleRow(2, int64(1))}, {{int64(1)}}, {}}}
+		n := 0
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Entity.Name == "testmodel.Sample" {
+				if n++; n == 2 {
+					st.Columns = []int{0} // id: leaves out parent_id
+				}
+			}
+			return nil
+		}))
+		P := testmodel.Samples.Parent
+		_, err := db.Query[testmodel.Sample]().With(P.With(P)).Limit(1).All(ctx)
+		if err == nil || !strings.Contains(err.Error(), "needs the column parent_id selected") {
+			t.Errorf("%v", err)
+		}
+	})
+}

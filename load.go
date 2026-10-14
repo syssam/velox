@@ -181,6 +181,11 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys
 			if st.Columns != nil && !slices.Contains(st.Columns, l.targetCol) {
 				return fmt.Errorf("velox: %s: a Rewrite hook left out the relation's key column %s", t.Name, t.Columns[l.targetCol].Name)
 			}
+			if len(sp.with) > 0 && st.Columns != nil {
+				if err := checkLoads(t, st.Columns, sp.with); err != nil {
+					return err
+				}
+			}
 			part, err = t.kit.scan(r, st.Columns)
 			return err
 		}

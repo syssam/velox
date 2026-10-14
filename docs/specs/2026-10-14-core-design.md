@@ -101,8 +101,9 @@ Rules:
    be called by hand, so it cannot be forgotten.
 7. **Relations.** `velox.One[E]` and `velox.Many[E]` fields.
    - They are never loaded lazily. The zero value means "not loaded";
-     `Get()` returns `(value, loaded bool)`. Not-loaded relations are left out of
-     JSON.
+     `Get()` returns `(value, loaded bool)`. Tag relation fields
+     `json:",omitzero"` to leave not-loaded relations out of JSON; without the
+     tag they marshal as null.
    - Keys, by convention:
      - **To-one:** a One relation named R uses the owner's field `RID` when
        there is one: the owner belongs to the target, whose primary key RID
@@ -378,7 +379,7 @@ text, args := db.Query[billing.Invoice]().Where(…).SQL() // no database needed
 - Offset pagination is `Offset(n)`.
 - A statement with more parameters than the dialect allows is refused before it
   is sent.
-- `EQ(nil)` and `NEQ(nil)` render `IS NULL` and `IS NOT NULL`.
+- `EQ(nil)` and `NEQ(nil)` with an untyped nil or a nil `[]byte` render `IS NULL` and `IS NOT NULL`; a nil of another type is compared with `=` and matches nothing.
 
 ### 4.4 Update
 

@@ -14,7 +14,13 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 
 ## Left by plan 4 (relations)
 
-The plan's final review fills this section.
+- velox-gen does not refuse a relation to a type that is not an entity (the generated `RelationTo` then fails to compile), and has no fixture with a relation target in an aliased package.
+- A rewrite hook that points a statement at another table (tenancy, sharding) does not redirect the tables inside `EXISTS` subqueries; relation loads do go through the hooks.
+- `HasWhere` does not check that `Rel`'s `T` is the relation's resolved target (only a hand-built `Rel` can differ).
+- `One` loads relations for the two rows it reads before returning `ErrNotSingular`.
+- A has-one relation with several matching rows loads the first in the relation's order.
+- On MySQL, an `UPDATE` or `DELETE` whose `EXISTS` reads the table being changed fails with error 1093 (documented on `Has`).
+- A `time.Time` cursor made in memory, finer than the column's precision, can skip or repeat a row with `After` (documented: `x` must be a row a query returned).
 
 ## Plan 5 (scale guards)
 

@@ -170,9 +170,9 @@ func TestRebind(t *testing.T) {
 }
 
 // setup creates the invoices table with five rows and the items table with
-// three: (1, invoice 1, A, 2), (2, invoice 1, B, 0), (3, invoice 2, C, 5). Org 1 owns ids 1–4. The
-// numbers hold LIKE wildcards and a backslash; even ids have a note; paid
-// invoices have paid_at.
+// three. Org 1 owns invoice ids 1–4. The numbers hold LIKE wildcards and a
+// backslash; even ids have a note; paid invoices have paid_at. The items are
+// (id, invoice, sku, qty): (1, 1, A, 2), (2, 1, B, 0), (3, 2, C, 5).
 func setup(t *testing.T, tg target) {
 	t.Helper()
 	tg.exec(t, "DROP TABLE IF EXISTS items")
