@@ -184,6 +184,10 @@ func flatten(t reflect.Type, base uintptr, cols, rels []field) ([]field, []field
 		case !f.IsExported():
 		case isRelation(f.Type):
 			rels = append(rels, field{name: f.Name, off: base + f.Offset, typ: f.Type})
+		case f.Type.Size() == 0:
+			// It holds no value, and it shares its address with the next field,
+			// so a pointer to it cannot name it.
+			return nil, nil, fmt.Errorf("field %s has the zero-size type %v, which holds no value; tag it velox:\"-\"", f.Name, f.Type)
 		default:
 			cols = append(cols, field{name: f.Name, off: base + f.Offset, typ: f.Type})
 		}

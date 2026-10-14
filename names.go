@@ -12,7 +12,10 @@ func snake(s string) string {
 	for i := range len(s) {
 		c := s[i]
 		if upper(c) {
-			if i > 0 && (lower(s[i-1]) || upper(s[i-1]) && i+1 < len(s) && lower(s[i+1])) {
+			// A word starts after a lower-case letter or digit, and at the last
+			// capital of an acronym followed by a lower-case letter (HTTPServer);
+			// a digit after an acronym continues it (OrgID2 → org_id2).
+			if i > 0 && (lower(s[i-1]) || upper(s[i-1]) && i+1 < len(s) && 'a' <= s[i+1] && s[i+1] <= 'z') {
 				b.WriteByte('_')
 			}
 			c += 'a' - 'A'

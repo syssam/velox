@@ -459,33 +459,17 @@ func TestOnUpdateReturnsTheGivenFunctionsValue(t *testing.T) {
 
 type zeroSize struct {
 	ID   int64
-	Mark struct{} // shares its offset with Name, which follows it
+	A, B struct{} // two fields at one address: a pointer could not tell them apart
 	Name string
-	End  struct{} // last: the compiler pads the struct so &End stays inside it
 }
 
-func (x *zeroSize) Schema(s *Schema) {
-	s.Column(&x.Mark).Name("mark")
-	s.Column(&x.Name).Name("label")
-	s.Column(&x.End).Name("end_mark")
-}
+func (x *zeroSize) Schema(s *Schema) { s.Column(&x.B).Name("b") }
 
-func TestZeroSizeFieldIsAColumnAndDoesNotConfuseFind(t *testing.T) {
-	var z zeroSize
-	if unsafe.Offsetof(z.Mark) != unsafe.Offsetof(z.Name) {
-		t.Fatal("the fixture no longer puts a zero-size field at the offset of the next field")
-	}
-	info, err := infoOf[zeroSize]([]string{"ID", "Mark", "Name", "End"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got [][2]string
-	for _, c := range info.Columns {
-		got = append(got, [2]string{c.Field, c.Name})
-	}
-	want := [][2]string{{"ID", "id"}, {"Mark", "mark"}, {"Name", "label"}, {"End", "end_mark"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("columns %v, want %v (each Column call must land on its own field, though two fields share an offset)", got, want)
+func TestZeroSizeFieldIsRefused(t *testing.T) {
+	_, err := infoOf[zeroSize]([]string{"ID", "A", "B", "Name"}, nil)
+	var se *SchemaError
+	if !errors.As(err, &se) || !strings.Contains(err.Error(), "field A has the zero-size type struct {}, which holds no value; tag it velox:\"-\"") {
+		t.Errorf("%v", err)
 	}
 }
 

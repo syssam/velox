@@ -30,8 +30,8 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - `TestRewriteCanReplaceTheEntity` can only catch a regression when the allocator reuses an address, and the bypass that renders uncached when a hook replaced the entity has no test pinning that the cache stays flat. The hook-replaced-entity cache check was not mutation-tested.
 - `TestCacheKeepsShapesApart` does not pin limit/offset presence, order or nesting as separate shapes (`FuzzRender` compares the cached path with the uncached one, which covers them only for the inputs it generates).
 - `Sum` and `Avg` on `NumberCol` await aggregates (sub-project 2 or later).
-- `snake` splits an acronym before a digit: `ID2` becomes `i_d2`, `OrgID2` `org_i_d2` and `SHA256Sum` `sh_a256_sum`, where `HTTPServer` becomes `http_server` and `V2Name` `v2_name`. Spec §1 rule 3 does not say what a digit after an acronym does; decide a rule (probably `id2`) before the first release, since column names are public. `names_test.go` leaves these cases out on purpose.
-- Two adjacent zero-size fields of the same type in an entity (`A, B struct{}`) share an offset and a type, so `Schema.find` resolves both to the first: `s.Column(&x.B)` configures `A` and no error is raised. A zero-size field of a distinct type is handled (pinned in `meta_test.go`). Refuse such an entity, or tell the two apart.
+- Resolved in plan 5's final review: `snake` keeps a digit with the acronym before it (`ID2` → `id2`, `OrgID2` → `org_id2`, `SHA256Sum` → `sha256_sum`).
+- Resolved in plan 5's final review: a zero-size field is refused as a column (a `SchemaError` asking for `velox:"-"`): it holds no value and shares its address with the next field. velox-gen still writes a handle for one; `verify` reports the error.
 
 ## Sub-project 2 (guardrails and policy)
 
