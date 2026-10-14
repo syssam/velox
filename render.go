@@ -250,7 +250,9 @@ func (w *writer) insertStmt(st *Statement) {
 // conflict writes the upsert clause. MySQL has neither a conflict target nor
 // DO NOTHING: ON DUPLICATE KEY UPDATE applies to any unique key, keeping the
 // existing row is a no-op assignment, and the inserted values come from the
-// row alias new (MySQL 8.0.19 and later).
+// row alias new (MySQL 8.0.19 and later). The alias makes an unqualified column
+// name on the right side ambiguous (error 1052), so the no-op assignment
+// qualifies it with the table.
 func (w *writer) conflict(cf *ConflictClause) {
 	keep := cf.DoNothing || len(cf.Update) == 0
 	if w.d == MySQL {
@@ -258,6 +260,8 @@ func (w *writer) conflict(cf *ConflictClause) {
 		if keep {
 			w.col(int32(cf.Columns[0]))
 			w.str(" = ")
+			w.table()
+			w.str(".")
 			w.col(int32(cf.Columns[0]))
 			return
 		}

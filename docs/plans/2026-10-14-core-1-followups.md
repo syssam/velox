@@ -2,12 +2,10 @@
 
 Findings from the reviews of Core 1 that were deliberately left for later. Each later plan takes the items under its name before it is written. Items already fixed on the branch are not listed.
 
-## Before plan 3 (writes)
+## Still open from before plan 3
 
-- A rewrite hook that changes `Statement.Op` from SELECT panics in `render` (only SELECT is implemented in Core 1).
-- `Table("schema.table")` becomes one quoted identifier; there is no way to name a PostgreSQL schema or MySQL database. Add a qualified form or document the limit.
 - The LIKE escape depends on server settings: MySQL's `ESCAPE '\\'` assumes `NO_BACKSLASH_ESCAPES` is off, and PostgreSQL's `ESCAPE '\'` assumes `standard_conforming_strings` is on. A non-backslash escape character (e.g. `!`) removes both dependencies.
-- Golden SQL for MySQL and SQLite on every render case (several cases assert PostgreSQL only), an OR-between-siblings case, and the NEQ/GTE/LT/LTE operators.
+- Golden SQL for MySQL and SQLite on the read-path render cases that still assert PostgreSQL only (writes cover all three since plan 3), an OR-between-siblings case, and the NEQ/GTE/LT/LTE operators.
 
 ## Plan 2 (generator)
 

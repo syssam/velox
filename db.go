@@ -39,6 +39,12 @@ func WithAround(a Around) Option { return func(c *config) { c.arounds = append(c
 // Open returns a DB that runs statements through db, a *sql.DB the
 // application opened with a driver for dialect d. For PostgreSQL, OpenPgx is
 // faster.
+//
+// For MySQL, include parseTime=true and clientFoundRows=true in the DSN: the
+// first scans DATETIME columns into time.Time, and the second makes a row an
+// update matched count as affected even when its values did not change, which
+// Save relies on. For SQLite, foreign keys are enforced only when the DSN asks
+// for it (modernc.org/sqlite: _pragma=foreign_keys(1)).
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
 	return newDB(d, sqlExecutor{c: db, db: db}, opts)
 }

@@ -14,7 +14,7 @@ trap '"${compose[@]}" down -v' EXIT
 "${compose[@]}" up -d --wait
 
 export VELOX_TEST_POSTGRES='postgres://velox:velox@127.0.0.1:55432/velox?sslmode=disable'
-export VELOX_TEST_MYSQL='velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true'
+export VELOX_TEST_MYSQL='velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true'
 
 unformatted=$(gofmt -l .)
 if [ -n "$unformatted" ]; then

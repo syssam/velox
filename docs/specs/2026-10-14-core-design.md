@@ -288,15 +288,24 @@ db := velox.Open(velox.MySQL, sqlDB)         // MySQL, SQLite (and PostgreSQL if
 ### 4.2 Create
 
 ```go
-err := db.Insert(ctx, &inv)             // type parameters inferred from &inv
-err = db.InsertAll(ctx, lines)          // multi-row INSERT, batched per dialect limits
-err = db.Insert(ctx, &inv, velox.OnConflict(I.OrgID, I.Number).Update(I.Total))
+err := db.Insert(&inv).Exec(ctx)                 // type parameters inferred from &inv
+err = db.InsertAll(lines).Exec(ctx)              // multi-row INSERT, batched per dialect limits
+err = db.Insert(&inv).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx)
 ```
 
+Inserts are builders because Go infers a generic function's type parameters from
+its arguments but not from an interface a column handle implements:
+`velox.OnConflict(I.OrgID)` could not infer the entity,
+`db.Insert(&inv).OnConflict(I.OrgID)` can.
+
 Generated keys and database defaults are read back into the struct: `RETURNING`
-on PostgreSQL and SQLite, `LastInsertId` on MySQL (single auto-increment key;
-other keys must be set by the application on MySQL). Upsert renders
-`ON CONFLICT … DO UPDATE` or `ON DUPLICATE KEY UPDATE`.
+on PostgreSQL and SQLite, `LastInsertId` on MySQL for an insert without
+OnConflict (MySQL's insert id does not name the row after
+`ON DUPLICATE KEY UPDATE`). Upsert renders `ON CONFLICT … DO UPDATE` /
+`DO NOTHING`, or on MySQL `AS new ON DUPLICATE KEY UPDATE` (8.0.19 and later).
+A static `Default` on a bool or numeric field must use a pointer field, so an
+explicit false or 0 can be inserted; `DefaultFunc` applies to any type and
+fills a zero field.
 
 ### 4.3 Read
 
@@ -343,6 +352,8 @@ n, err := db.Update[billing.Invoice]().
 
 err = db.Save(ctx, &inv, I.Number, I.Total)     // a loaded struct; columns named
 ```
+
+On MySQL, `Save` needs `clientFoundRows=true` in the DSN.
 
 There is no `Save(&x)` that writes every column: writing back a stale struct
 silently loses concurrent updates. `UpdatedAt`-style columns are declared by a
@@ -397,7 +408,11 @@ type Statement struct {
     Count     bool         // SELECT COUNT(*)
     Columns   []int        // selected columns; nil selects all
     Where     []Predicate
-    Values    []Assignment // inserts and updates
+    Set       []Assignment    // UPDATE
+    Rows      [][]any         // INSERT: one value per Columns entry
+    Conflict  *ConflictClause // INSERT: upsert
+    Returning []int           // INSERT: read back (PostgreSQL, SQLite)
+    AllRows   bool            // UPDATE, DELETE: said All
     OrderBy   []OrderTerm
     Limit     int
     Offset    int
@@ -417,13 +432,16 @@ allocations per query without a cache.
 
 PostgreSQL is the reference; every feature is defined there first.
 
-| | PostgreSQL | MySQL 8.0+ | SQLite 3.35+ |
+| | PostgreSQL | MySQL 8.0.19+ | SQLite 3.35+ |
 |---|---|---|---|
 | Executor | native pgx (`pgx/v5`, a `*pgxpool.Pool`) | `database/sql` + `go-sql-driver/mysql` | `database/sql` + `modernc.org/sqlite` (no cgo) |
 | Placeholders | `$1` | `?` | `?` |
 | Read back on insert | `RETURNING` | `LastInsertId` | `RETURNING` |
 | Upsert | `ON CONFLICT … DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON CONFLICT … DO UPDATE` |
 | Serialization retry codes | `40001`, `40P01` | 1213, 1205 | `SQLITE_BUSY` |
+
+MySQL DSNs need `parseTime=true` and, for `Save`, `clientFoundRows=true`.
+SQLite enforces foreign keys only when the DSN asks for it.
 
 Statements go through an executor: an internal interface whose rows type has
 `Next`, `Scan(dst ...any)`, `Err` and `Close`, which both `*sql.Rows` and
@@ -441,7 +459,7 @@ Constraint violations are normalized into `*velox.ConstraintError` with a kind
 
 Sentinels for `errors.Is`: `ErrNotFound`, `ErrNotSingular`, `ErrUnbounded`,
 `ErrNoWhere`, `ErrStale` (generated code out of date). Typed errors for
-`errors.As`: `*ConstraintError`, `*SchemaError` (an invalid `Schema` method,
+`errors.As`: `*ConstraintError{Entity, Kind, Constraint, Err}` with `Kind` one of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the constraint's name, except that SQLite reports the columns and a NOT NULL error the column. `*SchemaError` (an invalid `Schema` method,
 reported with the entity and field). Every error message starts with `velox:`
 and names the entity.
 
