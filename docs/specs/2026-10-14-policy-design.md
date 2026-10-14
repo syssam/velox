@@ -80,12 +80,26 @@ scope are a few branches.
 
 `Query.SQL`, `InsertQuery.SQL`, `UpdateQuery.SQL` and `DeleteQuery.SQL` take a
 context: `SQL(ctx context.Context) (string, []any, error)`. It runs every stage
-except execute: guard, entity hooks, rewrite, scope, render. It prints exactly
-what would be sent for that context, and returns the error the statement
-would fail with. Entity hooks and `Rewrite` hooks therefore run for `SQL(ctx)`
-too; they must have no side effects beyond the struct or statement they are
-given (documented on each hook type). A hook that needs to know can read
-`Statement.DryRun`.
+except execute: guard, entity hooks, rewrite, scope, row cap, render. It prints
+exactly what would be sent for that context, and returns the error the
+statement would fail with before it is sent, including:
+
+- a statement with more parameters than the dialect allows;
+- a query whose `Columns`/`Omit` leave out a `With` relation's key column,
+  checked before and after the `Rewrite` hooks, as `All` checks it.
+
+Entity hooks and `Rewrite` hooks therefore run for `SQL(ctx)` too; they must
+have no side effects beyond the struct or statement they are given
+(documented on each hook type). `Around` hooks, which wrap execution, do not
+run. A `Rewrite` hook that needs to know reads `Statement.DryRun`, which
+`SQL(ctx)` sets; an entity hook, which is given no `Statement`, reads
+`velox.IsDryRun(ctx)`.
+
+For an insert, `SQL(ctx)` prepares the rows as `Exec` does: Core defaults, the
+tenant fill and `BeforeInsert` change the caller's structs, and the policy's
+Insert check runs. An `InsertAll` too large for one statement returns the
+first batch's statement, with `InTx` set (`Exec` sends the batches in a
+transaction); an `InsertAll` of nothing returns `""`.
 
 This replaces Core's `SQL() (string, []any)`. Nothing is released, so the
 signature changes now rather than after 1.0.
@@ -109,6 +123,9 @@ ctx = velox.WithTenant(ctx, orgID)               // set by middleware
 ctx = velox.AllTenants(ctx, "nightly billing")   // bypass; the reason is required
 ```
 
+- The tenant column must be `NOT NULL` (not a pointer field) and of a
+  comparable type; otherwise `Schema` reports a `SchemaError`. A nullable or
+  slice tenant could be neither compared nor filled safely.
 - The later of the two on a context wins. `AllTenants` with an empty reason
   is ignored, so the statement fails closed.
 - The tenant's dynamic type must be the tenant column's Go type exactly (a
@@ -129,6 +146,15 @@ The insert fill writes the tenant into the caller's struct, as Core writes
 generated keys back. A tenant value that is the zero value of its type cannot
 be told apart from "not set" and is filled; applications must not use a zero
 tenant ID.
+
+- The `EXISTS` rule holds inside a policy's own condition too (§2.2).
+- An error raised for an `EXISTS` target names the statement's entity first,
+  keeping the `velox: <Entity>: ` rule, and the target after it:
+  `velox: Invoice: in the EXISTS on Customer: no tenant in the context`.
+- A `Rewrite` hook that replaces `Entity` with a copy must keep the original's
+  tenant column and policy; a copy that drops or moves either is refused, as
+  a copy with other columns is (§6). Otherwise a hook could unscope a
+  statement silently.
 
 **Upserts.** A conflict can land on another tenant's row and update it:
 
@@ -162,24 +188,47 @@ func (x *Invoice) Schema(s *velox.Schema) {
   (not a mixin's); a second call is a `SchemaError`. Any field may be nil.
 - **Read** is ANDed into every SELECT, Count, `With` load and `Has`/`HasWhere`
   subquery on the entity. Rows a reader cannot see do not exist.
+- **Policies inside policies:** a policy's condition may itself use
+  `Has`/`HasWhere`; the target's tenant and Read policy are applied inside
+  that `EXISTS` too, recursively, so an `Item` whose Read is
+  `Items.Invoice.Has()` shows only the items whose invoice the caller may
+  see. Each entity's Read is called once per statement and reused for every
+  `EXISTS` on it.
+- **Cycles fail closed:** a Read policy that reaches its own Read again
+  through `EXISTS`, directly or through another entity's, cannot be written
+  as finite SQL. The statement fails with `velox: <Entity>: the Read policy
+  of <Target> reaches its own Read through an EXISTS; such a policy cannot be
+  applied`. That is the schema's bug, not a denial: it is not a
+  `*PolicyError`.
 - **Write** and **Read** are both ANDed into every UPDATE, DELETE and `Save`:
   a writer cannot change what it cannot see. A `Save` whose row is hidden
   returns `ErrNotFound`, as for a row that does not exist.
 - **Insert** checks every inserted or upserted row after `BeforeInsert` hooks
   and the tenant fill.
 - **Upsert update branch:** PostgreSQL and SQLite render the Read and Write
-  predicates as `ON CONFLICT … DO UPDATE … WHERE`. When that `WHERE` is false
-  the database neither inserts nor updates the row and reports no error.
-  velox sees fewer affected rows than it sent and returns a `*PolicyError`. MySQL has no such clause: an
-  upsert that updates on an entity with a Read or Write policy is refused
-  with `ErrPolicyUpsert`.
+  predicates as `ON CONFLICT … DO UPDATE … WHERE` (`ConflictClause.Where`,
+  §2.3). When that `WHERE` is false the database neither inserts nor updates
+  the row and reports no error. velox sees fewer affected rows (or returned
+  rows) than it sent and returns a `*PolicyError` for `update`: `the existing
+  row is hidden from this upsert`. An `InsertAll` with that condition runs in
+  a transaction, so that the error also undoes the rows it did write. MySQL
+  has no such clause: an upsert that updates on an entity with a Read or
+  Write policy is refused with `ErrPolicyUpsert`.
 - A zero `Pred[E]{}` means no restriction. Any error denies the statement.
-  There is no allow-on-error. Denials are `*PolicyError{Entity, Op, Err}`;
+  There is no allow-on-error. Denials are `*PolicyError{Entity, Op, Err}`,
+  whose text is `velox: <Entity>: <op> denied by policy: <err>`;
   `velox.Deny(reason)` returns an error that makes one, and
   `errors.Is(err, velox.ErrDenied)` holds for every denial.
+- A denial raised for an `EXISTS` target names the statement's entity first,
+  as §2.1's errors do: `velox: Invoice: in the EXISTS on Customer: select
+  denied by policy: …`. It is still a `*PolicyError` and `ErrDenied`.
 - **Bypass:** `velox.SkipPolicy(ctx, reason)`; an empty reason is ignored.
   It is separate from `AllTenants`: a cross-tenant job usually still wants
   the policy, and a support tool may want the reverse.
+- `Statement.PolicyBypass` holds the reason when `SkipPolicy` skipped a policy
+  function that would otherwise have run, on the statement's entity or an
+  `EXISTS` target. It stays empty on a statement whose entities have no
+  policy to skip, so an audit log records what was actually bypassed.
 - Policy predicates join the render cache's shape key like any `Where`. A
   policy whose predicate structure varies by caller adds shapes, within the
   cache's existing bounds (4,096 shapes, 4 MiB).
@@ -198,6 +247,21 @@ DryRun       bool   // the statement is being built for SQL(ctx), not sent
 MaxRows      int    // SELECT: the most rows it may return; 0: the DB's cap
 ```
 
+`ConflictClause` gains the condition of an upsert's update branch:
+
+```go
+Where []Predicate // on the existing row; a conflicting row it rejects is neither updated nor replaced
+```
+
+- Scope appends the policy's Read and Write predicates to a copy of the
+  clause, so the query stays reusable by another caller; a `Rewrite` hook may
+  set `Where` itself.
+- PostgreSQL and SQLite render it as `DO UPDATE SET … WHERE …`, each column
+  qualified with the table's name (`"tickets"."owner"`) so that it names the
+  existing row. PostgreSQL rejects the unqualified name as ambiguous with
+  `EXCLUDED`'s (SQLSTATE 42702); the real-database tests pin both dialects.
+- MySQL never gets one: velox refuses there first (§2.1, §2.2).
+
 ## 3. Entity hooks
 
 Timestamps need no hooks: Core's `OnUpdate` column option already sets them on
@@ -210,9 +274,11 @@ s.BeforeDelete(func(ctx context.Context, m *velox.Mutation[Invoice]) error { …
 ```
 
 - Each may be declared more than once; hooks of a kind run in the order
-  declared. Mixins may declare hooks, typed on the mixin's own struct and
-  given the embedded value; a mixin's hooks run before the entity's. A hook
-  typed on any other struct is a `SchemaError`.
+  declared. A mixin may declare `BeforeInsert` only, typed on the mixin's own
+  struct and given the embedded value; a mixin's hooks run before the
+  entity's. A mixin has no column handles, so a `Mutation` of it would be
+  useless: `BeforeUpdate` or `BeforeDelete` in a `Mixin` is a `SchemaError`,
+  as is a hook typed on any other struct.
 - **BeforeInsert** runs once per row, for `Insert`, `InsertAll` and upserts,
   on the struct: Core defaults are filled, then the tenant, then the hooks run;
   the tenant check and the policy's Insert check run on the result, so a hook
@@ -222,8 +288,16 @@ s.BeforeDelete(func(ctx context.Context, m *velox.Mutation[Invoice]) error { …
   - `Set(ss ...Setter[E])` adds or replaces assignments;
   - `Where(ps ...Pred[E])` narrows the rows.
 
-  For `Save`, an assignment a hook adds is also stored into the caller's
-  struct, so the struct matches the row.
+  A `Mutation` records its errors: `Set` on a delete, or a zero or invalid
+  predicate given to `Where`, makes the hook stage fail with that error once
+  the hook returns, even if the hook returns nil.
+- **Save writes back what it sent.** After a successful `Save`, every plain
+  assignment (`Set`, not arithmetic) in the statement as sent is stored into
+  `*x` when its value is assignable to the field: Core's `OnUpdate` values,
+  and those a `BeforeUpdate` or `Rewrite` hook added, included. A nil value
+  stores the field's zero value; a nullable column's value is stored through
+  a new pointer. So the struct matches the row. After an error, including
+  `ErrNotFound`, `*x` is as it was.
 - **BeforeDelete** gets the same `Mutation[E]`; it may narrow or refuse.
   `Set` on a delete's mutation is an error.
 - An upsert's update branch runs `BeforeInsert` only.
@@ -290,7 +364,10 @@ velox.WithDeadlines(velox.Deadlines{
   transaction. A transaction whose context has ended by commit time (past
   either deadline, or canceled) is rolled back, never committed, on every
   driver; its error is `ErrTimeout` when velox's deadline passed, and
-  otherwise matches `context.DeadlineExceeded` or `context.Canceled`. Once the
+  otherwise matches `context.DeadlineExceeded` or `context.Canceled`. A
+  context whose deadline has passed counts as ended: velox waits at most a
+  short grace for its `Done` to close, so a context that never closes it
+  cannot hang a transaction. Once the
   context has ended, a failed rollback is not reported: the driver may have
   closed the connection (pgx does), and the server aborts the transaction.
   `Timeout(d)` with d ≤ 0 is ignored, and a nested `Tx` ignores it.
@@ -325,7 +402,7 @@ Op Op; Err error}`, with `Unwrap` returning `Err` and `Is(ErrDenied)` true.
   `http.Handle(nil)` does.
 - A `Rewrite` hook that sets `Entity` to nil or changes `Op` fails the
   statement. Replacing `Entity` is allowed only with one backed by the same Go
-  type and scan plan.
+  type and scan plan, and with the same tenant column and policy (§2.1).
 - A zero `Predicate{}` in `Where` fails the statement.
 - Hooks cannot edit a predicate's arguments: `Predicate`'s node is
   unexported and `In` copies its values into a new slice. A test pins this and
@@ -345,8 +422,18 @@ Op Op; Err error}`, with `Unwrap` returning `Err` and `Is(ErrDenied)` true.
 - `Policy[E]`, `Mutation[E]` and the new `Schema` methods follow Core §3: every
   method of a generic type is generic (`methods_test.go`), nothing runs at
   init, and no reachable type holds `reflect.Type` (rule 7).
-- An entity package declaring a policy and all three hooks grows by at most
-  8 KiB of object over one without (`compilecost_test.go`).
+- A policy and all three hooks add about 99 KB of object to an entity's
+  package (98,988 bytes on darwin/arm64, Go 1.27.1). About 42 KB of that is
+  the user's own six closures; the rest is velox's generic `Policy` and hook
+  registration, instantiated for the entity. This section first gave 8 KiB,
+  an estimate that was never measured. `compilecost_test.go` enforces the
+  measured cost plus its usual margin (123,904 bytes), so a regression still
+  fails; cutting velox's share is a follow-up. A policy and hooks are opt-in
+  per entity.
+- An entity package with no policy or hooks grew by about 21 KB during this
+  work (98,878 to 119,896 bytes): export data, because its API now reaches
+  `context.Context`, `Statement` and the new `Schema` methods' signatures.
+  Its object code did not change. The guard is re-baselined to it.
 
 ## 8. Testing
 

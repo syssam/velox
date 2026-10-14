@@ -181,20 +181,16 @@ var genericObjects = []struct {
 	{"Mutation", "velox.Mutation[E]", "", 8192}, // measured 3874
 }
 
-// policyGrowthSpec is policy design §7's budget for the bytes a Policy and
-// the three entity hooks add to an entity's package (entityPolicySrc over
-// entityUseSrc). It is not met: on 2026-10-15, darwin/arm64, Go 1.27.1, they
-// add 98988. Measured in packages with a shorter import path they add 92266,
-// of which the six functions alone, assigned to variables instead of
-// declared, take 41948, and velox's generic Policy, BeforeInsert,
+// policyGrowthMax bounds the bytes a Policy and the three entity hooks add to
+// an entity's package (entityPolicySrc over entityUseSrc): the measured growth
+// plus genericObjects' margin (policy design §7). On 2026-10-15, darwin/arm64,
+// Go 1.27.1, they add 98988. Measured in packages with a shorter import path
+// they add 92266, of which the six functions alone, assigned to variables
+// instead of declared, take 41948, and velox's generic Policy, BeforeInsert,
 // BeforeUpdate, BeforeDelete and mutationHook, instantiated for E with their
 // closures, the other 50318. Bodies barely count (a Read returning Pred[E]{}
 // costs as much as one returning a condition); every instantiated symbol's
 // name spells out E's shape and package path.
-const policyGrowthSpec = 8192
-
-// policyGrowthMax is the bound enforced meanwhile: the measured growth plus
-// genericObjects' margin, so that it still catches a regression.
 const policyGrowthMax = 123904 // measured 98988
 
 // TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one
@@ -253,7 +249,7 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 	t.Run("policy and hooks", func(t *testing.T) {
 		t.Parallel()
 		got := size(t, "entityPolicy") - size(t, "entityUse")
-		t.Logf("policy and hooks: +%d bytes; policy design §7's budget is %d", got, policyGrowthSpec)
+		t.Logf("policy and hooks: +%d bytes", got)
 		if got > policyGrowthMax {
 			t.Errorf("a Policy and the three entity hooks add %d bytes to an entity's package, over the recorded %d (policy design §7)", got, policyGrowthMax)
 		}

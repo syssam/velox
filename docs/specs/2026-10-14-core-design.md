@@ -403,6 +403,15 @@ text, args, err := db.Query[billing.Invoice]().Where(…).SQL(ctx) // no databas
 - Offset pagination is `Offset(n)`.
 - A statement with more parameters than the dialect allows is refused before it
   is sent.
+- `SQL(ctx)`, on `Query`, `InsertQuery`, `UpdateQuery` and `DeleteQuery`,
+  returns the statement and arguments execution would send for that context,
+  or the error execution would fail with before sending it (the parameter
+  limit and the `With` key-column check included); it sends nothing. It runs
+  every stage before execute: the guard, entity hooks, `Rewrite` hooks, tenant
+  and policy scope, the row cap and render, with `Statement.DryRun` set. An
+  insert's `SQL(ctx)` fills defaults and the tenant into the caller's structs
+  and runs `BeforeInsert`, as `Exec` does; an `InsertAll` larger than one
+  statement returns the first. The policy design (§1.1) gives the details.
 - `EQ(nil)` and `NEQ(nil)` with an untyped nil or a nil `[]byte` render `IS NULL` and `IS NOT NULL`; a nil of another type is compared with `=` and matches nothing.
 
 ### 4.4 Update
@@ -468,25 +477,35 @@ sub-projects 4 and 3; adding an option and a field breaks no caller.
 
 ```go
 type Statement struct {
-    Op        Op           // Select, Insert, Update, Delete
-    Entity    *EntityInfo  // table, columns, keys, tenant column, policies
-    Count     bool         // SELECT COUNT(*)
-    Columns   []int        // SELECT: selected columns, nil selects all; INSERT: written columns
-    Where     []Predicate
-    Set       []Assignment    // UPDATE
-    Rows      [][]any         // INSERT: one value per Columns entry
-    Conflict  *ConflictClause // INSERT: upsert
-    Returning []int           // INSERT: read back (PostgreSQL, SQLite)
-    AllRows   bool            // UPDATE, DELETE: said All
-    OrderBy   []OrderTerm
-    Limit     int
-    Offset    int
-    Unbounded bool
-    InTx      bool
-    SQL       string            // set by render
-    Args      []any             // set by render
+    Op           Op              // Select, Insert, Update, Delete
+    Entity       *EntityInfo     // table, columns, keys, tenant column, policies
+    Count        bool            // SELECT COUNT(*)
+    Columns      []int           // SELECT: selected columns, nil selects all; INSERT: written columns
+    Where        []Predicate
+    Set          []Assignment    // UPDATE
+    Rows         [][]any         // INSERT: one value per Columns entry
+    Conflict     *ConflictClause // INSERT: upsert
+    Returning    []int           // INSERT: read back (PostgreSQL, SQLite)
+    AllRows      bool            // UPDATE, DELETE: said All
+    OrderBy      []OrderTerm
+    Limit        int
+    Offset       int
+    Unbounded    bool
+    MaxRows      int             // SELECT: the most rows it may return; 0: the DB's WithMaxRows
+    Tenant       any             // the tenant scope applied; nil when unscoped
+    TenantBypass string          // the AllTenants reason, when it applied
+    PolicyBypass string          // the SkipPolicy reason, when it applied
+    DryRun       bool            // built for SQL(ctx), not sent
+    InTx         bool
+    SQL          string          // set by render
+    Args         []any           // set by render
 }
 ```
+
+`MaxRows`, `Tenant`, `TenantBypass`, `PolicyBypass` and `DryRun` come from the
+policy design (§2.3, §4); so does `ConflictClause.Where`, the condition of an
+upsert's update branch, which PostgreSQL and SQLite render as
+`DO UPDATE … WHERE` and velox refuses on MySQL.
 
 Rendering caches SQL text by statement shape (operation, entity, predicate
 structure, order, presence of a limit), so a statement that differs only in its
