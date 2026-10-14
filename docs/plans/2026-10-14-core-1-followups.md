@@ -12,10 +12,9 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - Resolved in plan 2: nested mixins and embedded structs that add no columns are refused by velox-gen; a field that is not a column is named in its `SchemaError`.
 - Still open: a field's type change (e.g. `float64` to a decimal) does not raise `ErrStale`. `Shape` would have to carry type names, and reflect's spelling of types (`[]uint8`, package paths inside type arguments) differs from go/types'; decide in plan 5 whether it is worth it.
 
-## Plan 4 (relations)
+## Left by plan 4 (relations)
 
-- `IN` lists are not bounded by dialect parameter limits (65,535 on PostgreSQL and MySQL, 32,766 on SQLite). Chunk them with `With`'s eager loading.
-- `EQ` with a nil value (e.g. a nil `[]byte`) renders `= $n` with NULL, which matches nothing; consider rendering `IS NULL` or refusing it.
+The plan's final review fills this section.
 
 ## Plan 5 (scale guards)
 

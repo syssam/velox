@@ -31,11 +31,12 @@ var (
 
 // target is one database the tests run against.
 type target struct {
-	name string
-	d    velox.Dialect
-	db   *velox.DB
-	exec func(t *testing.T, query string, args ...any) // setup SQL, written with ? placeholders
-	ddl  string
+	name  string
+	d     velox.Dialect
+	db    *velox.DB
+	exec  func(t *testing.T, query string, args ...any) // setup SQL, written with ? placeholders
+	ddl   string                                        // CREATE TABLE invoices
+	items string                                        // CREATE TABLE items
 }
 
 // targets returns SQLite always, and PostgreSQL and MySQL when their
@@ -78,10 +79,16 @@ func postgresTargets(t *testing.T, dsn string, opts []velox.Option) []target {
 	t.Cleanup(pool.Close)
 	exec := sqlExec(sqlDB, velox.Postgres)
 	return []target{
-		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool, opts...), exec: exec, ddl: pgDDL},
-		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB, opts...), exec: exec, ddl: pgDDL},
+		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool, opts...), exec: exec, ddl: pgDDL, items: pgItems},
+		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB, opts...), exec: exec, ddl: pgDDL, items: pgItems},
 	}
 }
+
+const pgItems = `CREATE TABLE items (id bigint PRIMARY KEY, invoice_id bigint NOT NULL, sku text NOT NULL, qty bigint NOT NULL)`
+
+const mysqlItems = "CREATE TABLE items (id BIGINT PRIMARY KEY, invoice_id BIGINT NOT NULL, sku VARCHAR(64) NOT NULL, qty BIGINT NOT NULL)"
+
+const sqliteItems = "CREATE TABLE items (id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL, sku TEXT NOT NULL, qty INTEGER NOT NULL)"
 
 const mysqlDDL = "CREATE TABLE invoices (created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL, " +
 	"id BIGINT AUTO_INCREMENT PRIMARY KEY, org_id BIGINT NOT NULL, number VARCHAR(64) NOT NULL, total DOUBLE NOT NULL, " +
@@ -95,7 +102,7 @@ func mysqlTarget(t *testing.T, dsn string, opts []velox.Option) target {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db, opts...), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL}
+	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db, opts...), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL, items: mysqlItems}
 }
 
 func sqliteTarget(t *testing.T, opts []velox.Option) target {
@@ -108,6 +115,7 @@ func sqliteTarget(t *testing.T, opts []velox.Option) target {
 	t.Cleanup(func() { _ = db.Close() })
 	return target{
 		name: "sqlite", d: velox.SQLite, db: velox.Open(velox.SQLite, db, opts...), exec: sqlExec(db, velox.SQLite),
+		items: sqliteItems,
 		ddl: `CREATE TABLE invoices (created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, id INTEGER PRIMARY KEY,
 			org_id INTEGER NOT NULL, number TEXT NOT NULL, total REAL NOT NULL, paid BOOLEAN NOT NULL,
 			paid_at DATETIME, note TEXT, data BLOB NOT NULL, CONSTRAINT invoices_org_number_uq UNIQUE (org_id, number))`,
@@ -161,13 +169,16 @@ func TestRebind(t *testing.T) {
 	}
 }
 
-// setup creates the invoices table with five rows. Org 1 owns ids 1–4. The
+// setup creates the invoices table with five rows and the items table with
+// three: (1, invoice 1, A, 2), (2, invoice 1, B, 0), (3, invoice 2, C, 5). Org 1 owns ids 1–4. The
 // numbers hold LIKE wildcards and a backslash; even ids have a note; paid
 // invoices have paid_at.
 func setup(t *testing.T, tg target) {
 	t.Helper()
+	tg.exec(t, "DROP TABLE IF EXISTS items")
 	tg.exec(t, "DROP TABLE IF EXISTS invoices")
 	tg.exec(t, tg.ddl)
+	tg.exec(t, tg.items)
 	note := "a note"
 	for _, r := range []struct {
 		id, org int64
@@ -188,6 +199,13 @@ func setup(t *testing.T, tg target) {
 		}
 		tg.exec(t, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, paid_at, note, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			t0, t0, r.id, r.org, r.number, r.total, r.paid, paidAt, n, []byte("d"))
+	}
+	for _, r := range []struct {
+		id, invoice int64
+		sku         string
+		qty         int64
+	}{{1, 1, "A", 2}, {2, 1, "B", 0}, {3, 2, "C", 5}} {
+		tg.exec(t, "INSERT INTO items (id, invoice_id, sku, qty) VALUES (?, ?, ?, ?)", r.id, r.invoice, r.sku, r.qty)
 	}
 }
 

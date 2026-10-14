@@ -103,8 +103,21 @@ Rules:
    - They are never loaded lazily. The zero value means "not loaded";
      `Get()` returns `(value, loaded bool)`. Not-loaded relations are left out of
      JSON.
-   - The foreign key is `<Owner>ID` on the other entity by convention;
-     `ForeignKey` overrides it.
+   - Keys, by convention:
+     - **To-one:** a One relation named R uses the owner's field `RID` when
+       there is one: the owner belongs to the target, whose primary key RID
+       holds.
+     - **Otherwise:** the target holds the key in a field named after the
+       owner: `InvoiceID` on `Line` for a relation of `Invoice`.
+   - **Declared keys:**
+     `s.Many(&x.Lines).ForeignKey(func(l *Line) *int64 { return &l.InvoiceID })`
+     names the target's column, and `s.One(&x.Org).References(&x.OrgID)` the
+     owner's. Declaring a relation's key twice is a `SchemaError`.
+     `ForeignKey`'s function runs once, while the schema is built.
+   - **Key types:** a relation joins one column to a single-column primary key
+     of the same Go type (ignoring one level of pointer).
+   - **When a mistake surfaces:** at the relation's first use, and in CI through
+     `velox-gen verify`.
    - Many-to-many goes through an explicit join entity.
    - Relations follow Go's import graph, so a cross-package relation points one
      way only. See §3 rule 6 for what a cross-package relation costs.
@@ -137,7 +150,7 @@ import (
 )
 
 // Fails to compile if this file and the velox library disagree.
-const _ = velox.GeneratedCodeIsVersion1
+const _ = velox.GeneratedCodeIsVersion2
 
 // Invoices holds the typed handles of Invoice's columns and relations.
 var Invoices = struct {
@@ -148,8 +161,8 @@ var Invoices = struct {
     Number    velox.StringCol[Invoice, string]
     Total     velox.NumberCol[Invoice, decimal.Decimal]
     PaidAt    velox.NullOrderedCol[Invoice, time.Time]
-    Lines     velox.ManyRel[Invoice, Line]
-    Org       velox.OneRel[Invoice, identity.Org]
+    Lines     velox.Rel[Invoice, Line]
+    Org       velox.Rel[Invoice, identity.Org]
 }{
     CreatedAt: velox.OrderedCol[Invoice, time.Time]{I: 0},
     // … one line per handle: an index, static data, no code at init
@@ -163,7 +176,7 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Get(invoic
 func invoiceShape() velox.Shape[Invoice] {
     return velox.Shape[Invoice]{
         Columns:   []string{"CreatedAt", "UpdatedAt", "ID", "OrgID", "Number", "Total", "PaidAt"},
-        Relations: []string{"Lines", "Org"},
+        Relations: []velox.Relation{velox.RelationTo[Line]("Lines"), velox.RelationTo[identity.Org]("Org")},
         Addr: func(x *Invoice, i int) any { // scan targets: no reflection per row
             switch i {
             case 0:
@@ -192,7 +205,7 @@ The handle type follows the field's type, by its underlying type
 | integers, floats, `decimal.Decimal`; types registered as numbers | `NumberCol` | `Add` `Sub`, `Sum` `Avg` |
 | `~string` | `StringCol` | `Like` `Contains` `HasPrefix` `HasSuffix` `EqualFold` |
 | `*T` of any of these | `Null…Col` | `IsNull` `NotNull` `SetNull` |
-| `velox.One[T]` / `velox.Many[T]` | `OneRel` / `ManyRel` | `Has` `HasWhere`, and eager-load options (§4.3) |
+| `velox.One[T]` / `velox.Many[T]` | `Rel` (one type for both kinds) | `Has` `HasWhere` `Where` `OrderBy` `With` (§4.3) |
 
 Each column handle produces values typed by its entity (`velox.Pred[Invoice]`,
 `velox.Order[Invoice]`, `velox.Setter[Invoice]`), so a condition on `Line`
@@ -243,6 +256,9 @@ or confirmed by measurement (Appendix A).
    level. An interface is the only way Go lets one parameter accept them, and an
    interface needs an ordinary method. It is one small method, and it takes
    `*E`, so a handle of another entity does not satisfy `Column[E]`.
+   `One[T]` and `Many[T]` also have `MarshalJSON`, an ordinary method because
+   `encoding/json` finds it by name; its body is one call. Tag relation fields
+   `json:",omitzero"` to leave unloaded ones out.
 2. **No generic velox type's descriptor reaches another entity.** Generic
    instantiations have no home package, so every package that needs one emits
    its runtime type descriptor, and everything that descriptor reaches. The
@@ -328,19 +344,41 @@ n, err := db.Query[billing.Invoice]().Where(I.PaidAt.IsNull()).Count(ctx)
 text, args := db.Query[billing.Invoice]().Where(…).SQL() // no database needed
 ```
 
-- `With` loads a relation with one extra query per relation (`WHERE fk IN (…)`),
-  chunked under each dialect's parameter limit. Nothing is ever loaded lazily.
+- `With` loads a relation with one extra query per relation,
+  `WHERE key IN (…)`, chunked under each dialect's parameter limit.
+  - Chain `With` for several relations; a relation's own `With` loads nested
+    ones.
+  - Related entities come in the order given by the relation's `OrderBy`, by
+    default the target's primary key.
+  - A to-one entity can be shared by several owners.
+  - `Iter` does not load relations.
+  - Nothing is ever loaded lazily.
+  - Errors in a `With`'s options are reported before any query runs. A query
+    whose `Columns`/`Omit` leave out a loaded relation's key column is an
+    error.
+  - Each relation chunk leaves 64 parameters for conditions that rewrite hooks
+    add.
 - `Iter` returns `iter.Seq2[E, error]` and holds one row at a time.
 - `Columns(I.ID, I.Total)` selects only those columns and `Omit(I.Payload)`
   all but those; the unselected fields keep their zero values. Both take
   handles of the query's own entity, so a column of another entity does not
   compile. The generated scan plan addresses columns by index, so a partial
   select costs nothing extra.
-- `Has` / `HasWhere` render `EXISTS (…)`.
+- `Has` / `HasWhere` render `EXISTS (…)`. On MySQL an `UPDATE` or `DELETE`
+  whose `EXISTS` reads the table being changed fails with error 1093.
 - Predicates combine with `velox.And`, `velox.Or`, `velox.Not`; a `Where` with
   several predicates is their `AND`.
-- Keyset pagination (`After(cursor)`) is in Core; offset pagination is
-  `Offset(n)`.
+- Keyset pagination: `After(lastRow)` continues after the previous page's last
+  row. The `OrderBy` must include the primary key or a unique index, and no
+  nullable column.
+  - `x` must be a row a query returned.
+  - Ordering by a nullable column, or by a slice or map column (nil is NULL),
+    is refused.
+  - `Count` applies `After`'s condition.
+- Offset pagination is `Offset(n)`.
+- A statement with more parameters than the dialect allows is refused before it
+  is sent.
+- `EQ(nil)` and `NEQ(nil)` render `IS NULL` and `IS NOT NULL`.
 
 ### 4.4 Update
 
