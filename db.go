@@ -25,6 +25,7 @@ type config struct {
 	rewrites []Rewrite
 	arounds  []Around
 	cache    renderCache
+	maxLimit int // WithMaxLimit; 0: none
 }
 
 // Option configures a DB's pipeline.
@@ -37,6 +38,15 @@ func WithRewrite(r Rewrite) Option {
 		panic("velox: WithRewrite(nil)")
 	}
 	return func(c *config) { c.rewrites = append(c.rewrites, r) }
+}
+
+// WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.
+// n must be at least 2, the limit One uses; a smaller n panics.
+func WithMaxLimit(n int) Option {
+	if n < 2 {
+		panic(fmt.Sprintf("velox: WithMaxLimit(%d): the maximum must be at least 2, the limit One uses", n))
+	}
+	return func(c *config) { c.maxLimit = n }
 }
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
@@ -243,8 +253,6 @@ func checkColumns(st *Statement) error {
 	var walk func(nd node) error
 	walk = func(nd node) error {
 		switch nd.op {
-		case 0:
-			return errZeroPredicate(st.Entity.Name)
 		case opAnd, opOr, opNot:
 			for _, k := range nd.kids {
 				if err := walk(k); err != nil {
@@ -262,6 +270,11 @@ func checkColumns(st *Statement) error {
 		return bad(int(nd.col))
 	}
 	for _, p := range st.Where {
+		// walk does not enter an EXISTS's kids, so look for the zero
+		// Predicate first.
+		if hasZero(p.n) {
+			return errZeroPredicate(st.Entity.Name)
+		}
 		if err := walk(p.n); err != nil {
 			return err
 		}

@@ -11,7 +11,7 @@ import (
 func TestWritesGoThroughExec(t *testing.T) {
 	e := &FakeExec{Affected: 3, LastID: 9, HasLastID: true}
 	db := OpenFake(Postgres, e)
-	st := Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.5}}}
+	st := Statement{Op: OpUpdate, Entity: invInfo, AllRows: true, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.5}}}
 	res, err := execWrite(context.Background(), db, &st)
 	if err != nil || res.affected != 3 || res.lastID != 9 || !res.hasLastID {
 		t.Fatalf("%+v, %v", res, err)
@@ -25,7 +25,7 @@ func TestWritesGoThroughExec(t *testing.T) {
 func TestHooksOnWrites(t *testing.T) {
 	ctx := context.Background()
 	update := func() Statement {
-		return Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.5}}}
+		return Statement{Op: OpUpdate, Entity: invInfo, AllRows: true, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.5}}}
 	}
 	t.Run("a hook's edits do not reach the caller", func(t *testing.T) {
 		edit := func(_ context.Context, st *Statement) error {

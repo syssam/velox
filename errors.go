@@ -17,6 +17,8 @@ var (
 	ErrUnbounded = errors.New("query has no Limit")
 	// ErrNoWhere: an update or delete with no Where that did not say All.
 	ErrNoWhere = errors.New("update or delete has no Where")
+	// ErrLimitTooLarge: a query whose Limit is over the DB's WithMaxLimit.
+	ErrLimitTooLarge = errors.New("limit is over the maximum")
 	// ErrStale: an entity's struct changed after velox-gen last ran.
 	ErrStale = errors.New("generated code is out of date")
 )

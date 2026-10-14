@@ -48,7 +48,7 @@ func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E] {
 }
 
 // All declares that the update has no Where on purpose and changes every
-// row. The guardrails refuse an update with neither (sub-project 2).
+// row. An update with neither a Where nor All fails with ErrNoWhere.
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E] {
 	u.st.AllRows = true
 	return u
@@ -125,7 +125,7 @@ func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E] {
 }
 
 // All declares that the delete has no Where on purpose and removes every
-// row. The guardrails refuse a delete with neither (sub-project 2).
+// row. A delete with neither a Where nor All fails with ErrNoWhere.
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E] {
 	d.st.AllRows = true
 	return d

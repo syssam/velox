@@ -70,7 +70,7 @@ func TestOne(t *testing.T) {
 func TestColumnsAndOmit(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(5), "INV-5"}}}
 	db := velox.OpenFake(velox.Postgres, e)
-	got, err := db.Query[testmodel.Invoice]().Columns(I.ID, I.Number).All(ctx)
+	got, err := db.Query[testmodel.Invoice]().Columns(I.ID, I.Number).Unbounded().All(ctx)
 	if err != nil || len(got) != 1 || got[0].ID != 5 || got[0].Number != "INV-5" || got[0].Total != 0 {
 		t.Fatalf("%+v, %v", got, err)
 	}
@@ -79,7 +79,7 @@ func TestColumnsAndOmit(t *testing.T) {
 	}
 	row := invoiceRow(6)
 	e.Rows = [][]any{append(row[:8:8], row[9])}
-	got, err = db.Query[testmodel.Invoice]().Omit(I.Note).All(ctx)
+	got, err = db.Query[testmodel.Invoice]().Omit(I.Note).Unbounded().All(ctx)
 	if err != nil || got[0].ID != 6 || got[0].Note != nil {
 		t.Fatalf("%+v, %v", got, err)
 	}
@@ -269,7 +269,7 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 					t.Errorf("goroutine %d: %s %v", g, text, args)
 					return
 				}
-				if _, err := q.All(ctx); err != nil {
+				if _, err := q.Unbounded().All(ctx); err != nil {
 					t.Error(err)
 					return
 				}

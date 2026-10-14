@@ -75,7 +75,8 @@ func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
 	return q
 }
 
-// Limit returns the query returning at most n rows. n <= 0 removes the limit.
+// Limit returns the query returning at most n rows. n <= 0 removes the limit;
+// a query with no limit fails with ErrUnbounded unless it says Unbounded.
 func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E] {
 	q.st.Limit = max(n, 0)
 	return q
@@ -88,8 +89,8 @@ func (q Query[E]) Offset[_ Lazy[E]](n int) Query[E] {
 	return q
 }
 
-// Unbounded returns the query declared to have no Limit on purpose. The
-// guardrails refuse a query with neither (sub-project 2).
+// Unbounded returns the query declared to have no Limit on purpose. A query
+// with neither a Limit nor Unbounded fails with ErrUnbounded.
 func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 	q.st.Unbounded = true
 	return q

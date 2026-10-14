@@ -65,6 +65,15 @@ func TestZeroPredicateIsRefused(t *testing.T) {
 	if _, err := hooked.Query[testmodel.Invoice]().Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "zero Predicate") || e.Calls != 0 {
 		t.Errorf("from a hook: %v, calls %d", err, e.Calls)
 	}
+	// HasWhere does not refuse a zero condition; a hook can add one inside
+	// an EXISTS, which checkColumns must still find.
+	exists := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Where = append(st.Where, velox.Predicate(I.Items.HasWhere(velox.Pred[testmodel.Item]{})))
+		return nil
+	}))
+	if _, err := exists.Query[testmodel.Invoice]().Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "zero Predicate") || e.Calls != 0 {
+		t.Errorf("from a hook, inside HasWhere: %v, calls %d", err, e.Calls)
+	}
 }
 
 func TestQuerySelectingNoColumnsIsRefused(t *testing.T) {

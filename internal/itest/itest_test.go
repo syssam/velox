@@ -229,7 +229,7 @@ func ids(xs []testmodel.Invoice) []int64 {
 
 func query(t *testing.T, tg target, ps ...velox.Pred[testmodel.Invoice]) []int64 {
 	t.Helper()
-	got, err := tg.db.Query[testmodel.Invoice]().Where(ps...).OrderBy(I.ID.Asc()).All(ctx)
+	got, err := tg.db.Query[testmodel.Invoice]().Where(ps...).OrderBy(I.ID.Asc()).Unbounded().All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestCountOffsetColumnsIter(t *testing.T) {
 		if err != nil || n != 4 {
 			t.Errorf("count %d, %v", n, err)
 		}
-		got, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Offset(3).All(ctx)
+		got, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Offset(3).Unbounded().All(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -381,7 +381,7 @@ func TestAroundDeadlineCoversReadingTheRows(t *testing.T) {
 	})
 	each(t, func(t *testing.T, tg target) {
 		for i := range 300 {
-			got, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).All(ctx)
+			got, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Unbounded().All(ctx)
 			if err != nil || len(got) != 5 {
 				t.Fatalf("query %d, All: %d rows, %v", i, len(got), err)
 			}

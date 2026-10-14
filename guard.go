@@ -14,6 +14,22 @@ func (db *DB) guard(st *Statement) error {
 	if st.Op == OpSelect && !st.Count && st.Columns != nil && len(st.Columns) == 0 {
 		return fmt.Errorf("velox: %s: the query selects no columns", st.Entity.Name)
 	}
+	switch st.Op {
+	case OpSelect:
+		if st.Count {
+			break
+		}
+		if st.Limit <= 0 && !st.Unbounded {
+			return fmt.Errorf("velox: %s: %w: add Limit, or Unbounded to read every row", st.Entity.Name, ErrUnbounded)
+		}
+		if m := db.cfg.maxLimit; m > 0 && st.Limit > m {
+			return fmt.Errorf("velox: %s: %w: Limit %d, the maximum is %d", st.Entity.Name, ErrLimitTooLarge, st.Limit, m)
+		}
+	case OpUpdate, OpDelete:
+		if len(st.Where) == 0 && !st.AllRows {
+			return fmt.Errorf("velox: %s: %w: add Where, or All to change every row", st.Entity.Name, ErrNoWhere)
+		}
+	}
 	return nil
 }
 
