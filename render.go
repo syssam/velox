@@ -90,7 +90,9 @@ func (w *writer) selectStmt(st *Statement) {
 	}
 }
 
-// isNilArg reports a value that SQL compares with IS NULL, not =.
+// isNilArg reports a value that SQL compares with IS NULL, not =. It
+// recognizes an untyped nil and a nil []byte only: a nil value of another type
+// (a nil *int64 in an any, say) is compared with =, which matches nothing.
 func isNilArg(v any) bool {
 	switch x := v.(type) {
 	case nil:

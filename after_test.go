@@ -1,6 +1,7 @@
 package velox_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -54,5 +55,93 @@ func TestParameterLimit(t *testing.T) {
 	_, err := db.Query[testmodel.Invoice]().Where(I.ID.In(1, 2, 3, 4)).Limit(1).All(ctx)
 	if err == nil || !strings.Contains(err.Error(), "the statement has 5 parameters; postgres allows 3") || e.Calls != 0 {
 		t.Errorf("%v, calls %d", err, e.Calls)
+	}
+}
+
+func TestAfterNilRow(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	q := db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).After(nil)
+	if _, err := q.All(ctx); err == nil || !strings.HasPrefix(err.Error(), "velox: ") || !strings.HasSuffix(err.Error(), ": After was given a nil row") {
+		t.Errorf("%v", err)
+	}
+	if text, _ := q.SQL(); text != "" {
+		t.Errorf("%s", text)
+	}
+}
+
+func TestAfterRefusesSliceColumns(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	_, err := db.Query[testmodel.Invoice]().OrderBy(I.Data.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 1}).Limit(10).All(ctx)
+	if err == nil || !strings.Contains(err.Error(), "After cannot page over the column data, which can be NULL") {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestAfterMixedDirections(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	last := &testmodel.Invoice{ID: 7, OrgID: 3, Total: 2.5}
+	text, args := db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL()
+	want := ` WHERE ("org_id" > $1 OR ("org_id" = $2 AND "total" < $3) OR ("org_id" = $4 AND "total" = $5 AND "id" > $6)) ORDER BY "org_id", "total" DESC, "id" LIMIT $7`
+	if !strings.HasSuffix(text, want) {
+		t.Errorf("%s", text)
+	}
+	wantArgs := []any{int64(3), int64(3), 2.5, int64(3), 2.5, int64(7), 10}
+	if !reflect.DeepEqual(args, wantArgs) {
+		t.Errorf("%#v", args)
+	}
+}
+
+func TestAfterSecondCaseArgs(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	_, args := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(&testmodel.Invoice{ID: 7}).Limit(10).SQL()
+	if !reflect.DeepEqual(args, []any{true, int64(7), 10}) {
+		t.Errorf("%#v", args)
+	}
+}
+
+// TestAfterReachesTheDatabase: All, Iter and Count send After's condition, and
+// Count returns the refusal for an ordering After cannot page over.
+func TestAfterReachesTheDatabase(t *testing.T) {
+	cond := `("id" > $1)`
+	last := &testmodel.Invoice{ID: 7}
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(8)}}
+	db := velox.OpenFake(velox.Postgres, e)
+	q := db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).After(last).Limit(10)
+	if _, err := q.All(ctx); err != nil || !strings.Contains(e.SQL, cond) || e.Args[0] != int64(7) {
+		t.Errorf("All: %v, %s %v", err, e.SQL, e.Args)
+	}
+	e.SQL, e.Args = "", nil
+	for _, err := range q.Iter(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !strings.Contains(e.SQL, cond) || e.Args[0] != int64(7) {
+		t.Errorf("Iter: %s %v", e.SQL, e.Args)
+	}
+	e.SQL, e.Args = "", nil
+	e.Rows = [][]any{{int64(1)}}
+	if n, err := q.Count(ctx); err != nil || n != 1 || !strings.Contains(e.SQL, "COUNT(*)") || !strings.Contains(e.SQL, cond) || strings.Contains(e.SQL, "ORDER BY") {
+		t.Errorf("Count: %d %v, %s %v", n, err, e.SQL, e.Args)
+	}
+	calls := e.Calls
+	if _, err := db.Query[testmodel.Invoice]().After(last).Count(ctx); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") || e.Calls != calls {
+		t.Errorf("Count refusal: %v", err)
+	}
+}
+
+// TestAfterWithRelations: After's condition is on the owner query only.
+func TestAfterWithRelations(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(8)}, {itemRow(10, 8, "A", 1)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	_, err := db.Query[testmodel.Invoice]().With(I.Items).OrderBy(I.ID.Asc()).After(&testmodel.Invoice{ID: 7}).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Log) != 2 || !strings.Contains(e.Log[0], ` WHERE ("id" > $1) ORDER BY "id"`) {
+		t.Fatalf("%q", e.Log)
+	}
+	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" IN ($1) ORDER BY "id"`; e.Log[1] != want {
+		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 }

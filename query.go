@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"reflect"
 	"slices"
 	"unsafe"
 )
@@ -131,8 +132,18 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // page: keyset pagination, which unlike Offset neither skips nor repeats rows
 // when rows are added between pages, and costs the same on every page. The
 // query's OrderBy must include every column of the primary key or of a
-// unique index, and no nullable column.
+// unique index, and no column that can be NULL. x must be a row a query
+// returned: its values carry the columns' stored precision, which a value made
+// in memory (a time with nanoseconds in a column that keeps microseconds) may
+// not, and the comparison would then skip or repeat a row. Count applies
+// After's condition too.
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
+	if x == nil {
+		if q.err == nil && q.meta.err == nil {
+			q.err = fmt.Errorf("velox: %s: After was given a nil row", q.meta.info.Name)
+		}
+		return q
+	}
 	c := *x
 	q.after = &c
 	return q
@@ -150,8 +161,13 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 	}
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for _, o := range st.OrderBy {
-		if in.Columns[o.Column].Nullable {
-			return st, fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, in.Columns[o.Column].Name)
+		col := in.Columns[o.Column]
+		if col.Nullable {
+			return st, fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
+		}
+		// A nil slice or map is stored as NULL, which no comparison matches.
+		if k := col.Type.Kind(); k == reflect.Slice || k == reflect.Map {
+			return st, fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
 		}
 		ordered[o.Column] = true
 	}
@@ -401,8 +417,9 @@ func readCount(c *countRun, r rows) error {
 	return nil
 }
 
-// Count returns the number of rows matching the query's conditions; its
-// ordering, limit, offset and columns are ignored.
+// Count returns the number of rows matching the query's conditions, After's
+// among them (so After's rules for the ordering apply, though the ordering is
+// then ignored); the query's ordering, limit, offset and columns are ignored.
 func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if q.meta.err != nil {
 		return 0, q.meta.err
