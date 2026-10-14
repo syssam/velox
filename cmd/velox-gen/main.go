@@ -16,7 +16,9 @@
 // nothing and exits 1 when a generated file is out of date; CI runs it.
 // verify builds every entity's metadata and reports mistakes in Schema and
 // Mixin methods, which velox-gen itself cannot see because it never runs your
-// code.
+// code. verify builds its program in a temporary .velox-verify-* directory of
+// your module and removes it, but a killed process leaves it behind; ignore
+// .velox-verify-*/ in git.
 package main
 
 import (

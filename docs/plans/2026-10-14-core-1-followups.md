@@ -50,3 +50,12 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - `pred` has no default case (an unknown op renders nothing and fails at the database); a zero `Dialect` renders SQLite-style.
 - A package-level helper named `flag` in the root package invites a collision.
 - `Count` calls `r.Err()` while rows are still open after the first row; `export_test`'s `assign` panics on a wrongly typed fake value.
+
+## Left by plan 2 (generator)
+
+- `velox-gen verify`'s temporary directory survives SIGINT/SIGKILL: there is no signal handling and no sweep of stale `.velox-verify-*` directories. Applications should ignore `.velox-verify-*/` in git (said in velox-gen's package comment).
+- `apply` is not atomic and, on an error, does not say which files it already changed.
+- Entities in nested `internal/` packages of the module are not reachable from verify's program at the module root; they fail to compile instead of being skipped.
+- Naming edge cases: the plural of names ending in an uppercase S or X ("DNSs"), a digit before y, and lowerCamel of "IDs" ("iDs").
+- `resolved` does not look inside func, chan or struct types; registered types take precedence over the underlying kind (untested).
+- verify's messages start `velox-gen verify: `, and a compile failure of its program is not explained beyond the compiler's output.
