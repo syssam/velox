@@ -53,6 +53,20 @@ func TestRenderSchemaQualifiedTable(t *testing.T) {
 	}
 }
 
+// TestRenderMySQLDoNothingQualifiesTheSchema: the no-op assignment's right side
+// carries the whole qualified table name.
+func TestRenderMySQLDoNothingQualifiesTheSchema(t *testing.T) {
+	info := &EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1,
+		Columns: []ColumnInfo{{Name: "id"}, {Name: "org_id"}}}
+	st := &Statement{Op: OpInsert, Entity: info, Columns: []int{1}, Rows: [][]any{{int64(7)}},
+		Conflict: &ConflictClause{Columns: []int{1}, DoNothing: true}}
+	got, _ := render(MySQL, st)
+	want := "INSERT INTO `billing`.`invoices` (`org_id`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `org_id` = `billing`.`invoices`.`org_id`"
+	if got != want {
+		t.Errorf("got %s", got)
+	}
+}
+
 type renderCase struct {
 	name string
 	st   func() *Statement

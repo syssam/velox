@@ -406,7 +406,7 @@ type Statement struct {
     Op        Op           // Select, Insert, Update, Delete
     Entity    *EntityInfo  // table, columns, keys, tenant column, policies
     Count     bool         // SELECT COUNT(*)
-    Columns   []int        // selected columns; nil selects all
+    Columns   []int        // SELECT: selected columns, nil selects all; INSERT: written columns
     Where     []Predicate
     Set       []Assignment    // UPDATE
     Rows      [][]any         // INSERT: one value per Columns entry
@@ -440,7 +440,8 @@ PostgreSQL is the reference; every feature is defined there first.
 | Upsert | `ON CONFLICT … DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON CONFLICT … DO UPDATE` |
 | Serialization retry codes | `40001`, `40P01` | 1213, 1205 | `SQLITE_BUSY` |
 
-MySQL DSNs need `parseTime=true` and, for `Save`, `clientFoundRows=true`.
+MySQL DSNs need `parseTime=true` and, for `Save`, `clientFoundRows=true`. CI
+tests MySQL 8.4.
 SQLite enforces foreign keys only when the DSN asks for it.
 
 Statements go through an executor: an internal interface whose rows type has
@@ -459,7 +460,10 @@ Constraint violations are normalized into `*velox.ConstraintError` with a kind
 
 Sentinels for `errors.Is`: `ErrNotFound`, `ErrNotSingular`, `ErrUnbounded`,
 `ErrNoWhere`, `ErrStale` (generated code out of date). Typed errors for
-`errors.As`: `*ConstraintError{Entity, Kind, Constraint, Err}` with `Kind` one of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the constraint's name, except that SQLite reports the columns and a NOT NULL error the column. `*SchemaError` (an invalid `Schema` method,
+`errors.As`: `*ConstraintError{Entity, Kind, Constraint, Err}` with `Kind` one
+of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the
+constraint's name, except that SQLite reports the columns and a NOT NULL error
+the column. `*SchemaError` (an invalid `Schema` method,
 reported with the entity and field). Every error message starts with `velox:`
 and names the entity.
 

@@ -31,6 +31,9 @@ func TestInsertAndReadBack(t *testing.T) {
 		if err := tg.db.Insert(&given).Exec(ctx); err != nil || given.ID != 50 {
 			t.Errorf("%v, ID %d", err, given.ID)
 		}
+		if row, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(50)).One(ctx); err != nil || row.Number != "GIVEN" {
+			t.Errorf("row 50: %+v, %v", row, err)
+		}
 	})
 }
 
@@ -57,6 +60,13 @@ func TestUpsert(t *testing.T) {
 		if err := tg.db.Insert(&keep).OnConflict(I.OrgID, I.Number).DoNothing().Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
+		if keep.ID != 0 {
+			t.Errorf("DO NOTHING read back ID %d, want 0: no row was inserted", keep.ID)
+		}
+		kept, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
+		if err != nil || kept.Total != 10 {
+			t.Fatalf("DO NOTHING must keep the row: %+v, %v", kept, err)
+		}
 		over := newInvoice(1, "INV-1")
 		over.Total = 99
 		if err := tg.db.Insert(&over).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx); err != nil {
@@ -69,8 +79,8 @@ func TestUpsert(t *testing.T) {
 		if tg.d != velox.MySQL && over.ID != 1 {
 			t.Errorf("RETURNING after DO UPDATE: ID %d, want 1", over.ID)
 		}
-		if n, _ := tg.db.Query[testmodel.Invoice]().Count(ctx); n != 5 {
-			t.Errorf("rows %d, want 5: an upsert inserted", n)
+		if n, err := tg.db.Query[testmodel.Invoice]().Count(ctx); err != nil || n != 5 {
+			t.Errorf("rows %d, %v, want 5: an upsert inserted", n, err)
 		}
 	})
 }
@@ -105,7 +115,10 @@ func TestUpdateDeleteSave(t *testing.T) {
 		if err != nil || again.Number != "CHANGED" {
 			t.Errorf("%+v, %v", again, err)
 		}
-		if err := tg.db.Save(ctx, one, I.Number); err != nil {
+		// Naming UpdatedAt keeps OnUpdate from firing, so every value sent equals
+		// the stored one (one.UpdatedAt is what the first Save sent) and the row
+		// is matched but not changed: only clientFoundRows makes MySQL count it.
+		if err := tg.db.Save(ctx, one, I.Number, I.UpdatedAt); err != nil {
 			t.Errorf("saving unchanged values must still find the row (clientFoundRows on MySQL): %v", err)
 		}
 		missing := newInvoice(1, "X")
@@ -153,8 +166,8 @@ func TestTransactions(t *testing.T) {
 		if !errors.Is(err, boom) {
 			t.Fatal(err)
 		}
-		if n, _ := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(8)).Count(ctx); n != 0 {
-			t.Errorf("a rolled-back insert is visible: %d rows", n)
+		if n, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(8)).Count(ctx); err != nil || n != 0 {
+			t.Errorf("a rolled-back insert is visible: %d rows, %v", n, err)
 		}
 	})
 }
