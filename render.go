@@ -17,6 +17,10 @@ type writer struct {
 	argsOnly bool
 	alias    string // the alias of the subquery being written, and its nesting
 	depth    int
+	// qualify names the table before each column of a condition outside any
+	// subquery: an upsert's condition is on the existing row, and on
+	// PostgreSQL a bare column there may also be EXCLUDED's.
+	qualify bool
 }
 
 func (w *writer) str(s string) {
@@ -32,6 +36,15 @@ func (w *writer) ident(s string) {
 }
 
 func (w *writer) col(i int32) { w.ident(w.in.Columns[i].Name) }
+
+// predCol writes a condition's column, qualified when w.qualify says so.
+func (w *writer) predCol(i int32) {
+	if w.qualify && w.depth == 0 {
+		w.table()
+		w.str(".")
+	}
+	w.col(i)
+}
 
 func (w *writer) arg(v any) {
 	w.args = append(w.args, v)
@@ -105,7 +118,7 @@ func isNilArg(v any) bool {
 
 func (w *writer) pred(n node) {
 	if (n.op == opEQ || n.op == opNEQ) && isNilArg(n.v) {
-		w.col(n.col)
+		w.predCol(n.col)
 		if n.op == opEQ {
 			w.str(" IS NULL")
 		} else {
@@ -115,7 +128,7 @@ func (w *writer) pred(n node) {
 	}
 	switch n.op {
 	case opEQ, opNEQ, opGT, opGTE, opLT, opLTE:
-		w.col(n.col)
+		w.predCol(n.col)
 		w.str(cmpText[n.op])
 		w.arg(n.v)
 	case opIn, opNotIn:
@@ -128,7 +141,7 @@ func (w *writer) pred(n node) {
 			}
 			return
 		}
-		w.col(n.col)
+		w.predCol(n.col)
 		if n.op == opNotIn {
 			w.str(" NOT IN (")
 		} else {
@@ -142,27 +155,27 @@ func (w *writer) pred(n node) {
 		}
 		w.str(")")
 	case opBetween:
-		w.col(n.col)
+		w.predCol(n.col)
 		w.str(" BETWEEN ")
 		w.arg(n.v)
 		w.str(" AND ")
 		w.arg(n.w)
 	case opLike:
-		w.col(n.col)
+		w.predCol(n.col)
 		w.str(" LIKE ")
 		w.arg(n.v)
 		w.str(w.d.likeEscape())
 	case opFold:
 		w.str("LOWER(")
-		w.col(n.col)
+		w.predCol(n.col)
 		w.str(") = LOWER(")
 		w.arg(n.v)
 		w.str(")")
 	case opIsNull:
-		w.col(n.col)
+		w.predCol(n.col)
 		w.str(" IS NULL")
 	case opNotNull:
-		w.col(n.col)
+		w.predCol(n.col)
 		w.str(" IS NOT NULL")
 	case opAnd, opOr:
 		if len(n.kids) == 0 {
@@ -313,12 +326,14 @@ func (w *writer) insertStmt(st *Statement) {
 	}
 }
 
-// conflict writes the upsert clause. MySQL has neither a conflict target nor
-// DO NOTHING: ON DUPLICATE KEY UPDATE applies to any unique key, keeping the
-// existing row is a no-op assignment, and the inserted values come from the
-// row alias new (MySQL 8.0.19 and later). The alias makes an unqualified column
-// name on the right side ambiguous (error 1052), so the no-op assignment
-// qualifies it with the table.
+// conflict writes the upsert clause. On PostgreSQL and SQLite the update
+// branch's condition names the existing row's columns by its table. MySQL
+// has neither a conflict target nor DO NOTHING: ON DUPLICATE KEY UPDATE
+// applies to any unique key, keeping the existing row is a no-op assignment,
+// and the inserted values come from the row alias new (MySQL 8.0.19 and
+// later). The alias makes an unqualified column name on the right side
+// ambiguous (error 1052), so the no-op assignment qualifies it with the
+// table.
 func (w *writer) conflict(cf *ConflictClause) {
 	keep := cf.DoNothing || len(cf.Update) == 0
 	if w.d == MySQL {
@@ -357,6 +372,9 @@ func (w *writer) conflict(cf *ConflictClause) {
 		w.str(" = EXCLUDED.")
 		w.col(int32(c))
 	}
+	w.qualify = true
+	w.where(cf.Where)
+	w.qualify = false
 }
 
 func (w *writer) updateStmt(st *Statement) {

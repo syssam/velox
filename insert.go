@@ -2,8 +2,10 @@ package velox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 // maxParams is each dialect's limit on the parameters of one statement.
@@ -24,16 +26,17 @@ type InsertQuery[E any] struct {
 //
 //	db.Insert(&inv).Exec(ctx)
 //
-// Exec changes *x: it fills defaults and reads the generated key back, and it
-// leaves those changes in place even when the insert then fails.
+// Exec changes *x: it fills defaults and the tenant, runs the BeforeInsert
+// hooks and reads the generated key back, and it leaves those changes in
+// place even when the insert then fails.
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: x.VeloxMeta(), one: (*E)(x), single: true}
 }
 
 // InsertAll starts an INSERT of every entity in xs, in as few statements as
-// the dialect's parameter limit allows. Exec fills defaults into xs[i], the
-// caller's own slice elements, and leaves them filled even when the insert
-// then fails.
+// the dialect's parameter limit allows. Exec fills defaults and the tenant
+// into xs[i], the caller's own slice elements, runs the BeforeInsert hooks on
+// them, and leaves those changes in place even when the insert then fails.
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: PE(nil).VeloxMeta(), many: xs}
 }
@@ -87,10 +90,25 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // Exec runs the insert.
 //
 // Exec first fills, in each entity, every zero field whose column has Default
-// or DefaultFunc, and every column with OnUpdate. An integer primary key left
-// at zero is not sent: the database assigns it. Insert reads that key back
-// into *x: with RETURNING on PostgreSQL and SQLite, from LastInsertId on MySQL
-// for an insert without OnConflict. After a conflict that kept the existing
+// or DefaultFunc, and every column with OnUpdate. On a tenant-scoped entity
+// it then sets a zero tenant field to the context's tenant, and refuses a
+// field set to another one (ErrTenantMismatch) or, under AllTenants, left at
+// zero (ErrNoTenant). Then the BeforeInsert hooks run, the tenant is checked
+// again, and the policy's Insert is asked; every entity is prepared before
+// anything is sent.
+//
+// An upsert that updates must name the tenant column in OnConflict
+// (ErrTenantUpsert); on MySQL, where any unique key can conflict, every
+// unique key must hold it. Its update branch gets the policy's Read and Write
+// conditions, on the existing row; an upsert that changed fewer rows than it
+// sent, because the conditions hid a conflicting row, fails with a
+// *PolicyError. MySQL cannot apply them, so there such an upsert of an entity
+// with a Read or Write policy fails with ErrPolicyUpsert. DoNothing is exempt
+// from both.
+//
+// An integer primary key left at zero is not sent: the database assigns it.
+// Insert reads that key back into *x: with RETURNING on PostgreSQL and
+// SQLite, from LastInsertId on MySQL for an insert without OnConflict. After a conflict that kept the existing
 // row, the key stays zero. A LastInsertId that does not fit the key's type is
 // an error.
 //
@@ -189,6 +207,9 @@ func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
 
 func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) error {
 	fillDefaults(m, p)
+	if err := prepareRow(ctx, m.info, unsafe.Pointer(p)); err != nil {
+		return err
+	}
 	gen := generatedKey(m, p)
 	cols := insertColumns(m.info, gen)
 	if len(cols) == 0 {
@@ -196,23 +217,38 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
 	if gen < 0 {
-		_, err := execWrite(ctx, db, &st)
-		return err
+		res, err := execWrite(ctx, db, &st)
+		if err != nil {
+			return err
+		}
+		return checkUpserted(&st, res.affected)
 	}
 	if db.d != MySQL {
 		st.Returning = []int{gen}
+		var back int64 // the rows that came back
 		read := func(r rows) error {
-			// A hook may have dropped or redirected Returning: then the
-			// rows do not hold the key.
-			if len(st.Returning) == 1 && st.Returning[0] == gen && r.Next() {
+			if !r.Next() {
+				return nil
+			}
+			back = 1
+			// A hook may have redirected Returning: then the row does not
+			// hold the key.
+			if len(st.Returning) == 1 && st.Returning[0] == gen {
 				return r.Scan(m.addr(p, gen))
 			}
 			return nil
 		}
+		var err error
 		if db.hooked() {
-			return db.run(ctx, &st, read, nil)
+			err = db.run(ctx, &st, read, nil)
+		} else {
+			err = db.plain(ctx, &st, read, nil)
 		}
-		return db.plain(ctx, &st, read, nil)
+		if err != nil || len(st.Returning) == 0 {
+			// Without RETURNING (a hook dropped it), no row tells nothing.
+			return err
+		}
+		return checkUpserted(&st, back)
 	}
 	res, err := execWrite(ctx, db, &st)
 	if err != nil {
@@ -221,6 +257,95 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	// st.Conflict, not cf: a rewrite hook may have added or removed the clause.
 	if st.Conflict == nil && res.hasLastID && res.affected == 1 {
 		return setGeneratedKey(m, p, gen, res.lastID)
+	}
+	return nil
+}
+
+// prepareRow readies the row at p, of entity in, to be inserted, once its
+// defaults are filled: it fills or checks the tenant column, runs the
+// BeforeInsert hooks, checks the tenant again on what they left, and asks the
+// policy's Insert. It changes the caller's entity, and the changes stay when
+// the insert then fails.
+func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
+	var id any
+	var all string
+	if in.Tenant >= 0 {
+		id, all = tenantOf(ctx)
+		if err := fillTenant(in, p, id, all); err != nil {
+			return err
+		}
+	}
+	for _, h := range in.beforeInsert {
+		if err := h(ctx, p); err != nil {
+			return fmt.Errorf("velox: %s: before insert: %w", in.Name, err)
+		}
+	}
+	if in.Tenant >= 0 && len(in.beforeInsert) > 0 {
+		if err := checkRowTenant(in, p, id, all, "a BeforeInsert hook set"); err != nil {
+			return err
+		}
+	}
+	if pol := in.policy; pol != nil && pol.insert != nil && policyBypass(ctx) == "" {
+		if err := pol.insert(ctx, p); err != nil {
+			return &PolicyError{Entity: in.Name, Op: OpInsert, Err: err}
+		}
+	}
+	return nil
+}
+
+// tenantField returns the tenant field of the row of in at p.
+func tenantField(in *EntityInfo, p unsafe.Pointer) reflect.Value {
+	c := &in.Columns[in.Tenant]
+	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Elem()
+}
+
+// fillTenant sets the row's zero tenant field to the context's tenant id, and
+// checks one already set. Under AllTenants (all) the row must name its
+// tenant.
+func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
+	if id != nil {
+		if err := checkTenantValue(in, id); err != nil {
+			return err
+		}
+		if v := tenantField(in, p); v.IsZero() {
+			v.Set(reflect.ValueOf(id))
+			return nil
+		}
+	}
+	return checkRowTenant(in, p, id, all, "the row has")
+}
+
+// checkRowTenant checks the row's tenant field against the context's tenant
+// id, whose type fillTenant checked: under WithTenant the field must hold id,
+// under AllTenants (all) it must not be zero, and with neither the row has no
+// tenant. who says what put the value in the field.
+func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) error {
+	col := in.Columns[in.Tenant].Name
+	v := tenantField(in, p)
+	switch {
+	case all != "":
+		if v.IsZero() {
+			return fmt.Errorf("velox: %s: %w: under AllTenants the row names its tenant, and its %s is zero", in.Name, ErrNoTenant, col)
+		}
+		return nil
+	case id == nil:
+		return fmt.Errorf("velox: %s: %w", in.Name, ErrNoTenant)
+	case !v.Equal(reflect.ValueOf(id)):
+		return fmt.Errorf("velox: %s: %w: %s %s %v, the tenant is %v", in.Name, ErrTenantMismatch, who, col, v, id)
+	}
+	return nil
+}
+
+// errHiddenRow is why an upsert that affected fewer rows than it sent is
+// denied: the policy's condition kept a conflicting row from being updated.
+var errHiddenRow = errors.New("the existing row is hidden from this upsert")
+
+// checkUpserted denies an upsert whose update branch the scope conditioned on
+// the policy, when it affected fewer rows than it sent: a conflicting row the
+// policy hides was neither inserted nor updated.
+func checkUpserted(st *Statement, affected int64) error {
+	if cf := st.Conflict; cf != nil && cf.policy && affected < int64(len(st.Rows)) {
+		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errHiddenRow}
 	}
 	return nil
 }
@@ -259,6 +384,9 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 	}
 	for i := range xs {
 		fillDefaults(m, &xs[i])
+		if err := prepareRow(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
+			return err
+		}
 	}
 	gen := generatedKey(m, &xs[0])
 	for i := range xs {
@@ -278,7 +406,11 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 			for i := start; i < end; i++ {
 				st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
 			}
-			if _, err := execWrite(ctx, db, &st); err != nil {
+			res, err := execWrite(ctx, db, &st)
+			if err != nil {
+				return err
+			}
+			if err := checkUpserted(&st, res.affected); err != nil {
 				return err
 			}
 		}

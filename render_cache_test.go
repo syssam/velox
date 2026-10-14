@@ -186,3 +186,27 @@ func TestCacheKeysMoreShapes(t *testing.T) {
 		}
 	}
 }
+
+// TestCacheKeysTheUpsertCondition: an upsert's condition is part of its shape.
+func TestCacheKeysTheUpsertCondition(t *testing.T) {
+	var c renderCache
+	seen := map[string]int{}
+	for i, where := range [][]Predicate{
+		nil,
+		{ColumnEQ(1, int64(1))},
+		{ColumnEQ(1, int64(1)), ColumnEQ(2, "x")},
+		{ColumnEQ(2, "x")},
+	} {
+		st := ins([]int{1}, [][]any{{int64(1)}})
+		st.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{1}, Where: where}
+		got, args := c.render(Postgres, st)
+		if j, dup := seen[got]; dup {
+			t.Errorf("conditions %d and %d share SQL %q", j, i, got)
+		}
+		seen[got] = i
+		want, wantArgs := render(Postgres, st)
+		if again, againArgs := c.render(Postgres, st); again != want || got != want || len(args) != len(wantArgs) || len(againArgs) != len(wantArgs) {
+			t.Errorf("condition %d: the cache answered %q, render %q", i, again, want)
+		}
+	}
+}

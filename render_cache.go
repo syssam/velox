@@ -103,6 +103,10 @@ func shapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = append(k, 1, flag(cf.DoNothing))
 		k = appendInts(k, cf.Columns)
 		k = appendInts(k, cf.Update)
+		k = binary.AppendUvarint(k, uint64(len(cf.Where)))
+		for _, p := range cf.Where {
+			k = nodeKey(k, p.n)
+		}
 	} else {
 		k = append(k, 0)
 	}

@@ -87,7 +87,7 @@ func TestInsertAll(t *testing.T) {
 	if err := db.InsertAll([]testmodel.Invoice(nil)).Exec(ctx); err != nil || e.Calls != 0 {
 		t.Errorf("empty: %v, calls %d", err, e.Calls)
 	}
-	mixed := []testmodel.Invoice{{ID: 1}, {}}
+	mixed := []testmodel.Invoice{{ID: 1, OrgID: 1}, {OrgID: 1}}
 	if err := db.InsertAll(mixed).Exec(ctx); err == nil || !strings.Contains(err.Error(), "every entity's key set, or every key left at zero") {
 		t.Errorf("mixed keys: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestInsertAll(t *testing.T) {
 // TestInsertAllBatchesInOneTransaction is Review Focus 3.
 func TestInsertAllBatchesInOneTransaction(t *testing.T) {
 	defer velox.SetMaxParams(velox.Postgres, 18)() // two rows of nine columns per statement
-	rows := []testmodel.Invoice{{Number: "A"}, {Number: "B"}, {Number: "C"}}
+	rows := []testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
 	if err := db.InsertAll(rows).Exec(ctx); err != nil {
@@ -256,7 +256,7 @@ func TestInsertAllAnExactlyFullBatchIsOneStatement(t *testing.T) {
 	defer velox.SetMaxParams(velox.Postgres, 18)()
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	if err := db.InsertAll([]testmodel.Invoice{{Number: "A"}, {Number: "B"}}).Exec(ctx); err != nil {
+	if err := db.InsertAll([]testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if len(e.Log) != 1 || strings.Count(e.Log[0], "(") != 3 {
@@ -266,7 +266,7 @@ func TestInsertAllAnExactlyFullBatchIsOneStatement(t *testing.T) {
 
 func TestInsertAllInsideATransactionUsesASavepoint(t *testing.T) {
 	defer velox.SetMaxParams(velox.Postgres, 18)()
-	rows := []testmodel.Invoice{{Number: "A"}, {Number: "B"}, {Number: "C"}}
+	rows := []testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
 	if err := db.Tx(ctx, func(tx *velox.DB) error { return tx.InsertAll(rows).Exec(ctx) }); err != nil {

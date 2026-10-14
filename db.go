@@ -189,7 +189,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		}
 		if st.Conflict != nil {
 			cf := *st.Conflict
-			cf.Columns, cf.Update = slices.Clone(cf.Columns), slices.Clone(cf.Update)
+			cf.Columns, cf.Update, cf.Where = slices.Clone(cf.Columns), slices.Clone(cf.Update), slices.Clone(cf.Where)
 			st.Conflict = &cf
 		}
 	}
@@ -217,6 +217,9 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 	if len(db.cfg.rewrites) > 0 {
 		if err := checkColumns(st); err != nil {
 			return err
+		}
+		if db.d == MySQL && st.Conflict != nil && len(st.Conflict.Where) > 0 {
+			return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition; MySQL's ON DUPLICATE KEY UPDATE takes none", entity.Name)
 		}
 	}
 	if err := db.scope(ctx, st); err != nil {
@@ -338,15 +341,24 @@ func checkColumns(st *Statement) error {
 		}
 		return bad(int(nd.col))
 	}
-	for _, p := range st.Where {
-		// walk does not enter an EXISTS's kids, so look for the zero
-		// Predicate first.
-		if hasZero(p.n) {
-			return errZeroPredicate(st.Entity.Name)
+	conds := func(ps []Predicate) error {
+		for _, p := range ps {
+			// walk does not enter an EXISTS's kids, so look for the zero
+			// Predicate first.
+			if hasZero(p.n) {
+				return errZeroPredicate(st.Entity.Name)
+			}
+			if err := walk(p.n); err != nil {
+				return err
+			}
 		}
-		if err := walk(p.n); err != nil {
-			return err
-		}
+		return nil
+	}
+	if err := conds(st.Where); err != nil {
+		return err
+	}
+	if st.Conflict != nil {
+		return conds(st.Conflict.Where)
 	}
 	return nil
 }

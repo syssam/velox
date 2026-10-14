@@ -55,6 +55,8 @@ type ConflictClause struct {
 	// conflicting row it rejects is neither updated nor replaced. PostgreSQL
 	// and SQLite render it; velox refuses it on MySQL.
 	Where []Predicate
+
+	policy bool // the scope added the policy's conditions to Where
 }
 
 // Statement is one operation on its way to the database. Every query becomes

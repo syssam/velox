@@ -23,6 +23,8 @@ import (
 func (db *DB) scope(ctx context.Context, st *Statement) error {
 	switch st.Op {
 	case OpSelect, OpUpdate, OpDelete:
+	case OpInsert:
+		return db.scopeInsert(ctx, st)
 	default:
 		return nil
 	}
@@ -94,6 +96,91 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if write.n.op != 0 {
 		st.Where = append(st.Where, write)
 	}
+	sc.record(st)
+	return nil
+}
+
+// scopeInsert applies the context's tenant and the entity's policy to an
+// INSERT. prepareRow has filled and checked each row's tenant and asked the
+// Insert policy; scopeInsert checks that the Rewrite hooks left every row in
+// the tenant. An upsert that updates must reach neither another tenant's row
+// nor one the policy hides from an update. On PostgreSQL and SQLite its
+// conflict columns must hold the tenant column, and its update branch gets
+// the Read and Write conditions. MySQL's ON DUPLICATE KEY UPDATE resolves a
+// conflict on any unique key and takes no condition: every unique key must
+// hold the tenant column, and an entity with a Read or Write policy is
+// refused. Keeping the existing row (DoNothing) changes nothing, so it is
+// exempt.
+func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
+	in := st.Entity
+	sc := scoper{ctx: ctx, entity: in.Name}
+	tenant, err := sc.tenantOf(in)
+	if err != nil {
+		return err
+	}
+	if tenant && len(db.cfg.rewrites) > 0 {
+		if err := checkTenantRows(in, st, sc.id); err != nil {
+			return err
+		}
+	}
+	pol := in.policy
+	if pol != nil && pol.insert != nil {
+		sc.policyOn() // records a SkipPolicy that prepareRow obeyed
+	}
+	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
+		if tenant {
+			if err := db.checkTenantUpsert(in, cf); err != nil {
+				return err
+			}
+		}
+		if pol != nil && (pol.read != nil || pol.write != nil) && sc.policyOn() {
+			if db.d == MySQL {
+				return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
+			}
+			if err := sc.conditionUpsert(in, st); err != nil {
+				return err
+			}
+		}
+	}
+	sc.record(st)
+	return nil
+}
+
+// conditionUpsert adds entity in's Read and Write conditions to the update
+// branch of st's upsert, in a copy of the clause: the caller's InsertQuery
+// may share it with other runs. A denial is the upsert's, as an update's.
+func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement) error {
+	var read, write Predicate
+	var err error
+	if in.policy.read != nil {
+		if read, err = sc.readOf(in, OpUpdate); err != nil {
+			return err
+		}
+	}
+	if in.policy.write != nil {
+		p, err := in.policy.write(sc.ctx)
+		if write, err = sc.policyCond(in, OpUpdate, "Write", p, err); err != nil {
+			return err
+		}
+	}
+	if read.n.op == 0 && write.n.op == 0 {
+		return nil
+	}
+	cf := *st.Conflict
+	cf.Where = slices.Clip(cf.Where) // appending copies
+	if read.n.op != 0 {
+		cf.Where = append(cf.Where, read)
+	}
+	if write.n.op != 0 {
+		cf.Where = append(cf.Where, write)
+	}
+	cf.policy = true
+	st.Conflict = &cf
+	return nil
+}
+
+// record shows hooks the scope that applied to st.
+func (sc *scoper) record(st *Statement) {
 	if sc.scoped {
 		if sc.all != "" {
 			st.TenantBypass = sc.all
@@ -104,7 +191,64 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if sc.skipped {
 		st.PolicyBypass = sc.skip
 	}
+}
+
+// checkTenantRows refuses an INSERT whose rows, as the Rewrite hooks left
+// them, are not all in tenant id.
+func checkTenantRows(in *EntityInfo, st *Statement, id any) error {
+	col := in.Columns[in.Tenant].Name
+	j := slices.Index(st.Columns, in.Tenant)
+	if j < 0 {
+		return fmt.Errorf("velox: %s: %w: the statement does not write %s", in.Name, ErrTenantMismatch, col)
+	}
+	for _, r := range st.Rows {
+		// id's type is the column's, which is comparable, so this cannot
+		// panic.
+		if r[j] != id {
+			return fmt.Errorf("velox: %s: %w: a row's %s is %v, the tenant is %v", in.Name, ErrTenantMismatch, col, r[j], id)
+		}
+	}
 	return nil
+}
+
+// checkTenantUpsert refuses an upsert that updates and whose conflict could
+// be with another tenant's row. On PostgreSQL and SQLite the conflict columns
+// must hold the tenant column. MySQL resolves a conflict on any unique key,
+// so the primary key and every unique index must hold it.
+func (db *DB) checkTenantUpsert(in *EntityInfo, cf *ConflictClause) error {
+	col := in.Columns[in.Tenant].Name
+	if db.d != MySQL {
+		if slices.Contains(cf.Columns, in.Tenant) {
+			return nil
+		}
+		return fmt.Errorf("velox: %s: %w: the conflict columns (%s) do not hold the tenant column %s; name the tenant column in OnConflict", in.Name, ErrTenantUpsert, columnNames(in, cf.Columns), col)
+	}
+	what, cols := "the primary key", in.PrimaryKey
+	if slices.Contains(cols, in.Tenant) {
+		what, cols = "", nil
+		for _, ix := range in.Indexes {
+			if ix.Unique && !slices.Contains(ix.Columns, in.Tenant) {
+				what, cols = "the unique index", ix.Columns
+				break
+			}
+		}
+	}
+	if what == "" {
+		return nil
+	}
+	return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and %s (%s) does not hold the tenant column %s", in.Name, ErrTenantUpsert, what, columnNames(in, cols), col)
+}
+
+// columnNames lists the names of in's columns cols, separated by commas.
+func columnNames(in *EntityInfo, cols []int) string {
+	var b strings.Builder
+	for i, c := range cols {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(in.Columns[c].Name)
+	}
+	return b.String()
 }
 
 // scoper is one statement's scope: the context's tenant and SkipPolicy,
