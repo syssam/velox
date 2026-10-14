@@ -1,0 +1,10 @@
+{
+  "500": {
+    "_measured": "2026-10-14 on darwin/arm64, Apple M3 Max (14 cores), three runs, the largest of each: cold 14.3s, leaf 1.05s, root 5.9s, service 5.47 MB, link 187.0 MB; each threshold is 2x",
+    "cold_build_s": 28.5,
+    "leaf_rebuild_s": 2.1,
+    "root_rebuild_s": 11.8,
+    "service_binary_mb": 10.94,
+    "link_peak_mb": 374
+  }
+}
