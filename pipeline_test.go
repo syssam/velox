@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -271,5 +272,46 @@ func TestAroundCallingNextAgainAfterIterYielded(t *testing.T) {
 	}
 	if e.Calls != 2 || e.Closed != 2 {
 		t.Errorf("calls %d, closed %d", e.Calls, e.Closed)
+	}
+}
+
+// TestRewriteColumnsAreChecked: a column index a rewrite hook sets that the
+// entity does not have is an error, not a panic, wherever the hook puts it.
+func TestRewriteColumnsAreChecked(t *testing.T) {
+	type P = velox.Pred[testmodel.Invoice]
+	for _, c := range []struct {
+		name   string
+		column int
+		hook   func(st *velox.Statement)
+	}{
+		{"condition", 99, func(st *velox.Statement) { st.Where = append(st.Where, velox.ColumnEQ(99, 1)) }},
+		{"negative", -1, func(st *velox.Statement) { st.Where = append(st.Where, velox.ColumnEQ(-1, 1)) }},
+		{"nested condition", 42, func(st *velox.Statement) {
+			inner := velox.Or(P(velox.ColumnEQ(2, 1)), velox.Not(P(velox.ColumnEQ(42, 1))))
+			st.Where = append(st.Where, velox.Predicate(velox.And(P(velox.ColumnEQ(3, 1)), inner)))
+		}},
+		{"columns", 77, func(st *velox.Statement) { st.Columns = []int{2, 77} }},
+		{"order", 55, func(st *velox.Statement) { st.OrderBy = append(st.OrderBy, velox.OrderTerm{Column: 55}) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := &velox.FakeExec{}
+			db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+				c.hook(st)
+				return nil
+			}))
+			var err error
+			func() {
+				defer func() {
+					if p := recover(); p != nil {
+						t.Fatalf("panicked: %v", p)
+					}
+				}()
+				_, err = db.Query[testmodel.Invoice]().All(ctx)
+			}()
+			want := fmt.Sprintf("velox: testmodel.Invoice: a Rewrite hook set column %d, the entity has 10 columns", c.column)
+			if err == nil || err.Error() != want || e.Calls != 0 {
+				t.Errorf("%v, calls %d; want %s", err, e.Calls, want)
+			}
+		})
 	}
 }

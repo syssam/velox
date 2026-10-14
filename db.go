@@ -91,6 +91,11 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error) err
 			return err
 		}
 	}
+	if len(db.cfg.rewrites) > 0 {
+		if err := checkColumns(st); err != nil {
+			return err
+		}
+	}
 	if st.Entity == entity {
 		st.SQL, st.Args = db.cfg.cache.render(db.d, st)
 	} else {
@@ -120,6 +125,48 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error) err
 	}
 	if last != nil {
 		return fmt.Errorf("velox: %s: an Around hook discarded the error from next", st.Entity.Name)
+	}
+	return nil
+}
+
+// checkColumns reports a column index in st, set by a rewrite hook, that
+// st's entity does not have; rendering would panic on it. The generic API
+// sets only valid ones.
+func checkColumns(st *Statement) error {
+	n := len(st.Entity.Columns)
+	bad := func(c int) error {
+		if c < 0 || c >= n {
+			return fmt.Errorf("velox: %s: a Rewrite hook set column %d, the entity has %d columns", st.Entity.Name, c, n)
+		}
+		return nil
+	}
+	for _, c := range st.Columns {
+		if err := bad(c); err != nil {
+			return err
+		}
+	}
+	for _, o := range st.OrderBy {
+		if err := bad(o.Column); err != nil {
+			return err
+		}
+	}
+	var walk func(nd node) error
+	walk = func(nd node) error {
+		switch nd.op {
+		case opAnd, opOr, opNot:
+			for _, k := range nd.kids {
+				if err := walk(k); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		return bad(int(nd.col))
+	}
+	for _, p := range st.Where {
+		if err := walk(p.n); err != nil {
+			return err
+		}
 	}
 	return nil
 }
