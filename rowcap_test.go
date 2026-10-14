@@ -50,10 +50,9 @@ func TestRowCapInIter(t *testing.T) {
 	}
 }
 
-// TestRowCapSparesInsertReturning is Review Focus 1. InsertAll does not read
-// its keys back (only Insert does), so it shows only that a write whose
-// statement could return more rows than the cap is not refused.
-func TestRowCapSparesInsertReturning(t *testing.T) {
+// TestInsertAllUnderRowCap checks that a write is not refused by the cap;
+// that rowCap spares an insert is checked in rowcap_internal_test.go.
+func TestInsertAllUnderRowCap(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(1)}, {int64(2)}, {int64(3)}}}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithMaxRows(1))
 	xs := []testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}
@@ -67,13 +66,23 @@ func TestRowCapSparesInsertReturning(t *testing.T) {
 }
 
 func TestRowCapCoversRelationLoads(t *testing.T) {
-	e := &velox.FakeExec{Results: [][][]any{
-		{invoiceRow(1)},
-		{itemRow(10, 1, "A", 1), itemRow(11, 1, "B", 1), itemRow(12, 1, "C", 1)},
-	}}
+	results := func() [][][]any {
+		return [][][]any{
+			{invoiceRow(1)},
+			{itemRow(10, 1, "A", 1), itemRow(11, 1, "B", 1), itemRow(12, 1, "C", 1)},
+		}
+	}
+	e := &velox.FakeExec{Results: results()}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithMaxRows(2))
 	_, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
 	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "Items") {
 		t.Errorf("%v", err)
+	}
+	// The owner query's MaxRows covers its loads.
+	e = &velox.FakeExec{Results: results()}
+	db = velox.OpenFake(velox.Postgres, e, velox.WithMaxRows(2))
+	got, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).MaxRows(10).All(ctx)
+	if err != nil || len(got) != 1 {
+		t.Errorf("MaxRows(10): %d rows, %v", len(got), err)
 	}
 }

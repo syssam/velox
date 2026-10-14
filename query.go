@@ -97,8 +97,9 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 }
 
 // MaxRows returns the query allowed to return up to n rows, in place of the
-// DB's WithMaxRows cap; n <= 0 restores the DB's cap. Say it where reading
-// many rows is meant, so the exception is visible where the query is
+// DB's WithMaxRows cap; n <= 0 restores the DB's cap. It covers the
+// statements of the query's With loads too, nested ones included. Say it where
+// reading many rows is meant, so the exception is visible where the query is
 // written.
 func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E] {
 	q.st.MaxRows = max(n, 0)
@@ -328,7 +329,7 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 		for i := range out {
 			ptrs[i] = unsafe.Pointer(&out[i])
 		}
-		if err := loadRelations(ctx, q.db, q.meta.info, ptrs, q.loads); err != nil {
+		if err := loadRelations(ctx, q.db, q.meta.info, ptrs, q.loads, q.st.MaxRows); err != nil {
 			return nil, err
 		}
 	}

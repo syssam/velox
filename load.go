@@ -78,17 +78,19 @@ func keyOf(v any) (any, bool) {
 	return v, true
 }
 
-// loadRelations loads each spec's relation for the owners at ptrs.
-func loadRelations(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Pointer, specs []loadSpec) error {
+// loadRelations loads each spec's relation for the owners at ptrs. maxRows is
+// the owner query's MaxRows, which its loads, nested ones too, share; 0 is the
+// DB's cap.
+func loadRelations(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Pointer, specs []loadSpec, maxRows int) error {
 	for _, sp := range specs {
-		if err := loadOne(ctx, db, owner, ptrs, sp); err != nil {
+		if err := loadOne(ctx, db, owner, ptrs, sp, maxRows); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Pointer, sp loadSpec) error {
+func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Pointer, sp loadSpec, maxRows int) error {
 	if sp.err != nil {
 		return sp.err
 	}
@@ -120,7 +122,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	var all any
 	var targets []unsafe.Pointer
 	if len(keys) > 0 {
-		if all, targets, err = fetch(ctx, db, t, l, sp, keys); err != nil {
+		if all, targets, err = fetch(ctx, db, t, l, sp, keys, maxRows); err != nil {
 			return fmt.Errorf("velox: %s: loading %s: %w", owner.Name, r.name, err)
 		}
 		for i, p := range targets {
@@ -129,7 +131,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 			}
 		}
 		if len(sp.with) > 0 {
-			if err := loadRelations(ctx, db, t, targets, sp.with); err != nil {
+			if err := loadRelations(ctx, db, t, targets, sp.with, maxRows); err != nil {
 				return err
 			}
 		}
@@ -156,7 +158,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 // under the dialect's parameter limit, ordered within each owner as asked
 // (by the target's primary key when nothing is asked). 64 parameters are left
 // for conditions that rewrite hooks add, such as a tenant's.
-func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys []any) (any, []unsafe.Pointer, error) {
+func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys []any, maxRows int) (any, []unsafe.Pointer, error) {
 	order := sp.order
 	if len(order) == 0 {
 		for _, k := range t.PrimaryKey {
@@ -173,7 +175,7 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys
 	var parts []any // each chunk's []T
 	for start := 0; start < len(keys); start += per {
 		chunk := keys[start:min(start+per, len(keys))]
-		st := Statement{Op: OpSelect, Entity: t, Unbounded: true, InTx: db.inTx, OrderBy: order,
+		st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.inTx, OrderBy: order,
 			Where: append([]Predicate{{node{op: opIn, col: int32(l.targetCol), v: chunk}}}, sp.where...)}
 		var part any
 		read := func(r rows) (err error) {

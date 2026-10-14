@@ -52,7 +52,9 @@ func WithMaxLimit(n int) Option {
 
 // WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
 // rows: a relation load and Iter included, Count and an insert's RETURNING
-// not. A query's MaxRows overrides it. n <= 0 sets no cap.
+// not. The cap counts per statement, so a With load that is split into chunks
+// to stay under the parameter limit is counted chunk by chunk. A query's
+// MaxRows overrides it, for the query and its With loads. n <= 0 sets no cap.
 func WithMaxRows(n int) Option { return func(c *config) { c.maxRows = max(n, 0) } }
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
