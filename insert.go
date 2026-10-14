@@ -277,7 +277,7 @@ func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 	}
 	for _, h := range in.beforeInsert {
 		if err := h(ctx, p); err != nil {
-			return fmt.Errorf("velox: %s: before insert: %w", in.Name, err)
+			return &hookError{in.Name, "before insert", err}
 		}
 	}
 	if in.Tenant >= 0 && len(in.beforeInsert) > 0 {

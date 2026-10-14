@@ -161,14 +161,19 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	return nil
 }
 
-// run takes a statement through the pipeline: guard, rewrite hooks, scope,
-// rendering, then the around hooks wrapping execution, which is sending the statement
-// and reading its rows. read reads them; it is called once per execution (an
+// run takes a statement through the pipeline: guard, the entity's
+// BeforeUpdate or BeforeDelete hooks, rewrite hooks, scope, rendering, then
+// the around hooks wrapping execution, which is sending the statement and
+// reading its rows. read reads them; it is called once per execution (an
 // around hook that retries runs it again) and must not close them: run does,
 // before it returns, on every path. Hooks may keep the statement, and next
-// (which holds read), so both escape; a DB with no hooks uses plain.
+// (which holds read), so both escape; a statement with no hooks of either
+// kind uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
 	if err := db.guard(st); err != nil {
+		return err
+	}
+	if err := db.entityHooks(ctx, st); err != nil {
 		return err
 	}
 	if db.hooked() {
@@ -246,6 +251,35 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		}
 	}
 	return db.execute(ctx, st, read, res)
+}
+
+// mutationHooks returns the BeforeUpdate or BeforeDelete hooks of st's
+// entity, and the stage that names their errors; none for other statements.
+func mutationHooks(st *Statement) ([]func(context.Context, *Statement) error, string) {
+	switch st.Op {
+	case OpUpdate:
+		return st.Entity.beforeUpdate, "before update"
+	case OpDelete:
+		return st.Entity.beforeDelete, "before delete"
+	}
+	return nil, ""
+}
+
+// entityHooks runs st's BeforeUpdate or BeforeDelete hooks, then the guard
+// again: a hook may have added a condition. The hooks change st's slices
+// only by copying or appending past their length, so the query st came from
+// stays as it was.
+func (db *DB) entityHooks(ctx context.Context, st *Statement) error {
+	hooks, stage := mutationHooks(st)
+	if len(hooks) == 0 {
+		return nil
+	}
+	for _, h := range hooks {
+		if err := h(ctx, st); err != nil {
+			return &hookError{st.Entity.Name, stage, err}
+		}
+	}
+	return db.guard(st)
 }
 
 // execute runs a rendered statement through the around hooks.
@@ -449,11 +483,12 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 	return nil
 }
 
-// execWrite runs a statement that returns no rows through the pipeline.
+// execWrite runs a statement that returns no rows through the pipeline: run
+// when the DB or the statement's entity has hooks for it, else plain.
 func execWrite(ctx context.Context, db *DB, st *Statement) (result, error) {
 	var res result
 	var err error
-	if db.hooked() {
+	if hooks, _ := mutationHooks(st); db.hooked() || len(hooks) > 0 {
 		err = db.run(ctx, st, nil, &res)
 	} else {
 		err = db.plain(ctx, st, nil, &res)

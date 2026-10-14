@@ -158,8 +158,10 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]]() (string, []any) {
 }
 
 // Save writes the named columns of *x to the row with x's primary key, and
-// every column with OnUpdate. Once the row was written, it stores the OnUpdate
-// values it sent in *x; after an error, including ErrNotFound, *x is as it was.
+// every column with OnUpdate. Once the row was written, it stores in *x every
+// value the statement as sent assigned, the OnUpdate values and those a
+// BeforeUpdate or Rewrite hook set included, when the field can hold it; after
+// an error, including ErrNotFound, *x is as it was.
 // Its error wraps ErrNotFound when no row has that key. Naming a column twice
 // is an error. On MySQL, open the database with clientFoundRows=true:
 // otherwise a row whose values did not change counts as not found.
@@ -187,9 +189,7 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 	if err := checkAssignedOnce(in, st.Set); err != nil {
 		return err
 	}
-	named := len(st.Set)
 	st.Set = withOnUpdate(in, st.Set)
-	stored := slices.Clone(st.Set[named:]) // what *x gets, if the write succeeds
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(m, p, k)))
 	}
@@ -200,8 +200,11 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 	if res.affected == 0 {
 		return fmt.Errorf("velox: %s: %w", in.Name, ErrNotFound)
 	}
-	for _, a := range stored {
-		setField(m, p, a.Column, a.Value)
+	// The statement as sent: run leaves in st.Set what the hooks made of it.
+	for _, a := range st.Set {
+		if a.Op == AssignSet {
+			setField(m, p, a.Column, a.Value)
+		}
 	}
 	return nil
 }
@@ -238,10 +241,27 @@ func withOnUpdate(info *EntityInfo, set []Assignment) []Assignment {
 // fieldValue is the value of column i's field in *p.
 func fieldValue[E any](m *Meta[E], p *E, i int) any { return elem(m.addr(p, i)) }
 
-// setField stores v in column i's field in *p.
+// setField stores v in column i's field in *p, as setElem does.
 func setField[E any](m *Meta[E], p *E, i int, v any) { setElem(m.addr(p, i), v) }
 
-// setElem stores v where p points. Like elem it is not generic, so that the
-// reflect.Value it uses is not compiled into every package that writes
-// (design §3 rule 7).
-func setElem(p, v any) { reflect.ValueOf(p).Elem().Set(reflect.ValueOf(v)) }
+// setElem stores v where p points: nil as the zero value, a value of the
+// pointed-to type of a pointer field through a new pointer, and nothing when
+// the field cannot hold v (a Rewrite hook may assign any value). Like elem it
+// is not generic, so that the reflect.Value it uses is not compiled into every
+// package that writes (design §3 rule 7).
+func setElem(p, v any) {
+	dst := reflect.ValueOf(p).Elem()
+	if v == nil {
+		dst.SetZero()
+		return
+	}
+	val := reflect.ValueOf(v)
+	switch t := dst.Type(); {
+	case val.Type().AssignableTo(t):
+		dst.Set(val)
+	case t.Kind() == reflect.Pointer && val.Type().AssignableTo(t.Elem()):
+		ptr := reflect.New(t.Elem())
+		ptr.Elem().Set(val)
+		dst.Set(ptr)
+	}
+}

@@ -3,6 +3,7 @@ package velox
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Errors velox returns. Each is returned wrapped, in an error whose text
@@ -110,3 +111,21 @@ func (e *ConstraintError) Error() string {
 }
 
 func (e *ConstraintError) Unwrap() error { return e.Err }
+
+// hookError is the error of an entity hook: "velox: <Entity>: <stage>:
+// <err>". An err whose text already starts "velox: <Entity>: ", such as an
+// invalid condition a Mutation recorded, does not name the entity twice.
+type hookError struct {
+	entity, stage string
+	err           error
+}
+
+func (e *hookError) Error() string {
+	msg := e.err.Error()
+	if p := "velox: " + e.entity + ": "; strings.HasPrefix(msg, p) {
+		msg = msg[len(p):]
+	}
+	return "velox: " + e.entity + ": " + e.stage + ": " + msg
+}
+
+func (e *hookError) Unwrap() error { return e.err }
