@@ -1,0 +1,252 @@
+// Package itest runs velox against real databases: SQLite always, PostgreSQL
+// and MySQL when VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name them
+// (scripts/ci-local.sh starts both and sets the variables).
+package itest
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	_ "modernc.org/sqlite"
+
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/testmodel"
+)
+
+var (
+	ctx = context.Background()
+	t0  = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	I   = testmodel.Invoices
+)
+
+// target is one database the tests run against.
+type target struct {
+	name string
+	d    velox.Dialect
+	db   *velox.DB
+	exec func(t *testing.T, query string, args ...any) // setup SQL, written with ? placeholders
+	ddl  string
+}
+
+func targets(t *testing.T) []target {
+	t.Helper()
+	return []target{sqliteTarget(t)}
+}
+
+func sqliteTarget(t *testing.T) target {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1) // one connection keeps the in-memory database alive
+	t.Cleanup(func() { _ = db.Close() })
+	return target{
+		name: "sqlite", d: velox.SQLite, db: velox.Open(velox.SQLite, db), exec: sqlExec(db, velox.SQLite),
+		ddl: `CREATE TABLE invoices (created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, id INTEGER PRIMARY KEY,
+			org_id INTEGER NOT NULL, number TEXT NOT NULL, total REAL NOT NULL, paid BOOLEAN NOT NULL,
+			paid_at DATETIME, note TEXT, data BLOB NOT NULL)`,
+	}
+}
+
+func sqlExec(db *sql.DB, d velox.Dialect) func(*testing.T, string, ...any) {
+	return func(t *testing.T, q string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, rebind(d, q), args...); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+}
+
+// rebind turns ? placeholders into $n for PostgreSQL.
+func rebind(d velox.Dialect, q string) string {
+	if d != velox.Postgres {
+		return q
+	}
+	var b strings.Builder
+	n := 0
+	for i := range len(q) {
+		if q[i] == '?' {
+			n++
+			b.WriteByte('$')
+			b.WriteString(strconv.Itoa(n))
+			continue
+		}
+		b.WriteByte(q[i])
+	}
+	return b.String()
+}
+
+// setup creates the invoices table with five rows. Org 1 owns ids 1–4. The
+// numbers hold LIKE wildcards and a backslash; even ids have a note; paid
+// invoices have paid_at.
+func setup(t *testing.T, tg target) {
+	t.Helper()
+	tg.exec(t, "DROP TABLE IF EXISTS invoices")
+	tg.exec(t, tg.ddl)
+	note := "a note"
+	for _, r := range []struct {
+		id, org int64
+		number  string
+		total   float64
+		paid    bool
+	}{
+		{1, 1, "INV-1", 10, true}, {2, 1, "INV-2", 20, false}, {3, 1, "50%_OFF", 30, true},
+		{4, 1, "500X", 40, false}, {5, 2, `back\slash`, 50, true},
+	} {
+		var paidAt *time.Time
+		if r.paid {
+			paidAt = &t0
+		}
+		var n *string
+		if r.id%2 == 0 {
+			n = &note
+		}
+		tg.exec(t, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, paid_at, note, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			t0, t0, r.id, r.org, r.number, r.total, r.paid, paidAt, n, []byte("d"))
+	}
+}
+
+func each(t *testing.T, f func(t *testing.T, tg target)) {
+	for _, tg := range targets(t) {
+		t.Run(tg.name, func(t *testing.T) {
+			setup(t, tg)
+			f(t, tg)
+		})
+	}
+}
+
+func ids(xs []testmodel.Invoice) []int64 {
+	out := make([]int64, len(xs))
+	for i := range xs {
+		out[i] = xs[i].ID
+	}
+	return out
+}
+
+func query(t *testing.T, tg target, ps ...velox.Pred[testmodel.Invoice]) []int64 {
+	t.Helper()
+	got, err := tg.db.Query[testmodel.Invoice]().Where(ps...).OrderBy(I.ID.Asc()).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ids(got)
+}
+
+func wantIDs(t *testing.T, got, want []int64) {
+	t.Helper()
+	if !slices.Equal(got, want) {
+		t.Errorf("ids %v, want %v", got, want)
+	}
+}
+
+func TestFilterOrderLimit(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		got, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).OrderBy(I.Total.Desc()).Limit(2).All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantIDs(t, ids(got), []int64{4, 3})
+	})
+}
+
+func TestOneScansEveryType(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		two, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(2)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if two.Number != "INV-2" || two.Total != 20 || two.Paid || two.PaidAt != nil || two.Note == nil ||
+			*two.Note != "a note" || string(two.Data) != "d" || !two.CreatedAt.Equal(t0) || two.OrgID != 1 {
+			t.Errorf("%+v", two)
+		}
+		three, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(3)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !three.Paid || three.PaidAt == nil || !three.PaidAt.Equal(t0) || three.Note != nil {
+			t.Errorf("%+v", three)
+		}
+	})
+}
+
+func TestOneErrors(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		if _, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(99)).One(ctx); !errors.Is(err, velox.ErrNotFound) {
+			t.Errorf("no row: %v", err)
+		}
+		if _, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).One(ctx); !errors.Is(err, velox.ErrNotSingular) {
+			t.Errorf("four rows: %v", err)
+		}
+	})
+}
+
+// TestLikeTakesTextLiterally is Review Focus 1.
+func TestLikeTakesTextLiterally(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		wantIDs(t, query(t, tg, I.Number.HasPrefix("50%")), []int64{3})
+		wantIDs(t, query(t, tg, I.Number.HasSuffix("_OFF")), []int64{3})
+		wantIDs(t, query(t, tg, I.Number.Contains("_")), []int64{3})
+		wantIDs(t, query(t, tg, I.Number.Contains(`\`)), []int64{5})
+		wantIDs(t, query(t, tg, I.Number.Like("INV-_")), []int64{1, 2})
+	})
+}
+
+// TestTextMatchingFollowsTheDatabase is Review Focus 2: whether LIKE ignores
+// case is the database's choice, and the handles' documentation says so.
+func TestTextMatchingFollowsTheDatabase(t *testing.T) {
+	want := map[velox.Dialect][]int64{velox.Postgres: nil, velox.MySQL: {1, 2}, velox.SQLite: {1, 2}}
+	each(t, func(t *testing.T, tg target) {
+		wantIDs(t, query(t, tg, I.Number.HasPrefix("inv")), want[tg.d])
+		wantIDs(t, query(t, tg, I.Number.EqualFold("inv-1")), []int64{1})
+	})
+}
+
+func TestEmptyLists(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		wantIDs(t, query(t, tg, I.ID.In()), nil)
+		wantIDs(t, query(t, tg, I.OrgID.EQ(1), I.ID.NotIn()), []int64{1, 2, 3, 4})
+	})
+}
+
+func TestLogicAndNull(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		wantIDs(t, query(t, tg, velox.Or(I.ID.EQ(1), I.ID.EQ(5)), velox.Not(I.Paid.EQ(false))), []int64{1, 5})
+		wantIDs(t, query(t, tg, I.Note.IsNull()), []int64{1, 3, 5})
+		wantIDs(t, query(t, tg, I.PaidAt.NotNull()), []int64{1, 3, 5})
+		wantIDs(t, query(t, tg, I.Total.Between(20, 40)), []int64{2, 3, 4})
+	})
+}
+
+func TestCountOffsetColumnsIter(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		n, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Count(ctx)
+		if err != nil || n != 4 {
+			t.Errorf("count %d, %v", n, err)
+		}
+		got, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Offset(3).All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantIDs(t, ids(got), []int64{4, 5})
+		some, err := tg.db.Query[testmodel.Invoice]().Columns(I.ID, I.Number).Where(I.ID.EQ(3)).One(ctx)
+		if err != nil || some.Number != "50%_OFF" || some.Total != 0 || some.Data != nil {
+			t.Errorf("%+v, %v", some, err)
+		}
+		var seen int
+		for _, err := range tg.db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if seen++; seen == 2 {
+				break
+			}
+		}
+	})
+}
