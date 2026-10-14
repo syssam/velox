@@ -63,8 +63,10 @@ func snake(s string) string {
 }
 
 // handleDirective returns the name a //velox:handle Name comment on the
-// entity's type declaration sets, or "".
-func handleDirective(pkg *packages.Package, name string) string {
+// entity's type declaration sets. present is true when the comment exists,
+// even without a name. The doc comment of a parenthesised group belongs to the
+// group, not to the types in it.
+func handleDirective(pkg *packages.Package, name string) (handle string, present bool) {
 	for _, f := range pkg.Syntax {
 		for _, d := range f.Decls {
 			gd, ok := d.(*ast.GenDecl)
@@ -76,20 +78,24 @@ func handleDirective(pkg *packages.Package, name string) string {
 				if ts.Name.Name != name {
 					continue
 				}
-				for _, doc := range []*ast.CommentGroup{ts.Doc, gd.Doc} {
+				docs := []*ast.CommentGroup{ts.Doc}
+				if !gd.Lparen.IsValid() {
+					docs = append(docs, gd.Doc)
+				}
+				for _, doc := range docs {
 					if doc == nil {
 						continue
 					}
 					for _, c := range doc.List {
-						if v, ok := strings.CutPrefix(c.Text, "//velox:handle "); ok {
-							return strings.TrimSpace(v)
+						if v, ok := strings.CutPrefix(c.Text, "//velox:handle"); ok && (v == "" || v[0] == ' ' || v[0] == '\t') {
+							return strings.TrimSpace(v), true
 						}
 					}
 				}
 			}
 		}
 	}
-	return ""
+	return "", false
 }
 
 // importNames maps the name each non-generated file of pkg gives an import to
@@ -148,8 +154,12 @@ func name(pkg *packages.Package, ents []*entity) []problem {
 	}
 	for _, e := range ents {
 		e.handles = plural(e.name)
-		if d := handleDirective(pkg, e.name); d != "" {
-			if !token.IsIdentifier(d) {
+		if d, present := handleDirective(pkg, e.name); present {
+			switch {
+			case d == "":
+				probs = append(probs, problem{e.pos, e.name + ": //velox:handle needs a name"})
+				continue
+			case !token.IsIdentifier(d):
 				probs = append(probs, problem{e.pos, fmt.Sprintf("%s: //velox:handle %q is not an identifier", e.name, d)})
 				continue
 			}

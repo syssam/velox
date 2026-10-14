@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -110,5 +111,29 @@ func TestBadDirectiveIsOneProblem(t *testing.T) {
 	_, probs := generate(t, "baddirective")
 	if lines := strings.Split(probs, "\n"); len(lines) != 1 || !strings.Contains(probs, "is not an identifier") {
 		t.Errorf("problems %q, want exactly one, containing %q", probs, "is not an identifier")
+	}
+}
+
+// TestGroupDirectiveDoesNotApplyToItsTypes: a directive in the doc comment of
+// a parenthesised group belongs to the group, not to the types in it.
+func TestGroupDirectiveDoesNotApplyToItsTypes(t *testing.T) {
+	cfg := config{dir: root}
+	ps := loadFixture(t, cfg, "./internal/testmodel/testdata/groupdirective")
+	res, probs := plan(ps, cfg)
+	if len(probs) > 0 || len(res.write) != 2 {
+		t.Fatalf("problems %v, %d files", probs, len(res.write))
+	}
+	for path, src := range res.write {
+		want := map[string]string{"invoice_velox.go": "var Invoices = struct {", "bill_velox.go": "var Bills = struct {"}[filepath.Base(path)]
+		if !strings.Contains(string(src), want) {
+			t.Errorf("%s lacks %q:\n%s", path, want, src)
+		}
+	}
+}
+
+func TestDirectiveWithoutANameIsAProblem(t *testing.T) {
+	_, probs := generate(t, "emptydirective")
+	if lines := strings.Split(probs, "\n"); len(lines) != 1 || !strings.Contains(probs, "//velox:handle needs a name") {
+		t.Errorf("problems %q, want exactly one, containing %q", probs, "//velox:handle needs a name")
 	}
 }
