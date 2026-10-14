@@ -90,8 +90,11 @@ func (q *Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) *Query[E] {
 	return q
 }
 
-// cloneStatement copies a query's statement for one run, so that running it
-// leaves the query as it was.
+// cloneStatement copies a query's statement for one run, with its slices
+// capped so that anything velox itself appends to them (a rewrite hook's
+// condition, say) cannot reach the query's slices. It does not copy their
+// elements: DB.run does that before a hook, which may edit them, sees the
+// statement.
 func cloneStatement(st *Statement) Statement {
 	c := *st
 	c.Where = slices.Clip(c.Where)

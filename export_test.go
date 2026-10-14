@@ -13,12 +13,19 @@ type FakeExec struct {
 	SQL   string
 	Args  []any
 	Calls int
+	// Closed counts the rows values returned by query that have been closed.
+	Closed int
+	// Err, when set, is returned by every query.
+	Err error
 }
 
 func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error) {
 	e.SQL, e.Args = sql, args
 	e.Calls++
-	return &fakeRows{data: e.Rows}, nil
+	if e.Err != nil {
+		return nil, e.Err
+	}
+	return &fakeRows{data: e.Rows, e: e}, nil
 }
 
 // OpenFake returns a DB of dialect d that runs statements on e.
@@ -37,11 +44,12 @@ func RawRows(db *DB, sql string, args []any) (interface {
 type fakeRows struct {
 	data [][]any
 	i    int
+	e    *FakeExec
 }
 
 func (r *fakeRows) Next() bool { r.i++; return r.i <= len(r.data) }
 func (r *fakeRows) Err() error { return nil }
-func (r *fakeRows) Close()     {}
+func (r *fakeRows) Close()     { r.e.Closed++ }
 
 func (r *fakeRows) Scan(dst ...any) error {
 	row := r.data[r.i-1]

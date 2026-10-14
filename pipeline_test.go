@@ -49,3 +49,109 @@ func TestAroundMustCallNext(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// TestHooksCannotChangeTheQuery: hooks get their own copies of the statement's
+// slices, so editing them in place leaves the query as it was.
+func TestHooksCannotChangeTheQuery(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(1), "INV-1"}}}
+	scribble := func(_ context.Context, st *velox.Statement) error {
+		st.Where[0] = velox.ColumnEQ(st.Entity.Tenant, int64(9))
+		st.Columns[0], st.Columns[1] = st.Columns[1], st.Columns[0]
+		st.OrderBy[0] = velox.OrderTerm{Column: int(I.Total.I), Desc: true}
+		return nil
+	}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(scribble))
+	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Columns(I.ID, I.Number).OrderBy(I.ID.Asc()).Limit(5)
+	wantQuery, wantArgs := q.SQL()
+	want := `SELECT "number", "id" FROM "invoices" WHERE "org_id" = $1 ORDER BY "total" DESC LIMIT $2`
+	for run := range 2 {
+		e.Rows = [][]any{{"INV-1", int64(1)}}
+		if _, err := q.All(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if e.SQL != want {
+			t.Fatalf("run %d:\n got %s\nwant %s", run, e.SQL, want)
+		}
+		if text, args := q.SQL(); text != wantQuery || !reflect.DeepEqual(args, wantArgs) {
+			t.Fatalf("run %d: the hook changed the query: %s %v", run, text, args)
+		}
+	}
+}
+
+// TestHooksCannotChangeTheQueryFromAnAround is the same for around hooks.
+func TestHooksCannotChangeTheQueryFromAnAround(t *testing.T) {
+	e := &velox.FakeExec{}
+	scribble := func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		st.OrderBy[0].Desc = true
+		st.Columns[0] = 0
+		return next(ctx)
+	}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(scribble))
+	q := db.Query[testmodel.Invoice]().Columns(I.ID).OrderBy(I.ID.Asc()).Limit(1)
+	want, _ := q.SQL()
+	for range 2 {
+		if _, err := q.All(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if text, _ := q.SQL(); text != want {
+			t.Fatalf("the hook changed the query: %s", text)
+		}
+	}
+}
+
+func TestAroundErrorAfterNextClosesRows(t *testing.T) {
+	failed := errors.New("failed")
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return failed
+	}))
+	if _, err := db.Query[testmodel.Invoice]().All(ctx); !errors.Is(err, failed) || e.Calls != 1 || e.Closed != 1 {
+		t.Fatalf("%v, calls %d, closed %d", err, e.Calls, e.Closed)
+	}
+}
+
+func TestAroundCallingNextTwiceClosesTheFirstRows(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return next(ctx)
+	}))
+	got, err := db.Query[testmodel.Invoice]().All(ctx)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("%v, %v", got, err)
+	}
+	if e.Calls != 2 || e.Closed != 2 {
+		t.Errorf("calls %d, closed %d: want both rows closed (one by the pipeline, one by All)", e.Calls, e.Closed)
+	}
+}
+
+func TestAroundThatDiscardsNextsErrorIsReportedAsSuch(t *testing.T) {
+	e := &velox.FakeExec{Err: errors.New("boom")}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		_ = next(ctx)
+		return nil
+	}))
+	_, err := db.Query[testmodel.Invoice]().All(ctx)
+	if err == nil || !strings.Contains(err.Error(), "discarded the error from next") || strings.Contains(err.Error(), "without calling next") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestRowsAreClosedWhenAnIterConsumerBreaks(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1), invoiceRow(2)}}
+	db := velox.OpenFake(velox.Postgres, e)
+	for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		break
+	}
+	if e.Closed != 1 {
+		t.Errorf("closed %d, want 1", e.Closed)
+	}
+}

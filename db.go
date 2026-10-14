@@ -60,8 +60,15 @@ func dbErr(info *EntityInfo, err error) error { return fmt.Errorf("velox: %s: %w
 // run takes a statement through the pipeline: rewrite hooks, rendering,
 // around hooks, execution.
 func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
-	if len(db.cfg.rewrites) > 0 {
+	if len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 {
+		// Hooks may edit the statement in place; give them copies so that
+		// the query the statement came from stays as it was. With no hooks
+		// nothing is copied.
 		st.Where = slices.Clone(st.Where)
+		st.OrderBy = slices.Clone(st.OrderBy)
+		st.Columns = slices.Clone(st.Columns)
+	}
+	if len(db.cfg.rewrites) > 0 {
 		for _, rw := range db.cfg.rewrites {
 			if err := rw(ctx, st); err != nil {
 				return nil, err
@@ -77,10 +84,15 @@ func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
 		return r, nil
 	}
 	var out rows
+	called := false
 	next := func(ctx context.Context) error {
+		called = true
 		r, err := db.ex.query(ctx, st.SQL, st.Args)
 		if err != nil {
 			return dbErr(st.Entity, err)
+		}
+		if out != nil {
+			out.Close() // a hook called next twice; keep the latest rows
 		}
 		out = r
 		return nil
@@ -96,6 +108,9 @@ func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
 		return nil, err
 	}
 	if out == nil {
+		if called {
+			return nil, fmt.Errorf("velox: %s: an Around hook discarded the error from next", st.Entity.Name)
+		}
 		return nil, fmt.Errorf("velox: %s: an Around hook returned without calling next", st.Entity.Name)
 	}
 	return out, nil
