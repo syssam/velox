@@ -145,15 +145,34 @@ func (c *ColumnDef[V]) SQLType[_ Lazy[V]](t string) *ColumnDef[V] {
 	return c
 }
 
-// Default sets the value an insert writes when the field holds its zero value.
+// Default sets the value an insert writes when the field holds its zero value
+// (nil, for a pointer field).
+//
+// A bool or numeric field cannot have a Default: its zero value is also a
+// real value, and the insert would overwrite an explicit false or 0. Declare
+// such a field as a pointer (*bool, *int64), where nil means "use the
+// default"; otherwise the schema is a *SchemaError. A string, a time or a
+// slice can have one. See DefaultFunc for a field whose zero value means
+// "unset" by design.
 func (c *ColumnDef[V]) Default[_ Lazy[V]](v V) *ColumnDef[V] {
+	if c.i >= 0 {
+		switch k := reflect.TypeFor[V]().Kind(); {
+		case k == reflect.Bool, k >= reflect.Int && k <= reflect.Float64:
+			ci := c.s.cols[c.i]
+			c.s.fail(ci.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", ci.Field)
+			return c
+		}
+	}
 	ci := colInfo(c.s, c.i)
 	ci.Default, ci.HasDefault = v, true
 	return c
 }
 
 // DefaultFunc sets a function whose result an insert writes when the field
-// holds its zero value, such as time.Now for a creation time.
+// holds its zero value, such as time.Now for a creation time or a generated
+// ID. Unlike Default it is allowed on any type, a bool or number included:
+// the function says what "unset" means by its own rules, so the zero value of
+// such a field is treated as unset.
 func (c *ColumnDef[V]) DefaultFunc[_ Lazy[V]](f func() V) *ColumnDef[V] {
 	colInfo(c.s, c.i).DefaultFunc = func() any { return f() }
 	return c

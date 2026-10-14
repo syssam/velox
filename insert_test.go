@@ -1,7 +1,9 @@
 package velox_test
 
 import (
+	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -115,5 +117,213 @@ func TestInsertAllBatchesInOneTransaction(t *testing.T) {
 	db = velox.OpenFake(velox.Postgres, failing)
 	if err := db.InsertAll(rows).Exec(ctx); !errors.Is(err, secondBatch) || failing.Log[len(failing.Log)-1] != "ROLLBACK" {
 		t.Errorf("%v %q", err, failing.Log)
+	}
+}
+
+// Small entities with a hand-written scan plan, for what Invoice cannot show.
+
+type keyOnly struct{ ID int64 }
+
+func (*keyOnly) Schema(*velox.Schema) {}
+
+var keyOnlyMeta velox.MetaOnce[keyOnly]
+
+func (*keyOnly) VeloxMeta() *velox.Meta[keyOnly] {
+	return keyOnlyMeta.Get(func() velox.Shape[keyOnly] {
+		return velox.Shape[keyOnly]{Columns: []string{"ID"}, Addr: func(x *keyOnly, i int) any { return &x.ID }}
+	})
+}
+
+type wideKey struct {
+	ID  uint64
+	Opt *bool
+}
+
+func (x *wideKey) Schema(s *velox.Schema) {
+	yes := true
+	s.Column(&x.Opt).Default(&yes)
+}
+
+var wideKeyMeta velox.MetaOnce[wideKey]
+
+func (*wideKey) VeloxMeta() *velox.Meta[wideKey] {
+	return wideKeyMeta.Get(func() velox.Shape[wideKey] {
+		return velox.Shape[wideKey]{Columns: []string{"ID", "Opt"}, Addr: func(x *wideKey, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.Opt
+		}}
+	})
+}
+
+type tinyKey struct {
+	ID   int8
+	Name string
+}
+
+func (*tinyKey) Schema(*velox.Schema) {}
+
+var tinyKeyMeta velox.MetaOnce[tinyKey]
+
+func (*tinyKey) VeloxMeta() *velox.Meta[tinyKey] {
+	return tinyKeyMeta.Get(func() velox.Shape[tinyKey] {
+		return velox.Shape[tinyKey]{Columns: []string{"ID", "Name"}, Addr: func(x *tinyKey, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.Name
+		}}
+	})
+}
+
+func TestInsertOfANilPointerIsAnError(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	err := db.Insert((*testmodel.Invoice)(nil)).Exec(ctx)
+	if err == nil || !strings.HasPrefix(err.Error(), "velox: ") || !strings.Contains(err.Error(), "Invoice: Insert of a nil pointer") || e.Calls != 0 {
+		t.Errorf("%v, calls %d", err, e.Calls)
+	}
+}
+
+func TestInsertOfAKeyOnlyEntityIsAnError(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	want := "nothing to insert: the only column is the generated key"
+	if err := db.Insert(&keyOnly{}).Exec(ctx); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Insert: %v", err)
+	}
+	if err := db.InsertAll([]keyOnly{{}, {}}).Exec(ctx); err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("InsertAll: %v", err)
+	}
+	if e.Calls != 0 {
+		t.Errorf("calls %d", e.Calls)
+	}
+}
+
+func TestDefaultOnAPointerFieldFillsNilOnly(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1, LastID: 1, HasLastID: true}
+	db := velox.OpenFake(velox.MySQL, e)
+	a := wideKey{}
+	if err := db.Insert(&a).Exec(ctx); err != nil || a.Opt == nil || !*a.Opt {
+		t.Fatalf("%v, Opt %v", err, a.Opt)
+	}
+	other := wideKey{}
+	if err := db.Insert(&other).Exec(ctx); err != nil || other.Opt == a.Opt {
+		t.Errorf("entities share the default's pointee: %v", err)
+	}
+	no := false
+	b := wideKey{Opt: &no}
+	if err := db.Insert(&b).Exec(ctx); err != nil || b.Opt != &no || *b.Opt {
+		t.Errorf("an explicit false was overwritten: %v", err)
+	}
+}
+
+func TestInsertMySQLUnsignedKeyAndOverflow(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1, LastID: 300, HasLastID: true}
+	db := velox.OpenFake(velox.MySQL, e)
+	w := wideKey{}
+	if err := db.Insert(&w).Exec(ctx); err != nil || w.ID != 300 {
+		t.Errorf("%v, ID %d", err, w.ID)
+	}
+	tk := tinyKey{Name: "x"}
+	if err := db.Insert(&tk).Exec(ctx); err == nil || !strings.Contains(err.Error(), "overflows the key field ID") || tk.ID != 0 {
+		t.Errorf("%v, ID %d", err, tk.ID)
+	}
+	e.LastID = -1
+	if err := db.Insert(&wideKey{}).Exec(ctx); err == nil || !strings.Contains(err.Error(), "overflows the key field ID") {
+		t.Errorf("negative id for an unsigned key: %v", err)
+	}
+}
+
+func TestInsertPostgresDoNothingWithoutARow(t *testing.T) {
+	e := &velox.FakeExec{} // ON CONFLICT DO NOTHING RETURNING returns no row when the row exists
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{OrgID: 1, Number: "N"}
+	if err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).DoNothing().Exec(ctx); err != nil || inv.ID != 0 {
+		t.Errorf("%v, ID %d", err, inv.ID)
+	}
+	if !strings.Contains(e.SQL, "DO NOTHING") {
+		t.Error(e.SQL)
+	}
+	// OnConflict alone keeps the existing row; chaining order does not matter.
+	if err := db.Insert(&inv).DoNothing().OnConflict(I.OrgID, I.Number).Exec(ctx); err != nil || !strings.Contains(e.SQL, `ON CONFLICT ("org_id", "number") DO NOTHING`) {
+		t.Errorf("%v, %s", err, e.SQL)
+	}
+}
+
+func TestInsertAllAnExactlyFullBatchIsOneStatement(t *testing.T) {
+	defer velox.SetMaxParams(velox.Postgres, 18)()
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	if err := db.InsertAll([]testmodel.Invoice{{Number: "A"}, {Number: "B"}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Log) != 1 || strings.Count(e.Log[0], "(") != 3 {
+		t.Errorf("%q", e.Log)
+	}
+}
+
+func TestInsertAllInsideATransactionUsesASavepoint(t *testing.T) {
+	defer velox.SetMaxParams(velox.Postgres, 18)()
+	rows := []testmodel.Invoice{{Number: "A"}, {Number: "B"}, {Number: "C"}}
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	if err := db.Tx(ctx, func(tx *velox.DB) error { return tx.InsertAll(rows).Exec(ctx) }); err != nil {
+		t.Fatal(err)
+	}
+	l := e.Log
+	if len(l) != 6 || l[0] != "BEGIN" || l[1] != "SAVEPOINT velox_1" || !strings.HasPrefix(l[2], "INSERT") || !strings.HasPrefix(l[3], "INSERT") || l[4] != "RELEASE SAVEPOINT velox_1" || l[5] != "COMMIT" {
+		t.Errorf("%q", l)
+	}
+
+	boom := errors.New("second batch failed")
+	failing := &velox.FakeExec{Errs: []error{nil, nil, boom}} // SAVEPOINT, first INSERT, second INSERT
+	db = velox.OpenFake(velox.Postgres, failing)
+	var inner error
+	err := db.Tx(ctx, func(tx *velox.DB) error {
+		inner = tx.InsertAll(rows).Exec(ctx)
+		return nil // the caller swallows the error: the savepoint must already have undone batch one
+	})
+	if err != nil || !errors.Is(inner, boom) {
+		t.Fatalf("%v, %v", err, inner)
+	}
+	want := []string{"BEGIN", "SAVEPOINT velox_1"}
+	if l := failing.Log; len(l) != 7 || !reflect.DeepEqual(l[:2], want) || l[4] != "ROLLBACK TO SAVEPOINT velox_1" || l[5] != "RELEASE SAVEPOINT velox_1" || l[6] != "COMMIT" {
+		t.Errorf("%q", failing.Log)
+	}
+}
+
+func TestInsertReadsTheKeyBackUnderHooks(t *testing.T) {
+	var sawRewrite, sawAround bool
+	rewrite := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { sawRewrite = true; return nil })
+	around := velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		sawAround = true
+		return next(ctx)
+	})
+	e := &velox.FakeExec{Rows: [][]any{{int64(42)}}}
+	db := velox.OpenFake(velox.Postgres, e, rewrite, around)
+	inv := testmodel.Invoice{OrgID: 1, Number: "N"}
+	if err := db.Insert(&inv).Exec(ctx); err != nil || inv.ID != 42 || !sawRewrite || !sawAround {
+		t.Errorf("%v, ID %d, hooks %v %v", err, inv.ID, sawRewrite, sawAround)
+	}
+
+	// A hook that drops RETURNING leaves the key alone: the rows do not hold it.
+	drop := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Returning = nil; return nil })
+	db = velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(42)}}}, drop)
+	inv = testmodel.Invoice{OrgID: 1, Number: "N"}
+	if err := db.Insert(&inv).Exec(ctx); err != nil || inv.ID != 0 {
+		t.Errorf("dropped RETURNING: %v, ID %d", err, inv.ID)
+	}
+
+	// A hook that turns the insert into an upsert on MySQL leaves the key alone.
+	upsert := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Conflict = &velox.ConflictClause{Columns: []int{2, 3}, DoNothing: true}
+		return nil
+	})
+	db = velox.OpenFake(velox.MySQL, &velox.FakeExec{Affected: 1, LastID: 9, HasLastID: true}, upsert)
+	inv = testmodel.Invoice{OrgID: 1, Number: "N"}
+	if err := db.Insert(&inv).Exec(ctx); err != nil || inv.ID != 0 {
+		t.Errorf("upsert added by a hook: %v, ID %d", err, inv.ID)
 	}
 }

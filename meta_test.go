@@ -35,8 +35,8 @@ type order struct {
 
 func (x *order) Schema(s *Schema) {
 	s.Table("orders")
-	s.Column(&x.Total).SQLType("numeric(18,2)").Default(1.5)
-	s.Column(&x.Code).Name("order_code")
+	s.Column(&x.Total).SQLType("numeric(18,2)")
+	s.Column(&x.Code).Name("order_code").Default("none")
 	s.Unique(&x.TenantID, &x.Code)
 	s.Tenant(&x.TenantID)
 }
@@ -73,8 +73,11 @@ func TestEntityInfo(t *testing.T) {
 		}
 	}
 	total := info.Columns[5]
-	if total.SQLType != "numeric(18,2)" || !total.HasDefault || total.Default != 1.5 {
+	if total.SQLType != "numeric(18,2)" || total.HasDefault {
 		t.Errorf("total: %+v", total)
+	}
+	if code := info.Columns[4]; !code.HasDefault || code.Default != "none" {
+		t.Errorf("code: %+v", code)
 	}
 	if info.Columns[1].OnUpdate == nil {
 		t.Error("the mixin's OnUpdate on updated_at was not applied")
@@ -292,5 +295,43 @@ func TestTableIn(t *testing.T) {
 	info, err := infoOf[qualified]([]string{"ID"}, nil)
 	if err != nil || info.Schema != "billing" || info.Table != "invoices" {
 		t.Fatalf("%+v, %v", info, err)
+	}
+}
+
+type badDefaults struct {
+	ID    int64
+	Paid  bool
+	Count int
+	Name  string
+	Opt   *bool
+	Cnt   *int64
+	Gen   int64
+}
+
+func (x *badDefaults) Schema(s *Schema) {
+	s.Column(&x.Paid).Default(true)
+	s.Column(&x.Count).Default(3)
+	s.Column(&x.Name).Default("n")
+	s.Column(&x.Opt).Default(new(bool))
+	s.Column(&x.Cnt).Default(new(int64))
+	s.Column(&x.Gen).DefaultFunc(func() int64 { return 5 })
+}
+
+func TestDefaultOnBoolOrNumericFieldIsASchemaError(t *testing.T) {
+	_, err := infoOf[badDefaults]([]string{"ID", "Paid", "Count", "Name", "Opt", "Cnt", "Gen"}, nil)
+	if err == nil {
+		t.Fatal("no error")
+	}
+	var fields []string
+	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		var se *SchemaError
+		if !errors.As(e, &se) || !strings.Contains(se.Reason, "Default on bool/numeric field "+se.Field+" would overwrite an explicit false or 0 on insert; make the field a pointer") {
+			t.Errorf("%v", e)
+			continue
+		}
+		fields = append(fields, se.Field)
+	}
+	if want := []string{"Paid", "Count"}; !reflect.DeepEqual(fields, want) {
+		t.Errorf("errors on %v, want %v (string, pointer and DefaultFunc stay legal)", fields, want)
 	}
 }
