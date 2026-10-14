@@ -51,6 +51,10 @@ type OrderTerm struct {
 // Column is any column handle of entity E, for Columns and Omit.
 type Column[E any] interface{ column(*E) int32 }
 
+// Setter is an assignment to a column of entity E, made by a handle's Set,
+// SetNull, Add or Sub.
+type Setter[E any] struct{ a Assignment }
+
 // ColumnEQ returns the condition column = v, for hooks that add conditions;
 // column is an index into the statement's EntityInfo.Columns.
 func ColumnEQ(column int, v any) Predicate {

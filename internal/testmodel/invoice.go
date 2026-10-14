@@ -15,8 +15,10 @@ type Timestamps struct {
 	UpdatedAt time.Time
 }
 
-// Mixin makes every update set UpdatedAt.
+// Mixin sets CreatedAt when an Invoice is inserted, and UpdatedAt on every
+// insert and update.
 func (t *Timestamps) Mixin(s *velox.Schema) {
+	s.Column(&t.CreatedAt).DefaultFunc(time.Now)
 	s.Column(&t.UpdatedAt).OnUpdate(time.Now)
 }
 

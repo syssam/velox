@@ -38,14 +38,15 @@ func (e *EntityInfo) Column(name string) (int, bool) {
 
 // ColumnInfo describes one column.
 type ColumnInfo struct {
-	Field      string       // the Go field name
-	Name       string       // the column name
-	Type       reflect.Type // the field's Go type
-	Nullable   bool         // the field is a pointer
-	SQLType    string       // empty: the dialect's default for Type
-	Default    any
-	HasDefault bool
-	OnUpdate   func() any // nil when none
+	Field       string       // the Go field name
+	Name        string       // the column name
+	Type        reflect.Type // the field's Go type
+	Nullable    bool         // the field is a pointer
+	SQLType     string       // empty: the dialect's default for Type
+	Default     any
+	HasDefault  bool
+	DefaultFunc func() any // nil when none
+	OnUpdate    func() any // nil when none
 }
 
 // IndexInfo describes one index.

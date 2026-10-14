@@ -31,6 +31,11 @@ func (c Col[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
 
+// Set sets the column to v.
+func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
 // OrderedCol is the handle of an ordered column: time.Time and types registered as ordered. I is the column's index; velox-gen sets it.
 type OrderedCol[E, V any] struct{ I int32 }
 
@@ -83,6 +88,11 @@ func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
 }
 
+// Set sets the column to v.
+func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
 // NumberCol is the handle of a numeric column. I is the column's index; velox-gen sets it.
 type NumberCol[E, V any] struct{ I int32 }
 
@@ -127,6 +137,21 @@ func (c NumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: o
 // Between is column BETWEEN lo AND hi.
 func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+}
+
+// Set sets the column to v.
+func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// Add adds v to the column: column = column + v.
+func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignAdd, Value: v}}
+}
+
+// Sub subtracts v from the column: column = column - v.
+func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSub, Value: v}}
 }
 
 // StringCol is the handle of a text column. I is the column's index; velox-gen sets it.
@@ -200,6 +225,11 @@ func (c StringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}
 }
 
+// Set sets the column to v.
+func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
 // NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullCol[E, V any] struct{ I int32 }
 
@@ -227,6 +257,16 @@ func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Col
 // Desc orders by the column, descending.
 func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
+}
+
+// Set sets the column to v.
+func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// SetNull sets the column to NULL.
+func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
 }
 
 // IsNull is column IS NULL.
@@ -291,6 +331,16 @@ func (c NullOrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 // Between is column BETWEEN lo AND hi.
 func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+}
+
+// Set sets the column to v.
+func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// SetNull sets the column to NULL.
+func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
 }
 
 // IsNull is column IS NULL.
@@ -359,6 +409,26 @@ func (c NullNumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 // Between is column BETWEEN lo AND hi.
 func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+}
+
+// Set sets the column to v.
+func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// Add adds v to the column: column = column + v.
+func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignAdd, Value: v}}
+}
+
+// Sub subtracts v from the column: column = column - v.
+func (c NullNumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSub, Value: v}}
+}
+
+// SetNull sets the column to NULL.
+func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
 }
 
 // IsNull is column IS NULL.
@@ -452,6 +522,16 @@ func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E] {
 // EqualFold is LOWER(column) = LOWER(s).
 func (c NullStringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}
+}
+
+// Set sets the column to v.
+func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// SetNull sets the column to NULL.
+func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
 }
 
 // IsNull is column IS NULL.

@@ -51,7 +51,19 @@ var (
 		{"EqualFold", "is LOWER(column) = LOWER(s).", "(s V) Pred[E]",
 			"return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}"},
 	}
+	set = []method{
+		{"Set", "sets the column to v.", "(v V) Setter[E]",
+			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}"},
+	}
+	arith = []method{
+		{"Add", "adds v to the column: column = column + v.", "(v V) Setter[E]",
+			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignAdd, Value: v}}"},
+		{"Sub", "subtracts v from the column: column = column - v.", "(v V) Setter[E]",
+			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSub, Value: v}}"},
+	}
 	null = []method{
+		{"SetNull", "sets the column to NULL.", "() Setter[E]",
+			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}"},
 		{"IsNull", "is column IS NULL.", "() Pred[E]", "return Pred[E]{node{op: opIsNull, col: c.I}}"},
 		{"NotNull", "is column IS NOT NULL.", "() Pred[E]", "return Pred[E]{node{op: opNotNull, col: c.I}}"},
 	}
@@ -63,14 +75,14 @@ type kind struct {
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base}},
-	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, ordered}},
-	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, ordered}},
-	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, ordered, text}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, null}},
-	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, null}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, null}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, text, null}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base, set}},
+	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, ordered, set}},
+	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, ordered, set, arith}},
+	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, ordered, text, set}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, set, null}},
+	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, set, null}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, set, arith, null}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, text, set, null}},
 }
 
 // Generate returns the source of handles.go.

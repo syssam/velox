@@ -11,6 +11,24 @@ import (
 
 type ent struct{}
 
+func TestSetters(t *testing.T) {
+	n := NumberCol[ent, int64]{I: 3}
+	ns := NullStringCol[ent, string]{I: 5}
+	b := Col[ent, bool]{I: 6}
+	for name, c := range map[string]struct{ got, want Assignment }{
+		"Set":                  {n.Set(7).a, Assignment{Column: 3, Op: AssignSet, Value: int64(7)}},
+		"Add":                  {n.Add(2).a, Assignment{Column: 3, Op: AssignAdd, Value: int64(2)}},
+		"Sub":                  {n.Sub(2).a, Assignment{Column: 3, Op: AssignSub, Value: int64(2)}},
+		"SetNull":              {ns.SetNull().a, Assignment{Column: 5, Op: AssignSet}},
+		"Set on a Null handle": {ns.Set("x").a, Assignment{Column: 5, Op: AssignSet, Value: "x"}},
+		"Set bool":             {b.Set(true).a, Assignment{Column: 6, Op: AssignSet, Value: true}},
+	} {
+		if !reflect.DeepEqual(c.got, c.want) {
+			t.Errorf("%s: %+v, want %+v", name, c.got, c.want)
+		}
+	}
+}
+
 func TestHandleMethodsBuildNodes(t *testing.T) {
 	n := NumberCol[ent, int64]{I: 3}
 	s := StringCol[ent, string]{I: 4}

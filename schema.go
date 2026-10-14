@@ -145,14 +145,21 @@ func (c *ColumnDef[V]) SQLType[_ Lazy[V]](t string) *ColumnDef[V] {
 	return c
 }
 
-// Default sets the column's default value.
+// Default sets the value an insert writes when the field holds its zero value.
 func (c *ColumnDef[V]) Default[_ Lazy[V]](v V) *ColumnDef[V] {
 	ci := colInfo(c.s, c.i)
 	ci.Default, ci.HasDefault = v, true
 	return c
 }
 
-// OnUpdate sets a function whose result every update writes to the column.
+// DefaultFunc sets a function whose result an insert writes when the field
+// holds its zero value, such as time.Now for a creation time.
+func (c *ColumnDef[V]) DefaultFunc[_ Lazy[V]](f func() V) *ColumnDef[V] {
+	colInfo(c.s, c.i).DefaultFunc = func() any { return f() }
+	return c
+}
+
+// OnUpdate sets a function whose result every insert and update writes to the column.
 func (c *ColumnDef[V]) OnUpdate[_ Lazy[V]](f func() V) *ColumnDef[V] {
 	colInfo(c.s, c.i).OnUpdate = func() any { return f() }
 	return c
