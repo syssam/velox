@@ -453,7 +453,7 @@ func TestForeignKeyInEmbeddedStruct(t *testing.T) {
 func TestInvalidTargetIsNamed(t *testing.T) {
 	// brokenTarget's generated shape is stale, so it cannot build.
 	err := resolveAll[invalidHolder]([]string{"ID"}, RelationTo[brokenTarget]("T"))
-	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: generated code is out of date: velox.brokenTarget")
+	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: generated code is out of date")
 }
 
 type invalidHolder struct {

@@ -217,7 +217,7 @@ func checkShape(entity string, fs, rs []field, cols []string, rels []Relation) e
 		got[i] = fs[i].name
 	}
 	if d := firstDiff(got, cols); d != "" {
-		return fmt.Errorf("%w: %s: columns %s; run go tool velox-gen", ErrStale, entity, d)
+		return fmt.Errorf("velox: %s: %w: columns %s; run go tool velox-gen", entity, ErrStale, d)
 	}
 	gotR, wantR := make([]string, len(rs)), make([]string, len(rels))
 	for i := range rs {
@@ -227,7 +227,7 @@ func checkShape(entity string, fs, rs []field, cols []string, rels []Relation) e
 		wantR[i] = rels[i].name
 	}
 	if d := firstDiff(gotR, wantR); d != "" {
-		return fmt.Errorf("%w: %s: relations %s; run go tool velox-gen", ErrStale, entity, d)
+		return fmt.Errorf("velox: %s: %w: relations %s; run go tool velox-gen", entity, ErrStale, d)
 	}
 	return nil
 }

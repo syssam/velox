@@ -108,7 +108,7 @@ func TestStaleColumns(t *testing.T) {
 	if !errors.Is(err, ErrStale) {
 		t.Fatalf("got %v, want ErrStale", err)
 	}
-	want := "velox: generated code is out of date: velox.order: columns #6 is ShipAt in the struct and (none) in the generated code; run go tool velox-gen"
+	want := "velox: velox.order: generated code is out of date: columns #6 is ShipAt in the struct and (none) in the generated code; run go tool velox-gen"
 	if err.Error() != want {
 		t.Errorf("message\n got %s\nwant %s", err, want)
 	}

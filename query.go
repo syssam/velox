@@ -335,11 +335,11 @@ func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	}
 	switch len(out) {
 	case 0:
-		return nil, fmt.Errorf("%w: %s", ErrNotFound, q.meta.info.Name)
+		return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotFound)
 	case 1:
 		return &out[0], nil
 	}
-	return nil, fmt.Errorf("%w: %s", ErrNotSingular, q.meta.info.Name)
+	return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotSingular)
 }
 
 // iterRun is the state of one Iter.

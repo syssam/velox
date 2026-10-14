@@ -198,7 +198,7 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 		return err
 	}
 	if res.affected == 0 {
-		return fmt.Errorf("%w: %s", ErrNotFound, in.Name)
+		return fmt.Errorf("velox: %s: %w", in.Name, ErrNotFound)
 	}
 	for _, a := range stored {
 		setField(m, p, a.Column, a.Value)

@@ -124,7 +124,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 	entity, op := st.Entity, st.Op
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
-			return err
+			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
 		}
 	}
 	if st.Op != op {

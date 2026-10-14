@@ -5,21 +5,20 @@ import (
 	"fmt"
 )
 
-// Errors velox returns, wrapped with the entity's name; test them with
-// errors.Is.
+// Errors velox returns. Each is returned wrapped, in an error whose text
+// starts "velox: <Entity>: " (policy design §6), so a sentinel's own text is
+// a bare phrase; test for them with errors.Is.
 var (
-	// ErrNotFound: One found no row.
-	ErrNotFound = errors.New("velox: not found")
+	// ErrNotFound: One found no row, or Save no row with the key.
+	ErrNotFound = errors.New("not found")
 	// ErrNotSingular: One found more than one row.
-	ErrNotSingular = errors.New("velox: more than one row")
-	// ErrUnbounded: a query with no Limit that did not say Unbounded. Raised
-	// by the guardrails (sub-project 2).
-	ErrUnbounded = errors.New("velox: query has no Limit")
+	ErrNotSingular = errors.New("more than one row")
+	// ErrUnbounded: a query with no Limit that did not say Unbounded.
+	ErrUnbounded = errors.New("query has no Limit")
 	// ErrNoWhere: an update or delete with no Where that did not say All.
-	// Raised by the guardrails (sub-project 2).
-	ErrNoWhere = errors.New("velox: update or delete has no Where")
+	ErrNoWhere = errors.New("update or delete has no Where")
 	// ErrStale: an entity's struct changed after velox-gen last ran.
-	ErrStale = errors.New("velox: generated code is out of date")
+	ErrStale = errors.New("generated code is out of date")
 )
 
 // SchemaError reports a mistake in an entity's Schema method or in a
