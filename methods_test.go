@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -24,10 +25,84 @@ func recvName(rt ast.Expr) string {
 	return ""
 }
 
+// handleKinds are the eight column handle types; each has an ordinary column
+// method, which makes it a Column[E].
+var handleKinds = map[string]bool{
+	"Col": true, "OrderedCol": true, "NumberCol": true, "StringCol": true,
+	"NullCol": true, "NullOrderedCol": true, "NullNumberCol": true, "NullStringCol": true,
+}
+
+// ordinaryMethod reports whether the method name of the generic type recv is
+// one of the exact exceptions: the handles' column, and the MarshalJSON of
+// One and Many (encoding/json finds it by name, spec §3).
+func ordinaryMethod(name, recv string) bool {
+	switch name {
+	case "column":
+		return handleKinds[recv]
+	case "MarshalJSON":
+		return recv == "One" || recv == "Many"
+	}
+	return false
+}
+
+// checkMethods returns one message per method of a generic type in f that
+// breaks design §3 rule 1.
+func checkMethods(fset *token.FileSet, f *ast.File) []string {
+	var bad []string
+	for _, d := range f.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Recv == nil {
+			continue
+		}
+		rt := fd.Recv.List[0].Type
+		if s, ok := rt.(*ast.StarExpr); ok {
+			rt = s.X
+		}
+		switch rt.(type) {
+		case *ast.IndexExpr, *ast.IndexListExpr:
+		default:
+			continue
+		}
+		name, recv := fd.Name.Name, recvName(rt)
+		pos := fset.Position(fd.Pos())
+		switch {
+		case ordinaryMethod(name, recv):
+		case name == "column" || name == "MarshalJSON":
+			bad = append(bad, fmt.Sprintf("%s: method %s of %s is an ordinary method; only the handles' column and One/Many's MarshalJSON may be", pos, name, recv))
+		case !genericOwnTypeParam(fd):
+			bad = append(bad, fmt.Sprintf("%s: method %s of a generic type is not a generic method; add [_ Lazy[...]] (design §3 rule 1)", pos, name))
+		}
+	}
+	return bad
+}
+
+// genericOwnTypeParam reports whether the method has type parameters whose
+// first is either _ Lazy[...] or a named parameter.
+func genericOwnTypeParam(fd *ast.FuncDecl) bool {
+	tp := fd.Type.TypeParams
+	if tp == nil || len(tp.List) == 0 {
+		return false
+	}
+	first := tp.List[0]
+	if len(first.Names) == 0 {
+		return false
+	}
+	if first.Names[0].Name != "_" {
+		return true
+	}
+	// _ must be constrained by Lazy[...].
+	ix, ok := first.Type.(*ast.IndexExpr)
+	if !ok {
+		return false
+	}
+	id, ok := ix.X.(*ast.Ident)
+	return ok && id.Name == "Lazy"
+}
+
 // TestMethodsOfGenericTypesAreGeneric enforces design §3 rule 1: a method of
 // a generic type is a generic method, compiled only where it is called. The
-// exceptions are column, which makes a handle a Column[E], and the MarshalJSON
-// of One and Many.
+// exceptions are exact: column on the eight handle kinds, which makes a handle
+// a Column[E], and MarshalJSON on One and Many.
 func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 	fset := token.NewFileSet()
 	files, err := filepath.Glob("*.go")
@@ -42,32 +117,33 @@ func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, d := range f.Decls {
-			fd, ok := d.(*ast.FuncDecl)
-			if !ok || fd.Recv == nil {
-				continue
-			}
-			rt := fd.Recv.List[0].Type
-			if s, ok := rt.(*ast.StarExpr); ok {
-				rt = s.X
-			}
-			switch rt.(type) {
-			case *ast.IndexExpr, *ast.IndexListExpr:
-			default:
-				continue
-			}
-			if fd.Name.Name == "column" {
-				continue
-			}
-			// One and Many have an ordinary MarshalJSON: encoding/json finds
-			// it by name (spec §3).
-			if fd.Name.Name == "MarshalJSON" && (recvName(rt) == "One" || recvName(rt) == "Many") {
-				continue
-			}
-			if fd.Type.TypeParams == nil || fd.Type.TypeParams.NumFields() == 0 {
-				t.Errorf("%s: method %s of a generic type is not a generic method; add [_ Lazy[...]] (design §3 rule 1)",
-					fset.Position(fd.Pos()), fd.Name.Name)
-			}
+		for _, msg := range checkMethods(fset, f) {
+			t.Error(msg)
 		}
+	}
+}
+
+func TestMethodGuardCatchesAnOrdinaryMethod(t *testing.T) {
+	src := `package velox
+type Col[E, V any] struct{ I int32 }
+func (c Col[E, V]) column(*E) int32 { return c.I }
+func (c Col[E, V]) Bad() {}
+func (c Col[E, V]) Good[_ Lazy[V]]() {}
+type Rel[E, T any] struct{}
+func (r Rel[E, T]) column(*E) int32 { return 0 }
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(checkMethods(fset, f), "\n")
+	for _, want := range []string{"method Bad of a generic type", "method column of Rel"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Good") || strings.Contains(got, "method column of Col") {
+		t.Errorf("flagged an allowed method:\n%s", got)
 	}
 }
