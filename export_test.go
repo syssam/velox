@@ -187,7 +187,8 @@ func assign(dst, src any) error {
 }
 
 // assignReflect scans src into any pointer dst: a named type, or a pointer
-// field (nil src sets it to nil).
+// field (nil src sets it to nil). Like the typed cases it panics on a source
+// of another kind.
 func assignReflect(dst, src any) error {
 	dv := reflect.ValueOf(dst)
 	if dv.Kind() != reflect.Pointer || dv.IsNil() {
@@ -195,23 +196,28 @@ func assignReflect(dst, src any) error {
 	}
 	dv = dv.Elem()
 	if src == nil {
-		dv.SetZero()
-		return nil
+		switch dv.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface:
+			dv.SetZero()
+			return nil
+		}
+		panic(fmt.Sprintf("fake: cannot scan nil into %T", dst))
 	}
 	sv := reflect.ValueOf(src)
+	target := dv.Type()
 	if dv.Kind() == reflect.Pointer {
-		p := reflect.New(dv.Type().Elem())
-		if !sv.CanConvert(p.Elem().Type()) {
-			return fmt.Errorf("fake: cannot scan %T into %T", src, dst)
-		}
-		p.Elem().Set(sv.Convert(p.Elem().Type()))
-		dv.Set(p)
-		return nil
+		target = target.Elem()
 	}
-	if !sv.CanConvert(dv.Type()) {
-		return fmt.Errorf("fake: cannot scan %T into %T", src, dst)
+	if sv.Kind() != target.Kind() {
+		panic(fmt.Sprintf("fake: cannot scan %T into %T", src, dst))
 	}
-	dv.Set(sv.Convert(dv.Type()))
+	v := reflect.New(target).Elem()
+	v.Set(sv.Convert(target))
+	if dv.Kind() == reflect.Pointer {
+		dv.Set(v.Addr())
+	} else {
+		dv.Set(v)
+	}
 	return nil
 }
 

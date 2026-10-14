@@ -51,8 +51,16 @@ func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 // with one more query per relation (chunked under the dialect's parameter
 // limit). Chain With for several relations; r's With loads nested ones.
 // Nothing is ever loaded lazily.
+//
+// The query must select the column each relation is keyed by (every column,
+// unless Columns or Omit say otherwise). Entities loaded through a One are
+// shared by every owner with the same key: changing one changes it for all.
 func (q Query[E]) With[T any](r Rel[E, T]) Query[E] {
-	q.loads = append(slices.Clip(q.loads), r.spec())
+	sp := r.spec()
+	if q.err == nil {
+		q.err = specErr(sp)
+	}
+	q.loads = append(slices.Clip(q.loads), sp)
 	return q
 }
 
@@ -186,6 +194,11 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	}
 	if q.err != nil {
 		return nil, q.err
+	}
+	if len(q.loads) > 0 {
+		if err := checkLoads(q.meta.info, q.st.Columns, q.loads); err != nil {
+			return nil, err
+		}
 	}
 	var out []E
 	var err error

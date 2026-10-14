@@ -318,12 +318,16 @@ func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 		value: func(p unsafe.Pointer, col int) any {
 			return reflect.ValueOf(addr((*E)(p), col)).Elem().Interface()
 		},
-		scan: func(r rows) (any, error) {
-			dst := make([]any, len(info.Columns))
+		scan: func(r rows, cols []int) (any, error) {
+			n := len(info.Columns)
+			if cols != nil {
+				n = len(cols)
+			}
+			dst := make([]any, n)
 			var part []E
 			for r.Next() {
 				part = append(part, *new(E))
-				if err := scanRow(r, m, nil, dst, &part[len(part)-1]); err != nil {
+				if err := scanRow(r, m, cols, dst, &part[len(part)-1]); err != nil {
 					return nil, err
 				}
 			}

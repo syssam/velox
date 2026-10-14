@@ -17,7 +17,7 @@ import (
 // so it is compiled once, in the entity's own package.
 type kit struct {
 	value func(p unsafe.Pointer, col int) any       // the value of column col of the entity at p
-	scan  func(r rows) (any, error)                 // every row, into a new []E
+	scan  func(r rows, cols []int) (any, error)     // every row, into a new []E; cols as in Statement.Columns
 	join  func(parts []any) (any, []unsafe.Pointer) // one []E of the parts, and a pointer to each element
 	pick  func(all any, idx []int) any              // a new []E of all's elements at idx
 	ptr   func(all any, i int) any                  // &all[i], as *E
@@ -34,6 +34,9 @@ type One[T any] struct {
 	loaded bool
 }
 
+// The entities loaded through a One are shared by every owner with the same
+// key: they point at the same value, so changing one changes it for all.
+//
 // Get returns the related entity (nil when there is none) and whether the
 // relation was loaded.
 func (o One[T]) Get[_ Lazy[T]]() (*T, bool) {
@@ -259,7 +262,11 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 
 // With returns the relation also loading a relation of each loaded entity.
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
-	r.with = append(slices.Clip(r.with), next.spec())
+	sp := next.spec()
+	if r.err == nil {
+		r.err = specErr(sp)
+	}
+	r.with = append(slices.Clip(r.with), sp)
 	return r
 }
 

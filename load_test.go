@@ -1,7 +1,9 @@
 package velox_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -118,7 +120,8 @@ func TestWithFilterAndOrder(t *testing.T) {
 
 // TestWithChunksUnderTheParameterLimit is Review Focus 4.
 func TestWithChunksUnderTheParameterLimit(t *testing.T) {
-	defer velox.SetMaxParams(velox.Postgres, 3)() // one parameter for the filter, two keys per chunk
+	// 64 parameters of headroom for hooks' conditions, one for the filter, two keys per chunk.
+	defer velox.SetMaxParams(velox.Postgres, 64+3)()
 	e := &velox.FakeExec{Results: [][][]any{
 		{invoiceRow(1), invoiceRow(2), invoiceRow(3)},
 		{itemRow(11, 1, "B", 1), itemRow(10, 1, "A", 1), itemRow(12, 2, "C", 1)},
@@ -162,8 +165,8 @@ func TestRelationsInJSON(t *testing.T) {
 	type out struct {
 		Items velox.Many[testmodel.Item] `json:",omitzero"`
 	}
-	b, _ := json.Marshal(out{})
-	if string(b) != `{}` {
+	b, err := json.Marshal(out{})
+	if err != nil || string(b) != `{}` {
 		t.Errorf("not loaded: %s", b)
 	}
 	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 2)}}}
@@ -171,8 +174,144 @@ func TestRelationsInJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ = json.Marshal(out{Items: invs[0].Items})
+	b, err = json.Marshal(out{Items: invs[0].Items})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(b) != `{"Items":[{"ID":10,"InvoiceID":1,"SKU":"A","Qty":2,"Invoice":null}]}` {
 		t.Errorf("loaded: %s", b)
+	}
+}
+
+func TestWithManyWithoutRowsIsLoadedAndEmpty(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {}}}
+	invs, err := velox.OpenFake(velox.Postgres, e).Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items, loaded := invs[0].Items.Get(); !loaded || items == nil || len(items) != 0 {
+		t.Errorf("%#v %v", items, loaded)
+	}
+}
+
+func TestWithMixedNilKeys(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{
+		{sampleRow(1, nil), sampleRow(2, int64(1))},
+		{sampleRow(1, nil)},
+	}}
+	db := velox.OpenFake(velox.Postgres, e)
+	ss, err := db.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(e.Log[1], `WHERE "id" IN ($1)`) || !reflect.DeepEqual(e.Args, []any{int64(1)}) {
+		t.Errorf("one key expected: %s %v", e.Log[1], e.Args)
+	}
+	if p, loaded := ss[0].Parent.Get(); !loaded || p != nil {
+		t.Errorf("nil key: %v %v", p, loaded)
+	}
+	if p, loaded := ss[1].Parent.Get(); !loaded || p == nil || p.ID != 1 {
+		t.Errorf("key 1: %v %v", p, loaded)
+	}
+}
+
+// TestWithNeedsTheKeyColumn: a projection that leaves out the key a relation
+// is loaded by is refused before anything runs.
+func TestWithNeedsTheKeyColumn(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	_, err := db.Query[testmodel.Item]().Omit(It.InvoiceID).With(It.Invoice).Limit(1).All(ctx)
+	if err == nil || !strings.HasPrefix(err.Error(), "velox: testmodel.Item: With(Invoice) needs the column invoice_id selected") || e.Calls != 0 {
+		t.Errorf("%v, calls %d", err, e.Calls)
+	}
+	// A Many is keyed by the owner's primary key.
+	e = &velox.FakeExec{Results: [][][]any{{{int64(1)}}, {itemRow(10, 1, "A", 1)}}}
+	invs, err := velox.OpenFake(velox.Postgres, e).Query[testmodel.Invoice]().Columns(I.ID).With(I.Items).Limit(1).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items, loaded := invs[0].Items.Get(); !loaded || len(items) != 1 || invs[0].Number != "" {
+		t.Errorf("%v %v %+v", items, loaded, invs[0])
+	}
+}
+
+// TestWithBadOptionsFailBeforeRunning: a mistake in the With options is
+// reported even when the query returns no rows, and nothing is sent.
+func TestWithBadOptionsFailBeforeRunning(t *testing.T) {
+	bad := velox.Rel[testmodel.Invoice, testmodel.Item]{I: 9}.Has() // a condition on Invoice that carries an error
+	for name, q := range map[string]func(*velox.DB) velox.Query[testmodel.Invoice]{
+		"invalid nested condition": func(db *velox.DB) velox.Query[testmodel.Invoice] {
+			return db.Query[testmodel.Invoice]().With(I.Items.With(It.Invoice.Where(bad)))
+		},
+		"invalid condition": func(db *velox.DB) velox.Query[testmodel.Invoice] {
+			return db.Query[testmodel.Invoice]().With(I.Items.Where(velox.Rel[testmodel.Item, testmodel.Invoice]{I: 9}.Has()))
+		},
+		"relation out of range": func(db *velox.DB) velox.Query[testmodel.Invoice] {
+			return db.Query[testmodel.Invoice]().With(velox.Rel[testmodel.Invoice, testmodel.Item]{I: 9})
+		},
+		"nested relation out of range": func(db *velox.DB) velox.Query[testmodel.Invoice] {
+			return db.Query[testmodel.Invoice]().With(I.Items.With(velox.Rel[testmodel.Item, testmodel.Invoice]{I: 9}))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := &velox.FakeExec{}
+			_, err := q(velox.OpenFake(velox.Postgres, e)).Limit(1).All(ctx)
+			if err == nil || !strings.HasPrefix(err.Error(), "velox: ") || e.Calls != 0 {
+				t.Errorf("%v, calls %d", err, e.Calls)
+			}
+		})
+	}
+}
+
+// TestWithThroughHooks: relation queries run the Rewrite and Around hooks;
+// a Rewrite hook that narrows the columns must keep the relation's key.
+func TestWithThroughHooks(t *testing.T) {
+	rewrites, arounds := map[string]int{}, 0
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 1)}}}
+	db := velox.OpenFake(velox.Postgres, e,
+		velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { rewrites[st.Entity.Name]++; return nil }),
+		velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			arounds++
+			return next(ctx)
+		}))
+	if _, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rewrites["testmodel.Invoice"] != 1 || rewrites["testmodel.Item"] != 1 || arounds != 2 {
+		t.Errorf("%v, %d arounds", rewrites, arounds)
+	}
+}
+
+func TestWithRewriteNarrowsColumns(t *testing.T) {
+	narrow := func(cols ...int) velox.Option {
+		return velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Entity.Name == "testmodel.Item" {
+				st.Columns = cols
+			}
+			return nil
+		})
+	}
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {}}}
+	_, err := velox.OpenFake(velox.Postgres, e, narrow(0, 2)).Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
+	if err == nil || !strings.Contains(err.Error(), "velox: testmodel.Item: a Rewrite hook left out the relation's key column invoice_id") {
+		t.Errorf("%v", err)
+	}
+	e = &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {{int64(1), "A"}}}}
+	invs, err := velox.OpenFake(velox.Postgres, e, narrow(1, 2)).Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, _ := invs[0].Items.Get()
+	if len(items) != 1 || items[0].SKU != "A" || items[0].InvoiceID != 1 || items[0].ID != 0 || items[0].Qty != 0 {
+		t.Errorf("%+v", items)
+	}
+}
+
+func TestWithRelationQueryErrorIsWrapped(t *testing.T) {
+	boom := errors.New("boom")
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}}, Errs: []error{nil, boom}}
+	_, err := velox.OpenFake(velox.Postgres, e).Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx)
+	if !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: loading Items: ") {
+		t.Errorf("%v", err)
 	}
 }

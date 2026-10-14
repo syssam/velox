@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -15,6 +16,53 @@ type loadSpec struct {
 	order []OrderTerm
 	with  []loadSpec
 	err   error
+}
+
+// specErr is the first error a load carries or one of its nested loads does.
+func specErr(sp loadSpec) error {
+	if sp.err != nil {
+		return sp.err
+	}
+	for _, n := range sp.with {
+		if err := specErr(n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// specRelation resolves the relation a load names on owner.
+func specRelation(owner *EntityInfo, sp loadSpec) (*relation, link, error) {
+	if int(sp.rel) < 0 || int(sp.rel) >= len(owner.rels) {
+		return nil, link{}, fmt.Errorf("velox: %s has no relation %d; run go tool velox-gen", owner.Name, sp.rel)
+	}
+	r := owner.rels[sp.rel]
+	l, err := r.resolve(owner)
+	return r, l, err
+}
+
+// checkLoads reports what is wrong with loads before the owner query runs: an
+// error in their options, a relation that does not exist or resolve, and (for
+// the owner query, whose columns are cols; nil selects all) a projection that
+// leaves out the column a relation is keyed by. Nested loads are checked
+// against their own entity.
+func checkLoads(owner *EntityInfo, cols []int, specs []loadSpec) error {
+	for _, sp := range specs {
+		if sp.err != nil {
+			return sp.err
+		}
+		r, l, err := specRelation(owner, sp)
+		if err != nil {
+			return err
+		}
+		if cols != nil && !slices.Contains(cols, l.ownerCol) {
+			return fmt.Errorf("velox: %s: With(%s) needs the column %s selected", owner.Name, r.name, owner.Columns[l.ownerCol].Name)
+		}
+		if err := checkLoads(l.target, nil, sp.with); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // keyOf returns a key value as a map key: a pointer is followed, and a nil
@@ -44,11 +92,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	if sp.err != nil {
 		return sp.err
 	}
-	if int(sp.rel) < 0 || int(sp.rel) >= len(owner.rels) {
-		return fmt.Errorf("velox: %s has no relation %d; run go tool velox-gen", owner.Name, sp.rel)
-	}
-	r := owner.rels[sp.rel]
-	l, err := r.resolve(owner)
+	r, l, err := specRelation(owner, sp)
 	if err != nil {
 		return err
 	}
@@ -110,7 +154,8 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 
 // fetch reads the related rows for keys, in chunks that keep each statement
 // under the dialect's parameter limit, ordered within each owner as asked
-// (by the target's primary key when nothing is asked).
+// (by the target's primary key when nothing is asked). 64 parameters are left
+// for conditions that rewrite hooks add, such as a tenant's.
 func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys []any) (any, []unsafe.Pointer, error) {
 	order := sp.order
 	if len(order) == 0 {
@@ -124,7 +169,7 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys
 		w.pred(p.n)
 		fixed += len(w.args)
 	}
-	per := max(1, maxParams[db.d]-fixed)
+	per := max(1, maxParams[db.d]-fixed-64)
 	var parts []any // each chunk's []T
 	for start := 0; start < len(keys); start += per {
 		chunk := keys[start:min(start+per, len(keys))]
@@ -132,7 +177,11 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys
 			Where: append([]Predicate{{node{op: opIn, col: int32(l.targetCol), v: chunk}}}, sp.where...)}
 		var part any
 		read := func(r rows) (err error) {
-			part, err = t.kit.scan(r)
+			// st is as the hooks left it.
+			if st.Columns != nil && !slices.Contains(st.Columns, l.targetCol) {
+				return fmt.Errorf("velox: %s: a Rewrite hook left out the relation's key column %s", t.Name, t.Columns[l.targetCol].Name)
+			}
+			part, err = t.kit.scan(r, st.Columns)
 			return err
 		}
 		var err error
