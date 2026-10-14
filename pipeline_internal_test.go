@@ -106,6 +106,12 @@ func TestHooksAndConditionsOfRelations(t *testing.T) {
 			st.Entity = &EntityInfo{Name: "tiny"}
 			return nil
 		}, "not a copy of it"},
+		"copy with another policy": {func(_ context.Context, st *Statement) error {
+			info := *st.Entity
+			info.policy = &policy{}
+			st.Entity = &info
+			return nil
+		}, "a copy whose tenant column or policy differs"},
 		"invalid predicate": {func(_ context.Context, st *Statement) error {
 			st.Where = append(st.Where, Predicate{node{op: opInvalid, v: broken}})
 			return nil

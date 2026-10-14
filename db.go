@@ -209,6 +209,10 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		// A copy (info := *st.Entity) keeps the scan plan; anything else
 		// would scan rows into the wrong fields.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with %s, which is not a copy of it", entity.Name, st.Entity.Name)
+	case st.Entity.Tenant != entity.Tenant || st.Entity.policy != entity.policy:
+		// The scope reads both from the statement's Entity: a copy without
+		// them would unscope the statement.
+		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose tenant column or policy differs", entity.Name)
 	}
 	if len(db.cfg.rewrites) > 0 {
 		if err := checkColumns(st); err != nil {

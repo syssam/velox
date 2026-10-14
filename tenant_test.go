@@ -262,9 +262,9 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 	}
 
 	_, err := q.All(context.Background())
-	want(t, err, velox.ErrNoTenant, "velox: testmodel.Invoice: no tenant in the context")
+	want(t, err, velox.ErrNoTenant, "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: no tenant in the context")
 	_, err = q.All(velox.WithTenant(context.Background(), "acme"))
-	if !errors.Is(err, velox.ErrTenantMismatch) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: ") {
+	if !errors.Is(err, velox.ErrTenantMismatch) || !strings.HasPrefix(err.Error(), "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: tenant does not match: ") {
 		t.Errorf("mismatch inside EXISTS: %v", err)
 	}
 	if _, err := q.All(velox.AllTenants(context.Background(), "reason")); err != nil {
