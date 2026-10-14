@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"sort"
@@ -42,4 +43,37 @@ func plan(ps []*packages.Package, cfg config) (result, []problem) {
 	}
 	sort.Strings(res.remove)
 	return res, probs
+}
+
+// stale lists the files a run would change: written with other content, or
+// removed.
+func stale(res result) []string {
+	var out []string
+	for path, want := range res.write {
+		if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, want) {
+			out = append(out, path)
+		}
+	}
+	out = append(out, res.remove...)
+	sort.Strings(out)
+	return out
+}
+
+// apply writes and removes the files of a run and returns the paths it
+// changed. A file whose content is already right is left alone.
+func apply(res result) ([]string, error) {
+	changed := stale(res)
+	for _, path := range changed {
+		want, ok := res.write[path]
+		if !ok {
+			if err := os.Remove(path); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := os.WriteFile(path, want, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	return changed, nil
 }
