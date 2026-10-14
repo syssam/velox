@@ -23,11 +23,17 @@ import (
 // DefaultValue is the default of a field whose schema gives a value: the
 // value, every time.
 //
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
+//
 //go:noinline
 func DefaultValue(v any) func() any { return func() any { return v } }
 
 // DefaultFunc is the default, or the update default, of a field whose schema
 // gives a function: fn, which must be a func() T, called every time.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 //
 //go:noinline
 func DefaultFunc[T any](fn any) func() any {
@@ -41,6 +47,9 @@ func DefaultFunc[T any](fn any) func() any {
 // Validators is the check of a field of Go type T: the schema's validators,
 // each a func(T) error, in order; the first error is the field's.
 //
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
+//
 //go:noinline
 func Validators[T any](checks []any) func(any) error {
 	return ValidatorsOf(checks, func(v T) T { return v })
@@ -49,6 +58,9 @@ func Validators[T any](checks []any) func(any) error {
 // ValidatorsOf is Validators for a field whose Go type T is not the type B
 // its validators take (a named string type, validated as a string): basic
 // converts.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 //
 //go:noinline
 func ValidatorsOf[T, B any](checks []any, basic func(T) B) func(any) error {
@@ -78,6 +90,9 @@ func ValidatorsOf[T, B any](checks []any, basic func(T) B) func(any) error {
 // DefaultOf is the default of a field whose schema gives a value of the
 // field's Go type T: the value, every time.
 //
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
+//
 //go:noinline
 func DefaultOf[T any](v any) func() any {
 	t, ok := v.(T)
@@ -90,6 +105,9 @@ func DefaultOf[T any](v any) func() any {
 // DefaultString is DefaultOf for a field whose Go type T is a named string
 // type, an enum, and whose schema gives the default as a string.
 //
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
+//
 //go:noinline
 func DefaultString[T ~string](v any) func() any {
 	s, ok := v.(string)
@@ -101,6 +119,9 @@ func DefaultString[T ~string](v any) func() any {
 
 // ValidatorsString is Validators for a field whose Go type T is a named
 // string type and whose validators take a string.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 //
 //go:noinline
 func ValidatorsString[T ~string](checks []any) func(any) error {
@@ -117,6 +138,9 @@ func ValidatorsString[T ~string](checks []any) func(any) error {
 // The fields of an entity are a list of these, data, and not a statement
 // per field: as statements they were nine tenths of a package that every
 // edit to the schema recompiles.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type FieldCode struct {
 	Index         int
 	Column        string
@@ -128,6 +152,9 @@ type FieldCode struct {
 // StitchFields gives the fields of m their defaults and validators: for
 // each row, from the descriptor of fields[row.Index] to the field of the
 // row's column. fields is what the schema's, or a mixin's, Fields returns.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 //
 //go:noinline
 func StitchFields(m *Meta, fields []velox.Field, codes []FieldCode) {

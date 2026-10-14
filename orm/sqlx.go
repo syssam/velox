@@ -47,6 +47,9 @@ func Compile[T Predicate](p T) func(*sql.Selector) {
 
 // Lock is the row lock a query takes on what it reads. It needs a
 // transaction to mean anything, and SQLite ignores it.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type Lock uint8
 
 // Row locks.

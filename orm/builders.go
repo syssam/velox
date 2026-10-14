@@ -92,6 +92,9 @@ type QueryOf[PT any, E Predicate, ID any] struct{ c QueryCore }
 
 // Neighbors returns the query of the rows an entity has on one of its
 // edges: the generated QueryPosts of an entity is it.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 func Neighbors[PT any, E Predicate, ID any](edge *EdgeMeta, of any, ex velox.Executor) *QueryOf[PT, E, ID] {
 	return &QueryOf[PT, E, ID]{c: QueryCore{M: edge.Target, Ex: ex, Preds: []P{NeighborOf(edge, of)}}}
 }

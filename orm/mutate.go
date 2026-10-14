@@ -18,6 +18,9 @@ import (
 
 // MutCore is the mutation of any entity. Generated per-entity create, update
 // and delete types embed one.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type MutCore struct {
 	M *Meta
 	// Ex is what the mutation runs on: the database handle or transaction
@@ -431,6 +434,9 @@ func (m *MutCore) insert(ctx context.Context, c *velox.ExecutorState) (any, erro
 // The statements of several batches are one transaction only when the handle
 // is one. On a database handle a batch that fails leaves the batches before
 // it in the table, and their entities are returned with the error.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 //
 //go:noinline
 func InsertBulk(ctx context.Context, ex velox.Executor, m *Meta, rows [][]S, batch int) ([]any, error) {

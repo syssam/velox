@@ -4,9 +4,14 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // An entity keeps its name: what the root package would have given of the
@@ -136,5 +141,69 @@ func TestImportSpec(t *testing.T) {
 	want := "import (\n\t\"context\"\n\t\"time\"\n\n\tschema \"example.com/app/schema\"\n\t\"" + ormPath + "\"\n)\n"
 	if decl != want {
 		t.Errorf("got:\n%s\nwant:\n%s", decl, want)
+	}
+}
+
+// What the generated root gives an application under its own name is the
+// application's: no such name of package orm may say, in its doc comment,
+// that it is for generated code (orm/stability_test.go has the other half:
+// every exported name there says one or the other).
+func TestForwardedEngineNamesAreTheApplications(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, filepath.Join("..", "..", "orm"), func(fi fs.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, parser.ParseComments)
+	require.NoError(t, err)
+	const sentence = "For generated code:"
+	forGenerated := map[string]bool{}
+	declared := map[string]bool{}
+	note := func(name string, docs ...*ast.CommentGroup) {
+		declared[name] = true
+		for _, d := range docs {
+			if d != nil && strings.Contains(d.Text(), sentence) {
+				forGenerated[name] = true
+			}
+		}
+	}
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Files {
+			for _, decl := range file.Decls {
+				switch d := decl.(type) {
+				case *ast.FuncDecl:
+					if d.Recv == nil {
+						note(d.Name.Name, d.Doc)
+					}
+				case *ast.GenDecl:
+					for _, spec := range d.Specs {
+						switch s := spec.(type) {
+						case *ast.TypeSpec:
+							note(s.Name.Name, d.Doc, s.Doc)
+						case *ast.ValueSpec:
+							for _, n := range s.Names {
+								note(n.Name, s.Doc)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, forGenerated, "package orm marks what is for generated code with %q", sentence)
+
+	var names []string
+	for _, typ := range engineTypes {
+		names = append(names, typ[1])
+	}
+	names = append(append(names, engineColumns...), engineConsts...)
+	used := regexp.MustCompile(`%\[1\]s\.([A-Z]\w*)`)
+	for _, f := range engineFuncs {
+		for _, m := range used.FindAllStringSubmatch(f.sig+" "+f.body, -1) {
+			names = append(names, m[1])
+		}
+	}
+	require.Greater(t, len(names), 30)
+	for _, n := range names {
+		assert.True(t, declared[n], "the generated root forwards orm.%s, which package orm does not declare", n)
+		assert.False(t, forGenerated[n], "the generated root gives an application orm.%s, whose doc comment says %q", n, sentence)
 	}
 }

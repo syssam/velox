@@ -25,6 +25,9 @@ import (
 // with the velox-gen of this module), where it would fail on whatever the
 // two disagree about. The number goes up, and the old constant goes away,
 // whenever this package changes what generated code calls.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 const GeneratedCodeIsVersion1 = true
 
 // NotFound returns the error of a query or mutation of the entity that

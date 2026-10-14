@@ -15,11 +15,17 @@ const opInvalid Op = 254
 // Invalid returns a predicate that makes the query or mutation it is given
 // to fail with err: how a condition that could not be built from its input
 // reports that, where the builder's chain has no place for an error.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 func Invalid(err error) P { return P{Op: opInvalid, Val: err} }
 
 // OrderTerm returns the order term of an order input: columns maps the
 // values of the entity's OrderField enum to columns, field is the value the
 // request gave ("" orders by the id).
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 func OrderTerm(m *Meta, columns map[string]string, field string, desc bool) O {
 	o := O{Desc: desc}
 	switch col, ok := columns[field]; {

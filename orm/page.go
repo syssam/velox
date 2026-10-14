@@ -20,6 +20,9 @@ import (
 
 // Page is one page as the runtime returns it; the Paginate of an
 // entity turns it into that entity's connection.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type Page struct {
 	Rows []any
 	// Cursors[i] is the cursor of Rows[i].
@@ -376,6 +379,9 @@ func (m *Meta) convert(f *FieldMeta, v any) (any, error) {
 // OpNotIn and ignored for OpIsNil and OpNotNil.
 //
 // Convert the result to the entity's predicate type: predicate.User(p).
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 func FieldPredicate(m *Meta, field string, op Op, value any) (P, error) {
 	m.prepare()
 	f := m.byName[field]
@@ -420,6 +426,9 @@ func FieldPredicate(m *Meta, field string, op Op, value any) (P, error) {
 
 // FieldOrder builds an order term from a field name that arrives at run time.
 // Convert the result to the entity's order type: predicate.UserOrderTerm(o).
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 func FieldOrder(m *Meta, field string, desc bool) (O, error) {
 	m.prepare()
 	f := m.byName[field]

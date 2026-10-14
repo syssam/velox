@@ -24,6 +24,9 @@ import (
 
 // QueryCore is the query of any entity. Generated per-entity query types
 // embed one and convert their typed arguments into its fields.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type QueryCore struct {
 	M *Meta
 	// Ex is what the query runs on: the database handle or transaction it

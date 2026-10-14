@@ -56,6 +56,9 @@ func (p P) IsZero() bool { return p.Op == 0 }
 const opRaw Op = 101
 
 // SetKind is what a setter does.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type SetKind uint8
 
 // Setter kinds.
@@ -106,6 +109,9 @@ const (
 )
 
 // EdgeLoad asks a query to eager-load one edge.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 type EdgeLoad struct {
 	Edge   *EdgeMeta
 	Preds  []P
@@ -147,6 +153,9 @@ const opNeighborOf Op = 100
 // NeighborOf returns the predicate that selects, among the edge's target
 // rows, the neighbors of parent. It is what the generated Query<Edge>
 // methods of an entity's client put in the target's query.
+//
+// For generated code: it is no part of what an application is promised, and
+// it changes with the generator.
 func NeighborOf(e *EdgeMeta, parent any) P {
 	id := e.Owner.get(parent, e.Owner.id().Column)
 	if e.Rel == M2M || e.fkOnOwner() {
