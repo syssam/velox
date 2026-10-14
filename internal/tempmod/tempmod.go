@@ -5,22 +5,28 @@ package tempmod
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 // Write creates a module example.com/tmp in dir that requires velox2 from
 // repo (by replace), with the given files (path → content), and resolves its
-// requirements from the module cache only.
+// requirements from the module cache only. files is not changed.
 func Write(dir, repo string, files map[string]string) error {
 	mod := fmt.Sprintf("module example.com/tmp\n\ngo 1.27.0\n\nrequire github.com/syssam/velox2 v0.0.0\n\nreplace github.com/syssam/velox2 => %s\n", repo)
 	sum, err := os.ReadFile(filepath.Join(repo, "go.sum"))
 	if err != nil {
 		return err
 	}
-	files["go.mod"], files["go.sum"] = mod, string(sum)
-	for name, content := range files {
+	all := maps.Clone(files)
+	if all == nil {
+		all = map[string]string{}
+	}
+	all["go.mod"], all["go.sum"] = mod, string(sum)
+	for name, content := range all {
 		p := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
@@ -33,9 +39,10 @@ func Write(dir, repo string, files map[string]string) error {
 	return err
 }
 
-// Go runs the go command in dir, offline, and returns its combined output.
+// Go runs the go command of the toolchain that built the caller in dir,
+// offline, and returns its combined output.
 func Go(dir string, args ...string) (string, error) {
-	cmd := exec.Command("go", args...)
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
 	var out bytes.Buffer

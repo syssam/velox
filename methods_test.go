@@ -68,7 +68,7 @@ func checkMethods(fset *token.FileSet, f *ast.File) []string {
 		switch {
 		case ordinaryMethod(name, recv):
 		case name == "column" || name == "MarshalJSON":
-			bad = append(bad, fmt.Sprintf("%s: method %s of %s is an ordinary method; only the handles' column and One/Many's MarshalJSON may be", pos, name, recv))
+			bad = append(bad, fmt.Sprintf("%s: method %s of %s is an ordinary method; only the handles' column and One/Many's MarshalJSON are allowed this name as ordinary methods", pos, name, recv))
 		case !genericOwnTypeParam(fd):
 			bad = append(bad, fmt.Sprintf("%s: method %s of a generic type is not a generic method; add [_ Lazy[...]] (design §3 rule 1)", pos, name))
 		}
@@ -129,6 +129,8 @@ type Col[E, V any] struct{ I int32 }
 func (c Col[E, V]) column(*E) int32 { return c.I }
 func (c Col[E, V]) Bad() {}
 func (c Col[E, V]) Good[_ Lazy[V]]() {}
+func (c Col[E, V]) Named[K any]() {}
+func (c Col[E, V]) Blank[_ any]() {}
 type Rel[E, T any] struct{}
 func (r Rel[E, T]) column(*E) int32 { return 0 }
 `
@@ -138,12 +140,12 @@ func (r Rel[E, T]) column(*E) int32 { return 0 }
 		t.Fatal(err)
 	}
 	got := strings.Join(checkMethods(fset, f), "\n")
-	for _, want := range []string{"method Bad of a generic type", "method column of Rel"} {
+	for _, want := range []string{"method Bad of a generic type", "method Blank of a generic type", "method column of Rel is an ordinary method; only the handles' column and One/Many's MarshalJSON are allowed this name as ordinary methods"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "Good") || strings.Contains(got, "method column of Col") {
+	if strings.Contains(got, "Good") || strings.Contains(got, "Named") || strings.Contains(got, "method column of Col") {
 		t.Errorf("flagged an allowed method:\n%s", got)
 	}
 }

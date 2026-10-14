@@ -18,7 +18,7 @@ type Mixer interface{ Mixin(*Schema) }
 type field struct {
 	name string
 	off  uintptr
-	typ  reflect.Type
+	typ  any // a reflect.Type (design §3 rule 7)
 }
 
 // Schema collects what an entity's Schema method declares. Fields are named
@@ -29,8 +29,8 @@ type Schema struct {
 	base   unsafe.Pointer
 	size   uintptr
 	fields []field
-	typ    reflect.Type // the entity's type, to name fields in errors
-	pkSet  bool         // PrimaryKey was called
+	typ    any  // the entity's reflect.Type, to name fields in errors
+	pkSet  bool // PrimaryKey was called
 	cols   []ColumnInfo
 	table  string
 	schema string
@@ -46,8 +46,9 @@ func (s *Schema) fail(fieldName, format string, args ...any) {
 }
 
 // find returns the column that a pointer into the entity names, or -1 after
-// recording an error.
-func (s *Schema) find(p unsafe.Pointer, t reflect.Type) int {
+// recording an error. t is the field's reflect.Type, held as any (design §3
+// rule 7).
+func (s *Schema) find(p unsafe.Pointer, t any) int {
 	if uintptr(p) < uintptr(s.base) || uintptr(p)-uintptr(s.base) >= s.size {
 		s.fail("", "a pointer given to Schema does not point into the entity")
 		return -1
@@ -58,7 +59,7 @@ func (s *Schema) find(p unsafe.Pointer, t reflect.Type) int {
 			return i
 		}
 	}
-	s.fail(fieldAt(s.typ, off, t), "the %v at offset %d is not a column (it is unexported, tagged velox:\"-\", or a relation)", t, off)
+	s.fail(fieldAt(rtype(s.typ), off, rtype(t)), "the %v at offset %d is not a column (it is unexported, tagged velox:\"-\", or a relation)", t, off)
 	return -1
 }
 
@@ -91,7 +92,7 @@ func (s *Schema) TableIn(schema, table string) { s.schema, s.table = schema, tab
 // Column returns the column that the field pointer p names, to declare its
 // options.
 func (s *Schema) Column[V any](p *V) *ColumnDef[V] {
-	return &ColumnDef[V]{s: s, i: s.find(unsafe.Pointer(p), reflect.TypeFor[V]())}
+	return &ColumnDef[V]{s: s, i: s.find(unsafe.Pointer(p), elemType(p))}
 }
 
 // PrimaryKey declares the primary key. The default is the field named ID.
@@ -156,17 +157,20 @@ func (c *ColumnDef[V]) SQLType[_ Lazy[V]](t string) *ColumnDef[V] {
 // slice can have one. See DefaultFunc for a field whose zero value means
 // "unset" by design.
 func (c *ColumnDef[V]) Default[_ Lazy[V]](v V) *ColumnDef[V] {
-	if c.i >= 0 {
-		switch k := reflect.TypeFor[V]().Kind(); {
-		case k == reflect.Bool, k >= reflect.Int && k <= reflect.Float64:
-			ci := c.s.cols[c.i]
-			c.s.fail(ci.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", ci.Field)
-			return c
-		}
+	if c.i >= 0 && boolOrNumber(c.s.cols[c.i].Type) {
+		ci := c.s.cols[c.i]
+		c.s.fail(ci.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", ci.Field)
+		return c
 	}
 	ci := colInfo(c.s, c.i)
 	ci.Default, ci.HasDefault = v, true
 	return c
+}
+
+// boolOrNumber reports whether t, a reflect.Type, is a bool or numeric type.
+func boolOrNumber(t any) bool {
+	k := rtype(t).Kind()
+	return k == reflect.Bool || k >= reflect.Int && k <= reflect.Float64
 }
 
 // DefaultFunc sets a function whose result an insert writes when the field
@@ -206,18 +210,19 @@ func fieldAt(t reflect.Type, off uintptr, ft reflect.Type) string {
 // key is the target's field named after this entity: InvoiceID on Line for a
 // relation of Invoice.
 func (s *Schema) Many[T any](f *Many[T]) *RelDef[T] {
-	return &RelDef[T]{s: s, r: s.findRel(unsafe.Pointer(f), reflect.TypeFor[Many[T]]())}
+	return &RelDef[T]{s: s, r: s.findRel(unsafe.Pointer(f), elemType(f))}
 }
 
 // One returns the to-one relation f, to declare its key. Undeclared, the key
 // is this entity's field named after the relation (OrgID for a relation Org)
 // when there is one, and otherwise the target's field named after this entity.
 func (s *Schema) One[T any](f *One[T]) *RelDef[T] {
-	return &RelDef[T]{s: s, r: s.findRel(unsafe.Pointer(f), reflect.TypeFor[One[T]]())}
+	return &RelDef[T]{s: s, r: s.findRel(unsafe.Pointer(f), elemType(f))}
 }
 
 // findRel returns the relation p points to, or nil after recording an error.
-func (s *Schema) findRel(p unsafe.Pointer, t reflect.Type) *relation {
+// t is the field's reflect.Type, held as any (design §3 rule 7).
+func (s *Schema) findRel(p unsafe.Pointer, t any) *relation {
 	if uintptr(p) >= uintptr(s.base) && uintptr(p)-uintptr(s.base) < s.size {
 		off := uintptr(p) - uintptr(s.base)
 		for _, r := range s.rels {
@@ -256,10 +261,10 @@ func (d *RelDef[T]) ForeignKey[K any](fk func(*T) *K) *RelDef[T] {
 	x := new(T)
 	off := uintptr(unsafe.Pointer(fk(x))) - uintptr(unsafe.Pointer(x))
 	if off >= unsafe.Sizeof(*x) {
-		d.s.fail(d.r.name, "ForeignKey's function must return a field of %s", reflect.TypeFor[T]())
+		d.s.fail(d.r.name, "ForeignKey's function must return a field of %s", elemType(x))
 		return d
 	}
-	d.r.fkOff, d.r.fkTyp, d.r.hasFK = off, reflect.TypeFor[K](), true
+	d.r.fkOff, d.r.fkTyp, d.r.hasFK = off, elemType((*K)(nil)), true
 	return d
 }
 
@@ -281,7 +286,7 @@ func (d *RelDef[T]) References[V any](p *V) *RelDef[T] {
 		d.s.fail(d.r.name, "relation %s's key is declared twice", d.r.name)
 		return d
 	}
-	d.r.ref = d.s.find(unsafe.Pointer(p), reflect.TypeFor[V]())
+	d.r.ref = d.s.find(unsafe.Pointer(p), elemType(p))
 	if d.r.ref < 0 {
 		d.r.ref = -2 // the error is recorded; keep resolution from guessing
 	}

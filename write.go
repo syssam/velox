@@ -236,11 +236,12 @@ func withOnUpdate(info *EntityInfo, set []Assignment) []Assignment {
 }
 
 // fieldValue is the value of column i's field in *p.
-func fieldValue[E any](m *Meta[E], p *E, i int) any {
-	return reflect.ValueOf(m.addr(p, i)).Elem().Interface()
-}
+func fieldValue[E any](m *Meta[E], p *E, i int) any { return elem(m.addr(p, i)) }
 
 // setField stores v in column i's field in *p.
-func setField[E any](m *Meta[E], p *E, i int, v any) {
-	reflect.ValueOf(m.addr(p, i)).Elem().Set(reflect.ValueOf(v))
-}
+func setField[E any](m *Meta[E], p *E, i int, v any) { setElem(m.addr(p, i), v) }
+
+// setElem stores v where p points. Like elem it is not generic, so that the
+// reflect.Value it uses is not compiled into every package that writes
+// (design §3 rule 7).
+func setElem(p, v any) { reflect.ValueOf(p).Elem().Set(reflect.ValueOf(v)) }

@@ -149,6 +149,13 @@ func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 	return q
 }
 
+// sliceOrMap reports whether t, a reflect.Type, is a slice or map type. It is
+// not generic, so that prepare holds no reflect.Type (design §3 rule 7).
+func sliceOrMap(t any) bool {
+	k := rtype(t).Kind()
+	return k == reflect.Slice || k == reflect.Map
+}
+
 // prepare is the statement a run sends: the query's, with After's condition.
 func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 	st := cloneStatement(&q.st)
@@ -166,7 +173,7 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 			return st, fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
 		}
 		// A nil slice or map is stored as NULL, which no comparison matches.
-		if k := col.Type.Kind(); k == reflect.Slice || k == reflect.Map {
+		if sliceOrMap(col.Type) {
 			return st, fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
 		}
 		ordered[o.Column] = true

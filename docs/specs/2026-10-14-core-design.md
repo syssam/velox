@@ -287,6 +287,18 @@ or confirmed by measurement (Appendix A).
    leaf recompiled 11. velox documents this and recommends referring to
    entities in other domains by key (`OrgID int64`) rather than by relation
    when the target is widely depended on.
+7. **No velox type that generated code, an entity's methods, a Statement or a
+   Query reaches holds `reflect.Type` or `reflect.Value` in a field or method
+   signature.** `reflect`'s iterator types (`iter.Seq[reflect.Type]`…) have no
+   home package, so every package that reaches `reflect.Type` compiles about
+   140 KB of their wrappers and descriptors. Measured: `var x *velox.EntityInfo`
+   cost 134 KB of object before, 0.3 KB after. Go types are held as `any`;
+   `velox.GoType(c)` reads a column's. The same holds for the bodies of the
+   generic functions and methods compiled where they are called
+   (`MetaOnce.Get`, `Schema.Column`, a Query's run, Insert, Save): they pass
+   pointers and types as `any` to non-generic helpers that use `reflect`.
+   Measured: a one-column entity package cost 283 KB before, 97 KB after; one
+   that also queries, inserts and saves its entity 595 KB before, 380 KB after.
 
 ## 4. Query and mutation API
 

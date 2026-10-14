@@ -87,12 +87,12 @@ func RelationTo[T any, PT Entity[T]](name string) Relation {
 type relation struct {
 	name   string
 	many   bool
-	off    uintptr      // the field's offset in the owner
-	typ    reflect.Type // One[T] or Many[T]
+	off    uintptr // the field's offset in the owner
+	typ    any     // the reflect.Type of One[T] or Many[T] (design §3 rule 7)
 	target func() (*EntityInfo, error)
-	ref    int          // References: the owner's column; -1 none, -2 invalid
-	fkOff  uintptr      // ForeignKey: the target field's offset...
-	fkTyp  reflect.Type // ...and type, computed during Schema
+	ref    int     // References: the owner's column; -1 none, -2 invalid
+	fkOff  uintptr // ForeignKey: the target field's offset...
+	fkTyp  any     // ...and reflect.Type, computed during Schema
 	hasFK  bool
 
 	once sync.Once
@@ -122,7 +122,7 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 	}
 	t, err := r.target()
 	if err != nil {
-		return fail("its target %s is invalid: %s", targetName(r.typ), strings.TrimPrefix(err.Error(), "velox: "))
+		return fail("its target %s is invalid: %s", targetName(rtype(r.typ)), strings.TrimPrefix(err.Error(), "velox: "))
 	}
 	l := link{target: t}
 	kind := "One"
@@ -180,8 +180,9 @@ func singleKey(in *EntityInfo) (int, error) {
 	return in.PrimaryKey[0], nil
 }
 
-// columnAt returns the column of the field at offset off with type typ.
-func columnAt(in *EntityInfo, off uintptr, typ reflect.Type) int {
+// columnAt returns the column of the field at offset off with type typ, a
+// reflect.Type.
+func columnAt(in *EntityInfo, off uintptr, typ any) int {
 	for i, c := range in.Columns {
 		if c.off == off && c.Type == typ {
 			return i
@@ -200,8 +201,10 @@ func fieldColumn(in *EntityInfo, field string) (int, bool) {
 	return -1, false
 }
 
-// base is t without one level of pointer: *int64 and int64 are the same key.
-func base(t reflect.Type) reflect.Type {
+// base is the reflect.Type v holds without one level of pointer: *int64 and
+// int64 are the same key.
+func base(v any) reflect.Type {
+	t := rtype(v)
 	if t.Kind() == reflect.Pointer {
 		return t.Elem()
 	}

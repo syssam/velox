@@ -40,17 +40,36 @@ func (e *EntityInfo) Column(name string) (int, bool) {
 
 // ColumnInfo describes one column.
 type ColumnInfo struct {
-	Field       string       // the Go field name
-	Name        string       // the column name
-	Type        reflect.Type // the field's Go type
-	Nullable    bool         // the field is a pointer
-	SQLType     string       // empty: the dialect's default for Type
+	Field       string // the Go field name
+	Name        string // the column name
+	Type        any    // the field's Go type, a reflect.Type: read it with GoType
+	Nullable    bool   // the field is a pointer
+	SQLType     string // empty: the dialect's default for Type
 	Default     any
 	HasDefault  bool
 	DefaultFunc func() any // nil when none
 	OnUpdate    func() any // nil when none
 	off         uintptr    // the field's offset in the entity
 }
+
+// GoType returns the Go type of column c's field. ColumnInfo.Type holds it
+// as any, and this is a function rather than a method, so that no velox type
+// reaches reflect.Type: every package that reaches it compiles about 140 KB
+// of wrappers for reflect's iterator types (design §3 rule 7).
+func GoType(c ColumnInfo) reflect.Type { return rtype(c.Type) }
+
+// rtype returns the reflect.Type that v holds; velox's types hold them as any
+// for the reason given on GoType.
+func rtype(v any) reflect.Type {
+	t, _ := v.(reflect.Type)
+	return t
+}
+
+// elemType returns, as any, the reflect.Type of what the pointer p points to.
+// Generic code calls it with a nil *T in place of reflect.TypeFor[T](), so
+// that its body, compiled where it is called, holds no reflect.Type (design
+// §3 rule 7).
+func elemType(p any) any { return reflect.TypeOf(p).Elem() }
 
 // IndexInfo describes one index.
 type IndexInfo struct {
@@ -87,24 +106,39 @@ type MetaOnce[E any] struct {
 // *SchemaError: every use of the entity reports it, not just the first.
 func (o *MetaOnce[E]) Get[_ Lazy[E]](shape func() Shape[E]) *Meta[E] {
 	o.once.Do(func() {
-		t := reflect.TypeFor[E]()
-		defer func() {
-			if p := recover(); p != nil {
-				o.m = &Meta[E]{err: &SchemaError{Entity: t.String(), Reason: fmt.Sprintf("Schema panicked: %v", p)}}
-			}
-		}()
-		sh := shape()
+		var addr func(*E, int) any
 		x := new(E)
-		info, err := buildInfo(t, unsafe.Pointer(x), any(x), sh.Columns, sh.Relations)
-		if err == nil && sh.Addr == nil { // after buildInfo, so that stale code is reported as such
-			err = &SchemaError{Entity: t.String(), Reason: "the generated code has no scan plan (Shape.Addr is nil); run go tool velox-gen"}
-		}
-		o.m = &Meta[E]{info: info, addr: sh.Addr, err: err}
-		if info != nil && sh.Addr != nil {
-			info.kit = kitOf(info, sh.Addr)
+		info, err := buildEntity(x, unsafe.Pointer(x), func() ([]string, []Relation, bool) {
+			sh := shape()
+			addr = sh.Addr
+			return sh.Columns, sh.Relations, sh.Addr != nil
+		})
+		o.m = &Meta[E]{info: info, addr: addr, err: err}
+		if info != nil && addr != nil {
+			info.kit = kitOf(info, addr)
 		}
 	})
 	return o.m
+}
+
+// buildEntity builds the metadata of the entity x, a new *E at base, from the
+// column and relation names shape returns, and whether it has a scan plan. It
+// holds the entity's reflect.Type so that MetaOnce.Get, compiled in every
+// entity's package, holds none (design §3 rule 7). A panic in shape, a
+// mixin's Mixin or the entity's Schema is recovered as a *SchemaError.
+func buildEntity(x any, base unsafe.Pointer, shape func() (cols []string, rels []Relation, addr bool)) (info *EntityInfo, err error) {
+	t := reflect.TypeOf(x).Elem()
+	defer func() {
+		if p := recover(); p != nil {
+			info, err = nil, &SchemaError{Entity: t.String(), Reason: fmt.Sprintf("Schema panicked: %v", p)}
+		}
+	}()
+	cols, rels, addr := shape()
+	info, err = buildInfo(t, base, x, cols, rels)
+	if err == nil && !addr { // after buildInfo, so that stale code is reported as such
+		err = &SchemaError{Entity: t.String(), Reason: "the generated code has no scan plan (Shape.Addr is nil); run go tool velox-gen"}
+	}
+	return info, err
 }
 
 // Entity is the constraint velox's generic API puts on an entity type E: its
@@ -219,11 +253,11 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols []string, rels [
 	s := &Schema{entity: name, base: base, size: t.Size(), fields: fs, typ: t, tenant: -1}
 	s.cols = make([]ColumnInfo, len(fs))
 	for i, f := range fs {
-		s.cols[i] = ColumnInfo{Field: f.name, Name: snake(f.name), Type: f.typ, Nullable: f.typ.Kind() == reflect.Pointer, off: f.off}
+		s.cols[i] = ColumnInfo{Field: f.name, Name: snake(f.name), Type: f.typ, Nullable: rtype(f.typ).Kind() == reflect.Pointer, off: f.off}
 	}
 	s.rels = make([]*relation, len(rs))
 	for i, r := range rs {
-		s.rels[i] = &relation{name: r.name, many: strings.HasPrefix(r.typ.Name(), "Many["), off: r.off, typ: r.typ, target: rels[i].target, ref: -1}
+		s.rels[i] = &relation{name: r.name, many: strings.HasPrefix(rtype(r.typ).Name(), "Many["), off: r.off, typ: r.typ, target: rels[i].target, ref: -1}
 	}
 	applyMixins(s, t, base)
 	sc, ok := x.(Schemer)
@@ -315,9 +349,7 @@ func CheckEntity[E any, PE Entity[E]]() error {
 func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 	m := &Meta[E]{info: info, addr: addr}
 	return &kit{
-		value: func(p unsafe.Pointer, col int) any {
-			return reflect.ValueOf(addr((*E)(p), col)).Elem().Interface()
-		},
+		value: func(p unsafe.Pointer, col int) any { return elem(addr((*E)(p), col)) },
 		scan: func(r rows, cols []int) (any, error) {
 			n := len(info.Columns)
 			if cols != nil {
@@ -357,12 +389,17 @@ func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 	}
 }
 
+// elem is the value p points to. It is not generic, so that the reflect.Value
+// it uses is not compiled into the generic code that calls it (design §3
+// rule 7).
+func elem(p any) any { return reflect.ValueOf(p).Elem().Interface() }
+
 // metaOf returns entity E's Meta, for generic code that cannot name E's
 // pointer type in its constraints (a method of Rel[E, T]).
 func metaOf[E any]() (*Meta[E], error) {
 	p, ok := any((*E)(nil)).(interface{ VeloxMeta() *Meta[E] })
 	if !ok {
-		return nil, fmt.Errorf("velox: %v is not an entity: run go tool velox-gen", reflect.TypeFor[E]())
+		return nil, fmt.Errorf("velox: %v is not an entity: run go tool velox-gen", elemType((*E)(nil)))
 	}
 	m := p.VeloxMeta()
 	return m, m.err

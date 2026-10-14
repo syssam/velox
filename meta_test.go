@@ -76,6 +76,12 @@ func TestEntityInfo(t *testing.T) {
 			t.Errorf("column %d (%s) nullable = %v", i, c.Field, c.Nullable)
 		}
 	}
+	if got := GoType(info.Columns[6]); got != reflect.TypeFor[*time.Time]() {
+		t.Errorf("GoType(ship_at) = %v", got)
+	}
+	if got := GoType(ColumnInfo{}); got != nil {
+		t.Errorf("GoType of a column without a type = %v, want nil", got)
+	}
 	total := info.Columns[5]
 	if total.SQLType != "numeric(18,2)" || total.HasDefault {
 		t.Errorf("total: %+v", total)

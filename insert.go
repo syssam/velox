@@ -118,16 +118,22 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // DefaultFunc, and every column with OnUpdate.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
-		c := &m.info.Columns[i]
-		v := reflect.ValueOf(m.addr(p, i)).Elem()
-		switch {
-		case c.OnUpdate != nil:
-			v.Set(reflect.ValueOf(c.OnUpdate()))
-		case c.HasDefault && v.IsZero():
-			v.Set(defaultValue(c.Default))
-		case c.DefaultFunc != nil && v.IsZero():
-			v.Set(reflect.ValueOf(c.DefaultFunc()))
-		}
+		fillDefault(&m.info.Columns[i], m.addr(p, i))
+	}
+}
+
+// fillDefault sets the field that ptr points to as column c's Default,
+// DefaultFunc or OnUpdate says. It is not generic, so that the reflect.Value
+// it uses is not compiled into every package that inserts (design §3 rule 7).
+func fillDefault(c *ColumnInfo, ptr any) {
+	v := reflect.ValueOf(ptr).Elem()
+	switch {
+	case c.OnUpdate != nil:
+		v.Set(reflect.ValueOf(c.OnUpdate()))
+	case c.HasDefault && v.IsZero():
+		v.Set(defaultValue(c.Default))
+	case c.DefaultFunc != nil && v.IsZero():
+		v.Set(reflect.ValueOf(c.DefaultFunc()))
 	}
 }
 
@@ -150,11 +156,16 @@ func generatedKey[E any](m *Meta[E], p *E) int {
 		return -1
 	}
 	k := m.info.PrimaryKey[0]
-	v := reflect.ValueOf(m.addr(p, k)).Elem()
-	if (v.CanInt() || v.CanUint()) && v.IsZero() {
+	if zeroInt(m.addr(p, k)) {
 		return k
 	}
 	return -1
+}
+
+// zeroInt reports whether ptr points to an integer holding zero.
+func zeroInt(ptr any) bool {
+	v := reflect.ValueOf(ptr).Elem()
+	return (v.CanInt() || v.CanUint()) && v.IsZero()
 }
 
 // insertColumns lists the columns an INSERT writes: every column but skip.
@@ -221,16 +232,22 @@ func errNothingToInsert(in *EntityInfo) error {
 // setGeneratedKey stores id in the integer key field gen, refusing a value
 // the field cannot hold.
 func setGeneratedKey[E any](m *Meta[E], p *E, gen int, id int64) error {
-	v := reflect.ValueOf(m.addr(p, gen)).Elem()
+	return setKey(m.info, gen, m.addr(p, gen), id)
+}
+
+// setKey stores id in the integer field ptr points to, column gen of in. It
+// is not generic for the reason given on fillDefault.
+func setKey(in *EntityInfo, gen int, ptr any, id int64) error {
+	v := reflect.ValueOf(ptr).Elem()
 	if v.CanInt() {
 		if v.OverflowInt(id) {
-			return fmt.Errorf("velox: %s: LastInsertId %d overflows the key field %s", m.info.Name, id, m.info.Columns[gen].Field)
+			return fmt.Errorf("velox: %s: LastInsertId %d overflows the key field %s", in.Name, id, in.Columns[gen].Field)
 		}
 		v.SetInt(id)
 		return nil
 	}
 	if id < 0 || v.OverflowUint(uint64(id)) {
-		return fmt.Errorf("velox: %s: LastInsertId %d overflows the key field %s", m.info.Name, id, m.info.Columns[gen].Field)
+		return fmt.Errorf("velox: %s: LastInsertId %d overflows the key field %s", in.Name, id, in.Columns[gen].Field)
 	}
 	v.SetUint(uint64(id))
 	return nil
