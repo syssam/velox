@@ -1,5 +1,6 @@
 // Package testmodel holds entities for velox's own tests. Its *_velox.go
-// files are written by hand in exactly the form velox-gen writes them.
+// files are written by velox-gen; velox-gen's golden test fails when they
+// differ from what it writes.
 package testmodel
 
 import (
