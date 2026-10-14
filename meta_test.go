@@ -193,3 +193,90 @@ func TestRelationHolders(t *testing.T) {
 		t.Error("isRelation")
 	}
 }
+
+type dupName struct {
+	ID int64
+	A  string
+	B  string
+}
+
+func (x *dupName) Schema(s *Schema) { s.Column(&x.B).Name("a") }
+
+type withID struct{ ID int64 }
+
+type shadowed struct {
+	withID
+	ID int64
+}
+
+func (*shadowed) Schema(*Schema) {}
+
+type emptyKeys struct {
+	ID int64
+	A  string
+}
+
+func (x *emptyKeys) Schema(s *Schema) {
+	s.PrimaryKey()
+	s.Unique()
+	s.Index(&x.A, &x.A)
+}
+
+func TestDuplicateColumnNames(t *testing.T) {
+	_, err := infoOf[dupName]([]string{"ID", "A", "B"}, nil)
+	if err == nil || !strings.Contains(err.Error(), `column name "a" is also the name of A`) {
+		t.Errorf("renamed column: %v", err)
+	}
+	_, err = infoOf[shadowed]([]string{"ID", "ID"}, nil)
+	if err == nil || !strings.Contains(err.Error(), `column name "id" is also the name of ID`) {
+		t.Errorf("shadowed field: %v", err)
+	}
+}
+
+func TestEmptyKeysAndIndexes(t *testing.T) {
+	_, err := infoOf[emptyKeys]([]string{"ID", "A"}, nil)
+	for _, part := range []string{"the primary key names no fields", "a unique index names no fields", "an index names the field twice"} {
+		if err == nil || !strings.Contains(err.Error(), part) {
+			t.Errorf("%v does not mention %q", err, part)
+		}
+	}
+}
+
+func TestNotAColumnNamesTheField(t *testing.T) {
+	_, err := infoOf[badSchema]([]string{"ID", "Name"}, nil)
+	var se *SchemaError
+	if !errors.As(err, &se) || se.Field != "hidden" {
+		t.Fatalf("%v, field %q", err, se.Field)
+	}
+}
+
+type checked struct{ ID int64 }
+
+func (*checked) Schema(*Schema) {}
+
+var checkedMeta MetaOnce[checked]
+
+func (*checked) VeloxMeta() *Meta[checked] {
+	return checkedMeta.Get(func() Shape[checked] {
+		return Shape[checked]{Columns: []string{"ID"}, Addr: func(x *checked, i int) any { return &x.ID }}
+	})
+}
+
+type checkedStale struct{ ID int64 }
+
+func (*checkedStale) Schema(*Schema) {}
+
+var checkedStaleMeta MetaOnce[checkedStale]
+
+func (*checkedStale) VeloxMeta() *Meta[checkedStale] {
+	return checkedStaleMeta.Get(func() Shape[checkedStale] { return Shape[checkedStale]{} })
+}
+
+func TestCheckEntity(t *testing.T) {
+	if err := CheckEntity[checked](); err != nil {
+		t.Errorf("valid entity: %v", err)
+	}
+	if err := CheckEntity[checkedStale](); !errors.Is(err, ErrStale) {
+		t.Errorf("stale entity: %v", err)
+	}
+}

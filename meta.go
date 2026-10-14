@@ -201,7 +201,7 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) 
 	if err := checkShape(name, fs, rs, cols, rels); err != nil {
 		return nil, err
 	}
-	s := &Schema{entity: name, base: base, size: t.Size(), fields: fs, tenant: -1}
+	s := &Schema{entity: name, base: base, size: t.Size(), fields: fs, typ: t, tenant: -1}
 	s.cols = make([]ColumnInfo, len(fs))
 	for i, f := range fs {
 		s.cols[i] = ColumnInfo{Field: f.name, Name: snake(f.name), Type: f.typ, Nullable: f.typ.Kind() == reflect.Pointer}
@@ -219,7 +219,7 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) 
 	if info.Table == "" {
 		info.Table = snake(t.Name())
 	}
-	if len(info.PrimaryKey) == 0 {
+	if !s.pkSet {
 		for i, f := range fs {
 			if f.name == "ID" {
 				info.PrimaryKey = []int{i}
@@ -229,5 +229,52 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) 
 			return nil, &SchemaError{Entity: name, Reason: "no primary key: name a field ID or call s.PrimaryKey"}
 		}
 	}
+	if err := validate(info); err != nil {
+		return nil, err
+	}
 	return info, nil
 }
+
+// validate refuses metadata that would render wrong SQL: two columns of one
+// name, and a key or index that names no field or one field twice.
+func validate(info *EntityInfo) error {
+	var errs []error
+	fail := func(field, format string, args ...any) {
+		errs = append(errs, &SchemaError{Entity: info.Name, Field: field, Reason: fmt.Sprintf(format, args...)})
+	}
+	seen := make(map[string]int, len(info.Columns))
+	for i, c := range info.Columns {
+		if j, ok := seen[c.Name]; ok {
+			fail(c.Field, "column name %q is also the name of %s", c.Name, info.Columns[j].Field)
+			continue
+		}
+		seen[c.Name] = i
+	}
+	set := func(what string, cols []int) {
+		if len(cols) == 0 {
+			fail("", "%s names no fields", what)
+			return
+		}
+		named := make(map[int]bool, len(cols))
+		for _, c := range cols {
+			if named[c] {
+				fail(info.Columns[c].Field, "%s names the field twice", what)
+			}
+			named[c] = true
+		}
+	}
+	set("the primary key", info.PrimaryKey)
+	for _, ix := range info.Indexes {
+		if ix.Unique {
+			set("a unique index", ix.Columns)
+		} else {
+			set("an index", ix.Columns)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// CheckEntity builds entity E's metadata and returns the error it holds, if
+// any: a mistake in its Schema or Mixin methods, or generated code that is
+// out of date. velox-gen verify calls it for every entity.
+func CheckEntity[E any, PE Entity[E]]() error { return PE(nil).VeloxMeta().err }

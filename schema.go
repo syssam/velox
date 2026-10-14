@@ -29,6 +29,8 @@ type Schema struct {
 	base   unsafe.Pointer
 	size   uintptr
 	fields []field
+	typ    reflect.Type // the entity's type, to name fields in errors
+	pkSet  bool         // PrimaryKey was called
 	cols   []ColumnInfo
 	table  string
 	pk     []int
@@ -54,7 +56,7 @@ func (s *Schema) find(p unsafe.Pointer, t reflect.Type) int {
 			return i
 		}
 	}
-	s.fail("", "the %v at offset %d is not a column (it is unexported, tagged velox:\"-\", or a relation)", t, off)
+	s.fail(fieldAt(s.typ, off, t), "the %v at offset %d is not a column (it is unexported, tagged velox:\"-\", or a relation)", t, off)
 	return -1
 }
 
@@ -87,7 +89,9 @@ func (s *Schema) Column[V any](p *V) *ColumnDef[V] {
 }
 
 // PrimaryKey declares the primary key. The default is the field named ID.
-func (s *Schema) PrimaryKey(fields ...any) { s.pk = s.indexes(fields) }
+func (s *Schema) PrimaryKey(fields ...any) {
+	s.pk, s.pkSet = s.indexes(fields), true
+}
 
 // Unique declares a unique index over the fields.
 func (s *Schema) Unique(fields ...any) {
@@ -147,4 +151,21 @@ func (c *ColumnDef[V]) Default[_ Lazy[V]](v V) *ColumnDef[V] {
 func (c *ColumnDef[V]) OnUpdate[_ Lazy[V]](f func() V) *ColumnDef[V] {
 	colInfo(c.s, c.i).OnUpdate = func() any { return f() }
 	return c
+}
+
+// fieldAt names the field of t at offset off with type ft, descending into
+// embedded and nested structs ("stamps.UpdatedAt"); "" when there is none.
+func fieldAt(t reflect.Type, off uintptr, ft reflect.Type) string {
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if f.Offset == off && f.Type == ft {
+			return f.Name
+		}
+		if f.Type.Kind() == reflect.Struct && off >= f.Offset && off < f.Offset+f.Type.Size() {
+			if n := fieldAt(f.Type, off-f.Offset, ft); n != "" {
+				return f.Name + "." + n
+			}
+		}
+	}
+	return ""
 }
