@@ -3,12 +3,15 @@ package velox
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
 // FakeExec is an executor that returns Rows for every query and records what
-// it was sent.
+// it was sent. Queries may run on it concurrently; read its fields only when
+// none is running.
 type FakeExec struct {
+	mu    sync.Mutex
 	Rows  [][]any
 	SQL   string
 	Args  []any
@@ -20,6 +23,8 @@ type FakeExec struct {
 }
 
 func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.SQL, e.Args = sql, args
 	e.Calls++
 	if e.Err != nil {
@@ -49,7 +54,11 @@ type fakeRows struct {
 
 func (r *fakeRows) Next() bool { r.i++; return r.i <= len(r.data) }
 func (r *fakeRows) Err() error { return nil }
-func (r *fakeRows) Close()     { r.e.Closed++ }
+func (r *fakeRows) Close() {
+	r.e.mu.Lock()
+	r.e.Closed++
+	r.e.mu.Unlock()
+}
 
 func (r *fakeRows) Scan(dst ...any) error {
 	row := r.data[r.i-1]

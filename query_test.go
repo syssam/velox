@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -174,4 +175,79 @@ func TestStaleGeneratedCodeIsReportedOnUse(t *testing.T) {
 	if text, _ := db.Query[staleEntity]().SQL(); text != "" {
 		t.Errorf("SQL of an invalid entity: %q", text)
 	}
+}
+
+// TestChainingCopiesTheQuery: extending a query returns a new one and leaves
+// the query extended as it was, so one base query can be extended many ways.
+func TestChainingCopiesTheQuery(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	base := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).OrderBy(I.ID.Asc())
+	baseSQL, baseArgs := base.SQL()
+
+	paid := base.Where(I.Paid.EQ(true))
+	big := base.Where(I.Total.GT(100))
+	if text, args := paid.SQL(); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "paid" = $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), true}) {
+		t.Errorf("first branch: %s %v", text, args)
+	}
+	if text, args := big.SQL(); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "total" > $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), float64(100)}) {
+		t.Errorf("second branch: %s %v", text, args)
+	}
+
+	byTotal := base.OrderBy(I.Total.Desc())
+	byNumber := base.OrderBy(I.Number.Asc())
+	if text, _ := byTotal.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC`) {
+		t.Errorf("first ordering: %s", text)
+	}
+	if text, _ := byNumber.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "number"`) {
+		t.Errorf("second ordering: %s", text)
+	}
+
+	// Three conditions and three orderings leave the base's slices with room
+	// for a fourth, which the two branches must not both write to.
+	roomy := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.Paid.EQ(true), I.Total.GT(1)).
+		OrderBy(I.ID.Asc(), I.Total.Desc(), I.Number.Asc())
+	low, high := roomy.Where(I.ID.LT(10)), roomy.Where(I.ID.GT(20))
+	if text, _ := low.SQL(); !strings.Contains(text, `AND "id" < $4 ORDER`) {
+		t.Errorf("first branch of a base with room: %s", text)
+	}
+	if text, _ := high.SQL(); !strings.Contains(text, `AND "id" > $4 ORDER`) {
+		t.Errorf("second branch of a base with room: %s", text)
+	}
+	byPaid, byOrg := roomy.OrderBy(I.Paid.Asc()), roomy.OrderBy(I.OrgID.Asc())
+	if text, _ := byPaid.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC, "number", "paid"`) {
+		t.Errorf("first ordering of a base with room: %s", text)
+	}
+	if text, _ := byOrg.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC, "number", "org_id"`) {
+		t.Errorf("second ordering of a base with room: %s", text)
+	}
+
+	base.Limit(5).Offset(2).Unbounded().Columns(I.ID).Omit(I.Note)
+	if text, args := base.SQL(); text != baseSQL || !reflect.DeepEqual(args, baseArgs) {
+		t.Errorf("the base query changed:\n got %s %v\nwant %s %v", text, args, baseSQL, baseArgs)
+	}
+}
+
+// TestBaseQueryIsSafeToExtendConcurrently; run it with -race.
+func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	base := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1))
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			for i := range 100 {
+				id := int64(g*1000 + i)
+				q := base.Where(I.ID.EQ(id)).OrderBy(I.ID.Desc())
+				text, args := q.SQL()
+				if want := `WHERE "org_id" = $1 AND "id" = $2 ORDER BY "id" DESC`; !strings.HasSuffix(text, want) || !reflect.DeepEqual(args, []any{int64(1), id}) {
+					t.Errorf("goroutine %d: %s %v", g, text, args)
+					return
+				}
+				if _, err := q.All(ctx); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }
