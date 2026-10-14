@@ -58,8 +58,10 @@ const pgDDL = `CREATE TABLE invoices (created_at timestamptz NOT NULL, updated_a
 	paid boolean NOT NULL, paid_at timestamptz, note text, data bytea NOT NULL)`
 
 // postgresTargets returns PostgreSQL twice: through native pgx (OpenPgx) and
-// through database/sql. Both are opened per test, so no connection keeps a
-// statement cached across the DROP and CREATE of setup.
+// through database/sql. Both are opened per test. The two targets share one
+// sqlDB for setup, so within a test its INSERT statement stays cached across
+// the second target's DROP and CREATE; that is harmless, because the schema is
+// the same and PostgreSQL re-plans a statement whose table was replaced.
 func postgresTargets(t *testing.T, dsn string) []target {
 	t.Helper()
 	sqlDB, err := sql.Open("pgx", dsn)
