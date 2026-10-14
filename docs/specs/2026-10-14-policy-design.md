@@ -308,7 +308,7 @@ Op Op; Err error}`, with `Unwrap` returning `Err` and `Is(ErrDenied)` true.
 
 **Hardening** (the Core follow-ups):
 
-- `WithRewrite(nil)` and `WithAround(nil)` panic at `Open`, as
+- `WithRewrite(nil)` and `WithAround(nil)` panic when called (in `Open`'s argument list), as
   `http.Handle(nil)` does.
 - A `Rewrite` hook that sets `Entity` to nil or changes `Op` fails the
   statement. Replacing `Entity` is allowed only with one backed by the same Go
