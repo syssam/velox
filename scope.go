@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -68,7 +69,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	// st.Where.
 	copied := false
 	for i, p := range st.Where {
-		n, changed, err := sc.node(p.n, true)
+		n, changed, err := sc.node(p.n)
 		if err != nil {
 			return err
 		}
@@ -122,7 +123,8 @@ type scoper struct {
 	skip     string // the SkipPolicy reason
 	skipped  bool   // a policy that would have applied was skipped
 
-	reads []readCond
+	reads     []readCond
+	computing []*EntityInfo // the entities whose Read is being made, outermost first
 }
 
 // readCond is an entity's Read condition, made once per statement.
@@ -167,26 +169,46 @@ func (sc *scoper) policyOn() bool {
 }
 
 // readOf returns entity t's Read condition, calling its policy the first time
-// only; a denial is a *PolicyError for op.
+// only; a denial is a *PolicyError for op. The EXISTS in the condition get
+// their targets' Read conditions in turn; a condition that reaches t's own
+// Read again, directly or through other entities, cannot be made, and the
+// statement is refused.
 func (sc *scoper) readOf(t *EntityInfo, op Op) (Predicate, error) {
 	for _, r := range sc.reads {
 		if r.entity == t {
 			return r.p, nil
 		}
 	}
+	if slices.Contains(sc.computing, t) {
+		return Predicate{}, &cycleError{entity: sc.entity, policy: t.Name}
+	}
+	sc.computing = append(sc.computing, t)
 	p, err := t.policy.read(sc.ctx)
-	if p, err = sc.policyCond(t, op, "Read", p, err); err != nil {
+	p, err = sc.policyCond(t, op, "Read", p, err)
+	sc.computing = sc.computing[:len(sc.computing)-1]
+	if err != nil {
 		return Predicate{}, err
 	}
 	sc.reads = append(sc.reads, readCond{t, p})
 	return p, nil
 }
 
+// cycleError is a Read policy that reaches its own Read through an EXISTS:
+// applying it would never end. It is the schema's bug, not a denial.
+type cycleError struct {
+	entity, policy string // the statement's entity; the entity whose Read loops
+}
+
+func (e *cycleError) Error() string {
+	return "velox: " + e.entity + ": the Read policy of " + e.policy + " reaches its own Read through an EXISTS; such a policy cannot be applied"
+}
+
 // policyCond checks what entity t's policy (which, "Read" or "Write")
 // returned for a statement of kind op: an error denies the statement, and a
 // condition is refused when it holds the zero Pred or is invalid. An EXISTS
-// in the condition gets its target's tenant, but no other policy: a policy is
-// the schema's own code, and its subqueries are as it wrote them.
+// in the condition gets its target's tenant and Read condition, as one in the
+// statement's own conditions does: a policy that inherits another entity's
+// with Has sees only the rows that one lets through.
 func (sc *scoper) policyCond(t *EntityInfo, op Op, which string, p Predicate, err error) (Predicate, error) {
 	switch {
 	case err != nil:
@@ -199,7 +221,7 @@ func (sc *scoper) policyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	if err := predErr(p.n); err != nil {
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition: %w", t.Name, which, err)
 	}
-	n, _, err := sc.node(p.n, false)
+	n, _, err := sc.node(p.n)
 	return Predicate{n}, err
 }
 
@@ -238,11 +260,11 @@ func checkTenantAssignments(in *EntityInfo, set []Assignment, id any) error {
 	return nil
 }
 
-// node returns n with the tenant condition, and with policy the Read
-// condition, added inside every EXISTS on a target that has them, and
+// node returns n with the tenant and Read conditions added inside every
+// EXISTS on a target that has them, and
 // whether that changed anything. It never edits n: a changed node is a copy
 // with a new kids slice, and unchanged subtrees are shared with n.
-func (sc *scoper) node(n node, policy bool) (node, bool, error) {
+func (sc *scoper) node(n node) (node, bool, error) {
 	switch n.op {
 	case opAnd, opOr, opNot, opExists:
 	default:
@@ -250,7 +272,7 @@ func (sc *scoper) node(n node, policy bool) (node, bool, error) {
 	}
 	var kids []node // nil until a kid changes
 	for i, k := range n.kids {
-		nk, changed, err := sc.node(k, policy)
+		nk, changed, err := sc.node(k)
 		if err != nil {
 			return n, false, err
 		}
@@ -265,10 +287,13 @@ func (sc *scoper) node(n node, policy bool) (node, bool, error) {
 	}
 	if n.op == opExists {
 		t := n.v.(link).target
-		tenant, read, err := sc.target(t, policy)
+		tenant, read, err := sc.target(t)
 		if err != nil {
-			// An error from an EXISTS in t's policy names its own target.
-			if _, ok := err.(*existsError); !ok {
+			// An error from an EXISTS in t's policy names its own target,
+			// and a cycle names the statement's entity already.
+			switch err.(type) {
+			case *existsError, *cycleError:
+			default:
 				err = &existsError{entity: sc.entity, target: t.Name, err: err}
 			}
 			return n, false, err
@@ -292,13 +317,13 @@ func (sc *scoper) node(n node, policy bool) (node, bool, error) {
 }
 
 // target returns what an EXISTS on entity t gets: whether the tenant
-// condition, and with policy t's Read condition (zero for none).
-func (sc *scoper) target(t *EntityInfo, policy bool) (bool, Predicate, error) {
+// condition, and t's Read condition (zero for none).
+func (sc *scoper) target(t *EntityInfo) (bool, Predicate, error) {
 	tenant, err := sc.tenantOf(t)
 	if err != nil {
 		return false, Predicate{}, err
 	}
-	if !policy || t.policy == nil || t.policy.read == nil || !sc.policyOn() {
+	if t.policy == nil || t.policy.read == nil || !sc.policyOn() {
 		return tenant, Predicate{}, nil
 	}
 	// An EXISTS reads its target, whatever the statement's kind.

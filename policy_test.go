@@ -130,6 +130,39 @@ func (*pbox) VeloxMeta() *velox.Meta[pbox] {
 
 var pboxNote = velox.Rel[pbox, pnote]{I: 0}
 
+// A pcomment inherits its note's Read policy: its own Read is a Has.
+type pcomment struct {
+	ID     int64
+	NoteID int64
+	Note   velox.One[pnote]
+}
+
+func (x *pcomment) Schema(s *velox.Schema) {
+	s.Table("pcomments")
+	s.Policy(velox.Policy[pcomment]{
+		Read: func(context.Context) (velox.Pred[pcomment], error) { return pcommentNote.Has(), nil },
+	})
+}
+
+var pcommentMeta velox.MetaOnce[pcomment]
+
+func (*pcomment) VeloxMeta() *velox.Meta[pcomment] {
+	return pcommentMeta.Get(func() velox.Shape[pcomment] {
+		return velox.Shape[pcomment]{Columns: []string{"ID", "NoteID"}, Relations: []velox.Relation{velox.RelationTo[pnote]("Note")},
+			Addr: func(x *pcomment, i int) any {
+				switch i {
+				case 0:
+					return &x.ID
+				case 1:
+					return &x.NoteID
+				}
+				return nil
+			}}
+	})
+}
+
+var pcommentNote = velox.Rel[pcomment, pnote]{I: 0}
+
 func TestPolicyReadPredicate(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
@@ -317,7 +350,8 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 }
 
 // TestPolicyConditionIsScopedAndChecked: an EXISTS in a policy's condition
-// gets the tenant; a condition holding the zero Pred is refused.
+// gets the tenant (and the Read policy, see TestPolicyIsInherited); a
+// condition holding the zero Pred is refused.
 func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
@@ -406,5 +440,65 @@ func TestSaveOfAHiddenRow(t *testing.T) {
 	}
 	if strings.Count(e.SQL, `"owner" = $`) != 2 || e.Calls != 1 {
 		t.Errorf("save: %s %v", e.SQL, e.Args)
+	}
+}
+
+// TestPolicyIsInherited: an EXISTS in a policy's condition gets its target's
+// Read policy, so a comment is hidden with its note.
+func TestPolicyIsInherited(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	bg := context.Background()
+	pnoteReads.Store(0)
+	if _, err := db.Query[pcomment]().Where(pcommentNote.HasWhere(pn.Locked.EQ(true))).Limit(1).All(bg); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "locked" = $1 AND "owner" = $2) AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "owner" = $3) LIMIT $4`,
+		true, "ann", "ann", 1)
+	if n := pnoteReads.Load(); n != 1 {
+		t.Errorf("pnote's Read called %d times", n)
+	}
+
+	calls := e.Calls
+	_, err := db.Query[pcomment]().Limit(1).All(pnoteReading(velox.Pred[pnote]{}, velox.Deny("hidden")))
+	want(t, err, velox.ErrDenied, "velox: velox_test.pcomment: in the EXISTS on velox_test.pnote: select denied by policy: hidden")
+	if e.Calls != calls {
+		t.Errorf("%d denied statements sent", e.Calls-calls)
+	}
+}
+
+// TestPolicyCycleIsRefused: a Read policy that reaches its own Read through
+// an EXISTS, directly or from another entity's policy, cannot be applied;
+// the statement is refused, and it is not a denial.
+func TestPolicyCycleIsRefused(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	self := pnoteReading(pn.Parent.HasWhere(pn.Locked.EQ(false)), nil)
+	for name, c := range map[string]struct {
+		run  func() error
+		want string
+	}{
+		"direct": {func() error { _, err := db.Query[pnote]().Limit(1).All(self); return err },
+			"velox: velox_test.pnote: the Read policy of velox_test.pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
+		"from an EXISTS": {func() error { _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(self); return err },
+			"velox: velox_test.pbox: the Read policy of velox_test.pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
+		"from another policy": {func() error { _, err := db.Query[pcomment]().Limit(1).All(self); return err },
+			"velox: velox_test.pcomment: the Read policy of velox_test.pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
+		"on an update": {func() error {
+			_, err := db.Update[pnote]().Set(pn.InvoiceID.Set(2)).Where(pn.ID.EQ(1)).Exec(self)
+			return err
+		}, "velox: velox_test.pnote: the Read policy of velox_test.pnote reaches its own Read through an EXISTS; such a policy cannot be applied"},
+	} {
+		err := c.run()
+		if err == nil || err.Error() != c.want || errors.Is(err, velox.ErrDenied) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
+	}
+	// Under SkipPolicy no policy runs, so there is no cycle.
+	if _, err := db.Query[pnote]().Limit(1).All(velox.SkipPolicy(self, "support")); err != nil {
+		t.Error(err)
 	}
 }
