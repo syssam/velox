@@ -22,6 +22,7 @@ type DB struct {
 type config struct {
 	rewrites []Rewrite
 	arounds  []Around
+	cache    renderCache
 }
 
 // Option configures a DB's pipeline.
@@ -75,7 +76,7 @@ func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
 			}
 		}
 	}
-	st.SQL, st.Args = render(db.d, st)
+	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
 	if len(db.cfg.arounds) == 0 {
 		r, err := db.ex.query(ctx, st.SQL, st.Args)
 		if err != nil {
