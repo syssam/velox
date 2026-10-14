@@ -524,7 +524,8 @@ Constraint violations are normalized into `*velox.ConstraintError` with a kind
 ## 7. Errors
 
 Sentinels for `errors.Is`: `ErrNotFound`, `ErrNotSingular`, `ErrUnbounded`,
-`ErrNoWhere`, `ErrStale` (generated code out of date). Typed errors for
+`ErrNoWhere`, `ErrLimitTooLarge`, `ErrTooManyRows`, `ErrTimeout`, `ErrStale`
+(generated code out of date). Typed errors for
 `errors.As`: `*ConstraintError{Entity, Kind, Constraint, Err}` with `Kind` one
 of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the
 constraint's name, except that SQLite reports the columns and a NOT NULL error
@@ -534,9 +535,11 @@ returned wrapped (policy design §6). Every error message starts with `velox:`
 and names the entity.
 
 `ErrUnbounded` (a query with no `Limit` and no `Unbounded()`) and `ErrNoWhere`
-(an update or delete with no `Where` and no `All()`) are raised by
-sub-project 2's guardrails. Core defines them, and the `Unbounded()` / `All()`
-methods, so the API does not change when guardrails land.
+(an update or delete with no `Where` and no `All()`) are raised
+by velox (policy design §4). `ErrLimitTooLarge` (a `Limit` over `WithMaxLimit`),
+`ErrTooManyRows` (a read past `WithMaxRows` or the query's `MaxRows`) and
+`ErrTimeout` (a deadline velox set passed; it also matches
+`context.DeadlineExceeded`) are raised under the same rules.
 
 ## 8. Performance budget
 

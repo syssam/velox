@@ -37,6 +37,7 @@ type target struct {
 	exec  func(t *testing.T, query string, args ...any) // setup SQL, written with ? placeholders
 	ddl   string                                        // CREATE TABLE invoices
 	items string                                        // CREATE TABLE items
+	raw   *sql.DB                                       // a second way in, for holding locks; nil for SQLite
 }
 
 // targets returns SQLite always, and PostgreSQL and MySQL when their
@@ -79,8 +80,8 @@ func postgresTargets(t *testing.T, dsn string, opts []velox.Option) []target {
 	t.Cleanup(pool.Close)
 	exec := sqlExec(sqlDB, velox.Postgres)
 	return []target{
-		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool, opts...), exec: exec, ddl: pgDDL, items: pgItems},
-		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB, opts...), exec: exec, ddl: pgDDL, items: pgItems},
+		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool, opts...), exec: exec, ddl: pgDDL, items: pgItems, raw: sqlDB},
+		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB, opts...), exec: exec, ddl: pgDDL, items: pgItems, raw: sqlDB},
 	}
 }
 
@@ -102,7 +103,7 @@ func mysqlTarget(t *testing.T, dsn string, opts []velox.Option) target {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db, opts...), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL, items: mysqlItems}
+	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db, opts...), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL, items: mysqlItems, raw: db}
 }
 
 func sqliteTarget(t *testing.T, opts []velox.Option) target {

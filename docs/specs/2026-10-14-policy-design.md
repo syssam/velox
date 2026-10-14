@@ -195,6 +195,7 @@ Tenant       any    // the tenant applied; nil when unscoped
 TenantBypass string // the AllTenants reason, when it applied
 PolicyBypass string // the SkipPolicy reason, when it applied
 DryRun       bool   // the statement is being built for SQL(ctx), not sent
+MaxRows      int    // SELECT: the most rows it may return; 0: the DB's cap
 ```
 
 ## 3. Entity hooks
@@ -247,11 +248,14 @@ Always on:
 Set at `Open`; both off by default:
 
 - `velox.WithMaxLimit(n)`: a `Limit` above n fails with `ErrLimitTooLarge`.
+  `WithMaxLimit(n)` panics for n < 2, because `One` limits itself to 2.
 - `velox.WithMaxRows(n)`: a read that returns more than n rows fails with
-  `ErrTooManyRows` when row n+1 arrives. This applies to every read, including
-  `Unbounded`, `Iter`, and each `With` load statement. With `Iter` the caller
-  has already handled n rows when the error is yielded (documented).
-  `Query.MaxRows(n)` overrides the cap for one query.
+  `ErrTooManyRows` when row n+1 arrives. This applies to every row-returning
+  SELECT, including `Unbounded`, `Iter`, and each `With` load statement; it
+  does not apply to `Count` or to an insert's `RETURNING`. The cap counts per
+  statement. With `Iter` the caller has already handled n rows when the error
+  is yielded (documented). `Query.MaxRows(n)` overrides the cap for one query
+  and its `With` loads.
 
 ## 5. Deadlines
 
@@ -270,8 +274,13 @@ velox.WithDeadlines(velox.Deadlines{
   caller's loop body.
 - **Transactions:** `Tx` and `MaxTx` apply the same way to the whole `db.Tx`
   call: the function, every `RetrySerializable` attempt and the commit. The
-  `Tx` option `Timeout(d)` replaces `Tx` for one call, still subject to
-  `MaxTx`. Statement deadlines still apply inside a transaction.
+  `Tx` default applies only to a context with no deadline. The `Tx` option
+  `Timeout(d)` is a cap on the transaction: it replaces `Tx` for one call, is
+  still subject to `MaxTx`, and an earlier deadline on the context still
+  applies. A transaction's deadline bounds every statement inside it, whatever
+  context the statement is given, and statement deadlines still apply inside a
+  transaction. A transaction past its deadline is rolled back, never
+  committed, on every driver.
 - **Errors:** velox's deadlines carry a context cause. A statement that runs
   out of time returns an error for which `errors.Is(err,
   context.DeadlineExceeded)` holds; `errors.Is(err, velox.ErrTimeout)` holds

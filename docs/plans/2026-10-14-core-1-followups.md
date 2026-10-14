@@ -35,10 +35,10 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 
 ## Sub-project 2 (guardrails and policy)
 
-- Hook misuse hardening: a rewrite hook that sets `st.Entity` to nil panics; a zero `Predicate{}` passes the column check; a hook-replaced `EntityInfo` whose columns differ from the Go type's scan plan is not detected; `WithRewrite(nil)`/`WithAround(nil)` panic at query time rather than at `Open`.
-- Hook errors are returned without `velox: <Entity>:`; wrapping them would double the prefix of the sentinel errors hooks return (`ErrUnbounded`), so decide the convention with the guardrails.
-- The hook-statement copy is one level deep: a hook editing a predicate's own argument slice in place still shares it with the query.
-- `Count` with `OrderBy`/`Limit`/`Offset` set renders them; `Count` clears them, but the contract is not documented on `Statement.Count`. A non-nil empty `Columns` (e.g. `Omit` of every column) renders `SELECT  FROM`.
+- Resolved in policy plan 1: hook misuse hardening. `WithRewrite(nil)` and `WithAround(nil)` panic at `Open`; a rewrite hook cannot set `st.Entity` to nil or swap it for an entity that is not a copy of the original (so a replaced `EntityInfo` whose columns differ from the scan plan is refused); a zero `Predicate{}` is refused.
+- Resolved in policy plan 1: the hook-error convention. Hook errors are returned as `velox: <Entity>: rewrite: …` (and the matching form for `Around`); sentinels are bare phrases wrapped with `%w`, so the prefix is never doubled.
+- Resolved in policy plan 1: the one-level copy. A predicate holds its own copy of `In`'s values, so neither the caller nor a hook can change a built query's arguments through the slice (`TestInCopiesItsValues`).
+- Resolved in policy plan 1: `Statement.Count`'s contract is documented (velox clears `Columns`, `OrderBy`, `Limit` and `Offset`), and an empty `Columns` list is refused instead of rendering `SELECT  FROM`.
 
 ## Sub-project 3 (observability)
 
@@ -73,7 +73,13 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - A rollback or savepoint error after the statement ran: sqlExecutor.exec returns an error when RowsAffected fails although the statement ran; begin on a transaction executor would dereference nil (unreachable: nested Tx uses savepoints).
 - Error classification: MySQL 1364 (NOT NULL without default, strict mode) and MariaDB's 4025 are not classified; a typed-nil driver error would panic; SQLite's NOT NULL names "table.column" while PostgreSQL and MySQL name the column.
 - Static slice or map Defaults are shared by every inserted entity (pointer defaults are copied).
-- An UPDATE or DELETE with neither Where nor All runs on every row until sub-project 2's guardrails raise ErrNoWhere.
+- Resolved in policy plan 1: an UPDATE or DELETE with neither Where nor All returns `ErrNoWhere`.
 - InsertAll batches of many distinct sizes each add a render-cache shape.
 - Test gaps: value semantics of UpdateQuery/DeleteQuery extended twice; Save on a composite key; a named numeric type (type Cents int64) under the Default rule; a uint64 key read back through RETURNING; a look-alike driver error type from another package; cache keys that differ only in Conflict/Update/Returning/Set columns; schema-qualified INSERT and UPDATE golden SQL; that ErrTxDone/ErrTxClosed from rollback is not joined.
 - CI tests MySQL 8.4 only, while the spec supports 8.0.19 and later.
+
+## Left by policy plan 1
+
+- A statement-level timeout set by velox replaces the original error: the caller sees `ErrTimeout`, not the driver's error. The transaction-level timeout joins both.
+- `SAVEPOINT`, `RELEASE` and `ROLLBACK TO` run on the caller's context, so the transaction's deadline does not bound them.
+- Test gaps: no test of `MaxTx` capping a larger `Timeout`, or of `MaxTx` alone; `Timeout(d)` with `d <= 0` is ignored, and this is not documented; no test of `MaxRows` across nested `With` loads; no boundary test of exactly n rows under a cap of n.
