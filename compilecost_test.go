@@ -167,10 +167,18 @@ var genericObjects = []struct {
 	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 294
 	{"Schema", "*velox.Schema", "", 5120},                           // measured 282
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
-	{"entity", "", entitySrc, 123904},                               // measured 98878
-	{"entityUse", "", entityUseSrc, 740352},                         // measured 673936
-	{"Policy", "velox.Policy[E]", "", 8192},                         // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 8192},                     // measured 3874
+	// The entity packages, remeasured on 2026-10-15 after policy 2. An
+	// entity's package carries the export data of every velox type its API
+	// reaches, and Schema's Policy, BeforeInsert, BeforeUpdate and
+	// BeforeDelete take functions of a context.Context (whose Deadline brings
+	// time.Time and its methods, about 9.5 KiB) and a Mutation[E] (which holds
+	// a *Statement, about 2.3 KiB); those four methods with Policy[E] and
+	// Mutation[E] add about 8 KiB more. entityUse also compiles the insert
+	// path's new generic steps (oneStatement, prepareMany, batch, check).
+	{"entity", "", entitySrc, 150528},           // measured 119896 (98878 before policy 2)
+	{"entityUse", "", entityUseSrc, 775168},     // measured 708658 (673936 before policy 2)
+	{"Policy", "velox.Policy[E]", "", 8192},     // measured 4050
+	{"Mutation", "velox.Mutation[E]", "", 8192}, // measured 3874
 }
 
 // policyGrowthSpec is policy design §7's budget for the bytes a Policy and
@@ -208,6 +216,9 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 			src = fmt.Sprintf("package p\n\nimport \"github.com/syssam/velox2\"\n\ntype E struct{ ID int64 }\n\nvar x %s\n", g.decl)
 		}
 		files[g.name+"/p.go"] = src
+	}
+	if entityPolicySrc == entityUseSrc {
+		t.Fatal("entityPolicySrc adds nothing to entityUseSrc: its anchor, the Many line of E's Schema, is not in entityUseSrc")
 	}
 	files["entityPolicy/p.go"] = entityPolicySrc
 	if err := tempmod.Write(dir, repoRoot(), files); err != nil {
