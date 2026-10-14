@@ -124,6 +124,16 @@ run_integration() {
         tail -20 /tmp/ci-local-integ2.log
         record_fail "test-integration:e2e"
     fi
+    # The new ORM's tests run on SQLite elsewhere; with a Postgres to make
+    # databases on (VELOX_ORM_TEST_POSTGRES, an admin URL), they run there.
+    if [[ -n "${VELOX_ORM_TEST_POSTGRES:-}" ]]; then
+        if go test -race ./tests/orm/ -count=1 >/tmp/ci-local-orm-pg.log 2>&1; then
+            record_pass "test-integration:orm-postgres"
+        else
+            tail -30 /tmp/ci-local-orm-pg.log
+            record_fail "test-integration:orm-postgres"
+        fi
+    fi
 }
 
 summary() {

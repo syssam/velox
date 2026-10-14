@@ -461,7 +461,7 @@ func templateOption(next func(t *gen.Template) (*gen.Template, error)) Option {
 func generateCtx(ctx context.Context, schemaPath string, cfg *gen.Config) error {
 	graph, err := LoadGraph(schemaPath, cfg)
 	if err != nil {
-		if err = mayRecover(err, schemaPath, cfg); err != nil {
+		if err = recovered(err, mayRecover(err, schemaPath, cfg)); err != nil {
 			return err
 		}
 		if graph, err = LoadGraph(schemaPath, cfg); err != nil {
@@ -475,6 +475,18 @@ func generateCtx(ctx context.Context, schemaPath string, cfg *gen.Config) error 
 	// Route through Graph.Gen() which applies hooks consistently,
 	// then dispatches to cfg.Generator or the default SQL generator.
 	return graph.Gen()
+}
+
+// recovered is the error of a schema that could not be loaded (loadErr) after
+// the attempt to recover from it returned recoverErr. The recovery is an
+// attempt: when it fails too, why the schema could not be loaded is what
+// there is to fix, and its own failure alone ("schema snapshot was not
+// found") once hid a toolchain newer than golang.org/x/tools could read.
+func recovered(loadErr, recoverErr error) error {
+	if recoverErr == nil || errors.Is(recoverErr, loadErr) {
+		return recoverErr
+	}
+	return fmt.Errorf("%w (recovering from the schema snapshot: %w)", loadErr, recoverErr)
 }
 
 func mayRecover(err error, schemaPath string, cfg *gen.Config) error {

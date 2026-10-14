@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -543,4 +544,22 @@ func TestMayRecover_BuildError_NoSnapshotFile(t *testing.T) {
 	err := mayRecover(buildErr, schemaDir, cfg)
 	// Should fail because there's no internal/schema.go snapshot to restore from.
 	require.Error(t, err)
+}
+
+// A recovery that fails does not replace why the schema could not be loaded:
+// "schema snapshot was not found" alone said nothing of a toolchain whose
+// export data golang.org/x/tools could not read.
+func TestRecoveredKeepsTheLoadError(t *testing.T) {
+	loadErr := errors.New("velox/load: parse schema dir: export data version 5 is greater than maximum supported version 4")
+	restoreErr := errors.New("schema snapshot was not found in velox/internal/schema.go")
+
+	require.NoError(t, recovered(loadErr, nil))
+	assert.Equal(t, loadErr, recovered(loadErr, loadErr), "not attempted: the error as it was")
+	wrapped := fmt.Errorf("schema failure: %w", loadErr)
+	assert.Equal(t, wrapped, recovered(loadErr, wrapped), "already says why")
+
+	err := recovered(loadErr, restoreErr)
+	require.ErrorIs(t, err, loadErr)
+	require.ErrorIs(t, err, restoreErr)
+	assert.True(t, strings.HasPrefix(err.Error(), loadErr.Error()), "the load error first: %s", err)
 }

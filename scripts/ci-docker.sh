@@ -102,6 +102,7 @@ for pair in "${PAIRS[@]}"; do
     first=0
     if VELOX_TEST_POSTGRES="host=localhost port=${CI_PG_PORT} user=postgres password=test dbname=velox_test sslmode=disable" \
         VELOX_TEST_MYSQL="root:test@tcp(localhost:${CI_MYSQL_PORT})/velox_test?parseTime=true&multiStatements=true" \
+        VELOX_ORM_TEST_POSTGRES="postgres://postgres:test@localhost:${CI_PG_PORT}/postgres?sslmode=disable" \
         scripts/ci-local.sh "${flag}"; then
         :
     else

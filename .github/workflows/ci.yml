@@ -459,6 +459,13 @@ jobs:
         env:
           VELOX_TEST_POSTGRES: "host=localhost port=5432 user=postgres password=test dbname=velox_test sslmode=disable"
           VELOX_TEST_MYSQL: "root:test@tcp(localhost:3306)/velox_test?parseTime=true&multiStatements=true"
+      - name: New ORM against Postgres
+        # tests/orm runs on SQLite everywhere else. Here every test of it
+        # runs on the matrix's Postgres, each in a database of its own that
+        # it creates and drops.
+        run: go test -race ./tests/orm/ -count=1
+        env:
+          VELOX_ORM_TEST_POSTGRES: "postgres://postgres:test@localhost:5432/postgres?sslmode=disable"
 
   parity:
     # Differential parity harness (tests/parity): runs the curated three-way
