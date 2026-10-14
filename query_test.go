@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	ctx = context.Background()
+	ctx = velox.AllTenants(context.Background(), "velox tests")
 	t0  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	I   = testmodel.Invoices
 	It  = testmodel.Items

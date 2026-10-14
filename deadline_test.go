@@ -193,7 +193,7 @@ func TestCallersDeadlineBoundsTheTx(t *testing.T) {
 	go func() {
 		done <- db.Tx(cctx, func(tx *velox.DB) error {
 			e.Block = true
-			_, err := tx.Query[testmodel.Invoice]().Limit(1).All(context.Background())
+			_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx) // ctx has no deadline
 			return err
 		})
 	}()
@@ -249,7 +249,7 @@ func TestSavepointGetsCallersDeadline(t *testing.T) {
 	var got time.Time
 	err := db.Tx(cctx, func(tx *velox.DB) error {
 		return tx.Tx(ctx, func(nested *velox.DB) error {
-			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(context.Background())
+			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(ctx) // ctx has no deadline
 			got = e.Deadline
 			return err
 		})

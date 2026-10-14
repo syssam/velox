@@ -131,11 +131,15 @@ func dbErr(info *EntityInfo, err error) error {
 // through run, or may take the shortcut of plain.
 func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
 
-// plain runs a statement on a DB with no hooks: rendering and execution.
+// plain runs a statement on a DB with no hooks: guard, scope, rendering and
+// execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
 	if err := db.guard(st); err != nil {
+		return err
+	}
+	if err := db.scope(ctx, st); err != nil {
 		return err
 	}
 	db.capLimit(st)
@@ -157,8 +161,8 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	return nil
 }
 
-// run takes a statement through the pipeline: rewrite hooks, rendering,
-// then the around hooks wrapping execution, which is sending the statement
+// run takes a statement through the pipeline: guard, rewrite hooks, scope,
+// rendering, then the around hooks wrapping execution, which is sending the statement
 // and reading its rows. read reads them; it is called once per execution (an
 // around hook that retries runs it again) and must not close them: run does,
 // before it returns, on every path. Hooks may keep the statement, and next
@@ -210,6 +214,9 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		if err := checkColumns(st); err != nil {
 			return err
 		}
+	}
+	if err := db.scope(ctx, st); err != nil {
+		return err
 	}
 	db.capLimit(st)
 	if st.Entity == entity {
