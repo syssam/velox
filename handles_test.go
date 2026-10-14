@@ -44,6 +44,16 @@ func TestHandleMethodsBuildNodes(t *testing.T) {
 	}{
 		{"EQ", n.EQ(7).n, node{op: opEQ, col: 3, v: int64(7)}},
 		{"In", n.In(1, 2).n, node{op: opIn, col: 3, v: []any{int64(1), int64(2)}}},
+		{"In with no values", n.In().n, node{op: opIn, col: 3, v: []any{}}},
+		{"NotIn", n.NotIn(1, 2).n, node{op: opNotIn, col: 3, v: []any{int64(1), int64(2)}}},
+		{"NotIn with no values", n.NotIn().n, node{op: opNotIn, col: 3, v: []any{}}},
+		{"NEQ", n.NEQ(7).n, node{op: opNEQ, col: 3, v: int64(7)}},
+		{"GT", n.GT(7).n, node{op: opGT, col: 3, v: int64(7)}},
+		{"GTE", n.GTE(7).n, node{op: opGTE, col: 3, v: int64(7)}},
+		{"LT", n.LT(7).n, node{op: opLT, col: 3, v: int64(7)}},
+		{"LTE", n.LTE(7).n, node{op: opLTE, col: 3, v: int64(7)}},
+		{"Col NEQ", Col[ent, bool]{I: 6}.NEQ(true).n, node{op: opNEQ, col: 6, v: true}},
+		{"Col NotIn", Col[ent, bool]{I: 6}.NotIn(true).n, node{op: opNotIn, col: 6, v: []any{true}}},
 		{"Between", n.Between(1, 9).n, node{op: opBetween, col: 3, v: int64(1), w: int64(9)}},
 		{"HasPrefix escapes", s.HasPrefix(`5%_\`).n, node{op: opLike, col: 4, v: `5\%\_\\%`}},
 		{"HasSuffix", s.HasSuffix("x").n, node{op: opLike, col: 4, v: "%x"}},
@@ -62,6 +72,12 @@ func TestHandleMethodsBuildNodes(t *testing.T) {
 	}
 	if o := n.Desc(); o.t != (OrderTerm{Column: 3, Desc: true}) {
 		t.Errorf("Desc: %+v", o.t)
+	}
+	if o := n.Asc(); o.t != (OrderTerm{Column: 3}) {
+		t.Errorf("Asc: %+v", o.t)
+	}
+	if o := (Col[ent, bool]{I: 6}).Asc(); o.t != (OrderTerm{Column: 6}) {
+		t.Errorf("Col Asc: %+v", o.t)
 	}
 	var c Column[ent] = n
 	if got := c.column(nil); got != 3 {

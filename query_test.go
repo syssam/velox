@@ -118,6 +118,32 @@ func TestIterStopsEarly(t *testing.T) {
 	}
 }
 
+// TestIterBreakClosesTheRows: leaving an Iter loop early must close the rows,
+// or the statement's connection is never returned to the pool. It covers both
+// execution paths (no hooks, and an Around hook that wraps the loop body).
+func TestIterBreakClosesTheRows(t *testing.T) {
+	for name, opts := range map[string][]velox.Option{
+		"no hooks": nil,
+		"with Around": {velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+			return next(ctx)
+		})},
+	} {
+		e := &velox.FakeExec{Rows: [][]any{invoiceRow(1), invoiceRow(2), invoiceRow(3)}}
+		db := velox.OpenFake(velox.Postgres, e, opts...)
+		seen := 0
+		for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			seen++
+			break // on the first row, with two more unread
+		}
+		if seen != 1 || e.Calls != 1 || e.Closed != 1 {
+			t.Errorf("%s: saw %d rows, %d queries, %d closed; want 1, 1, 1", name, seen, e.Calls, e.Closed)
+		}
+	}
+}
+
 func TestSQLNeedsNoDatabase(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.MySQL, e)

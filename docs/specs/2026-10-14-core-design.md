@@ -545,7 +545,21 @@ velox's own cost counts. Core's benchmarks must stay within:
 | 100-row query | within noise of hand-written (120 vs 131 µs median; +14 allocations) | at most +5% time, +16 allocations |
 | Metadata, first use of an entity | 7.8 µs, 36 allocations, once per process | at most 20 µs |
 
-Most of the one-row gap is rendering (1.6 µs and 12 allocations measured
+Measured on 2026-10-14, darwin/arm64 (Apple M3 Max), after Core, against the
+same fake driver, with the shape cache built:
+
+| Case | velox | hand-written |
+|---|---|---|
+| One-row query | 607 ns, 6 allocations | 4 allocations |
+| 100-row query | 11.7 µs, 105 allocations | 202 allocations |
+| Metadata, first use of an entity | 2.7 µs, 30 allocations | |
+
+The allocation budgets are tests (`budget_test.go`, `meta_bench_test.go`);
+the time budgets are read from the benchmarks, not asserted, because times
+vary between machines. The "Measured" column of the first table is the
+simulation's, kept for what it showed before the cache.
+
+Most of the one-row gap was rendering (1.6 µs and 12 allocations measured
 alone), which the shape cache in §5 removes. For scale: a database round trip
 is typically 100 µs or more, so the budget is about keeping velox out of
 profiles, not about what users wait on.
@@ -559,17 +573,28 @@ profiles, not about what users wait on.
 - **Golden SQL.** Each operation's rendered SQL is pinned per dialect.
 - **Generated code.** Golden files per entity shape; `velox-gen -check` in CI;
   a test that the generator never adds an import.
-- **Compile-cost guards** for §3: a test that every method of every exported
-  generic type is generic; a test that compiles a one-variable package per
-  exported generic type and fails if its object exceeds a threshold; a test
-  that generated code contains no `init` and no package-level function call.
-- **Scale harness.** The simulation used for this design becomes
-  `bench/scale`: it generates an application of N entities and S services and
-  reports cold build, incremental rebuilds, archive sizes, link memory and
-  per-query cost. CI runs it at N=500 against recorded thresholds; the full
-  N=2,000 run is a release check.
-- **Fuzzing** of the SQL builder (no input produces SQL with unbalanced quotes
-  or misplaced arguments); `-race` everywhere.
+- **Compile-cost guards** for §3, and where each lives:
+  - every method of every exported generic type is generic, and has a
+    `[_ Lazy[...]]` type parameter: `methods_test.go`;
+  - each handle kind has exactly the methods of the handle table in §2, so a
+    method granted to the wrong kind, or dropped, fails: the method-set table
+    in `handles_test.go` (`TestHandleMethodSets`);
+  - a package of one variable per exported generic type, and the entity
+    packages (`entity`, `entityUse` rows), must stay under an object-size
+    threshold, which also guards the `reflect.Type` rule (§3 rule 7):
+    `compilecost_test.go`;
+  - generated code contains no `init` and no package-level function call:
+    velox-gen's `TestGeneratedCodeRunsNothingAtStart`.
+- **Scale harness.** The simulation used for this design is `bench/scale`: it
+  generates an application of N entities and S services and reports cold
+  build, incremental rebuilds, the service binary's size and the linker's peak
+  memory. The thresholds are in `bench/scale/thresholds.json`; CI runs it at
+  N=500 and fails when one is exceeded. The full N=2,000 run is a release
+  check.
+- **Fuzzing** of the SQL builder (`fuzz_test.go`: placeholders match
+  arguments, no argument appears in the SQL text, quotes stay balanced, the
+  cached path equals the uncached one), run briefly in CI; `-race`
+  everywhere.
 
 ## 10. Toolchain requirements
 
@@ -606,9 +631,8 @@ established:
    reaches 1.0.
 2. **Runtime times are from a shared machine**, with PostgreSQL in Docker on
    macOS, whose network adds about 1 ms per round trip. Allocation counts are
-   exact; times are indicative. The one-row budget in §8 depends on the shape
-   cache, which is designed but not built. MySQL and SQLite have not been
-   benchmarked.
+   exact; times are indicative. The shape cache is built; the one-row and 100-row
+   allocation budgets are tests. MySQL and SQLite have not been benchmarked.
 3. **velox over native pgx has not been measured.** Appendix A.5 measures
    velox over `database/sql` and hand-written native pgx; the claim that velox
    adds as little over pgx as over `database/sql` is an expectation, to be
@@ -707,3 +731,21 @@ mostly network and their differences are noise. velox adds 5 to 15
 allocations over hand-written `database/sql`. Native pgx takes 0.4 times the
 time and allocations of `database/sql` at 1,000 rows; that is why §6 makes it
 PostgreSQL's executor.
+
+### A.6 Scale harness after Core
+
+`bench/scale` on darwin/arm64 (Apple M3 Max), 10 entities per domain package,
+5 entities per service, measured on 2026-10-14 after Core was complete:
+
+| | N=500, S=100 | N=2,000, S=400 |
+|---|---|---|
+| Cold build | 14.3 s | 32.4 s |
+| Rebuild after editing a leaf entity | 1.05 s | 2.2 s |
+| Rebuild after editing a root entity | 5.9 s | 14.1 s |
+| One service's binary | 5.47 MB | 5.47 MB |
+| Linker peak memory | 187 MB | 202 MB |
+
+The service binary does not grow with the application and the link memory
+barely does (§3 rules 2 and 5); the root-edit rebuild is §3 rule 6. Times
+include the harness's `-toolexec` wrapper. The recorded CI thresholds for
+N=500 are in `bench/scale/thresholds.json`.

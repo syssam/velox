@@ -345,3 +345,165 @@ func TestDefaultOnBoolOrNumericFieldIsASchemaError(t *testing.T) {
 		t.Errorf("errors on %v, want %v (string, pointer and DefaultFunc stay legal)", fields, want)
 	}
 }
+
+type outsider struct{ N int64 }
+
+type reachesOut struct {
+	ID int64
+}
+
+func (x *reachesOut) Schema(s *Schema) {
+	o := new(outsider) // another object: its field is not inside the entity
+	s.Column(&o.N)
+}
+
+func TestPointerOutsideTheEntityIsASchemaError(t *testing.T) {
+	_, err := infoOf[reachesOut]([]string{"ID"}, nil)
+	var se *SchemaError
+	if !errors.As(err, &se) || !strings.Contains(err.Error(), "does not point into the entity") {
+		t.Fatalf("got %v, want a *SchemaError that says the pointer does not point into the entity", err)
+	}
+}
+
+type pkFields struct {
+	ID int64
+	A  string
+	B  string
+}
+
+type keyedA struct{ pkFields }
+type keyedAB struct{ pkFields }
+type keyedBA struct{ pkFields }
+
+func (x *keyedA) Schema(s *Schema)  { s.PrimaryKey(&x.A) }
+func (x *keyedAB) Schema(s *Schema) { s.PrimaryKey(&x.A, &x.B) }
+func (x *keyedBA) Schema(s *Schema) { s.PrimaryKey(&x.B, &x.A) }
+
+func TestExplicitPrimaryKey(t *testing.T) {
+	cols := []string{"ID", "A", "B"}
+	for name, c := range map[string]struct {
+		info func() (*EntityInfo, error)
+		want []int
+	}{
+		"one field replaces the ID default": {func() (*EntityInfo, error) { return infoOf[keyedA](cols, nil) }, []int{1}},
+		"composite":                         {func() (*EntityInfo, error) { return infoOf[keyedAB](cols, nil) }, []int{1, 2}},
+		"composite keeps the given order":   {func() (*EntityInfo, error) { return infoOf[keyedBA](cols, nil) }, []int{2, 1}},
+	} {
+		info, err := c.info()
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if !reflect.DeepEqual(info.PrimaryKey, c.want) {
+			t.Errorf("%s: primary key %v, want %v", name, info.PrimaryKey, c.want)
+		}
+	}
+}
+
+type indexed struct {
+	ID int64
+	A  string
+	B  string
+}
+
+func (x *indexed) Schema(s *Schema) {
+	s.Index(&x.A)
+	s.Index(&x.B, &x.A)
+	s.Unique(&x.A, &x.B)
+}
+
+func TestIndexIsNotUnique(t *testing.T) {
+	info, err := infoOf[indexed]([]string{"ID", "A", "B"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []IndexInfo{
+		{Columns: []int{1}},
+		{Columns: []int{2, 1}},
+		{Columns: []int{1, 2}, Unique: true},
+	}
+	if !reflect.DeepEqual(info.Indexes, want) {
+		t.Errorf("indexes %+v, want %+v", info.Indexes, want)
+	}
+}
+
+type stamped struct {
+	ID int64
+	N  int64
+	At string
+}
+
+var onUpdateCalls int
+
+func (x *stamped) Schema(s *Schema) {
+	s.Column(&x.N).OnUpdate(func() int64 { onUpdateCalls++; return 42 })
+}
+
+func TestOnUpdateReturnsTheGivenFunctionsValue(t *testing.T) {
+	info, err := infoOf[stamped]([]string{"ID", "N", "At"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Columns[0].OnUpdate != nil || info.Columns[2].OnUpdate != nil {
+		t.Error("OnUpdate set on a column that did not declare one")
+	}
+	f := info.Columns[1].OnUpdate
+	if f == nil {
+		t.Fatal("OnUpdate is nil on the column that declared one")
+	}
+	onUpdateCalls = 0
+	if got := f(); got != int64(42) || onUpdateCalls != 1 {
+		t.Errorf("OnUpdate() = %#v after %d calls, want int64(42) after 1", got, onUpdateCalls)
+	}
+}
+
+type zeroSize struct {
+	ID   int64
+	Mark struct{} // shares its offset with Name, which follows it
+	Name string
+	End  struct{} // last: the compiler pads the struct so &End stays inside it
+}
+
+func (x *zeroSize) Schema(s *Schema) {
+	s.Column(&x.Mark).Name("mark")
+	s.Column(&x.Name).Name("label")
+	s.Column(&x.End).Name("end_mark")
+}
+
+func TestZeroSizeFieldIsAColumnAndDoesNotConfuseFind(t *testing.T) {
+	var z zeroSize
+	if unsafe.Offsetof(z.Mark) != unsafe.Offsetof(z.Name) {
+		t.Fatal("the fixture no longer puts a zero-size field at the offset of the next field")
+	}
+	info, err := infoOf[zeroSize]([]string{"ID", "Mark", "Name", "End"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got [][2]string
+	for _, c := range info.Columns {
+		got = append(got, [2]string{c.Field, c.Name})
+	}
+	want := [][2]string{{"ID", "id"}, {"Mark", "mark"}, {"Name", "label"}, {"End", "end_mark"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("columns %v, want %v (each Column call must land on its own field, though two fields share an offset)", got, want)
+	}
+}
+
+func TestColumnTypeIsTheFieldsType(t *testing.T) {
+	info, err := infoOf[order](orderCols, orderRels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range info.Columns {
+		f, ok := reflect.TypeFor[order]().FieldByName(c.Field)
+		if !ok {
+			t.Fatalf("order has no field %s", c.Field)
+		}
+		if _, isType := c.Type.(reflect.Type); !isType {
+			t.Errorf("%s: Type is a %T, not a reflect.Type", c.Field, c.Type)
+		}
+		if GoType(c) != f.Type {
+			t.Errorf("%s: GoType %v, want %v", c.Field, GoType(c), f.Type)
+		}
+	}
+}

@@ -4,6 +4,11 @@
 // and a root entity, a service's binary size and the linker's peak memory
 // (design §9). With -check it compares the measurements with recorded
 // thresholds and exits 1 when one is exceeded.
+//
+// Every build runs under a -toolexec wrapper that reads the linker's peak
+// memory, so the times include that wrapper's overhead. The overhead is the
+// same in every run and the thresholds were calibrated on the same setup, so
+// the figures compare with each other, not with a plain go build.
 package main
 
 import (
@@ -23,7 +28,7 @@ import (
 
 type config struct {
 	n, services int
-	dir         string // where the application is written; a temporary directory when empty
+	dir         string // where the application is written: empty or missing; a temporary directory when empty
 }
 
 type report struct {
@@ -88,6 +93,9 @@ func run(c config) (report, error) {
 			return r, err
 		}
 		defer func() { _ = os.RemoveAll(c.dir) }()
+	} else if entries, err := os.ReadDir(c.dir); err == nil && len(entries) > 0 {
+		// Its build cache would be warm, and the cold build would not be cold.
+		return r, fmt.Errorf("directory %s is not empty: a reused directory would warm the build cache", c.dir)
 	}
 	app, tools, cache, bin := filepath.Join(c.dir, "app"), filepath.Join(c.dir, "tools"), filepath.Join(c.dir, "cache"), filepath.Join(c.dir, "bin")
 	for _, d := range []string{tools, cache, bin} {
@@ -252,6 +260,7 @@ func main() {
 		if ee, ok := err.(*exec.ExitError); ok {
 			os.Exit(ee.ExitCode())
 		}
+		fmt.Fprintln(os.Stderr, "linkmem:", err) // the tool did not start
 		os.Exit(1)
 	}
 }
@@ -290,7 +299,9 @@ func check(r report, n int, path string) []string {
 	if err != nil {
 		return []string{err.Error()}
 	}
-	var all map[string]map[string]any // a key starting with _ is a comment
+	// A key starting with _ inside an n object is a comment. A top-level _ key
+	// is not supported: its value is not an object, and parsing fails.
+	var all map[string]map[string]any
 	if err := json.Unmarshal(b, &all); err != nil {
 		return []string{err.Error()}
 	}

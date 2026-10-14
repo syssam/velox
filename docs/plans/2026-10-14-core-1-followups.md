@@ -22,12 +22,16 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - On MySQL, an `UPDATE` or `DELETE` whose `EXISTS` reads the table being changed fails with error 1093 (documented on `Has`).
 - A `time.Time` cursor made in memory, finer than the column's precision, can skip or repeat a row with `After` (documented: `x` must be a row a query returned).
 
-## Plan 5 (scale guards)
+## Left by plan 5 (scale guards)
 
-- The render cache bounds the number of shapes, not bytes; large `IN` arities each store long text, and once full the cache admits nothing new.
-- No test pins handle method sets (e.g. that `Col` has no `GT`); a generator change could grant wrong methods silently. `methods_test.go` exempts any method named `column` on any generic type and checks only that type parameters exist, not that they are `[_ Lazy[...]]`.
-- Test gaps to close: a pointer outside the entity, explicit and composite `PrimaryKey`, `Index`, `OnUpdate`'s value, zero-size fields, `ColumnInfo.Type`; `TestHandleMethodsBuildNodes` lacks NEQ/NotIn/GT*/Asc/empty In; `TestCacheKeepsShapesApart` does not pin limit/offset presence, order or nesting; the budget test does not assert a cache hit; the connection-leak path after an early `Iter` break was not mutation-tested; `snake` has no case for a capital after a digit (`V2Name` → `v2_name`).
-- `TestRewriteCanReplaceTheEntity` can only catch a regression when the allocator reuses an address; the bypass that renders uncached when a hook replaced the entity has no test pinning that the cache stays flat.
+- `bench/scale`'s time thresholds are 4x an M3 Max (sizes and memory 2x). Recalibrate them from the first GitHub run: set each to a margin over the figures that run reports.
+- The object-size guard's large rows (`entityUse` and similar) carry a fixed per-package cost, so a 2x threshold on them tolerates a bigger absolute growth than on the small rows.
+- The spec's "98 lines per entity" (the generated code's size, §2) was not re-measured after the type-check function was added to generated code.
+- `TestRewriteCanReplaceTheEntity` can only catch a regression when the allocator reuses an address, and the bypass that renders uncached when a hook replaced the entity has no test pinning that the cache stays flat. The hook-replaced-entity cache check was not mutation-tested.
+- `TestCacheKeepsShapesApart` does not pin limit/offset presence, order or nesting as separate shapes (`FuzzRender` compares the cached path with the uncached one, which covers them only for the inputs it generates).
+- `Sum` and `Avg` on `NumberCol` await aggregates (sub-project 2 or later).
+- `snake` splits an acronym before a digit: `ID2` becomes `i_d2`, `OrgID2` `org_i_d2` and `SHA256Sum` `sh_a256_sum`, where `HTTPServer` becomes `http_server` and `V2Name` `v2_name`. Spec §1 rule 3 does not say what a digit after an acronym does; decide a rule (probably `id2`) before the first release, since column names are public. `names_test.go` leaves these cases out on purpose.
+- Two adjacent zero-size fields of the same type in an entity (`A, B struct{}`) share an offset and a type, so `Schema.find` resolves both to the first: `s.Column(&x.B)` configures `A` and no error is raised. A zero-size field of a distinct type is handled (pinned in `meta_test.go`). Refuse such an entity, or tell the two apart.
 
 ## Sub-project 2 (guardrails and policy)
 
