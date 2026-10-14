@@ -114,10 +114,148 @@ func TestTxPastItsDeadlineIsNotCommitted(t *testing.T) {
 	if !errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
 		t.Errorf("%v", err)
 	}
+	notCommitted(t, e)
+}
+
+// notCommitted fails t unless e's transaction ended with ROLLBACK.
+func notCommitted(t *testing.T, e *velox.FakeExec) {
+	t.Helper()
 	for _, s := range e.Log {
 		if s == "COMMIT" {
 			t.Errorf("committed: %v", e.Log)
 		}
+	}
+	if len(e.Log) == 0 || e.Log[len(e.Log)-1] != "ROLLBACK" {
+		t.Errorf("log %v, want ROLLBACK last", e.Log)
+	}
+}
+
+// TestTimedOutTxReportsNoRollbackError: once the transaction's deadline has
+// passed, a rollback that fails (pgx closes the connection whose statement
+// the deadline cut off) is not reported; before it, it is.
+func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
+	conn := errors.New("conn closed")
+	e := &velox.FakeExec{RollbackErr: conn}
+	db := velox.OpenFake(velox.Postgres, e)
+	err := db.Tx(ctx, func(tx *velox.DB) error {
+		e.Block = true
+		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
+		return err
+	}, velox.Timeout(50*time.Millisecond))
+	if !errors.Is(err, velox.ErrTimeout) || strings.Contains(err.Error(), "rollback") {
+		t.Errorf("transaction: %v", err)
+	}
+
+	e = &velox.FakeExec{}
+	db = velox.OpenFake(velox.Postgres, e)
+	err = db.Tx(ctx, func(tx *velox.DB) error {
+		return tx.Tx(ctx, func(nested *velox.DB) error {
+			e.Block = true
+			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(ctx)
+			e.Block, e.Err = false, conn // ROLLBACK TO SAVEPOINT fails
+			return err
+		})
+	}, velox.Timeout(50*time.Millisecond))
+	if !errors.Is(err, velox.ErrTimeout) || strings.Contains(err.Error(), "rollback") {
+		t.Errorf("savepoint: %v", err)
+	}
+
+	e = &velox.FakeExec{RollbackErr: conn}
+	db = velox.OpenFake(velox.Postgres, e)
+	err = db.Tx(ctx, func(*velox.DB) error { return errors.New("boom") })
+	if !errors.Is(err, conn) || !strings.Contains(err.Error(), "velox: rollback: conn closed") {
+		t.Errorf("in time: %v", err)
+	}
+
+	e = &velox.FakeExec{}
+	db = velox.OpenFake(velox.Postgres, e)
+	err = db.Tx(ctx, func(tx *velox.DB) error {
+		return tx.Tx(ctx, func(*velox.DB) error {
+			e.Err = conn
+			return errors.New("boom")
+		})
+	}, velox.Timeout(time.Minute))
+	if !errors.Is(err, conn) || !strings.Contains(err.Error(), "velox: rollback to savepoint: conn closed") {
+		t.Errorf("savepoint in time: %v", err)
+	}
+}
+
+// TestCallersDeadlineBoundsTheTx: a deadline on the transaction's context
+// that is earlier than velox's bounds the statements inside it, whatever
+// context they are given, and the transaction is not committed past it. It
+// is the caller's, so the error is not ErrTimeout.
+func TestCallersDeadlineBoundsTheTx(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithDeadlines(velox.Deadlines{MaxTx: time.Hour}))
+	cctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- db.Tx(cctx, func(tx *velox.DB) error {
+			e.Block = true
+			_, err := tx.Query[testmodel.Invoice]().Limit(1).All(context.Background())
+			return err
+		})
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, velox.ErrTimeout) {
+			t.Errorf("blocked statement: %v", err)
+		}
+		notCommitted(t, e)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the statement inside the transaction ignored the caller's deadline")
+	}
+}
+
+// TestTxPastCallersDeadlineIsNotCommitted: a transaction whose context ended,
+// by the caller's deadline or cancellation, is rolled back and its error says
+// which.
+func TestTxPastCallersDeadlineIsNotCommitted(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	err := db.Tx(cctx, func(*velox.DB) error {
+		time.Sleep(60 * time.Millisecond)
+		return nil
+	})
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
+		t.Errorf("past the deadline: %v", err)
+	}
+	notCommitted(t, e)
+
+	e = &velox.FakeExec{}
+	db = velox.OpenFake(velox.Postgres, e)
+	cctx, cancel = context.WithCancel(ctx)
+	err = db.Tx(cctx, func(*velox.DB) error {
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
+		t.Errorf("canceled: %v", err)
+	}
+	notCommitted(t, e)
+}
+
+// TestSavepointGetsCallersDeadline: the caller's deadline on a transaction
+// reaches the statements of a nested Tx.
+func TestSavepointGetsCallersDeadline(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	want, _ := cctx.Deadline()
+	var got time.Time
+	err := db.Tx(cctx, func(tx *velox.DB) error {
+		return tx.Tx(ctx, func(nested *velox.DB) error {
+			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(context.Background())
+			got = e.Deadline
+			return err
+		})
+	})
+	if err != nil || !got.Equal(want) {
+		t.Errorf("%v; savepoint statement's deadline %v, want the caller's %v", err, got, want)
 	}
 }
 
@@ -130,7 +268,7 @@ func TestRetriesStopAtTheTxDeadline(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 		return &pgconn.PgError{Code: "40001"}
 	}, velox.RetrySerializable(1000), velox.Timeout(100*time.Millisecond))
-	if !errors.Is(err, velox.ErrTimeout) || runs > 10 {
+	if !errors.Is(err, velox.ErrTimeout) || runs < 2 || runs > 10 {
 		t.Errorf("%v after %d runs", err, runs)
 	}
 }

@@ -39,8 +39,11 @@ type FakeExec struct {
 	Log       []string // every statement, and BEGIN, COMMIT, ROLLBACK
 	Errs      []error  // returned by the next calls, one each, before Err
 	CommitErr error
-	Isolation sql.IsolationLevel // the last transaction's options
-	ReadOnly  bool
+	// RollbackErr is what ROLLBACK returns, as pgx does once it has closed a
+	// connection whose statement a deadline cut off.
+	RollbackErr error
+	Isolation   sql.IsolationLevel // the last transaction's options
+	ReadOnly    bool
 	// RollbackCtxErr and SavepointCtxErr are the first non-nil ctx.Err() that
 	// a ROLLBACK, and a ROLLBACK TO or RELEASE SAVEPOINT, ran with.
 	RollbackCtxErr  error
@@ -131,7 +134,7 @@ func (t fakeTx) rollback(ctx context.Context) error {
 		t.e.RollbackCtxErr = ctx.Err()
 	}
 	t.e.Log = append(t.e.Log, "ROLLBACK")
-	return nil
+	return t.e.RollbackErr
 }
 
 // OpenFake returns a DB of dialect d that runs statements on e.

@@ -243,7 +243,9 @@ Always on:
   includes `Limit(n)` with n ≤ 0, `Iter`, and keyset `After`. `Count` is exempt.
   `One` sets its own limit. Core's relation loads say `Unbounded`.
 - **`ErrNoWhere`:** an UPDATE or DELETE with no `Where` and no `All()`. `Save`
-  always has its key.
+  always has its key. A `Where` whose every condition holds for every row by
+  its structure alone (an empty `And`, `NotIn()` of nothing, `Not` of an empty
+  `Or`) counts as no `Where`.
 
 Set at `Open`; both off by default:
 
@@ -253,9 +255,13 @@ Set at `Open`; both off by default:
   `ErrTooManyRows` when row n+1 arrives. This applies to every row-returning
   SELECT, including `Unbounded`, `Iter`, and each `With` load statement; it
   does not apply to `Count` or to an insert's `RETURNING`. The cap counts per
-  statement. With `Iter` the caller has already handled n rows when the error
-  is yielded (documented). `Query.MaxRows(n)` overrides the cap for one query
-  and its `With` loads.
+  statement. velox renders `LIMIT` cap+1, so the database stops early: when
+  the query has no `Limit` or a higher one, velox sets it to n+1 after the
+  guard and the `Rewrite` hooks (which see the caller's `Limit`) and before
+  rendering (the `Around` hooks see the one sent). With `Iter` the caller has
+  already handled n rows when the error is yielded (documented).
+  `Query.MaxRows(n)` overrides the cap for one query and its `With` loads.
+  `WithMaxRows(1)` panics, because `One` reads 2 rows; n ≤ 0 is no cap.
 
 ## 5. Deadlines
 
@@ -277,10 +283,17 @@ velox.WithDeadlines(velox.Deadlines{
   `Tx` default applies only to a context with no deadline. The `Tx` option
   `Timeout(d)` is a cap on the transaction: it replaces `Tx` for one call, is
   still subject to `MaxTx`, and an earlier deadline on the context still
-  applies. A transaction's deadline bounds every statement inside it, whatever
-  context the statement is given, and statement deadlines still apply inside a
-  transaction. A transaction past its deadline is rolled back, never
-  committed, on every driver.
+  applies. A transaction's effective deadline is velox's or the one on the
+  context given to `db.Tx`, whichever is earlier; it bounds every statement
+  inside the transaction, nested `Tx` (savepoints) included, whatever context
+  the statement is given, and statement deadlines still apply inside a
+  transaction. A transaction whose context has ended by commit time (past
+  either deadline, or canceled) is rolled back, never committed, on every
+  driver; its error is `ErrTimeout` when velox's deadline passed, and
+  otherwise matches `context.DeadlineExceeded` or `context.Canceled`. Once the
+  context has ended, a failed rollback is not reported: the driver may have
+  closed the connection (pgx does), and the server aborts the transaction.
+  `Timeout(d)` with d ≤ 0 is ignored, and a nested `Tx` ignores it.
 - **Errors:** velox's deadlines carry a context cause. A statement that runs
   out of time returns an error for which `errors.Is(err,
   context.DeadlineExceeded)` holds; `errors.Is(err, velox.ErrTimeout)` holds
