@@ -24,6 +24,9 @@ func plan(ps []*packages.Package, cfg config) (result, []problem) {
 		probs = append(probs, pr...)
 		probs = append(probs, name(p, ents)...)
 		for _, e := range ents {
+			if e.out == "" {
+				continue // name reported why it has no file
+			}
 			if _, err := os.Stat(e.out); err == nil && !isGenerated(e.out) {
 				probs = append(probs, problem{e.pos, fmt.Sprintf("%s: %s exists and velox-gen did not write it", e.name, e.out)})
 				continue

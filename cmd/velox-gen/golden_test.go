@@ -103,3 +103,12 @@ func TestImportsAvoidTheFilesOwnDeclarations(t *testing.T) {
 		}
 	}
 }
+
+// TestBadDirectiveIsOneProblem: the entity of an invalid directive is not
+// rendered, so the run does not add a second, misleading problem.
+func TestBadDirectiveIsOneProblem(t *testing.T) {
+	_, probs := generate(t, "baddirective")
+	if lines := strings.Split(probs, "\n"); len(lines) != 1 || !strings.Contains(probs, "is not an identifier") {
+		t.Errorf("problems %q, want exactly one, containing %q", probs, "is not an identifier")
+	}
+}
