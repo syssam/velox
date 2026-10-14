@@ -41,6 +41,10 @@ jobs:
           cd cmd/velox-gen && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
       - run: go test -race -count=1 ./...
       - run: go -C cmd/velox-gen test -race -count=1 ./...
+      - name: fuzz (short)
+        run: |
+          go test -run XXX -fuzz FuzzRender -fuzztime 20s .
+          go test -run XXX -fuzz FuzzQuote -fuzztime 10s .
       - name: generated files are current and every entity is valid
         run: |
           go -C cmd/velox-gen build -o "$PWD/bin/velox-gen" .
