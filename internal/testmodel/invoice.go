@@ -33,6 +33,7 @@ type Invoice struct {
 	PaidAt  *time.Time
 	Note    *string
 	Data    []byte
+	Items   velox.Many[Item]
 	Display string `velox:"-"`
 }
 

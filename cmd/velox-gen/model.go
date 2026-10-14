@@ -23,7 +23,7 @@ type entity struct {
 	file      string // the file that declares it
 	pos       token.Position
 	columns   []column
-	relations []string
+	relations []rel
 	handles   string // the handles variable, e.g. "Invoices"
 	meta      string // the MetaOnce variable, e.g. "invoiceMeta"
 	shape     string // the function returning the Shape, e.g. "invoiceShape"
@@ -35,6 +35,12 @@ type column struct {
 	field  string     // the field's name; fields of embedded structs flatten in
 	handle string     // the handle type in package velox, e.g. "NumberCol"
 	value  types.Type // the handle's value type V
+}
+
+// rel is one relation field of an entity.
+type rel struct {
+	field  string
+	target types.Type // T of velox.One[T] or velox.Many[T]
 }
 
 // problem is a reason velox-gen refuses to write anything.

@@ -91,27 +91,40 @@ func render(e *entity) ([]byte, error) {
 	handle := func(c column) string {
 		return fmt.Sprintf("%s.%s[%s, %s]", vx, c.handle, E, types.TypeString(c.value, im.qualifier))
 	}
+	relHandle := func(r rel) string {
+		return fmt.Sprintf("%s.Rel[%s, %s]", vx, E, types.TypeString(r.target, im.qualifier))
+	}
 	fields := make([]string, len(e.columns))
 	for i, c := range e.columns {
 		fields[i] = c.field
 	}
 
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "// Fails to compile if this file and the velox library disagree.\nconst _ = %s.GeneratedCodeIsVersion1\n\n", vx)
+	fmt.Fprintf(&b, "// Fails to compile if this file and the velox library disagree.\nconst _ = %s.GeneratedCodeIsVersion2\n\n", vx)
 	fmt.Fprintf(&b, "// %s holds the typed handles of %s's columns and relations.\nvar %s = struct {\n", e.handles, E, e.handles)
 	for _, c := range e.columns {
 		fmt.Fprintf(&b, "\t%s %s\n", c.field, handle(c))
 	}
+	for _, r := range e.relations {
+		fmt.Fprintf(&b, "\t%s %s\n", r.field, relHandle(r))
+	}
 	b.WriteString("}{\n")
 	for i, c := range e.columns {
 		fmt.Fprintf(&b, "\t%s: %s{I: %d},\n", c.field, handle(c), i)
+	}
+	for i, r := range e.relations {
+		fmt.Fprintf(&b, "\t%s: %s{I: %d},\n", r.field, relHandle(r), i)
 	}
 	b.WriteString("}\n\n")
 	fmt.Fprintf(&b, "var %s %s.MetaOnce[%s]\n\n", e.meta, vx, E)
 	fmt.Fprintf(&b, "// VeloxMeta is called by velox, not by applications.\nfunc (*%s) VeloxMeta() *%s.Meta[%s] { return %s.Get(%s) }\n\n", E, vx, E, e.meta, e.shape)
 	fmt.Fprintf(&b, "func %s() %s.Shape[%s] {\n\treturn %s.Shape[%s]{\n\t\tColumns: []string{%s},\n", e.shape, vx, E, vx, E, quoted(fields))
 	if len(e.relations) > 0 {
-		fmt.Fprintf(&b, "\t\tRelations: []string{%s},\n", quoted(e.relations))
+		rs := make([]string, len(e.relations))
+		for i, r := range e.relations {
+			rs[i] = fmt.Sprintf("%s.RelationTo[%s](%q)", vx, types.TypeString(r.target, im.qualifier), r.field)
+		}
+		fmt.Fprintf(&b, "\t\tRelations: []%s.Relation{%s},\n", vx, strings.Join(rs, ", "))
 	}
 	fmt.Fprintf(&b, "\t\tAddr: func(x *%s, i int) any {\n\t\t\tswitch i {\n", E)
 	for i, c := range e.columns {

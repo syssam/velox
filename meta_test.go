@@ -48,7 +48,11 @@ var (
 
 func infoOf[E any](cols, rels []string) (*EntityInfo, error) {
 	x := new(E)
-	return buildInfo(reflect.TypeFor[E](), unsafe.Pointer(x), any(x), cols, rels)
+	rs := make([]Relation, len(rels))
+	for i, n := range rels {
+		rs[i] = Relation{name: n}
+	}
+	return buildInfo(reflect.TypeFor[E](), unsafe.Pointer(x), any(x), cols, rs)
 }
 
 func TestEntityInfo(t *testing.T) {

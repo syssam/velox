@@ -1,5 +1,15 @@
 package velox
 
+import (
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
+)
+
+// kit is replaced in Task 3.
+type kit struct{}
+
 // One holds a to-one relation, filled by With. Its zero value means not
 // loaded. The value is held as any so that an entity's type does not reach
 // the types of the entities it relates to: every package that uses an
@@ -28,4 +38,167 @@ type Many[T any] struct {
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool) {
 	s, _ := m.v.([]T)
 	return s, m.loaded
+}
+
+// holder has the layout of One[T] and Many[T], so that velox's non-generic
+// loader can fill a relation field through its offset (TestHolderLayout).
+type holder struct {
+	v      any
+	loaded bool
+}
+
+// Relation is one relation field of a generated Shape: its name and how to
+// reach its target entity.
+type Relation struct {
+	name   string
+	target func() (*EntityInfo, error)
+}
+
+// RelationTo is what velox-gen writes for a relation field whose target is
+// entity T. Nothing runs until the relation is first used.
+func RelationTo[T any, PT Entity[T]](name string) Relation {
+	return Relation{name: name, target: func() (*EntityInfo, error) {
+		m := PT(nil).VeloxMeta()
+		return m.info, m.err
+	}}
+}
+
+// relation is a relation field of an entity, resolved on first use.
+// Resolving reads the target's EntityInfo, never the target's relations, so
+// relations that point at each other, or at their own entity, cannot wait on
+// each other.
+type relation struct {
+	name   string
+	many   bool
+	off    uintptr      // the field's offset in the owner
+	typ    reflect.Type // One[T] or Many[T]
+	target func() (*EntityInfo, error)
+	ref    int                            // References: the owner's column; -1 none, -2 invalid
+	fk     func() (uintptr, reflect.Type) // ForeignKey: the target's field; nil none
+
+	once sync.Once
+	link link
+	err  error
+}
+
+// link is a resolved relation: owner.Columns[ownerCol] equals
+// target.Columns[targetCol].
+type link struct {
+	target    *EntityInfo
+	ownerCol  int
+	targetCol int
+}
+
+func (r *relation) resolve(owner *EntityInfo) (link, error) {
+	r.once.Do(func() { r.link, r.err = r.build(owner) })
+	return r.link, r.err
+}
+
+func (r *relation) build(owner *EntityInfo) (link, error) {
+	fail := func(format string, args ...any) (link, error) {
+		return link{}, &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
+	}
+	if r.target == nil {
+		return fail("relation %s has no target in the generated code; run go tool velox-gen", r.name)
+	}
+	t, err := r.target()
+	if err != nil {
+		return fail("relation %s: its target is invalid: %v", r.name, err)
+	}
+	l := link{target: t}
+	kind := "One"
+	if r.many {
+		kind = "Many"
+	}
+	switch {
+	case r.ref == -2:
+		return fail("relation %s: References names no column", r.name)
+	case r.ref >= 0:
+		l.ownerCol = r.ref
+		if l.targetCol, err = singleKey(t); err != nil {
+			return fail("relation %s: %v", r.name, err)
+		}
+	case r.fk != nil:
+		off, typ := r.fk()
+		if l.targetCol = columnAt(t, off, typ); l.targetCol < 0 {
+			return fail("relation %s: ForeignKey's function does not return a column of %s", r.name, t.Name)
+		}
+		if l.ownerCol, err = singleKey(owner); err != nil {
+			return fail("relation %s: %v", r.name, err)
+		}
+	default:
+		if c, ok := fieldColumn(owner, r.name+"ID"); ok && !r.many {
+			l.ownerCol = c
+			if l.targetCol, err = singleKey(t); err != nil {
+				return fail("relation %s: %v", r.name, err)
+			}
+			break
+		}
+		want := typeName(owner.Name) + "ID"
+		c, ok := fieldColumn(t, want)
+		if !ok {
+			return fail("%s has no field %s; name one, or declare the key with s.%s(&x.%s).ForeignKey", t.Name, want, kind, r.name)
+		}
+		l.targetCol = c
+		if l.ownerCol, err = singleKey(owner); err != nil {
+			return fail("relation %s: %v", r.name, err)
+		}
+	}
+	oc, tc := owner.Columns[l.ownerCol], t.Columns[l.targetCol]
+	if base(oc.Type) != base(tc.Type) {
+		return fail("the key types differ: %s.%s is %v and %s.%s is %v", owner.Name, oc.Field, base(oc.Type), t.Name, tc.Field, base(tc.Type))
+	}
+	if !base(oc.Type).Comparable() {
+		return fail("relation %s: a key of type %v cannot be compared", r.name, base(oc.Type))
+	}
+	return l, nil
+}
+
+// singleKey returns an entity's primary key column; relations need one.
+func singleKey(in *EntityInfo) (int, error) {
+	if len(in.PrimaryKey) != 1 {
+		return -1, fmt.Errorf("%s has a composite primary key; a relation needs a single-column key", in.Name)
+	}
+	return in.PrimaryKey[0], nil
+}
+
+// columnAt returns the column of the field at offset off with type typ.
+func columnAt(in *EntityInfo, off uintptr, typ reflect.Type) int {
+	for i, c := range in.Columns {
+		if c.off == off && c.Type == typ {
+			return i
+		}
+	}
+	return -1
+}
+
+// fieldColumn returns the column of the field named field.
+func fieldColumn(in *EntityInfo, field string) (int, bool) {
+	for i, c := range in.Columns {
+		if c.Field == field {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// base is t without one level of pointer: *int64 and int64 are the same key.
+func base(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Pointer {
+		return t.Elem()
+	}
+	return t
+}
+
+// typeName is the type's name without its package, first letter upper-cased:
+// "Invoice" for "billing.Invoice" (and "Company" for an unexported company).
+func typeName(name string) string {
+	n := name[strings.LastIndexByte(name, '.')+1:]
+	return strings.ToUpper(n[:1]) + n[1:]
+}
+
+// Rel is the handle of a relation of entity E to entity T, written by
+// velox-gen: its I is the relation's index in E's shape.
+type Rel[E, T any] struct {
+	I int32
 }

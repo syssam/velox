@@ -7,7 +7,7 @@ import (
 )
 
 // Fails to compile if this file and the velox library disagree.
-const _ = velox.GeneratedCodeIsVersion1
+const _ = velox.GeneratedCodeIsVersion2
 
 // Lines holds the typed handles of Line's columns and relations.
 var Lines = struct {

@@ -9,7 +9,7 @@ import (
 )
 
 // Fails to compile if this file and the velox library disagree.
-const _ = velox.GeneratedCodeIsVersion1
+const _ = velox.GeneratedCodeIsVersion2
 
 // Samples holds the typed handles of Sample's columns and relations.
 var Samples = struct {
@@ -24,7 +24,10 @@ var Samples = struct {
 	When      velox.OrderedCol[Sample, time.Time]
 	MaybeWhen velox.NullOrderedCol[Sample, time.Time]
 	Blob      velox.Col[Sample, []byte]
+	ParentID  velox.NullNumberCol[Sample, int64]
 	Score     velox.NumberCol[Sample, Score]
+	Lines     velox.Rel[Sample, Line]
+	Parent    velox.Rel[Sample, Sample]
 }{
 	ID:        velox.NumberCol[Sample, int64]{I: 0},
 	Name:      velox.StringCol[Sample, string]{I: 1},
@@ -37,7 +40,10 @@ var Samples = struct {
 	When:      velox.OrderedCol[Sample, time.Time]{I: 8},
 	MaybeWhen: velox.NullOrderedCol[Sample, time.Time]{I: 9},
 	Blob:      velox.Col[Sample, []byte]{I: 10},
-	Score:     velox.NumberCol[Sample, Score]{I: 11},
+	ParentID:  velox.NullNumberCol[Sample, int64]{I: 11},
+	Score:     velox.NumberCol[Sample, Score]{I: 12},
+	Lines:     velox.Rel[Sample, Line]{I: 0},
+	Parent:    velox.Rel[Sample, Sample]{I: 1},
 }
 
 var sampleMeta velox.MetaOnce[Sample]
@@ -47,8 +53,8 @@ func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Get(sampleSha
 
 func sampleShape() velox.Shape[Sample] {
 	return velox.Shape[Sample]{
-		Columns:   []string{"ID", "Name", "Status", "Prev", "Price", "Ratio", "Flag", "MaybeFlag", "When", "MaybeWhen", "Blob", "Score"},
-		Relations: []string{"Lines", "Parent"},
+		Columns:   []string{"ID", "Name", "Status", "Prev", "Price", "Ratio", "Flag", "MaybeFlag", "When", "MaybeWhen", "Blob", "ParentID", "Score"},
+		Relations: []velox.Relation{velox.RelationTo[Line]("Lines"), velox.RelationTo[Sample]("Parent")},
 		Addr: func(x *Sample, i int) any {
 			switch i {
 			case 0:
@@ -74,6 +80,8 @@ func sampleShape() velox.Shape[Sample] {
 			case 10:
 				return &x.Blob
 			case 11:
+				return &x.ParentID
+			case 12:
 				return &x.Score
 			}
 			return nil

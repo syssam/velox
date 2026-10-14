@@ -9,7 +9,7 @@ import (
 )
 
 // Fails to compile if this file and the velox library disagree.
-const _ = velox.GeneratedCodeIsVersion1
+const _ = velox.GeneratedCodeIsVersion2
 
 // Invoices holds the typed handles of Invoice's columns and relations.
 var Invoices = struct {
@@ -23,6 +23,7 @@ var Invoices = struct {
 	PaidAt    velox.NullOrderedCol[Invoice, time.Time]
 	Note      velox.NullStringCol[Invoice, string]
 	Data      velox.Col[Invoice, []byte]
+	Items     velox.Rel[Invoice, Item]
 }{
 	CreatedAt: velox.OrderedCol[Invoice, time.Time]{I: 0},
 	UpdatedAt: velox.OrderedCol[Invoice, time.Time]{I: 1},
@@ -34,6 +35,7 @@ var Invoices = struct {
 	PaidAt:    velox.NullOrderedCol[Invoice, time.Time]{I: 7},
 	Note:      velox.NullStringCol[Invoice, string]{I: 8},
 	Data:      velox.Col[Invoice, []byte]{I: 9},
+	Items:     velox.Rel[Invoice, Item]{I: 0},
 }
 
 var invoiceMeta velox.MetaOnce[Invoice]
@@ -43,7 +45,8 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Get(invoic
 
 func invoiceShape() velox.Shape[Invoice] {
 	return velox.Shape[Invoice]{
-		Columns: []string{"CreatedAt", "UpdatedAt", "ID", "OrgID", "Number", "Total", "Paid", "PaidAt", "Note", "Data"},
+		Columns:   []string{"CreatedAt", "UpdatedAt", "ID", "OrgID", "Number", "Total", "Paid", "PaidAt", "Note", "Data"},
+		Relations: []velox.Relation{velox.RelationTo[Item]("Items")},
 		Addr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:

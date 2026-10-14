@@ -112,7 +112,8 @@ func (w *walker) fields(st *types.Struct, depth int) {
 		case !f.Exported():
 		case relation(f.Type()):
 			w.add(f)
-			w.e.relations = append(w.e.relations, f.Name())
+			n := types.Unalias(f.Type()).(*types.Named)
+			w.e.relations = append(w.e.relations, rel{field: f.Name(), target: n.TypeArgs().At(0)})
 		default:
 			w.add(f)
 			w.column(f)

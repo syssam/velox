@@ -24,6 +24,8 @@ type EntityInfo struct {
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none
 	Indexes    []IndexInfo
+	rels       []*relation // in the order of the generated shape
+	kit        *kit        // set by MetaOnce.Get (Task 3); nil in tests that call buildInfo
 }
 
 // Column returns the index of the column with the given name.
@@ -47,6 +49,7 @@ type ColumnInfo struct {
 	HasDefault  bool
 	DefaultFunc func() any // nil when none
 	OnUpdate    func() any // nil when none
+	off         uintptr    // the field's offset in the entity
 }
 
 // IndexInfo describes one index.
@@ -59,7 +62,7 @@ type IndexInfo struct {
 // scan plan.
 type Shape[E any] struct {
 	Columns   []string
-	Relations []string
+	Relations []Relation
 	Addr      func(x *E, i int) any
 }
 
@@ -126,7 +129,7 @@ func isRelation(t reflect.Type) bool {
 
 // flatten lists an entity's columns and relations in declaration order,
 // descending into embedded structs.
-func flatten(t reflect.Type, base uintptr, cols []field, rels []string) ([]field, []string, error) {
+func flatten(t reflect.Type, base uintptr, cols, rels []field) ([]field, []field, error) {
 	for i := range t.NumField() {
 		f := t.Field(i)
 		switch {
@@ -140,7 +143,7 @@ func flatten(t reflect.Type, base uintptr, cols []field, rels []string) ([]field
 			}
 		case !f.IsExported():
 		case isRelation(f.Type):
-			rels = append(rels, f.Name)
+			rels = append(rels, field{name: f.Name, off: base + f.Offset, typ: f.Type})
 		default:
 			cols = append(cols, field{name: f.Name, off: base + f.Offset, typ: f.Type})
 		}
@@ -164,7 +167,7 @@ func firstDiff(got, want []string) string {
 	return ""
 }
 
-func checkShape(entity string, fs []field, rs, cols, rels []string) error {
+func checkShape(entity string, fs, rs []field, cols []string, rels []Relation) error {
 	got := make([]string, len(fs))
 	for i := range fs {
 		got[i] = fs[i].name
@@ -172,7 +175,14 @@ func checkShape(entity string, fs []field, rs, cols, rels []string) error {
 	if d := firstDiff(got, cols); d != "" {
 		return fmt.Errorf("%w: %s: columns %s; run go tool velox-gen", ErrStale, entity, d)
 	}
-	if d := firstDiff(rs, rels); d != "" {
+	gotR, wantR := make([]string, len(rs)), make([]string, len(rels))
+	for i := range rs {
+		gotR[i] = rs[i].name
+	}
+	for i := range rels {
+		wantR[i] = rels[i].name
+	}
+	if d := firstDiff(gotR, wantR); d != "" {
 		return fmt.Errorf("%w: %s: relations %s; run go tool velox-gen", ErrStale, entity, d)
 	}
 	return nil
@@ -194,7 +204,7 @@ func applyMixins(s *Schema, t reflect.Type, base unsafe.Pointer) {
 // buildInfo builds an entity's metadata from its type, the column and
 // relation names velox-gen saw (cols, rels), its mixins and its Schema
 // method. x is a zero entity at base.
-func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) (*EntityInfo, error) {
+func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols []string, rels []Relation) (*EntityInfo, error) {
 	name := t.String()
 	fs, rs, err := flatten(t, 0, nil, nil)
 	if err != nil {
@@ -206,7 +216,11 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) 
 	s := &Schema{entity: name, base: base, size: t.Size(), fields: fs, typ: t, tenant: -1}
 	s.cols = make([]ColumnInfo, len(fs))
 	for i, f := range fs {
-		s.cols[i] = ColumnInfo{Field: f.name, Name: snake(f.name), Type: f.typ, Nullable: f.typ.Kind() == reflect.Pointer}
+		s.cols[i] = ColumnInfo{Field: f.name, Name: snake(f.name), Type: f.typ, Nullable: f.typ.Kind() == reflect.Pointer, off: f.off}
+	}
+	s.rels = make([]*relation, len(rs))
+	for i, r := range rs {
+		s.rels[i] = &relation{name: r.name, many: strings.HasPrefix(r.typ.Name(), "Many["), off: r.off, typ: r.typ, target: rels[i].target, ref: -1}
 	}
 	applyMixins(s, t, base)
 	sc, ok := x.(Schemer)
@@ -217,7 +231,7 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) 
 	if len(s.errs) > 0 {
 		return nil, errors.Join(s.errs...)
 	}
-	info := &EntityInfo{Name: name, Table: s.table, Schema: s.schema, Columns: s.cols, PrimaryKey: s.pk, Tenant: s.tenant, Indexes: s.idx}
+	info := &EntityInfo{Name: name, Table: s.table, Schema: s.schema, Columns: s.cols, PrimaryKey: s.pk, Tenant: s.tenant, Indexes: s.idx, rels: s.rels}
 	if info.Table == "" {
 		info.Table = snake(t.Name())
 	}
@@ -276,7 +290,31 @@ func validate(info *EntityInfo) error {
 	return errors.Join(errs...)
 }
 
-// CheckEntity builds entity E's metadata and returns the error it holds, if
-// any: a mistake in its Schema or Mixin methods, or generated code that is
-// out of date. velox-gen verify calls it for every entity.
-func CheckEntity[E any, PE Entity[E]]() error { return PE(nil).VeloxMeta().err }
+// CheckEntity builds entity E's metadata and resolves its relations, and
+// returns what is wrong: a mistake in its Schema or Mixin methods, a relation
+// whose key is missing or mistyped, or generated code that is out of date.
+// velox-gen verify calls it for every entity.
+func CheckEntity[E any, PE Entity[E]]() error {
+	m := PE(nil).VeloxMeta()
+	if m.err != nil {
+		return m.err
+	}
+	var errs []error
+	for _, r := range m.info.rels {
+		if _, err := r.resolve(m.info); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// metaOf returns entity E's Meta, for generic code that cannot name E's
+// pointer type in its constraints (a method of Rel[E, T]).
+func metaOf[E any]() (*Meta[E], error) {
+	p, ok := any((*E)(nil)).(interface{ VeloxMeta() *Meta[E] })
+	if !ok {
+		return nil, fmt.Errorf("velox: %v is not an entity: run go tool velox-gen", reflect.TypeFor[E]())
+	}
+	m := p.VeloxMeta()
+	return m, m.err
+}

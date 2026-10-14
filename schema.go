@@ -38,6 +38,7 @@ type Schema struct {
 	tenant int
 	idx    []IndexInfo
 	errs   []error
+	rels   []*relation
 }
 
 func (s *Schema) fail(fieldName, format string, args ...any) {
@@ -199,4 +200,76 @@ func fieldAt(t reflect.Type, off uintptr, ft reflect.Type) string {
 		}
 	}
 	return ""
+}
+
+// Many returns the to-many relation f, to declare its key. Undeclared, the
+// key is the target's field named after this entity: InvoiceID on Line for a
+// relation of Invoice.
+func (s *Schema) Many[T any](f *Many[T]) *RelDef[T] {
+	return &RelDef[T]{s: s, r: s.findRel(unsafe.Pointer(f), reflect.TypeFor[Many[T]]())}
+}
+
+// One returns the to-one relation f, to declare its key. Undeclared, the key
+// is this entity's field named after the relation (OrgID for a relation Org)
+// when there is one, and otherwise the target's field named after this entity.
+func (s *Schema) One[T any](f *One[T]) *RelDef[T] {
+	return &RelDef[T]{s: s, r: s.findRel(unsafe.Pointer(f), reflect.TypeFor[One[T]]())}
+}
+
+// findRel returns the relation p points to, or nil after recording an error.
+func (s *Schema) findRel(p unsafe.Pointer, t reflect.Type) *relation {
+	if uintptr(p) >= uintptr(s.base) && uintptr(p)-uintptr(s.base) < s.size {
+		off := uintptr(p) - uintptr(s.base)
+		for _, r := range s.rels {
+			if r.off == off && r.typ == t {
+				return r
+			}
+		}
+	}
+	s.fail("", "a pointer given to Many or One is not a relation field of the entity")
+	return nil
+}
+
+// RelDef declares the key of one relation.
+type RelDef[T any] struct {
+	s *Schema
+	r *relation // nil when the field pointer was invalid (the error is recorded)
+}
+
+// ForeignKey declares the target's column that holds this entity's primary
+// key: func(l *Line) *int64 { return &l.InvoiceID }.
+func (d *RelDef[T]) ForeignKey[K any](fk func(*T) *K) *RelDef[T] {
+	if d.r == nil {
+		return d
+	}
+	if d.r.ref >= 0 {
+		d.s.fail(d.r.name, "relation %s declares both ForeignKey and References", d.r.name)
+		return d
+	}
+	d.r.fk = func() (uintptr, reflect.Type) {
+		x := new(T)
+		return uintptr(unsafe.Pointer(fk(x))) - uintptr(unsafe.Pointer(x)), reflect.TypeFor[K]()
+	}
+	return d
+}
+
+// References declares this entity's column that holds the target's primary
+// key, for a One relation to an entity this one belongs to: References(&x.OrgID).
+func (d *RelDef[T]) References[V any](p *V) *RelDef[T] {
+	if d.r == nil {
+		return d
+	}
+	if d.r.many {
+		d.s.fail(d.r.name, "References applies to a One relation; a Many relation's key is on its target: use ForeignKey")
+		return d
+	}
+	if d.r.fk != nil {
+		d.s.fail(d.r.name, "relation %s declares both ForeignKey and References", d.r.name)
+		return d
+	}
+	d.r.ref = d.s.find(unsafe.Pointer(p), reflect.TypeFor[V]())
+	if d.r.ref < 0 {
+		d.r.ref = -2 // the error is recorded; keep resolution from guessing
+	}
+	return d
 }

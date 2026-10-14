@@ -15,7 +15,7 @@ type Cents int64
 // Score is embedded in Sample: an embedded type that is not a struct is a column named after the type.
 type Score int64
 
-// Sample has a field of every handle kind, and both kinds of relation.
+// Sample has a field of every handle kind, and both kinds of relation, declared.
 type Sample struct {
 	ID        int64
 	Name      string
@@ -28,6 +28,7 @@ type Sample struct {
 	When      time.Time
 	MaybeWhen *time.Time
 	Blob      []byte
+	ParentID  *int64
 	Score
 	note   string
 	Lines  velox.Many[Line]
@@ -35,8 +36,12 @@ type Sample struct {
 	Hidden string `velox:"-"`
 }
 
-// Schema names Sample's table.
-func (x *Sample) Schema(s *velox.Schema) { s.Table("samples") }
+// Schema names Sample's table and declares both relations' keys.
+func (x *Sample) Schema(s *velox.Schema) {
+	s.Table("samples")
+	s.Many(&x.Lines).ForeignKey(func(l *Line) *int64 { return &l.SampleID })
+	s.One(&x.Parent).References(&x.ParentID)
+}
 
 // Note returns the unexported note, which is never a column.
 func (x *Sample) Note() string { return x.note }

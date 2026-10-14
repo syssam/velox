@@ -5,11 +5,11 @@ package velox
 
 //go:generate go run ./internal/handlegen/gen
 
-// GeneratedCodeIsVersion1 is referenced by every file velox-gen writes, so
+// GeneratedCodeIsVersion2 is referenced by every file velox-gen writes, so
 // that generated code and this library fail to compile together when they
-// disagree. It is replaced by GeneratedCodeIsVersion2 when generated code must
-// change.
-const GeneratedCodeIsVersion1 = true
+// disagree. It is replaced by GeneratedCodeIsVersion3 when generated code must
+// change. (Version 2: relations in Shape and Rel handles.)
+const GeneratedCodeIsVersion2 = true
 
 // Lazy is the constraint of the type parameter that every method of a
 // generic velox type carries, and that callers never write. A generic method
