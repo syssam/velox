@@ -1166,3 +1166,45 @@ func TestRefusedValuesSayWhy(t *testing.T) {
 	_, _, err = client.User.Query(db).ForUpdate(client.SkipLocked, client.SkipLocked).SQL(ctx)
 	require.NoError(t, err)
 }
+
+// Where the NULLs go, and an order by how many neighbors a row has: what
+// took a function on the SQL builder.
+func TestOrderByNullsAndByEdgeCount(t *testing.T) {
+	ctx := context.Background()
+	db, _ := open(t)
+	ann, bob, cy := newUser(t, db, "ann", 30), newUser(t, db, "bob", 40), newUser(t, db, "cy", 50)
+	for u, nick := range map[*entity.User]string{ann: "zed", cy: "ace"} {
+		_, err := client.User.UpdateByID(db, u.ID).Set(user.Nickname.Set(nick)).SaveOne(ctx)
+		require.NoError(t, err)
+	}
+	names := func(q *entity.UserQuery) []string {
+		var out []string
+		for _, u := range velox.Must(q.All(ctx)) {
+			out = append(out, u.Name)
+		}
+		return out
+	}
+	// bob has no nickname: first or last by what the term says, in either
+	// direction, and not by what the database does on its own.
+	assert.Equal(t, []string{"bob", "cy", "ann"}, names(client.User.Query(db).OrderBy(user.Nickname.Asc().NullsFirst())))
+	assert.Equal(t, []string{"cy", "ann", "bob"}, names(client.User.Query(db).OrderBy(user.Nickname.Asc().NullsLast())))
+	assert.Equal(t, []string{"bob", "ann", "cy"}, names(client.User.Query(db).OrderBy(user.Nickname.Desc().NullsFirst())))
+	assert.Equal(t, []string{"ann", "cy", "bob"}, names(client.User.Query(db).OrderBy(user.Nickname.Desc().NullsLast())))
+
+	// cy has two posts, ann one, bob none.
+	newPost(t, db, cy, "c1")
+	newPost(t, db, cy, "c2")
+	newPost(t, db, ann, "a1")
+	assert.Equal(t, []string{"cy", "ann", "bob"}, names(client.User.Query(db).OrderBy(user.Posts.Count().Desc(), user.Name.Asc())))
+	assert.Equal(t, []string{"bob", "ann", "cy"}, names(client.User.Query(db).OrderBy(user.Posts.Count().Asc())))
+	assert.Equal(t, []string{"cy", "ann"}, names(client.User.Query(db).Where(user.Posts.Has()).OrderBy(user.Posts.Count().Desc())))
+
+	// Neither can be the order of a page: a cursor continues in the
+	// database's own order of the columns.
+	one := 1
+	_, err := client.User.Query(db).OrderBy(user.Nickname.Asc().NullsLast()).Paginate(ctx, nil, &one, nil, nil)
+	require.ErrorContains(t, err, "cannot be paged")
+	_, err = client.User.Query(db).OrderBy(user.Posts.Count().Desc()).Paginate(ctx, nil, &one, nil, nil)
+	require.ErrorContains(t, err, "cannot be paged")
+	_ = bob
+}

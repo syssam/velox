@@ -517,6 +517,15 @@ func (q *QueryCore) selector(ctx context.Context, c *velox.ExecutorState, cols [
 			s.AddError(fmt.Errorf("velox: %s cannot be ordered by %q: not a column", q.M.Name, o.Col))
 			continue
 		}
+		// Where the NULLs go is said as an order of its own, before the
+		// column's: "is NULL" is false or true, which every dialect sorts,
+		// where NULLS FIRST and NULLS LAST are not MySQL's.
+		switch o.nulls {
+		case nullsFirst:
+			s.OrderExpr(sql.Expr(s.C(o.Col) + " IS NULL DESC"))
+		case nullsLast:
+			s.OrderExpr(sql.Expr(s.C(o.Col) + " IS NULL"))
+		}
 		if o.Desc {
 			s.OrderBy(sql.Desc(s.C(o.Col)))
 		} else {
@@ -895,6 +904,17 @@ func sqlgraphRel(r Rel) sqlgraph.Rel {
 	default:
 		return sqlgraph.M2M
 	}
+}
+
+// countOrder is the order by the number of neighbors a row has on edge e.
+func countOrder(e *EdgeMeta, desc bool) O {
+	return O{raw: func(s *sql.Selector) {
+		var opts []sql.OrderTermOption
+		if desc {
+			opts = append(opts, sql.OrderDesc())
+		}
+		sqlgraph.OrderByNeighborsCount(s, edgeStep(e), opts...)
+	}}
 }
 
 // edgeStep describes the traversal of e from its owner to its target.

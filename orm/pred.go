@@ -89,12 +89,21 @@ type S struct {
 type O struct {
 	Col  string
 	Desc bool
+	// nulls says where the rows whose column is NULL go, when the term says
+	// so: nullsFirst or nullsLast. Zero leaves it to the database.
+	nulls int8
 	// err is why the term could not be built (an order input naming
 	// something the entity is not ordered by); the query reports it.
 	err error
 	// raw, when set, writes the term itself: see RawOrder.
 	raw func(*sql.Selector)
 }
+
+// Where a term puts the rows whose column is NULL.
+const (
+	nullsFirst int8 = iota + 1
+	nullsLast
+)
 
 // EdgeLoad asks a query to eager-load one edge.
 type EdgeLoad struct {

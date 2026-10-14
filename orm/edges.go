@@ -132,6 +132,24 @@ func (e *ToMany[E, N, ID]) Load[PT any](q *QueryOf[PT, N, ID]) *LoadOf[E, N] {
 // loadOf makes the edge a Loader: With takes it as it is.
 func (e *ToMany[E, N, ID]) loadOf(E) load { return load{edge: e.Meta} }
 
+// Count is the number of neighbors a row has on the edge, to order by:
+//
+//	velox.User.Query(conn).OrderBy(user.Posts.Count().Desc())
+//
+// A query ordered by it cannot be paged with Paginate.
+func (e *ToMany[E, N, ID]) Count[_ Lazy[ID]]() EdgeCount[E] { return EdgeCount[E]{edge: e.Meta} }
+
+// EdgeCount is the number of neighbors on an edge of the entity whose
+// predicate type is E, as something to order by: what an edge's Count
+// returns.
+type EdgeCount[E Predicate] struct{ edge *EdgeMeta }
+
+// Asc orders by the count, the rows with fewest neighbors first.
+func (c EdgeCount[E]) Asc[_ Lazy[E]]() OrderOf[E] { return OrderOf[E](countOrder(c.edge, false)) }
+
+// Desc orders by the count, the rows with most neighbors first.
+func (c EdgeCount[E]) Desc[_ Lazy[E]]() OrderOf[E] { return OrderOf[E](countOrder(c.edge, true)) }
+
 // plain returns the predicates of an entity as the engine holds them.
 func plain[E Predicate](ps []E) []P {
 	subs := make([]P, len(ps))

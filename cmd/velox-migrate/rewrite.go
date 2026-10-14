@@ -1240,6 +1240,9 @@ func (r *rewriter) function(call *ast.CallExpr, sel *ast.SelectorExpr, stack []a
 			}
 			return
 		}
+		if edge := edgeCounted(name, e); edge != "" && r.inOrder(stack) {
+			return // Order writes it: <edge>.Count().Asc() or .Desc()
+		}
 		switch name {
 		case "Or", "Not":
 			r.emptyList(call, name)
@@ -2323,8 +2326,15 @@ func (r *rewriter) applyOption(call *ast.CallExpr) bool {
 // OrderBy(pkg.X.Desc(), pkg.Y.Asc()).
 func (r *rewriter) order(call *ast.CallExpr, sel *ast.SelectorExpr, e *entityInfo) {
 	term := r.predicate(call.Pos()) + "." + e.name + "OrderTerm"
-	// raw makes an order term of a function on a selector.
-	raw := func(text string) string { return term + "(" + r.orm(call.Pos()) + ".RawOrder(" + text + "))" }
+	// raw makes an order term of a function on a selector: the entity's
+	// own, velox.User.RawOrder(f), wherever the file can import the generated
+	// root, and the engine's converted to the entity's term elsewhere.
+	raw := func(text string) string {
+		if r.reachesRoot() {
+			return r.root(call.Pos()) + "." + e.name + ".RawOrder(" + text + ")"
+		}
+		return term + "(" + r.orm(call.Pos()) + ".RawOrder(" + text + "))"
+	}
 	var terms []string
 	for i, a := range call.Args {
 		if call.Ellipsis.IsValid() && i == len(call.Args)-1 {
@@ -2351,23 +2361,10 @@ func (r *rewriter) order(call *ast.CallExpr, sel *ast.SelectorExpr, e *entityInf
 		}
 		switch {
 		case known && t.where == "<entity>" && strings.HasPrefix(fn.Sel.Name, "By") && t.ent.fields[strings.TrimPrefix(fn.Sel.Name, "By")]:
-			dir := "Asc"
-			for _, opt := range c.Args {
-				option := ""
-				if oc, ok := opt.(*ast.CallExpr); ok {
-					if os, ok := oc.Fun.(*ast.SelectorExpr); ok {
-						option = os.Sel.Name
-					}
-				}
-				switch option {
-				case "OrderDesc":
-					dir = "Desc"
-				case "OrderAsc":
-				default:
-					dir = "" // NULLS FIRST, a function of the column: the library's own term
-				}
-			}
-			if dir == "" {
+			dir, nulls, plain := orderOptions(c.Args)
+			if !plain {
+				// An option the column's term does not have (an alias, a
+				// selected expression): the library's own term.
 				sqlPkg := r.ref(r.lib+"/dialect/sql", "sql", call.Pos())
 				opts := ""
 				for _, opt := range c.Args {
@@ -2376,7 +2373,15 @@ func (r *rewriter) order(call *ast.CallExpr, sel *ast.SelectorExpr, e *entityInf
 				terms = append(terms, raw(sqlPkg+".OrderByField("+r.render(fn.X)+".Column"+strings.TrimPrefix(fn.Sel.Name, "By")+opts+").ToFunc()"))
 				continue
 			}
-			terms = append(terms, r.render(fn.X)+"."+strings.TrimPrefix(fn.Sel.Name, "By")+"."+dir+"()")
+			terms = append(terms, r.render(fn.X)+"."+strings.TrimPrefix(fn.Sel.Name, "By")+"."+dir+"()"+nulls)
+		case known && t.where == "<entity>" && edgeCounted(fn.Sel.Name, t.ent) != "":
+			// ByPostsCount(sql.OrderDesc()): the count of the edge.
+			dir, nulls, plain := orderOptions(c.Args)
+			if !plain || nulls != "" {
+				terms = append(terms, raw(r.render(a)))
+				continue
+			}
+			terms = append(terms, r.render(fn.X)+"."+edgeCounted(fn.Sel.Name, t.ent)+".Count()."+dir+"()")
 		case known && t.where == "root" && (fn.Sel.Name == "Asc" || fn.Sel.Name == "Desc"):
 			for _, col := range c.Args {
 				cs, ok := col.(*ast.SelectorExpr)
@@ -2409,6 +2414,47 @@ func (r *rewriter) order(call *ast.CallExpr, sel *ast.SelectorExpr, e *entityInf
 	}
 	r.replace(sel.Sel.Pos(), call.End(), "OrderBy("+strings.Join(terms, ", ")+")")
 	r.count("OrderBy")
+}
+
+// orderOptions reads the options of an order function of the old generator,
+// ByName(sql.OrderDesc(), sql.OrderNullsLast()): the direction, the call that
+// says where the NULLs go, and whether those were all the options there were.
+func orderOptions(opts []ast.Expr) (dir, nulls string, plain bool) {
+	dir = "Asc"
+	for _, opt := range opts {
+		option := ""
+		if oc, ok := opt.(*ast.CallExpr); ok && len(oc.Args) == 0 {
+			if os, ok := oc.Fun.(*ast.SelectorExpr); ok {
+				option = os.Sel.Name
+			}
+		}
+		switch option {
+		case "OrderDesc":
+			dir = "Desc"
+		case "OrderAsc":
+			dir = "Asc"
+		case "OrderNullsFirst":
+			nulls = ".NullsFirst()"
+		case "OrderNullsLast":
+			nulls = ".NullsLast()"
+		default:
+			return "", "", false
+		}
+	}
+	return dir, nulls, true
+}
+
+// edgeCounted returns the edge an order function of the old generator counts
+// the neighbors on, Posts for ByPostsCount, or "".
+func edgeCounted(name string, e *entityInfo) string {
+	edge, ok := strings.CutPrefix(name, "By")
+	if !ok {
+		return ""
+	}
+	if edge, ok = strings.CutSuffix(edge, "Count"); !ok || !e.edges[edge] {
+		return ""
+	}
+	return edge
 }
 
 // paginate moves the order and the filter out of Paginate's options and

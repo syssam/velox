@@ -198,6 +198,16 @@ func nullsFirst(ctx context.Context, c *integration.Client) ([]*entity.User, err
 	return c.User.Query().Order(user.ByNickname(sql.OrderAsc(), sql.OrderNullsFirst()), user.ByID()).All(ctx)
 }
 
+// An order by the number of neighbors on an edge, and one with an option the
+// column's term does not have.
+func mostPosts(ctx context.Context, c *integration.Client) ([]*entity.User, error) {
+	return c.User.Query().Order(user.ByPostsCount(sql.OrderDesc()), user.ByName()).All(ctx)
+}
+
+func orderAliased(ctx context.Context, c *integration.Client) ([]*entity.User, error) {
+	return c.User.Query().Order(user.ByNickname(sql.OrderAs("nick"))).All(ctx)
+}
+
 func postsOf(ctx context.Context, c *integration.Client, who *entity.User) ([]*entity.Post, error) {
 	return c.User.QueryPosts(who).All(ctx)
 }

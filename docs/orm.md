@@ -218,9 +218,14 @@ err = velox.User.DeleteByID(conn, id).ExecOne(ctx)
   into a struct of the caller's.
 - An order is `user.Name.Asc()`; by a column named at run time,
   `velox.User.FieldOrder(name, desc)` (a name that is no field, or a
-  sensitive one, is an error); and for what neither says (NULLS LAST, an
+  sensitive one, is an error). Where the rows whose column is NULL go is the
+  database's choice, and the databases differ, unless the term says:
+  `user.Nickname.Asc().NullsLast()`, `.NullsFirst()`, the same rows first or
+  last on every dialect. By how many neighbors a row has on an edge:
+  `user.Posts.Count().Desc()`. And for what none of these says (an
   expression), `velox.User.RawOrder(func(s *sql.Selector) { ... })`. A
-  query ordered by a function cannot be paged: a cursor is made of columns.
+  query ordered by a function, by a count or with the NULLs placed cannot
+  be paged: a cursor is made of columns, in the database's own order.
 - Every column has `IsNil` and `NotNil`, one that cannot be NULL included
   (it never is): a filter chosen at run time, or code written once for every
   column of a type, asks without knowing which it has. `Clear` is only on a

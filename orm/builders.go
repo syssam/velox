@@ -71,6 +71,22 @@ func assignments[E Predicate](held []S, ss []SetterOf[E]) []S {
 	return held
 }
 
+// NullsFirst puts the rows whose column is NULL before all others, whichever
+// way the term orders: user.Nickname.Asc().NullsFirst(). Without it, where
+// they go is the database's choice, and the databases differ. A query ordered
+// this way cannot be paged with Paginate.
+func (o OrderOf[E]) NullsFirst[_ Lazy[E]]() OrderOf[E] {
+	o.nulls = nullsFirst
+	return o
+}
+
+// NullsLast puts the rows whose column is NULL after all others, whichever
+// way the term orders: see NullsFirst.
+func (o OrderOf[E]) NullsLast[_ Lazy[E]]() OrderOf[E] {
+	o.nulls = nullsLast
+	return o
+}
+
 // QueryOf is the query of an entity.
 type QueryOf[PT any, E Predicate, ID any] struct{ c QueryCore }
 

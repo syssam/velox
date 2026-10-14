@@ -328,11 +328,11 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"ctx = velox.WithExecutor(ctx, c) ctx = velox.WithExecutor(ctx, tx)",
 		"return velox.TxFrom(ctx) != nil && velox.ExecutorFrom(ctx) != nil",
 		// Order terms in a variable.
-		"order := func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnCreatedAt)), sql.Desc(s.C(user.ColumnName))) } return velox.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(order))).First(ctx)",
-		"byAge := func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C(user.ColumnAge))) } return velox.User.Query(c).OrderBy(predicate.UserOrderTerm(orm.RawOrder(byAge))).First(ctx)",
+		"order := func(s *sql.Selector) { s.OrderBy(sql.Desc(s.C(user.ColumnCreatedAt)), sql.Desc(s.C(user.ColumnName))) } return velox.User.Query(c).OrderBy(velox.User.RawOrder(order)).First(ctx)",
+		"byAge := func(s *sql.Selector) { s.OrderBy(sql.Asc(s.C(user.ColumnAge))) } return velox.User.Query(c).OrderBy(velox.User.RawOrder(byAge)).First(ctx)",
 		// An order written as a function; a column named at run time; a list of functions.
-		`OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { s.OrderBy(s.C(user.ColumnNickname) + " NULLS LAST") })), predicate.UserOrderTerm{Col: column, Desc: true}).All(ctx)`,
-		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(func(s *sql.Selector) { for _, f := range fs { f(s) } }))).All(ctx)",
+		`OrderBy(velox.User.RawOrder(func(s *sql.Selector) { s.OrderBy(s.C(user.ColumnNickname) + " NULLS LAST") }), predicate.UserOrderTerm{Col: column, Desc: true}).All(ctx)`,
+		"OrderBy(velox.User.RawOrder(func(s *sql.Selector) { for _, f := range fs { f(s) } })).All(ctx)",
 		// A predicate where a function on a selector is wanted.
 		"func asFunction(p predicate.User) func(*sql.Selector) { return velox.Compile(p) }",
 		// The where input's own additions, and Filter.
@@ -351,7 +351,9 @@ func TestMigrateReportsWhatItCannotKeep(t *testing.T) {
 		"func defaultRole() user.RoleEnum { return user.DefaultRole() }",
 		"return velox.First(velox.User.Query(c).Limit(1).IDs(ctx))",
 		"return velox.User.Query(c).ForUpdate(velox.SkipLocked).All(ctx)",
-		"OrderBy(predicate.UserOrderTerm(orm.RawOrder(sql.OrderByField(user.ColumnNickname, sql.OrderAsc(), sql.OrderNullsFirst()).ToFunc())), user.ID.Asc()).All(ctx)",
+		"OrderBy(user.Nickname.Asc().NullsFirst(), user.ID.Asc()).All(ctx)",
+		"OrderBy(user.Posts.Count().Desc(), user.Name.Asc()).All(ctx)",
+		`OrderBy(velox.User.RawOrder(sql.OrderByField(user.ColumnNickname, sql.OrderAs("nick")).ToFunc())).All(ctx)`,
 		"return who.QueryPosts(c).All(ctx)",
 		`func noField(o *entity.PostOrder) bool { return o == nil || o.Field == "" }`,
 		"func columnOf(o *entity.PostOrder) string { return o.Term().Col }",

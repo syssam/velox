@@ -81,7 +81,10 @@ func (q *QueryCore) Paginate(ctx context.Context, after *velox.Cursor, first *in
 			return nil, o.err
 		}
 		if o.raw != nil {
-			return nil, errors.New("velox: a query ordered by a function (orm.RawOrder) cannot be paged: a cursor is made of the columns ordered by")
+			return nil, errors.New("velox: a query ordered by a function (RawOrder) or by the count of an edge cannot be paged: a cursor is made of the columns ordered by")
+		}
+		if o.nulls != 0 {
+			return nil, errors.New("velox: a query ordered with NullsFirst or NullsLast cannot be paged: a cursor continues after a row in the database's own order of NULLs")
 		}
 	}
 	keys := slices.DeleteFunc(slices.Clone(q.Orders), func(o O) bool { return o.Col == "" })
