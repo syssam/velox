@@ -13,6 +13,30 @@ const (
 	OpDelete
 )
 
+// AssignOp is how an UPDATE assigns a column.
+type AssignOp uint8
+
+// The assignment operators.
+const (
+	AssignSet AssignOp = iota + 1 // column = value
+	AssignAdd                     // column = column + value
+	AssignSub                     // column = column - value
+)
+
+// Assignment is one column an UPDATE sets.
+type Assignment struct {
+	Column int // index into EntityInfo.Columns
+	Op     AssignOp
+	Value  any
+}
+
+// ConflictClause is an INSERT's upsert clause.
+type ConflictClause struct {
+	Columns   []int // the unique key whose conflict the insert resolves
+	Update    []int // columns overwritten with the inserted row's values
+	DoNothing bool  // keep the existing row; also what an empty Update means
+}
+
 // Statement is one operation on its way to the database. Every query becomes
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs (design §5).
@@ -25,12 +49,17 @@ type Statement struct {
 	Op        Op
 	Entity    *EntityInfo // shared and read-only: replace it, never edit it
 	Count     bool        // SELECT COUNT(*) instead of columns
-	Columns   []int       // the selected columns; nil selects all
+	Columns   []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
 	Where     []Predicate // all must hold
 	OrderBy   []OrderTerm
 	Limit     int // 0: no limit
 	Offset    int
-	Unbounded bool // the query said Unbounded
+	Unbounded bool            // the query said Unbounded
+	Set       []Assignment    // UPDATE: the assignments
+	Rows      [][]any         // INSERT: the rows, one value per Columns entry
+	Conflict  *ConflictClause // INSERT: the upsert clause, if any
+	Returning []int           // INSERT: columns read back (PostgreSQL and SQLite)
+	AllRows   bool            // UPDATE and DELETE: the statement said All
 	InTx      bool
 	SQL       string // set by rendering, after the rewrite hooks
 	Args      []any  // set by rendering

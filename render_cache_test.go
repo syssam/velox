@@ -89,3 +89,27 @@ func TestCacheStopsGrowing(t *testing.T) {
 		t.Errorf("cache holds %d shapes (counted %d), the limit is 3", held, c.size())
 	}
 }
+
+func TestCacheKeepsWriteShapesApart(t *testing.T) {
+	var c renderCache
+	one, _ := c.render(Postgres, ins([]int{1}, [][]any{{int64(1)}}))
+	two, _ := c.render(Postgres, ins([]int{1}, [][]any{{int64(1)}, {int64(2)}}))
+	up := ins([]int{1}, [][]any{{int64(1)}})
+	up.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{1}}
+	keep := ins([]int{1}, [][]any{{int64(1)}})
+	keep.Conflict = &ConflictClause{Columns: []int{1}, DoNothing: true}
+	upSQL, _ := c.render(Postgres, up)
+	keepSQL, _ := c.render(Postgres, keep)
+	set := &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.0}}}
+	add := &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignAdd, Value: 1.0}}}
+	setSQL, _ := c.render(Postgres, set)
+	addSQL, _ := c.render(Postgres, add)
+	ret := ins([]int{1}, [][]any{{int64(1)}})
+	ret.Returning = []int{0}
+	retSQL, _ := c.render(Postgres, ret)
+	for _, p := range [][2]string{{one, two}, {upSQL, keepSQL}, {setSQL, addSQL}, {one, retSQL}} {
+		if p[0] == p[1] {
+			t.Errorf("two shapes share SQL: %s", p[0])
+		}
+	}
+}

@@ -33,6 +33,7 @@ type Schema struct {
 	pkSet  bool         // PrimaryKey was called
 	cols   []ColumnInfo
 	table  string
+	schema string
 	pk     []int
 	tenant int
 	idx    []IndexInfo
@@ -81,6 +82,10 @@ func (s *Schema) indexes(fields []any) []int {
 
 // Table sets the table name. The default is the snake_case of the type name.
 func (s *Schema) Table(name string) { s.table = name }
+
+// TableIn sets the table name and the schema (PostgreSQL) or database
+// (MySQL, SQLite) that holds it: SQL names the table schema.table.
+func (s *Schema) TableIn(schema, table string) { s.schema, s.table = schema, table }
 
 // Column returns the column that the field pointer p names, to declare its
 // options.

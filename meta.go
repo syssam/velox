@@ -19,6 +19,7 @@ import (
 type EntityInfo struct {
 	Name       string // the Go type, e.g. "billing.Invoice"
 	Table      string
+	Schema     string // the schema holding Table; empty for the default
 	Columns    []ColumnInfo
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none
@@ -215,7 +216,7 @@ func buildInfo(t reflect.Type, base unsafe.Pointer, x any, cols, rels []string) 
 	if len(s.errs) > 0 {
 		return nil, errors.Join(s.errs...)
 	}
-	info := &EntityInfo{Name: name, Table: s.table, Columns: s.cols, PrimaryKey: s.pk, Tenant: s.tenant, Indexes: s.idx}
+	info := &EntityInfo{Name: name, Table: s.table, Schema: s.schema, Columns: s.cols, PrimaryKey: s.pk, Tenant: s.tenant, Indexes: s.idx}
 	if info.Table == "" {
 		info.Table = snake(t.Name())
 	}

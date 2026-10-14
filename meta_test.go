@@ -283,3 +283,14 @@ func TestCheckEntity(t *testing.T) {
 		t.Errorf("stale entity: %v", err)
 	}
 }
+
+type qualified struct{ ID int64 }
+
+func (x *qualified) Schema(s *Schema) { s.TableIn("billing", "invoices") }
+
+func TestTableIn(t *testing.T) {
+	info, err := infoOf[qualified]([]string{"ID"}, nil)
+	if err != nil || info.Schema != "billing" || info.Table != "invoices" {
+		t.Fatalf("%+v, %v", info, err)
+	}
+}

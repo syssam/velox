@@ -1,6 +1,9 @@
 package velox
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // writer renders a statement. With argsOnly it collects the arguments and
 // writes no text: the text is cached (render_cache.go), and one code path for
@@ -57,15 +60,8 @@ func (w *writer) selectStmt(st *Statement) {
 		}
 	}
 	w.str(" FROM ")
-	w.ident(w.in.Table)
-	for i, p := range st.Where {
-		if i == 0 {
-			w.str(" WHERE ")
-		} else {
-			w.str(" AND ")
-		}
-		w.pred(p.n)
-	}
+	w.table()
+	w.where(st.Where)
 	for i, o := range st.OrderBy {
 		if i == 0 {
 			w.str(" ORDER BY ")
@@ -171,13 +167,153 @@ func (w *writer) pred(n node) {
 	}
 }
 
-// render returns a statement's SQL and arguments. Only SELECT exists until
-// the writes plan.
+// render returns a statement's SQL and arguments.
 func render(d Dialect, st *Statement) (string, []any) {
-	if st.Op != OpSelect {
-		panic("velox: render: only SELECT is implemented")
-	}
 	w := writer{d: d, in: st.Entity}
-	w.selectStmt(st)
+	w.statement(st)
 	return w.b.String(), w.args
+}
+
+// statement writes a statement of any kind.
+func (w *writer) statement(st *Statement) {
+	switch st.Op {
+	case OpSelect:
+		w.selectStmt(st)
+	case OpInsert:
+		w.insertStmt(st)
+	case OpUpdate:
+		w.updateStmt(st)
+	case OpDelete:
+		w.deleteStmt(st)
+	default:
+		panic(fmt.Sprintf("velox: render: unknown statement kind %d", st.Op))
+	}
+}
+
+// table writes the entity's table, qualified by its schema when it has one.
+func (w *writer) table() {
+	if w.in.Schema != "" {
+		w.ident(w.in.Schema)
+		w.str(".")
+	}
+	w.ident(w.in.Table)
+}
+
+func (w *writer) where(ps []Predicate) {
+	for i, p := range ps {
+		if i == 0 {
+			w.str(" WHERE ")
+		} else {
+			w.str(" AND ")
+		}
+		w.pred(p.n)
+	}
+}
+
+func (w *writer) columns(cs []int) {
+	for i, c := range cs {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.col(int32(c))
+	}
+}
+
+func (w *writer) insertStmt(st *Statement) {
+	w.str("INSERT INTO ")
+	w.table()
+	w.str(" (")
+	w.columns(st.Columns)
+	w.str(") VALUES ")
+	for r, row := range st.Rows {
+		if r > 0 {
+			w.str(", ")
+		}
+		w.str("(")
+		for i, v := range row {
+			if i > 0 {
+				w.str(", ")
+			}
+			w.arg(v)
+		}
+		w.str(")")
+	}
+	if st.Conflict != nil {
+		w.conflict(st.Conflict)
+	}
+	if len(st.Returning) > 0 && w.d != MySQL {
+		w.str(" RETURNING ")
+		w.columns(st.Returning)
+	}
+}
+
+// conflict writes the upsert clause. MySQL has neither a conflict target nor
+// DO NOTHING: ON DUPLICATE KEY UPDATE applies to any unique key, keeping the
+// existing row is a no-op assignment, and the inserted values come from the
+// row alias new (MySQL 8.0.19 and later).
+func (w *writer) conflict(cf *ConflictClause) {
+	keep := cf.DoNothing || len(cf.Update) == 0
+	if w.d == MySQL {
+		w.str(" AS new ON DUPLICATE KEY UPDATE ")
+		if keep {
+			w.col(int32(cf.Columns[0]))
+			w.str(" = ")
+			w.col(int32(cf.Columns[0]))
+			return
+		}
+		for i, c := range cf.Update {
+			if i > 0 {
+				w.str(", ")
+			}
+			w.col(int32(c))
+			w.str(" = new.")
+			w.col(int32(c))
+		}
+		return
+	}
+	w.str(" ON CONFLICT (")
+	w.columns(cf.Columns)
+	w.str(")")
+	if keep {
+		w.str(" DO NOTHING")
+		return
+	}
+	w.str(" DO UPDATE SET ")
+	for i, c := range cf.Update {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.col(int32(c))
+		w.str(" = EXCLUDED.")
+		w.col(int32(c))
+	}
+}
+
+func (w *writer) updateStmt(st *Statement) {
+	w.str("UPDATE ")
+	w.table()
+	w.str(" SET ")
+	for i, a := range st.Set {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.col(int32(a.Column))
+		w.str(" = ")
+		switch a.Op {
+		case AssignAdd:
+			w.col(int32(a.Column))
+			w.str(" + ")
+		case AssignSub:
+			w.col(int32(a.Column))
+			w.str(" - ")
+		}
+		w.arg(a.Value)
+	}
+	w.where(st.Where)
+}
+
+func (w *writer) deleteStmt(st *Statement) {
+	w.str("DELETE FROM ")
+	w.table()
+	w.where(st.Where)
 }

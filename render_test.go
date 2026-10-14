@@ -32,6 +32,27 @@ func stmt(where ...Pred[inv]) *Statement {
 	return st
 }
 
+func ins(cols []int, rows [][]any) *Statement {
+	return &Statement{Op: OpInsert, Entity: invInfo, Columns: cols, Rows: rows}
+}
+
+func TestRenderSchemaQualifiedTable(t *testing.T) {
+	info := &EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1, Columns: []ColumnInfo{{Name: "id"}}}
+	for d, want := range map[Dialect]string{
+		Postgres: `SELECT "id" FROM "billing"."invoices"`,
+		MySQL:    "SELECT `id` FROM `billing`.`invoices`",
+		SQLite:   `SELECT "id" FROM "billing"."invoices"`,
+	} {
+		if got, _ := render(d, &Statement{Op: OpSelect, Entity: info}); got != want {
+			t.Errorf("%v: %s", d, got)
+		}
+	}
+	del, _ := render(Postgres, &Statement{Op: OpDelete, Entity: info})
+	if del != `DELETE FROM "billing"."invoices"` {
+		t.Errorf("delete: %s", del)
+	}
+}
+
 type renderCase struct {
 	name string
 	st   func() *Statement
@@ -95,6 +116,57 @@ func renderCases() []renderCase {
 		}, map[Dialect]string{
 			Postgres: `SELECT "number", "id" FROM "invoices" LIMIT $1 OFFSET $2`,
 		}, []any{1, 5}},
+		{"insert one row", func() *Statement { return ins([]int{1, 2}, [][]any{{int64(7), "A"}}) }, map[Dialect]string{
+			Postgres: `INSERT INTO "invoices" ("org_id", "number") VALUES ($1, $2)`,
+			MySQL:    "INSERT INTO `invoices` (`org_id`, `number`) VALUES (?, ?)",
+			SQLite:   `INSERT INTO "invoices" ("org_id", "number") VALUES (?, ?)`,
+		}, []any{int64(7), "A"}},
+		{"insert two rows returning", func() *Statement {
+			st := ins([]int{1, 2}, [][]any{{int64(7), "A"}, {int64(8), "B"}})
+			st.Returning = []int{0}
+			return st
+		}, map[Dialect]string{
+			Postgres: `INSERT INTO "invoices" ("org_id", "number") VALUES ($1, $2), ($3, $4) RETURNING "id"`,
+			MySQL:    "INSERT INTO `invoices` (`org_id`, `number`) VALUES (?, ?), (?, ?)",
+			SQLite:   `INSERT INTO "invoices" ("org_id", "number") VALUES (?, ?), (?, ?) RETURNING "id"`,
+		}, []any{int64(7), "A", int64(8), "B"}},
+		{"upsert update", func() *Statement {
+			st := ins([]int{1, 2, 3}, [][]any{{int64(7), "A", 1.5}})
+			st.Conflict = &ConflictClause{Columns: []int{1, 2}, Update: []int{3}}
+			return st
+		}, map[Dialect]string{
+			Postgres: `INSERT INTO "invoices" ("org_id", "number", "total") VALUES ($1, $2, $3) ON CONFLICT ("org_id", "number") DO UPDATE SET "total" = EXCLUDED."total"`,
+			MySQL:    "INSERT INTO `invoices` (`org_id`, `number`, `total`) VALUES (?, ?, ?) AS new ON DUPLICATE KEY UPDATE `total` = new.`total`",
+			SQLite:   `INSERT INTO "invoices" ("org_id", "number", "total") VALUES (?, ?, ?) ON CONFLICT ("org_id", "number") DO UPDATE SET "total" = EXCLUDED."total"`,
+		}, []any{int64(7), "A", 1.5}},
+		{"upsert do nothing", func() *Statement {
+			st := ins([]int{1, 2}, [][]any{{int64(7), "A"}})
+			st.Conflict = &ConflictClause{Columns: []int{1, 2}, DoNothing: true}
+			return st
+		}, map[Dialect]string{
+			Postgres: `INSERT INTO "invoices" ("org_id", "number") VALUES ($1, $2) ON CONFLICT ("org_id", "number") DO NOTHING`,
+			MySQL:    "INSERT INTO `invoices` (`org_id`, `number`) VALUES (?, ?) AS new ON DUPLICATE KEY UPDATE `org_id` = `org_id`",
+			SQLite:   `INSERT INTO "invoices" ("org_id", "number") VALUES (?, ?) ON CONFLICT ("org_id", "number") DO NOTHING`,
+		}, []any{int64(7), "A"}},
+		{"update", func() *Statement {
+			st := stmt(hOrg.EQ(7))
+			st.Op = OpUpdate
+			st.Set = []Assignment{{Column: 3, Op: AssignAdd, Value: 2.0}, {Column: 4, Op: AssignSet}, {Column: 2, Op: AssignSub, Value: "x"}}
+			return st
+		}, map[Dialect]string{
+			Postgres: `UPDATE "invoices" SET "total" = "total" + $1, "paid_at" = $2, "number" = "number" - $3 WHERE "org_id" = $4`,
+			MySQL:    "UPDATE `invoices` SET `total` = `total` + ?, `paid_at` = ?, `number` = `number` - ? WHERE `org_id` = ?",
+			SQLite:   `UPDATE "invoices" SET "total" = "total" + ?, "paid_at" = ?, "number" = "number" - ? WHERE "org_id" = ?`,
+		}, []any{2.0, nil, "x", int64(7)}},
+		{"delete", func() *Statement {
+			st := stmt(hID.In(1, 2))
+			st.Op = OpDelete
+			return st
+		}, map[Dialect]string{
+			Postgres: `DELETE FROM "invoices" WHERE "id" IN ($1, $2)`,
+			MySQL:    "DELETE FROM `invoices` WHERE `id` IN (?, ?)",
+			SQLite:   `DELETE FROM "invoices" WHERE "id" IN (?, ?)`,
+		}, []any{int64(1), int64(2)}},
 	}
 }
 

@@ -33,7 +33,7 @@ func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
 	c.mu.RUnlock()
 	if ok {
 		w := writer{d: d, in: st.Entity, argsOnly: true, args: make([]any, 0, 8)}
-		w.selectStmt(st)
+		w.statement(st)
 		return text, w.args
 	}
 	text, args := render(d, st)
@@ -86,6 +86,28 @@ func shapeKey(k []byte, d Dialect, st *Statement) []byte {
 	for _, o := range st.OrderBy {
 		k = binary.AppendUvarint(k, uint64(o.Column))
 		k = append(k, flag(o.Desc))
+	}
+	k = binary.AppendUvarint(k, uint64(len(st.Set)))
+	for _, a := range st.Set {
+		k = binary.AppendUvarint(k, uint64(a.Column))
+		k = append(k, byte(a.Op))
+	}
+	k = binary.AppendUvarint(k, uint64(len(st.Rows)))
+	if cf := st.Conflict; cf != nil {
+		k = append(k, 1, flag(cf.DoNothing))
+		k = appendInts(k, cf.Columns)
+		k = appendInts(k, cf.Update)
+	} else {
+		k = append(k, 0)
+	}
+	k = appendInts(k, st.Returning)
+	return k
+}
+
+func appendInts(k []byte, xs []int) []byte {
+	k = binary.AppendUvarint(k, uint64(len(xs)))
+	for _, x := range xs {
+		k = binary.AppendUvarint(k, uint64(x))
 	}
 	return k
 }
