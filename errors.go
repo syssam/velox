@@ -19,6 +19,9 @@ var (
 	ErrNoWhere = errors.New("update or delete has no Where")
 	// ErrLimitTooLarge: a query whose Limit is over the DB's WithMaxLimit.
 	ErrLimitTooLarge = errors.New("limit is over the maximum")
+	// ErrTooManyRows: a query returned more rows than WithMaxRows or the
+	// query's MaxRows allow.
+	ErrTooManyRows = errors.New("read more rows than the cap")
 	// ErrStale: an entity's struct changed after velox-gen last ran.
 	ErrStale = errors.New("generated code is out of date")
 )

@@ -96,6 +96,15 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 	return q
 }
 
+// MaxRows returns the query allowed to return up to n rows, in place of the
+// DB's WithMaxRows cap; n <= 0 restores the DB's cap. Say it where reading
+// many rows is meant, so the exception is visible where the query is
+// written.
+func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E] {
+	q.st.MaxRows = max(n, 0)
+	return q
+}
+
 // Columns returns the query selecting only the given columns; the other
 // fields keep their zero values. With no columns it selects every column.
 func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E] {

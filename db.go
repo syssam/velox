@@ -26,6 +26,7 @@ type config struct {
 	arounds  []Around
 	cache    renderCache
 	maxLimit int // WithMaxLimit; 0: none
+	maxRows  int // WithMaxRows; 0: none
 }
 
 // Option configures a DB's pipeline.
@@ -48,6 +49,11 @@ func WithMaxLimit(n int) Option {
 	}
 	return func(c *config) { c.maxLimit = n }
 }
+
+// WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
+// rows: a relation load and Iter included, Count and an insert's RETURNING
+// not. A query's MaxRows overrides it. n <= 0 sets no cap.
+func WithMaxRows(n int) Option { return func(c *config) { c.maxRows = max(n, 0) } }
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
 // hook panics.
@@ -282,6 +288,38 @@ func checkColumns(st *Statement) error {
 	return nil
 }
 
+// rowCap is the most rows st may return: its own MaxRows, else the DB's; 0
+// for no cap.
+func (db *DB) rowCap(st *Statement) int {
+	if st.Op != OpSelect || st.Count {
+		return 0
+	}
+	if st.MaxRows > 0 {
+		return st.MaxRows
+	}
+	return db.cfg.maxRows
+}
+
+// cappedRows ends the rows after left of them, and records that there were
+// more.
+type cappedRows struct {
+	rows
+	left int
+	over bool
+}
+
+func (c *cappedRows) Next() bool {
+	if !c.rows.Next() {
+		return false
+	}
+	if c.left == 0 {
+		c.over = true
+		return false
+	}
+	c.left--
+	return true
+}
+
 // exec sends a rendered statement, reads its rows with read and closes them;
 // with a nil read it sends a statement that returns no rows and fills *res.
 // Errors from the database, the driver or read name the entity.
@@ -303,6 +341,11 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 	if err != nil {
 		return dbErr(st.Entity, err)
 	}
+	var capped *cappedRows
+	if n := db.rowCap(st); n > 0 {
+		capped = &cappedRows{rows: r, left: n}
+		r = capped
+	}
 	defer func() {
 		// Deferred, so that the rows are closed even when the loop body of
 		// an Iter, which runs inside read, panics. pgx reports some errors
@@ -314,6 +357,9 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 	}()
 	if err := read(r); err != nil {
 		return dbErr(st.Entity, err)
+	}
+	if capped != nil && capped.over {
+		return fmt.Errorf("velox: %s: %w: more than %d; raise it with the query's MaxRows", st.Entity.Name, ErrTooManyRows, db.rowCap(st))
 	}
 	return nil
 }

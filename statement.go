@@ -55,6 +55,7 @@ type Statement struct {
 	Limit     int // 0: no limit
 	Offset    int
 	Unbounded bool            // the query said Unbounded
+	MaxRows   int             // SELECT: the most rows it may return; 0: the DB's WithMaxRows
 	Set       []Assignment    // UPDATE: the assignments
 	Rows      [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict  *ConflictClause // INSERT: the upsert clause, if any
