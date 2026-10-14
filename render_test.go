@@ -27,7 +27,7 @@ const (
 func stmt(where ...Pred[inv]) *Statement {
 	st := &Statement{Op: OpSelect, Entity: invInfo}
 	for _, p := range where {
-		st.Where = append(st.Where, Predicate{p.n})
+		st.Where = append(st.Where, Predicate(p))
 	}
 	return st
 }

@@ -26,7 +26,7 @@ func (db *DB) Query[E any, PE Entity[E]]() *Query[E] {
 // Where adds conditions. All of a query's conditions must hold.
 func (q *Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) *Query[E] {
 	for _, p := range ps {
-		q.st.Where = append(q.st.Where, Predicate{p.n})
+		q.st.Where = append(q.st.Where, Predicate(p))
 	}
 	return q
 }

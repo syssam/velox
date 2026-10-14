@@ -1,0 +1,29 @@
+# The databases CI runs against, for scripts/ci-local.sh.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: velox
+      POSTGRES_PASSWORD: velox
+      POSTGRES_DB: velox
+    ports: ["127.0.0.1:55432:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U velox"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: velox
+      MYSQL_DATABASE: velox
+      MYSQL_USER: velox
+      MYSQL_PASSWORD: velox
+    ports: ["127.0.0.1:53306:3306"]
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uvelox", "-pvelox"]
+      interval: 1s
+      timeout: 3s
+      retries: 120

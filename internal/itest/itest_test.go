@@ -7,12 +7,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
@@ -34,9 +38,59 @@ type target struct {
 	ddl  string
 }
 
+// targets returns SQLite always, and PostgreSQL and MySQL when their
+// environment variable is set. An unset variable omits the database; it never
+// skips a test, so the SQLite subtests always run.
 func targets(t *testing.T) []target {
 	t.Helper()
-	return []target{sqliteTarget(t)}
+	ts := []target{sqliteTarget(t)}
+	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
+		ts = append(ts, postgresTargets(t, dsn)...)
+	}
+	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
+		ts = append(ts, mysqlTarget(t, dsn))
+	}
+	return ts
+}
+
+const pgDDL = `CREATE TABLE invoices (created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL,
+	id bigint PRIMARY KEY, org_id bigint NOT NULL, number text NOT NULL, total double precision NOT NULL,
+	paid boolean NOT NULL, paid_at timestamptz, note text, data bytea NOT NULL)`
+
+// postgresTargets returns PostgreSQL twice: through native pgx (OpenPgx) and
+// through database/sql. Both are opened per test, so no connection keeps a
+// statement cached across the DROP and CREATE of setup.
+func postgresTargets(t *testing.T, dsn string) []target {
+	t.Helper()
+	sqlDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	exec := sqlExec(sqlDB, velox.Postgres)
+	return []target{
+		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool), exec: exec, ddl: pgDDL},
+		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB), exec: exec, ddl: pgDDL},
+	}
+}
+
+const mysqlDDL = "CREATE TABLE invoices (created_at DATETIME(6) NOT NULL, updated_at DATETIME(6) NOT NULL, " +
+	"id BIGINT PRIMARY KEY, org_id BIGINT NOT NULL, number VARCHAR(64) NOT NULL, total DOUBLE NOT NULL, " +
+	"paid BOOLEAN NOT NULL, paid_at DATETIME(6) NULL, note TEXT NULL, data BLOB NOT NULL)"
+
+func mysqlTarget(t *testing.T, dsn string) target {
+	t.Helper()
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL}
 }
 
 func sqliteTarget(t *testing.T) target {
@@ -81,6 +135,25 @@ func rebind(d velox.Dialect, q string) string {
 		b.WriteByte(q[i])
 	}
 	return b.String()
+}
+
+func TestRebind(t *testing.T) {
+	const q = "a = ? AND b IN (?, ?)"
+	for _, c := range []struct {
+		d    velox.Dialect
+		want string
+	}{
+		{velox.Postgres, "a = $1 AND b IN ($2, $3)"},
+		{velox.MySQL, q},
+		{velox.SQLite, q},
+	} {
+		if got := rebind(c.d, q); got != c.want {
+			t.Errorf("rebind(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+	if got := rebind(velox.Postgres, "no placeholders"); got != "no placeholders" {
+		t.Errorf("rebind without placeholders = %q", got)
+	}
 }
 
 // setup creates the invoices table with five rows. Org 1 owns ids 1–4. The
