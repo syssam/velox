@@ -295,7 +295,7 @@ func relLink[E any](i int32) (link, error) {
 		return link{}, err
 	}
 	if i < 0 || int(i) >= len(m.info.rels) {
-		return link{}, fmt.Errorf("velox: %s has no relation %d; run go tool velox-gen", m.info.Name, i)
+		return link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", m.info.Name, i)
 	}
 	return m.info.rels[i].resolve(m.info)
 }

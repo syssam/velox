@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2"
@@ -60,6 +61,52 @@ func TestWriteWithoutWhereIsRefused(t *testing.T) {
 	inv := testmodel.Invoice{ID: 1}
 	if err := db.Save(ctx, &inv, I.Number); err != nil {
 		t.Errorf("Save: %v", err)
+	}
+}
+
+// TestWhereThatHoldsForEveryRowIsNoWhere: a Where that matches every row by
+// its structure alone (DELETE … WHERE 1 = 1) is refused as if it were absent.
+func TestWhereThatHoldsForEveryRowIsNoWhere(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	always := map[string]velox.Pred[testmodel.Invoice]{
+		"And()":     velox.And[testmodel.Invoice](),
+		"Not(Or())": velox.Not(velox.Or[testmodel.Invoice]()),
+		"NotIn()":   I.ID.NotIn(),
+	}
+	const msg = "velox: testmodel.Invoice: update or delete has no Where: its conditions match every row"
+	for name, p := range always {
+		if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(p).Exec(ctx); !errors.Is(err, velox.ErrNoWhere) || !strings.HasPrefix(err.Error(), msg) {
+			t.Errorf("Update %s: %v", name, err)
+		}
+		if _, err := db.Delete[testmodel.Invoice]().Where(p).Exec(ctx); !errors.Is(err, velox.ErrNoWhere) || !strings.HasPrefix(err.Error(), msg) {
+			t.Errorf("Delete %s: %v", name, err)
+		}
+	}
+	if e.Calls != 0 {
+		t.Fatalf("%d statements sent: %v", e.Calls, e.Log)
+	}
+	for name, p := range always {
+		if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(p).All().Exec(ctx); err != nil {
+			t.Errorf("Update %s All: %v", name, err)
+		}
+		if _, err := db.Delete[testmodel.Invoice]().Where(p).All().Exec(ctx); err != nil {
+			t.Errorf("Delete %s All: %v", name, err)
+		}
+	}
+	for name, ps := range map[string][]velox.Pred[testmodel.Invoice]{
+		"And(EQ)":            {velox.And(I.ID.EQ(1))},
+		"And(), EQ":          {velox.And[testmodel.Invoice](), I.ID.EQ(1)},
+		"In()":               {I.ID.In()},
+		"And(And, Or())":     {velox.And(velox.And[testmodel.Invoice](), velox.Or[testmodel.Invoice]())},
+		"Or(EQ, Not(And()))": {velox.Or(I.ID.EQ(1), velox.Not(velox.And[testmodel.Invoice]()))},
+	} {
+		if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(ps...).Exec(ctx); err != nil {
+			t.Errorf("Update %s: %v", name, err)
+		}
+		if _, err := db.Delete[testmodel.Invoice]().Where(ps...).Exec(ctx); err != nil {
+			t.Errorf("Delete %s: %v", name, err)
+		}
 	}
 }
 

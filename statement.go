@@ -52,7 +52,7 @@ type Statement struct {
 	Columns   []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
 	Where     []Predicate // all must hold
 	OrderBy   []OrderTerm
-	Limit     int // 0: no limit
+	Limit     int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
 	Offset    int
 	Unbounded bool            // the query said Unbounded
 	MaxRows   int             // SELECT: the most rows it may return; 0: the DB's WithMaxRows

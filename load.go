@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"unsafe"
 )
 
@@ -34,7 +35,7 @@ func specErr(sp loadSpec) error {
 // specRelation resolves the relation a load names on owner.
 func specRelation(owner *EntityInfo, sp loadSpec) (*relation, link, error) {
 	if int(sp.rel) < 0 || int(sp.rel) >= len(owner.rels) {
-		return nil, link{}, fmt.Errorf("velox: %s has no relation %d; run go tool velox-gen", owner.Name, sp.rel)
+		return nil, link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", owner.Name, sp.rel)
 	}
 	r := owner.rels[sp.rel]
 	l, err := r.resolve(owner)
@@ -64,6 +65,20 @@ func checkLoads(owner *EntityInfo, cols []int, specs []loadSpec) error {
 	}
 	return nil
 }
+
+// loadError is the error of a relation load: err, the target's error, named
+// by the owner and relation. Its text drops err's own "velox: ", so the
+// prefix does not double; errors.Is and As still see err.
+type loadError struct {
+	owner, rel string
+	err        error
+}
+
+func (e *loadError) Error() string {
+	return "velox: " + e.owner + ": loading " + e.rel + ": " + strings.TrimPrefix(e.err.Error(), "velox: ")
+}
+
+func (e *loadError) Unwrap() error { return e.err }
 
 // keyOf returns a key value as a map key: a pointer is followed, and a nil
 // pointer is no key.
@@ -123,7 +138,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	var targets []unsafe.Pointer
 	if len(keys) > 0 {
 		if all, targets, err = fetch(ctx, db, t, l, sp, keys, maxRows); err != nil {
-			return fmt.Errorf("velox: %s: loading %s: %w", owner.Name, r.name, err)
+			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
 		for i, p := range targets {
 			if k, ok := keyOf(t.kit.value(p, l.targetCol)); ok {

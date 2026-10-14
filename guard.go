@@ -26,11 +26,74 @@ func (db *DB) guard(st *Statement) error {
 			return fmt.Errorf("velox: %s: %w: Limit %d, the maximum is %d", st.Entity.Name, ErrLimitTooLarge, st.Limit, m)
 		}
 	case OpUpdate, OpDelete:
-		if len(st.Where) == 0 && !st.AllRows {
+		if st.AllRows {
+			break
+		}
+		if len(st.Where) == 0 {
 			return fmt.Errorf("velox: %s: %w: add Where, or All to change every row", st.Entity.Name, ErrNoWhere)
+		}
+		every := true
+		for _, p := range st.Where {
+			every = every && alwaysTrue(p.n)
+		}
+		if every {
+			// And(conds...) of an empty conds renders WHERE 1 = 1.
+			return fmt.Errorf("velox: %s: %w: its conditions match every row; add a condition, or All to change every row", st.Entity.Name, ErrNoWhere)
 		}
 	}
 	return nil
+}
+
+// alwaysTrue reports whether n holds for every row, judged by its structure
+// alone, as render writes it: an empty And, or NotIn of nothing, is 1 = 1.
+func alwaysTrue(n node) bool {
+	switch n.op {
+	case opAnd:
+		for _, k := range n.kids {
+			if !alwaysTrue(k) {
+				return false
+			}
+		}
+		return true
+	case opOr:
+		for _, k := range n.kids {
+			if alwaysTrue(k) {
+				return true
+			}
+		}
+		return false
+	case opNot:
+		return alwaysFalse(n.kids[0])
+	case opNotIn:
+		return len(n.v.([]any)) == 0
+	}
+	return false
+}
+
+// alwaysFalse reports whether n holds for no row, judged by its structure
+// alone: an empty Or, or In of nothing, is 1 = 0.
+func alwaysFalse(n node) bool {
+	switch n.op {
+	case opAnd:
+		for _, k := range n.kids {
+			if alwaysFalse(k) {
+				return true
+			}
+		}
+		return false
+	case opOr:
+		for _, k := range n.kids {
+			if !alwaysFalse(k) {
+				return false
+			}
+		}
+		return true
+	case opNot:
+		return alwaysTrue(n.kids[0])
+	case opIn:
+		return len(n.v.([]any)) == 0
+	}
+	return false
 }
 
 // hasZero reports whether n is, or holds, the zero Predicate, which renders

@@ -100,7 +100,8 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 // DB's WithMaxRows cap; n <= 0 restores the DB's cap. It covers the
 // statements of the query's With loads too, nested ones included. Say it where
 // reading many rows is meant, so the exception is visible where the query is
-// written.
+// written. One reads up to 2 rows, so under MaxRows(1) a second matching row
+// fails One with ErrTooManyRows rather than ErrNotSingular.
 func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E] {
 	q.st.MaxRows = max(n, 0)
 	return q
@@ -277,7 +278,13 @@ type allRun[E any] struct {
 // readAll reads every row into a.out, anew should an around hook retry.
 func readAll[E any](a *allRun[E], r rows) error {
 	dst := make([]any, columnCount(&a.st))
-	a.out = make([]E, 0, min(a.st.Limit, 1024))
+	// The Limit of an Unbounded read is the row cap's (cap+1): a bound, not a
+	// likely size, so nothing is allocated ahead for it.
+	n := 0
+	if !a.st.Unbounded {
+		n = min(a.st.Limit, 1024)
+	}
+	a.out = make([]E, 0, n)
 	for r.Next() {
 		a.out = append(a.out, *new(E))
 		if err := scanRow(r, a.m, a.st.Columns, dst, &a.out[len(a.out)-1]); err != nil {
@@ -392,6 +399,9 @@ func readIter[E any](it *iterRun[E], r rows) error {
 // The rows are read while the around hooks run (see Around), so the body of
 // the loop over Iter runs inside them: an around hook's timing or deadline
 // covers it, and the statement's connection is held until the loop ends.
+// WithDeadlines' Statement and MaxStatement bound the loop body too, and no
+// query can lift them: a long export needs a DB opened without MaxStatement,
+// or a context whose deadline is within it.
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 	return func(yield func(E, error) bool) {
 		var zero E

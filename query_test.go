@@ -362,12 +362,16 @@ func TestABrokenRelationIsAnError(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	bad := velox.Rel[testmodel.Invoice, testmodel.Item]{I: 9}
 	badItem := velox.Rel[testmodel.Item, testmodel.Invoice]{I: 9}
-	const msg = "has no relation 9"
+	const msg = ": has no relation 9"
 	check := func(name string, err error) {
 		t.Helper()
 		if err == nil || !strings.Contains(err.Error(), msg) {
 			t.Errorf("%s: %v, want an error containing %q", name, err, msg)
 		}
+	}
+	_, err := db.Query[testmodel.Invoice]().With(bad).Limit(1).All(ctx)
+	if want := "velox: testmodel.Invoice: has no relation 9; run go tool velox-gen"; err == nil || err.Error() != want {
+		t.Errorf("With: %v, want %q", err, want)
 	}
 	for name, p := range map[string]velox.Pred[testmodel.Invoice]{
 		"direct":            bad.Has(),

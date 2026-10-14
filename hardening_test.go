@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-func TestNilHooksPanicAtOpen(t *testing.T) {
+func TestNilHooksPanic(t *testing.T) {
 	for name, f := range map[string]func(){
 		"WithRewrite": func() { velox.WithRewrite(nil) },
 		"WithAround":  func() { velox.WithAround(nil) },

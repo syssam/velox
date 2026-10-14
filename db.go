@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
@@ -20,9 +21,11 @@ type DB struct {
 	cfg   *config
 	inTx  bool
 	depth int // savepoint nesting inside a transaction
-	// txDeadline is, in a transaction, the deadline velox set for it; zero
-	// when none.
+	// txDeadline is, in a transaction, its deadline: velox's or the
+	// caller's, whichever is earlier; zero when none. txCause is ErrTimeout
+	// when the deadline is velox's, nil when it is the caller's.
 	txDeadline time.Time
+	txCause    error
 }
 
 type config struct {
@@ -57,10 +60,19 @@ func WithMaxLimit(n int) Option {
 
 // WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
 // rows: a relation load and Iter included, Count and an insert's RETURNING
-// not. The cap counts per statement, so a With load that is split into chunks
-// to stay under the parameter limit is counted chunk by chunk. A query's
-// MaxRows overrides it, for the query and its With loads. n <= 0 sets no cap.
-func WithMaxRows(n int) Option { return func(c *config) { c.maxRows = max(n, 0) } }
+// not. velox sends such a query with LIMIT n+1 (or the query's own Limit,
+// when that is lower), so the database stops early: the extra row is the one
+// that trips the cap. The cap counts per statement, so a With load that is
+// split into chunks to stay under the parameter limit is counted chunk by
+// chunk. A query's MaxRows overrides it, for the query and its With loads.
+// n <= 0 sets no cap; n must otherwise be at least 2, the rows One reads, and
+// n = 1 panics.
+func WithMaxRows(n int) Option {
+	if n == 1 {
+		panic("velox: WithMaxRows(1): the cap must be at least 2, the rows One reads")
+	}
+	return func(c *config) { c.maxRows = max(n, 0) }
+}
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
 // hook panics.
@@ -126,6 +138,7 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	if err := db.guard(st); err != nil {
 		return err
 	}
+	db.capLimit(st)
 	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
 	if !db.timed() {
 		return db.exec(ctx, st, read, res)
@@ -198,6 +211,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 			return err
 		}
 	}
+	db.capLimit(st)
 	if st.Entity == entity {
 		st.SQL, st.Args = db.cfg.cache.render(db.d, st)
 	} else {
@@ -336,6 +350,16 @@ func (db *DB) rowCap(st *Statement) int {
 		return st.MaxRows
 	}
 	return db.cfg.maxRows
+}
+
+// capLimit lowers st's Limit to its row cap plus one, so that the database
+// stops at the row that trips the cap instead of sending every row; exec's
+// cappedRows still does the counting. It runs just before rendering: the
+// guard and the Rewrite hooks have seen the caller's Limit.
+func (db *DB) capLimit(st *Statement) {
+	if n := db.rowCap(st); n > 0 && n < math.MaxInt && (st.Limit == 0 || st.Limit > n) {
+		st.Limit = n + 1
+	}
 }
 
 // cappedRows ends the rows after left of them, and records that there were
