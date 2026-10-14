@@ -108,13 +108,13 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 	}()
 	if err := fn(&DB{d: db.d, ex: ex, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause}); err != nil {
 		finished = true
-		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && ctx.Err() == nil {
+		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && !over(ctx) {
 			return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
 		return err
 	}
 	finished = true
-	if ctx.Err() != nil {
+	if over(ctx) {
 		// Past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
 		_ = ctl.rollback(end)
@@ -127,6 +127,17 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 		return fmt.Errorf("velox: commit: %w", err)
 	}
 	return nil
+}
+
+// over reports whether ctx has ended. Once its deadline has passed, it waits
+// for ctx to end: a statement in the transaction carries the same deadline on
+// a timer of its own, which may fire first, and the statement's timeout must
+// not find the transaction still live.
+func over(ctx context.Context) bool {
+	if dl, ok := ctx.Deadline(); ok && !time.Now().Before(dl) {
+		<-ctx.Done()
+	}
+	return ctx.Err() != nil
 }
 
 // savepoint runs fn under a savepoint of the current transaction.
