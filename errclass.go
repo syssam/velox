@@ -3,6 +3,7 @@ package velox
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -46,26 +47,54 @@ func pgKind(pg *pgconn.PgError) (ConstraintKind, string) {
 	return 0, ""
 }
 
+// driverError walks err's tree depth-first, through both Unwrap() error and
+// Unwrap() []error, and returns the first error whose type is a pointer to the
+// named type pkg.name. Matching the package path and not only the type's name
+// keeps a look-alike type in another package from being taken for the driver's.
+func driverError(err error, pkg, name string) error {
+	if err == nil {
+		return nil
+	}
+	if t := reflect.TypeOf(err); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == pkg && t.Elem().Name() == name {
+		return err
+	}
+	switch u := err.(type) {
+	case interface{ Unwrap() error }:
+		return driverError(u.Unwrap(), pkg, name)
+	case interface{ Unwrap() []error }:
+		for _, e := range u.Unwrap() {
+			if d := driverError(e, pkg, name); d != nil {
+				return d
+			}
+		}
+	}
+	return nil
+}
+
 // mysqlError reads a go-sql-driver/mysql error, whose text is
 // "Error 1062 (23000): Duplicate entry 'a' for key 'p.p_code_uq'".
 func mysqlError(err error) (int, string, bool) {
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		if fmt.Sprintf("%T", e) != "*mysql.MySQLError" {
-			continue
-		}
-		msg := e.Error()
-		var n int
-		if _, scanErr := fmt.Sscanf(msg, "Error %d", &n); scanErr == nil {
-			return n, msg, true
-		}
+	e := driverError(err, "github.com/go-sql-driver/mysql", "MySQLError")
+	if e == nil {
+		return 0, "", false
 	}
-	return 0, "", false
+	msg := e.Error()
+	var n int
+	if _, scanErr := fmt.Sscanf(msg, "Error %d", &n); scanErr != nil {
+		return 0, "", false
+	}
+	return n, msg, true
 }
 
 func mysqlKind(n int, msg string) (ConstraintKind, string) {
 	switch n {
 	case 1062:
-		name := between(msg, "for key '", "'")
+		// The key is the message's suffix. The duplicate value comes before
+		// it and can contain "for key '" itself, so read from the last one.
+		name := ""
+		if i := strings.LastIndex(msg, "for key '"); i >= 0 {
+			name = between(msg[i:], "for key '", "'")
+		}
 		if i := strings.LastIndexByte(name, '.'); i >= 0 {
 			name = name[i+1:] // MySQL 8 prefixes the table
 		}
@@ -84,9 +113,9 @@ func mysqlKind(n int, msg string) (ConstraintKind, string) {
 // extended result code and whose text ends with the constraint's subject:
 // "constraint failed: UNIQUE constraint failed: p.code (2067)".
 func sqliteError(err error) (int, string, bool) {
-	var c interface{ Code() int }
-	if errors.As(err, &c) && fmt.Sprintf("%T", c) == "*sqlite.Error" {
-		return c.Code(), err.Error(), true
+	e := driverError(err, "modernc.org/sqlite", "Error")
+	if c, ok := e.(interface{ Code() int }); ok {
+		return c.Code(), e.Error(), true
 	}
 	return 0, "", false
 }
@@ -98,6 +127,9 @@ func sqliteKind(code int, msg string) (ConstraintKind, string) {
 		if j := strings.LastIndex(subject, " ("); j >= 0 {
 			subject = subject[:j]
 		}
+	}
+	if code == 787 {
+		subject = "" // "FOREIGN KEY constraint failed" names nothing
 	}
 	switch code {
 	case 2067, 1555: // SQLITE_CONSTRAINT_UNIQUE, SQLITE_CONSTRAINT_PRIMARYKEY

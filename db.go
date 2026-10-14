@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -63,6 +64,9 @@ func (db *DB) Dialect() Dialect { return db.d }
 // dbErr names the entity in an error from the database or the driver, and
 // turns a violated constraint into a *ConstraintError.
 func dbErr(info *EntityInfo, err error) error {
+	if errors.As(err, new(*ConstraintError)) {
+		return err // already classified
+	}
 	if ce := constraint(info.Name, err); ce != nil {
 		return ce
 	}
