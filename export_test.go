@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -22,6 +23,25 @@ type FakeExec struct {
 	Scanned int
 	// Err, when set, is returned by every query.
 	Err error
+
+	Affected  int64 // what exec reports
+	LastID    int64
+	HasLastID bool
+	Log       []string // every statement, and BEGIN, COMMIT, ROLLBACK
+	Errs      []error  // returned by the next calls, one each, before Err
+	CommitErr error
+	Isolation sql.IsolationLevel // the last transaction's options
+	ReadOnly  bool
+}
+
+// next is the error the next call returns: the first of Errs, then Err.
+func (e *FakeExec) next() error {
+	if len(e.Errs) > 0 {
+		err := e.Errs[0]
+		e.Errs = e.Errs[1:]
+		return err
+	}
+	return e.Err
 }
 
 func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error) {
@@ -29,10 +49,47 @@ func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error
 	defer e.mu.Unlock()
 	e.SQL, e.Args = sql, args
 	e.Calls++
-	if e.Err != nil {
-		return nil, e.Err
+	e.Log = append(e.Log, sql)
+	if err := e.next(); err != nil {
+		return nil, err
 	}
 	return &fakeRows{data: e.Rows, e: e}, nil
+}
+
+func (e *FakeExec) exec(_ context.Context, sql string, args []any) (result, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.SQL, e.Args = sql, args
+	e.Calls++
+	e.Log = append(e.Log, sql)
+	if err := e.next(); err != nil {
+		return result{}, err
+	}
+	return result{affected: e.Affected, lastID: e.LastID, hasLastID: e.HasLastID}, nil
+}
+
+func (e *FakeExec) begin(_ context.Context, o txOptions) (executor, txControl, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.Log = append(e.Log, "BEGIN")
+	e.Isolation, e.ReadOnly = o.isolation, o.readOnly
+	return e, fakeTx{e}, nil
+}
+
+type fakeTx struct{ e *FakeExec }
+
+func (t fakeTx) commit(context.Context) error {
+	t.e.mu.Lock()
+	defer t.e.mu.Unlock()
+	t.e.Log = append(t.e.Log, "COMMIT")
+	return t.e.CommitErr
+}
+
+func (t fakeTx) rollback(context.Context) error {
+	t.e.mu.Lock()
+	defer t.e.mu.Unlock()
+	t.e.Log = append(t.e.Log, "ROLLBACK")
+	return nil
 }
 
 // OpenFake returns a DB of dialect d that runs statements on e.

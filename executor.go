@@ -5,10 +5,11 @@ import (
 	"database/sql"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// rows is what an executor returns; *sql.Rows (wrapped) and pgx.Rows both
-// provide it.
+// rows is what an executor returns for a query; *sql.Rows (wrapped) and
+// pgx.Rows both provide it.
 type rows interface {
 	Next() bool
 	Scan(dst ...any) error
@@ -16,41 +17,145 @@ type rows interface {
 	Close()
 }
 
+// result is what a statement that returns no rows reports.
+type result struct {
+	affected  int64
+	lastID    int64
+	hasLastID bool // the driver reports LastInsertId (MySQL, SQLite)
+}
+
+// txOptions are a transaction's options; TxOption sets them.
+type txOptions struct {
+	isolation sql.IsolationLevel
+	readOnly  bool
+	retries   int
+}
+
+// txControl ends a transaction.
+type txControl interface {
+	commit(ctx context.Context) error
+	rollback(ctx context.Context) error
+}
+
 // executor runs rendered statements.
 type executor interface {
 	query(ctx context.Context, sql string, args []any) (rows, error)
+	exec(ctx context.Context, sql string, args []any) (result, error)
+	// begin starts a transaction and returns the executor that runs in it.
+	begin(ctx context.Context, o txOptions) (executor, txControl, error)
 }
 
-type sqlQueryer interface {
+type sqlConn interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// sqlExecutor runs statements through database/sql.
-type sqlExecutor struct{ q sqlQueryer }
+// sqlExecutor runs statements through database/sql: through db outside a
+// transaction, through a *sql.Tx inside one.
+type sqlExecutor struct {
+	c  sqlConn
+	db *sql.DB // nil inside a transaction
+}
 
 func (e sqlExecutor) query(ctx context.Context, s string, args []any) (rows, error) {
-	r, err := e.q.QueryContext(ctx, s, args...)
+	r, err := e.c.QueryContext(ctx, s, args...)
 	if err != nil {
 		return nil, err
 	}
 	return sqlRows{r}, nil
 }
 
+func (e sqlExecutor) exec(ctx context.Context, s string, args []any) (result, error) {
+	res, err := e.c.ExecContext(ctx, s, args...)
+	if err != nil {
+		return result{}, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return result{}, err
+	}
+	id, idErr := res.LastInsertId()
+	return result{affected: n, lastID: id, hasLastID: idErr == nil}, nil
+}
+
+func (e sqlExecutor) begin(ctx context.Context, o txOptions) (executor, txControl, error) {
+	tx, err := e.db.BeginTx(ctx, &sql.TxOptions{Isolation: o.isolation, ReadOnly: o.readOnly})
+	if err != nil {
+		return nil, nil, err
+	}
+	return sqlExecutor{c: tx}, sqlTx{tx}, nil
+}
+
+type sqlTx struct{ tx *sql.Tx }
+
+func (t sqlTx) commit(context.Context) error   { return t.tx.Commit() }
+func (t sqlTx) rollback(context.Context) error { return t.tx.Rollback() }
+
 type sqlRows struct{ *sql.Rows }
 
 func (r sqlRows) Close() { _ = r.Rows.Close() }
 
-type pgxQueryer interface {
+type pgxConn interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// pgxExecutor runs statements through pgx's native protocol.
-type pgxExecutor struct{ q pgxQueryer }
+type pgxBeginner interface {
+	BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error)
+}
+
+// pgxExecutor runs statements through pgx's native protocol: through the
+// pool outside a transaction, through a pgx.Tx inside one.
+type pgxExecutor struct {
+	c    pgxConn
+	pool pgxBeginner // nil inside a transaction
+}
 
 func (e pgxExecutor) query(ctx context.Context, s string, args []any) (rows, error) {
-	r, err := e.q.Query(ctx, s, args...)
+	r, err := e.c.Query(ctx, s, args...)
 	if err != nil {
 		return nil, err
 	}
 	return r, nil
 }
+
+func (e pgxExecutor) exec(ctx context.Context, s string, args []any) (result, error) {
+	tag, err := e.c.Exec(ctx, s, args...)
+	if err != nil {
+		return result{}, err
+	}
+	return result{affected: tag.RowsAffected()}, nil
+}
+
+func (e pgxExecutor) begin(ctx context.Context, o txOptions) (executor, txControl, error) {
+	mode := pgx.ReadWrite
+	if o.readOnly {
+		mode = pgx.ReadOnly
+	}
+	tx, err := e.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgxIsolation(o.isolation), AccessMode: mode})
+	if err != nil {
+		return nil, nil, err
+	}
+	return pgxExecutor{c: tx}, pgxTx{tx}, nil
+}
+
+// pgxIsolation maps database/sql's isolation levels to pgx's; the default
+// leaves the server's.
+func pgxIsolation(l sql.IsolationLevel) pgx.TxIsoLevel {
+	switch l {
+	case sql.LevelReadUncommitted:
+		return pgx.ReadUncommitted
+	case sql.LevelReadCommitted:
+		return pgx.ReadCommitted
+	case sql.LevelRepeatableRead, sql.LevelSnapshot:
+		return pgx.RepeatableRead
+	case sql.LevelSerializable, sql.LevelLinearizable:
+		return pgx.Serializable
+	}
+	return ""
+}
+
+type pgxTx struct{ tx pgx.Tx }
+
+func (t pgxTx) commit(ctx context.Context) error   { return t.tx.Commit(ctx) }
+func (t pgxTx) rollback(ctx context.Context) error { return t.tx.Rollback(ctx) }

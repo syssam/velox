@@ -111,6 +111,8 @@ func cloneStatement(st *Statement) Statement {
 	c.Where = slices.Clip(c.Where)
 	c.OrderBy = slices.Clip(c.OrderBy)
 	c.Columns = slices.Clip(c.Columns)
+	c.Set = slices.Clip(c.Set)
+	c.Returning = slices.Clip(c.Returning)
 	return c
 }
 
@@ -169,11 +171,11 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	var err error
 	if q.db.hooked() {
 		a := &allRun[E]{st: cloneStatement(&q.st), m: q.meta}
-		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) })
+		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) }, nil)
 		out = a.out
 	} else {
 		a := allRun[E]{st: cloneStatement(&q.st), m: q.meta}
-		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) })
+		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) }, nil)
 		out = a.out
 	}
 	if err != nil {
@@ -249,11 +251,11 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		var stopped bool
 		if q.db.hooked() {
 			it := &iterRun[E]{st: cloneStatement(&q.st), m: q.meta, yield: yield}
-			err = q.db.run(ctx, &it.st, func(r rows) error { return readIter(it, r) })
+			err = q.db.run(ctx, &it.st, func(r rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
 			it := iterRun[E]{st: cloneStatement(&q.st), m: q.meta, yield: yield}
-			err = q.db.plain(ctx, &it.st, func(r rows) error { return readIter(&it, r) })
+			err = q.db.plain(ctx, &it.st, func(r rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}
 		if err != nil && !stopped {
@@ -288,11 +290,11 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	var err error
 	if q.db.hooked() {
 		c := &countRun{st: st}
-		err = q.db.run(ctx, &c.st, func(r rows) error { return readCount(c, r) })
+		err = q.db.run(ctx, &c.st, func(r rows) error { return readCount(c, r) }, nil)
 		n = c.n
 	} else {
 		c := countRun{st: st}
-		err = q.db.plain(ctx, &c.st, func(r rows) error { return readCount(&c, r) })
+		err = q.db.plain(ctx, &c.st, func(r rows) error { return readCount(&c, r) }, nil)
 		n = c.n
 	}
 	if err != nil {
