@@ -253,5 +253,15 @@ func TestCountOffsetColumnsIter(t *testing.T) {
 				break
 			}
 		}
+		if seen != 2 {
+			t.Errorf("Iter yielded %d rows before the break, want 2", seen)
+		}
+		// The early break must release the connection. SQLite has only one, so a
+		// leak makes this query wait out the timeout and fail rather than hang.
+		tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if n, err := tg.db.Query[testmodel.Invoice]().Count(tctx); err != nil || n != 5 {
+			t.Errorf("query after an early break: %d, %v", n, err)
+		}
 	})
 }
