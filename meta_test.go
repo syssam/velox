@@ -245,8 +245,11 @@ func TestEmptyKeysAndIndexes(t *testing.T) {
 func TestNotAColumnNamesTheField(t *testing.T) {
 	_, err := infoOf[badSchema]([]string{"ID", "Name"}, nil)
 	var se *SchemaError
-	if !errors.As(err, &se) || se.Field != "hidden" {
-		t.Fatalf("%v, field %q", err, se.Field)
+	if !errors.As(err, &se) {
+		t.Fatalf("%v is not a *SchemaError", err)
+	}
+	if se.Field != "hidden" {
+		t.Fatalf("field %q, want hidden: %v", se.Field, err)
 	}
 }
 

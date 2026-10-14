@@ -17,7 +17,7 @@ func noVerifyDirs(t *testing.T, dir string) {
 
 func TestVerifyPasses(t *testing.T) {
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
 	code, out, errs := velox(t, dir, "verify", "./...")
 	if code != 0 || !strings.Contains(out, "velox-gen verify: 1 entities, 0 with errors") {
 		t.Errorf("%d %q %q", code, out, errs)
@@ -28,9 +28,7 @@ func TestVerifyPasses(t *testing.T) {
 func TestVerifyReportsSchemaMistakes(t *testing.T) {
 	src := strings.Replace(invoiceSrc, `{ s.Table("invoices") }`, `{ s.Tenant(x.ID) }`, 1)
 	dir := tempModule(t, map[string]string{"billing/invoice.go": src})
-	if code, _, errs := velox(t, dir, "./..."); code != 0 {
-		t.Fatalf("generate: %q", errs)
-	}
+	mustGenerate(t, dir)
 	code, _, errs := velox(t, dir, "verify", "./...")
 	if code != 1 || !strings.Contains(errs, "expected a pointer to a field") {
 		t.Errorf("%d %q", code, errs)
@@ -39,7 +37,7 @@ func TestVerifyReportsSchemaMistakes(t *testing.T) {
 
 func TestVerifyReportsStaleCode(t *testing.T) {
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
 	writeFile(t, filepath.Join(dir, "billing/invoice.go"), strings.Replace(invoiceSrc, "Number    string", "Number    string\n\tNote      string", 1))
 	code, _, errs := velox(t, dir, "verify", "./...")
 	if code != 1 || !strings.Contains(errs, "generated code is out of date") {
@@ -51,7 +49,7 @@ func TestVerifyReportsStaleCode(t *testing.T) {
 func TestVerifySkipsEntitiesItCannotName(t *testing.T) {
 	note := "package billing\n\nimport \"github.com/syssam/velox2\"\n\ntype note struct{ ID int64 }\n\nfunc (x *note) Schema(s *velox.Schema) {}\n"
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc, "billing/note.go": note})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
 	code, out, errs := velox(t, dir, "verify", "./...")
 	if code != 0 || !strings.Contains(errs, "skipping billing.note") || !strings.Contains(out, "1 entities, 0 with errors") {
 		t.Errorf("%d %q %q", code, out, errs)
@@ -63,7 +61,7 @@ func TestVerifySkipsEntitiesItCannotName(t *testing.T) {
 func TestVerifyLeavesNothingBehind(t *testing.T) {
 	src := strings.Replace(invoiceSrc, `{ s.Table("invoices") }`, `{ s.Tenant(x.ID) }`, 1)
 	dir := tempModule(t, map[string]string{"billing/invoice.go": src})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
 	if code, _, errs := velox(t, dir, "verify", "./..."); code != 1 || !strings.Contains(errs, "expected a pointer to a field") {
 		t.Errorf("verify of a bad Schema: %d %q", code, errs)
 	}

@@ -63,6 +63,15 @@ func velox(t *testing.T, dir string, args ...string) (int, string, string) {
 	return code, out.String(), errs.String()
 }
 
+// mustGenerate runs velox-gen over dir to set a test up, and requires it to
+// succeed: a test that starts from a failed generation tests nothing.
+func mustGenerate(t *testing.T, dir string) {
+	t.Helper()
+	if code, out, errs := velox(t, dir, "./..."); code != 0 {
+		t.Fatalf("generate: %d %q %q", code, out, errs)
+	}
+}
+
 const invoiceSrc = `package billing
 
 import (
@@ -99,7 +108,7 @@ func TestRunWritesThenNothingChanges(t *testing.T) {
 
 func TestCheckFindsAStaleFile(t *testing.T) {
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
 	gen := filepath.Join(dir, "billing/invoice_velox.go")
 	before, _ := os.ReadFile(gen)
 	writeFile(t, filepath.Join(dir, "billing/invoice.go"), strings.Replace(invoiceSrc, "Number    string", "Number    string\n\tNote      string", 1))
@@ -116,7 +125,11 @@ func TestCheckFindsAStaleFile(t *testing.T) {
 // a field that no longer exists and does not compile.
 func TestRegeneratesAfterARename(t *testing.T) {
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
+	stale, err := os.ReadFile(filepath.Join(dir, "billing/invoice_velox.go"))
+	if err != nil || !strings.Contains(string(stale), "return &x.Number") {
+		t.Fatalf("no stale file to regenerate (err %v):\n%s", err, stale)
+	}
 	writeFile(t, filepath.Join(dir, "billing/invoice.go"), strings.ReplaceAll(invoiceSrc, "Number ", "Code   "))
 	if code, out, errs := velox(t, dir, "./..."); code != 0 || out != "billing/invoice_velox.go\n" {
 		t.Fatalf("regenerate: %d %q %q", code, out, errs)
@@ -129,7 +142,7 @@ func TestRegeneratesAfterARename(t *testing.T) {
 
 func TestRemovesTheFileOfAGoneEntity(t *testing.T) {
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
-	velox(t, dir, "./...")
+	mustGenerate(t, dir)
 	writeFile(t, filepath.Join(dir, "billing/invoice.go"), strings.Replace(invoiceSrc, "func (x *Invoice) Schema(s *velox.Schema) { s.Table(\"invoices\") }\n", "var _ = velox.ErrNotFound\n", 1))
 	code, out, errs := velox(t, dir, "./...")
 	if code != 0 || out != "billing/invoice_velox.go\n" {
