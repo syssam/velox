@@ -67,8 +67,8 @@ func TestDelete(t *testing.T) {
 	if err != nil || n != 1 || e.SQL != "DELETE FROM `invoices` WHERE `id` = ?" {
 		t.Errorf("%d %v %s", n, err, e.SQL)
 	}
-	if text, _ := db.Delete[testmodel.Invoice]().Where(I.ID.EQ(4)).SQL(); text != e.SQL {
-		t.Errorf("SQL() %s", text)
+	if text, _ := sqlOK(t)(db.Delete[testmodel.Invoice]().Where(I.ID.EQ(4)).SQL(ctx)); text != e.SQL {
+		t.Errorf("SQL(ctx) %s", text)
 	}
 }
 
@@ -137,8 +137,8 @@ func TestAColumnAssignedTwiceIsRefused(t *testing.T) {
 	if _, err := u.Exec(ctx); err == nil || err.Error() != want || e.Calls != 0 {
 		t.Errorf("Exec: %v, calls %d", err, e.Calls)
 	}
-	if text, _ := u.SQL(); text != "" {
-		t.Errorf("SQL() %q", text)
+	if text, _, err := u.SQL(ctx); text != "" || err == nil || err.Error() != want {
+		t.Errorf("SQL(ctx): %q %v", text, err)
 	}
 	// Set called twice is the same thing.
 	u = db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Set(2))

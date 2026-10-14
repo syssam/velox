@@ -3,7 +3,6 @@ package velox_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/syssam/velox2"
@@ -42,9 +41,11 @@ func TestBeforeDeleteAddsItsCondition(t *testing.T) {
 		}
 		wantSent(t, e, `DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3`, int64(1), true, int64(1))
 	}
-	// SQL, which runs no hooks, shows the query as built.
-	if sql, _ := d.SQL(); strings.Contains(sql, `"done"`) {
-		t.Errorf("SQL() = %s", sql)
+	// SQL(ctx) runs the hook as well, and shows its condition once.
+	for range 2 {
+		if sql, _, err := d.SQL(asUser("admin")); err != nil || sql != e.SQL {
+			t.Errorf("SQL(ctx) = %s %v", sql, err)
+		}
 	}
 }
 

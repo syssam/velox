@@ -147,7 +147,7 @@ func TestIterBreakClosesTheRows(t *testing.T) {
 func TestSQLNeedsNoDatabase(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.MySQL, e)
-	text, args := db.Query[testmodel.Invoice]().Where(I.Number.HasPrefix("A")).Limit(3).SQL()
+	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Number.HasPrefix("A")).Limit(3).SQL(ctx))
 	want := "SELECT `created_at`, `updated_at`, `id`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '\\\\' LIMIT ?"
 	if text != want || !reflect.DeepEqual(args, []any{"A%", 3}) || e.Calls != 0 {
 		t.Errorf("%s %v calls %d", text, args, e.Calls)
@@ -172,8 +172,9 @@ func TestQueryCanRunAgain(t *testing.T) {
 			t.Fatalf("run %d:\n got %s %v\nwant %s", run, e.SQL, e.Args, want)
 		}
 	}
-	if text, _ := q.SQL(); strings.Contains(text, `"org_id" =`) {
-		t.Errorf("the rewrite hook changed the query itself: %s", text)
+	// SQL(ctx) runs the hook too, and shows its condition once.
+	if text, _ := sqlOK(t)(q.SQL(ctx)); text != want {
+		t.Errorf("SQL(ctx):\n got %s\nwant %s", text, want)
 	}
 }
 
@@ -199,8 +200,8 @@ func TestStaleGeneratedCodeIsReportedOnUse(t *testing.T) {
 	if !errors.Is(err, velox.ErrStale) || !strings.Contains(err.Error(), "velox_test.staleEntity") || e.Calls != 0 {
 		t.Fatalf("%v, calls %d", err, e.Calls)
 	}
-	if text, _ := db.Query[staleEntity]().SQL(); text != "" {
-		t.Errorf("SQL of an invalid entity: %q", text)
+	if text, _, err := db.Query[staleEntity]().SQL(ctx); text != "" || !errors.Is(err, velox.ErrStale) {
+		t.Errorf("SQL of an invalid entity: %q %v", text, err)
 	}
 }
 
@@ -208,48 +209,48 @@ func TestStaleGeneratedCodeIsReportedOnUse(t *testing.T) {
 // the query extended as it was, so one base query can be extended many ways.
 func TestChainingCopiesTheQuery(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
-	base := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).OrderBy(I.ID.Asc())
-	baseSQL, baseArgs := base.SQL()
+	base := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).OrderBy(I.ID.Asc()).Unbounded()
+	baseSQL, baseArgs := sqlOK(t)(base.SQL(ctx))
 
 	paid := base.Where(I.Paid.EQ(true))
 	big := base.Where(I.Total.GT(100))
-	if text, args := paid.SQL(); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "paid" = $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), true}) {
+	if text, args := sqlOK(t)(paid.SQL(ctx)); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "paid" = $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), true}) {
 		t.Errorf("first branch: %s %v", text, args)
 	}
-	if text, args := big.SQL(); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "total" > $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), float64(100)}) {
+	if text, args := sqlOK(t)(big.SQL(ctx)); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "total" > $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), float64(100)}) {
 		t.Errorf("second branch: %s %v", text, args)
 	}
 
 	byTotal := base.OrderBy(I.Total.Desc())
 	byNumber := base.OrderBy(I.Number.Asc())
-	if text, _ := byTotal.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC`) {
+	if text, _ := sqlOK(t)(byTotal.SQL(ctx)); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC`) {
 		t.Errorf("first ordering: %s", text)
 	}
-	if text, _ := byNumber.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "number"`) {
+	if text, _ := sqlOK(t)(byNumber.SQL(ctx)); !strings.HasSuffix(text, `ORDER BY "id", "number"`) {
 		t.Errorf("second ordering: %s", text)
 	}
 
 	// Three conditions and three orderings leave the base's slices with room
 	// for a fourth, which the two branches must not both write to.
 	roomy := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.Paid.EQ(true), I.Total.GT(1)).
-		OrderBy(I.ID.Asc(), I.Total.Desc(), I.Number.Asc())
+		OrderBy(I.ID.Asc(), I.Total.Desc(), I.Number.Asc()).Unbounded()
 	low, high := roomy.Where(I.ID.LT(10)), roomy.Where(I.ID.GT(20))
-	if text, _ := low.SQL(); !strings.Contains(text, `AND "id" < $4 ORDER`) {
+	if text, _ := sqlOK(t)(low.SQL(ctx)); !strings.Contains(text, `AND "id" < $4 ORDER`) {
 		t.Errorf("first branch of a base with room: %s", text)
 	}
-	if text, _ := high.SQL(); !strings.Contains(text, `AND "id" > $4 ORDER`) {
+	if text, _ := sqlOK(t)(high.SQL(ctx)); !strings.Contains(text, `AND "id" > $4 ORDER`) {
 		t.Errorf("second branch of a base with room: %s", text)
 	}
 	byPaid, byOrg := roomy.OrderBy(I.Paid.Asc()), roomy.OrderBy(I.OrgID.Asc())
-	if text, _ := byPaid.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC, "number", "paid"`) {
+	if text, _ := sqlOK(t)(byPaid.SQL(ctx)); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC, "number", "paid"`) {
 		t.Errorf("first ordering of a base with room: %s", text)
 	}
-	if text, _ := byOrg.SQL(); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC, "number", "org_id"`) {
+	if text, _ := sqlOK(t)(byOrg.SQL(ctx)); !strings.HasSuffix(text, `ORDER BY "id", "total" DESC, "number", "org_id"`) {
 		t.Errorf("second ordering of a base with room: %s", text)
 	}
 
 	base.Limit(5).Offset(2).Unbounded().Columns(I.ID).Omit(I.Note)
-	if text, args := base.SQL(); text != baseSQL || !reflect.DeepEqual(args, baseArgs) {
+	if text, args := sqlOK(t)(base.SQL(ctx)); text != baseSQL || !reflect.DeepEqual(args, baseArgs) {
 		t.Errorf("the base query changed:\n got %s %v\nwant %s %v", text, args, baseSQL, baseArgs)
 	}
 }
@@ -264,7 +265,11 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 			for i := range 100 {
 				id := int64(g*1000 + i)
 				q := base.Where(I.ID.EQ(id)).OrderBy(I.ID.Desc())
-				text, args := q.SQL()
+				text, args, err := q.Unbounded().SQL(ctx)
+				if err != nil {
+					t.Error(err)
+					return
+				}
 				if want := `WHERE "org_id" = $1 AND "id" = $2 ORDER BY "id" DESC`; !strings.HasSuffix(text, want) || !reflect.DeepEqual(args, []any{int64(1), id}) {
 					t.Errorf("goroutine %d: %s %v", g, text, args)
 					return
@@ -348,7 +353,7 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 func TestHasThroughTheAPI(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	text, args := db.Query[testmodel.Invoice]().Where(I.Items.HasWhere(It.Qty.GT(2)), velox.Not(I.Items.Has())).Limit(5).SQL()
+	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Items.HasWhere(It.Qty.GT(2)), velox.Not(I.Items.Has())).Limit(5).SQL(ctx))
 	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT $2`
 	if text != want || len(args) != 2 {
 		t.Errorf("\n got %s\nwant %s", text, want)
@@ -389,19 +394,25 @@ func TestABrokenRelationIsAnError(t *testing.T) {
 		for _, err := range q.Iter(ctx) {
 			check(name+" Iter", err)
 		}
-		if text, args := q.SQL(); text != "" || args != nil {
+		text, args, err := q.SQL(ctx)
+		check(name+" Query.SQL", err)
+		if text != "" || args != nil {
 			t.Errorf("%s Query.SQL: %q %v", name, text, args)
 		}
 		u := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(p)
 		_, err = u.Exec(ctx)
 		check(name+" Update", err)
-		if text, _ := u.SQL(); text != "" {
+		text, _, err = u.SQL(ctx)
+		check(name+" Update.SQL", err)
+		if text != "" {
 			t.Errorf("%s Update.SQL: %q", name, text)
 		}
 		d := db.Delete[testmodel.Invoice]().Where(p)
 		_, err = d.Exec(ctx)
 		check(name+" Delete", err)
-		if text, _ := d.SQL(); text != "" {
+		text, _, err = d.SQL(ctx)
+		check(name+" Delete.SQL", err)
+		if text != "" {
 			t.Errorf("%s Delete.SQL: %q", name, text)
 		}
 	}

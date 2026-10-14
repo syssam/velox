@@ -12,14 +12,14 @@ import (
 func TestAfter(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	last := &testmodel.Invoice{ID: 7, Total: 2.5}
-	text, args := db.Query[testmodel.Invoice]().OrderBy(I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL()
+	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().OrderBy(I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL(ctx))
 	if !strings.HasSuffix(text, ` WHERE ("total" < $1 OR ("total" = $2 AND "id" > $3)) ORDER BY "total" DESC, "id" LIMIT $4`) {
 		t.Errorf("%s", text)
 	}
 	if len(args) != 4 || args[0] != 2.5 || args[1] != 2.5 || args[2] != int64(7) {
 		t.Errorf("%v", args)
 	}
-	text, _ = db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(last).Limit(10).SQL()
+	text, _ = sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(last).Limit(10).SQL(ctx))
 	if !strings.Contains(text, `WHERE "paid" = $1 AND ("id" > $2) ORDER BY "id"`) {
 		t.Errorf("%s", text)
 	}
@@ -64,8 +64,8 @@ func TestAfterNilRow(t *testing.T) {
 	if _, err := q.All(ctx); err == nil || !strings.HasPrefix(err.Error(), "velox: ") || !strings.HasSuffix(err.Error(), ": After was given a nil row") {
 		t.Errorf("%v", err)
 	}
-	if text, _ := q.SQL(); text != "" {
-		t.Errorf("%s", text)
+	if text, _, err := q.SQL(ctx); text != "" || err == nil || !strings.HasSuffix(err.Error(), ": After was given a nil row") {
+		t.Errorf("SQL(ctx): %q %v", text, err)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestAfterRefusesSliceColumns(t *testing.T) {
 func TestAfterMixedDirections(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	last := &testmodel.Invoice{ID: 7, OrgID: 3, Total: 2.5}
-	text, args := db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL()
+	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL(ctx))
 	want := ` WHERE ("org_id" > $1 OR ("org_id" = $2 AND "total" < $3) OR ("org_id" = $4 AND "total" = $5 AND "id" > $6)) ORDER BY "org_id", "total" DESC, "id" LIMIT $7`
 	if !strings.HasSuffix(text, want) {
 		t.Errorf("%s", text)
@@ -93,7 +93,7 @@ func TestAfterMixedDirections(t *testing.T) {
 
 func TestAfterSecondCaseArgs(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
-	_, args := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(&testmodel.Invoice{ID: 7}).Limit(10).SQL()
+	_, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(&testmodel.Invoice{ID: 7}).Limit(10).SQL(ctx))
 	if !reflect.DeepEqual(args, []any{true, int64(7), 10}) {
 		t.Errorf("%#v", args)
 	}

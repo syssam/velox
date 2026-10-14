@@ -304,7 +304,7 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 	e0 := &velox.FakeExec{}
 	db0 := velox.OpenFake(velox.Postgres, e0)
 	base := db0.Query[testmodel.Ticket]().Where(cond, has).Limit(1)
-	sql0, args0 := base.SQL()
+	sql0, args0 := sqlOK(t)(base.SQL(tenant(int64(1))))
 	run0 := func() (string, []any) {
 		t.Helper()
 		e0.Log = nil
@@ -346,7 +346,7 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 	}
 	wg.Wait()
 
-	if sql, args := base.SQL(); sql != sql0 || !reflect.DeepEqual(args, args0) {
+	if sql, args := sqlOK(t)(base.SQL(tenant(int64(1)))); sql != sql0 || !reflect.DeepEqual(args, args0) {
 		t.Errorf("the base query's SQL changed:\n%s %v\n%s %v", sql0, args0, sql, args)
 	}
 	if after, afterArgs := run0(); after != before || !reflect.DeepEqual(afterArgs, beforeArgs) {

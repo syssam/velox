@@ -117,6 +117,51 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // statements is atomic: outside a transaction it runs them in one, and inside
 // one it runs them under a savepoint.
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
+	if err := q.check(); err != nil {
+		return err
+	}
+	if q.one != nil {
+		return insertOne(ctx, q.db, q.meta, q.one, q.conflict)
+	}
+	return insertMany(ctx, q.db, q.meta, q.many, q.conflict)
+}
+
+// SQL returns the first statement and arguments Exec would send for ctx, or
+// the error Exec would fail with before sending it; it sends nothing, and
+// returns "" for an InsertAll of nothing. It runs every stage Exec runs
+// before execution: like Exec, it fills defaults and the tenant into the
+// caller's entities and runs the BeforeInsert hooks on them, then asks the
+// policy's Insert and runs the Rewrite hooks, the scope and rendering. So the
+// hooks run, and a Rewrite hook can tell from Statement.DryRun that the
+// statement will not be sent. Around hooks, which wrap execution, do not run.
+// An InsertAll too large for one statement gives the first, with InTx set:
+// Exec sends it in a transaction.
+func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
+	if err := q.check(); err != nil {
+		return "", nil, err
+	}
+	var st Statement
+	if q.one != nil {
+		var err error
+		if st, _, err = oneStatement(ctx, q.db, q.meta, q.one, q.conflict); err != nil {
+			return "", nil, err
+		}
+	} else {
+		if len(q.many) == 0 {
+			return "", nil, nil
+		}
+		cols, per, err := prepareMany(ctx, q.db, q.meta, q.many)
+		if err != nil {
+			return "", nil, err
+		}
+		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, q.db.inTx || len(q.many) > per)
+	}
+	return q.db.dryRun(ctx, &st)
+}
+
+// check refuses an insert that cannot be built: invalid metadata, Insert of
+// a nil pointer, an upsert without OnConflict's columns.
+func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.meta.err != nil {
 		return q.meta.err
 	}
@@ -126,10 +171,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.conflict != nil && len(q.conflict.Columns) == 0 {
 		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", q.meta.info.Name)
 	}
-	if q.one != nil {
-		return insertOne(ctx, q.db, q.meta, q.one, q.conflict)
-	}
-	return insertMany(ctx, q.db, q.meta, q.many, q.conflict)
+	return nil
 }
 
 // fillDefaults sets, in *p, every zero field whose column has Default or
@@ -205,17 +247,31 @@ func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
 	return vals
 }
 
-func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) error {
+// oneStatement prepares the entity at p, as Insert's Exec does, and returns
+// the statement that inserts it and its generated key column, -1 for none. On
+// PostgreSQL and SQLite the statement reads that key back with RETURNING.
+func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) (Statement, int, error) {
 	fillDefaults(m, p)
 	if err := prepareRow(ctx, m.info, unsafe.Pointer(p)); err != nil {
-		return err
+		return Statement{}, -1, err
 	}
 	gen := generatedKey(m, p)
 	cols := insertColumns(m.info, gen)
 	if len(cols) == 0 {
-		return errNothingToInsert(m.info)
+		return Statement{}, -1, errNothingToInsert(m.info)
 	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
+	if gen >= 0 && db.d != MySQL {
+		st.Returning = []int{gen}
+	}
+	return st, gen, nil
+}
+
+func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) error {
+	st, gen, err := oneStatement(ctx, db, m, p, cf)
+	if err != nil {
+		return err
+	}
 	if gen < 0 {
 		res, err := execWrite(ctx, db, &st)
 		if err != nil {
@@ -224,7 +280,6 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 		return checkUpserted(&st, res.affected)
 	}
 	if db.d != MySQL {
-		st.Returning = []int{gen}
 		var back int64 // the rows that came back
 		read := func(r rows) error {
 			if !r.Next() {
@@ -238,7 +293,6 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 			}
 			return nil
 		}
-		var err error
 		if db.hooked() {
 			err = db.run(ctx, &st, read, nil)
 		} else {
@@ -378,34 +432,48 @@ func setKey(in *EntityInfo, gen int, ptr any, id int64) error {
 	return nil
 }
 
-func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *ConflictClause) error {
-	if len(xs) == 0 {
-		return nil
-	}
+// prepareMany prepares every entity in xs, as InsertAll's Exec does, and
+// returns the columns to insert and the most rows one statement holds.
+func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols []int, per int, err error) {
 	for i := range xs {
 		fillDefaults(m, &xs[i])
 		if err := prepareRow(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
-			return err
+			return nil, 0, err
 		}
 	}
 	gen := generatedKey(m, &xs[0])
 	for i := range xs {
 		if (generatedKey(m, &xs[i]) >= 0) != (gen >= 0) {
-			return fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", m.info.Name)
+			return nil, 0, fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", m.info.Name)
 		}
 	}
-	cols := insertColumns(m.info, gen)
+	cols = insertColumns(m.info, gen)
 	if len(cols) == 0 {
-		return errNothingToInsert(m.info)
+		return nil, 0, errNothingToInsert(m.info)
 	}
-	per := max(1, maxParams[db.d]/len(cols))
+	return cols, max(1, maxParams[db.d]/len(cols)), nil
+}
+
+// batch is the statement that inserts xs, prepared, in one statement.
+func batch[E any](m *Meta[E], xs []E, cols []int, cf *ConflictClause, inTx bool) Statement {
+	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Conflict: cf, InTx: inTx, Rows: make([][]any, 0, len(xs))}
+	for i := range xs {
+		st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
+	}
+	return st
+}
+
+func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *ConflictClause) error {
+	if len(xs) == 0 {
+		return nil
+	}
+	cols, per, err := prepareMany(ctx, db, m, xs)
+	if err != nil {
+		return err
+	}
 	batches := func(db *DB) error {
 		for start := 0; start < len(xs); start += per {
-			end := min(start+per, len(xs))
-			st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Conflict: cf, InTx: db.inTx, Rows: make([][]any, 0, end-start)}
-			for i := start; i < end; i++ {
-				st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
-			}
+			st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.inTx)
 			res, err := execWrite(ctx, db, &st)
 			if err != nil {
 				return err

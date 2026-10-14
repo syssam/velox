@@ -99,7 +99,7 @@ func TestInCopiesItsValues(t *testing.T) {
 	ids := []int64{1, 2}
 	q := db.Query[testmodel.Invoice]().Where(I.ID.In(ids...)).Limit(5)
 	ids[0] = 9
-	if _, args := q.SQL(); args[0] != int64(1) {
+	if _, args := sqlOK(t)(q.SQL(ctx)); args[0] != int64(1) {
 		t.Errorf("args %v: In shares the caller's slice", args)
 	}
 }

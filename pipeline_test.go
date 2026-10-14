@@ -64,7 +64,7 @@ func TestHooksCannotChangeTheQuery(t *testing.T) {
 	}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(scribble))
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Columns(I.ID, I.Number).OrderBy(I.ID.Asc()).Limit(5)
-	wantQuery, wantArgs := q.SQL()
+	wantQuery, wantArgs := sqlOK(t)(q.SQL(ctx))
 	want := `SELECT "number", "id" FROM "invoices" WHERE "org_id" = $1 ORDER BY "total" DESC LIMIT $2`
 	for run := range 2 {
 		e.Rows = [][]any{{"INV-1", int64(1)}}
@@ -74,7 +74,7 @@ func TestHooksCannotChangeTheQuery(t *testing.T) {
 		if e.SQL != want {
 			t.Fatalf("run %d:\n got %s\nwant %s", run, e.SQL, want)
 		}
-		if text, args := q.SQL(); text != wantQuery || !reflect.DeepEqual(args, wantArgs) {
+		if text, args := sqlOK(t)(q.SQL(ctx)); text != wantQuery || !reflect.DeepEqual(args, wantArgs) {
 			t.Fatalf("run %d: the hook changed the query: %s %v", run, text, args)
 		}
 	}
@@ -90,12 +90,12 @@ func TestHooksCannotChangeTheQueryFromAnAround(t *testing.T) {
 	}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(scribble))
 	q := db.Query[testmodel.Invoice]().Columns(I.ID).OrderBy(I.ID.Asc()).Limit(1)
-	want, _ := q.SQL()
+	want, _ := sqlOK(t)(q.SQL(ctx))
 	for range 2 {
 		if _, err := q.All(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if text, _ := q.SQL(); text != want {
+		if text, _ := sqlOK(t)(q.SQL(ctx)); text != want {
 			t.Fatalf("the hook changed the query: %s", text)
 		}
 	}

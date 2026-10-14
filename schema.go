@@ -323,7 +323,8 @@ func (s *Schema) Policy[E any](p Policy[E]) {
 
 // BeforeInsert declares a hook that runs on every row an insert or upsert
 // writes, after the defaults and the tenant are filled; its error refuses the
-// statement. In a mixin's Mixin method, f takes the mixin's own struct, and
+// statement. InsertQuery's SQL(ctx) runs it too, so it must change nothing
+// but x. In a mixin's Mixin method, f takes the mixin's own struct, and
 // is given the one embedded in the row; the mixins' hooks run before the
 // entity's, each kind in the order declared.
 func (s *Schema) BeforeInsert[E any](f func(ctx context.Context, x *E) error) {
@@ -338,14 +339,16 @@ func (s *Schema) BeforeInsert[E any](f func(ctx context.Context, x *E) error) {
 // BeforeUpdate declares a hook that runs on every update and Save of the
 // entity, before the statement is scoped and rendered. It may read and change
 // the assignments and narrow the rows through m; its error refuses the
-// statement. A mixin cannot declare one.
+// statement. UpdateQuery's SQL(ctx) runs it too, so it must change nothing
+// but m. A mixin cannot declare one.
 func (s *Schema) BeforeUpdate[E any](f func(ctx context.Context, m *Mutation[E]) error) {
 	s.addMutationHook("BeforeUpdate", elemType((*E)(nil)), mutationHook(f), &s.beforeUpdate)
 }
 
 // BeforeDelete declares a hook that runs on every delete of the entity,
 // before the statement is scoped and rendered. It may narrow the rows through
-// m; its error refuses the statement. A mixin cannot declare one.
+// m; its error refuses the statement. DeleteQuery's SQL(ctx) runs it too, so
+// it must change nothing but m. A mixin cannot declare one.
 func (s *Schema) BeforeDelete[E any](f func(ctx context.Context, m *Mutation[E]) error) {
 	s.addMutationHook("BeforeDelete", elemType((*E)(nil)), mutationHook(f), &s.beforeDelete)
 }

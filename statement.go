@@ -94,7 +94,8 @@ type Statement struct {
 
 // Rewrite is a hook that may change a statement before it is rendered, or
 // refuse it by returning an error. Rewrite hooks run in the order given to
-// Open.
+// Open. They run for the SQL(ctx) methods too, with the statement's DryRun
+// set, so a hook must change nothing but the statement.
 type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the

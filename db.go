@@ -161,15 +161,37 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	return nil
 }
 
-// run takes a statement through the pipeline: guard, the entity's
-// BeforeUpdate or BeforeDelete hooks, rewrite hooks, scope, rendering, then
-// the around hooks wrapping execution, which is sending the statement and
+// run takes a statement through the pipeline: prepare's stages, then the
+// around hooks wrapping execution, which is sending the statement and
 // reading its rows. read reads them; it is called once per execution (an
 // around hook that retries runs it again) and must not close them: run does,
 // before it returns, on every path. Hooks may keep the statement, and next
 // (which holds read), so both escape; a statement with no hooks of either
 // kind uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+	if err := db.prepare(ctx, st); err != nil {
+		return err
+	}
+	if db.timed() {
+		if tctx, cancel := db.bound(ctx); cancel != nil {
+			defer cancel()
+			if err := db.execute(tctx, st, read, res); err != nil {
+				if timedOut(tctx) {
+					return errTimeout(st.Entity.Name)
+				}
+				return err
+			}
+			return nil
+		}
+	}
+	return db.execute(ctx, st, read, res)
+}
+
+// prepare takes a statement through every stage before execution, for run
+// and for SQL(ctx): guard, the entity's BeforeUpdate or BeforeDelete hooks,
+// rewrite hooks and their checks, scope, the row cap, and rendering into
+// st.SQL and st.Args.
+func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.guard(st); err != nil {
 		return err
 	}
@@ -238,19 +260,21 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		// made for this statement alone; caching by it would fill the cache.
 		st.SQL, st.Args = render(db.d, st)
 	}
-	if db.timed() {
-		if tctx, cancel := db.bound(ctx); cancel != nil {
-			defer cancel()
-			if err := db.execute(tctx, st, read, res); err != nil {
-				if timedOut(tctx) {
-					return errTimeout(st.Entity.Name)
-				}
-				return err
-			}
-			return nil
-		}
+	return nil
+}
+
+// dryRun prepares st, with DryRun set, and returns what run would send, or
+// the error it would fail with before sending: the SQL(ctx) methods' work. It
+// never executes st, so no Around hook runs.
+func (db *DB) dryRun(ctx context.Context, st *Statement) (string, []any, error) {
+	st.DryRun = true
+	if err := db.prepare(ctx, st); err != nil {
+		return "", nil, err
 	}
-	return db.execute(ctx, st, read, res)
+	if err := checkParams(db.d, st); err != nil {
+		return "", nil, err
+	}
+	return st.SQL, st.Args, nil
 }
 
 // mutationHooks returns the BeforeUpdate or BeforeDelete hooks of st's
@@ -443,8 +467,8 @@ func (c *cappedRows) Next() bool {
 // with a nil read it sends a statement that returns no rows and fills *res.
 // Errors from the database, the driver or read name the entity.
 func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, res *result) (err error) {
-	if lim := maxParams[db.d]; len(st.Args) > lim {
-		return fmt.Errorf("velox: %s: the statement has %d parameters; %s allows %d", st.Entity.Name, len(st.Args), db.d, lim)
+	if err := checkParams(db.d, st); err != nil {
+		return err
 	}
 	if read == nil {
 		r, err := db.ex.exec(ctx, st.SQL, st.Args)
@@ -479,6 +503,15 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 	}
 	if capped != nil && capped.over {
 		return fmt.Errorf("velox: %s: %w: more than %d; raise it with the query's MaxRows", st.Entity.Name, ErrTooManyRows, db.rowCap(st))
+	}
+	return nil
+}
+
+// checkParams refuses a rendered statement with more parameters than
+// dialect d allows.
+func checkParams(d Dialect, st *Statement) error {
+	if lim := maxParams[d]; len(st.Args) > lim {
+		return fmt.Errorf("velox: %s: the statement has %d parameters; %s allows %d", st.Entity.Name, len(st.Args), d, lim)
 	}
 	return nil
 }

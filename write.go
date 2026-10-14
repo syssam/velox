@@ -86,14 +86,18 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	return res.affected, err
 }
 
-// SQL returns the statement and arguments Exec would send, without a
-// database and before rewrite hooks; "" when the update cannot run.
-func (u UpdateQuery[E]) SQL[_ Lazy[E]]() (string, []any) {
+// SQL returns the statement and arguments Exec would send for ctx, or the
+// error Exec would fail with before sending it; it sends nothing. It runs
+// every stage Exec runs before execution: the guard, the BeforeUpdate hooks,
+// the Rewrite hooks, the tenant and policy scope and rendering. So the hooks
+// run, and a Rewrite hook can tell from Statement.DryRun that the statement
+// will not be sent. Around hooks, which wrap execution, do not run.
+func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	st, err := u.statement()
 	if err != nil {
-		return "", nil
+		return "", nil, err
 	}
-	return render(u.db.d, &st)
+	return u.db.dryRun(ctx, &st)
 }
 
 // DeleteQuery is a DELETE of entity E, built by chaining and run by Exec.
@@ -144,17 +148,21 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	return res.affected, err
 }
 
-// SQL returns the statement and arguments Exec would send, without a
-// database and before rewrite hooks.
-func (d DeleteQuery[E]) SQL[_ Lazy[E]]() (string, []any) {
+// SQL returns the statement and arguments Exec would send for ctx, or the
+// error Exec would fail with before sending it; it sends nothing. It runs
+// every stage Exec runs before execution: the guard, the BeforeDelete hooks,
+// the Rewrite hooks, the tenant and policy scope and rendering. So the hooks
+// run, and a Rewrite hook can tell from Statement.DryRun that the statement
+// will not be sent. Around hooks, which wrap execution, do not run.
+func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	if d.meta.err != nil {
-		return "", nil
+		return "", nil, d.meta.err
 	}
 	if d.err != nil {
-		return "", nil
+		return "", nil, d.err
 	}
 	st := cloneStatement(&d.st)
-	return render(d.db.d, &st)
+	return d.db.dryRun(ctx, &st)
 }
 
 // Save writes the named columns of *x to the row with x's primary key, and

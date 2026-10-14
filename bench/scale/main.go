@@ -211,10 +211,10 @@ func generate(domains, services int) map[string]string {
 				seen[d] = true
 				fmt.Fprintf(&imp, "\t\"example.com/tmp/d%d\"\n", d)
 			}
-			fmt.Fprintf(&use, "\tsink(db.Query[d%d.E%d]().Where(d%d.E%ds.ID.EQ(1)).Limit(1).SQL())\n", d, m, d, m)
+			fmt.Fprintf(&use, "\tsink(db.Query[d%d.E%d]().Where(d%d.E%ds.ID.EQ(1)).Limit(1).SQL(ctx))\n", d, m, d, m)
 		}
 		files[filepath.Join(fmt.Sprintf("s%d", s), "main.go")] = fmt.Sprintf(
-			"package main\n\nimport (\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n%s)\n\nfunc sink(s string, _ []any) { fmt.Println(len(s)) }\n\nfunc main() {\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
+			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n%s)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
 			imp.String(), use.String())
 	}
 	return files
