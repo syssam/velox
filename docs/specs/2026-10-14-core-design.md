@@ -44,7 +44,8 @@ Taken on the designer's recommendation, open to change at review:
 ## Success criteria
 
 1. Every statement velox sends is predictable from the code that sent it, and
-   can be printed without a database (`SQL()`).
+   can be printed without a database (`SQL(ctx)`; the policy design changed it
+   from `SQL()` so that it includes tenant and policy scope).
 2. Compile cost follows what a package uses, not how many entities the
    application has (§3, measured).
 3. Nothing proportional to the number of entities runs at program start.
@@ -365,7 +366,7 @@ page, err := db.Query[billing.Invoice]().
 for inv, err := range db.Query[billing.Invoice]().Unbounded().Iter(ctx) { … }
 
 n, err := db.Query[billing.Invoice]().Where(I.PaidAt.IsNull()).Count(ctx)
-text, args := db.Query[billing.Invoice]().Where(…).SQL() // no database needed
+text, args, err := db.Query[billing.Invoice]().Where(…).SQL(ctx) // no database needed
 ```
 
 - `With` loads a relation with one extra query per relation,
@@ -441,7 +442,9 @@ and deadlocks, as classified per dialect. Nested `Tx` uses savepoints.
 ## 5. Execution pipeline
 
 Every operation becomes one non-generic `*velox.Statement` and passes through
-the same stages. Sub-projects 2–4 are written against these stages and nothing
+the same stages (the policy design, `2026-10-14-policy-design.md` §1, adds
+guard, entity-hook and scope stages and the statement fields `Tenant`,
+`TenantBypass`, `PolicyBypass` and `DryRun`). Sub-projects 2–4 are written against these stages and nothing
 else.
 
 ```
@@ -526,7 +529,8 @@ Sentinels for `errors.Is`: `ErrNotFound`, `ErrNotSingular`, `ErrUnbounded`,
 of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the
 constraint's name, except that SQLite reports the columns and a NOT NULL error
 the column. `*SchemaError` (an invalid `Schema` method,
-reported with the entity and field). Every error message starts with `velox:`
+reported with the entity and field). Sentinels are bare phrases, always
+returned wrapped (policy design §6). Every error message starts with `velox:`
 and names the entity.
 
 `ErrUnbounded` (a query with no `Limit` and no `Unbounded()`) and `ErrNoWhere`
