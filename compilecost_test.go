@@ -118,10 +118,12 @@ var genericObjects = []struct {
 	max        int64
 }{
 	// Measured on 2026-10-14, darwin/arm64, Go 1.27.1: each max is the
-	// measured growth plus the larger of 4096 and a quarter of it, rounded up
-	// to the next KiB, with the measurement beside it. One ordinary method adds
-	// about 20 KiB to a handle (NumberCol: 14846 → 35782), which exceeds that
-	// margin; a velox type reaching reflect.Type adds about 134 KiB.
+	// measured growth plus the larger of 4096 and a quarter of it, the quarter
+	// capped at 65536, rounded up to the next KiB, with the measurement beside
+	// it. One ordinary method adds about 20 KiB to a handle (NumberCol: 14846 →
+	// 35782), which exceeds that margin; a velox type reaching reflect.Type adds
+	// about 134 KiB, which the cap keeps above the margin of the largest rows.
+	// linux/amd64 and linux/arm64 measure within 3% of darwin/arm64.
 	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14312
 	{"OrderedCol", "velox.OrderedCol[E, int64]", "", 19456},         // measured 14924
 	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},           // measured 14846
@@ -150,7 +152,7 @@ var genericObjects = []struct {
 	{"Schema", "*velox.Schema", "", 5120},                           // measured 282
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	{"entity", "", entitySrc, 123904},                               // measured 98878
-	{"entityUse", "", entityUseSrc, 842752},                         // measured 673936
+	{"entityUse", "", entityUseSrc, 740352},                         // measured 673936
 }
 
 // TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one
