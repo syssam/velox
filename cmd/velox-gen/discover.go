@@ -144,7 +144,7 @@ func (w *walker) embedded(f *types.Var, depth int) {
 		}
 	}
 	if mixin && depth > 1 {
-		w.fail(f, "mixin %s is inside another embedded struct, where velox does not call its Mixin method; embed it in the entity", f.Name())
+		w.fail(f, "mixin %s is inside another embedded struct; embed mixins directly in the entity, where velox applies them", f.Name())
 	}
 	before := len(w.seen)
 	w.fields(t.Underlying().(*types.Struct), depth+1)

@@ -35,7 +35,7 @@ func discoverFixture(t *testing.T, cfg config, fixture string) ([]*entity, strin
 func TestDiscovery(t *testing.T) {
 	for fixture, want := range map[string]string{
 		"embedptr":   "Order: embedded pointer Base is not supported",
-		"nested":     "Order: mixin Inner is inside another embedded struct",
+		"nested":     "Order: mixin Inner is inside another embedded struct; embed mixins directly in the entity, where velox applies them",
 		"emptyembed": "Order: embedded Time adds no columns",
 		"generic":    "Box has type parameters",
 		"valuerecv":  "Order: Schema has a value receiver",
