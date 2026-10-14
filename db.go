@@ -60,8 +60,14 @@ func newDB(d Dialect, ex executor, opts []Option) *DB {
 // Dialect returns the DB's dialect.
 func (db *DB) Dialect() Dialect { return db.d }
 
-// dbErr names the entity in an error from the database or the driver.
-func dbErr(info *EntityInfo, err error) error { return fmt.Errorf("velox: %s: %w", info.Name, err) }
+// dbErr names the entity in an error from the database or the driver, and
+// turns a violated constraint into a *ConstraintError.
+func dbErr(info *EntityInfo, err error) error {
+	if ce := constraint(info.Name, err); ce != nil {
+		return ce
+	}
+	return fmt.Errorf("velox: %s: %w", info.Name, err)
+}
 
 // hooked reports whether the pipeline has hooks: whether a statement must go
 // through run, or may take the shortcut of plain.

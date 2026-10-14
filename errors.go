@@ -1,6 +1,9 @@
 package velox
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Errors velox returns, wrapped with the entity's name; test them with
 // errors.Is.
@@ -33,3 +36,50 @@ func (e *SchemaError) Error() string {
 	}
 	return "velox: " + e.Entity + "." + e.Field + ": " + e.Reason
 }
+
+// ConstraintKind is the kind of constraint a statement violated.
+type ConstraintKind uint8
+
+// The kinds of constraint.
+const (
+	Unique ConstraintKind = iota + 1 // a unique index or primary key
+	ForeignKey
+	NotNull
+	Check
+)
+
+func (k ConstraintKind) String() string {
+	switch k {
+	case Unique:
+		return "unique"
+	case ForeignKey:
+		return "foreign key"
+	case NotNull:
+		return "not null"
+	case Check:
+		return "check"
+	}
+	return "unknown"
+}
+
+// ConstraintError reports a violated constraint, in the same form on every
+// dialect; find it with errors.As. Err is the driver's error.
+type ConstraintError struct {
+	Entity string
+	Kind   ConstraintKind
+	// Constraint is the constraint's name. SQLite reports the columns instead
+	// ("invoices.org_id, invoices.number"), and a NOT NULL error names the
+	// column.
+	Constraint string
+	Err        error
+}
+
+func (e *ConstraintError) Error() string {
+	name := e.Constraint
+	if name == "" {
+		name = "(unnamed)"
+	}
+	return fmt.Sprintf("velox: %s: %s constraint %s violated: %v", e.Entity, e.Kind, name, e.Err)
+}
+
+func (e *ConstraintError) Unwrap() error { return e.Err }
