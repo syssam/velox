@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/token"
 	"io"
@@ -60,6 +61,10 @@ func runVerify(cfg config, ps []*packages.Package, stdout, stderr io.Writer) int
 	cmd := exec.Command("go", "run", "./"+filepath.Base(tmp))
 	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = mod.Dir, cfg.env, stdout, stderr
 	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) { // an ExitError means go already printed why
+			fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
+		}
 		return 1
 	}
 	return 0

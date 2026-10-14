@@ -64,13 +64,15 @@ func TestVerifyLeavesNothingBehind(t *testing.T) {
 	src := strings.Replace(invoiceSrc, `{ s.Table("invoices") }`, `{ s.Tenant(x.ID) }`, 1)
 	dir := tempModule(t, map[string]string{"billing/invoice.go": src})
 	velox(t, dir, "./...")
-	velox(t, dir, "verify", "./...")
+	if code, _, errs := velox(t, dir, "verify", "./..."); code != 1 || !strings.Contains(errs, "expected a pointer to a field") {
+		t.Errorf("verify of a bad Schema: %d %q", code, errs)
+	}
 	noVerifyDirs(t, dir)
 	if err := os.Remove(filepath.Join(dir, "billing/invoice_velox.go")); err != nil { // VeloxMeta gone: the program cannot compile
 		t.Fatal(err)
 	}
-	if code, _, _ := velox(t, dir, "verify", "./..."); code != 1 {
-		t.Errorf("verify of an entity without its generated file: %d, want 1", code)
+	if code, _, errs := velox(t, dir, "verify", "./..."); code != 1 || !strings.Contains(errs, "VeloxMeta") {
+		t.Errorf("verify of an entity without its generated file: %d %q, want 1 and a compile error naming VeloxMeta", code, errs)
 	}
 	noVerifyDirs(t, dir)
 }
