@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,6 +33,10 @@ type FakeExec struct {
 	CommitErr error
 	Isolation sql.IsolationLevel // the last transaction's options
 	ReadOnly  bool
+	// RollbackCtxErr and SavepointCtxErr are the first non-nil ctx.Err() that
+	// a ROLLBACK, and a ROLLBACK TO or RELEASE SAVEPOINT, ran with.
+	RollbackCtxErr  error
+	SavepointCtxErr error
 }
 
 // next is the error the next call returns: the first of Errs, then Err.
@@ -56,9 +61,12 @@ func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error
 	return &fakeRows{data: e.Rows, e: e}, nil
 }
 
-func (e *FakeExec) exec(_ context.Context, sql string, args []any) (result, error) {
+func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if (strings.HasPrefix(sql, "ROLLBACK TO") || strings.HasPrefix(sql, "RELEASE")) && e.SavepointCtxErr == nil {
+		e.SavepointCtxErr = ctx.Err()
+	}
 	e.SQL, e.Args = sql, args
 	e.Calls++
 	e.Log = append(e.Log, sql)
@@ -85,9 +93,12 @@ func (t fakeTx) commit(context.Context) error {
 	return t.e.CommitErr
 }
 
-func (t fakeTx) rollback(context.Context) error {
+func (t fakeTx) rollback(ctx context.Context) error {
 	t.e.mu.Lock()
 	defer t.e.mu.Unlock()
+	if t.e.RollbackCtxErr == nil {
+		t.e.RollbackCtxErr = ctx.Err()
+	}
 	t.e.Log = append(t.e.Log, "ROLLBACK")
 	return nil
 }
