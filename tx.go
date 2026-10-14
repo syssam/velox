@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -32,6 +33,9 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // a *DB like any other, so a function that takes a *DB works inside a
 // transaction unchanged.
 //
+// WithDeadlines' Tx and MaxTx, and Timeout, bound the whole call; a transaction
+// past its deadline is rolled back.
+//
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. A nested Tx (a savepoint) ignores options.
 //
@@ -45,9 +49,25 @@ func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) e
 	for _, opt := range opts {
 		opt(&o)
 	}
+	def, maxd := db.cfg.deadlines.Tx, db.cfg.deadlines.MaxTx
+	if o.timeout > 0 {
+		def = 0
+		if maxd <= 0 || o.timeout < maxd {
+			maxd = o.timeout
+		}
+	}
+	tctx, cancel := bound(ctx, def, maxd, time.Time{})
+	var deadline time.Time
+	if cancel != nil {
+		defer cancel()
+		deadline, _ = tctx.Deadline()
+	}
 	for attempt := 0; ; attempt++ {
-		err := db.transaction(ctx, fn, o)
-		if err == nil || attempt >= o.retries || !retryable(err) {
+		err := db.transaction(tctx, fn, o, deadline)
+		if err != nil && cancel != nil && timedOut(tctx) && !errors.Is(err, ErrTimeout) {
+			err = errors.Join(errTimeout("transaction"), err)
+		}
+		if err == nil || attempt >= o.retries || !retryable(err) || tctx.Err() != nil {
 			return err
 		}
 	}
@@ -63,7 +83,7 @@ func ended(err error) bool {
 // finish, because fn panicked or called runtime.Goexit, is rolled back by the
 // deferred function. Rollback uses a context without ctx's cancellation, so a
 // canceled ctx still rolls back.
-func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions) error {
+func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time) error {
 	ex, ctl, err := db.ex.begin(ctx, o)
 	if err != nil {
 		return fmt.Errorf("velox: begin: %w", err)
@@ -75,7 +95,7 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions) 
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: ex, cfg: db.cfg, inTx: true}); err != nil {
+	if err := fn(&DB{d: db.d, ex: ex, cfg: db.cfg, inTx: true, txDeadline: deadline}); err != nil {
 		finished = true
 		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) {
 			return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
@@ -83,6 +103,14 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions) 
 		return err
 	}
 	finished = true
+	if timedOut(ctx) {
+		// Past velox's deadline: roll back on every driver rather than leave
+		// it to the driver whether a late commit succeeds.
+		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) {
+			return errors.Join(errTimeout("transaction"), fmt.Errorf("velox: rollback: %w", rerr))
+		}
+		return errTimeout("transaction")
+	}
 	if err := ctl.commit(ctx); err != nil {
 		return fmt.Errorf("velox: commit: %w", err)
 	}
@@ -102,7 +130,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: db.ex, cfg: db.cfg, inTx: true, depth: db.depth + 1}); err != nil {
+	if err := fn(&DB{d: db.d, ex: db.ex, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline}); err != nil {
 		finished = true
 		if rerr := db.rollbackSavepoint(end, name); rerr != nil && !ended(rerr) {
 			return errors.Join(err, fmt.Errorf("velox: rollback to savepoint: %w", rerr))

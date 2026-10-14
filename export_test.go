@@ -26,6 +26,12 @@ type FakeExec struct {
 	Scanned int
 	// Err, when set, is returned by every query.
 	Err error
+	// Block makes query and exec wait until their context ends, then return
+	// its error.
+	Block bool
+	// Deadline is the deadline of the last query's or exec's context; zero
+	// when it had none.
+	Deadline time.Time
 
 	Affected  int64 // what exec reports
 	LastID    int64
@@ -51,7 +57,23 @@ func (e *FakeExec) next() error {
 	return e.Err
 }
 
-func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error) {
+// wait records ctx's deadline and, when Block is set, waits for ctx to end.
+func (e *FakeExec) wait(ctx context.Context) error {
+	e.mu.Lock()
+	e.Deadline, _ = ctx.Deadline()
+	block := e.Block
+	e.mu.Unlock()
+	if !block {
+		return nil
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, error) {
+	if err := e.wait(ctx); err != nil {
+		return nil, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.SQL, e.Args = sql, args
@@ -68,6 +90,9 @@ func (e *FakeExec) query(_ context.Context, sql string, args []any) (rows, error
 }
 
 func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {
+	if err := e.wait(ctx); err != nil {
+		return result{}, err
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if (strings.HasPrefix(sql, "ROLLBACK TO") || strings.HasPrefix(sql, "RELEASE")) && e.SavepointCtxErr == nil {

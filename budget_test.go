@@ -2,6 +2,7 @@ package velox_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
@@ -111,6 +112,16 @@ func BenchmarkHundredRows(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Limit(100).All(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkOneRowWithDeadline(b *testing.B) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}, velox.WithDeadlines(velox.Deadlines{Statement: time.Second}))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 			b.Fatal(err)
 		}
 	}

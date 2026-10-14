@@ -22,6 +22,10 @@ var (
 	// ErrTooManyRows: a query returned more rows than WithMaxRows or the
 	// query's MaxRows allow.
 	ErrTooManyRows = errors.New("read more rows than the cap")
+	// ErrTimeout: a deadline velox set (WithDeadlines, Timeout) passed. The
+	// error also matches context.DeadlineExceeded; a deadline the caller set
+	// matches that alone.
+	ErrTimeout = errors.New("deadline set by velox passed")
 	// ErrStale: an entity's struct changed after velox-gen last ran.
 	ErrStale = errors.New("generated code is out of date")
 )

@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -29,6 +30,7 @@ type txOptions struct {
 	isolation sql.IsolationLevel
 	readOnly  bool
 	retries   int
+	timeout   time.Duration // Timeout; 0: the DB's Tx default
 }
 
 // txControl ends a transaction.

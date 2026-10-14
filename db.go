@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,14 +20,18 @@ type DB struct {
 	cfg   *config
 	inTx  bool
 	depth int // savepoint nesting inside a transaction
+	// txDeadline is, in a transaction, the deadline velox set for it; zero
+	// when none.
+	txDeadline time.Time
 }
 
 type config struct {
-	rewrites []Rewrite
-	arounds  []Around
-	cache    renderCache
-	maxLimit int // WithMaxLimit; 0: none
-	maxRows  int // WithMaxRows; 0: none
+	rewrites  []Rewrite
+	arounds   []Around
+	cache     renderCache
+	maxLimit  int       // WithMaxLimit; 0: none
+	maxRows   int       // WithMaxRows; 0: none
+	deadlines Deadlines // WithDeadlines
 }
 
 // Option configures a DB's pipeline.
@@ -122,7 +127,21 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 		return err
 	}
 	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
-	return db.exec(ctx, st, read, res)
+	if !db.timed() {
+		return db.exec(ctx, st, read, res)
+	}
+	tctx, cancel := db.bound(ctx)
+	if cancel == nil {
+		return db.exec(ctx, st, read, res)
+	}
+	defer cancel()
+	if err := db.exec(tctx, st, read, res); err != nil {
+		if timedOut(tctx) {
+			return errTimeout(st.Entity.Name)
+		}
+		return err
+	}
+	return nil
 }
 
 // run takes a statement through the pipeline: rewrite hooks, rendering,
@@ -186,6 +205,23 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		// made for this statement alone; caching by it would fill the cache.
 		st.SQL, st.Args = render(db.d, st)
 	}
+	if db.timed() {
+		if tctx, cancel := db.bound(ctx); cancel != nil {
+			defer cancel()
+			if err := db.execute(tctx, st, read, res); err != nil {
+				if timedOut(tctx) {
+					return errTimeout(st.Entity.Name)
+				}
+				return err
+			}
+			return nil
+		}
+	}
+	return db.execute(ctx, st, read, res)
+}
+
+// execute runs a rendered statement through the around hooks.
+func (db *DB) execute(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
 	if len(db.cfg.arounds) == 0 {
 		return db.exec(ctx, st, read, res)
 	}
