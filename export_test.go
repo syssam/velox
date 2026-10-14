@@ -179,3 +179,10 @@ func assign(dst, src any) error {
 	}
 	return nil
 }
+
+// SetMaxParams lowers a dialect's parameter limit for a test.
+func SetMaxParams(d Dialect, n int) (restore func()) {
+	old := maxParams[d]
+	maxParams[d] = n
+	return func() { maxParams[d] = old }
+}
