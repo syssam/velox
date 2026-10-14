@@ -84,6 +84,8 @@ func quoted(ss []string) string {
 // render returns the source of an entity's generated file (design §2).
 func render(e *entity) ([]byte, error) {
 	im := newImports(e.pkg.Types)
+	// The file's own declarations come first: no import may take their names.
+	im.used[e.handles], im.used[e.meta], im.used[e.shape] = true, true, true
 	vx := im.name(veloxPath, "velox")
 	E := e.name
 	handle := func(c column) string {

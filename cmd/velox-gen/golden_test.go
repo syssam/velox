@@ -78,3 +78,28 @@ func TestImportNamesAvoidThePackagesIdentifiers(t *testing.T) {
 		}
 	}
 }
+
+// TestNamesAvoidImportNames: package-level declarations and the import names
+// of every file share a namespace, so a handles variable named like an import
+// of the user's file does not compile.
+func TestNamesAvoidImportNames(t *testing.T) {
+	_, probs := generate(t, "importclash")
+	if want := "its handles variable notes is also the name of an import in"; !strings.Contains(probs, want) {
+		t.Errorf("problems %q, want one containing %q", probs, want)
+	}
+}
+
+// TestImportsAvoidTheFilesOwnDeclarations: a package velox-gen imports that
+// the user's file does not (here through a mixin's field type) must not take
+// the name of a variable the generated file declares.
+func TestImportsAvoidTheFilesOwnDeclarations(t *testing.T) {
+	src, probs := generate(t, "aliasclash")
+	if probs != "" {
+		t.Fatal(probs)
+	}
+	for _, want := range []string{"events2 \"", "velox.StringCol[event, events2.Kind]"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("source lacks %q:\n%s", want, src)
+		}
+	}
+}
