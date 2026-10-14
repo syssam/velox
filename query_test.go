@@ -251,3 +251,69 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+type panickyEntity struct{ ID int64 }
+
+func (*panickyEntity) Schema(*velox.Schema) { panic("no schema today") }
+
+var panickyMeta velox.MetaOnce[panickyEntity]
+
+func (*panickyEntity) VeloxMeta() *velox.Meta[panickyEntity] {
+	return panickyMeta.Get(func() velox.Shape[panickyEntity] {
+		return velox.Shape[panickyEntity]{Columns: []string{"ID"}, Addr: func(x *panickyEntity, _ int) any { return &x.ID }}
+	})
+}
+
+type addrlessEntity struct{ ID int64 }
+
+func (*addrlessEntity) Schema(*velox.Schema) {}
+
+var addrlessMeta velox.MetaOnce[addrlessEntity]
+
+func (*addrlessEntity) VeloxMeta() *velox.Meta[addrlessEntity] {
+	return addrlessMeta.Get(func() velox.Shape[addrlessEntity] {
+		return velox.Shape[addrlessEntity]{Columns: []string{"ID"}}
+	})
+}
+
+// TestBrokenMetadataIsAnErrorOnEveryUse: a Schema method that panics, or
+// generated code with no scan plan, makes every query on the entity return a
+// *SchemaError naming it, not just the first, and none panics.
+func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(1)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	check := func(name, entity, reason string, run func() error) {
+		t.Helper()
+		for i := range 2 {
+			var err error
+			panicked := true
+			func() {
+				defer func() {
+					if p := recover(); p != nil {
+						t.Errorf("%s, query %d panicked: %v", name, i+1, p)
+					}
+				}()
+				err = run()
+				panicked = false
+			}()
+			if panicked {
+				continue
+			}
+			var se *velox.SchemaError
+			if !errors.As(err, &se) || se.Entity != entity || !strings.Contains(se.Reason, reason) || !strings.HasPrefix(err.Error(), "velox: ") {
+				t.Errorf("%s, query %d: %v", name, i+1, err)
+			}
+		}
+	}
+	check("Schema panics", "velox_test.panickyEntity", "Schema panicked: no schema today", func() error {
+		_, err := db.Query[panickyEntity]().All(ctx)
+		return err
+	})
+	check("no Addr", "velox_test.addrlessEntity", "Addr", func() error {
+		_, err := db.Query[addrlessEntity]().All(ctx)
+		return err
+	})
+	if e.Calls != 0 {
+		t.Errorf("%d queries reached the database", e.Calls)
+	}
+}

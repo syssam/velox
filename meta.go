@@ -76,11 +76,24 @@ type MetaOnce[E any] struct {
 }
 
 // Get returns the entity's Meta, building it from shape the first time.
+//
+// The build runs once, so a panic in it (in the entity's Schema method, a
+// mixin's Mixin or shape) is recovered and kept as the Meta's error, a
+// *SchemaError: every use of the entity reports it, not just the first.
 func (o *MetaOnce[E]) Get[_ Lazy[E]](shape func() Shape[E]) *Meta[E] {
 	o.once.Do(func() {
+		t := reflect.TypeFor[E]()
+		defer func() {
+			if p := recover(); p != nil {
+				o.m = &Meta[E]{err: &SchemaError{Entity: t.String(), Reason: fmt.Sprintf("Schema panicked: %v", p)}}
+			}
+		}()
 		sh := shape()
 		x := new(E)
-		info, err := buildInfo(reflect.TypeFor[E](), unsafe.Pointer(x), any(x), sh.Columns, sh.Relations)
+		info, err := buildInfo(t, unsafe.Pointer(x), any(x), sh.Columns, sh.Relations)
+		if err == nil && sh.Addr == nil { // after buildInfo, so that stale code is reported as such
+			err = &SchemaError{Entity: t.String(), Reason: "the generated code has no scan plan (Shape.Addr is nil); run go tool velox-gen"}
+		}
 		o.m = &Meta[E]{info: info, addr: sh.Addr, err: err}
 	})
 	return o.m
