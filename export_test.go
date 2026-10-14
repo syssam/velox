@@ -18,6 +18,8 @@ type FakeExec struct {
 	Calls int
 	// Closed counts the rows values returned by query that have been closed.
 	Closed int
+	// Scanned counts the rows scanned, across queries.
+	Scanned int
 	// Err, when set, is returned by every query.
 	Err error
 }
@@ -61,6 +63,9 @@ func (r *fakeRows) Close() {
 }
 
 func (r *fakeRows) Scan(dst ...any) error {
+	r.e.mu.Lock()
+	r.e.Scanned++
+	r.e.mu.Unlock()
 	row := r.data[r.i-1]
 	if len(dst) != len(row) {
 		return fmt.Errorf("fake: %d destinations for %d columns", len(dst), len(row))

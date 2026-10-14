@@ -41,7 +41,14 @@ type Statement struct {
 // Open.
 type Rewrite func(ctx context.Context, st *Statement) error
 
-// Around is a hook that wraps a statement's execution. It must call next
-// exactly once, unless it returns an error instead. The first Around given to
-// Open is the outermost.
+// Around is a hook that wraps a statement's execution. next runs the
+// statement and reads all its rows, so the hook wraps everything from sending
+// it to its last row; with Iter, that includes the body of the caller's loop.
+// The context passed to next must stay valid until next returns: a hook may
+// set a deadline and cancel it once next has returned.
+//
+// A hook must call next, and return its error, unless it returns an error of
+// its own instead. It may call next again to retry after an error; running
+// the statement again after Iter has yielded rows is an error. The first
+// Around given to Open is the outermost.
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error

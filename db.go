@@ -58,9 +58,25 @@ func (db *DB) Dialect() Dialect { return db.d }
 // dbErr names the entity in an error from the database or the driver.
 func dbErr(info *EntityInfo, err error) error { return fmt.Errorf("velox: %s: %w", info.Name, err) }
 
+// hooked reports whether the pipeline has hooks: whether a statement must go
+// through run, or may take the shortcut of plain.
+func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
+
+// plain runs a statement on a DB with no hooks: rendering and execution.
+// Unlike run's, its st and read do not escape, so a caller's state and
+// reading closure can stay on the stack.
+func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error) error {
+	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
+	return db.exec(ctx, st, read)
+}
+
 // run takes a statement through the pipeline: rewrite hooks, rendering,
-// around hooks, execution.
-func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
+// then the around hooks wrapping execution, which is sending the statement
+// and reading its rows. read reads them; it is called once per execution (an
+// around hook that retries runs it again) and must not close them: run does,
+// before it returns, on every path. Hooks may keep the statement, and next
+// (which holds read), so both escape; a DB with no hooks uses plain.
+func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error) error {
 	if len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
@@ -72,7 +88,7 @@ func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
 	entity := st.Entity
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if st.Entity == entity {
@@ -83,41 +99,49 @@ func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
 		st.SQL, st.Args = render(db.d, st)
 	}
 	if len(db.cfg.arounds) == 0 {
-		r, err := db.ex.query(ctx, st.SQL, st.Args)
-		if err != nil {
-			return nil, dbErr(st.Entity, err)
-		}
-		return r, nil
+		return db.exec(ctx, st, read)
 	}
-	var out rows
 	called := false
+	var last error // what the innermost next last returned
 	next := func(ctx context.Context) error {
 		called = true
-		r, err := db.ex.query(ctx, st.SQL, st.Args)
-		if err != nil {
-			return dbErr(st.Entity, err)
-		}
-		if out != nil {
-			out.Close() // a hook called next twice; keep the latest rows
-		}
-		out = r
-		return nil
+		last = db.exec(ctx, st, read)
+		return last
 	}
 	for i := len(db.cfg.arounds) - 1; i >= 0; i-- {
 		a, inner := db.cfg.arounds[i], next
 		next = func(ctx context.Context) error { return a(ctx, st, inner) }
 	}
 	if err := next(ctx); err != nil {
-		if out != nil {
-			out.Close()
-		}
-		return nil, err
+		return err
 	}
-	if out == nil {
-		if called {
-			return nil, fmt.Errorf("velox: %s: an Around hook discarded the error from next", st.Entity.Name)
-		}
-		return nil, fmt.Errorf("velox: %s: an Around hook returned without calling next", st.Entity.Name)
+	if !called {
+		return fmt.Errorf("velox: %s: an Around hook returned without calling next", st.Entity.Name)
 	}
-	return out, nil
+	if last != nil {
+		return fmt.Errorf("velox: %s: an Around hook discarded the error from next", st.Entity.Name)
+	}
+	return nil
+}
+
+// exec sends a rendered statement, reads its rows with read and closes them.
+// Errors from the database, the driver or read name the entity.
+func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error) (err error) {
+	r, err := db.ex.query(ctx, st.SQL, st.Args)
+	if err != nil {
+		return dbErr(st.Entity, err)
+	}
+	defer func() {
+		// Deferred, so that the rows are closed even when the loop body of
+		// an Iter, which runs inside read, panics. pgx reports some errors
+		// only once the rows are closed.
+		r.Close()
+		if rerr := r.Err(); rerr != nil && err == nil {
+			err = dbErr(st.Entity, rerr)
+		}
+	}()
+	if err := read(r); err != nil {
+		return dbErr(st.Entity, err)
+	}
+	return nil
 }

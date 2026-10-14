@@ -127,7 +127,7 @@ func TestAroundCallingNextTwiceClosesTheFirstRows(t *testing.T) {
 		t.Fatalf("%v, %v", got, err)
 	}
 	if e.Calls != 2 || e.Closed != 2 {
-		t.Errorf("calls %d, closed %d: want both rows closed (one by the pipeline, one by All)", e.Calls, e.Closed)
+		t.Errorf("calls %d, closed %d: want both rows closed, each before its next returned", e.Calls, e.Closed)
 	}
 }
 
@@ -193,5 +193,83 @@ func TestRewriteCanReplaceTheEntity(t *testing.T) {
 	}
 	if wrong > 0 {
 		t.Errorf("%d of 3000 queries named the wrong table", wrong)
+	}
+}
+
+// TestAroundWrapsReadingTheRows: next runs the statement and reads all its
+// rows, so an around hook times (or bounds with a deadline) the whole query.
+func TestAroundWrapsReadingTheRows(t *testing.T) {
+	e := &velox.FakeExec{}
+	var scanned, closed int
+	inside := false
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		inside = true
+		defer func() { inside = false }()
+		before := e.Scanned
+		err := next(ctx)
+		scanned, closed = e.Scanned-before, e.Closed
+		return err
+	}))
+
+	e.Rows = [][]any{invoiceRow(1), invoiceRow(2)}
+	got, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%v, %v", got, err)
+	}
+	if scanned != 2 || closed != 1 {
+		t.Errorf("All: when next returned, %d rows were scanned and %d rows closed; want 2 and 1", scanned, closed)
+	}
+
+	e.Rows = [][]any{{int64(7)}}
+	if n, err := db.Query[testmodel.Invoice]().Count(ctx); err != nil || n != 7 {
+		t.Fatalf("%d, %v", n, err)
+	}
+	if scanned != 1 || closed != 2 {
+		t.Errorf("Count: when next returned, %d rows were scanned and %d rows closed; want 1 and 2", scanned, closed)
+	}
+
+	e.Rows = [][]any{invoiceRow(1), invoiceRow(2), invoiceRow(3)}
+	seen := 0
+	for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !inside {
+			t.Error("Iter ran the loop body outside the around hook")
+		}
+		if seen++; seen == 2 {
+			break
+		}
+	}
+	if seen != 2 || scanned != 2 || closed != 3 {
+		t.Errorf("Iter: %d rows seen; when next returned, %d rows were scanned and %d rows closed; want 2, 2 and 3", seen, scanned, closed)
+	}
+}
+
+// TestAroundCallingNextAgainAfterIterYielded: rows Iter has yielded cannot be
+// taken back, so running the statement again (a retry) is an error, reported
+// once, and no row is yielded twice.
+func TestAroundCallingNextAgainAfterIterYielded(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1), invoiceRow(2)}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return next(ctx)
+	}))
+	var ids []int64
+	var errs []error
+	for inv, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		ids = append(ids, inv.ID)
+	}
+	if !reflect.DeepEqual(ids, []int64{1, 2}) || len(errs) != 1 || !strings.Contains(errs[0].Error(), "velox: testmodel.Invoice: an Around hook called next again") {
+		t.Errorf("ids %v, errors %v", ids, errs)
+	}
+	if e.Calls != 2 || e.Closed != 2 {
+		t.Errorf("calls %d, closed %d", e.Calls, e.Closed)
 	}
 }

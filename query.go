@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"slices"
@@ -132,27 +133,51 @@ func scanRow[E any](r rows, m *Meta[E], cols []int, dst []any, p *E) error {
 	return r.Scan(dst...)
 }
 
+// Each way of running a query keeps its state (the statement, and what its
+// rows are read into) in one struct, read by a function given a pointer to
+// it. With hooks configured, the struct is allocated and run is used: hooks
+// may keep what they are given, so all that the reading reaches is on the
+// heap. With none, the struct is a local and plain is used, which keeps it,
+// and the closure reading the rows, on the stack (design §8).
+
+// allRun is the state of one All.
+type allRun[E any] struct {
+	st  Statement
+	m   *Meta[E]
+	out []E
+}
+
+// readAll reads every row into a.out, anew should an around hook retry.
+func readAll[E any](a *allRun[E], r rows) error {
+	dst := make([]any, columnCount(&a.st))
+	a.out = make([]E, 0, min(a.st.Limit, 1024))
+	for r.Next() {
+		a.out = append(a.out, *new(E))
+		if err := scanRow(r, a.m, a.st.Columns, dst, &a.out[len(a.out)-1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // All runs the query and returns every row.
 func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if q.meta.err != nil {
 		return nil, q.meta.err
 	}
-	st := cloneStatement(&q.st)
-	r, err := q.db.run(ctx, &st)
+	var out []E
+	var err error
+	if q.db.hooked() {
+		a := &allRun[E]{st: cloneStatement(&q.st), m: q.meta}
+		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) })
+		out = a.out
+	} else {
+		a := allRun[E]{st: cloneStatement(&q.st), m: q.meta}
+		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) })
+		out = a.out
+	}
 	if err != nil {
 		return nil, err
-	}
-	defer r.Close()
-	dst := make([]any, columnCount(&st))
-	out := make([]E, 0, min(st.Limit, 1024))
-	for r.Next() {
-		out = append(out, *new(E))
-		if err := scanRow(r, q.meta, st.Columns, dst, &out[len(out)-1]); err != nil {
-			return nil, dbErr(st.Entity, err)
-		}
-	}
-	if err := r.Err(); err != nil {
-		return nil, dbErr(st.Entity, err)
 	}
 	return out, nil
 }
@@ -174,8 +199,45 @@ func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	return nil, fmt.Errorf("%w: %s", ErrNotSingular, q.meta.info.Name)
 }
 
+// iterRun is the state of one Iter.
+type iterRun[E any] struct {
+	st      Statement
+	m       *Meta[E]
+	yield   func(E, error) bool
+	yielded bool // a row was yielded
+	stopped bool // the loop over Iter ended early
+}
+
+// errIterAgain is what Iter's reading returns when an around hook runs the
+// statement again after rows were yielded, which cannot be taken back.
+var errIterAgain = errors.New("an Around hook called next again after Iter had yielded rows")
+
+// readIter yields each row until the loop over Iter ends.
+func readIter[E any](it *iterRun[E], r rows) error {
+	if it.yielded || it.stopped {
+		return errIterAgain
+	}
+	dst := make([]any, columnCount(&it.st))
+	for r.Next() {
+		var e E
+		if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
+			return err
+		}
+		it.yielded = true
+		if !it.yield(e, nil) {
+			it.stopped = true
+			return nil
+		}
+	}
+	return nil
+}
+
 // Iter runs the query and yields one row at a time; only the current row is
 // held in memory.
+//
+// The rows are read while the around hooks run (see Around), so the body of
+// the loop over Iter runs inside them: an around hook's timing or deadline
+// covers it, and the statement's connection is held until the loop ends.
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 	return func(yield func(E, error) bool) {
 		var zero E
@@ -183,28 +245,35 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, q.meta.err)
 			return
 		}
-		st := cloneStatement(&q.st)
-		r, err := q.db.run(ctx, &st)
-		if err != nil {
+		var err error
+		var stopped bool
+		if q.db.hooked() {
+			it := &iterRun[E]{st: cloneStatement(&q.st), m: q.meta, yield: yield}
+			err = q.db.run(ctx, &it.st, func(r rows) error { return readIter(it, r) })
+			stopped = it.stopped
+		} else {
+			it := iterRun[E]{st: cloneStatement(&q.st), m: q.meta, yield: yield}
+			err = q.db.plain(ctx, &it.st, func(r rows) error { return readIter(&it, r) })
+			stopped = it.stopped
+		}
+		if err != nil && !stopped {
 			yield(zero, err)
-			return
-		}
-		defer r.Close()
-		dst := make([]any, columnCount(&st))
-		for r.Next() {
-			var e E
-			if err := scanRow(r, q.meta, st.Columns, dst, &e); err != nil {
-				yield(zero, dbErr(st.Entity, err))
-				return
-			}
-			if !yield(e, nil) {
-				return
-			}
-		}
-		if err := r.Err(); err != nil {
-			yield(zero, dbErr(st.Entity, err))
 		}
 	}
+}
+
+// countRun is the state of one Count.
+type countRun struct {
+	st Statement
+	n  int64
+}
+
+func readCount(c *countRun, r rows) error {
+	c.n = 0
+	if r.Next() {
+		return r.Scan(&c.n)
+	}
+	return nil
 }
 
 // Count returns the number of rows matching the query's conditions; its
@@ -215,19 +284,19 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	}
 	st := cloneStatement(&q.st)
 	st.Count, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 0, 0
-	r, err := q.db.run(ctx, &st)
+	var n int64
+	var err error
+	if q.db.hooked() {
+		c := &countRun{st: st}
+		err = q.db.run(ctx, &c.st, func(r rows) error { return readCount(c, r) })
+		n = c.n
+	} else {
+		c := countRun{st: st}
+		err = q.db.plain(ctx, &c.st, func(r rows) error { return readCount(&c, r) })
+		n = c.n
+	}
 	if err != nil {
 		return 0, err
-	}
-	defer r.Close()
-	var n int64
-	if r.Next() {
-		if err := r.Scan(&n); err != nil {
-			return 0, dbErr(st.Entity, err)
-		}
-	}
-	if err := r.Err(); err != nil {
-		return 0, dbErr(st.Entity, err)
 	}
 	return n, nil
 }

@@ -40,15 +40,16 @@ type target struct {
 
 // targets returns SQLite always, and PostgreSQL and MySQL when their
 // environment variable is set. An unset variable omits the database; it never
-// skips a test, so the SQLite subtests always run.
-func targets(t *testing.T) []target {
+// skips a test, so the SQLite subtests always run. Each target's DB is opened
+// with opts.
+func targets(t *testing.T, opts []velox.Option) []target {
 	t.Helper()
-	ts := []target{sqliteTarget(t)}
+	ts := []target{sqliteTarget(t, opts)}
 	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
-		ts = append(ts, postgresTargets(t, dsn)...)
+		ts = append(ts, postgresTargets(t, dsn, opts)...)
 	}
 	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
-		ts = append(ts, mysqlTarget(t, dsn))
+		ts = append(ts, mysqlTarget(t, dsn, opts))
 	}
 	return ts
 }
@@ -62,7 +63,7 @@ const pgDDL = `CREATE TABLE invoices (created_at timestamptz NOT NULL, updated_a
 // sqlDB for setup, so within a test its INSERT statement stays cached across
 // the second target's DROP and CREATE; that is harmless, because the schema is
 // the same and PostgreSQL re-plans a statement whose table was replaced.
-func postgresTargets(t *testing.T, dsn string) []target {
+func postgresTargets(t *testing.T, dsn string, opts []velox.Option) []target {
 	t.Helper()
 	sqlDB, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -76,8 +77,8 @@ func postgresTargets(t *testing.T, dsn string) []target {
 	t.Cleanup(pool.Close)
 	exec := sqlExec(sqlDB, velox.Postgres)
 	return []target{
-		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool), exec: exec, ddl: pgDDL},
-		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB), exec: exec, ddl: pgDDL},
+		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool, opts...), exec: exec, ddl: pgDDL},
+		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB, opts...), exec: exec, ddl: pgDDL},
 	}
 }
 
@@ -85,17 +86,17 @@ const mysqlDDL = "CREATE TABLE invoices (created_at DATETIME(6) NOT NULL, update
 	"id BIGINT PRIMARY KEY, org_id BIGINT NOT NULL, number VARCHAR(64) NOT NULL, total DOUBLE NOT NULL, " +
 	"paid BOOLEAN NOT NULL, paid_at DATETIME(6) NULL, note TEXT NULL, data BLOB NOT NULL)"
 
-func mysqlTarget(t *testing.T, dsn string) target {
+func mysqlTarget(t *testing.T, dsn string, opts []velox.Option) target {
 	t.Helper()
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL}
+	return target{name: "mysql", d: velox.MySQL, db: velox.Open(velox.MySQL, db, opts...), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL}
 }
 
-func sqliteTarget(t *testing.T) target {
+func sqliteTarget(t *testing.T, opts []velox.Option) target {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -104,7 +105,7 @@ func sqliteTarget(t *testing.T) target {
 	db.SetMaxOpenConns(1) // one connection keeps the in-memory database alive
 	t.Cleanup(func() { _ = db.Close() })
 	return target{
-		name: "sqlite", d: velox.SQLite, db: velox.Open(velox.SQLite, db), exec: sqlExec(db, velox.SQLite),
+		name: "sqlite", d: velox.SQLite, db: velox.Open(velox.SQLite, db, opts...), exec: sqlExec(db, velox.SQLite),
 		ddl: `CREATE TABLE invoices (created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, id INTEGER PRIMARY KEY,
 			org_id INTEGER NOT NULL, number TEXT NOT NULL, total REAL NOT NULL, paid BOOLEAN NOT NULL,
 			paid_at DATETIME, note TEXT, data BLOB NOT NULL)`,
@@ -188,8 +189,9 @@ func setup(t *testing.T, tg target) {
 	}
 }
 
-func each(t *testing.T, f func(t *testing.T, tg target)) {
-	for _, tg := range targets(t) {
+// each runs f on every target, opened with opts.
+func each(t *testing.T, f func(t *testing.T, tg target), opts ...velox.Option) {
+	for _, tg := range targets(t, opts) {
 		t.Run(tg.name, func(t *testing.T) {
 			setup(t, tg)
 			f(t, tg)
@@ -339,4 +341,36 @@ func TestCountOffsetColumnsIter(t *testing.T) {
 			t.Errorf("query after an early break: %d, %v", n, err)
 		}
 	})
+}
+
+// TestAroundDeadlineCoversReadingTheRows: an around hook that gives the
+// statement a deadline, cancelled when next returns, must not cut off reading
+// its rows: next reads them all before it returns.
+func TestAroundDeadlineCoversReadingTheRows(t *testing.T) {
+	deadline := velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		return next(ctx)
+	})
+	each(t, func(t *testing.T, tg target) {
+		for i := range 300 {
+			got, err := tg.db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).All(ctx)
+			if err != nil || len(got) != 5 {
+				t.Fatalf("query %d, All: %d rows, %v", i, len(got), err)
+			}
+			if n, err := tg.db.Query[testmodel.Invoice]().Count(ctx); err != nil || n != 5 {
+				t.Fatalf("query %d, Count: %d, %v", i, n, err)
+			}
+			seen := 0
+			for _, err := range tg.db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+				if err != nil {
+					t.Fatalf("query %d, Iter: %v", i, err)
+				}
+				seen++
+			}
+			if seen != 5 {
+				t.Fatalf("query %d, Iter: %d rows", i, seen)
+			}
+		}
+	}, deadline)
 }
