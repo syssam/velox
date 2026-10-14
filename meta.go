@@ -347,6 +347,11 @@ func validate(info *EntityInfo) error {
 		if c := info.Columns[info.Tenant]; rtype(c.Type).Kind() == reflect.Pointer || !rtype(c.Type).Comparable() {
 			fail(c.Field, "the tenant column must be NOT NULL and comparable")
 		}
+		// Filled by a default, a row would land in a tenant the context
+		// never named; and OnUpdate would move rows between tenants.
+		if c := info.Columns[info.Tenant]; c.HasDefault || c.DefaultFunc != nil || c.OnUpdate != nil {
+			fail(c.Field, "the tenant column cannot have Default, DefaultFunc or OnUpdate: the context's tenant fills it")
+		}
 	}
 	set("the primary key", info.PrimaryKey)
 	for _, ix := range info.Indexes {

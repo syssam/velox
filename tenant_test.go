@@ -383,3 +383,89 @@ func TestWithLoadIsScoped(t *testing.T) {
 		t.Errorf("%d statements sent, want the item read alone", len(e.Log))
 	}
 }
+
+// TestScopeNeverAppendsIntoAHooksArray: a Rewrite hook may point st.Where at
+// an array it does not own, with room past its length; the scope's tenant
+// condition goes into a copy, never into that array.
+func TestScopeNeverAppendsIntoAHooksArray(t *testing.T) {
+	shared := make([]velox.Predicate, 0, 4)
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Where = shared[:0]
+		return nil
+	}))
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(int64(7))); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "org_id" = $1 LIMIT $2`, int64(7), 1)
+	if !reflect.ValueOf(shared[:1][0]).IsZero() {
+		t.Errorf("the scope appended into the hook's array: %v", shared[:1])
+	}
+}
+
+// TestScopeWithSharedDefaults is C1 of policy 2's final review: a Rewrite
+// hook that sets every statement's Where to one shared slice of defaults,
+// with spare capacity, must not let concurrent statements overwrite each
+// other's tenant condition. Run it with -race.
+func TestScopeWithSharedDefaults(t *testing.T) {
+	defaults := make([]velox.Predicate, 1, 8)
+	defaults[0] = velox.Predicate(I.Paid.EQ(true))
+	setDefaults := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Where = defaults
+		return nil
+	})
+	var wg sync.WaitGroup
+	for g := range 8 {
+		id := int64(100 + g)
+		wg.Go(func() {
+			var wrong int
+			var last []any
+			db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, setDefaults,
+				velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+					if len(st.Args) != 3 || st.Args[1] != id || st.Tenant != id {
+						wrong, last = wrong+1, st.Args
+					}
+					return next(ctx)
+				}))
+			ctx := tenant(id)
+			for range 200 {
+				if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+			if wrong > 0 {
+				t.Errorf("tenant %d: %d of 200 statements carried another tenant's condition, last with args %v", id, wrong, last)
+			}
+		})
+	}
+	wg.Wait()
+	if len(defaults) != 1 || !reflect.ValueOf(defaults[:2][1]).IsZero() {
+		t.Errorf("the defaults changed: %v", defaults[:2])
+	}
+}
+
+// TestZeroTenantIsRefused: WithTenant of the type's zero value, which
+// middleware gets by parsing a missing claim, scopes nothing: every
+// statement fails closed, inserts included.
+func TestZeroTenantIsRefused(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(5)}}, Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	zero := tenant(int64(0))
+	const msg = "velox: testmodel.Invoice: no tenant in the context: the tenant is the zero value"
+	_, err := db.Query[testmodel.Invoice]().Limit(5).All(zero)
+	want(t, err, velox.ErrNoTenant, msg)
+	_, err = db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(zero)
+	want(t, err, velox.ErrNoTenant, msg)
+	_, err = db.Query[testmodel.Item]().Where(It.Invoice.Has()).Limit(5).All(zero)
+	want(t, err, velox.ErrNoTenant, "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: no tenant in the context: the tenant is the zero value")
+	inv := testmodel.Invoice{Number: "A"}
+	err = db.Insert(&inv).Exec(zero)
+	want(t, err, velox.ErrNoTenant, msg)
+	if inv.OrgID != 0 {
+		t.Errorf("OrgID %d", inv.OrgID)
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
+	}
+}

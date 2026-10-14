@@ -121,7 +121,12 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 		if timedOut(ctx) {
 			return errTimeout("transaction")
 		}
-		return fmt.Errorf("velox: transaction: %w", ctxErr(ctx))
+		err := ctxErr(ctx)
+		if err == nil {
+			// Past its deadline, its Done not closed within the grace.
+			err = context.DeadlineExceeded
+		}
+		return fmt.Errorf("velox: transaction: %w", err)
 	}
 	if err := ctl.commit(ctx); err != nil {
 		return fmt.Errorf("velox: commit: %w", err)
@@ -129,13 +134,25 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 	return nil
 }
 
-// over reports whether ctx has ended. Once its deadline has passed, it waits
-// for ctx to end: a statement in the transaction carries the same deadline on
-// a timer of its own, which may fire first, and the statement's timeout must
-// not find the transaction still live.
+// overGrace is how long over waits for the Done of a context whose deadline
+// has passed.
+const overGrace = 50 * time.Millisecond
+
+// over reports whether ctx has ended. Once its deadline has passed, it is
+// over: a statement in the transaction carries the same deadline on a timer
+// of its own, which may fire first, and the statement's timeout must not find
+// the transaction still live. over then waits for ctx to end, so that its
+// error says why, but at most overGrace: a context whose Done never closes
+// must not hang the transaction.
 func over(ctx context.Context) bool {
 	if dl, ok := ctx.Deadline(); ok && !time.Now().Before(dl) {
-		<-ctx.Done()
+		t := time.NewTimer(overGrace)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+		case <-t.C:
+		}
+		return true
 	}
 	return ctx.Err() != nil
 }

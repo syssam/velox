@@ -91,15 +91,20 @@ statement would fail with before it is sent, including:
 Entity hooks and `Rewrite` hooks therefore run for `SQL(ctx)` too; they must
 have no side effects beyond the struct or statement they are given
 (documented on each hook type). `Around` hooks, which wrap execution, do not
-run. A `Rewrite` hook that needs to know reads `Statement.DryRun`, which
-`SQL(ctx)` sets; an entity hook, which is given no `Statement`, reads
-`velox.IsDryRun(ctx)`.
+run. Each `SQL(ctx)` method marks its context first, before any hook or
+policy function runs, so `velox.IsDryRun(ctx context.Context) bool` is true in
+every `BeforeInsert`, `BeforeUpdate` and `BeforeDelete` hook, `Rewrite` hook
+and policy function that runs for it, and false when the statement is sent.
+An entity hook, which is given no `Statement`, reads `IsDryRun`; a `Rewrite`
+hook may read it or `Statement.DryRun`, which `SQL(ctx)` also sets.
 
 For an insert, `SQL(ctx)` prepares the rows as `Exec` does: Core defaults, the
 tenant fill and `BeforeInsert` change the caller's structs, and the policy's
 Insert check runs. An `InsertAll` too large for one statement returns the
-first batch's statement, with `InTx` set (`Exec` sends the batches in a
-transaction); an `InsertAll` of nothing returns `""`.
+first batch's statement. `InTx` is set whenever `Exec` would send the
+statement in a transaction: inside one, for an `InsertAll` too large for one
+statement, and for an `InsertAll` whose update branch gets the policy (§2.2).
+An `InsertAll` of nothing returns `""`.
 
 This replaces Core's `SQL() (string, []any)`. Nothing is released, so the
 signature changes now rather than after 1.0.
@@ -126,6 +131,10 @@ ctx = velox.AllTenants(ctx, "nightly billing")   // bypass; the reason is requir
 - The tenant column must be `NOT NULL` (not a pointer field) and of a
   comparable type; otherwise `Schema` reports a `SchemaError`. A nullable or
   slice tenant could be neither compared nor filled safely.
+- The tenant column may not have `Default`, `DefaultFunc` or `OnUpdate`; any
+  of them is a `SchemaError`. The context's tenant fills the column: a default
+  would put a row in a tenant no context named, and `OnUpdate` would move rows
+  between tenants.
 - The later of the two on a context wins. `AllTenants` with an empty reason
   is ignored, so the statement fails closed.
 - The tenant's dynamic type must be the tenant column's Go type exactly (a
@@ -143,9 +152,11 @@ On a statement whose entity has a tenant column:
 | Assigning the tenant column (`Set`, `Save`, an upsert's update list) | to `id`: allowed (it changes nothing); to another value: `ErrTenantImmutable` | allowed | `ErrNoTenant` |
 
 The insert fill writes the tenant into the caller's struct, as Core writes
-generated keys back. A tenant value that is the zero value of its type cannot
-be told apart from "not set" and is filled; applications must not use a zero
-tenant ID.
+generated keys back. A tenant field holding the zero value of its type cannot
+be told apart from "not set" and is filled. So the zero value is never a
+tenant: `WithTenant(ctx, v)` where `v` is its type's zero value fails every
+statement on a scoped entity with `ErrNoTenant` ("the tenant is the zero
+value"). That fails closed when middleware parses a missing claim as 0.
 
 - The `EXISTS` rule holds inside a policy's own condition too (§2.2).
 - An error raised for an `EXISTS` target names the statement's entity first,
@@ -156,7 +167,9 @@ tenant ID.
   a copy with other columns is (§6). Otherwise a hook could unscope a
   statement silently.
 
-**Upserts.** A conflict can land on another tenant's row and update it:
+**Upserts.** A conflict can land on another tenant's row and update it. The
+rules below apply under `WithTenant`; under `AllTenants` the statement reaches
+every tenant's rows anyway, and they do not apply:
 
 - **PostgreSQL, SQLite:** an upsert that updates (`OnConflict(...).Update(...)`)
   on a scoped entity must include the tenant column in `OnConflict`'s columns,
@@ -187,7 +200,8 @@ func (x *Invoice) Schema(s *velox.Schema) {
 - `Policy` may be declared once per entity, in the entity's own `Schema`
   (not a mixin's); a second call is a `SchemaError`. Any field may be nil.
 - **Read** is ANDed into every SELECT, Count, `With` load and `Has`/`HasWhere`
-  subquery on the entity. Rows a reader cannot see do not exist.
+  subquery on the entity. Rows a reader cannot see do not exist: so a
+  `Not(Has())` over rows the policy hides is true.
 - **Policies inside policies:** a policy's condition may itself use
   `Has`/`HasWhere`; the target's tenant and Read policy are applied inside
   that `EXISTS` too, recursively, so an `Item` whose Read is
@@ -203,6 +217,11 @@ func (x *Invoice) Schema(s *velox.Schema) {
 - **Write** and **Read** are both ANDed into every UPDATE, DELETE and `Save`:
   a writer cannot change what it cannot see. A `Save` whose row is hidden
   returns `ErrNotFound`, as for a row that does not exist.
+- **Write filters, it does not check.** It decides which existing rows may
+  change; it does not check the new values (there is no `WITH CHECK`). A
+  writer may therefore change a column the policy reads, such as an owner,
+  and hand the row to someone else. Only the tenant column is immutable
+  (§2.1).
 - **Insert** checks every inserted or upserted row after `BeforeInsert` hooks
   and the tenant fill.
 - **Upsert update branch:** PostgreSQL and SQLite render the Read and Write
@@ -210,8 +229,12 @@ func (x *Invoice) Schema(s *velox.Schema) {
   §2.3). When that `WHERE` is false the database neither inserts nor updates
   the row and reports no error. velox sees fewer affected rows (or returned
   rows) than it sent and returns a `*PolicyError` for `update`: `the existing
-  row is hidden from this upsert`. An `InsertAll` with that condition runs in
-  a transaction, so that the error also undoes the rows it did write. MySQL
+  row is hidden from this upsert`. An `InsertAll` of more than one row with
+  that condition runs in a transaction (a savepoint inside the caller's), so
+  that the error also undoes the rows it did write. Whether it will have the
+  condition is decided before the scope runs, from what is known then: an
+  upsert that updates (not `DoNothing`, a non-empty `Update`), a dialect other
+  than MySQL, an entity that declares Read or Write, and no `SkipPolicy`. MySQL
   has no such clause: an upsert that updates on an entity with a Read or
   Write policy is refused with `ErrPolicyUpsert`.
 - A zero `Pred[E]{}` means no restriction. Any error denies the statement.
@@ -221,7 +244,8 @@ func (x *Invoice) Schema(s *velox.Schema) {
   `errors.Is(err, velox.ErrDenied)` holds for every denial.
 - A denial raised for an `EXISTS` target names the statement's entity first,
   as §2.1's errors do: `velox: Invoice: in the EXISTS on Customer: select
-  denied by policy: …`. It is still a `*PolicyError` and `ErrDenied`.
+  denied by policy: …`. It is still a `*PolicyError` and `ErrDenied`, and its
+  `Op` is `select` whatever the statement is: the `EXISTS` reads its target.
 - **Bypass:** `velox.SkipPolicy(ctx, reason)`; an empty reason is ignored.
   It is separate from `AllTenants`: a cross-tenant job usually still wants
   the policy, and a support tool may want the reverse.
@@ -255,11 +279,15 @@ Where []Predicate // on the existing row; a conflicting row it rejects is neithe
 
 - Scope appends the policy's Read and Write predicates to a copy of the
   clause, so the query stays reusable by another caller; a `Rewrite` hook may
-  set `Where` itself.
+  set `Where` itself. Every `EXISTS` in it, a hook's included, gets its
+  target's tenant and Read policy, as one in a statement's `Where` does.
+- A `Rewrite` hook's `Where` on an upsert that has no update branch to apply
+  it to (`DoNothing`, or an empty `Update`) is an error, not dropped.
 - PostgreSQL and SQLite render it as `DO UPDATE SET … WHERE …`, each column
   qualified with the table's name (`"tickets"."owner"`) so that it names the
   existing row. PostgreSQL rejects the unqualified name as ambiguous with
-  `EXCLUDED`'s (SQLSTATE 42702); the real-database tests pin both dialects.
+  `EXCLUDED`'s (SQLSTATE 42702); the real-database tests pin PostgreSQL's
+  (SQLite accepts either form).
 - MySQL never gets one: velox refuses there first (§2.1, §2.2).
 
 ## 3. Entity hooks
@@ -366,8 +394,9 @@ velox.WithDeadlines(velox.Deadlines{
   driver; its error is `ErrTimeout` when velox's deadline passed, and
   otherwise matches `context.DeadlineExceeded` or `context.Canceled`. A
   context whose deadline has passed counts as ended: velox waits at most a
-  short grace for its `Done` to close, so a context that never closes it
-  cannot hang a transaction. Once the
+  short grace (50ms) for its `Done` to close, so a context that never closes
+  it cannot hang a transaction; when it has not closed by then, the error
+  matches `context.DeadlineExceeded`. Once the
   context has ended, a failed rollback is not reported: the driver may have
   closed the connection (pgx does), and the server aborts the transaction.
   `Timeout(d)` with d ≤ 0 is ignored, and a nested `Tx` ignores it.

@@ -2,6 +2,7 @@ package velox_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"testing"
@@ -126,7 +127,8 @@ func FuzzScope(f *testing.F) {
 	f.Add(int64(7), []byte{}, "")
 	f.Add(int64(7), []byte{0, 3, 2, 3, 0}, "a")                  // select: Has(Parent), Has(Invoice), Title
 	f.Add(int64(-1), []byte{1, 1, 7, 2, 7, 1, 2, 3}, "b")        // count: HasWhere(Parent, HasWhere(Parent, Has(Parent)), Has(Invoice))
-	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // update: And(Not(HasWhere(Parent, Has(Parent))), Or(Has(Invoice))), Title
+	f.Add(int64(3), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // update: And(Not(HasWhere(Parent, Has(Parent))), Or(Has(Invoice))), Title
+	f.Add(int64(0), []byte{2, 2, 4, 2, 6, 7, 1, 2, 5, 1, 3}, "") // the same under the zero tenant, which is refused
 	f.Add(int64(9), []byte{3 | 15<<2, 2, 7, 1, 7, 1, 2, 1}, "c") // delete with every hook: three EXISTS deep
 	f.Fuzz(func(t *testing.T, n int64, ops []byte, s string) {
 		if len(ops) > 64 {
@@ -137,7 +139,15 @@ func FuzzScope(f *testing.F) {
 		in := st.Where
 		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, opts...)
 		ctx := testmodel.AsUser(velox.WithTenant(context.Background(), n), "ann")
-		if err := velox.Prepare(db, ctx, st); err != nil {
+		err := velox.Prepare(db, ctx, st)
+		if n == 0 {
+			// The zero tenant scopes nothing: the statement fails closed.
+			if !errors.Is(err, velox.ErrNoTenant) {
+				t.Fatalf("tenant 0: %v", err)
+			}
+			return
+		}
+		if err != nil {
 			t.Fatalf("%v", err)
 		}
 

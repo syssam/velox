@@ -122,7 +122,9 @@ func (s *Schema) Index(fields ...any) {
 	s.idx = append(s.idx, IndexInfo{Columns: s.indexes(fields)})
 }
 
-// Tenant declares the column that scopes every row to a tenant.
+// Tenant declares the column that scopes every row to a tenant. It must be
+// NOT NULL (not a pointer) and comparable, and have no Default, DefaultFunc
+// or OnUpdate: the context's tenant fills it.
 func (s *Schema) Tenant(field any) {
 	if s.tenant >= 0 {
 		s.fail("", "Tenant is declared twice")
@@ -324,7 +326,7 @@ func (s *Schema) Policy[E any](p Policy[E]) {
 // BeforeInsert declares a hook that runs on every row an insert or upsert
 // writes, after the defaults and the tenant are filled; its error refuses the
 // statement. InsertQuery's SQL(ctx) runs it too, so it must change nothing
-// but x. In a mixin's Mixin method, f takes the mixin's own struct, and
+// but x; IsDryRun(ctx) tells it so. In a mixin's Mixin method, f takes the mixin's own struct, and
 // is given the one embedded in the row; the mixins' hooks run before the
 // entity's, each kind in the order declared.
 func (s *Schema) BeforeInsert[E any](f func(ctx context.Context, x *E) error) {
@@ -340,7 +342,7 @@ func (s *Schema) BeforeInsert[E any](f func(ctx context.Context, x *E) error) {
 // entity, before the statement is scoped and rendered. It may read and change
 // the assignments and narrow the rows through m; its error refuses the
 // statement. UpdateQuery's SQL(ctx) runs it too, so it must change nothing
-// but m. A mixin cannot declare one.
+// but m; IsDryRun(ctx) tells it so. A mixin cannot declare one.
 func (s *Schema) BeforeUpdate[E any](f func(ctx context.Context, m *Mutation[E]) error) {
 	s.addMutationHook("BeforeUpdate", elemType((*E)(nil)), mutationHook(f), &s.beforeUpdate)
 }
@@ -348,7 +350,7 @@ func (s *Schema) BeforeUpdate[E any](f func(ctx context.Context, m *Mutation[E])
 // BeforeDelete declares a hook that runs on every delete of the entity,
 // before the statement is scoped and rendered. It may narrow the rows through
 // m; its error refuses the statement. DeleteQuery's SQL(ctx) runs it too, so
-// it must change nothing but m. A mixin cannot declare one.
+// it must change nothing but m; IsDryRun(ctx) tells it so. A mixin cannot declare one.
 func (s *Schema) BeforeDelete[E any](f func(ctx context.Context, m *Mutation[E]) error) {
 	s.addMutationHook("BeforeDelete", elemType((*E)(nil)), mutationHook(f), &s.beforeDelete)
 }

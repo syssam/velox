@@ -65,28 +65,10 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if write.n.op != 0 {
 		extra++
 	}
-	// The conditions are the caller's and may be shared with other runs of
-	// the same query, in other goroutines: an EXISTS that gains a condition
-	// is replaced by a copy, and so is every node above it, in a copy of
-	// st.Where.
-	copied := false
-	for i, p := range st.Where {
-		n, changed, err := sc.node(p.n)
-		if err != nil {
-			return err
-		}
-		if !changed {
-			continue
-		}
-		if !copied {
-			w := make([]Predicate, len(st.Where), len(st.Where)+extra)
-			copy(w, st.Where)
-			st.Where, copied = w, true
-		}
-		st.Where[i] = Predicate{n}
+	if st.Where, err = sc.walk(st.Where, extra); err != nil {
+		return err
 	}
-	// st.Where is clipped (or a copy), so appending never writes into the
-	// query's own array.
+	// st.Where is now the scope's own array, or nothing is appended to it.
 	if tenant {
 		st.Where = append(st.Where, tenantPredicate(in, sc.id))
 	}
@@ -106,11 +88,12 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 // the tenant. An upsert that updates must reach neither another tenant's row
 // nor one the policy hides from an update. On PostgreSQL and SQLite its
 // conflict columns must hold the tenant column, and its update branch gets
-// the Read and Write conditions. MySQL's ON DUPLICATE KEY UPDATE resolves a
-// conflict on any unique key and takes no condition: every unique key must
-// hold the tenant column, and an entity with a Read or Write policy is
-// refused. Keeping the existing row (DoNothing) changes nothing, so it is
-// exempt.
+// the Read and Write conditions; an EXISTS a Rewrite hook put in that
+// branch's condition gets its target's tenant and Read, as one in a Where
+// does. MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key
+// and takes no condition: every unique key must hold the tenant column, and
+// an entity with a Read or Write policy is refused. Keeping the existing row
+// (DoNothing) changes nothing, so it is exempt.
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
 	sc := scoper{ctx: ctx, entity: in.Name}
@@ -133,48 +116,62 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 				return err
 			}
 		}
-		if pol != nil && (pol.read != nil || pol.write != nil) && sc.policyOn() {
-			if db.d == MySQL {
-				return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
-			}
-			if err := sc.conditionUpsert(in, st); err != nil {
-				return err
-			}
+		conditioned := pol != nil && (pol.read != nil || pol.write != nil) && sc.policyOn()
+		if conditioned && db.d == MySQL {
+			return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
+		}
+		if err := sc.conditionUpsert(in, st, conditioned); err != nil {
+			return err
 		}
 	}
 	sc.record(st)
 	return nil
 }
 
-// conditionUpsert adds entity in's Read and Write conditions to the update
-// branch of st's upsert, in a copy of the clause: the caller's InsertQuery
-// may share it with other runs. A denial is the upsert's, as an update's.
-func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement) error {
+// conditionUpsert scopes the condition of the update branch of st's upsert:
+// every EXISTS in it, a Rewrite hook's included, gets its target's tenant and
+// Read condition, as in a Where, and with policy it gains entity in's Read
+// and Write conditions. It works on a copy of the clause: the caller's
+// InsertQuery may share it with other runs. A denial is the upsert's, as an
+// update's.
+func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement, policy bool) error {
 	var read, write Predicate
 	var err error
-	if in.policy.read != nil {
+	// The entity's own policy first, as in scope.
+	if policy && in.policy.read != nil {
 		if read, err = sc.readOf(in, OpUpdate); err != nil {
 			return err
 		}
 	}
-	if in.policy.write != nil {
+	if policy && in.policy.write != nil {
 		p, err := in.policy.write(sc.ctx)
 		if write, err = sc.policyCond(in, OpUpdate, "Write", p, err); err != nil {
 			return err
 		}
 	}
-	if read.n.op == 0 && write.n.op == 0 {
+	extra := 0
+	if read.n.op != 0 {
+		extra++
+	}
+	if write.n.op != 0 {
+		extra++
+	}
+	if extra == 0 && len(st.Conflict.Where) == 0 {
 		return nil
 	}
 	cf := *st.Conflict
-	cf.Where = slices.Clip(cf.Where) // appending copies
+	where, err := sc.walk(cf.Where, extra)
+	if err != nil {
+		return err
+	}
+	cf.Where = where // the scope's own array, or nothing is appended to it
 	if read.n.op != 0 {
 		cf.Where = append(cf.Where, read)
 	}
 	if write.n.op != 0 {
 		cf.Where = append(cf.Where, write)
 	}
-	cf.policy = true
+	cf.policy = extra > 0
 	st.Conflict = &cf
 	return nil
 }
@@ -374,11 +371,16 @@ func tenantPredicate(in *EntityInfo, id any) Predicate { return ColumnEQ(in.Tena
 
 // checkTenantValue refuses a tenant id whose dynamic type is not exactly the
 // Go type of in's tenant column: a named OrgID is not an int64, and an
-// untyped constant is an int.
+// untyped constant is an int. It refuses the type's zero value as no tenant:
+// that is what middleware gets when it parses a claim that is missing, and an
+// insert could not tell it from a tenant field left unset.
 func checkTenantValue(in *EntityInfo, id any) error {
 	c := in.Columns[in.Tenant]
 	if t := GoType(c); reflect.TypeOf(id) != t {
 		return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %s", in.Name, ErrTenantMismatch, id, c.Name, t)
+	}
+	if reflect.ValueOf(id).IsZero() {
+		return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
 	}
 	return nil
 }
@@ -402,6 +404,42 @@ func checkTenantAssignments(in *EntityInfo, set []Assignment, id any) error {
 		}
 	}
 	return nil
+}
+
+// walk returns ps with the tenant and Read conditions added inside every
+// EXISTS, ready for extra more conditions to be appended. The conditions are
+// the caller's and may be shared with other runs of the same query, in other
+// goroutines: an EXISTS that gains a condition is replaced by a copy, and so
+// is every node above it, in a copy of ps. The array ps is on may be anyone's
+// too (a Rewrite hook may point st.Where at a slice of defaults it shares
+// between statements), so appending is never left to write past ps's length:
+// with extra > 0 the result is a copy of ps even when nothing in it changed.
+func (sc *scoper) walk(ps []Predicate, extra int) ([]Predicate, error) {
+	copied := false
+	for i, p := range ps {
+		n, changed, err := sc.node(p.n)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			continue
+		}
+		if !copied {
+			ps, copied = withRoom(ps, extra), true
+		}
+		ps[i] = Predicate{n}
+	}
+	if !copied && extra > 0 {
+		ps = withRoom(ps, extra)
+	}
+	return ps, nil
+}
+
+// withRoom returns a copy of ps on a new array with room for extra more.
+func withRoom(ps []Predicate, extra int) []Predicate {
+	w := make([]Predicate, len(ps), len(ps)+extra)
+	copy(w, ps)
+	return w
 }
 
 // node returns n with the tenant and Read conditions added inside every

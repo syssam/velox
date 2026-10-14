@@ -2,6 +2,8 @@ package velox
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -33,5 +35,42 @@ func TestOverWaitsForAPassedDeadline(t *testing.T) {
 	defer cancelLive()
 	if over(live) {
 		t.Error("a context before its deadline is over")
+	}
+}
+
+// TestOverDoesNotWaitForever: a context past its deadline whose Done never
+// closes is over once a short grace has passed, so a transaction on it
+// neither hangs nor commits.
+func TestOverDoesNotWaitForever(t *testing.T) {
+	stuck := lateCtx{context.Background()} // Background's Done never closes
+	start := time.Now()
+	ended := make(chan bool, 1)
+	go func() { ended <- over(stuck) }()
+	select {
+	case ok := <-ended:
+		if !ok {
+			t.Error("a context past its deadline is not over")
+		}
+		if d := time.Since(start); d < overGrace || d > overGrace+time.Second {
+			t.Errorf("over took %v, want about %v", d, overGrace)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("over waits for a Done that never closes")
+	}
+
+	e := &FakeExec{}
+	db := OpenFake(Postgres, e)
+	done := make(chan error, 1)
+	go func() { done <- db.Tx(stuck, func(*DB) error { return nil }) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) || err.Error() != "velox: transaction: context deadline exceeded" {
+			t.Errorf("got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Tx hangs on a context whose Done never closes")
+	}
+	if want := []string{"BEGIN", "ROLLBACK"}; !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("log %q, want %q", e.Log, want)
 	}
 }

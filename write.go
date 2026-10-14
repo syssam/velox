@@ -90,9 +90,11 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the BeforeUpdate hooks,
 // the Rewrite hooks, the tenant and policy scope and rendering. So the hooks
-// run, and a Rewrite hook can tell from Statement.DryRun that the statement
-// will not be sent. Around hooks, which wrap execution, do not run.
+// and the policy run, and can tell from IsDryRun(ctx), or a Rewrite hook from
+// Statement.DryRun, that the statement will not be sent. Around hooks, which
+// wrap execution, do not run.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
+	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()
 	if err != nil {
 		return "", nil, err
@@ -152,9 +154,11 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the BeforeDelete hooks,
 // the Rewrite hooks, the tenant and policy scope and rendering. So the hooks
-// run, and a Rewrite hook can tell from Statement.DryRun that the statement
-// will not be sent. Around hooks, which wrap execution, do not run.
+// and the policy run, and can tell from IsDryRun(ctx), or a Rewrite hook from
+// Statement.DryRun, that the statement will not be sent. Around hooks, which
+// wrap execution, do not run.
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
+	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if d.meta.err != nil {
 		return "", nil, d.meta.err
 	}

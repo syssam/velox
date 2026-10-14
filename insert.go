@@ -97,12 +97,13 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // again, and the policy's Insert is asked; every entity is prepared before
 // anything is sent.
 //
-// An upsert that updates must name the tenant column in OnConflict
-// (ErrTenantUpsert); on MySQL, where any unique key can conflict, every
-// unique key must hold it. Its update branch gets the policy's Read and Write
-// conditions, on the existing row; an upsert that changed fewer rows than it
-// sent, because the conditions hid a conflicting row, fails with a
-// *PolicyError. MySQL cannot apply them, so there such an upsert of an entity
+// Under WithTenant, an upsert that updates must name the tenant column in
+// OnConflict (ErrTenantUpsert); on MySQL, where any unique key can conflict,
+// every unique key must hold it. Under AllTenants, which reaches every
+// tenant's rows anyway, neither is required. Its update branch gets the
+// policy's Read and Write conditions, on the existing row; an upsert that
+// changed fewer rows than it sent, because the conditions hid a conflicting
+// row, fails with a *PolicyError. MySQL cannot apply them, so there such an upsert of an entity
 // with a Read or Write policy fails with ErrPolicyUpsert. DoNothing is exempt
 // from both.
 //
@@ -115,7 +116,9 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // InsertAll reads nothing back. Give every entity its key, or leave every key
 // at zero for the database to assign. An InsertAll that needs several
 // statements is atomic: outside a transaction it runs them in one, and inside
-// one it runs them under a savepoint.
+// one it runs them under a savepoint. So is an upsert of several rows whose
+// update branch gets the policy's conditions, so that the error for a hidden
+// row also undoes the rows written with it.
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if err := q.check(); err != nil {
 		return err
@@ -132,11 +135,14 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // before execution: like Exec, it fills defaults and the tenant into the
 // caller's entities and runs the BeforeInsert hooks on them, then asks the
 // policy's Insert and runs the Rewrite hooks, the scope and rendering. So the
-// hooks run, and a Rewrite hook can tell from Statement.DryRun that the
-// statement will not be sent. Around hooks, which wrap execution, do not run.
-// An InsertAll too large for one statement gives the first, with InTx set:
-// Exec sends it in a transaction.
+// hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
+// hook from Statement.DryRun, that the statement will not be sent. Around
+// hooks, which wrap execution, do not run. An InsertAll too large for one
+// statement gives the first. InTx is set when Exec sends the statement in a
+// transaction: inside one, for an InsertAll too large for one statement, and
+// for one whose update branch gets the policy's conditions.
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
+	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if err := q.check(); err != nil {
 		return "", nil, err
 	}
@@ -154,7 +160,8 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 		if err != nil {
 			return "", nil, err
 		}
-		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, q.db.inTx || len(q.many) > per)
+		inTx := q.db.inTx || len(q.many) > per || conditionedUpsert(ctx, q.db, q.meta.info, q.conflict, len(q.many))
+		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
 	return q.db.dryRun(ctx, &st)
 }
@@ -484,8 +491,20 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 		}
 		return nil
 	}
-	if len(xs) <= per {
+	if len(xs) <= per && !conditionedUpsert(ctx, db, m.info, cf, len(xs)) {
 		return batches(db)
 	}
 	return db.Tx(ctx, batches)
+}
+
+// conditionedUpsert predicts, before the scope runs, whether it will give
+// the update branch of an InsertAll of n rows of entity in the policy's Read
+// or Write conditions. A row those conditions hide fails the upsert once the
+// statement has written the others, so such an InsertAll of several rows runs
+// in a transaction, which the failure rolls back. The scope conditions an
+// upsert that updates, on any dialect but MySQL (which refuses it), of an
+// entity with a Read or Write policy, unless SkipPolicy.
+func conditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
+	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.d != MySQL &&
+		in.policy != nil && (in.policy.read != nil || in.policy.write != nil) && policyBypass(ctx) == ""
 }

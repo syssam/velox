@@ -244,3 +244,44 @@ func TestMutation(t *testing.T) {
 		t.Errorf("Set on a delete: err %v, set %+v", m.err, del.Set)
 	}
 }
+
+// A tenant column that a default or OnUpdate would fill could put a row in a
+// tenant the context never named.
+type defaultTenant struct {
+	ID  int64
+	Org string
+}
+
+func (x *defaultTenant) Schema(s *Schema) {
+	s.Tenant(&x.Org)
+	s.Column(&x.Org).Default("acme")
+}
+
+type defaultFuncTenant struct {
+	ID    int64
+	OrgID int64
+}
+
+func (x *defaultFuncTenant) Schema(s *Schema) {
+	s.Tenant(&x.OrgID)
+	s.Column(&x.OrgID).DefaultFunc(func() int64 { return 1 })
+}
+
+type onUpdateTenant struct {
+	ID    int64
+	OrgID int64
+}
+
+func (x *onUpdateTenant) Schema(s *Schema) {
+	s.Tenant(&x.OrgID)
+	s.Column(&x.OrgID).OnUpdate(func() int64 { return 1 })
+}
+
+func TestSchemaPolicyTenantColumnIsNotFilled(t *testing.T) {
+	_, err := infoOf[defaultTenant]([]string{"ID", "Org"}, nil)
+	schemaErr(t, err, "velox: velox.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or OnUpdate")
+	_, err = infoOf[defaultFuncTenant]([]string{"ID", "OrgID"}, nil)
+	schemaErr(t, err, "velox: velox.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or OnUpdate")
+	_, err = infoOf[onUpdateTenant]([]string{"ID", "OrgID"}, nil)
+	schemaErr(t, err, "velox: velox.onUpdateTenant.OrgID: the tenant column cannot have Default, DefaultFunc or OnUpdate")
+}

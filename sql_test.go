@@ -307,3 +307,123 @@ func TestScopedSQLGolden(t *testing.T) {
 		})
 	}
 }
+
+// A dnote records, in the dryRuns its context carries, what IsDryRun told
+// each of its hooks and policy functions.
+type dnote struct {
+	ID    int64
+	Owner string
+}
+
+// dryRuns maps a hook's name to what IsDryRun told it, call by call.
+type dryRuns map[string][]bool
+
+type dryRunsKey struct{}
+
+func noteDryRun(ctx context.Context, hook string) {
+	if m, ok := ctx.Value(dryRunsKey{}).(dryRuns); ok {
+		m[hook] = append(m[hook], velox.IsDryRun(ctx))
+	}
+}
+
+func (x *dnote) Schema(s *velox.Schema) {
+	s.Table("dnotes")
+	s.Policy(velox.Policy[dnote]{
+		Read: func(ctx context.Context) (velox.Pred[dnote], error) {
+			noteDryRun(ctx, "Read")
+			return velox.Pred[dnote]{}, nil
+		},
+		Write: func(ctx context.Context) (velox.Pred[dnote], error) {
+			noteDryRun(ctx, "Write")
+			return velox.Pred[dnote]{}, nil
+		},
+		Insert: func(ctx context.Context, _ *dnote) error {
+			noteDryRun(ctx, "Insert")
+			return nil
+		},
+	})
+	s.BeforeInsert(func(ctx context.Context, _ *dnote) error {
+		noteDryRun(ctx, "BeforeInsert")
+		return nil
+	})
+	s.BeforeUpdate(func(ctx context.Context, _ *velox.Mutation[dnote]) error {
+		noteDryRun(ctx, "BeforeUpdate")
+		return nil
+	})
+	s.BeforeDelete(func(ctx context.Context, _ *velox.Mutation[dnote]) error {
+		noteDryRun(ctx, "BeforeDelete")
+		return nil
+	})
+}
+
+var dnoteMeta velox.MetaOnce[dnote]
+
+func (*dnote) VeloxMeta() *velox.Meta[dnote] {
+	return dnoteMeta.Get(func() velox.Shape[dnote] {
+		return velox.Shape[dnote]{Columns: []string{"ID", "Owner"}, Addr: func(x *dnote, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.Owner
+		}}
+	})
+}
+
+var dnoteID = velox.NumberCol[dnote, int64]{I: 0}
+
+// TestIsDryRun: under SQL(ctx), every hook and policy function sees
+// IsDryRun, entity hooks included, which are given no Statement; when the
+// statement is sent, none does.
+func TestIsDryRun(t *testing.T) {
+	for _, dry := range []bool{true, false} {
+		// The query reads a row, and the insert its generated key.
+		e := &velox.FakeExec{Results: [][][]any{{{int64(1), "ann"}}}, Rows: [][]any{{int64(1)}}, Affected: 1}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(ctx context.Context, _ *velox.Statement) error {
+			noteDryRun(ctx, "Rewrite")
+			return nil
+		}))
+		seen := dryRuns{}
+		ctx := context.WithValue(context.Background(), dryRunsKey{}, seen)
+		q := db.Query[dnote]().Limit(1)
+		u := db.Update[dnote]().Set(velox.StringCol[dnote, string]{I: 1}.Set("bob")).Where(dnoteID.EQ(1))
+		d := db.Delete[dnote]().Where(dnoteID.EQ(1))
+		ins := db.Insert(&dnote{Owner: "ann"})
+		var errs []error
+		if dry {
+			_, _, err := q.SQL(ctx)
+			errs = append(errs, err)
+			_, _, err = u.SQL(ctx)
+			errs = append(errs, err)
+			_, _, err = d.SQL(ctx)
+			errs = append(errs, err)
+			_, _, err = ins.SQL(ctx)
+			errs = append(errs, err)
+		} else {
+			_, err := q.All(ctx)
+			errs = append(errs, err)
+			_, err = u.Exec(ctx)
+			errs = append(errs, err)
+			_, err = d.Exec(ctx)
+			errs = append(errs, err)
+			errs = append(errs, ins.Exec(ctx))
+		}
+		if err := errors.Join(errs...); err != nil {
+			t.Fatal(err)
+		}
+		for _, hook := range []string{"Read", "Write", "Insert", "BeforeInsert", "BeforeUpdate", "BeforeDelete", "Rewrite"} {
+			got := seen[hook]
+			if len(got) == 0 {
+				t.Errorf("dry run %v: %s did not run", dry, hook)
+			}
+			for _, v := range got {
+				if v != dry {
+					t.Errorf("dry run %v: %s saw IsDryRun %v", dry, hook, got)
+					break
+				}
+			}
+		}
+	}
+	if velox.IsDryRun(context.Background()) {
+		t.Error("IsDryRun of a plain context")
+	}
+}

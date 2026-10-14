@@ -245,8 +245,14 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		if err := checkColumns(st); err != nil {
 			return err
 		}
-		if db.d == MySQL && st.Conflict != nil && len(st.Conflict.Where) > 0 {
-			return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition; MySQL's ON DUPLICATE KEY UPDATE takes none", entity.Name)
+		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
+			switch {
+			case db.d == MySQL:
+				return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition; MySQL's ON DUPLICATE KEY UPDATE takes none", entity.Name)
+			case cf.DoNothing || len(cf.Update) == 0:
+				// Rendering would drop it: there is no update branch.
+				return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition, but the upsert keeps the existing row and has no update branch to apply it to", entity.Name)
+			}
 		}
 	}
 	if err := db.scope(ctx, st); err != nil {

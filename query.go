@@ -486,10 +486,12 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 // SQL returns the statement and arguments All would send for ctx, or the
 // error All would fail with before sending it; it sends nothing. It runs
 // every stage All runs before execution: the guard, the Rewrite hooks, the
-// tenant and policy scope, the row cap and rendering. So the hooks run, and a
-// Rewrite hook can tell from Statement.DryRun that the statement will not be
-// sent. Around hooks, which wrap execution, do not run.
+// tenant and policy scope, the row cap and rendering. So the hooks and the
+// policy run, and can tell from IsDryRun(ctx), or a Rewrite hook from
+// Statement.DryRun, that the statement will not be sent. Around hooks, which
+// wrap execution, do not run.
 func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
+	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if q.meta.err != nil {
 		return "", nil, q.meta.err
 	}

@@ -502,3 +502,80 @@ func TestPolicyCycleIsRefused(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// pcycA's Read is that its B is visible, and pcycB's that its A is: each
+// reaches its own Read through the other's.
+type pcycA struct {
+	ID  int64
+	BID int64
+	B   velox.One[pcycB]
+}
+
+type pcycB struct {
+	ID  int64
+	AID int64
+	A   velox.One[pcycA]
+}
+
+var (
+	pcycAB = velox.Rel[pcycA, pcycB]{I: 0}
+	pcycBA = velox.Rel[pcycB, pcycA]{I: 0}
+)
+
+func (x *pcycA) Schema(s *velox.Schema) {
+	s.Table("pcyc_as")
+	s.Policy(velox.Policy[pcycA]{Read: func(context.Context) (velox.Pred[pcycA], error) { return pcycAB.Has(), nil }})
+}
+
+func (x *pcycB) Schema(s *velox.Schema) {
+	s.Table("pcyc_bs")
+	s.Policy(velox.Policy[pcycB]{Read: func(context.Context) (velox.Pred[pcycB], error) { return pcycBA.Has(), nil }})
+}
+
+var (
+	pcycAMeta velox.MetaOnce[pcycA]
+	pcycBMeta velox.MetaOnce[pcycB]
+)
+
+func (*pcycA) VeloxMeta() *velox.Meta[pcycA] {
+	return pcycAMeta.Get(func() velox.Shape[pcycA] {
+		return velox.Shape[pcycA]{Columns: []string{"ID", "BID"}, Relations: []velox.Relation{velox.RelationTo[pcycB]("B")},
+			Addr: func(x *pcycA, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.BID
+			}}
+	})
+}
+
+func (*pcycB) VeloxMeta() *velox.Meta[pcycB] {
+	return pcycBMeta.Get(func() velox.Shape[pcycB] {
+		return velox.Shape[pcycB]{Columns: []string{"ID", "AID"}, Relations: []velox.Relation{velox.RelationTo[pcycA]("A")},
+			Addr: func(x *pcycB, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.AID
+			}}
+	})
+}
+
+// TestPolicyMutualCycleIsRefused: two Read policies that reach each other's
+// through EXISTS are a cycle, from either side.
+func TestPolicyMutualCycleIsRefused(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	bg := context.Background()
+	_, err := db.Query[pcycA]().Limit(1).All(bg)
+	if err == nil || err.Error() != "velox: velox_test.pcycA: the Read policy of velox_test.pcycA reaches its own Read through an EXISTS; such a policy cannot be applied" || errors.Is(err, velox.ErrDenied) {
+		t.Errorf("A: %v", err)
+	}
+	_, err = db.Query[pcycB]().Limit(1).All(bg)
+	if err == nil || err.Error() != "velox: velox_test.pcycB: the Read policy of velox_test.pcycB reaches its own Read through an EXISTS; such a policy cannot be applied" {
+		t.Errorf("B: %v", err)
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
+	}
+}

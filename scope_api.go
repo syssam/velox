@@ -23,8 +23,9 @@ type policyKey struct{}
 // WithTenant returns ctx scoped to tenant id: statements on a tenant-scoped
 // entity read and change only that tenant's rows, and inserts fill or check
 // the tenant column. id's dynamic type must be the tenant column's Go type
-// exactly; a nil id scopes nothing, so such statements fail with ErrNoTenant.
-// It replaces an earlier WithTenant or AllTenants on ctx.
+// exactly. A nil id, or the type's zero value (what parsing a missing claim
+// gives), scopes nothing: such statements fail with ErrNoTenant. It replaces
+// an earlier WithTenant or AllTenants on ctx.
 func WithTenant(ctx context.Context, id any) context.Context {
 	return context.WithValue(ctx, tenantKey{}, tenantScope{id: id})
 }
@@ -52,6 +53,24 @@ func SkipPolicy(ctx context.Context, reason string) context.Context {
 	return context.WithValue(ctx, policyKey{}, reason)
 }
 
+// dryRunKey is the context key the SQL(ctx) methods mark their context with.
+type dryRunKey struct{}
+
+// IsDryRun reports whether ctx is that of a SQL(ctx) method: the statement
+// being built will not be sent. The methods mark the context before anything
+// runs, so every hook and policy function sees it: BeforeInsert, BeforeUpdate
+// and BeforeDelete hooks, which are given no Statement, read it here, and a
+// Rewrite hook may read it here or in Statement.DryRun.
+func IsDryRun(ctx context.Context) bool {
+	dry, _ := ctx.Value(dryRunKey{}).(bool)
+	return dry
+}
+
+// dryRunContext returns ctx marked for IsDryRun.
+func dryRunContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, dryRunKey{}, true)
+}
+
 // tenantOf returns the context's tenant state: the tenant's id (nil when
 // none), and the AllTenants reason ("" when none). At most one is set.
 func tenantOf(ctx context.Context) (id any, all string) {
@@ -70,9 +89,14 @@ func policyBypass(ctx context.Context) string {
 // Pred[E]{} restricts nothing; any error it returns denies the statement.
 type Policy[E any] struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
-	// subquery on the entity, and into every UPDATE, DELETE and Save.
+	// subquery on the entity, into every UPDATE, DELETE and Save, and into
+	// the update branch of an upsert, on the existing row.
 	Read func(ctx context.Context) (Pred[E], error)
-	// Write is ANDed into every UPDATE, DELETE and Save, with Read.
+	// Write is ANDed into every UPDATE, DELETE and Save, and into an upsert's
+	// update branch, with Read. It decides which existing rows may change; it
+	// does not check the new values (there is no WITH CHECK), so a writer may
+	// set a column the policy reads, such as an owner. Only the tenant column
+	// cannot be changed.
 	Write func(ctx context.Context) (Pred[E], error)
 	// Insert checks every inserted or upserted row, after the BeforeInsert
 	// hooks and the tenant fill.
@@ -83,8 +107,12 @@ type Policy[E any] struct {
 // Every PolicyError matches ErrDenied.
 type PolicyError struct {
 	Entity string // the Go type, e.g. "billing.Invoice"
-	Op     Op
-	Err    error
+	// Op is the kind of statement denied: the statement's own, or, for a
+	// denial of the target of an EXISTS (a Has or HasWhere, in the statement
+	// or in a policy's condition), OpSelect, since the EXISTS reads its target
+	// whatever the statement does. An upsert's update branch is OpUpdate.
+	Op  Op
+	Err error
 }
 
 func (e *PolicyError) Error() string {

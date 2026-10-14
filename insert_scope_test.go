@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -374,5 +375,146 @@ func TestUpsertConditionFromAHook(t *testing.T) {
 	db = velox.OpenFake(velox.Postgres, e, cond(velox.ColumnEQ(3, "ann")))
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ctx); err != nil || !strings.HasSuffix(e.SQL, `WHERE "tickets"."owner" = $9`) {
 		t.Errorf("%v %s", err, e.SQL)
+	}
+}
+
+// TestUpsertConditionFromAHookIsScoped: an EXISTS a Rewrite hook puts in the
+// update branch's condition gets its target's tenant, as one in a Where does.
+func TestUpsertConditionFromAHookIsScoped(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Conflict != nil {
+			st.Conflict.Where = append(st.Conflict.Where, velox.Predicate(Tk.Invoice.Has()))
+		}
+		return nil
+	}))
+	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t", InvoiceID: 3}
+	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `INSERT INTO "tickets" (`+ticketCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $9) AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
+		"ann", int64(1), int64(7), "ann", "t", false, int64(3), (*int64)(nil), int64(7), "ann", "ann")
+}
+
+// TestUpsertConditionThatWouldBeDropped: a Rewrite hook's condition on an
+// upsert that keeps the existing row, which renders no update branch, is an
+// error rather than silently dropped.
+func TestUpsertConditionThatWouldBeDropped(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Conflict != nil {
+			st.Conflict.Where = append(st.Conflict.Where, velox.Predicate(Tk.Owner.EQ("ann")))
+		}
+		return nil
+	}))
+	ctx := velox.SkipPolicy(as("ann", 7), "hooks")
+	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
+	for name, q := range map[string]velox.InsertQuery[testmodel.Ticket]{
+		"DoNothing":    db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).DoNothing(),
+		"empty Update": db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(),
+	} {
+		err := q.Exec(ctx)
+		if err == nil || err.Error() != "velox: testmodel.Ticket: a Rewrite hook gave the upsert a condition, but the upsert keeps the existing row and has no update branch to apply it to" {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
+	}
+}
+
+// TestUpsertAllOfAHiddenRowRollsBack: a policy-conditioned InsertAll of
+// several rows runs in a transaction, so the hidden-row denial also undoes
+// the rows it wrote; SQL(ctx) says so with InTx.
+func TestUpsertAllOfAHiddenRowRollsBack(t *testing.T) {
+	var inTx []bool
+	e := &velox.FakeExec{Affected: 2}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		inTx = append(inTx, st.InTx)
+		return nil
+	}))
+	three := []testmodel.Ticket{{ID: 1, Owner: "ann", Title: "a"}, {ID: 2, Owner: "ann", Title: "b"}, {ID: 3, Owner: "ann", Title: "c"}}
+	q := db.InsertAll(three).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done)
+	text, _, err := q.SQL(as("ann", 7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPolicyError(t, q.Exec(as("ann", 7)), velox.OpUpdate)
+	if want := []string{"BEGIN", text, "ROLLBACK"}; !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("log %q, want %q", e.Log, want)
+	}
+	if !reflect.DeepEqual(inTx, []bool{true, true}) {
+		t.Errorf("InTx %v, want true under SQL(ctx) and Exec", inTx)
+	}
+
+	// No transaction when nothing conditions the upsert: one row, DoNothing,
+	// SkipPolicy, or an entity with no Read or Write policy.
+	for name, q := range map[string]velox.InsertQuery[testmodel.Ticket]{
+		"one row":   db.InsertAll(three[:1]).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done),
+		"DoNothing": db.InsertAll(three).OnConflict(Tk.OrgID, Tk.Title).DoNothing(),
+	} {
+		e.Log, e.Affected = nil, 3
+		if err := q.Exec(as("ann", 7)); err != nil || len(e.Log) != 1 {
+			t.Errorf("%s: %v, log %q", name, err, e.Log)
+		}
+	}
+	e.Log = nil
+	if err := q.Exec(velox.SkipPolicy(as("ann", 7), "sync")); err != nil || len(e.Log) != 1 {
+		t.Errorf("SkipPolicy: %v, log %q", err, e.Log)
+	}
+	e.Log = nil
+	invs := []testmodel.Invoice{{ID: 1, Number: "a"}, {ID: 2, Number: "b"}}
+	if err := db.InsertAll(invs).OnConflict(I.OrgID, I.Number).Update(I.Paid).Exec(velox.WithTenant(context.Background(), int64(7))); err != nil || len(e.Log) != 1 {
+		t.Errorf("no policy: %v, log %q", err, e.Log)
+	}
+}
+
+// tunique's primary key holds its tenant, but its unique code does not: on
+// MySQL a conflict on the code could reach another tenant's row.
+type tunique struct {
+	OrgID int64
+	ID    int64
+	Code  string
+}
+
+func (x *tunique) Schema(s *velox.Schema) {
+	s.Table("tuniques")
+	s.PrimaryKey(&x.OrgID, &x.ID)
+	s.Tenant(&x.OrgID)
+	s.Unique(&x.Code)
+}
+
+var tuniqueMeta velox.MetaOnce[tunique]
+
+func (*tunique) VeloxMeta() *velox.Meta[tunique] {
+	return tuniqueMeta.Get(func() velox.Shape[tunique] {
+		return velox.Shape[tunique]{Columns: []string{"OrgID", "ID", "Code"}, Addr: func(x *tunique, i int) any {
+			switch i {
+			case 0:
+				return &x.OrgID
+			case 1:
+				return &x.ID
+			}
+			return &x.Code
+		}}
+	})
+}
+
+var tu = struct {
+	OrgID velox.NumberCol[tunique, int64]
+	ID    velox.NumberCol[tunique, int64]
+	Code  velox.StringCol[tunique, string]
+}{velox.NumberCol[tunique, int64]{I: 0}, velox.NumberCol[tunique, int64]{I: 1}, velox.StringCol[tunique, string]{I: 2}}
+
+// TestUpsertOnMySQLNamesTheUniqueIndex: a primary key that holds the tenant
+// is not enough on MySQL; a unique index without it is named.
+func TestUpsertOnMySQLNamesTheUniqueIndex(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.MySQL, e)
+	x := tunique{ID: 1, Code: "c"}
+	err := db.Insert(&x).OnConflict(tu.OrgID, tu.ID).Update(tu.Code).Exec(velox.WithTenant(context.Background(), int64(7)))
+	want(t, err, velox.ErrTenantUpsert, "velox: velox_test.tunique: upsert could cross tenants: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and the unique index (code) does not hold the tenant column org_id")
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
 	}
 }
