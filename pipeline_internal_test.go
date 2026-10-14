@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -79,6 +80,41 @@ func TestHooksOnWrites(t *testing.T) {
 			e := &FakeExec{}
 			db := OpenFake(Postgres, e, WithRewrite(c.hook))
 			st := c.st
+			if _, err := execWrite(ctx, db, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
+				t.Errorf("%v (calls %d), want an error containing %q", err, e.Calls, c.want)
+			}
+		})
+	}
+}
+
+// TestHooksAndConditionsOfRelations: a rewrite hook that points the statement
+// at an entity too small for an EXISTS, or appends a condition that carries an
+// error, gets an error, not a panic or a malformed statement.
+func TestHooksAndConditionsOfRelations(t *testing.T) {
+	ctx := context.Background()
+	co := (*company)(nil).VeloxMeta().info
+	staff, err := co.rels[0].resolve(co)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := errors.New("velox: the captured condition is invalid")
+	for name, c := range map[string]struct {
+		hook Rewrite
+		want string
+	}{
+		"smaller entity": {func(_ context.Context, st *Statement) error {
+			st.Entity = &EntityInfo{Name: "tiny"}
+			return nil
+		}, "the entity has 0 columns"},
+		"invalid predicate": {func(_ context.Context, st *Statement) error {
+			st.Where = append(st.Where, Predicate{node{op: opInvalid, v: broken}})
+			return nil
+		}, broken.Error()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := &FakeExec{}
+			db := OpenFake(Postgres, e, WithRewrite(c.hook))
+			st := Statement{Op: OpDelete, Entity: co, Where: []Predicate{{node{op: opExists, col: 0, v: staff}}}}
 			if _, err := execWrite(ctx, db, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
 				t.Errorf("%v (calls %d), want an error containing %q", err, e.Calls, c.want)
 			}

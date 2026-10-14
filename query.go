@@ -322,7 +322,7 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 // SQL returns the statement and arguments the query would send, without a
 // database. Rewrite hooks have not run on it, so a condition a hook adds (a
 // tenant's, for example) is not shown. It returns "" when the entity's
-// metadata is invalid; All returns that error.
+// metadata or a condition is invalid; All returns that error.
 func (q Query[E]) SQL[_ Lazy[E]]() (string, []any) {
 	if q.meta.err != nil {
 		return "", nil

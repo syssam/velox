@@ -1,6 +1,9 @@
 package velox
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // TestRenderExists is Review Focus 3: the subquery's table is aliased, the
 // correlation names the outer table (or the outer alias when nested), and the
@@ -48,5 +51,43 @@ func TestCacheKeepsRelationsApart(t *testing.T) {
 	b, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 1, v: comp}}}})
 	if a == b {
 		t.Errorf("two relations share SQL: %s", a)
+	}
+}
+
+// TestCachedExistsRendersLikeRender renders a statement with a nested EXISTS,
+// a trailing condition and a Limit through the cache twice (a miss, then a
+// hit on another statement of the same shape), and compares the hit's SQL and
+// arguments with render's.
+func TestCachedExistsRendersLikeRender(t *testing.T) {
+	em := (*employee)(nil).VeloxMeta().info
+	co := (*company)(nil).VeloxMeta().info
+	staff, err := co.rels[0].resolve(co)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boss, err := em.rels[0].resolve(em)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(inner, id, limit int64) *Statement {
+		return &Statement{Op: OpSelect, Entity: co, Limit: int(limit), Where: []Predicate{
+			{node{op: opExists, col: 0, v: staff, kids: []node{
+				{op: opEQ, col: 1, v: inner},
+				{op: opExists, col: 0, v: boss},
+			}}},
+			{node{op: opEQ, col: 0, v: id}},
+		}}
+	}
+	for _, d := range []Dialect{Postgres, MySQL, SQLite} {
+		var c renderCache
+		c.render(d, mk(7, 3, 5)) // miss
+		hit, hitArgs := c.render(d, mk(8, 4, 6))
+		want, wantArgs := render(d, mk(8, 4, 6))
+		if hit != want || !reflect.DeepEqual(hitArgs, wantArgs) || len(wantArgs) != 3 {
+			t.Errorf("%v:\n got %s %v\nwant %s %v", d, hit, hitArgs, want, wantArgs)
+		}
+		if c.size() != 1 {
+			t.Errorf("%v: %d shapes", d, c.size())
+		}
 	}
 }

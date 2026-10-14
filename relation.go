@@ -228,11 +228,15 @@ func relLink[E any](i int32) (link, error) {
 	return m.info.rels[i].resolve(m.info)
 }
 
-// Has is true when the relation holds at least one entity.
+// Has is true when the relation holds at least one entity. On MySQL, an UPDATE
+// or DELETE whose condition's EXISTS reads the table being changed (a relation
+// of an entity to itself) fails with error 1093.
 func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E] { return r.HasWhere() }
 
 // HasWhere is true when at least one related entity meets every condition:
-// EXISTS (SELECT 1 FROM target WHERE key = owner's key AND ps…).
+// EXISTS (SELECT 1 FROM target WHERE key = owner's key AND ps…). On MySQL, an
+// UPDATE or DELETE whose condition's EXISTS reads the table being changed (a
+// relation of an entity to itself) fails with error 1093.
 func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	l, err := relLink[E](r.I)
 	if err == nil {

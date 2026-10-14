@@ -225,7 +225,11 @@ func checkColumns(st *Statement) error {
 			}
 			return nil
 		case opExists:
-			return nil // its kids are conditions on the target, made by HasWhere
+			// Only the owner's column is the statement's entity's; the kids
+			// are conditions on the target, made by HasWhere.
+			return bad(nd.v.(link).ownerCol)
+		case opInvalid:
+			return nd.v.(error)
 		}
 		return bad(int(nd.col))
 	}

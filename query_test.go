@@ -335,10 +335,44 @@ func TestHasThroughTheAPI(t *testing.T) {
 func TestABrokenRelationIsAnError(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	bad := velox.Rel[testmodel.Invoice, testmodel.Item]{I: 9}
-	if _, err := db.Query[testmodel.Invoice]().Where(bad.Has()).Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "has no relation 9") {
-		t.Errorf("%v", err)
+	badItem := velox.Rel[testmodel.Item, testmodel.Invoice]{I: 9}
+	const msg = "has no relation 9"
+	check := func(name string, err error) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), msg) {
+			t.Errorf("%s: %v, want an error containing %q", name, err, msg)
+		}
 	}
-	if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(bad.Has()).Exec(ctx); err == nil {
-		t.Error("Update accepted a broken relation")
+	for name, p := range map[string]velox.Pred[testmodel.Invoice]{
+		"direct":            bad.Has(),
+		"inside Not":        velox.Not(bad.Has()),
+		"inside HasWhere":   I.Items.HasWhere(badItem.Has()),
+		"inside And and Or": velox.Or(I.Paid.EQ(true), velox.And(bad.Has())),
+	} {
+		q := db.Query[testmodel.Invoice]().Where(p).Limit(1)
+		_, err := q.All(ctx)
+		check(name+" All", err)
+		_, err = q.One(ctx)
+		check(name+" One", err)
+		_, err = q.Count(ctx)
+		check(name+" Count", err)
+		for _, err := range q.Iter(ctx) {
+			check(name+" Iter", err)
+		}
+		if text, args := q.SQL(); text != "" || args != nil {
+			t.Errorf("%s Query.SQL: %q %v", name, text, args)
+		}
+		u := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(p)
+		_, err = u.Exec(ctx)
+		check(name+" Update", err)
+		if text, _ := u.SQL(); text != "" {
+			t.Errorf("%s Update.SQL: %q", name, text)
+		}
+		d := db.Delete[testmodel.Invoice]().Where(p)
+		_, err = d.Exec(ctx)
+		check(name+" Delete", err)
+		if text, _ := d.SQL(); text != "" {
+			t.Errorf("%s Delete.SQL: %q", name, text)
+		}
 	}
 }
