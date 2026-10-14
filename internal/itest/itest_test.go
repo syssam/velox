@@ -192,6 +192,7 @@ func TestLikeTakesTextLiterally(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		wantIDs(t, query(t, tg, I.Number.HasPrefix("50%")), []int64{3})
 		wantIDs(t, query(t, tg, I.Number.HasSuffix("_OFF")), []int64{3})
+		wantIDs(t, query(t, tg, I.Number.HasSuffix("_1")), nil) // unescaped, "%_1" would match INV-1
 		wantIDs(t, query(t, tg, I.Number.Contains("_")), []int64{3})
 		wantIDs(t, query(t, tg, I.Number.Contains(`\`)), []int64{5})
 		wantIDs(t, query(t, tg, I.Number.Like("INV-_")), []int64{1, 2})
@@ -203,7 +204,11 @@ func TestLikeTakesTextLiterally(t *testing.T) {
 func TestTextMatchingFollowsTheDatabase(t *testing.T) {
 	want := map[velox.Dialect][]int64{velox.Postgres: nil, velox.MySQL: {1, 2}, velox.SQLite: {1, 2}}
 	each(t, func(t *testing.T, tg target) {
-		wantIDs(t, query(t, tg, I.Number.HasPrefix("inv")), want[tg.d])
+		w, ok := want[tg.d]
+		if !ok {
+			t.Fatalf("no expectation for dialect %v", tg.d)
+		}
+		wantIDs(t, query(t, tg, I.Number.HasPrefix("inv")), w)
 		wantIDs(t, query(t, tg, I.Number.EqualFold("inv-1")), []int64{1})
 	})
 }
