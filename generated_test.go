@@ -14,6 +14,7 @@ func TestGeneratedEntities(t *testing.T) {
 		velox.CheckEntity[testmodel.Invoice](),
 		velox.CheckEntity[testmodel.Sample](),
 		velox.CheckEntity[testmodel.Line](),
+		velox.CheckEntity[testmodel.Item](),
 	} {
 		if err != nil {
 			t.Error(err)

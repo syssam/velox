@@ -238,18 +238,28 @@ type RelDef[T any] struct {
 
 // ForeignKey declares the target's column that holds this entity's primary
 // key: func(l *Line) *int64 { return &l.InvoiceID }.
+//
+// The function runs once, here, on a fresh T; it must return a pointer to one
+// of T's fields (or of a struct embedded in it) and do nothing else.
 func (d *RelDef[T]) ForeignKey[K any](fk func(*T) *K) *RelDef[T] {
 	if d.r == nil {
 		return d
 	}
-	if d.r.ref >= 0 {
+	switch {
+	case d.r.hasFK:
+		d.s.fail(d.r.name, "relation %s's key is declared twice", d.r.name)
+		return d
+	case d.r.ref != -1:
 		d.s.fail(d.r.name, "relation %s declares both ForeignKey and References", d.r.name)
 		return d
 	}
-	d.r.fk = func() (uintptr, reflect.Type) {
-		x := new(T)
-		return uintptr(unsafe.Pointer(fk(x))) - uintptr(unsafe.Pointer(x)), reflect.TypeFor[K]()
+	x := new(T)
+	off := uintptr(unsafe.Pointer(fk(x))) - uintptr(unsafe.Pointer(x))
+	if off >= unsafe.Sizeof(*x) {
+		d.s.fail(d.r.name, "ForeignKey's function must return a field of %s", reflect.TypeFor[T]())
+		return d
 	}
+	d.r.fkOff, d.r.fkTyp, d.r.hasFK = off, reflect.TypeFor[K](), true
 	return d
 }
 
@@ -263,8 +273,12 @@ func (d *RelDef[T]) References[V any](p *V) *RelDef[T] {
 		d.s.fail(d.r.name, "References applies to a One relation; a Many relation's key is on its target: use ForeignKey")
 		return d
 	}
-	if d.r.fk != nil {
+	if d.r.hasFK {
 		d.s.fail(d.r.name, "relation %s declares both ForeignKey and References", d.r.name)
+		return d
+	}
+	if d.r.ref != -1 {
+		d.s.fail(d.r.name, "relation %s's key is declared twice", d.r.name)
 		return d
 	}
 	d.r.ref = d.s.find(unsafe.Pointer(p), reflect.TypeFor[V]())

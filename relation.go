@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 // kit is replaced in Task 3.
@@ -73,8 +75,10 @@ type relation struct {
 	off    uintptr      // the field's offset in the owner
 	typ    reflect.Type // One[T] or Many[T]
 	target func() (*EntityInfo, error)
-	ref    int                            // References: the owner's column; -1 none, -2 invalid
-	fk     func() (uintptr, reflect.Type) // ForeignKey: the target's field; nil none
+	ref    int          // References: the owner's column; -1 none, -2 invalid
+	fkOff  uintptr      // ForeignKey: the target field's offset...
+	fkTyp  reflect.Type // ...and type, computed during Schema
+	hasFK  bool
 
 	once sync.Once
 	link link
@@ -99,11 +103,11 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 		return link{}, &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
 	}
 	if r.target == nil {
-		return fail("relation %s has no target in the generated code; run go tool velox-gen", r.name)
+		return fail("it has no target in the generated code; run go tool velox-gen")
 	}
 	t, err := r.target()
 	if err != nil {
-		return fail("relation %s: its target is invalid: %v", r.name, err)
+		return fail("its target %s is invalid: %s", targetName(r.typ), strings.TrimPrefix(err.Error(), "velox: "))
 	}
 	l := link{target: t}
 	kind := "One"
@@ -112,25 +116,24 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 	}
 	switch {
 	case r.ref == -2:
-		return fail("relation %s: References names no column", r.name)
+		return fail("References names no column")
 	case r.ref >= 0:
 		l.ownerCol = r.ref
 		if l.targetCol, err = singleKey(t); err != nil {
-			return fail("relation %s: %v", r.name, err)
+			return fail("%v", err)
 		}
-	case r.fk != nil:
-		off, typ := r.fk()
-		if l.targetCol = columnAt(t, off, typ); l.targetCol < 0 {
-			return fail("relation %s: ForeignKey's function does not return a column of %s", r.name, t.Name)
+	case r.hasFK:
+		if l.targetCol = columnAt(t, r.fkOff, r.fkTyp); l.targetCol < 0 {
+			return fail("ForeignKey's function does not return a column of %s", t.Name)
 		}
 		if l.ownerCol, err = singleKey(owner); err != nil {
-			return fail("relation %s: %v", r.name, err)
+			return fail("%v", err)
 		}
 	default:
 		if c, ok := fieldColumn(owner, r.name+"ID"); ok && !r.many {
 			l.ownerCol = c
 			if l.targetCol, err = singleKey(t); err != nil {
-				return fail("relation %s: %v", r.name, err)
+				return fail("%v", err)
 			}
 			break
 		}
@@ -141,7 +144,7 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 		}
 		l.targetCol = c
 		if l.ownerCol, err = singleKey(owner); err != nil {
-			return fail("relation %s: %v", r.name, err)
+			return fail("%v", err)
 		}
 	}
 	oc, tc := owner.Columns[l.ownerCol], t.Columns[l.targetCol]
@@ -149,7 +152,7 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 		return fail("the key types differ: %s.%s is %v and %s.%s is %v", owner.Name, oc.Field, base(oc.Type), t.Name, tc.Field, base(tc.Type))
 	}
 	if !base(oc.Type).Comparable() {
-		return fail("relation %s: a key of type %v cannot be compared", r.name, base(oc.Type))
+		return fail("a key of type %v cannot be compared", base(oc.Type))
 	}
 	return l, nil
 }
@@ -194,7 +197,17 @@ func base(t reflect.Type) reflect.Type {
 // "Invoice" for "billing.Invoice" (and "Company" for an unexported company).
 func typeName(name string) string {
 	n := name[strings.LastIndexByte(name, '.')+1:]
-	return strings.ToUpper(n[:1]) + n[1:]
+	r, size := utf8.DecodeRuneInString(n)
+	return string(unicode.ToUpper(r)) + n[size:]
+}
+
+// targetName is the name of T in the relation field type One[T] or Many[T].
+func targetName(t reflect.Type) string {
+	n := t.Name()
+	if i := strings.IndexByte(n, '['); i >= 0 && strings.HasSuffix(n, "]") {
+		return n[i+1 : len(n)-1]
+	}
+	return n
 }
 
 // Rel is the handle of a relation of entity E to entity T, written by
