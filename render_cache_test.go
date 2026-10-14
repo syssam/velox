@@ -18,7 +18,7 @@ func TestCacheRendersLikeRender(t *testing.T) {
 			}
 		}
 	}
-	if len(c.m) == 0 {
+	if c.size() == 0 {
 		t.Error("nothing was cached")
 	}
 }
@@ -40,6 +40,13 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	m, _ := c.render(MySQL, stmt())
 	if m == b {
 		t.Error("dialects share SQL")
+	}
+	other := *invInfo
+	other.Table = "archive"
+	st := stmt()
+	st.Entity = &other
+	if o, _ := c.render(Postgres, st); o == b {
+		t.Error("entities share SQL")
 	}
 }
 
@@ -74,7 +81,11 @@ func TestCacheStopsGrowing(t *testing.T) {
 			t.Fatalf("n=%d: %s", n, got)
 		}
 	}
-	if len(c.m) != 3 {
-		t.Errorf("cache holds %d shapes, the limit is 3", len(c.m))
+	held := 0
+	for _, shapes := range c.m {
+		held += len(shapes)
+	}
+	if c.size() != 3 || held != 3 {
+		t.Errorf("cache holds %d shapes (counted %d), the limit is 3", held, c.size())
 	}
 }

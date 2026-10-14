@@ -11,6 +11,11 @@ import (
 
 // EntityInfo is what velox knows about an entity, built once on its first
 // use. It is the non-generic view that hooks see in a Statement.
+//
+// One EntityInfo is shared by every query on the entity, in every goroutine,
+// so it must be treated as read-only, slices included. A hook that needs
+// different metadata for a statement copies it and points Statement.Entity
+// at the copy; it never changes the shared one.
 type EntityInfo struct {
 	Name       string // the Go type, e.g. "billing.Invoice"
 	Table      string

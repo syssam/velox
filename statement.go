@@ -16,9 +16,14 @@ const (
 // Statement is one operation on its way to the database. Every query becomes
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs (design §5).
+//
+// The EntityInfo that Entity points to is shared by every query on the
+// entity, in every goroutine: treat it as read-only. A rewrite hook may point
+// Entity at an EntityInfo of its own (a copy with another Table, say), but
+// must never change the shared one.
 type Statement struct {
 	Op        Op
-	Entity    *EntityInfo
+	Entity    *EntityInfo // shared and read-only: replace it, never edit it
 	Count     bool        // SELECT COUNT(*) instead of columns
 	Columns   []int       // the selected columns; nil selects all
 	Where     []Predicate // all must hold

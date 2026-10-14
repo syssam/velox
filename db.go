@@ -69,14 +69,19 @@ func (db *DB) run(ctx context.Context, st *Statement) (rows, error) {
 		st.OrderBy = slices.Clone(st.OrderBy)
 		st.Columns = slices.Clone(st.Columns)
 	}
-	if len(db.cfg.rewrites) > 0 {
-		for _, rw := range db.cfg.rewrites {
-			if err := rw(ctx, st); err != nil {
-				return nil, err
-			}
+	entity := st.Entity
+	for _, rw := range db.cfg.rewrites {
+		if err := rw(ctx, st); err != nil {
+			return nil, err
 		}
 	}
-	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
+	if st.Entity == entity {
+		st.SQL, st.Args = db.cfg.cache.render(db.d, st)
+	} else {
+		// A hook pointed the statement at its own EntityInfo, likely one
+		// made for this statement alone; caching by it would fill the cache.
+		st.SQL, st.Args = render(db.d, st)
+	}
 	if len(db.cfg.arounds) == 0 {
 		r, err := db.ex.query(ctx, st.SQL, st.Args)
 		if err != nil {
