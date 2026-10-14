@@ -54,7 +54,7 @@ type ColumnInfo struct {
 
 // GoType returns the Go type of column c's field. ColumnInfo.Type holds it
 // as any, and this is a function rather than a method, so that no velox type
-// reaches reflect.Type: every package that reaches it compiles about 140 KB
+// reaches reflect.Type: every package that reaches it compiles about 134 KiB
 // of wrappers for reflect's iterator types (design §3 rule 7).
 func GoType(c ColumnInfo) reflect.Type { return rtype(c.Type) }
 
@@ -113,6 +113,9 @@ func (o *MetaOnce[E]) Get[_ Lazy[E]](shape func() Shape[E]) *Meta[E] {
 			addr = sh.Addr
 			return sh.Columns, sh.Relations, sh.Addr != nil
 		})
+		if err != nil {
+			addr = nil // an error Meta has no scan plan, as when Schema panics
+		}
 		o.m = &Meta[E]{info: info, addr: addr, err: err}
 		if info != nil && addr != nil {
 			info.kit = kitOf(info, addr)

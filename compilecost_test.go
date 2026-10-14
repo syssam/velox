@@ -34,9 +34,10 @@ func eShape() velox.Shape[E] {
 }
 `
 
-// entityUseSrc is an entity whose Schema declares a column option, used by a
-// function that queries, inserts and saves it: the generic bodies velox
-// compiles into such a package must not reach reflect either.
+// entityUseSrc is an entity whose Schema declares a column option and two
+// relations, used by a function that queries with relations, inserts, saves,
+// updates and deletes it: the generic bodies velox compiles into such a
+// package must not reach reflect either.
 const entityUseSrc = `package p
 
 import (
@@ -46,33 +47,63 @@ import (
 )
 
 type E struct {
-	ID   int64
-	Name string
+	ID       int64
+	Name     string
+	ParentID *int64
+	Parent   velox.One[E]
+	Kids     velox.Many[E]
 }
 
-func (x *E) Schema(s *velox.Schema) { s.Column(&x.Name).Default("none") }
+func (x *E) Schema(s *velox.Schema) {
+	s.Column(&x.Name).Default("none")
+	s.One(&x.Parent).References(&x.ParentID)
+	s.Many(&x.Kids).ForeignKey(func(k *E) **int64 { return &k.ParentID })
+}
 
 var eMeta velox.MetaOnce[E]
 
 func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Get(eShape) }
 
 func eShape() velox.Shape[E] {
-	return velox.Shape[E]{Columns: []string{"ID", "Name"}, Addr: func(x *E, i int) any {
-		if i == 0 {
-			return &x.ID
-		}
-		return &x.Name
-	}}
+	return velox.Shape[E]{
+		Columns:   []string{"ID", "Name", "ParentID"},
+		Relations: []velox.Relation{velox.RelationTo[E]("Parent"), velox.RelationTo[E]("Kids")},
+		Addr: func(x *E, i int) any {
+			switch i {
+			case 0:
+				return &x.ID
+			case 1:
+				return &x.Name
+			case 2:
+				return &x.ParentID
+			}
+			return nil
+		},
+	}
 }
 
+var (
+	eID     = velox.NumberCol[E, int64]{I: 0}
+	eName   = velox.StringCol[E, string]{I: 1}
+	eParent = velox.Rel[E, E]{I: 0}
+	eKids   = velox.Rel[E, E]{I: 1}
+)
+
 func Use(ctx context.Context, db *velox.DB, e *E) error {
-	if _, err := db.Query[E]().Limit(1).All(ctx); err != nil {
+	if _, err := db.Query[E]().Where(eKids.Has()).With(eParent).Limit(1).All(ctx); err != nil {
 		return err
 	}
 	if err := db.Insert(e).Exec(ctx); err != nil {
 		return err
 	}
-	return db.Save(ctx, e)
+	if err := db.Save(ctx, e); err != nil {
+		return err
+	}
+	if _, err := db.Update[E]().Set(eName.Set("x")).Where(eID.EQ(1)).Exec(ctx); err != nil {
+		return err
+	}
+	_, err := db.Delete[E]().Where(eID.EQ(1)).Exec(ctx)
+	return err
 }
 `
 
@@ -88,9 +119,9 @@ var genericObjects = []struct {
 }{
 	// Measured on 2026-10-14, darwin/arm64, Go 1.27.1: each max is the
 	// measured growth plus the larger of 4096 and a quarter of it, rounded up
-	// to the next KB, with the measurement beside it. One ordinary method adds
-	// about 20 KB to a handle (NumberCol: 14846 → 35782), which exceeds that
-	// margin; a velox type reaching reflect.Type adds about 135 KB.
+	// to the next KiB, with the measurement beside it. One ordinary method adds
+	// about 20 KiB to a handle (NumberCol: 14846 → 35782), which exceeds that
+	// margin; a velox type reaching reflect.Type adds about 134 KiB.
 	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14312
 	{"OrderedCol", "velox.OrderedCol[E, int64]", "", 19456},         // measured 14924
 	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},           // measured 14846
@@ -119,7 +150,7 @@ var genericObjects = []struct {
 	{"Schema", "*velox.Schema", "", 5120},                           // measured 282
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	{"entity", "", entitySrc, 123904},                               // measured 98878
-	{"entityUse", "", entityUseSrc, 487424},                         // measured 389196
+	{"entityUse", "", entityUseSrc, 842752},                         // measured 673936
 }
 
 // TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one

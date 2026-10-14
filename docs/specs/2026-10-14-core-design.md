@@ -291,14 +291,16 @@ or confirmed by measurement (Appendix A).
    Query reaches holds `reflect.Type` or `reflect.Value` in a field or method
    signature.** `reflect`'s iterator types (`iter.Seq[reflect.Type]`…) have no
    home package, so every package that reaches `reflect.Type` compiles about
-   140 KB of their wrappers and descriptors. Measured: `var x *velox.EntityInfo`
-   cost 134 KB of object before, 0.3 KB after. Go types are held as `any`;
+   134 KiB of their wrappers and descriptors. Measured: `var x *velox.EntityInfo`
+   cost 134 KiB of object before, 0.3 KiB after. Go types are held as `any`;
    `velox.GoType(c)` reads a column's. The same holds for the bodies of the
    generic functions and methods compiled where they are called
-   (`MetaOnce.Get`, `Schema.Column`, a Query's run, Insert, Save): they pass
-   pointers and types as `any` to non-generic helpers that use `reflect`.
-   Measured: a one-column entity package cost 283 KB before, 97 KB after; one
-   that also queries, inserts and saves its entity 595 KB before, 380 KB after.
+   (`MetaOnce.Get`, `Schema.Column`, `Schema.One`/`Many` and their keys, a
+   Query's run, Insert, Save, Update, Delete): they pass pointers and types as
+   `any` to non-generic helpers that use `reflect`. Measured: a one-column
+   entity package cost 283 KiB before, 97 KiB after; one with two relations
+   that also queries, inserts, saves, updates and deletes its entity 884 KiB
+   before, 658 KiB after.
 
 ## 4. Query and mutation API
 

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 )
 
 // Write creates a module example.com/tmp in dir that requires velox2 from
@@ -39,10 +38,12 @@ func Write(dir, repo string, files map[string]string) error {
 	return err
 }
 
-// Go runs the go command of the toolchain that built the caller in dir,
-// offline, and returns its combined output.
+// Go runs the go command in dir, offline, and returns its combined output.
+// It runs "go" from PATH: go test, go run, go generate and go tool put their
+// own GOROOT/bin first on a child's PATH (go help test), so this is the
+// toolchain that runs the caller.
 func Go(dir string, args ...string) (string, error) {
-	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), args...)
+	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
 	var out bytes.Buffer
