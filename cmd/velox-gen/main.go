@@ -54,7 +54,7 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 	cfg := config{dir: dir, env: env, ordered: typeSet(*ordered), number: typeSet(*number)}
 	ps, err := load(cfg, patterns)
 	if err != nil {
-		fmt.Fprintf(stderr, "velox-gen: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
 	}
 	if verify {
@@ -67,21 +67,21 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 	if *checkOnly {
 		files := stale(res)
 		for _, f := range files {
-			fmt.Fprintf(stderr, "velox-gen: %s is out of date\n", relPath(dir, f))
+			_, _ = fmt.Fprintf(stderr, "velox-gen: %s is out of date\n", relPath(dir, f))
 		}
 		if len(files) > 0 {
-			fmt.Fprintf(stderr, "velox-gen: run go tool velox-gen %s\n", strings.Join(patterns, " "))
+			_, _ = fmt.Fprintf(stderr, "velox-gen: run go tool velox-gen %s\n", strings.Join(patterns, " "))
 			return 1
 		}
 		return 0
 	}
 	changed, err := apply(res)
 	if err != nil {
-		fmt.Fprintf(stderr, "velox-gen: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
 	}
 	for _, f := range changed {
-		fmt.Fprintln(stdout, relPath(dir, f))
+		_, _ = fmt.Fprintln(stdout, relPath(dir, f))
 	}
 	return 0
 }
@@ -89,7 +89,7 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 // report prints problems and says whether there were any.
 func report(w io.Writer, probs []problem) bool {
 	for _, p := range probs {
-		fmt.Fprintf(w, "velox-gen: %s\n", p)
+		_, _ = fmt.Fprintf(w, "velox-gen: %s\n", p)
 	}
 	return len(probs) > 0
 }

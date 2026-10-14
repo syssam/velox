@@ -4,8 +4,6 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 
 ## Before plan 3 (writes)
 
-- Duplicate column names are accepted silently: a second field renamed with `Name("id")`, or a mixin and the entity both declaring `ID`. Reads survive; inserts will not. Make it a `SchemaError`. The default primary-key loop also picks the last `ID`.
-- `Unique()`/`Index()` with no fields, a column repeated in one index, and `PrimaryKey()` with no fields are accepted.
 - A rewrite hook that changes `Statement.Op` from SELECT panics in `render` (only SELECT is implemented in Core 1).
 - `Table("schema.table")` becomes one quoted identifier; there is no way to name a PostgreSQL schema or MySQL database. Add a qualified form or document the limit.
 - The LIKE escape depends on server settings: MySQL's `ESCAPE '\\'` assumes `NO_BACKSLASH_ESCAPES` is off, and PostgreSQL's `ESCAPE '\'` assumes `standard_conforming_strings` is on. A non-backslash escape character (e.g. `!`) removes both dependencies.
@@ -13,10 +11,8 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 
 ## Plan 2 (generator)
 
-- A struct embedding a mixin that embeds another mixin with its own `Mixin` method shadows the inner one, which is never called.
-- A field's type change (e.g. `float64` to a decimal) does not raise `ErrStale`; `Shape` could carry type names.
-- `flatten` descends into any embedded struct (`time.Time`, `sync.Mutex`), not only mixins; the generator should refuse non-mixin embeds.
-- The "is not a column" `SchemaError` leaves `Field` empty, though the candidate fields are known.
+- Resolved in plan 2: nested mixins and embedded structs that add no columns are refused by velox-gen; a field that is not a column is named in its `SchemaError`.
+- Still open: a field's type change (e.g. `float64` to a decimal) does not raise `ErrStale`. `Shape` would have to carry type names, and reflect's spelling of types (`[]uint8`, package paths inside type arguments) differs from go/types'; decide in plan 5 whether it is worth it.
 
 ## Plan 4 (relations)
 

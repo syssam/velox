@@ -32,30 +32,30 @@ func runVerify(cfg config, ps []*packages.Package, stdout, stderr io.Writer) int
 	var named []*entity
 	for _, e := range ents {
 		if !token.IsExported(e.name) || e.pkg.Name == "main" {
-			fmt.Fprintf(stderr, "velox-gen verify: skipping %s.%s, which a program outside its package cannot name\n", e.pkg.Name, e.name)
+			_, _ = fmt.Fprintf(stderr, "velox-gen verify: skipping %s.%s, which a program outside its package cannot name\n", e.pkg.Name, e.name)
 			continue
 		}
 		named = append(named, e)
 	}
 	if len(named) == 0 {
-		fmt.Fprintln(stdout, "velox-gen verify: no entities")
+		_, _ = fmt.Fprintln(stdout, "velox-gen verify: no entities")
 		return 0
 	}
 	mod := named[0].pkg.Module
 	for _, e := range named {
 		if mod == nil || e.pkg.Module == nil || e.pkg.Module.Dir != mod.Dir {
-			fmt.Fprintln(stderr, "velox-gen verify: the entities must be in one module; run verify once per module")
+			_, _ = fmt.Fprintln(stderr, "velox-gen verify: the entities must be in one module; run verify once per module")
 			return 1
 		}
 	}
 	tmp, err := os.MkdirTemp(mod.Dir, ".velox-verify-")
 	if err != nil {
-		fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		return 1
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	if err := os.WriteFile(filepath.Join(tmp, "main.go"), verifyProgram(named), 0o644); err != nil {
-		fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		return 1
 	}
 	cmd := exec.Command("go", "run", "./"+filepath.Base(tmp))
@@ -63,7 +63,7 @@ func runVerify(cfg config, ps []*packages.Package, stdout, stderr io.Writer) int
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) { // an ExitError means go already printed why
-			fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		}
 		return 1
 	}
