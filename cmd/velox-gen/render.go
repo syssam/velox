@@ -118,6 +118,11 @@ func render(e *entity) ([]byte, error) {
 	b.WriteString("}\n\n")
 	fmt.Fprintf(&b, "var %s %s.MetaOnce[%s]\n\n", e.meta, vx, E)
 	fmt.Fprintf(&b, "// VeloxMeta is called by velox, not by applications.\nfunc (*%s) VeloxMeta() *%s.Meta[%s] { return %s.Get(%s) }\n\n", E, vx, E, e.meta, e.shape)
+	fmt.Fprintf(&b, "// Fails to compile when a field's type changed and this file was not regenerated.\nfunc _(x *%s) {\n", E)
+	for _, c := range e.columns {
+		fmt.Fprintf(&b, "\tvar _ *%s = &x.%s\n", types.TypeString(c.typ, im.qualifier), c.field)
+	}
+	b.WriteString("}\n\n")
 	fmt.Fprintf(&b, "func %s() %s.Shape[%s] {\n\treturn %s.Shape[%s]{\n\t\tColumns: []string{%s},\n", e.shape, vx, E, vx, E, quoted(fields))
 	if len(e.relations) > 0 {
 		rs := make([]string, len(e.relations))

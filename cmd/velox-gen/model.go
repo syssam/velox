@@ -35,6 +35,7 @@ type column struct {
 	field  string     // the field's name; fields of embedded structs flatten in
 	handle string     // the handle type in package velox, e.g. "NumberCol"
 	value  types.Type // the handle's value type V
+	typ    types.Type // the field's own type
 }
 
 // rel is one relation field of an entity.

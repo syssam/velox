@@ -10,7 +10,7 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 ## Plan 2 (generator)
 
 - Resolved in plan 2: nested mixins and embedded structs that add no columns are refused by velox-gen; a field that is not a column is named in its `SchemaError`.
-- Still open: a field's type change (e.g. `float64` to a decimal) does not raise `ErrStale`. `Shape` would have to carry type names, and reflect's spelling of types (`[]uint8`, package paths inside type arguments) differs from go/types'; decide in plan 5 whether it is worth it.
+- Resolved in plan 5: a field's type change fails to compile (velox-gen's type-check function).
 
 ## Left by plan 4 (relations)
 

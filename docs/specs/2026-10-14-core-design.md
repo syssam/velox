@@ -174,6 +174,12 @@ var invoiceMeta velox.MetaOnce[Invoice] // zero value: nothing runs at program s
 // VeloxMeta is called by velox, not by applications.
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Get(invoiceShape) }
 
+// Fails to compile when a field's type changed and this file was not regenerated.
+func _(x *Invoice) {
+    var _ *time.Time = &x.CreatedAt
+    // … one line per column
+}
+
 func invoiceShape() velox.Shape[Invoice] {
     return velox.Shape[Invoice]{
         Columns:   []string{"CreatedAt", "UpdatedAt", "ID", "OrgID", "Number", "Total", "PaidAt"},
@@ -190,7 +196,7 @@ func invoiceShape() velox.Shape[Invoice] {
 }
 ```
 
-That is about 2 lines per field plus 30 per entity (98 lines per entity
+That is about 3 lines per field plus 35 per entity (98 lines per entity
 measured on the simulated schema). The only addition to the entity's own type is
 the method `VeloxMeta`.
 
@@ -228,6 +234,9 @@ command line (`-ordered=…`, `-number=…`).
 - **Stale code.** If a struct is edited and not regenerated, the first
   operation on that entity returns an error naming the mismatched field and the
   command to run. No row is ever scanned into the wrong field.
+  A field whose type changed is caught at compile time: each generated file
+  holds a function, never called, that assigns `&x.Field` to a variable of the
+  field's generated type, so the build fails naming the field.
 - **Verifying `Schema` methods.** The generator reads only struct shapes, so a
   mistake inside a `Schema` method (a pointer to a non-column, a conflicting
   option) would otherwise surface at the entity's first use, possibly in

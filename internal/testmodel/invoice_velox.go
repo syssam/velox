@@ -43,6 +43,20 @@ var invoiceMeta velox.MetaOnce[Invoice]
 // VeloxMeta is called by velox, not by applications.
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Get(invoiceShape) }
 
+// Fails to compile when a field's type changed and this file was not regenerated.
+func _(x *Invoice) {
+	var _ *time.Time = &x.CreatedAt
+	var _ *time.Time = &x.UpdatedAt
+	var _ *int64 = &x.ID
+	var _ *int64 = &x.OrgID
+	var _ *string = &x.Number
+	var _ *float64 = &x.Total
+	var _ *bool = &x.Paid
+	var _ **time.Time = &x.PaidAt
+	var _ **string = &x.Note
+	var _ *[]byte = &x.Data
+}
+
 func invoiceShape() velox.Shape[Invoice] {
 	return velox.Shape[Invoice]{
 		Columns:   []string{"CreatedAt", "UpdatedAt", "ID", "OrgID", "Number", "Total", "Paid", "PaidAt", "Note", "Data"},

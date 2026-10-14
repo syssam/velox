@@ -51,6 +51,23 @@ var sampleMeta velox.MetaOnce[Sample]
 // VeloxMeta is called by velox, not by applications.
 func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Get(sampleShape) }
 
+// Fails to compile when a field's type changed and this file was not regenerated.
+func _(x *Sample) {
+	var _ *int64 = &x.ID
+	var _ *string = &x.Name
+	var _ *Status = &x.Status
+	var _ **Status = &x.Prev
+	var _ *Cents = &x.Price
+	var _ **float64 = &x.Ratio
+	var _ *bool = &x.Flag
+	var _ **bool = &x.MaybeFlag
+	var _ *time.Time = &x.When
+	var _ **time.Time = &x.MaybeWhen
+	var _ *[]byte = &x.Blob
+	var _ **int64 = &x.ParentID
+	var _ *Score = &x.Score
+}
+
 func sampleShape() velox.Shape[Sample] {
 	return velox.Shape[Sample]{
 		Columns:   []string{"ID", "Name", "Status", "Prev", "Price", "Ratio", "Flag", "MaybeFlag", "When", "MaybeWhen", "Blob", "ParentID", "Score"},

@@ -169,7 +169,7 @@ func (w *walker) column(f *types.Var) {
 		return
 	}
 	h, v := classify(f.Type(), w.cfg)
-	w.e.columns = append(w.e.columns, column{field: f.Name(), handle: h, value: v})
+	w.e.columns = append(w.e.columns, column{field: f.Name(), handle: h, value: v, typ: f.Type()})
 }
 
 // relation reports a velox.One or velox.Many field.

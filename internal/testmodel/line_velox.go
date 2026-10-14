@@ -23,6 +23,12 @@ var lineMeta velox.MetaOnce[Line]
 // VeloxMeta is called by velox, not by applications.
 func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Get(lineShape) }
 
+// Fails to compile when a field's type changed and this file was not regenerated.
+func _(x *Line) {
+	var _ *int64 = &x.ID
+	var _ *int64 = &x.SampleID
+}
+
 func lineShape() velox.Shape[Line] {
 	return velox.Shape[Line]{
 		Columns: []string{"ID", "SampleID"},

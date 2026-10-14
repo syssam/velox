@@ -29,6 +29,14 @@ var itemMeta velox.MetaOnce[Item]
 // VeloxMeta is called by velox, not by applications.
 func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Get(itemShape) }
 
+// Fails to compile when a field's type changed and this file was not regenerated.
+func _(x *Item) {
+	var _ *int64 = &x.ID
+	var _ *int64 = &x.InvoiceID
+	var _ *string = &x.SKU
+	var _ *int64 = &x.Qty
+}
+
 func itemShape() velox.Shape[Item] {
 	return velox.Shape[Item]{
 		Columns:   []string{"ID", "InvoiceID", "SKU", "Qty"},
