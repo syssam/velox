@@ -178,6 +178,13 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.conflict != nil && len(q.conflict.Columns) == 0 {
 		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", q.meta.info.Name)
 	}
+	if q.conflict != nil && q.meta.info.immutable {
+		for _, c := range q.conflict.Update {
+			if col := &q.meta.info.Columns[c]; col.Immutable {
+				return fmt.Errorf("velox: %s: %s: %w", q.meta.info.Name, col.Name, ErrImmutable)
+			}
+		}
+	}
 	return nil
 }
 
@@ -266,6 +273,9 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 	cols := insertColumns(m.info, gen)
 	if len(cols) == 0 {
 		return Statement{}, -1, errNothingToInsert(m.info)
+	}
+	if err := validateRow(m.info, unsafe.Pointer(p), cols); err != nil {
+		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
 	if gen >= 0 && db.d != MySQL {
@@ -457,6 +467,11 @@ func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols [
 	cols = insertColumns(m.info, gen)
 	if len(cols) == 0 {
 		return nil, 0, errNothingToInsert(m.info)
+	}
+	for i := range xs {
+		if err := validateRow(m.info, unsafe.Pointer(&xs[i]), cols); err != nil {
+			return nil, 0, err
+		}
 	}
 	return cols, max(1, maxParams[db.d]/len(cols)), nil
 }

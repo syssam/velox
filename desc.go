@@ -115,6 +115,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		return fail("", "the generated metadata has no Addr; run go tool velox-gen")
 	}
 	cols := make([]ColumnInfo, len(d.columns))
+	anyImmutable := false
 	for i, c := range d.columns {
 		off, ft, ok := fieldOf(v.addr(i), base, t.Size())
 		if !ok {
@@ -137,6 +138,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 			}
 		}
 		cols[i] = ci
+		anyImmutable = anyImmutable || c.Immutable
 	}
 	inRange := func(i int) bool { return i >= 0 && i < len(cols) }
 	for _, k := range d.primaryKey {
@@ -172,7 +174,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 			explicit: true, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.table, Schema: d.schema, Columns: cols, PrimaryKey: d.primaryKey, Tenant: d.tenant,
-		Indexes: d.indexes, rels: rels}
+		Indexes: d.indexes, rels: rels, immutable: anyImmutable}
 	if err := validate(info); err != nil {
 		return nil, err
 	}

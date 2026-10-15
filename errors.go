@@ -48,6 +48,9 @@ var (
 	// policy has a Read or Write predicate, which MySQL cannot apply to the
 	// update.
 	ErrPolicyUpsert = errors.New("upsert cannot apply the policy")
+	// ErrImmutable: an update, Save or upsert's Update list assigned an
+	// Immutable column. An insert may set one.
+	ErrImmutable = errors.New("column is immutable")
 )
 
 // SchemaError reports a mistake in an entity's Schema method or in a

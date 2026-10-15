@@ -1,0 +1,70 @@
+package velox_test
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/syssam/velox2"
+)
+
+func TestInsertValidates(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	tctx := velox.WithTenant(ctx, int64(7))
+	err := db.Insert(&dAuthor{Name: ""}).Exec(tctx)
+	var ve *velox.ValidationError
+	if !errors.As(err, &ve) || ve.Field != "Name" || !errors.Is(err, errEmptyName) || err.Error() != "velox: velox_test.dAuthor: Name: must not be empty" {
+		t.Fatalf("got %v", err)
+	}
+	if e.Calls != 0 {
+		t.Fatal("a refused row sends nothing")
+	}
+	if err := db.InsertAll([]dAuthor{{Name: "ok"}, {Name: "this name is far too long"}}).Exec(tctx); !errors.As(err, &ve) {
+		t.Fatalf("InsertAll validates every row: %v", err)
+	}
+	if e.Calls != 0 {
+		t.Fatal("a refused InsertAll sends nothing")
+	}
+}
+
+func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1})
+	tctx := velox.WithTenant(ctx, int64(7))
+	_, err := db.Update[dAuthor]().Set(dAuthors.Name.Set("")).Where(dAuthors.ID.EQ(1)).Exec(tctx)
+	var ve *velox.ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("got %v", err)
+	}
+	_, err = db.Update[dAuthor]().Set(dAuthors.CreatedAt.Set(time.Now())).Where(dAuthors.ID.EQ(1)).Exec(tctx)
+	if !errors.Is(err, velox.ErrImmutable) || err.Error() != "velox: velox_test.dAuthor: created_at: column is immutable" {
+		t.Fatalf("got %v", err)
+	}
+	a := dAuthor{ID: 1, OrgID: 7, Name: "ada", CreatedAt: time.Now()}
+	if err := db.Save(tctx, &a, dAuthors.CreatedAt); !errors.Is(err, velox.ErrImmutable) {
+		t.Fatalf("Save: %v", err)
+	}
+	a.Name = ""
+	if err := db.Save(tctx, &a, dAuthors.Name); !errors.As(err, &ve) {
+		t.Fatalf("Save validates: %v", err)
+	}
+	if err := db.Insert(&dAuthor{Name: "ada"}).OnConflict(dAuthors.ID).Update(dAuthors.CreatedAt).Exec(tctx); !errors.Is(err, velox.ErrImmutable) {
+		t.Fatalf("upsert: %v", err)
+	}
+}
+
+func TestNilPointerIsNotValidated(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	if err := db.Insert(&dAuthor{Name: "ada"}).Exec(velox.WithTenant(ctx, int64(7))); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateSetNullIsNotValidated(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1})
+	tctx := velox.WithTenant(ctx, int64(7))
+	// SetNull of a pointer column assigns nil: not checked.
+	if _, err := db.Update[dAuthor]().Set(dAuthors.Email.SetNull()).Where(dAuthors.ID.EQ(1)).Exec(tctx); err != nil {
+		t.Fatal(err)
+	}
+}

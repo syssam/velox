@@ -72,6 +72,9 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	}
 	st := cloneStatement(&u.st)
 	st.Set = withUpdateDefaults(u.meta.info, st.Set)
+	if err := validateSet(u.meta.info, st.Set); err != nil {
+		return Statement{}, err
+	}
 	return st, nil
 }
 
@@ -202,6 +205,9 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 		return err
 	}
 	st.Set = withUpdateDefaults(in, st.Set)
+	if err := validateSet(in, st.Set); err != nil {
+		return err
+	}
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(m, p, k)))
 	}

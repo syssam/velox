@@ -28,6 +28,7 @@ type EntityInfo struct {
 	rels       []*relation                // in the order of the generated shape
 	kit        *kit                       // set by MetaOnce.Get and Load; nil in tests that call buildInfo
 	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
+	immutable  bool                       // some column is Immutable
 
 	// The entity's policy and hooks, wrapped once by the generic Schema
 	// methods into functions over the entity's address and its statement.
