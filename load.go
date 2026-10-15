@@ -114,7 +114,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 		return err
 	}
 	t := l.target
-	if owner.kit == nil || t.kit == nil {
+	if owner.kit == nil || t.kit == nil || (l.join != nil && l.join.kit == nil) {
 		return fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.name)
 	}
 	// The distinct keys, in the order the owners have them; and each owner's key.
@@ -136,7 +136,13 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	byKey := make(map[any][]int, len(keys)) // key → indexes into all
 	var all any
 	var targets []unsafe.Pointer
-	if len(keys) > 0 {
+	switch {
+	case len(keys) == 0:
+	case l.join != nil:
+		if all, targets, err = fetchThrough(ctx, db, l, sp, keys, maxRows, byKey); err != nil {
+			return &loadError{owner: owner.Name, rel: r.name, err: err}
+		}
+	default:
 		if all, targets, err = fetch(ctx, db, t, l, sp, keys, maxRows); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
@@ -145,10 +151,10 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 				byKey[k] = append(byKey[k], i)
 			}
 		}
-		if len(sp.with) > 0 {
-			if err := loadRelations(ctx, db, t, targets, sp.with, maxRows); err != nil {
-				return err
-			}
+	}
+	if all != nil && len(sp.with) > 0 { // all is nil when nothing was fetched
+		if err := loadRelations(ctx, db, t, targets, sp.with, maxRows); err != nil {
+			return err
 		}
 	}
 	for i, p := range ptrs {
@@ -167,6 +173,61 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 		h.loaded = true
 	}
 	return nil
+}
+
+// fetchThrough reads the targets of a many-to-many relation for the owner
+// keys: the join entity's rows for them, then the targets of the keys those
+// rows hold, which are the ones sp's options apply to. It fills byKey with
+// each owner key's targets, as indexes into the targets returned, in their
+// fetched order and each once. It returns a nil all when the join rows hold
+// no target key, and so no target was fetched.
+func fetchThrough(ctx context.Context, db *DB, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+	j, t := l.join, l.target
+	_, rows, err := fetch(ctx, db, j, link{target: j, targetCol: l.joinOwner}, loadSpec{}, keys, maxRows)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Each owner key's target keys, in join-row order; and the distinct
+	// target keys, in the same order.
+	byOwner := make(map[any][]any, len(keys))
+	var targetKeys []any
+	seen := make(map[any]bool, len(rows))
+	for _, p := range rows {
+		own, okOwner := keyOf(j.kit.value(p, l.joinOwner))
+		tk, okTarget := keyOf(j.kit.value(p, l.joinTarget))
+		if !okOwner || !okTarget {
+			continue
+		}
+		byOwner[own] = append(byOwner[own], tk)
+		if !seen[tk] {
+			seen[tk] = true
+			targetKeys = append(targetKeys, tk)
+		}
+	}
+	if len(targetKeys) == 0 {
+		return nil, nil, nil
+	}
+	all, targets, err := fetch(ctx, db, t, link{target: t, targetCol: l.targetCol}, sp, targetKeys, maxRows)
+	if err != nil {
+		return nil, nil, err
+	}
+	byTarget := make(map[any][]int, len(targets)) // target key → indexes into all
+	for i, p := range targets {
+		if k, ok := keyOf(t.kit.value(p, l.targetCol)); ok {
+			byTarget[k] = append(byTarget[k], i)
+		}
+	}
+	for own, tks := range byOwner {
+		var idx []int
+		for _, tk := range tks {
+			idx = append(idx, byTarget[tk]...)
+		}
+		// The fetched order, which sp's OrderBy set; a join row repeated
+		// repeats no target.
+		slices.Sort(idx)
+		byKey[own] = slices.Compact(idx)
+	}
+	return all, targets, nil
 }
 
 // fetch reads the related rows for keys, in chunks that keep each statement

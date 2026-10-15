@@ -106,7 +106,7 @@ type relation struct {
 	explicit  bool
 	ownerCol  int
 	targetCol int
-	through   *through // EdgeThrough; Task 4 loads it
+	through   *through // EdgeThrough's join entity; nil for any other relation
 
 	once sync.Once
 	link link
@@ -114,11 +114,15 @@ type relation struct {
 }
 
 // link is a resolved relation: owner.Columns[ownerCol] equals
-// target.Columns[targetCol].
+// target.Columns[targetCol] or, for a many-to-many relation, the owner's and
+// the target's columns each equal a column of a row of the join entity.
 type link struct {
-	target    *EntityInfo
-	ownerCol  int
-	targetCol int
+	target     *EntityInfo
+	ownerCol   int
+	targetCol  int
+	join       *EntityInfo // many-to-many: the join entity; nil otherwise
+	joinOwner  int         // join's column equal to owner.Columns[ownerCol]
+	joinTarget int         // join's column equal to target.Columns[targetCol]
 }
 
 func (r *relation) resolve(owner *EntityInfo) (link, error) {
@@ -144,9 +148,6 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 	}
 	switch {
 	case r.explicit:
-		if r.through != nil {
-			return fail("many-to-many relations arrive in Task 4")
-		}
 		// The indexes are literals in generated code: an index out of range
 		// is stale or hand-edited code, and would panic on first use.
 		if r.ownerCol < 0 || r.ownerCol >= len(owner.Columns) {
@@ -156,6 +157,9 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 			return fail("its key names column %d of %s, which has %d", r.targetCol, t.Name, len(t.Columns))
 		}
 		l.ownerCol, l.targetCol = r.ownerCol, r.targetCol
+		if r.through != nil {
+			return r.buildThrough(owner, l, fail)
+		}
 	case r.ref == -2:
 		return fail("References names no column")
 	case r.ref >= 0:
@@ -188,14 +192,48 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 			return fail("%v", err)
 		}
 	}
-	oc, tc := owner.Columns[l.ownerCol], t.Columns[l.targetCol]
-	if base(oc.Type) != base(tc.Type) {
-		return fail("the key types differ: %s.%s is %v and %s.%s is %v", owner.Name, oc.Field, base(oc.Type), t.Name, tc.Field, base(tc.Type))
-	}
-	if !base(oc.Type).Comparable() {
-		return fail("a key of type %v cannot be compared", base(oc.Type))
+	if err := sameKey(owner, l.ownerCol, t, l.targetCol); err != nil {
+		return fail("%v", err)
 	}
 	return l, nil
+}
+
+// buildThrough resolves a many-to-many relation, l with its owner's and
+// target's columns checked, by adding the join entity and its columns.
+func (r *relation) buildThrough(owner *EntityInfo, l link, fail func(string, ...any) (link, error)) (link, error) {
+	if !r.many {
+		return fail("a many-to-many relation needs a Many field")
+	}
+	j, err := r.through.join()
+	if err != nil {
+		return fail("its join entity is invalid: %s", strings.TrimPrefix(err.Error(), "velox: "))
+	}
+	for _, c := range [...]int{r.through.ownerCol, r.through.targetCol} {
+		if c < 0 || c >= len(j.Columns) {
+			return fail("its key names column %d of %s, which has %d", c, j.Name, len(j.Columns))
+		}
+	}
+	l.join, l.joinOwner, l.joinTarget = j, r.through.ownerCol, r.through.targetCol
+	if err := sameKey(owner, l.ownerCol, j, l.joinOwner); err != nil {
+		return fail("%v", err)
+	}
+	if err := sameKey(j, l.joinTarget, l.target, l.targetCol); err != nil {
+		return fail("%v", err)
+	}
+	return l, nil
+}
+
+// sameKey reports whether a.Columns[ac] and b.Columns[bc] can key a
+// relation: their types, without a pointer, are one comparable type.
+func sameKey(a *EntityInfo, ac int, b *EntityInfo, bc int) error {
+	x, y := a.Columns[ac], b.Columns[bc]
+	if base(x.Type) != base(y.Type) {
+		return fmt.Errorf("the key types differ: %s.%s is %v and %s.%s is %v", a.Name, x.Field, base(x.Type), b.Name, y.Field, base(y.Type))
+	}
+	if !base(x.Type).Comparable() {
+		return fmt.Errorf("a key of type %v cannot be compared", base(x.Type))
+	}
+	return nil
 }
 
 // singleKey returns an entity's primary key column; relations need one.

@@ -196,9 +196,9 @@ func TestDescRefusals(t *testing.T) {
 		{"EdgeTo key types differ", func(d *velox.Desc[dRow]) {
 			d.Relations = []velox.Relation{velox.EdgeTo[dAuthor]("Author", 3, 0)}
 		}, "the key types differ"},
-		{"EdgeThrough", func(d *velox.Desc[dRow]) {
+		{"EdgeThrough on a One", func(d *velox.Desc[dRow]) {
 			d.Relations = []velox.Relation{velox.EdgeThrough[dBook, dAuthor]("Author", 0, 0, 1, 0)}
-		}, "many-to-many relations arrive in Task 4"},
+		}, "dRow.Author: a many-to-many relation needs a Many field"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			d := rowDesc()

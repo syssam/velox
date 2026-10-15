@@ -211,39 +211,58 @@ func (w *writer) pred(n node) {
 // vx<depth>, so it is told apart from the outer table even when they are the
 // same table; the correlation names the outer side by its alias, or by its
 // table at the top; the target's conditions are unqualified and bind to the
-// innermost table.
+// innermost table. A many-to-many relation is an EXISTS on the join entity
+// holding one on the target, which holds the conditions; the inner EXISTS is
+// written even with none: it asserts that the target row exists, and the
+// scope adds the target's tenant and Read conditions to it.
 func (w *writer) exists(n node) {
 	l := n.v.(link)
-	owner, outer := w.in, w.alias
+	owner, outer, depth := w.in, w.alias, w.depth
+	if l.join != nil {
+		w.subquery(l.join, l.joinOwner, owner, l.ownerCol)
+		w.str(" AND ")
+		w.subquery(l.target, l.targetCol, l.join, l.joinTarget)
+	} else {
+		w.subquery(l.target, l.targetCol, owner, l.ownerCol)
+	}
+	for _, k := range n.kids {
+		w.str(" AND ")
+		w.pred(k)
+	}
+	if l.join != nil {
+		w.str(")")
+	}
+	w.str(")")
+	w.in, w.alias, w.depth = owner, outer, depth
+}
+
+// subquery opens an EXISTS on in, aliased one level deeper, correlated by
+// in.Columns[col] = from.Columns[fromCol], where from is the table of w.alias,
+// or the statement's table when there is no alias yet. It leaves w writing
+// conditions on in.
+func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int) {
 	w.depth++
 	alias := "vx" + strconv.Itoa(w.depth)
 	w.str("EXISTS (SELECT 1 FROM ")
-	w.in = l.target
+	w.in = in
 	w.table()
 	w.str(" AS ")
 	w.ident(alias)
 	w.str(" WHERE ")
 	w.ident(alias)
 	w.str(".")
-	w.col(int32(l.targetCol))
+	w.col(int32(col))
 	w.str(" = ")
-	if outer != "" {
-		w.ident(outer)
+	if w.alias != "" {
+		w.ident(w.alias)
 	} else {
-		w.in = owner
+		w.in = from
 		w.table()
-		w.in = l.target
+		w.in = in
 	}
 	w.str(".")
-	w.ident(owner.Columns[l.ownerCol].Name)
+	w.ident(from.Columns[fromCol].Name)
 	w.alias = alias
-	for _, k := range n.kids {
-		w.str(" AND ")
-		w.pred(k)
-	}
-	w.str(")")
-	w.in, w.alias = owner, outer
-	w.depth--
 }
 
 // render returns a statement's SQL and arguments.
