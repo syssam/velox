@@ -189,12 +189,21 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
 
 // send is Exec's work inside the hooks, their next: it prepares every row
 // (defaults, tenant, the old BeforeInsert hooks, the validators and the
-// policy's Insert) and sends the statements. It sets mu.res.
+// policy's Insert) and sends the statements. It sets mu.res only when they
+// all succeeded, so that Mutation.Result is 0 after an error whatever order
+// insertOne sets Affected and checks an upsert in.
 func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error {
+	var res Result
+	var err error
 	if q.one != nil {
-		return insertOne(ctx, q.db, q.meta, q.one, q.conflict, &mu.res)
+		err = insertOne(ctx, q.db, q.meta, q.one, q.conflict, &res)
+	} else {
+		err = insertMany(ctx, q.db, q.meta, q.many, q.conflict, &res)
 	}
-	return insertMany(ctx, q.db, q.meta, q.many, q.conflict, &mu.res)
+	if err == nil {
+		mu.res = res
+	}
+	return err
 }
 
 // render is SQL's work inside the hooks: it prepares the rows as send does,

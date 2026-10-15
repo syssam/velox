@@ -279,9 +279,9 @@ func (x *onUpdateTenant) Schema(s *Schema) {
 
 func TestSchemaPolicyTenantColumnIsNotFilled(t *testing.T) {
 	_, err := infoOf[defaultTenant]([]string{"ID", "Org"}, nil)
-	schemaErr(t, err, "velox: velox.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or OnUpdate")
+	schemaErr(t, err, "velox: velox.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 	_, err = infoOf[defaultFuncTenant]([]string{"ID", "OrgID"}, nil)
-	schemaErr(t, err, "velox: velox.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or OnUpdate")
+	schemaErr(t, err, "velox: velox.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 	_, err = infoOf[onUpdateTenant]([]string{"ID", "OrgID"}, nil)
-	schemaErr(t, err, "velox: velox.onUpdateTenant.OrgID: the tenant column cannot have Default, DefaultFunc or OnUpdate")
+	schemaErr(t, err, "velox: velox.onUpdateTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 }

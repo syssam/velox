@@ -375,7 +375,7 @@ func validate(info *EntityInfo) error {
 		// Filled by a default, a row would land in a tenant the context
 		// never named; and UpdateDefault would move rows between tenants.
 		if c := info.Columns[info.Tenant]; c.HasDefault || c.DefaultFunc != nil || c.UpdateDefault != nil {
-			fail(c.Field, "the tenant column cannot have Default, DefaultFunc or OnUpdate: the context's tenant fills it")
+			fail(c.Field, "the tenant column cannot have Default, DefaultFunc or UpdateDefault: the context's tenant fills it")
 		}
 	}
 	set("the primary key", info.PrimaryKey)
