@@ -37,10 +37,13 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 // SQL(ctx) methods, where next renders the statement instead of sending it
 // and IsDryRun(ctx) is true.
 //
-// Hooks run before next does any of its work: next fills an insert's defaults
-// and tenant, adds an update's UpdateDefault assignments, refuses an
-// Immutable column, runs the validators and the policy, and only then sends
-// the statement. So validators see what hooks set.
+// The guard (ErrNoWhere and the like) runs on an update or delete as the
+// caller built it, before the hooks, and again inside next: a condition a
+// hook adds never stands in for the caller's Where. Hooks run before next
+// does any of its work: next fills an insert's defaults and tenant, adds an
+// update's UpdateDefault assignments, refuses an Immutable column, runs the
+// validators and the policy, and only then sends the statement. So
+// validators see what hooks set.
 //
 // An error that velox returns from next passes back through the hooks as is
 // when a hook returns it unchanged. Any other error a hook returns is wrapped

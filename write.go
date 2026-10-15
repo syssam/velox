@@ -72,10 +72,11 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 // Exec runs the update and returns the number of rows it matched (on MySQL,
 // with clientFoundRows=true; without it, the rows whose values changed).
 //
-// The entity's hooks (Hooks) run first. Then Exec adds an assignment for
-// every column with an UpdateDefault that the statement does not assign,
-// refuses a column assigned twice or an Immutable one (ErrImmutable), and
-// runs the validators, before the statement goes through the pipeline.
+// The guard runs first, on the statement as built, then the entity's hooks
+// (Hooks). Then Exec adds an assignment for every column with an
+// UpdateDefault that the statement does not assign, refuses a column
+// assigned twice or an Immutable one (ErrImmutable), and runs the
+// validators, before the statement goes through the pipeline.
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	st, err := u.statement()
 	if err != nil {
@@ -87,12 +88,12 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
-// every stage Exec runs before execution: the entity's hooks, the
-// UpdateDefault assignments and the checks, the guard, the old BeforeUpdate
-// hooks, the Rewrite hooks, the tenant and policy scope and rendering. So the
-// hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
-// hook from Statement.DryRun, that the statement will not be sent. Around
-// hooks, which wrap execution, do not run.
+// every stage Exec runs before execution: the guard, the entity's hooks, the
+// UpdateDefault assignments and the checks, the guard again, the old
+// BeforeUpdate hooks, the Rewrite hooks, the tenant and policy scope and
+// rendering. So the hooks and the policy run, and can tell from
+// IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the statement
+// will not be sent. Around hooks, which wrap execution, do not run.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()
@@ -153,11 +154,11 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
-// every stage Exec runs before execution: the entity's hooks, the guard, the
-// old BeforeDelete hooks, the Rewrite hooks, the tenant and policy scope and
-// rendering. So the hooks and the policy run, and can tell from
-// IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the statement
-// will not be sent. Around hooks, which wrap execution, do not run.
+// every stage Exec runs before execution: the guard, the entity's hooks, the
+// guard again, the old BeforeDelete hooks, the Rewrite hooks, the tenant and
+// policy scope and rendering. So the hooks and the policy run, and can tell
+// from IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the
+// statement will not be sent. Around hooks, which wrap execution, do not run.
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if d.meta.err != nil {
@@ -223,6 +224,11 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 // save), inside its entity's hooks, or alone when it has none, without
 // allocating for them. Under SQL(ctx) (dry) it renders st instead of sending
 // it. It returns the rows affected, and what dry rendered.
+//
+// The guard runs on st as the caller built it before the hooks see it, and
+// again inside next, in the pipeline: a condition a hook adds never stands in
+// for the caller's Where (policy design §1). Without hooks, the pipeline's
+// guard is the only one.
 func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
 	if len(st.Entity.hooks) == 0 {
 		var err error
@@ -233,6 +239,9 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 			err = writeCore(ctx, db, &mu)
 		}
 		return mu.res.Affected, mu.sql, mu.args, err
+	}
+	if err := db.guard(st); err != nil {
+		return 0, "", nil, err
 	}
 	core := func(ctx context.Context, mu *mutation) error { return writeCore(ctx, db, mu) }
 	if save {

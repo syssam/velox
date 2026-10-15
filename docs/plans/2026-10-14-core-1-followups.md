@@ -157,4 +157,4 @@ Left by the observability plan:
 - A join entity (`EdgeThrough`) has no tenant or policy of its own: the relation is refused when it resolves. Loading applies the target's tenant and `Read` policy only.
 - `InsertAll` still reads no keys back, so after `next` the rows of an `InsertAll` that `Rows()` returns have no generated IDs.
 - A hook can change the rows of an insert, but not how many there are: `Rows()` returns the rows, not the slice that holds them.
-- The guard runs inside `next`, after the hooks, so a `Where` that a hook adds satisfies it: Ticket's delete hook narrows to finished tickets, and a delete of Ticket with no `Where` of its own deletes every finished ticket of the tenant rather than failing with `ErrNoWhere` (`TestEntityHooksBeforeTheGuard`).
+- Until plan 3, the root `bin/velox-gen verify ./...` in CI checks no entities ("velox-gen verify: no entities"): the test model is on the Desc path, which the old generator does not see. `TestGeneratedEntities` runs `CheckEntity` on every test model entity meanwhile.

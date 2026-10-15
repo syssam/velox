@@ -80,9 +80,11 @@ func TestHookErrorIsWrapped(t *testing.T) {
 }
 
 func TestHookPassesVeloxErrorsThrough(t *testing.T) {
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
-	_, err := db.Delete[dBook]().Exec(ctx) // no Where: the guard refuses inside next
-	if !errors.Is(err, velox.ErrNoWhere) || strings.Count(err.Error(), "velox:") != 1 {
+	boom := errors.New("boom")
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Err: boom})
+	// The executor fails inside next, and velox wraps its error once.
+	_, err := db.Delete[dBook]().Where(dBooks.ID.EQ(1)).Exec(ctx)
+	if !errors.Is(err, boom) || err.Error() != "velox: velox_test.dBook: boom" {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -283,9 +285,10 @@ func TestHookMayReplaceTheCoreError(t *testing.T) {
 		}
 		return nil
 	}
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
-	_, err := db.Delete[hFlex]().Exec(ctx)
-	if !errors.Is(err, errRefused) || !errors.Is(err, velox.ErrNoWhere) || !strings.HasPrefix(err.Error(), "velox: velox_test.hFlex: hook: ") {
+	boom := errors.New("boom")
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Err: boom}) // the executor fails inside next
+	_, err := db.Delete[hFlex]().Where(hfID.EQ(1)).Exec(ctx)
+	if !errors.Is(err, errRefused) || !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: velox_test.hFlex: hook: ") {
 		t.Fatalf("got %v", err)
 	}
 }

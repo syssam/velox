@@ -84,7 +84,7 @@ func TestInsertAllTenants(t *testing.T) {
 	}
 }
 
-func TestInsertRunsBeforeInsert(t *testing.T) {
+func TestInsertHookRefusesAnEmptyTitle(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(5)}}}
 	db := velox.OpenFake(velox.Postgres, e)
 	tk := testmodel.Ticket{Owner: "ann"}

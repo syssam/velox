@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-func TestBeforeUpdateRefuses(t *testing.T) {
+func TestUpdateHookRefusesAnEmptyTitle(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
 	const text = "velox: testmodel.Ticket: hook: a ticket needs a title"
@@ -31,7 +31,7 @@ func TestBeforeUpdateRefuses(t *testing.T) {
 	wantSent(t, e, `UPDATE "tickets" SET "title" = $1 WHERE "id" = $2 AND "org_id" = $3`, "t", int64(1), int64(1))
 }
 
-func TestBeforeDeleteAddsItsCondition(t *testing.T) {
+func TestDeleteHookAddsItsCondition(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
 	d := db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(1))
@@ -49,8 +49,8 @@ func TestBeforeDeleteAddsItsCondition(t *testing.T) {
 	}
 }
 
-// TestEntityHooksRunBeforeRewriteAndScope checks the order: entity hooks,
-// guard, Rewrite hooks, scope.
+// TestEntityHooksRunBeforeRewriteAndScope checks the order: guard, entity
+// hooks, guard, Rewrite hooks, scope.
 func TestEntityHooksRunBeforeRewriteAndScope(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	var seen []int
@@ -75,19 +75,28 @@ func TestEntityHooksRunBeforeRewriteAndScope(t *testing.T) {
 	}
 }
 
-// TestEntityHooksBeforeTheGuard: Ticket's hooks run before next, and the
-// guard runs inside next (schema plan 2, Ruling 5), so the condition Ticket's
-// delete hook adds satisfies the guard: a delete with no Where of its own
-// deletes the finished tickets. An update, which no hook narrows, is still
-// refused.
-func TestEntityHooksBeforeTheGuard(t *testing.T) {
+// TestEntityHooksAfterTheGuard: the guard runs on the statement as the
+// caller built it, before the hooks, so a delete with no Where is refused
+// before Ticket's delete hook can narrow it (its condition would otherwise
+// satisfy the guard inside next), under SQL(ctx) too, and so is an update.
+func TestEntityHooksAfterTheGuard(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Delete[testmodel.Ticket]().Exec(asUser("admin")); !errors.Is(err, velox.ErrNoWhere) {
+		t.Errorf("delete: got %v, want ErrNoWhere", err)
+	}
+	if _, _, err := db.Delete[testmodel.Ticket]().SQL(asUser("admin")); !errors.Is(err, velox.ErrNoWhere) {
+		t.Errorf("delete SQL: got %v, want ErrNoWhere", err)
+	}
 	if _, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("t")).Exec(asUser("admin")); !errors.Is(err, velox.ErrNoWhere) {
 		t.Errorf("update: got %v, want ErrNoWhere", err)
 	}
-	if _, err := db.Delete[testmodel.Ticket]().Exec(asUser("admin")); err != nil {
-		t.Fatal(err)
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
 	}
-	wantSent(t, e, `DELETE FROM "tickets" WHERE "done" = $1 AND "org_id" = $2`, true, int64(1))
+	// dBook's hooks record that they ran: they do not.
+	trace = nil
+	if _, err := db.Delete[dBook]().Exec(ctx); !errors.Is(err, velox.ErrNoWhere) || len(trace) != 0 || e.Calls != 0 {
+		t.Errorf("dBook: %v, hooks ran %v, %d statements sent", err, trace, e.Calls)
+	}
 }

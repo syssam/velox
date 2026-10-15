@@ -177,13 +177,13 @@ func (*User) Hooks() []velox.Hook[User] {
 - `Result()` after `next`: its `Affected` is the rows inserted, matched or deleted. A generated key is written back into its row, so after `next` an `Insert`'s `m.Rows()[0].ID` holds it; `InsertAll` reads no keys back.
 
 **Order of a write:**
-1. The hooks' code before `next` runs.
-2. Inside `next`, velox runs:
-   - the schema's validators and defaults;
-   - tenant fill and check;
-   - the policy's `Insert` check;
-   - the pipeline (Rewrite hooks, scope, render, execute).
-3. The hooks' code after `next` runs.
+1. For an update or delete, the guard (`ErrNoWhere` and the like), on the statement as the caller built it: a condition a hook adds never stands in for the caller's `Where`.
+2. The hooks' code before `next` runs.
+3. Inside `next`, velox runs:
+   - for an insert: the defaults, the tenant (fill, then check), the validators, and the policy's `Insert` check;
+   - for an update: the `UpdateDefault` assignments, the immutable check, and the validators;
+   - then the pipeline: the guard again, the Rewrite hooks, the scope, render, and execute.
+4. The hooks' code after `next` runs.
 
 Validators therefore see what hooks set. In a transaction, the code after `next` runs before the commit; hooks after commit are out of scope. Under `SQL(ctx)`, `next` does not execute: `Result()` is empty and `velox.IsDryRun(ctx)` is true.
 
