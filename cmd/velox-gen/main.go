@@ -11,6 +11,7 @@
 //
 //	velox-gen [-check] [-ordered=path.Type,...] [-number=path.Type,...] [packages]
 //	velox-gen verify [packages]
+//	velox-gen describe [-json] [package]
 //
 // velox-gen writes nothing when any entity has a problem. -check writes
 // nothing and exits 1 when a generated file is out of date; CI runs it.
@@ -18,7 +19,8 @@
 // Mixin methods, which velox-gen itself cannot see because it never runs your
 // code. verify builds its program in a temporary .velox-verify-* directory of
 // your module and removes it, but a killed process leaves it behind; ignore
-// .velox-verify-*/ in git.
+// .velox-verify-*/ in git. describe prints the entities, columns and
+// relations that the schema package (default ./schema) declares.
 package main
 
 import (
@@ -37,6 +39,9 @@ func main() {
 // run is the command, with its directory, environment and output passed in
 // so that tests can run it.
 func run(args []string, dir string, env []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "describe" {
+		return runDescribe(args[1:], dir, env, stdout, stderr)
+	}
 	verify := len(args) > 0 && args[0] == "verify"
 	if verify {
 		args = args[1:]

@@ -1,0 +1,85 @@
+package gen
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"text/tabwriter"
+)
+
+// Describe writes the graph: as indented JSON when asJSON, otherwise as text,
+// one block per entity with its fields, then its edges.
+func Describe(w io.Writer, g *Graph, asJSON bool) error {
+	if asJSON {
+		b, err := json.MarshalIndent(g, "", "  ")
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(append(b, '\n'))
+		return err
+	}
+	var buf bytes.Buffer
+	for i, e := range g.Entities {
+		if i > 0 {
+			buf.WriteByte('\n')
+		}
+		describeEntity(&buf, e)
+	}
+	_, err := w.Write(buf.Bytes())
+	return err
+}
+
+// describeEntity writes the block of one entity. The tab-aligned lines are
+// written through a tabwriter and stripped of the padding after their last
+// cell.
+func describeEntity(buf *bytes.Buffer, e *Entity) {
+	fmt.Fprintf(buf, "%s (%s)\n", e.Name, e.Table)
+	var tab bytes.Buffer
+	tw := tabwriter.NewWriter(&tab, 0, 0, 2, ' ', 0)
+	for _, f := range e.Fields {
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", f.Name, f.Type, f.Column, strings.Join(fieldFlags(f), ", "))
+	}
+	for _, ed := range e.Edges {
+		_, _ = fmt.Fprintf(tw, "  %s\t%s → %s\t%s\n", ed.Name, ed.Rel.Kind, ed.Target, relStorage(ed.Rel))
+	}
+	_ = tw.Flush() // writes to a bytes.Buffer
+	for line := range strings.Lines(tab.String()) {
+		buf.WriteString(strings.TrimRight(line, " \n"))
+		buf.WriteByte('\n')
+	}
+}
+
+// relStorage says where a relation is stored: table.column for a foreign key,
+// table(owner column, target column) for a join table.
+func relStorage(r Rel) string {
+	if r.Kind == "M2M" {
+		return r.Table + "(" + strings.Join(r.Columns, ", ") + ")"
+	}
+	return r.Table + "." + strings.Join(r.Columns, ", ")
+}
+
+// fieldFlags lists the properties of a field that the text form shows.
+func fieldFlags(f *Field) []string {
+	var flags []string
+	for _, p := range []struct {
+		on   bool
+		name string
+	}{
+		{f.AutoID, "auto"},
+		{f.Tenant, "tenant"},
+		{f.Optional, "optional"},
+		{f.Nillable, "nillable"},
+		{f.Pointer, "pointer"},
+		{f.Unique, "unique"},
+		{f.Immutable, "immutable"},
+		{f.Sensitive, "sensitive"},
+		{f.Implicit != "", "implicit(" + f.Implicit + ")"},
+	} {
+		if p.on {
+			flags = append(flags, p.name)
+		}
+	}
+	return flags
+}

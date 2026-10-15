@@ -183,3 +183,32 @@ func TestPatternMatchingNothing(t *testing.T) {
 		t.Errorf("%d %q", code, errs)
 	}
 }
+
+func TestDescribeCommand(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"schema/user.go": `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+`})
+	code, out, errs := velox(t, dir, "describe", "-json", "./schema")
+	if code != 0 || !strings.Contains(out, `"name": "User"`) || !strings.Contains(out, `"table": "users"`) {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	code, out, errs = velox(t, dir, "describe")
+	if code != 0 || !strings.HasPrefix(out, "User (users)\n") || !strings.Contains(out, "name") {
+		t.Fatalf("default package: %d %q %q", code, out, errs)
+	}
+	code, _, errs = velox(t, dir, "describe", "./nothing")
+	if code != 1 || !strings.HasPrefix(errs, "velox-gen: ") {
+		t.Fatalf("%d %q", code, errs)
+	}
+}

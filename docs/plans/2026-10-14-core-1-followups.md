@@ -136,3 +136,15 @@ Left by the observability plan:
 - Doc and cost nits:
   - `render` stays in non-test code only for the tests.
   - `contrib/otel`'s `record` allocates its attribute set even under a no-op `MeterProvider`; an instrument-enabled check would skip it.
+
+## Left by schema plan 1
+
+- The `Graph` that `gen.Build` returns is plan 3's input: the generator reads it, not the model.
+- `Index.Where` is PostgreSQL-only, and nothing refuses it on other dialects yet.
+- `edge.Symbol` and `edge.Immutable` are recorded but unused until the migration planner.
+- Irregular plurals need `schema.Table`.
+- `singular()` is the simple inverse of plural (`children` gives `children_id`, where ent says `child_id`); a self-M2M edge named after its own type (edge `nodes` on `Node`) gives a duplicate column that nothing catches.
+- Rule 31 is stricter than ent: `edge.Column` with a bound field whose column differs is refused (ent lets the field adopt the edge's column).
+- `desc.GoTypeOf` does not collect imports from generic type arguments (`pkg.Box[time.Time]`) or from unnamed func, struct and interface types; plan 3's generator must not rely on `Imports` for those.
+- Rule 12 accepts a bound foreign key whose `GoType` differs from the ID's for int and string kinds; generated code may need conversions.
+- A typed-nil func given to `DefaultFunc` or `UpdateDefault` passes the builder's check.
