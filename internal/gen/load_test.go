@@ -60,7 +60,7 @@ func module(t *testing.T, files map[string]string) string {
 }
 
 func offline() []string {
-	return append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off", "GOCACHE=/private/tmp/claude-501/velox2-gocache")
+	return append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
 }
 
 func TestLoad(t *testing.T) {

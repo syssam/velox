@@ -64,14 +64,32 @@ func Load(dir, pattern string, env []string) (*load.Model, error) {
 	if err != nil {
 		msg := strings.ReplaceAll(stderr, tmp, "velox-gen")
 		msg = strings.ReplaceAll(msg, filepath.Base(tmp), "velox-gen")
+		if strings.TrimSpace(msg) == "" {
+			msg = err.Error()
+		}
 		return nil, fmt.Errorf("loading %s:\n%s", pkg.ImportPath, strings.TrimRight(msg, "\n"))
 	}
-	var m load.Model
-	if err := json.Unmarshal([]byte(out), &m); err != nil {
-		return nil, fmt.Errorf("loading %s: decoding the model: %w", pkg.ImportPath, err)
+	m, err := decodeModel([]byte(out))
+	if err != nil {
+		return nil, fmt.Errorf("loading %s: %w", pkg.ImportPath, err)
 	}
-	if m.Version != load.Version {
-		return nil, fmt.Errorf("the loader wrote model version %d; velox-gen reads version %d: update velox-gen and the velox2 module together", m.Version, load.Version)
+	return m, nil
+}
+
+// decodeModel decodes the loader's output. It checks the version before it
+// decodes the rest, so a model whose shape changed with its version reports
+// the version.
+func decodeModel(b []byte) (*load.Model, error) {
+	var v struct{ Version int }
+	if err := json.Unmarshal(b, &v); err != nil {
+		return nil, fmt.Errorf("decoding the model: %w", err)
+	}
+	if v.Version != load.Version {
+		return nil, fmt.Errorf("the loader wrote model version %d; velox-gen reads version %d: update velox-gen and the velox2 module together", v.Version, load.Version)
+	}
+	var m load.Model
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("decoding the model: %w", err)
 	}
 	return &m, nil
 }
@@ -158,7 +176,13 @@ func discover(files map[string][]byte) ([]string, error) {
 			for _, sp := range gd.Specs {
 				ts := sp.(*ast.TypeSpec)
 				st, ok := ts.Type.(*ast.StructType)
-				if !ok || !embedsSchema(st, local) {
+				if !ok {
+					continue
+				}
+				if embedsSchema(st, local, true) {
+					return nil, fmt.Errorf("schema type %s must embed schema.Schema by value, not a pointer", ts.Name.Name)
+				}
+				if !embedsSchema(st, local, false) {
 					continue
 				}
 				if !ts.Name.IsExported() {
@@ -194,8 +218,9 @@ func schemaName(f *ast.File) string {
 	return ""
 }
 
-// embedsSchema reports whether st embeds <local>.Schema.
-func embedsSchema(st *ast.StructType, local string) bool {
+// embedsSchema reports whether st embeds <local>.Schema, or *<local>.Schema
+// when ptr is set.
+func embedsSchema(st *ast.StructType, local string, ptr bool) bool {
 	if local == "" {
 		return false
 	}
@@ -203,7 +228,13 @@ func embedsSchema(st *ast.StructType, local string) bool {
 		if len(fld.Names) != 0 {
 			continue
 		}
-		if sel, ok := fld.Type.(*ast.SelectorExpr); ok && sel.Sel.Name == "Schema" {
+		typ := fld.Type
+		if star, ok := typ.(*ast.StarExpr); ok != ptr {
+			continue
+		} else if ok {
+			typ = star.X
+		}
+		if sel, ok := typ.(*ast.SelectorExpr); ok && sel.Sel.Name == "Schema" {
 			if id, ok := sel.X.(*ast.Ident); ok && id.Name == local {
 				return true
 			}

@@ -28,4 +28,20 @@ type Alias = Post
 	if err == nil || !strings.Contains(err.Error(), "schema type user is unexported") {
 		t.Fatalf("got %v", err)
 	}
+	_, err = discover(map[string][]byte{"d.go": []byte("package s\nimport \"github.com/syssam/velox2/schema\"\ntype Ok struct{ schema.Schema }\ntype Ptr struct{ *schema.Schema }\n")})
+	if err == nil || !strings.Contains(err.Error(), "schema type Ptr must embed schema.Schema by value, not a pointer") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestDecodeModel(t *testing.T) {
+	m, err := decodeModel([]byte(`{"version":1,"package":"p","schemas":[]}`))
+	if err != nil || m.Package != "p" {
+		t.Fatalf("got %+v %v", m, err)
+	}
+	// A model of another version whose shape differs reports the version.
+	_, err = decodeModel([]byte(`{"version":2,"package":["p"],"schemas":{}}`))
+	if err == nil || !strings.Contains(err.Error(), "the loader wrote model version 2; velox-gen reads version 1: update velox-gen and the velox2 module together") {
+		t.Fatalf("got %v", err)
+	}
 }
