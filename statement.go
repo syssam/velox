@@ -88,6 +88,7 @@ type Statement struct {
 	PolicyBypass string          // the SkipPolicy reason, when it applied
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool
+	Tx           *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise
 	Dialect      Dialect // the DB's: an Around hook has only the statement
 	// Tags are the context's WithTags tags, set before the hooks run. A
 	// Rewrite hook gets its own copy; it may change them, and the SQL

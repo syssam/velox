@@ -40,6 +40,8 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // is rolled back, never committed; its error matches ErrTimeout when velox's
 // deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
 //
+// WithTxAround's hooks wrap the whole call: every attempt and the commit.
+//
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. A nested Tx (a savepoint) ignores options.
 //
@@ -69,13 +71,36 @@ func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) e
 		defer cancel()
 		cause = ErrTimeout
 	}
-	for attempt := 0; ; attempt++ {
-		err := db.transaction(tctx, fn, o, deadline, cause)
-		if err != nil && cancel != nil && timedOut(tctx) && !errors.Is(err, ErrTimeout) {
+	info := db.newTxInfo(tctx, o)
+	if len(db.cfg.txArounds) == 0 {
+		// No closure here: one passed to the hooks escapes, and would cost
+		// a DB with nothing configured an allocation per transaction.
+		return db.attempts(tctx, tctx, fn, o, deadline, cause, info)
+	}
+	return db.txAround(tctx, info, func(ctx context.Context) error {
+		return db.attempts(ctx, tctx, fn, o, deadline, cause, info)
+	})
+}
+
+// attempts runs fn in a transaction on ctx, and again after a retryable
+// failure as many times as o allows. tctx is the context Tx bounded, ctx the
+// one the TxAround hooks passed on (tctx when there are none); cause is
+// ErrTimeout when the deadline is velox's. info, when not nil, is updated
+// before each attempt and each retry.
+func (db *DB) attempts(ctx, tctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo) error {
+	for attempt := 1; ; attempt++ {
+		if info != nil {
+			info.Attempt = attempt
+		}
+		err := db.transaction(ctx, fn, o, deadline, cause, info)
+		if err != nil && cause != nil && timedOut(tctx) && !errors.Is(err, ErrTimeout) {
 			err = errors.Join(errTimeout("transaction"), err)
 		}
-		if err == nil || attempt >= o.retries || !retryable(err) || tctx.Err() != nil {
+		if err == nil || attempt > o.retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
 			return err
+		}
+		if info != nil {
+			info.Retries = append(info.Retries, TxRetry{Err: err, At: time.Now()})
 		}
 	}
 }
@@ -86,35 +111,47 @@ func ended(err error) bool {
 	return errors.Is(err, sql.ErrTxDone) || errors.Is(err, pgx.ErrTxClosed)
 }
 
-// transaction runs fn once in a new transaction. A transaction that did not
-// finish, because fn panicked or called runtime.Goexit, is rolled back by the
-// deferred function. Rollback uses a context without ctx's cancellation, so a
-// canceled ctx still rolls back.
+// transaction runs fn once in a new transaction, and records how it ended in
+// info, which may be nil. A transaction that did not finish, because fn
+// panicked or called runtime.Goexit, is rolled back by the deferred function.
+// Rollback uses a context without ctx's cancellation, so a canceled ctx still
+// rolls back.
 //
 // Once ctx has ended, a rollback's error is not reported: the driver may have
 // closed the connection that the deadline cut a statement off on (pgx does),
 // and the server then aborts the transaction itself.
-func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error) error {
+//
+// deadline, Tx's, ends the transaction as ctx's would, even when a TxAround
+// hook passed on a context without it: past it, nothing commits.
+func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo) error {
 	ex, ctl, err := db.ex.begin(ctx, o)
 	if err != nil {
+		info.end(TxError)
 		return fmt.Errorf("velox: begin: %w", err)
 	}
 	end := context.WithoutCancel(ctx)
 	finished := false
 	defer func() {
 		if !finished {
+			info.end(TxRollback)
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: ex, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause}); err != nil {
+	if err := fn(&DB{d: db.d, ex: ex, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info}); err != nil {
 		finished = true
-		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && !over(ctx) {
+		if ctx.Err() != nil || past(deadline) {
+			info.end(TxError)
+		} else {
+			info.end(TxRollback)
+		}
+		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
 		return err
 	}
 	finished = true
-	if over(ctx) {
+	if over(ctx) || past(deadline) {
+		info.end(TxError)
 		// Past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
 		_ = ctl.rollback(end)
@@ -129,9 +166,16 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 		return fmt.Errorf("velox: transaction: %w", err)
 	}
 	if err := ctl.commit(ctx); err != nil {
+		info.end(TxError)
 		return fmt.Errorf("velox: commit: %w", err)
 	}
+	info.end(TxCommit)
 	return nil
+}
+
+// past reports whether deadline is set and has passed.
+func past(deadline time.Time) bool {
+	return !deadline.IsZero() && !time.Now().Before(deadline)
 }
 
 // overGrace is how long over waits for the Done of a context whose deadline
@@ -157,7 +201,8 @@ func over(ctx context.Context) bool {
 	return ctx.Err() != nil
 }
 
-// savepoint runs fn under a savepoint of the current transaction.
+// savepoint runs fn under a savepoint of the current transaction. It runs no
+// TxAround hook; its statements see the transaction's TxInfo.
 func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 	name := "velox_" + strconv.Itoa(db.depth+1)
 	if _, err := db.ex.exec(ctx, "SAVEPOINT "+name, nil); err != nil {
@@ -170,7 +215,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: db.ex, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause}); err != nil {
+	if err := fn(&DB{d: db.d, ex: db.ex, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx}); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.

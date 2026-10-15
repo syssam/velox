@@ -26,6 +26,7 @@ type DB struct {
 	// when the deadline is velox's, nil when it is the caller's.
 	txDeadline time.Time
 	txCause    error
+	tx         *TxInfo // the transaction's, when hooks are configured
 }
 
 type config struct {
@@ -37,6 +38,7 @@ type config struct {
 	deadlines Deadlines  // WithDeadlines
 	callers   *callers   // WithCallers; nil: off
 	comment   *commenter // WithSQLComment; nil: off
+	txArounds []TxAround
 }
 
 // Option configures a DB's pipeline.
@@ -289,9 +291,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 }
 
 // observe sets what st's hooks and adapters read about it: its Dialect, its
-// Tags and, with WithCallers, its Caller.
+// Tags, its transaction's TxInfo and, with WithCallers, its Caller.
 func (db *DB) observe(ctx context.Context, st *Statement) {
 	st.Dialect = db.d
+	st.Tx = db.tx
 	st.Tags = tagsOf(ctx)
 	if c := db.cfg.callers; c != nil {
 		st.Caller = c.capture()

@@ -1,0 +1,282 @@
+package velox_test
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/syssam/velox2"
+)
+
+type hookKey struct{}
+
+// TestTxAroundWrapsTheCall: the first hook is the outermost; statements,
+// a savepoint's included, see the call's TxInfo and the context the
+// innermost hook passed, though touch runs them on the outer ctx.
+func TestTxAroundWrapsTheCall(t *testing.T) {
+	var log []string
+	hook := func(name string) velox.Option {
+		return velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+			log = append(log, name+" in")
+			err := next(context.WithValue(ctx, hookKey{}, name))
+			log = append(log, name+" out")
+			return err
+		})
+	}
+	var seen []*velox.TxInfo
+	var from []any
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e, hook("a"), hook("b"),
+		velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			seen = append(seen, st.Tx)
+			from = append(from, st.Tx.Context.Value(hookKey{}))
+			return next(ctx)
+		}))
+	err := db.Tx(ctx, func(tx *velox.DB) error {
+		if err := touch(tx); err != nil {
+			return err
+		}
+		return tx.Tx(ctx, touch) // a savepoint: no hook runs again
+	}, velox.ReadOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a in", "b in", "b out", "a out"}; !reflect.DeepEqual(log, want) {
+		t.Errorf("hooks ran %q", log)
+	}
+	if want := []string{"BEGIN", touchSQL, "SAVEPOINT velox_1", touchSQL, "RELEASE SAVEPOINT velox_1", "COMMIT"}; !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("sent %q", e.Log)
+	}
+	if len(seen) != 2 || seen[0] != seen[1] || seen[0] == nil || !reflect.DeepEqual(from, []any{"b", "b"}) {
+		t.Fatalf("statements saw %v with contexts from %v", seen, from)
+	}
+	if info := seen[0]; info.ID == 0 || info.Attempt != 1 || !info.ReadOnly || info.Outcome != velox.TxCommit || len(info.Retries) != 0 {
+		t.Errorf("TxInfo %+v", info)
+	}
+}
+
+func TestTxAroundSeesEveryAttempt(t *testing.T) {
+	serialization := &pgconn.PgError{Code: "40001"}
+	e := &velox.FakeExec{Errs: []error{serialization}}
+	calls := 0
+	var info *velox.TxInfo
+	var attempts []int
+	db := velox.OpenFake(velox.Postgres, e,
+		velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+			calls++
+			info = tx
+			return next(ctx)
+		}),
+		velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			attempts = append(attempts, st.Tx.Attempt)
+			return next(ctx)
+		}))
+	if err := db.Tx(ctx, touch, velox.RetrySerializable(2)); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || !reflect.DeepEqual(attempts, []int{1, 2}) || info.Attempt != 2 || info.Outcome != velox.TxCommit {
+		t.Fatalf("hook calls %d, attempts %v, info %+v", calls, attempts, info)
+	}
+	if len(info.Retries) != 1 || !errors.Is(info.Retries[0].Err, serialization) || info.Retries[0].At.IsZero() {
+		t.Errorf("retries %+v", info.Retries)
+	}
+}
+
+func TestTxIDsAreUnique(t *testing.T) {
+	var ids []uint64
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		ids = append(ids, tx.ID)
+		return next(ctx)
+	}))
+	for range 2 {
+		if err := db.Tx(ctx, func(*velox.DB) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(ids) != 2 || ids[0] == 0 || ids[0] == ids[1] {
+		t.Errorf("ids %v", ids)
+	}
+}
+
+// TestStatementTx: with any hook, a statement in a transaction has its
+// TxInfo, without a TxAround hook too; one outside a transaction has none.
+func TestStatementTx(t *testing.T) {
+	var seen []*velox.TxInfo
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		seen = append(seen, st.Tx)
+		return nil
+	}))
+	if err := touch(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Tx(ctx, touch, velox.RetrySerializable(1)); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 || seen[0] != nil || seen[1] == nil || seen[1].ID == 0 || seen[1].Attempt != 1 || seen[1].Outcome != velox.TxCommit {
+		t.Errorf("statements saw %v", seen)
+	}
+}
+
+// TestTxAroundRules: what velox does with a hook that breaks the contract,
+// and the outcome a hook reads after next.
+func TestTxAroundRules(t *testing.T) {
+	boom := errors.New("boom")
+	own := errors.New("the hook's own")
+	var outcome velox.TxOutcome
+	observe := func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		err := next(ctx)
+		outcome = tx.Outcome
+		return err
+	}
+	var second error
+	runs := 0
+	for _, tc := range []struct {
+		name      string
+		hook      velox.TxAround
+		fn        func(*velox.DB) error // nil: touch
+		opts      []velox.TxOption
+		commitErr error
+		check     func(err error, e *velox.FakeExec) bool
+		outcome   velox.TxOutcome // what observe saw; 0: not checked
+	}{
+		{
+			name:  "own error",
+			hook:  func(context.Context, *velox.TxInfo, func(context.Context) error) error { return own },
+			check: func(err error, e *velox.FakeExec) bool { return err == own && len(e.Log) == 0 },
+		},
+		{
+			name: "no next",
+			hook: func(context.Context, *velox.TxInfo, func(context.Context) error) error { return nil },
+			check: func(err error, e *velox.FakeExec) bool {
+				return err != nil && err.Error() == "velox: transaction: a TxAround hook returned without calling next" && len(e.Log) == 0
+			},
+		},
+		{
+			name: "discarded",
+			hook: func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+				_ = next(ctx)
+				return nil
+			},
+			fn: func(*velox.DB) error { return boom },
+			check: func(err error, _ *velox.FakeExec) bool {
+				return err != nil && err.Error() == "velox: transaction: a TxAround hook discarded the error from next"
+			},
+		},
+		{
+			name: "next twice",
+			hook: func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+				err := next(ctx)
+				second = next(ctx)
+				return err
+			},
+			fn: func(tx *velox.DB) error { runs++; return touch(tx) },
+			check: func(err error, _ *velox.FakeExec) bool {
+				return err == nil && second != nil && strings.Contains(second.Error(), "called next twice") && runs == 1
+			},
+		},
+		{
+			name:    "rollback",
+			hook:    observe,
+			fn:      func(*velox.DB) error { return boom },
+			check:   func(err error, _ *velox.FakeExec) bool { return err == boom },
+			outcome: velox.TxRollback,
+		},
+		{
+			name:      "commit fails",
+			hook:      observe,
+			commitErr: boom,
+			check:     func(err error, _ *velox.FakeExec) bool { return errors.Is(err, boom) },
+			outcome:   velox.TxError,
+		},
+		{
+			name:    "deadline",
+			hook:    observe,
+			fn:      func(*velox.DB) error { time.Sleep(20 * time.Millisecond); return nil },
+			opts:    []velox.TxOption{velox.Timeout(time.Millisecond)},
+			check:   func(err error, _ *velox.FakeExec) bool { return errors.Is(err, velox.ErrTimeout) },
+			outcome: velox.TxError,
+		},
+		{
+			// A hook that drops the deadline from the context still gets
+			// no commit past it.
+			name: "deadline dropped",
+			hook: func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+				return observe(context.WithoutCancel(ctx), tx, next)
+			},
+			fn:   func(*velox.DB) error { time.Sleep(20 * time.Millisecond); return nil },
+			opts: []velox.TxOption{velox.Timeout(time.Millisecond)},
+			check: func(err error, e *velox.FakeExec) bool {
+				return errors.Is(err, velox.ErrTimeout) && e.Log[len(e.Log)-1] == "ROLLBACK"
+			},
+			outcome: velox.TxError,
+		},
+		{
+			name:    "commit",
+			hook:    observe,
+			check:   func(err error, _ *velox.FakeExec) bool { return err == nil },
+			outcome: velox.TxCommit,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			outcome, second, runs = 0, nil, 0
+			e := &velox.FakeExec{CommitErr: tc.commitErr}
+			db := velox.OpenFake(velox.Postgres, e, velox.WithTxAround(tc.hook))
+			fn := tc.fn
+			if fn == nil {
+				fn = touch
+			}
+			err := db.Tx(ctx, fn, tc.opts...)
+			if !tc.check(err, e) {
+				t.Errorf("error %v, second next %v, fn ran %d times, sent %q", err, second, runs, e.Log)
+			}
+			if tc.outcome != 0 && outcome != tc.outcome {
+				t.Errorf("outcome %v, want %v", outcome, tc.outcome)
+			}
+		})
+	}
+
+	// Review Focus 3: a panic in fn rolls back and goes on unchanged, through
+	// the hook, whose deferred code runs.
+	t.Run("panic", func(t *testing.T) {
+		e := &velox.FakeExec{}
+		deferred := false
+		var info *velox.TxInfo
+		db := velox.OpenFake(velox.Postgres, e, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+			info = tx
+			defer func() { deferred = true }()
+			return next(ctx)
+		}))
+		defer func() {
+			if p := recover(); p != "oops" || !deferred || info.Outcome != velox.TxRollback || e.Log[len(e.Log)-1] != "ROLLBACK" {
+				t.Errorf("recovered %v, hook's defer ran %v, outcome %v, sent %q", p, deferred, info.Outcome, e.Log)
+			}
+		}()
+		_ = db.Tx(ctx, func(*velox.DB) error { panic("oops") })
+		t.Error("Tx did not re-raise the panic")
+	})
+
+	t.Run("outcome names", func(t *testing.T) {
+		for o, want := range map[velox.TxOutcome]string{
+			velox.TxCommit: "commit", velox.TxRollback: "rollback", velox.TxError: "error", 0: "unknown",
+		} {
+			if got := o.String(); got != want {
+				t.Errorf("%d: %q, want %q", o, got, want)
+			}
+		}
+	})
+
+	t.Run("nil hook", func(t *testing.T) {
+		defer func() {
+			if p := recover(); p != "velox: WithTxAround(nil)" {
+				t.Errorf("recovered %v", p)
+			}
+		}()
+		velox.WithTxAround(nil)
+		t.Error("WithTxAround(nil) did not panic")
+	})
+}
