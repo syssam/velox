@@ -12,6 +12,7 @@ Each directory is a `main` package with its own entity package (`model/`, or
 | [policy](policy) | `Policy[E]` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `SkipPolicy`; `SQL(ctx)` | `go run ./policy` |
 | [hooks](hooks) | `BeforeInsert` (and a mixin's), `BeforeUpdate` through a `Mutation`, `BeforeDelete` narrowing, `Save` writing back, `IsDryRun` | `go run ./hooks` |
 | [tx](tx) | `db.Tx` commit and rollback, a nested `Tx` savepoint, `ConstraintError`, `RetrySerializable`, `Timeout` and `WithDeadlines` | `go run ./tx` |
+| [otel](otel) | Tracing and metrics with `contrib/otel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
 | [tour](tour) | One walkthrough that touches everything once | `go run ./tour` |
 
 Run from this directory:
@@ -49,5 +50,6 @@ golangci-lint and the tests.
 This directory is its own Go module, so the velox2 module does not depend on
 anything the examples use. In a module of your own, add the tool with
 `go get -tool github.com/syssam/velox2/cmd/velox-gen`. This module instead
-points `github.com/syssam/velox2` and its generator at the parent directory
-with `replace` lines, so it always builds against the code beside it.
+points `github.com/syssam/velox2`, its generator and `contrib/otel` at the
+directories beside it with `replace` lines, so it always builds against the
+code there. Only the otel example uses the OpenTelemetry SDK.

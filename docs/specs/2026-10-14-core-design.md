@@ -467,7 +467,7 @@ build ─▶ rewrite ─▶ render ─▶ route ─▶ execute ─▶ scan
 | rewrite | Ordered hooks may add predicates, set assignments, or refuse the statement | Tenant scoping, row-level policy, guardrails (sub-project 2) |
 | render | The dialect turns the statement into SQL and arguments, and the fingerprint, stored in the render cache; observability appends the SQL comment after rendering | Dialects; observability (sub-project 3) |
 | route | Picks the executor: primary, replica, shard | Routing (sub-project 4); default: the `DB`'s own connection |
-| execute | Ordered `around` hooks wrap running the statement and reading its rows: the innermost `next` sends it through the executor (`database/sql` or pgx), scans every row (the scan stage) and closes the rows before it returns, so a span or a deadline covers the whole query; with `Iter`, the caller's loop body runs inside it too | Spans and fingerprints (sub-project 3), retries |
+| execute | Ordered `around` hooks wrap running the statement and reading its rows: the innermost `next` sends it through the executor (`database/sql` or pgx), scans every row (the scan stage) and closes the rows before it returns, so a span or a deadline covers the whole query; with `Iter`, the caller's loop body runs inside it too | Spans and metrics (`contrib/otel`), retries |
 | scan | Rows into entities through the generated scan plan, inside execute's `next` | — |
 
 The pipeline is configured on `velox.Open` and immutable afterwards. Core
@@ -589,14 +589,20 @@ same fake driver, with the shape cache built:
 | One-row query | 607 ns, 6 allocations | 4 allocations |
 | 100-row query | 11.7 µs, 105 allocations | 202 allocations |
 | Metadata, first use of an entity | 2.7 µs, 30 allocations | |
-| One-row query, `WithCallers` and `WithSQLComment` | 1.03 µs, 7 allocations (observability design §6) | |
+| One-row query, `WithCallers` and `WithSQLComment` | 1.03 µs (minimum) to 1.38 µs (median), 7 allocations (observability design §6) | |
 
 The one-row row with callers and comments was measured on 2026-10-15 against
 `BenchmarkOneRow`'s 0.69 µs, 6 allocations: the minimum of 600 alternating
 batches of 2,000 reads, because the machine was busy (load average above 20)
 and its medians moved by a third. The added 340 ns are the comment's join (80
 ns) and one `runtime.Callers` (260 ns; unwinding costs about 60 ns a frame, the
-skipped ones included).
+skipped ones included): 40 ns over the observability design's 300 ns aim.
+Re-measured the same day at a load average of 15 to 26, the medians were
+0.87 µs plain and 1.38 µs observed (`-count 10`, +518 ns), and 10
+interleaved pairs differed by a median of +478 ns (300 to 652): over the aim
+by about 200 ns. The allocations (6 and 7) were the same in every run. The
+observability design's §6 has the table; runs at a load average above 39
+moved by up to 4x and are left out.
 
 The allocation budgets are tests (`budget_test.go`, `meta_bench_test.go`);
 the time budgets are read from the benchmarks, not asserted, because times

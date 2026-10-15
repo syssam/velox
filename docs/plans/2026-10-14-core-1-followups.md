@@ -101,3 +101,41 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - A Rewrite hook that drops an insert's RETURNING skips the hidden-row check: the upsert then reports less than it should, but writes nothing across tenants.
 - A Read policy's own parameters are not counted when `With` loads are chunked under the parameter limit; a chunk that goes over fails closed with the parameter-limit error.
 - Doc nits: `run`'s doc and `Exec`'s doc exceed the line width; `node`'s doc wrap; in `TestUpsertPolicyAndCache`, the comment "A policy that denies denies the upsert, as an update" is misleading: the Insert policy denies first.
+
+## Left by observability
+
+API rough spots found while building `./example`:
+- `WithTenant` needs the tenant column's exact Go type: on an `int64` column, `WithTenant(ctx, 1)` (an untyped constant, so an `int`) fails at run time with `ErrTenantMismatch`; nothing catches it at compile time.
+- `InsertAll` reads no generated keys back, so code that inserts parents and then their children must read the parents' IDs again.
+- There is no `Sum`, `Avg` or `GROUP BY`: the example totals revenue per organization in Go, over `Iter`.
+- A policy function that only allows or denies must still return a zero `Pred[E]{}` beside its error.
+- The core package imports pgx, so an application that uses only SQLite or MySQL still links pgx.
+- On SQLite, `ConstraintError.Constraint` holds the columns (`invoices.org_id, invoices.number`), not the constraint's name.
+- The function given to `Tx` gets no context, so code inside it uses the outer one. `Statement.Tx` and `contrib/otel`'s parenting on `Tx.Context` work around it for spans only.
+
+API rough spots found while splitting `./example` into one directory per topic:
+- A policy function gets no `*DB`, so an inherited policy cannot check on insert that the parent is visible: `example/policy`'s `Comment` inherits `Doc`'s `Read` through `Has`, which covers reads only.
+- A `Write` policy filters rather than denies, so a forbidden update returns 0 rows, not an error.
+- `Mutation.Value` returns `any`, so a `BeforeUpdate` hook type-asserts the value of a column it named through a typed handle.
+- `RetrySerializable` cannot be shown retrying on single-connection SQLite: `example/tx`'s retry runs once.
+
+Left by the observability plan:
+- §6's 300 ns is read from benchmarks and recorded, not asserted.
+- A serialization failure or deadlock that `RetrySerializable` retries has `error.type` `_OTHER`; there is no value of its own.
+- A statement refused before execution (guard, scope, policy, hooks) makes no statement span and no metric point; it shows only as the error of a transaction it ends.
+- Inside a transaction, a statement span's parent is always `velox.tx`, even when the application started a span of its own inside `fn` and passed its context.
+- A statement with no application frame within 64 frames (an `Iter` driven through `iter.Pull`, say) has a zero `Caller`.
+- The `TxInfo` allocated per transaction when hooks are configured has no budget test.
+- Test gaps left by the task reviews:
+  - fingerprints: no test asserts that the render cache's byte bound counts the fingerprint's bytes;
+  - call sites: no concurrent test of the program-counter cache;
+  - results: no test of `Affected` on a failed `INSERT … RETURNING`; the no-pairs `WithTags` test's identity check is vacuous;
+  - comments: no concurrent-eviction test; the cache's byte accounting is not checked exactly; a panic test makes an unchecked `r.(string)`;
+  - transactions: core has no test of the outcome when BEGIN fails or `fn` calls `runtime.Goexit` under a `TxAround` hook, nor of `RetrySerializable` exhausted with a hook; two tests index `e.Log[len-1]` unchecked;
+  - `contrib/otel`: `TestTxDurationMetric` asserts the commit outcome only.
+- Doc and cost nits:
+  - `WithCallers`' doc says one `runtime.Callers` per statement; a deep call site costs more than one.
+  - Comment cache keys over 256 bytes (long tag values) allocate on every statement; `WithSQLComment`'s doc does not say so.
+  - `render` stays in non-test code only for the tests.
+  - A failed `SELECT` records a `db.client.response.returned_rows` point.
+  - `contrib/otel`'s `record` allocates its attribute set even under a no-op `MeterProvider`; an instrument-enabled check would skip it.
