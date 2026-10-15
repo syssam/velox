@@ -311,6 +311,11 @@ func (d *RelDef[T]) References[V any](p *V) *RelDef[T] {
 // Policy declares the entity's row-level policy (see Policy). It is declared
 // at most once, in the entity's own Schema method: not in a mixin.
 func (s *Schema) Policy[E any](p Policy[E]) {
+	s.setPolicy(elemType((*E)(nil)), policyOf(p))
+}
+
+// policyOf is p with E erased.
+func policyOf[E any](p Policy[E]) *policy {
 	pol := &policy{}
 	if r := p.Read; r != nil {
 		pol.read = func(ctx context.Context) (Predicate, error) { q, err := r(ctx); return Predicate(q), err }
@@ -321,7 +326,7 @@ func (s *Schema) Policy[E any](p Policy[E]) {
 	if ins := p.Insert; ins != nil {
 		pol.insert = func(ctx context.Context, x unsafe.Pointer) error { return ins(ctx, (*E)(x)) }
 	}
-	s.setPolicy(elemType((*E)(nil)), pol)
+	return pol
 }
 
 // BeforeInsert declares a hook that runs on every row an insert or upsert

@@ -58,9 +58,10 @@ type dryRunKey struct{}
 
 // IsDryRun reports whether ctx is that of a SQL(ctx) method: the statement
 // being built will not be sent. The methods mark the context before anything
-// runs, so every hook and policy function sees it: BeforeInsert, BeforeUpdate
-// and BeforeDelete hooks, which are given no Statement, read it here, and a
-// Rewrite hook may read it here or in Statement.DryRun.
+// runs, so every hook and policy function sees it: entity hooks (Hooks), and
+// the old BeforeInsert, BeforeUpdate and BeforeDelete, which are given no
+// Statement, read it here, and a Rewrite hook may read it here or in
+// Statement.DryRun.
 func IsDryRun(ctx context.Context) bool {
 	dry, _ := ctx.Value(dryRunKey{}).(bool)
 	return dry
@@ -84,8 +85,14 @@ func policyBypass(ctx context.Context) string {
 	return r
 }
 
-// Policy is entity E's row-level policy, declared once in its Schema method
-// with Schema.Policy. Any field may be nil. A predicate function's zero
+// Policy is entity E's row-level policy, declared once: by a method on the
+// entity's pointer type,
+//
+//	func (*E) Policy() velox.Policy[E]
+//
+// which velox calls once, when it builds the metadata, on a nil *E (so the
+// method must not read its receiver), or, on the old path, in its Schema
+// method with Schema.Policy. Any field may be nil. A predicate function's zero
 // Pred[E]{} restricts nothing; any error it returns denies the statement.
 type Policy[E any] struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
@@ -98,8 +105,8 @@ type Policy[E any] struct {
 	// set a column the policy reads, such as an owner. Only the tenant column
 	// cannot be changed.
 	Write func(ctx context.Context) (Pred[E], error)
-	// Insert checks every inserted or upserted row, after the BeforeInsert
-	// hooks and the tenant fill.
+	// Insert checks every inserted or upserted row, after the entity's
+	// hooks, the defaults, the tenant fill and the old BeforeInsert hooks.
 	Insert func(ctx context.Context, x *E) error
 }
 
@@ -141,21 +148,50 @@ func (d denial) Error() string { return string(d) }
 // Is makes a denial match ErrDenied.
 func (d denial) Is(target error) bool { return target == ErrDenied }
 
-// Mutation is the UPDATE or DELETE that a BeforeUpdate or BeforeDelete hook
-// of entity E sees and may change. A misuse (Set on a delete, a zero or
-// invalid condition) is recorded and fails the statement once the hook
-// returns.
-type Mutation[E any] struct {
-	st  *Statement
-	err error
+// Mutation is the write that an entity's hooks (Hooks) see and may change,
+// and the UPDATE or DELETE that an old BeforeUpdate or BeforeDelete hook
+// sees. A misuse (Set on a delete, a zero or invalid condition, Value, Set or
+// Where on an insert) is recorded and fails the write: before next sends
+// it, or once the hook returns.
+type Mutation[E any] mutation
+
+// errInsertMutation is the misuse of Value, Set or Where on an insert.
+var errInsertMutation = errors.New("Set and Where are for updates and deletes; change Rows")
+
+// Op returns the write's kind: OpInsert, OpUpdate or OpDelete.
+func (m *Mutation[E]) Op[_ Lazy[E]]() Op {
+	if m.op != 0 {
+		return m.op
+	}
+	return m.st.Op
 }
 
-// Op returns the statement's kind, OpUpdate or OpDelete.
-func (m *Mutation[E]) Op[_ Lazy[E]]() Op { return m.st.Op }
+// Rows returns an insert's rows, which a hook may change before next; nil
+// for an update or delete.
+func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
+	if m.rows == nil {
+		return nil
+	}
+	out := make([]*E, len(m.rows))
+	for i, p := range m.rows {
+		out[i] = (*E)(p)
+	}
+	return out
+}
+
+// Result returns what the write did, once next has returned: Affected is the
+// rows inserted, matched or deleted. It is zero before next, after an error,
+// and under SQL(ctx).
+func (m *Mutation[E]) Result[_ Lazy[E]]() Result { return m.res }
 
 // Value returns the value the statement assigns to column c, and whether it
-// assigns one; an Add or Sub is not an assignment of a value.
+// assigns one; an Add or Sub is not an assignment of a value. On an insert it
+// records an error: read the Rows.
 func (m *Mutation[E]) Value[_ Lazy[E]](c Column[E]) (any, bool) {
+	if m.st == nil {
+		m.misuse()
+		return nil, false
+	}
 	if c == nil {
 		return nil, false
 	}
@@ -163,19 +199,35 @@ func (m *Mutation[E]) Value[_ Lazy[E]](c Column[E]) (any, bool) {
 }
 
 // Set adds assignments to an update; each replaces the statement's
-// assignment of the same column, if there is one. Set on a delete is an
-// error.
+// assignment of the same column, if there is one. Set on a delete or an
+// insert is an error.
 func (m *Mutation[E]) Set[_ Lazy[E]](ss ...Setter[E]) {
+	if m.st == nil {
+		m.misuse()
+		return
+	}
 	for _, s := range ss {
 		mutateSet(m.st, &m.err, s.a)
 	}
 }
 
 // Where narrows the rows the statement changes: all of the conditions must
-// hold, with the statement's own.
+// hold, with the statement's own. Where on an insert is an error.
 func (m *Mutation[E]) Where[_ Lazy[E]](ps ...Pred[E]) {
+	if m.st == nil {
+		m.misuse()
+		return
+	}
 	for _, p := range ps {
 		mutateWhere(m.st, &m.err, Predicate(p))
+	}
+}
+
+// misuse records the error of Value, Set or Where on an insert, keeping the
+// first.
+func (m *Mutation[E]) misuse[_ Lazy[E]]() {
+	if m.err == nil {
+		m.err = errInsertMutation
 	}
 }
 

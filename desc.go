@@ -82,8 +82,11 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 			return v
 		})
 		addr := d.Addr
+		if err == nil {
+			err = entityMethods[E](info)
+		}
 		if err != nil {
-			addr = nil // an error Meta has no scan plan, as in Get
+			info, addr = nil, nil // an error Meta has no scan plan, as in Get
 		}
 		o.m = &Meta[E]{info: info, addr: addr, err: err}
 		if info != nil {

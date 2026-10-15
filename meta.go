@@ -29,6 +29,7 @@ type EntityInfo struct {
 	kit        *kit                       // set by MetaOnce.Get and Load; nil in tests that call buildInfo
 	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
+	hooks      []hookFn                   // the Hooks method's, outermost first (Desc only)
 
 	// The entity's policy and hooks, wrapped once by the generic Schema
 	// methods into functions over the entity's address and its statement.

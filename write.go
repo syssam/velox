@@ -54,9 +54,8 @@ func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E] {
 	return u
 }
 
-// statement is the UPDATE Exec and SQL run: Set's assignments, then one for
-// every column with an UpdateDefault that Set did not name. A column assigned twice
-// is an error.
+// statement is the UPDATE Exec and SQL give the hooks: Set's assignments.
+// The core adds the UpdateDefault ones and checks them all (writeCore).
 func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if u.meta.err != nil {
 		return Statement{}, u.meta.err
@@ -67,42 +66,41 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if len(u.st.Set) == 0 {
 		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.info.Name)
 	}
-	if err := checkAssignedOnce(u.meta.info, u.st.Set); err != nil {
-		return Statement{}, err
-	}
-	st := cloneStatement(&u.st)
-	st.Set = withUpdateDefaults(u.meta.info, st.Set)
-	if err := validateSet(u.meta.info, st.Set); err != nil {
-		return Statement{}, err
-	}
-	return st, nil
+	return cloneStatement(&u.st), nil
 }
 
 // Exec runs the update and returns the number of rows it matched (on MySQL,
 // with clientFoundRows=true; without it, the rows whose values changed).
+//
+// The entity's hooks (Hooks) run first. Then Exec adds an assignment for
+// every column with an UpdateDefault that the statement does not assign,
+// refuses a column assigned twice or an Immutable one (ErrImmutable), and
+// runs the validators, before the statement goes through the pipeline.
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	st, err := u.statement()
 	if err != nil {
 		return 0, err
 	}
-	res, err := execWrite(ctx, u.db, &st)
-	return res.affected, err
+	n, _, _, err := write(ctx, u.db, &st, false, false)
+	return n, err
 }
 
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
-// every stage Exec runs before execution: the guard, the BeforeUpdate hooks,
-// the Rewrite hooks, the tenant and policy scope and rendering. So the hooks
-// and the policy run, and can tell from IsDryRun(ctx), or a Rewrite hook from
-// Statement.DryRun, that the statement will not be sent. Around hooks, which
-// wrap execution, do not run.
+// every stage Exec runs before execution: the entity's hooks, the
+// UpdateDefault assignments and the checks, the guard, the old BeforeUpdate
+// hooks, the Rewrite hooks, the tenant and policy scope and rendering. So the
+// hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
+// hook from Statement.DryRun, that the statement will not be sent. Around
+// hooks, which wrap execution, do not run.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()
 	if err != nil {
 		return "", nil, err
 	}
-	return u.db.dryRun(ctx, &st)
+	_, q, args, err := write(ctx, u.db, &st, true, false)
+	return q, args, err
 }
 
 // DeleteQuery is a DELETE of entity E, built by chaining and run by Exec.
@@ -149,17 +147,17 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 		return 0, d.err
 	}
 	st := cloneStatement(&d.st)
-	res, err := execWrite(ctx, d.db, &st)
-	return res.affected, err
+	n, _, _, err := write(ctx, d.db, &st, false, false)
+	return n, err
 }
 
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
-// every stage Exec runs before execution: the guard, the BeforeDelete hooks,
-// the Rewrite hooks, the tenant and policy scope and rendering. So the hooks
-// and the policy run, and can tell from IsDryRun(ctx), or a Rewrite hook from
-// Statement.DryRun, that the statement will not be sent. Around hooks, which
-// wrap execution, do not run.
+// every stage Exec runs before execution: the entity's hooks, the guard, the
+// old BeforeDelete hooks, the Rewrite hooks, the tenant and policy scope and
+// rendering. So the hooks and the policy run, and can tell from
+// IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the statement
+// will not be sent. Around hooks, which wrap execution, do not run.
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if d.meta.err != nil {
@@ -169,14 +167,17 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 		return "", nil, d.err
 	}
 	st := cloneStatement(&d.st)
-	return d.db.dryRun(ctx, &st)
+	_, q, args, err := write(ctx, d.db, &st, true, false)
+	return q, args, err
 }
 
 // Save writes the named columns of *x to the row with x's primary key, and
-// every column with an UpdateDefault. Once the row was written, it stores in
-// *x every value the statement as sent assigned, the UpdateDefault values and those a
-// BeforeUpdate or Rewrite hook set included, when the field can hold it; after
-// an error, including ErrNotFound, *x is as it was.
+// every column with an UpdateDefault. The entity's hooks (Hooks) see it as an
+// update, OpUpdate. Once the row was written, it stores in *x every value the
+// statement as sent assigned, the UpdateDefault values and those a hook
+// (Hooks, BeforeUpdate or Rewrite) set included, when the field can hold it;
+// after an error, including ErrNotFound, *x is as it was, and so it is when a
+// hook returns nil without calling next.
 // Its error wraps ErrNotFound when no row has that key. Naming a column twice
 // is an error. On MySQL, open the database with clientFoundRows=true:
 // otherwise a row whose values did not change counts as not found.
@@ -201,28 +202,87 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 		i := int(c.column(nil))
 		st.Set = append(st.Set, Assignment{Column: i, Op: AssignSet, Value: fieldValue(m, p, i)})
 	}
-	if err := checkAssignedOnce(in, st.Set); err != nil {
-		return err
-	}
-	st.Set = withUpdateDefaults(in, st.Set)
-	if err := validateSet(in, st.Set); err != nil {
-		return err
-	}
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(m, p, k)))
 	}
-	res, err := execWrite(ctx, db, &st)
-	if err != nil {
+	n, _, _, err := write(ctx, db, &st, false, true)
+	if err != nil || n == 0 {
+		// n == 0 without an error: a hook skipped next, and nothing was written.
 		return err
-	}
-	if res.affected == 0 {
-		return fmt.Errorf("velox: %s: %w", in.Name, ErrNotFound)
 	}
 	// The statement as sent: run leaves in st.Set what the hooks made of it.
 	for _, a := range st.Set {
 		if a.Op == AssignSet {
 			setField(m, p, a.Column, a.Value)
 		}
+	}
+	return nil
+}
+
+// write runs st, an update or delete (an update that must find its row, with
+// save), inside its entity's hooks, or alone when it has none, without
+// allocating for them. Under SQL(ctx) (dry) it renders st instead of sending
+// it. It returns the rows affected, and what dry rendered.
+func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
+	if len(st.Entity.hooks) == 0 {
+		var err error
+		mu := mutation{st: st, dry: dry}
+		if save {
+			err = saveCore(ctx, db, &mu)
+		} else {
+			err = writeCore(ctx, db, &mu)
+		}
+		return mu.res.Affected, mu.sql, mu.args, err
+	}
+	core := func(ctx context.Context, mu *mutation) error { return writeCore(ctx, db, mu) }
+	if save {
+		core = func(ctx context.Context, mu *mutation) error { return saveCore(ctx, db, mu) }
+	}
+	mu := &mutation{op: st.Op, st: st, dry: dry}
+	if err := mutate(ctx, st.Entity, mu, core); err != nil {
+		return 0, "", nil, err
+	}
+	return mu.res.Affected, mu.sql, mu.args, nil
+}
+
+// writeCore is an update's or delete's work inside the hooks, their next.
+// For an update it adds the UpdateDefault assignments, refuses a column
+// assigned twice or an Immutable one and runs the validators; then it sends
+// the statement through the pipeline, whose guard runs first, or under
+// SQL(ctx) renders it into mu.sql and mu.args. It sets mu.res.
+func writeCore(ctx context.Context, db *DB, mu *mutation) error {
+	st := mu.st
+	if st.Op == OpUpdate {
+		in := st.Entity
+		st.Set = withUpdateDefaults(in, st.Set)
+		if err := checkAssignedOnce(in, st.Set); err != nil {
+			return err
+		}
+		if err := validateSet(in, st.Set); err != nil {
+			return err
+		}
+	}
+	if mu.dry {
+		var err error
+		mu.sql, mu.args, err = db.dryRun(ctx, st)
+		return err
+	}
+	res, err := execWrite(ctx, db, st)
+	if err != nil {
+		return err
+	}
+	mu.res.Affected = res.affected
+	return nil
+}
+
+// saveCore is Save's core: writeCore, failing with ErrNotFound when no row
+// has the key.
+func saveCore(ctx context.Context, db *DB, mu *mutation) error {
+	if err := writeCore(ctx, db, mu); err != nil {
+		return err
+	}
+	if mu.res.Affected == 0 {
+		return fmt.Errorf("velox: %s: %w", mu.st.Entity.Name, ErrNotFound)
 	}
 	return nil
 }

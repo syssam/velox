@@ -26,17 +26,19 @@ type InsertQuery[E any] struct {
 //
 //	db.Insert(&inv).Exec(ctx)
 //
-// Exec changes *x: it fills defaults and the tenant, runs the BeforeInsert
-// hooks and reads the generated key back, and it leaves those changes in
-// place even when the insert then fails.
+// Exec changes *x: the entity's hooks (Hooks) may change it, Exec fills
+// defaults and the tenant, runs the old BeforeInsert hooks and reads the
+// generated key back, and it leaves those changes in place even when the
+// insert then fails.
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: x.VeloxMeta(), one: (*E)(x), single: true}
 }
 
 // InsertAll starts an INSERT of every entity in xs, in as few statements as
-// the dialect's parameter limit allows. Exec fills defaults and the tenant
-// into xs[i], the caller's own slice elements, runs the BeforeInsert hooks on
-// them, and leaves those changes in place even when the insert then fails.
+// the dialect's parameter limit allows. The entity's hooks (Hooks) run once,
+// over all of xs. Exec fills defaults and the tenant into xs[i], the caller's
+// own slice elements, runs the old BeforeInsert hooks on them, and leaves
+// those changes in place even when the insert then fails.
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: PE(nil).VeloxMeta(), many: xs}
 }
@@ -89,13 +91,16 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 
 // Exec runs the insert.
 //
-// Exec first fills, in each entity, every zero field whose column has Default
+// The entity's hooks (Hooks) run first, around all that follows; their next
+// does the rest. An InsertAll of nothing runs nothing.
+//
+// Exec then fills, in each entity, every zero field whose column has Default
 // or DefaultFunc, and every column with an UpdateDefault. On a tenant-scoped entity
 // it then sets a zero tenant field to the context's tenant, and refuses a
 // field set to another one (ErrTenantMismatch) or, under AllTenants, left at
-// zero (ErrNoTenant). Then the BeforeInsert hooks run, the tenant is checked
-// again, and the policy's Insert is asked; every entity is prepared before
-// anything is sent.
+// zero (ErrNoTenant). Then the old BeforeInsert hooks run, the tenant is
+// checked again, the policy's Insert is asked and the validators run; every
+// entity is prepared before anything is sent.
 //
 // Under WithTenant, an upsert that updates must name the tenant column in
 // OnConflict (ErrTenantUpsert); on MySQL, where any unique key can conflict,
@@ -123,18 +128,23 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if err := q.check(); err != nil {
 		return err
 	}
-	if q.one != nil {
-		return insertOne(ctx, q.db, q.meta, q.one, q.conflict)
+	if q.one == nil && len(q.many) == 0 {
+		return nil
 	}
-	return insertMany(ctx, q.db, q.meta, q.many, q.conflict)
+	if len(q.meta.info.hooks) > 0 {
+		return mutate(ctx, q.meta.info, q.mutation(false), func(ctx context.Context, mu *mutation) error { return q.send(ctx, mu) })
+	}
+	var mu mutation
+	return q.send(ctx, &mu)
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or
 // the error Exec would fail with before sending it; it sends nothing, and
 // returns "" for an InsertAll of nothing. It runs every stage Exec runs
-// before execution: like Exec, it fills defaults and the tenant into the
-// caller's entities and runs the BeforeInsert hooks on them, then asks the
-// policy's Insert and runs the Rewrite hooks, the scope and rendering. So the
+// before execution: like Exec, it runs the entity's hooks, fills defaults and
+// the tenant into the caller's entities and runs the old BeforeInsert hooks on
+// them, then asks the policy's Insert, runs the validators and runs the
+// Rewrite hooks, the scope and rendering. So the
 // hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
 // hook from Statement.DryRun, that the statement will not be sent. Around
 // hooks, which wrap execution, do not run. An InsertAll too large for one
@@ -146,24 +156,67 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if err := q.check(); err != nil {
 		return "", nil, err
 	}
+	if q.one == nil && len(q.many) == 0 {
+		return "", nil, nil
+	}
+	if len(q.meta.info.hooks) > 0 {
+		mu := q.mutation(true)
+		if err := mutate(ctx, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil {
+			return "", nil, err
+		}
+		return mu.sql, mu.args, nil
+	}
+	mu := mutation{dry: true}
+	if err := q.render(ctx, &mu); err != nil {
+		return "", nil, err
+	}
+	return mu.sql, mu.args, nil
+}
+
+// mutation is the insert as its entity's hooks see it: its rows.
+func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
+	mu := &mutation{op: OpInsert, dry: dry}
+	if q.one != nil {
+		mu.rows = []unsafe.Pointer{unsafe.Pointer(q.one)}
+		return mu
+	}
+	mu.rows = make([]unsafe.Pointer, len(q.many))
+	for i := range q.many {
+		mu.rows[i] = unsafe.Pointer(&q.many[i])
+	}
+	return mu
+}
+
+// send is Exec's work inside the hooks, their next: it prepares every row
+// (defaults, tenant, the old BeforeInsert hooks, the policy's Insert and the
+// validators) and sends the statements. It sets mu.res.
+func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error {
+	if q.one != nil {
+		return insertOne(ctx, q.db, q.meta, q.one, q.conflict, &mu.res)
+	}
+	return insertMany(ctx, q.db, q.meta, q.many, q.conflict, &mu.res)
+}
+
+// render is SQL's work inside the hooks: it prepares the rows as send does,
+// and renders the first statement into mu.sql and mu.args.
+func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *mutation) error {
 	var st Statement
 	if q.one != nil {
 		var err error
 		if st, _, err = oneStatement(ctx, q.db, q.meta, q.one, q.conflict); err != nil {
-			return "", nil, err
+			return err
 		}
 	} else {
-		if len(q.many) == 0 {
-			return "", nil, nil
-		}
 		cols, per, err := prepareMany(ctx, q.db, q.meta, q.many)
 		if err != nil {
-			return "", nil, err
+			return err
 		}
 		inTx := q.db.inTx || len(q.many) > per || conditionedUpsert(ctx, q.db, q.meta.info, q.conflict, len(q.many))
 		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
-	return q.db.dryRun(ctx, &st)
+	var err error
+	mu.sql, mu.args, err = q.db.dryRun(ctx, &st)
+	return err
 }
 
 // check refuses an insert that cannot be built: invalid metadata, Insert of
@@ -284,7 +337,8 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 	return st, gen, nil
 }
 
-func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) error {
+// insertOne inserts the entity at p and sets out.Affected.
+func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause, out *Result) error {
 	st, gen, err := oneStatement(ctx, db, m, p, cf)
 	if err != nil {
 		return err
@@ -294,6 +348,7 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 		if err != nil {
 			return err
 		}
+		out.Affected = res.affected
 		return checkUpserted(&st, res.affected)
 	}
 	if db.d != MySQL {
@@ -315,9 +370,13 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 		} else {
 			err = db.plain(ctx, &st, read, nil)
 		}
-		if err != nil || len(st.Returning) == 0 {
-			// Without RETURNING (a hook dropped it), no row tells nothing.
+		if err != nil {
 			return err
+		}
+		out.Affected = back
+		if len(st.Returning) == 0 {
+			// Without RETURNING (a hook dropped it), no row tells nothing.
+			return nil
 		}
 		return checkUpserted(&st, back)
 	}
@@ -325,6 +384,7 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	if err != nil {
 		return err
 	}
+	out.Affected = res.affected
 	// st.Conflict, not cf: a rewrite hook may have added or removed the clause.
 	if st.Conflict == nil && res.hasLastID && res.affected == 1 {
 		return setGeneratedKey(m, p, gen, res.lastID)
@@ -485,7 +545,8 @@ func batch[E any](m *Meta[E], xs []E, cols []int, cf *ConflictClause, inTx bool)
 	return st
 }
 
-func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *ConflictClause) error {
+// insertMany inserts every entity in xs and sets out.Affected.
+func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *ConflictClause, out *Result) error {
 	if len(xs) == 0 {
 		return nil
 	}
@@ -493,23 +554,41 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 	if err != nil {
 		return err
 	}
-	batches := func(db *DB) error {
-		for start := 0; start < len(xs); start += per {
-			st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.inTx)
-			res, err := execWrite(ctx, db, &st)
-			if err != nil {
-				return err
-			}
-			if err := checkUpserted(&st, res.affected); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 	if len(xs) <= per && !conditionedUpsert(ctx, db, m.info, cf, len(xs)) {
-		return batches(db)
+		n, err := insertBatches(ctx, db, m, xs, cols, per, cf)
+		if err == nil {
+			out.Affected = n
+		}
+		return err
 	}
-	return db.Tx(ctx, batches)
+	var n int64 // in the transaction's closure: only this path pays for it
+	err = db.Tx(ctx, func(db *DB) error {
+		var err error
+		n, err = insertBatches(ctx, db, m, xs, cols, per, cf)
+		return err
+	})
+	if err == nil {
+		out.Affected = n
+	}
+	return err
+}
+
+// insertBatches sends xs, prepared, in statements of at most per rows, and
+// returns the rows they affected.
+func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols []int, per int, cf *ConflictClause) (int64, error) {
+	var affected int64
+	for start := 0; start < len(xs); start += per {
+		st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.inTx)
+		res, err := execWrite(ctx, db, &st)
+		if err != nil {
+			return 0, err
+		}
+		if err := checkUpserted(&st, res.affected); err != nil {
+			return 0, err
+		}
+		affected += res.affected
+	}
+	return affected, nil
 }
 
 // conditionedUpsert predicts, before the scope runs, whether it will give

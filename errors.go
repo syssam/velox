@@ -116,8 +116,10 @@ func (e *ConstraintError) Error() string {
 func (e *ConstraintError) Unwrap() error { return e.Err }
 
 // hookError is the error of an entity hook: "velox: <Entity>: <stage>:
-// <err>". An err whose text already starts "velox: <Entity>: ", such as an
-// invalid condition a Mutation recorded, does not name the entity twice.
+// <err>", where stage is "hook" for the Hooks method's and "before insert",
+// "before update" or "before delete" for the old path's. An err whose text
+// already starts "velox: <Entity>: ", such as an invalid condition a Mutation
+// recorded, does not name the entity twice.
 type hookError struct {
 	entity, stage string
 	err           error
