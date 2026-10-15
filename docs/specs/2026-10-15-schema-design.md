@@ -150,12 +150,12 @@ func (*User) Policy() velox.Policy[User] { return velox.Policy[User]{Read: …, 
 
 func (*User) Hooks() []velox.Hook[User] {
     return []velox.Hook[User]{
-        velox.On(audit.Hook[User](), velox.OpCreate|velox.OpUpdate|velox.OpDelete),
+        velox.On(audit.Hook[User](), velox.OpInsert, velox.OpUpdate, velox.OpDelete),
         func(next velox.Mutator[User]) velox.Mutator[User] {
             return velox.MutateFunc[User](func(ctx context.Context, m *velox.Mutation[User]) error {
-                // before: m.Rows() on create (mutable); m.Value/Set/Where on update and delete
+                // before: m.Rows() on insert (mutable); m.Value/Set/Where on update and delete
                 err := next.Mutate(ctx, m)
-                // after: m.Result() — generated IDs, rows affected
+                // after: m.Result().Affected — rows affected; generated IDs are in m.Rows()
                 return err
             })
         },
@@ -166,15 +166,15 @@ func (*User) Hooks() []velox.Hook[User] {
 **Hooks** follow ent's middleware shape, typed on the entity:
 - `Hook[E] func(Mutator[E]) Mutator[E]`, where `Mutator[E]` has `Mutate(ctx, *Mutation[E]) error`.
 - `MutateFunc[E]` adapts a function to a `Mutator[E]`.
-- `velox.On(h, ops)` runs a hook only for the given operations (`OpCreate`, `OpUpdate`, `OpDelete`, combined with `|`).
+- `velox.On(h, ops...)` runs a hook only for the given operations, the `Op` constants that `Statement.Op` uses: `OpInsert`, `OpUpdate`, `OpDelete`, listed as arguments.
 - Hooks run in the order listed, each wrapping the next.
 - Generic hooks are reusable across entities, for example `audit.Hook[E]()`.
 
 `Mutation[E]` covers every operation:
 - `Op()`;
-- `Rows() []*E` for a create (all rows of an `Insert` or `InsertAll` statement), changeable before `next`;
+- `Rows() []*E` for an insert (all rows of an `Insert` or `InsertAll` statement), changeable before `next`;
 - `Value(col)`, `Set(...)` and `Where(...)` for an update or delete, as in the policy design §3;
-- `Result()` after `next`: generated IDs and rows affected.
+- `Result()` after `next`: its `Affected` is the rows inserted, matched or deleted. A generated key is written back into its row, so after `next` an `Insert`'s `m.Rows()[0].ID` holds it; `InsertAll` reads no keys back.
 
 **Order of a write:**
 1. The hooks' code before `next` runs.

@@ -8,13 +8,15 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-// TestGeneratedEntities runs the library on entities velox-gen wrote.
+// TestGeneratedEntities runs the library on the test model's entities, on
+// the Desc path in the shape velox-gen will generate.
 func TestGeneratedEntities(t *testing.T) {
 	for _, err := range []error{
 		velox.CheckEntity[testmodel.Invoice](),
 		velox.CheckEntity[testmodel.Sample](),
 		velox.CheckEntity[testmodel.Line](),
 		velox.CheckEntity[testmodel.Item](),
+		velox.CheckEntity[testmodel.Ticket](),
 	} {
 		if err != nil {
 			t.Error(err)

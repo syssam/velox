@@ -9,14 +9,16 @@ import (
 	"testing"
 )
 
-var update = flag.Bool("update", false, "write internal/testmodel's generated files")
+var update = flag.Bool("update", false, "write testdata/testmodel's generated files")
 
-// TestTestmodelIsReproduced is the golden test: generating internal/testmodel
+// TestTestmodelIsReproduced is the golden test: generating testdata/testmodel
 // gives exactly its committed *_velox.go files. invoice_velox.go was written
-// by hand in plan 1, before velox-gen existed.
+// by hand in plan 1, before velox-gen existed. testdata/testmodel is the
+// test model as it was before it moved to the Desc path (schema plan 2); it
+// guards this generator until schema plan 3 replaces it.
 func TestTestmodelIsReproduced(t *testing.T) {
-	cfg := config{dir: root}
-	ps, err := load(cfg, []string{"./internal/testmodel"})
+	cfg := config{dir: "."}
+	ps, err := load(cfg, []string{"./testdata/testmodel"})
 	if err != nil {
 		t.Fatal(err)
 	}

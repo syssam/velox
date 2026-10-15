@@ -149,8 +149,8 @@ func TestSQLReportsTheRefusal(t *testing.T) {
 	if !errors.Is(err, velox.ErrNoTenant) || text != "" {
 		t.Errorf("no tenant: %q %v", text, err)
 	}
-	if _, _, err = db.Update[testmodel.Ticket]().Set(Tk.Title.Set("")).Where(Tk.ID.EQ(1)).SQL(annIn7()); err == nil || err.Error() != "velox: testmodel.Ticket: before update: a ticket needs a title" {
-		t.Errorf("BeforeUpdate: %v", err)
+	if _, _, err = db.Update[testmodel.Ticket]().Set(Tk.Title.Set("")).Where(Tk.ID.EQ(1)).SQL(annIn7()); err == nil || err.Error() != "velox: testmodel.Ticket: hook: a ticket needs a title" {
+		t.Errorf("update hook: %v", err)
 	}
 	tk := testmodel.Ticket{Owner: "bob", Title: "T-1", InvoiceID: 1}
 	if _, _, err = db.Insert(&tk).SQL(annIn7()); !errors.Is(err, velox.ErrDenied) {
@@ -224,7 +224,7 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 // TestScopedSQLGolden pins the SQL of Ticket's statements as ann under tenant
 // 7: the tenant and owner conditions follow the caller's, and an EXISTS on
 // Ticket gets both among its own; an UPDATE or DELETE gets the Read and the
-// Write condition (both the owner's), a DELETE the BeforeDelete hook's
+// Write condition (both the owner's), a DELETE the delete hook's
 // condition, and an upsert's update branch the Read and Write conditions on
 // the existing row.
 func TestScopedSQLGolden(t *testing.T) {

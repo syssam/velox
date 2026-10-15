@@ -17,7 +17,7 @@ import (
 // file has no init function and no package-level call; its values are
 // literals and zero values.
 func TestGeneratedCodeRunsNothingAtStart(t *testing.T) {
-	files, _ := filepath.Glob(filepath.Join(root, "internal/testmodel/*_velox.go"))
+	files, _ := filepath.Glob("testdata/testmodel/*_velox.go")
 	if len(files) == 0 {
 		t.Fatal("no generated files")
 	}
@@ -61,7 +61,7 @@ func TestStaleFieldTypeDoesNotCompile(t *testing.T) {
 	}
 	// The whole testmodel package, its generated files as committed, with
 	// Item.Qty changed from int64 to float64 and nothing regenerated.
-	paths, err := filepath.Glob(filepath.Join(root, "internal/testmodel/*.go"))
+	paths, err := filepath.Glob("testdata/testmodel/*.go")
 	if err != nil {
 		t.Fatal(err)
 	}

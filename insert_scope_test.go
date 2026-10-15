@@ -89,7 +89,7 @@ func TestInsertRunsBeforeInsert(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, e)
 	tk := testmodel.Ticket{Owner: "ann"}
 	err := db.Insert(&tk).Exec(as("ann", 7))
-	if err == nil || err.Error() != "velox: testmodel.Ticket: before insert: a ticket needs a title" {
+	if err == nil || err.Error() != "velox: testmodel.Ticket: hook: a ticket needs a title" {
 		t.Fatalf("got %v", err)
 	}
 	if e.Calls != 0 {
@@ -136,7 +136,7 @@ func TestInsertAllPreparesEveryRow(t *testing.T) {
 	// A failing row stops the insert before anything is sent.
 	e.Calls = 0
 	bad := []testmodel.Ticket{{Owner: "ann", Title: "a"}, {Owner: "ann"}}
-	if err := db.InsertAll(bad).Exec(as("ann", 7)); err == nil || !strings.Contains(err.Error(), "before insert") || e.Calls != 0 {
+	if err := db.InsertAll(bad).Exec(as("ann", 7)); err == nil || !strings.Contains(err.Error(), ": hook: ") || e.Calls != 0 {
 		t.Errorf("%v, %d statements sent", err, e.Calls)
 	}
 	if err := db.InsertAll([]testmodel.Ticket{{Owner: "ann", Title: "a"}, {Owner: "bob", Title: "b"}}).Exec(as("ann", 7)); err == nil {

@@ -150,3 +150,11 @@ Left by the observability plan:
 - `velox-gen` finds only the types that embed `schema.Schema` directly. A type that embeds another struct which embeds `schema.Schema` is not found, and is not loaded.
 - velox2 names a default index `<table>_<cols>` (`users_org_id_name`), where ent uses `<lower(type)>_<cols>` (`user_org_id_name`). Against a database ent created, the migration planner will see each such index as a rename.
 - velox2's default ID is `int64`, and ent's is `int`. A ported edge field declared `field.Int("x_id")` must become `field.Int64("x_id")`, or the schema must declare its ID with `field.Int("id")`; rule 12's error says so.
+
+## Left by schema plan 2
+
+- The old path is removed in plan 3, once velox-gen writes `Desc` literals and every entity has moved: `Schema`, `Mixer`, `BeforeInsert`, `BeforeUpdate` and `BeforeDelete`, `Shape`, `MetaOnce.Get`, `RelationTo`, and the reflection over structs that finds columns and infers relation keys. `cmd/velox-gen/testdata/testmodel`, the test model on the old path, goes with the old generator.
+- A join entity (`EdgeThrough`) has no tenant or policy of its own: the relation is refused when it resolves. Loading applies the target's tenant and `Read` policy only.
+- `InsertAll` still reads no keys back, so after `next` the rows of an `InsertAll` that `Rows()` returns have no generated IDs.
+- A hook can change the rows of an insert, but not how many there are: `Rows()` returns the rows, not the slice that holds them.
+- The guard runs inside `next`, after the hooks, so a `Where` that a hook adds satisfies it: Ticket's delete hook narrows to finished tickets, and a delete of Ticket with no `Where` of its own deletes every finished ticket of the tenant rather than failing with `ErrNoWhere` (`TestEntityHooksBeforeTheGuard`).

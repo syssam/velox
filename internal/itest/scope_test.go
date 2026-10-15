@@ -248,7 +248,7 @@ func TestScopeUpdate(t *testing.T) {
 }
 
 func TestScopeDelete(t *testing.T) {
-	// BeforeDelete deletes only done tickets: 2, 3 and 8.
+	// Ticket's delete hook deletes only done tickets: 2, 3 and 8.
 	deleted := map[string][]int64{"ann": {2}, "admin": {2, 3}, "anyone": {2, 3, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		n, err := tg.db.Delete[testmodel.Ticket]().Where(Tk.Owner.In("ann", "bob")).Exec(c.ctx)

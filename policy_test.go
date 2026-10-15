@@ -207,7 +207,7 @@ func TestPolicyOnUpdateAndDelete(t *testing.T) {
 	if _, err := db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(1)).Exec(ann); err != nil {
 		t.Fatal(err)
 	}
-	// Ticket's BeforeDelete hook may add a condition on done.
+	// Ticket's delete hook may add a condition on done.
 	if !strings.HasPrefix(e.SQL, `DELETE FROM "tickets" WHERE "id" = $1 AND `) || strings.Count(e.SQL, `"owner" = $`) != 2 || !strings.Contains(e.SQL, `"org_id" = $`) {
 		t.Errorf("delete: %s %v", e.SQL, e.Args)
 	}

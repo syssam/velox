@@ -8,7 +8,8 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// root is the library's module, whose internal/testmodel holds the fixtures.
+// root is the library's module, whose internal/testmodel/testdata holds the
+// fixtures.
 const root = "../.."
 
 func loadFixture(t *testing.T, cfg config, pattern string) []*packages.Package {
@@ -55,8 +56,13 @@ func TestDiscovery(t *testing.T) {
 	})
 }
 
+// TestDiscoveryOfTestmodel discovers testdata/testmodel, the test model on
+// the old path (see TestTestmodelIsReproduced).
 func TestDiscoveryOfTestmodel(t *testing.T) {
-	ps := loadFixture(t, config{}, "./internal/testmodel")
+	ps, err := load(config{dir: "."}, []string{"./testdata/testmodel"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	ents, probs := discover(ps[0], config{})
 	if len(probs) != 0 {
 		t.Fatal(probs)

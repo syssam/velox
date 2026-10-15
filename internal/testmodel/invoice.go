@@ -1,6 +1,6 @@
-// Package testmodel holds entities for velox's own tests. Its *_velox.go
-// files are written by velox-gen; velox-gen's golden test fails when they
-// differ from what it writes.
+// Package testmodel holds entities for velox's own tests. They are on the
+// Desc path: each *_desc.go file is written by hand in the shape velox-gen
+// will generate (schema plan 3).
 package testmodel
 
 import (
@@ -9,20 +9,16 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// Timestamps is a mixin: embedded in an entity, its fields are columns.
+// Timestamps is embedded in Invoice: its fields are columns. Invoice's Desc
+// sets CreatedAt when an Invoice is inserted, and UpdatedAt on every insert
+// and update.
 type Timestamps struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-// Mixin sets CreatedAt when an Invoice is inserted, and UpdatedAt on every
-// insert and update.
-func (t *Timestamps) Mixin(s *velox.Schema) {
-	s.Column(&t.CreatedAt).DefaultFunc(time.Now)
-	s.Column(&t.UpdatedAt).OnUpdate(time.Now)
-}
-
-// Invoice is the entity velox's tests query.
+// Invoice is the entity velox's tests query. Its OrgID and Number are
+// unique together, and OrgID is its tenant.
 type Invoice struct {
 	Timestamps
 	ID      int64
@@ -35,11 +31,4 @@ type Invoice struct {
 	Data    []byte
 	Items   velox.Many[Item]
 	Display string `velox:"-"`
-}
-
-// Schema declares Invoice's table, unique key and tenant column.
-func (x *Invoice) Schema(s *velox.Schema) {
-	s.Table("invoices")
-	s.Unique(&x.OrgID, &x.Number)
-	s.Tenant(&x.OrgID)
 }
