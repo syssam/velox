@@ -38,8 +38,8 @@ func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDe
 
 func ticketDesc() velox.Desc[Ticket] {
 	return velox.Desc[Ticket]{
-		Policy: (*Ticket).Policy,
-		Hooks:  (*Ticket).Hooks,
+		Policy: func() velox.BoundPolicy { return velox.BindPolicy((*Ticket)(nil).Policy()) },
+		Hooks:  func() velox.BoundHooks { return velox.BindHooks((*Ticket)(nil).Hooks()) },
 		Table:  "tickets",
 		Columns: []velox.ColumnDesc{
 			{Field: "CreatedBy", Name: "created_by"},

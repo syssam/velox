@@ -28,9 +28,9 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 //	func (*E) Hooks() []velox.Hook[E]
 //
-// which velox-gen binds in the generated metadata (Desc.Hooks is (*E).Hooks):
-// a method with another signature does not compile, and one the metadata does
-// not bind is refused at the entity's first use. velox calls it once, when it
+// which velox-gen binds in the generated metadata (Desc.Hooks calls
+// BindHooks on it): a method with another signature does not compile, and one
+// the metadata does not bind is refused at the entity's first use. velox calls it once, when it
 // builds the entity's metadata, on a nil *E: the method must not read its
 // receiver. Nor may its body, outside the hooks it returns, read the entity's
 // own metadata (a Has or HasWhere on a relation from or to it, say): that
@@ -152,63 +152,81 @@ var (
 	errNextTwice = errors.New("a hook called next twice")
 )
 
-// erasedPolicy is Desc.Policy, a func(*E) Policy[E], with E erased. The types
-// have one memory layout and one calling convention: *E is an unsafe.Pointer,
-// and Policy[E] is policy with Pred[E] for Predicate and *E for
-// unsafe.Pointer, all of them one pointer or one struct of pointers.
-// TestErasedLayouts checks it. Load converts the function's address rather
-// than instantiating a conversion of Policy[E] and every closure in it for
-// each entity, which cost about 25 KiB in every entity package, used or not.
-type erasedPolicy = func(unsafe.Pointer) policy
+// BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
+// Desc.Policy. Its fields are not exported: only BindPolicy makes one.
+type BoundPolicy struct{ p *policy }
 
-// erasedHooks is Desc.Hooks, a func(*E) []Hook[E], with E erased: a Hook[E]
-// is a func(Mutator[E]) Mutator[E], and Mutator[E] an interface of the one
-// method Mutate(ctx, *Mutation[E]), which is called through the interface's
-// method table and so does not care which interface type holds it.
-type erasedHooks = func(unsafe.Pointer) []func(rawMutator) rawMutator
-
-// rawMutator is a Mutator[E] with E erased, as the hook functions see it.
-type rawMutator interface {
-	Mutate(ctx context.Context, m *mutation) error
+// BoundHooks is an entity's hooks with E erased, made by BindHooks for
+// Desc.Hooks. Its fields are not exported: only BindHooks makes one.
+type BoundHooks struct {
+	hs     []hookFn
+	nilAt1 int // 1 + the index of the first nil hook; 0 when none
 }
 
-// rawNext is a mutateFn as a rawMutator.
-type rawNext mutateFn
+// BindPolicy erases p's entity type, for Desc.Policy. velox-gen writes
+//
+//	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
+//
+// only for an entity that declares the Policy method, so that a method of
+// another signature does not compile, and an entity without one instantiates
+// nothing here. Load calls the function once, when it builds the metadata;
+// the method runs on a nil *E and must not read its receiver, nor, in its
+// body outside the functions it returns, the entity's own metadata (see
+// Policy).
+func BindPolicy[E any](p Policy[E]) BoundPolicy { return BoundPolicy{policyOf(p)} }
 
-func (f rawNext) Mutate(ctx context.Context, m *mutation) error { return f(ctx, m) }
+// BindHooks erases hs's entity type, for Desc.Hooks. velox-gen writes
+//
+//	Hooks: func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
+//
+// only for an entity that declares the Hooks method (see Hook). A nil hook is
+// refused when the metadata is built.
+func BindHooks[E any](hs []Hook[E]) BoundHooks {
+	var b BoundHooks
+	for i, f := range hs {
+		if f == nil {
+			b.nilAt1 = i + 1
+			return b
+		}
+		b.hs = append(b.hs, erase(f))
+	}
+	return b
+}
 
-// bindPolicy calls f, the Desc's Policy, on a nil *E and keeps its result in
-// info.
-func bindPolicy(info *EntityInfo, f erasedPolicy) error {
-	var pol policy
-	if err := recovered(info.Name, "Policy()", func() { pol = f(nil) }); err != nil {
+// erase returns h with E erased.
+func erase[E any](h Hook[E]) hookFn {
+	return func(next mutateFn) mutateFn {
+		typed := h(MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error { return next(ctx, (*mutation)(m)) }))
+		return func(ctx context.Context, mu *mutation) error {
+			if typed == nil {
+				return errNilMutator
+			}
+			return typed.Mutate(ctx, (*Mutation[E])(mu))
+		}
+	}
+}
+
+// bindPolicy calls f, the Desc's Policy, and keeps its result in info.
+func bindPolicy(info *EntityInfo, f func() BoundPolicy) error {
+	var b BoundPolicy
+	if err := recovered(info.Name, "Policy()", func() { b = f() }); err != nil {
 		return err
 	}
-	info.policy = &pol
+	info.policy = b.p
 	return nil
 }
 
-// bindHooks calls f, the Desc's Hooks, on a nil *E and keeps its hooks, with
-// the mutation type erased, in info. A nil hook is refused.
-func bindHooks(info *EntityInfo, f erasedHooks) error {
-	var hs []func(rawMutator) rawMutator
-	if err := recovered(info.Name, "Hooks()", func() { hs = f(nil) }); err != nil {
+// bindHooks calls f, the Desc's Hooks, and keeps its hooks in info. A nil
+// hook is refused.
+func bindHooks(info *EntityInfo, f func() BoundHooks) error {
+	var b BoundHooks
+	if err := recovered(info.Name, "Hooks()", func() { b = f() }); err != nil {
 		return err
 	}
-	for i, h := range hs {
-		if h == nil {
-			return errNilHook(info.Name, i)
-		}
-		info.hooks = append(info.hooks, func(next mutateFn) mutateFn {
-			typed := h(rawNext(next))
-			return func(ctx context.Context, mu *mutation) error {
-				if typed == nil {
-					return errNilMutator
-				}
-				return typed.Mutate(ctx, mu)
-			}
-		})
+	if b.nilAt1 != 0 {
+		return errNilHook(info.Name, b.nilAt1-1)
 	}
+	info.hooks = append(info.hooks, b.hs...)
 	return nil
 }
 

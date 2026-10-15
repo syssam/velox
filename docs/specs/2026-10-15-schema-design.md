@@ -187,7 +187,7 @@ func (*User) Hooks() []velox.Hook[User] {
 
 Validators therefore see what hooks set. In a transaction, the code after `next` runs before the commit; hooks after commit are out of scope. A hook cannot yet reach the caller's transaction: `Mutation` holds no DB and the context carries no transaction, so a write a hook makes itself runs outside it. Plan 3 decides how to expose it, for example `velox.TxOf(ctx)`. Under `SQL(ctx)`, `next` does not execute: `Result()` is empty and `velox.IsDryRun(ctx)` is true.
 
-**Detection:** velox-gen binds `Policy()` and `Hooks()` in the generated metadata when the entity declares them; a wrong signature does not compile, and an entity whose method the metadata does not bind is refused at first use. Nothing runs at program start.
+**Detection:** velox-gen binds `Policy()` and `Hooks()` in the generated metadata (`velox.BindPolicy` and `velox.BindHooks`) when the entity declares them; a wrong signature does not compile, and an entity whose method the metadata does not bind is refused at first use. Nothing runs at program start.
 
 Neither method's body may read the entity's own metadata outside the functions it returns: a `Has` or `HasWhere` there waits on the metadata's build in progress and deadlocks. Such predicates are built inside the returned functions.
 

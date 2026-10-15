@@ -30,23 +30,29 @@ type Desc[E any] struct {
 	Check func(col int, v any) error
 
 	// Policy and Hooks bind the entity's Policy and Hooks methods, when it
-	// declares them: velox-gen writes the method expressions (*E).Policy and
-	// (*E).Hooks, and leaves the fields nil when the entity has no such
-	// method. A method with another signature therefore does not compile
-	// (which is why no test checks it at run time), and an entity whose
-	// pointer type has a Policy or Hooks method that its Desc does not bind is
-	// refused at first use with a *SchemaError, so a policy or a hook is never
-	// silently left out.
+	// declares them. velox-gen writes
 	//
-	// Load calls each once, when it builds the metadata, on a nil *E: neither
-	// may read its receiver, and a panic in either becomes the entity's
-	// *SchemaError. Neither may read the entity's own metadata in its body,
-	// outside the functions it returns: a Has or HasWhere on a relation from
-	// or to the entity, or anything else that calls its VeloxMeta, waits on
-	// the build in progress and deadlocks. Build such predicates inside the
-	// returned functions, which run on each statement.
-	Policy func(*E) Policy[E]
-	Hooks  func(*E) []Hook[E]
+	//	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
+	//	Hooks:  func() velox.BoundHooks  { return velox.BindHooks((*E)(nil).Hooks()) },
+	//
+	// and leaves the field nil when the entity has no such method, so that an
+	// entity without them instantiates none of the policy and hook generics.
+	// A method with another signature does not compile (BindPolicy takes a
+	// Policy[E], BindHooks a []Hook[E]), which is why no test checks it at
+	// run time; and an entity whose pointer type has a Policy or Hooks method
+	// that its Desc does not bind is refused at first use with a
+	// *SchemaError, so a policy or a hook is never silently left out.
+	//
+	// Load calls each function once, when it builds the metadata: the
+	// methods run on a nil *E, so neither may read its receiver, and a panic
+	// in either becomes the entity's *SchemaError. Neither method may read the
+	// entity's own metadata in its body, outside the functions it returns: a
+	// Has or HasWhere on a relation from or to the entity, or anything else
+	// that calls its VeloxMeta, waits on the build in progress and deadlocks.
+	// Build such predicates inside the returned functions, which run on each
+	// statement.
+	Policy func() BoundPolicy
+	Hooks  func() BoundHooks
 }
 
 // ColumnDesc describes one column of a Desc.
@@ -112,14 +118,14 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 			return v
 		})
 		addr := d.Addr
-		// The binding is not generic: it takes the two functions with E
-		// erased (see erasedPolicy), so that an entity whose Desc leaves them
-		// nil does not compile a Policy or Hook instantiation it never uses.
+		// Desc.Policy and Desc.Hooks have E erased (BoundPolicy, BoundHooks):
+		// the generated code instantiates BindPolicy and BindHooks, so that
+		// an entity that has neither compiles no Policy or Hook generic.
 		if err == nil && d.Policy != nil {
-			err = bindPolicy(info, *(*erasedPolicy)(unsafe.Pointer(&d.Policy)))
+			err = bindPolicy(info, d.Policy)
 		}
 		if err == nil && d.Hooks != nil {
-			err = bindHooks(info, *(*erasedHooks)(unsafe.Pointer(&d.Hooks)))
+			err = bindHooks(info, d.Hooks)
 		}
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan, as in Get

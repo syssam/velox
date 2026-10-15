@@ -166,4 +166,4 @@ Left by the observability plan:
 - The generated `Addr` and `RelAddr` must be allocation-free switches (as the test model's are not yet: some build an array per call).
 - `Desc.Tenant`'s zero value means column 0, so the generator always writes it (`-1` for none).
 - `ValidationError` names the Go field, while `ErrImmutable` names the column.
-- `MetaOnce.Load` binds `Desc.Policy` and `Desc.Hooks` through `unsafe` conversions of the two functions, not generic code, so that an entity without them compiles no Policy or Hook instantiation (about 78 KiB). `TestErasedLayouts` pins the layouts the conversion relies on; a change to `Policy`, `Hook`, `Mutator` or `Mutation` must keep it passing.
+- The generator writes `Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) }` and the like for `Hooks` (`BindHooks`), only for an entity that declares the method. `Load` itself holds no Policy or Hook generic, so an entity without them pays nothing (about 80 KiB each otherwise).

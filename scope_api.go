@@ -91,9 +91,9 @@ func policyBypass(ctx context.Context) string {
 //	func (*E) Policy() velox.Policy[E]
 //
 // or, on the old path, in its Schema method with Schema.Policy. velox-gen
-// binds the method in the generated metadata (Desc.Policy is (*E).Policy): a
-// method with another signature does not compile, and one the metadata does
-// not bind is refused at the entity's first use. velox calls it once, when it
+// binds the method in the generated metadata (Desc.Policy calls
+// BindPolicy on it): a method with another signature does not compile, and
+// one the metadata does not bind is refused at the entity's first use. velox calls it once, when it
 // builds the metadata, on a nil *E, so the method must not read its receiver.
 // Nor may its body, outside the functions it returns, read the entity's own
 // metadata (a Has or HasWhere on a relation from or to it, say): that waits on

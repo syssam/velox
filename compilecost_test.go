@@ -274,8 +274,8 @@ var (
 // methods.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		Tenant:     -1,
 		Relations:`, `		Tenant:     -1,
-		Policy:     (*E).Policy,
-		Hooks:      (*E).Hooks,
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
 		Relations:`, 1)
 
 // genericObjects is one unexported variable of each exported generic type,
@@ -341,26 +341,28 @@ var genericObjects = []struct {
 	// Remeasured on 2026-10-15 after schema plan 2's typed hooks: EntityInfo
 	// reaches the hooks' mutation, and entityUse compiles the hooks branch of
 	// each write and insertBatches.
-	{"entity", "", entitySrc, 154624},       // measured 132988 (134630 when last recorded, 127904 before typed hooks, 123318 before that, 119972 before observability, 98878 before policy 2)
-	{"entityUse", "", entityUseSrc, 784384}, // measured 760732 (761664 when last recorded, 731746 before typed hooks, 717868 before that, 709930 before observability, 673936 before policy 2)
+	{"entity", "", entitySrc, 154624},       // measured 132168 (134630 when last recorded, 127904 before typed hooks, 123318 before that, 119972 before observability, 98878 before policy 2)
+	{"entityUse", "", entityUseSrc, 784384}, // measured 759910 (761664 when last recorded, 731746 before typed hooks, 717868 before that, 709930 before observability, 673936 before policy 2)
 	// The Desc path, remeasured on 2026-10-15 after Desc gained Policy and
-	// Hooks. entityDesc is entity on the Desc path: Load costs about 24 KiB
-	// more than Get. It was 237706 when Load checked E for Policy and Hooks
-	// methods through interfaces, and 229594 when it called generic functions
-	// to bind the new fields: 80 KiB of Policy and Hook instantiations in
-	// every entity's package, which an entity without the methods never used.
-	// Load now binds the two fields through unsafe
-	// conversions of their addresses (erasedPolicy and erasedHooks), so that
-	// only an entity that declares the methods pays for them, in its own
-	// generated code. entityDescUse is entityUse on Desc (854600 before),
-	// entityDescHooks is that with a Policy and three hooks bound through the
-	// fields (990872 before, from the same source without the bindings).
+	// Hooks. entityDesc is entity on the Desc path: with nothing bound it is
+	// 8 KiB under entity (Load takes no Policy or Hook generic). It was
+	// 237706 when Load checked E for Policy and Hooks methods through
+	// interfaces, and 157092 with an unsafe conversion of method expressions:
+	// 80 KiB of Policy and Hook instantiations in every entity's package,
+	// which an entity without the methods never used. The fields now hold
+	// E-erased BoundPolicy and BoundHooks, made by BindPolicy and BindHooks in
+	// the entity's own generated code, so that only an entity that declares
+	// the methods instantiates those generics. entityDescUse is entityUse on
+	// Desc (854600 with the interface check). entityDescHooks is that with a
+	// Policy and three hooks bound through the fields (990872 with the
+	// interface check, from the same source without the bindings); the
+	// generics it instantiates are the cost of having a policy and hooks.
 	// Their maxima follow the rule above.
-	{"entityDesc", "", entityDescSrc, 196608},             // measured 157092
-	{"entityDescUse", "", entityDescUseSrc, 826368},       // measured 760422
-	{"entityDescHooks", "", entityDescHooksBound, 982016}, // measured 916132
-	{"Policy", "velox.Policy[E]", "", 8192},               // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 9216},           // measured 3572
+	{"entityDesc", "", entityDescSrc, 155648},              // measured 124438
+	{"entityDescUse", "", entityDescUseSrc, 787456},        // measured 721136
+	{"entityDescHooks", "", entityDescHooksBound, 1065984}, // measured 999852
+	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
+	{"Mutation", "velox.Mutation[E]", "", 9216},            // measured 3572
 }
 
 // policyGrowthMax bounds the bytes a Policy and the three entity hooks add to

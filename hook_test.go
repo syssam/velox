@@ -207,7 +207,7 @@ func (*hFlex) VeloxMeta() *velox.Meta[hFlex] { return hFlexMeta.Load(hFlexDesc) 
 
 func hFlexDesc() velox.Desc[hFlex] {
 	return velox.Desc[hFlex]{
-		Hooks: (*hFlex).Hooks,
+		Hooks: func() velox.BoundHooks { return velox.BindHooks((*hFlex)(nil).Hooks()) },
 		Table: "flex",
 		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
@@ -303,7 +303,7 @@ var hNilMeta velox.MetaOnce[hNil]
 
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Desc[hNil] {
-		return velox.Desc[hNil]{Hooks: (*hNil).Hooks, Table: "n", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hNil]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNil)(nil).Hooks()) }, Table: "n", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
@@ -320,7 +320,7 @@ var hPanicMeta velox.MetaOnce[hPanic]
 
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Desc[hPanic] {
-		return velox.Desc[hPanic]{Policy: (*hPanic).Policy, Table: "p", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hPanic]{Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hPanic)(nil).Policy()) }, Table: "p", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
@@ -503,7 +503,7 @@ var hNilMutMeta velox.MetaOnce[hNilMut]
 
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Desc[hNilMut] {
-		return velox.Desc[hNilMut]{Hooks: (*hNilMut).Hooks, Table: "m", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hNilMut]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hNilMut)(nil).Hooks()) }, Table: "m", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
@@ -520,7 +520,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Desc[hPanicHooks] {
-		return velox.Desc[hPanicHooks]{Hooks: (*hPanicHooks).Hooks, Table: "ph", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hPanicHooks]{Hooks: func() velox.BoundHooks { return velox.BindHooks((*hPanicHooks)(nil).Hooks()) }, Table: "ph", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
@@ -623,8 +623,8 @@ func (*uPlain) VeloxMeta() *velox.Meta[uPlain] {
 }
 
 // A Policy or Hooks method with the wrong signature needs no test here: the
-// method expression velox-gen writes into Desc.Policy or Desc.Hooks does not
-// compile.
+// BindPolicy or BindHooks call velox-gen writes into Desc.Policy or
+// Desc.Hooks does not compile.
 func TestUnboundMethodsAreRefused(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
@@ -677,7 +677,7 @@ var hUpMeta velox.MetaOnce[hUp]
 func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 	return hUpMeta.Load(func() velox.Desc[hUp] {
 		return velox.Desc[hUp]{
-			Policy: (*hUp).Policy, Hooks: (*hUp).Hooks,
+			Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hUp)(nil).Policy()) }, Hooks: func() velox.BoundHooks { return velox.BindHooks((*hUp)(nil).Hooks()) },
 			Table: "ups", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
 		}
