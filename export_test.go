@@ -39,6 +39,7 @@ type FakeExec struct {
 	Log       []string // every statement, and BEGIN, COMMIT, ROLLBACK
 	Errs      []error  // returned by the next calls, one each, before Err
 	CommitErr error
+	BeginErr  error // what BEGIN returns
 	// RollbackErr is what ROLLBACK returns, as pgx does once it has closed a
 	// connection whose statement a deadline cut off.
 	RollbackErr error
@@ -114,6 +115,9 @@ func (e *FakeExec) begin(_ context.Context, o txOptions) (executor, txControl, e
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.Log = append(e.Log, "BEGIN")
+	if e.BeginErr != nil {
+		return nil, nil, e.BeginErr
+	}
 	e.Isolation, e.ReadOnly = o.isolation, o.readOnly
 	return e, fakeTx{e}, nil
 }

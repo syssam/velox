@@ -14,7 +14,9 @@ import (
 type Config struct {
 	TracerProvider trace.TracerProvider // nil: otel.GetTracerProvider()
 	MeterProvider  metric.MeterProvider // nil: otel.GetMeterProvider()
-	// App names the application in the SQL comment; empty: no comment.
+	// App names the application in the SQL comment; empty: no comment. The
+	// comment carries the call site, so pgx prepares a statement per call
+	// site per connection: see the package doc on sizing its cache.
 	App string
 	// CommentTags are the velox.WithTags keys the SQL comment carries, in
 	// this order. List only tags whose values are stable per code path (a

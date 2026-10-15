@@ -149,17 +149,22 @@ func TestStatementMetrics(t *testing.T) {
 		t.Errorf("%d durations, %d of them failed; want 4, 1", count, failed)
 	}
 
+	// The two reads that succeeded; the failed one returned no rows to
+	// count.
 	var rows int64
 	count = 0
 	for _, dp := range intPoints(t, r, "db.client.response.returned_rows", "{row}", wantRowBounds) {
 		if op, _ := dp.Attributes.Value("db.operation.name"); op.AsString() != "SELECT" {
 			t.Errorf("returned rows for %s", op.AsString())
 		}
+		if _, ok := dp.Attributes.Value("error.type"); ok {
+			t.Errorf("returned rows for a failed read: %v", dp.Attributes.ToSlice())
+		}
 		rows += dp.Sum
 		count += dp.Count
 	}
-	if rows != 3 || count != 3 {
-		t.Errorf("returned rows: %d in %d points, want 3 in 3", rows, count)
+	if rows != 3 || count != 2 {
+		t.Errorf("returned rows: %d in %d points, want 3 in 2", rows, count)
 	}
 }
 
@@ -257,7 +262,9 @@ func TestMetricFingerprint(t *testing.T) {
 
 func TestTxDurationMetric(t *testing.T) {
 	// The first transaction commits; the second's first attempt fails its
-	// SELECT on a serialization failure, and its second commits.
+	// SELECT on a serialization failure, and its second commits. Then one
+	// rolls back, one fails its commit, one read-only one commits, and one
+	// panics in fn, which is a rollback.
 	f := &fakeDB{}
 	db, r := metered(t, f, veloxotel.Config{})
 	fn := func(tx *velox.DB) error {
@@ -271,6 +278,23 @@ func TestTxDurationMetric(t *testing.T) {
 	if err := db.Tx(ctx, fn, velox.RetrySerializable(1)); err != nil {
 		t.Fatal(err)
 	}
+	boom := errors.New("boom")
+	if err := db.Tx(ctx, func(*velox.DB) error { return boom }); !errors.Is(err, boom) {
+		t.Fatalf("rollback: %v", err)
+	}
+	f.commitErr = boom
+	if err := db.Tx(ctx, fn); !errors.Is(err, boom) {
+		t.Fatalf("commit fails: %v", err)
+	}
+	f.commitErr = nil
+	if err := db.Tx(ctx, fn, velox.ReadOnly()); err != nil {
+		t.Fatal(err)
+	}
+	func() {
+		defer func() { _ = recover() }()
+		_ = db.Tx(ctx, func(*velox.DB) error { panic("in fn") })
+		t.Error("Tx did not re-raise the panic")
+	}()
 	got := map[string]uint64{}
 	for _, dp := range points(t, r, "velox.tx.duration", "s", wantDurationBounds) {
 		var kv []string
@@ -280,8 +304,11 @@ func TestTxDurationMetric(t *testing.T) {
 		got[strings.Join(kv, ",")] += dp.Count
 	}
 	want := map[string]uint64{
-		"velox.tx.outcome=commit,velox.tx.read_only=false,velox.tx.retried=false": 1,
-		"velox.tx.outcome=commit,velox.tx.read_only=false,velox.tx.retried=true":  1,
+		"velox.tx.outcome=commit,velox.tx.read_only=false,velox.tx.retried=false":   1,
+		"velox.tx.outcome=commit,velox.tx.read_only=false,velox.tx.retried=true":    1,
+		"velox.tx.outcome=rollback,velox.tx.read_only=false,velox.tx.retried=false": 2,
+		"velox.tx.outcome=error,velox.tx.read_only=false,velox.tx.retried=false":    1,
+		"velox.tx.outcome=commit,velox.tx.read_only=true,velox.tx.retried=false":    1,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("points %v, want %v", got, want)

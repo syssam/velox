@@ -100,8 +100,9 @@ type Statement struct {
 	SQL         string // set by rendering, after the rewrite hooks: the text sent, WithSQLComment's comment included
 	Fingerprint string // set by rendering: the shape's ID, the hash of SQL without the comment
 	Args        []any  // set by rendering
-	// Result is set by each execution, before next returns to the Around
-	// hooks; a hook that retries sees the last attempt's.
+	// Result is reset before the Around hooks run, and set by each
+	// execution before next returns to them; a hook that retries sees the
+	// last attempt's.
 	Result Result
 }
 
@@ -113,7 +114,7 @@ type Result struct {
 	Rows int64
 	// Affected is the rows a write affected: the driver's count for one sent
 	// without RETURNING, the rows returned for one sent with it. It is -1
-	// for a read, for a failed statement, and when the driver does not say.
+	// for a read and for a failed statement.
 	Affected int64
 }
 

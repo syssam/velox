@@ -26,7 +26,8 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	sctx, span := a.tracer.Start(parent, operation(st)+" "+collection(st),
 		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
-	// the adapter never recovers one.
+	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
+	// reported the same way, with the description "panic".
 	ended := false
 	defer func() {
 		if !ended {
@@ -59,7 +60,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 
 // attributes are a statement's span attributes known before it runs.
 func (a *adapter) attributes(st *velox.Statement) []attribute.KeyValue {
-	kv := make([]attribute.KeyValue, 0, 12+len(st.Tags))
+	kv := make([]attribute.KeyValue, 0, 13+len(st.Tags))
 	kv = append(kv,
 		attribute.String(attrDBSystem, dbSystem(st.Dialect)),
 		attribute.String(attrDBOperation, operation(st)),

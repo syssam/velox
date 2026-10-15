@@ -148,7 +148,7 @@ var genericObjects = []struct {
 	// types (Caller, Tag, Result, TxInfo, TxRetry) are export data in every
 	// package that reaches a Statement or a DB: +242 bytes for Statement
 	// (566 → 808 against the commit before the plan), up to +240 for the
-	// handles, 3.3 KiB for entity and 7.9 KiB for entityUse. Nothing in
+	// handles, 3.3 KiB for entity and 7.75 KiB (7,938 bytes) for entityUse. Nothing in
 	// observability is generic (TestObservabilityIsNotGeneric), so this is
 	// export data only; some rows had also drifted since 2026-10-14.
 	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14312

@@ -20,9 +20,10 @@ type Caller struct {
 }
 
 // WithCallers records each statement's call site in Statement.Caller. It
-// costs one runtime.Callers per statement, and nothing more once a call
-// site's program counters are cached: each is resolved once per DB, for up to
-// 4,096 of them.
+// costs one runtime.Callers per batch of up to 8 frames between velox and the
+// call site, usually one per statement, and nothing more once a call site's
+// program counters are cached: each is resolved once per DB, for up to 4,096
+// of them.
 func WithCallers() Option {
 	return func(c *config) {
 		if c.callers == nil {
@@ -95,7 +96,7 @@ func (c *callers) load() {
 // capture returns the call site of the statement being run: the first frame,
 // within 64, outside velox and skip; zero when there is none. The first batch
 // is as many frames as the last call site was down (4 to 8, 4 at first), the
-// next ones 8.
+// next ones 8, the last cut to end at the 64th.
 func (c *callers) capture() Caller {
 	c.once.Do(c.load)
 	var pcs [8]uintptr
@@ -107,7 +108,7 @@ func (c *callers) capture() Caller {
 	for skip := 2; skip < 2+64; {
 		n := runtime.Callers(skip, pcs[:size])
 		if i, caller, ok := c.find(pcs[:n]); ok {
-			if d := min(skip-2+i+1, len(pcs)); d != int(c.depth.Load()) {
+			if d := max(min(skip-2+i+1, len(pcs)), 4); d != int(c.depth.Load()) {
 				c.depth.Store(int32(d))
 			}
 			return caller
@@ -116,7 +117,8 @@ func (c *callers) capture() Caller {
 			break
 		}
 		skip += size
-		size = len(pcs)
+		// The last batch stops at the 64th frame.
+		size = min(len(pcs), 2+64-skip)
 	}
 	return Caller{}
 }

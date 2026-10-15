@@ -112,6 +112,7 @@
     - An instrument-creation error goes to `otel.Handle`, and the instrument the API returned is used.
 18. **`contrib/otel`'s tests run on a `database/sql` fake driver in its test files.** Velox's `FakeExec` lives in the root package's test files and cannot be imported. The entities are `internal/testmodel`'s: Go's internal rule goes by import path, and `contrib/otel`'s path is under `github.com/syssam/velox2`.
 19. **The example's tracing section lives in `example/tracing.go`,** so the call-site line numbers in its golden output do not move when `main.go` changes.
+    - When the examples were split into one directory per topic, the tracing section became its own example, `example/otel`.
 20. **CI runs `contrib/otel` from Task 6, where the module is created, not Task 8.** Task 7 changes the module, and `ci-local.sh` is the gate before every push, so the module is checked from its first commit.
 
 ## Review Focus

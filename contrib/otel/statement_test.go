@@ -235,6 +235,18 @@ func TestRecordTenant(t *testing.T) {
 	}
 }
 
+// TestTenantNotRecordedByDefault: without RecordTenant, a tenant-scoped
+// statement's span has no velox.tenant.
+func TestTenantNotRecordedByDefault(t *testing.T) {
+	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(context.Background(), int64(7))); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := attrs(only(t, exp))["velox.tenant"]; ok {
+		t.Errorf("velox.tenant = %v", v.String())
+	}
+}
+
 func TestPolicyBypass(t *testing.T) {
 	f := &fakeDB{cols: []string{}}
 	db, exp, _ := traced(t, f, veloxotel.Config{})

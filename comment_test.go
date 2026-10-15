@@ -113,8 +113,8 @@ func TestSQLCommentPanics(t *testing.T) {
 	for _, args := range [][]string{{""}, {"billing", ""}, {"billing", "route", "route"}, {"billing", "app"}, {"billing", "caller"}} {
 		func() {
 			defer func() {
-				if r := recover(); r == nil || !strings.Contains(r.(string), "velox: WithSQLComment") {
-					t.Errorf("WithSQLComment(%q): recovered %v", args, r)
+				if msg, _ := recover().(string); !strings.Contains(msg, "velox: WithSQLComment") {
+					t.Errorf("WithSQLComment(%q): recovered %q", args, msg)
 				}
 			}()
 			velox.WithSQLComment(args[0], args[1:]...)

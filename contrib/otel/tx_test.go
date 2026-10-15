@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -242,5 +243,30 @@ func TestTxAroundAlone(t *testing.T) {
 	}
 	if s := only(t, exp); s.Name != "velox.tx" {
 		t.Errorf("span %q", s.Name)
+	}
+}
+
+// TestTxAroundInnerHookWithoutNext: an inner hook that returns without
+// calling next leaves velox no outcome to report; the span and the metric
+// say error, one of velox.tx.outcome's three values, not "unknown".
+func TestTxAroundInnerHookWithoutNext(t *testing.T) {
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	r := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()); _ = mp.Shutdown(context.Background()) })
+	refuse := velox.WithTxAround(func(context.Context, *velox.TxInfo, func(context.Context) error) error { return nil })
+	opts := append(veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp}), refuse)
+	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), opts...)
+	if err := db.Tx(ctx, func(*velox.DB) error { return nil }); err == nil {
+		t.Fatal("no error")
+	}
+	if a := attrs(only(t, exp)); a["velox.tx.outcome"] != attribute.StringValue("error") {
+		t.Errorf("velox.tx.outcome %q", a["velox.tx.outcome"].String())
+	}
+	for _, dp := range points(t, r, "velox.tx.duration", "s", wantDurationBounds) {
+		if o, _ := dp.Attributes.Value("velox.tx.outcome"); o.AsString() != "error" {
+			t.Errorf("velox.tx.duration's velox.tx.outcome %q", o.AsString())
+		}
 	}
 }

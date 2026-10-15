@@ -23,9 +23,9 @@ Made by the author during design (2026-10-15):
 - **The OpenTelemetry adapter lives in `./contrib/otel`,** as its own Go module (`github.com/syssam/velox2/contrib/otel`). The core module keeps no OpenTelemetry dependency. Core exposes vendor-neutral data; any other vendor's adapter can use it.
 - **1.0 ships spans and metrics.** A slow-query log and log records are out of scope.
 - **The SQL comment carries stable values only:** the application, the call site, and context tags the application lists. It never carries a trace ID or a tenant.
-  - pgx caches prepared statements by SQL text.
-  - PostgreSQL's `pg_stat_statements`, and MySQL's digest, group by text or shape.
-  - A per-request value would defeat both.
+  - pgx caches prepared statements by SQL text, so a per-request value would defeat its cache.
+  - `pg_stat_activity` shows the text, which a per-request value makes hard to read.
+  - PostgreSQL's `pg_stat_statements` and MySQL's digest normalise comments away, so a comment does not split their statistics. (This design first said it would; the final review corrected it.)
 - **Metric keys have bounded cardinality.** They are the database system, operation, table, entity and error type. The fingerprint is on every span; it is added to metrics only when the application asks.
 - **`./example` is a runnable example module.** It shows velox2's API end to end and gains a tracing section when `contrib/otel` exists. CI runs it.
 
@@ -90,8 +90,9 @@ SELECT … FROM "invoices" WHERE … /*app='billing',caller='billing%2Finvoice.g
 - **Two copies of the text:** `Statement.SQL` is the text sent, comment included. The fingerprint is of the text without the comment.
 - **Hooks:** a `Rewrite` hook sees no comment, because rendering comes after it. It may change `Caller` and `Tags`, and the comment is rendered from what it leaves. An `Around` hook sees the sent text.
 - **`SQL(ctx)`** includes the comment, with the call site of the `SQL` call: it returns the text that would be sent from there.
-- **Misuse:** `WithSQLComment` with an empty `app` panics at `Open`, as `WithAround(nil)` does.
-- **Cache safety:** applications must list only tags whose values are stable per code path, such as a route template, never an ID. The documentation says so with the pgx cache reason.
+- **Misuse:** `WithSQLComment` panics when it is called, in `Open`'s argument list, as `WithAround(nil)` does: with an empty `app`, or a listed tag name that is empty, repeated, `app` or `caller`.
+- **Cache safety:** applications must list only tags whose values are stable per code path, such as a route template, never an ID. The documentation says so with the reasons: pgx caches prepared statements by their text, so a per-request value would prepare a statement per request, and it would make `pg_stat_activity` hard to read. `pg_stat_statements` and MySQL's digest normalise comments away, so their statistics are not split.
+- **Call sites and pgx's statement cache:** with `WithCallers` on, each call site of a shape is a distinct statement text, so pgx prepares one statement per call site per connection. One shape called from many sites multiplies statements against pgx's per-connection cache, which holds 512 by default. The documentation (`WithSQLComment`, and `contrib/otel`'s `Config` and package doc) says to size `pgxpool.Config.ConnConfig.StatementCacheCapacity` for it, or to use `WithSQLComment` without callers.
 
 ### 1.4 Tags
 
@@ -114,7 +115,7 @@ type Result struct {
 
 - **`Rows`** counts the rows read, an `INSERT … RETURNING`'s and a `Count`'s single row included. Rows are counted only when an `Around` hook exists or a row cap applies: otherwise nothing can read it, and counting would add an allocation.
 - **`Affected`** is the driver's count for a write sent without `RETURNING`, the rows returned for one sent with it, and -1 for a read or a failed statement.
-- **Each execution** resets `Result` first, so a retrying `Around` hook sees the last attempt's.
+- **Each execution** resets `Result` first, so a retrying `Around` hook sees the last attempt's. It is also reset before the `Around` hooks run, so an outer hook sees `Affected: -1` and `Rows: 0` when an inner one refuses without calling `next`.
 
 ### 1.6 Transactions
 
@@ -128,7 +129,7 @@ type TxInfo struct {
     Isolation sql.IsolationLevel
     ReadOnly  bool
     Attempt   int                // 1 for the first try; RetrySerializable increments it
-    Context   context.Context    // the context the hooks passed to next
+    Context   context.Context    // what the hooks passed to next; Tx's bounded context when there are none
     Retries   []TxRetry          // the attempts RetrySerializable retried, in order
     Outcome   TxOutcome          // how the last attempt ended; set before next returns
 }
@@ -150,7 +151,8 @@ type TxOutcome uint8 // TxCommit, TxRollback or TxError; String gives "commit", 
   - a panic or `runtime.Goexit` in `fn` is `TxRollback`.
 - **Statements inside:** each gets `Statement.Tx` pointing to the transaction's `TxInfo`. An adapter can then parent a statement's span on `Tx.Context`'s span even when the application passed its own context to the query.
 - **Cost:** a `TxInfo` is made only when the DB has a hook of any kind (`Rewrite`, `Around` or `TxAround`); otherwise `Statement.Tx` is nil. Nothing else can read it, so a DB with nothing configured allocates nothing more per transaction.
-- **Rules as for `Around`:** a `TxAround` hook must call `next` exactly once, or return an error of its own without calling it. Calling `next` a second time returns an error without running `fn`. Its errors are returned unchanged. `WithTxAround(nil)` panics at `Open`.
+- **Rules as for `Around`:** a `TxAround` hook must call `next` exactly once, or return an error of its own without calling it. Calling `next` a second time returns an error without running `fn`. Its errors are returned unchanged. If a hook recovers a panic from `next` and returns nil, `Tx` returns an error, since the transaction was rolled back; the outcome stays `TxRollback`. `WithTxAround(nil)` panics at `Open`.
+- **velox's deadline:** past it, a transaction is never committed and its error matches `ErrTimeout`, even when a hook passed on a context without the deadline.
 
 ### 1.7 Statement fields, together
 
@@ -223,7 +225,7 @@ The `code.*` names are those of the semantic-convention release whose `db.*` nam
 `TxAround` makes one span per `db.Tx` call, named `velox.tx`, of kind internal, with these attributes:
 - `velox.tx.isolation`, `sql.IsolationLevel.String()` (for example `Default`), and `velox.tx.read_only`;
 - `velox.tx.attempts`, the final count;
-- `velox.tx.outcome`, `TxInfo.Outcome` (§1.6): `commit`, `rollback` (the function returned an error, or panicked), or `error` (begin or commit failed, or the deadline passed).
+- `velox.tx.outcome`, `TxInfo.Outcome` (§1.6): `commit`, `rollback` (the function returned an error, or panicked), or `error` (begin or commit failed, the deadline passed, or an inner hook returned without calling `next`, which leaves velox no outcome).
 
 Each retry adds a span event `retry` carrying the error type. The events are added after `next` returns, stamped with `TxRetry.At`.
 
@@ -236,8 +238,10 @@ The instruments follow OpenTelemetry's database semantic conventions where they 
 | Instrument | Kind, unit | Attributes |
 |---|---|---|
 | `db.client.operation.duration` | histogram, s | `db.system.name`, `db.operation.name`, `db.collection.name`, `velox.entity`, `error.type` (when failed); `velox.fingerprint` only with `Config.MetricFingerprint` |
-| `db.client.response.returned_rows` | histogram, {row} | as above, reads only |
+| `db.client.response.returned_rows` | histogram, {row} | as above, for reads that succeeded only (so never `error.type`) |
 | `velox.tx.duration` | histogram, s | `velox.tx.outcome`, `velox.tx.read_only`, `velox.tx.retried` (bool) |
+
+A transaction whose function panics, or calls `runtime.Goexit`, still records its `velox.tx.duration` point, with the outcome `rollback`.
 
 Histogram boundaries are the conventions' recommended ones for durations (from 0.001 s to 10 s), and powers of 4 up to 65,536 for rows. Cardinality is bounded by entities × 4 operations × the error-type values. With `MetricFingerprint`, it is bounded by the render cache's 4,096 shapes per process.
 
@@ -279,7 +283,7 @@ Observability never changes what a statement returns. A panic in the adapter is 
   - **Statement fields:** `Result` for reads and writes, and `Tx` on statements inside `db.Tx` and its savepoints.
   - **`TxAround`:** ordering, retries and errors.
   - **Budgets:** the tests unchanged with nothing configured, and a new budget test with callers and comments on.
-- **`contrib/otel`,** with OpenTelemetry's in-memory span exporter and a manual metric reader on velox's fake executor:
+- **`contrib/otel`,** with OpenTelemetry's in-memory span exporter and a manual metric reader, on a `database/sql` fake driver in its test files (velox's fake executor is in the root package's test files, which another module cannot import):
   - span names and attributes for every operation;
   - error types;
   - the transaction span tree when the application passes its own context;
@@ -292,7 +296,7 @@ Observability never changes what a statement returns. A panic in the adapter is 
 ## 6. Performance
 
 - **Nothing configured:** Core's budgets (Core §8) are unchanged, and the fingerprint is computed into the render cache.
-- **`WithCallers` and `WithSQLComment` on, cached statement:** velox adds at most 1 allocation and 300 ns per statement over the same statement without them.
+- **`WithCallers` and `WithSQLComment` on, cached statement:** velox adds at most 1 allocation per statement over the same statement without them, and aims at 300 ns; measured above it, see below.
   - The allocation is asserted: `TestObservedOneRowBudget` (7 allocations against 6).
   - The time is measured, not asserted, as Core §8 does for its own times, because times vary between machines and under `-race`. It is read from `BenchmarkOneRow` against `BenchmarkOneRowObserved`.
 - **`contrib/otel`:** its cost beyond OpenTelemetry's SDK is benchmarked and reported, not budgeted: `BenchmarkAdapter` (a one-row read with `Options`, on an SDK tracer provider with a discarding exporter and a manual metric reader) against `BenchmarkBareSpan` (the same read, with an `Around` hook that only starts and ends one span).
@@ -301,14 +305,14 @@ Measured on 2026-10-15, darwin/arm64 (Apple M3 Max, 14 cores), against the fake 
 
 | Benchmarks | Run | Time | Added | Allocations | Load |
 |---|---|---|---|---|---|
-| `BenchmarkOneRow` / `BenchmarkOneRowObserved` | minimum of 600 alternating batches of 2,000 reads (Task 5) | 0.69 / 1.03 µs | +340 ns | 6 / 7 | 20–45 |
-| the same | medians of `-count 10` (Task 8) | 0.87 / 1.38 µs | +518 ns | 6 / 7 | 19–26 |
-| the same | 10 interleaved pairs (Task 8) | medians 0.85 / 1.35 µs | median +478 ns (300 to 652) | 6 / 7 | 15–19 |
-| `BenchmarkBareSpan` / `BenchmarkAdapter` | medians of `-count 10` (Task 8) | 3.9 / 9.0 µs | +5.1 µs | 25 / 41 | 19–21 |
-| the same | 10 interleaved pairs (Task 8) | medians 3.2 / 9.2 µs | median +5.4 µs (4.3 to 8.2) | 25 / 41 | 15–19 |
+| `BenchmarkOneRow` / `BenchmarkOneRowObserved` | minimum of 600 alternating batches of 2,000 reads (while building the budget guards) | 0.69 / 1.03 µs | +340 ns | 6 / 7 | 20–45 |
+| the same | medians of `-count 10` (while building the example) | 0.87 / 1.38 µs | +518 ns | 6 / 7 | 19–26 |
+| the same | 10 interleaved pairs (while building the example) | medians 0.85 / 1.35 µs | median +478 ns (300 to 652) | 6 / 7 | 15–19 |
+| `BenchmarkBareSpan` / `BenchmarkAdapter` | medians of `-count 10` (while building the example) | 3.9 / 9.0 µs | +5.1 µs | 25 / 41 | 19–21 |
+| the same | 10 interleaved pairs (while building the example) | medians 3.2 / 9.2 µs | median +5.4 µs (4.3 to 8.2) | 25 / 41 | 15–19 |
 
-- **The 300 ns aim is exceeded.** The medians put velox's added time at about 480 to 520 ns; the minimum, the figure least affected by the load, at 340 ns. Task 5's profile split the 340 ns into the comment's join (about 80 ns) and one `runtime.Callers` (about 260 ns; unwinding costs about 60 ns a frame, the two skipped ones included). The first unwind is already sized to the last call site's depth (§1.2), so most of what remains is the unwinder's own cost. A quiet machine should re-measure before the number is cut further or the aim changed.
-- **Runs at a load average of 39 to 52,** earlier the same day and in Task 7, are not in the table: their medians moved by up to 4x between runs, and in one `-count 10` run the observed read's median was below the plain one's.
+- **The 300 ns aim is exceeded.** The medians put velox's added time at about 480 to 520 ns; the minimum, the figure least affected by the load, at 340 ns. A profile taken with that minimum split the 340 ns into the comment's join (about 80 ns) and one `runtime.Callers` (about 260 ns; unwinding costs about 60 ns a frame, the two skipped ones included). The first unwind is already sized to the last call site's depth (§1.2), so most of what remains is the unwinder's own cost. A quiet machine should re-measure before the number is cut further or the aim changed.
+- **Runs at a load average of 39 to 52,** earlier the same day and while the transaction metrics were built, are not in the table: their medians moved by up to 4x between runs, and in one `-count 10` run the observed read's median was below the plain one's.
 - **The allocations are stable** in every run: the observed read makes 1 more than the plain one, and the adapter 16 more than a bare span. The adapter's 16 are its metric attribute set (3), the span's attribute slice and start options, the SDK's handling of the extra attributes, and the call-site lookup.
 - **`contrib/otel`'s time** is the SDK's as much as the adapter's: most of the difference is the SDK storing the span's attributes and recording two histogram points. For scale, a database round trip is typically 100 µs or more.
 

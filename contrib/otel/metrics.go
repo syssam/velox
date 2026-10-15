@@ -41,9 +41,10 @@ func handle(err error) {
 	}
 }
 
-// record records a statement's duration, and a read's rows, after it ran
-// (not on a panic). Its attributes are bounded: never the tags, tenant, SQL
-// or call site, and the fingerprint only with Config.MetricFingerprint.
+// record records a statement's duration, and a successful read's rows,
+// after it ran (not on a panic). Its attributes are bounded: never the tags,
+// tenant, SQL or call site, and the fingerprint only with
+// Config.MetricFingerprint.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error) {
 	kv := make([]attribute.KeyValue, 0, 6)
 	kv = append(kv,
@@ -60,7 +61,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float
 	}
 	set := metric.WithAttributeSet(attribute.NewSet(kv...))
 	a.duration.Record(ctx, seconds, set)
-	if st.Op == velox.OpSelect {
+	if st.Op == velox.OpSelect && err == nil {
 		a.returned.Record(ctx, st.Result.Rows, set)
 	}
 }

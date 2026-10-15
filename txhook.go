@@ -28,7 +28,7 @@ type TxInfo struct {
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
 	Attempt   int             // 1 for the first try; RetrySerializable increments it
-	Context   context.Context // the context the hooks passed to next
+	Context   context.Context // what the TxAround hooks passed to next; Tx's bounded context when there are none
 	Retries   []TxRetry       // the attempts RetrySerializable retried, in order
 	Outcome   TxOutcome       // how the last attempt ended; set before next returns
 }
@@ -91,7 +91,7 @@ func (info *TxInfo) end(o TxOutcome) {
 
 // txAround runs attempts through db.cfg.txArounds, the first given outermost.
 func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.Context) error) error {
-	called := false
+	called, returned := false, false
 	var last error // what attempts returned
 	next := func(ctx context.Context) error {
 		if called {
@@ -100,6 +100,7 @@ func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.
 		called = true
 		info.Context = ctx
 		last = attempts(ctx)
+		returned = true
 		return last
 	}
 	for i := len(db.cfg.txArounds) - 1; i >= 0; i-- {
@@ -111,6 +112,11 @@ func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.
 	}
 	if !called {
 		return errors.New("velox: transaction: a TxAround hook returned without calling next")
+	}
+	if !returned {
+		// attempts panicked and a hook recovered the panic: velox rolled the
+		// transaction back, so Tx must not report success.
+		return errors.New("velox: transaction: a TxAround hook recovered a panic from next")
 	}
 	if last != nil {
 		return errors.New("velox: transaction: a TxAround hook discarded the error from next")

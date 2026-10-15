@@ -147,6 +147,11 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
+		if cause != nil && past(deadline) && !errors.Is(err, ErrTimeout) {
+			// velox's deadline passed, whatever context fn's statements ran
+			// on: say so without waiting for the deadline's timer.
+			return errors.Join(errTimeout("transaction"), err)
+		}
 		return err
 	}
 	finished = true
@@ -155,7 +160,9 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 		// Past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
 		_ = ctl.rollback(end)
-		if timedOut(ctx) {
+		// velox's deadline is the cause even when a TxAround hook passed on
+		// a context without it.
+		if timedOut(ctx) || cause != nil && past(deadline) {
 			return errTimeout("transaction")
 		}
 		err := ctxErr(ctx)

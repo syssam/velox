@@ -512,10 +512,10 @@ type Statement struct {
 ```
 
 `MaxRows`, `Tenant`, `TenantBypass`, `PolicyBypass` and `DryRun` come from the
-policy design (§2.3, §4); `Dialect`, `Tags`, `Caller`, `Tx`, `Fingerprint` and
-`Result` from the observability design (§1, §2); so does `ConflictClause.Where`, the condition of an
-upsert's update branch, which PostgreSQL and SQLite render as
-`DO UPDATE … WHERE` and velox refuses on MySQL.
+policy design (§2.3, §4), and so does `ConflictClause.Where`, the condition of
+an upsert's update branch, which PostgreSQL and SQLite render as
+`DO UPDATE … WHERE` and velox refuses on MySQL. `Dialect`, `Tags`, `Caller`,
+`Tx`, `Fingerprint` and `Result` come from the observability design (§1, §2).
 
 Rendering caches SQL text by statement shape (operation, entity, predicate
 structure, order, presence of a limit), so a statement that differs only in its

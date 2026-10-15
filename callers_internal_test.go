@@ -2,6 +2,7 @@ package velox
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -116,5 +117,45 @@ func TestCaptureReadsDeepStacks(t *testing.T) {
 	// Past 64 frames there is no call site.
 	if got := descend(c, 100); got != (Caller{}) {
 		t.Errorf("100 frames down: %+v", got)
+	}
+}
+
+// TestCaptureReadsAtMost64Frames: the search stops at the 64th frame, whatever
+// size the first batch was. Every frame of this test is velox's own but
+// strings.Map's, which calls descend's caller back: it is the call site when
+// it is the 64th frame, and none is found when it is the 65th.
+func TestCaptureReadsAtMost64Frames(t *testing.T) {
+	// at returns the call site found with strings.Map frame k (from 1) down
+	// from capture's caller, the first batch being hint frames.
+	at := func(k, hint int) Caller {
+		c := &callers{}
+		c.depth.Store(int32(hint))
+		var got Caller
+		// descend's frames are 1 to k-2, the closure's k-1.
+		if s := strings.Map(func(r rune) rune { got = descend(c, k-3); return r }, "x"); s != "x" {
+			t.Fatalf("strings.Map returned %q", s)
+		}
+		return got
+	}
+	for _, hint := range []int{0, 4, 5, 7, 8} {
+		if got := at(64, hint); got.Func != "strings.Map" {
+			t.Errorf("first batch %d, strings.Map 64 frames down: %+v", hint, got)
+		}
+		if got := at(65, hint); got != (Caller{}) {
+			t.Errorf("first batch %d, strings.Map 65 frames down: %+v", hint, got)
+		}
+	}
+}
+
+// TestDepthHintIsAtLeast4: a call site found in the first frames sizes the
+// next first batch at 4, the smallest, as at the start.
+func TestDepthHintIsAtLeast4(t *testing.T) {
+	c := &callers{}
+	c.once.Do(func() { c.self = "velox.invalid/none" })
+	if got := c.capture(); got.Func != "github.com/syssam/velox2.TestDepthHintIsAtLeast4" {
+		t.Fatalf("call site %+v", got)
+	}
+	if d := c.depth.Load(); d != 4 {
+		t.Errorf("depth hint %d, want 4", d)
 	}
 }

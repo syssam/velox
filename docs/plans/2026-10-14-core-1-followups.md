@@ -123,19 +123,16 @@ Left by the observability plan:
 - §6's 300 ns is read from benchmarks and recorded, not asserted.
 - A serialization failure or deadlock that `RetrySerializable` retries has `error.type` `_OTHER`; there is no value of its own.
 - A statement refused before execution (guard, scope, policy, hooks) makes no statement span and no metric point; it shows only as the error of a transaction it ends.
-- Inside a transaction, a statement span's parent is always `velox.tx`, even when the application started a span of its own inside `fn` and passed its context.
+- Inside a transaction, a statement span's parent is always `velox.tx`, even when the application started a span of its own inside `fn` and passed its context (a spec choice).
 - A statement with no application frame within 64 frames (an `Iter` driven through `iter.Pull`, say) has a zero `Caller`.
-- The `TxInfo` allocated per transaction when hooks are configured has no budget test.
+- The `TxInfo` allocated per transaction when hooks are configured has no budget of its own; `TestTxAllocationBudget` pins only that a DB with nothing configured makes none.
+- `contrib/otel`'s `go.mod` requires velox2 at a placeholder version, with a `replace` to the repository root, until velox tags releases.
 - Test gaps left by the task reviews:
   - fingerprints: no test asserts that the render cache's byte bound counts the fingerprint's bytes;
-  - call sites: no concurrent test of the program-counter cache;
+  - call sites: no concurrent test of the program-counter cache at the cache's bound;
   - results: no test of `Affected` on a failed `INSERT … RETURNING`; the no-pairs `WithTags` test's identity check is vacuous;
-  - comments: no concurrent-eviction test; the cache's byte accounting is not checked exactly; a panic test makes an unchecked `r.(string)`;
-  - transactions: core has no test of the outcome when BEGIN fails or `fn` calls `runtime.Goexit` under a `TxAround` hook, nor of `RetrySerializable` exhausted with a hook; two tests index `e.Log[len-1]` unchecked;
-  - `contrib/otel`: `TestTxDurationMetric` asserts the commit outcome only.
+  - comments: no concurrent-eviction test; the cache's byte accounting is not checked exactly;
+  - transactions: no test of `RetrySerializable` exhausted with a `TxAround` hook.
 - Doc and cost nits:
-  - `WithCallers`' doc says one `runtime.Callers` per statement; a deep call site costs more than one.
-  - Comment cache keys over 256 bytes (long tag values) allocate on every statement; `WithSQLComment`'s doc does not say so.
   - `render` stays in non-test code only for the tests.
-  - A failed `SELECT` records a `db.client.response.returned_rows` point.
   - `contrib/otel`'s `record` allocates its attribute set even under a no-op `MeterProvider`; an instrument-enabled check would skip it.

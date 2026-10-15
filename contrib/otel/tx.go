@@ -22,19 +22,27 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 		attribute.String(attrTxIsolation, tx.Isolation.String()),
 		attribute.Bool(attrTxReadOnly, tx.ReadOnly),
 	))
-	// A panic in fn ends the span and goes on: the adapter never recovers
-	// one. velox rolled the transaction back.
+	// A panic in fn ends the span, records the duration and goes on: the
+	// adapter never recovers one. velox rolled the transaction back.
+	// runtime.Goexit in fn is reported the same way, as "panic".
 	ended := false
 	defer func() {
 		if !ended {
 			txEnd(ctx, span, tx, velox.TxRollback)
 			span.SetStatus(codes.Error, "panic")
 			span.End()
+			a.txRecord(sctx, start, tx, velox.TxRollback)
 		}
 	}()
 
 	err := next(sctx)
-	txEnd(ctx, span, tx, tx.Outcome)
+	// An inner hook that returned without calling next left no outcome:
+	// the transaction did not happen, which is an error.
+	outcome := tx.Outcome
+	if outcome == 0 {
+		outcome = velox.TxError
+	}
+	txEnd(ctx, span, tx, outcome)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		span.SetAttributes(attribute.String(attrErrorType, errorType(ctx, err)))
@@ -42,12 +50,18 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 	}
 	ended = true
 	span.End()
-	a.txDuration.Record(sctx, time.Since(start).Seconds(), metric.WithAttributeSet(attribute.NewSet(
-		attribute.String(attrTxOutcome, tx.Outcome.String()),
+	a.txRecord(sctx, start, tx, outcome)
+	return err
+}
+
+// txRecord records the velox.tx.duration point of a transaction that
+// started at start and ended with outcome.
+func (a *adapter) txRecord(ctx context.Context, start time.Time, tx *velox.TxInfo, outcome velox.TxOutcome) {
+	a.txDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributeSet(attribute.NewSet(
+		attribute.String(attrTxOutcome, outcome.String()),
 		attribute.Bool(attrTxReadOnly, tx.ReadOnly),
 		attribute.Bool(attrTxRetried, tx.Attempt > 1),
 	)))
-	return err
 }
 
 // txEnd sets what is known once next has returned, or panicked: a retry

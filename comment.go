@@ -23,13 +23,21 @@ import (
 // with the call site of the SQL call.
 //
 // List only tags whose values are stable per code path, such as a route
-// template, never an ID: pgx caches prepared statements by their text, and
-// pg_stat_statements and MySQL's digest group by it, so a per-request value
-// would prepare a statement per request and split every statistic.
+// template, never an ID: pgx caches prepared statements by their text, so a
+// per-request value would prepare a statement per request, and it would
+// make pg_stat_activity hard to read. (pg_stat_statements and MySQL's
+// digest normalise comments away, so their statistics are not split.)
+//
+// With WithCallers, each call site of a shape is a distinct text, so pgx
+// prepares one statement per call site per connection. A shape called from
+// many sites multiplies statements against pgx's per-connection cache,
+// which holds 512 by default: size pgxpool.Config.ConnConfig's
+// StatementCacheCapacity for it, or use WithSQLComment without WithCallers.
 //
 // Comments are cached per call site and tag values, up to 4,096 of them and
 // 4 MiB, evicting the oldest. Appending one to a statement's text costs one
-// allocation.
+// allocation, and a cache key over 256 bytes (a long file path with long
+// tag values) one more.
 func WithSQLComment(app string, tags ...string) Option {
 	if app == "" {
 		panic("velox: WithSQLComment: an empty app name")

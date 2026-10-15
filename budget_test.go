@@ -181,6 +181,37 @@ func BenchmarkOneRowWithDeadline(b *testing.B) {
 	}
 }
 
+// TestTxAllocationBudget pins observability Ruling 3: with nothing
+// configured, a transaction makes no TxInfo. It is measured against the same
+// read outside a transaction, so that the read's allocations, which vary
+// between Go versions, cancel out. What is left is the transaction's own 3:
+// Tx's options (opt(&o) makes them escape), the context its rollback runs
+// on, and the *DB fn is given. A TxInfo would be a fourth.
+func TestTxAllocationBudget(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	read := func(db *velox.DB) error {
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		return err
+	}
+	if err := db.Tx(ctx, read); err != nil { // fill the render cache
+		t.Fatal(err)
+	}
+	alone := testing.AllocsPerRun(200, func() {
+		if err := read(db); err != nil {
+			t.Fatal(err)
+		}
+	})
+	inTx := testing.AllocsPerRun(200, func() {
+		if err := db.Tx(ctx, read); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Logf("a one-row read makes %.0f allocations in a transaction, %.0f alone", inTx, alone)
+	if inTx > alone+3 {
+		t.Errorf("a transaction with nothing configured adds %.0f allocations to its read: over the budget of 3 (observability Ruling 3)", inTx-alone)
+	}
+}
+
 // TestObservedOneRowBudget pins observability design §6: WithCallers and
 // WithSQLComment add at most one allocation, the comment's join, to a cached
 // one-row read. Its time is read from BenchmarkOneRowObserved against

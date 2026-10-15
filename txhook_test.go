@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +134,27 @@ func TestTxAroundRules(t *testing.T) {
 		outcome = tx.Outcome
 		return err
 	}
+	// dropDeadline passes on a context without the deadline, and records it
+	// in deadline; untilDeadline returns once it has passed, with err.
+	var deadline time.Time
+	dropDeadline := func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		deadline, _ = ctx.Deadline()
+		return observe(context.WithoutCancel(ctx), tx, next)
+	}
+	untilDeadline := func(err error) func(*velox.DB) error {
+		return func(*velox.DB) error {
+			for time.Now().Before(deadline) {
+				time.Sleep(time.Until(deadline))
+			}
+			return err
+		}
+	}
+	last := func(e *velox.FakeExec) string {
+		if len(e.Log) == 0 {
+			return ""
+		}
+		return e.Log[len(e.Log)-1]
+	}
 	var second error
 	runs := 0
 	for _, tc := range []struct {
@@ -140,6 +162,7 @@ func TestTxAroundRules(t *testing.T) {
 		hook      velox.TxAround
 		fn        func(*velox.DB) error // nil: touch
 		opts      []velox.TxOption
+		beginErr  error
 		commitErr error
 		check     func(err error, e *velox.FakeExec) bool
 		outcome   velox.TxOutcome // what observe saw; 0: not checked
@@ -202,18 +225,54 @@ func TestTxAroundRules(t *testing.T) {
 			outcome: velox.TxError,
 		},
 		{
-			// A hook that drops the deadline from the context still gets
-			// no commit past it.
-			name: "deadline dropped",
-			hook: func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
-				return observe(context.WithoutCancel(ctx), tx, next)
-			},
-			fn:   func(*velox.DB) error { time.Sleep(20 * time.Millisecond); return nil },
-			opts: []velox.TxOption{velox.Timeout(time.Millisecond)},
+			name:     "begin fails",
+			hook:     observe,
+			beginErr: boom,
 			check: func(err error, e *velox.FakeExec) bool {
-				return errors.Is(err, velox.ErrTimeout) && e.Log[len(e.Log)-1] == "ROLLBACK"
+				return errors.Is(err, boom) && reflect.DeepEqual(e.Log, []string{"BEGIN"})
 			},
 			outcome: velox.TxError,
+		},
+		{
+			// A hook that drops the deadline from the context still gets
+			// no commit past it, and the error says velox's deadline passed
+			// as soon as it has, not once its timer has fired.
+			name: "deadline dropped",
+			hook: dropDeadline,
+			fn:   untilDeadline(nil),
+			opts: []velox.TxOption{velox.Timeout(time.Millisecond)},
+			check: func(err error, e *velox.FakeExec) bool {
+				return errors.Is(err, velox.ErrTimeout) && last(e) == "ROLLBACK"
+			},
+			outcome: velox.TxError,
+		},
+		{
+			name: "deadline dropped, fn fails",
+			hook: dropDeadline,
+			fn:   untilDeadline(boom),
+			opts: []velox.TxOption{velox.Timeout(time.Millisecond)},
+			check: func(err error, e *velox.FakeExec) bool {
+				return errors.Is(err, velox.ErrTimeout) && errors.Is(err, boom) && last(e) == "ROLLBACK"
+			},
+			outcome: velox.TxError,
+		},
+		{
+			// A hook that recovers a panic from next: velox rolled back,
+			// so Tx must not succeed.
+			name: "recovered panic",
+			hook: func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) (err error) {
+				defer func() {
+					outcome = tx.Outcome
+					_ = recover()
+				}()
+				return next(ctx)
+			},
+			fn: func(*velox.DB) error { panic("oops") },
+			check: func(err error, e *velox.FakeExec) bool {
+				return err != nil && err.Error() == "velox: transaction: a TxAround hook recovered a panic from next" &&
+					reflect.DeepEqual(e.Log, []string{"BEGIN", "ROLLBACK"})
+			},
+			outcome: velox.TxRollback,
 		},
 		{
 			name:    "commit",
@@ -224,7 +283,7 @@ func TestTxAroundRules(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			outcome, second, runs = 0, nil, 0
-			e := &velox.FakeExec{CommitErr: tc.commitErr}
+			e := &velox.FakeExec{BeginErr: tc.beginErr, CommitErr: tc.commitErr}
 			db := velox.OpenFake(velox.Postgres, e, velox.WithTxAround(tc.hook))
 			fn := tc.fn
 			if fn == nil {
@@ -252,12 +311,34 @@ func TestTxAroundRules(t *testing.T) {
 			return next(ctx)
 		}))
 		defer func() {
-			if p := recover(); p != "oops" || !deferred || info.Outcome != velox.TxRollback || e.Log[len(e.Log)-1] != "ROLLBACK" {
+			if p := recover(); p != "oops" || !deferred || info.Outcome != velox.TxRollback || last(e) != "ROLLBACK" {
 				t.Errorf("recovered %v, hook's defer ran %v, outcome %v, sent %q", p, deferred, info.Outcome, e.Log)
 			}
 		}()
 		_ = db.Tx(ctx, func(*velox.DB) error { panic("oops") })
 		t.Error("Tx did not re-raise the panic")
+	})
+
+	// runtime.Goexit in fn, as t.FailNow does, rolls back and goes on
+	// through the hook, which reads the outcome in its deferred code.
+	t.Run("Goexit", func(t *testing.T) {
+		e := &velox.FakeExec{}
+		var got velox.TxOutcome
+		db := velox.OpenFake(velox.Postgres, e, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+			defer func() { got = tx.Outcome }()
+			return next(ctx)
+		}))
+		returned := false
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_ = db.Tx(ctx, func(*velox.DB) error { runtime.Goexit(); return nil })
+			returned = true
+		}()
+		<-done
+		if returned || got != velox.TxRollback || !reflect.DeepEqual(e.Log, []string{"BEGIN", "ROLLBACK"}) {
+			t.Errorf("Tx returned %v, outcome %v, sent %q", returned, got, e.Log)
+		}
 	})
 
 	t.Run("outcome names", func(t *testing.T) {

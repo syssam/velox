@@ -35,12 +35,13 @@
 // savepoint (a nested Tx) makes no span of its own.
 //
 // A panic in the transaction's function, or in an Iter loop body, ends the
-// open spans with the status Error and the description "panic", and goes on:
-// the adapter never recovers one.
+// open spans with the status Error and the description "panic", records the
+// transaction's duration with the outcome rollback, and goes on: the adapter
+// never recovers one. runtime.Goexit is reported the same way.
 //
 // The metrics are three histograms: db.client.operation.duration (seconds)
-// and db.client.response.returned_rows (reads only) per statement, and
-// velox.tx.duration (seconds) per transaction. Their attributes are bounded:
+// and db.client.response.returned_rows (reads that succeeded) per
+// statement, and velox.tx.duration (seconds) per transaction. Their attributes are bounded:
 // the database system, operation, table, entity and error type for a
 // statement, and the outcome, read-only flag and whether it retried for a
 // transaction. Tags, the tenant, the SQL text and the call site are on spans
@@ -56,4 +57,12 @@
 // whose values are stable per code path, such as a route template, never an
 // ID: pgx caches prepared statements by their text, so a per-request value
 // would prepare a statement per request (see velox.WithSQLComment).
+//
+// With Config.App set, the comment carries the call site too, since Options
+// turns callers on: each call site of a shape is then a distinct text, and
+// pgx prepares one statement per call site per connection. A shape called
+// from many sites multiplies statements against pgx's per-connection cache,
+// 512 by default. Size pgxpool.Config.ConnConfig's StatementCacheCapacity
+// for it, or install Around and TxAround with velox.WithSQLComment and
+// without velox.WithCallers (the spans then carry no call site).
 package veloxotel

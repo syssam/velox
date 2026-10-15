@@ -119,3 +119,19 @@ func TestResultUnderARowCap(t *testing.T) {
 		t.Errorf("capped: %+v, want %+v", got, want)
 	}
 }
+
+// TestResultWhenAnInnerHookRefuses: an inner Around hook that returns
+// without calling next leaves the outer hooks the Result of a statement that
+// did not run, not a zero Result whose Affected reads 0.
+func TestResultWhenAnInnerHookRefuses(t *testing.T) {
+	var got velox.Result
+	refused := errors.New("refused")
+	refuse := velox.WithAround(func(context.Context, *velox.Statement, func(context.Context) error) error { return refused })
+	db := resultOf(&velox.FakeExec{Rows: threeInvoices()}, &got, refuse)
+	if _, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx); !errors.Is(err, refused) {
+		t.Fatalf("err %v, want refused", err)
+	}
+	if want := (velox.Result{Rows: 0, Affected: -1}); got != want {
+		t.Errorf("an inner hook refused: %+v, want %+v", got, want)
+	}
+}

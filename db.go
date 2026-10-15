@@ -349,6 +349,9 @@ func (db *DB) execute(ctx context.Context, st *Statement, read func(rows) error,
 	if len(db.cfg.arounds) == 0 {
 		return db.exec(ctx, st, read, res)
 	}
+	// Reset here as well as in exec: a hook that returns before calling
+	// next must leave the outer hooks no stale Result.
+	st.Result = Result{Affected: -1}
 	called := false
 	var last error // what the innermost next last returned
 	next := func(ctx context.Context) error {
