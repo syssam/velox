@@ -12,7 +12,7 @@ their own.
 |---|---|---|
 | 1 | **Core** (this document): entity model, generator, query and mutation API, transactions, relations and eager loading, SQL rendering for three dialects, the execution pipeline | — |
 | 2 | Policy and guardrails: tenant scoping, row-level policy, hooks, required limits, deadlines | Core's pipeline |
-| 3 | Observability: OpenTelemetry spans, query fingerprints, call-site SQL comments | Core's pipeline |
+| 3 | Observability: OpenTelemetry spans and metrics, query fingerprints, call-site SQL comments (`2026-10-15-observability-design.md`) | Core's pipeline |
 | 4 | Routing: primary/replica, read-your-writes, shard-key hook | Core's pipeline and executor |
 | 5 | Migration planner: diff structs against a live database, emit reviewable SQL with safety lints | Core's entity metadata |
 
