@@ -167,3 +167,72 @@ func TestMarshalDeterministic(t *testing.T) {
 		t.Fatal("Marshal depends on argument order")
 	}
 }
+
+type ptrHooked struct{ schema.Schema }
+
+func (*ptrHooked) Hooks() []any { return nil }
+
+type policed struct{ schema.Schema }
+
+func (policed) Policy() any { return nil }
+
+type intercepted struct{ schema.Schema }
+
+func (*intercepted) Interceptors() []any { return nil }
+
+func TestMarshalRefusesBehaviourVariants(t *testing.T) {
+	for _, c := range []struct {
+		s    schema.Interface
+		want string
+	}{
+		{ptrHooked{}, "schema ptrHooked: has a Hooks method; hooks and policies"},
+		{&ptrHooked{}, "schema ptrHooked: has a Hooks method; hooks and policies"},
+		{policed{}, "schema policed: has a Policy method; hooks and policies"},
+		{intercepted{}, "schema intercepted: has a Interceptors method; hooks and policies"},
+	} {
+		if _, err := load.Marshal("p", c.s); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("got %v, want %q", err, c.want)
+		}
+	}
+}
+
+type boomAnno struct{}
+
+func (boomAnno) Name() string                              { return "Boom" }
+func (boomAnno) Merge(schema.Annotation) schema.Annotation { panic("merge boom") }
+
+type mergePanics struct{ schema.Schema }
+
+func (mergePanics) Annotations() []schema.Annotation {
+	return []schema.Annotation{boomAnno{}, boomAnno{}}
+}
+
+type nilAnno struct{ schema.Schema }
+
+func (nilAnno) Annotations() []schema.Annotation {
+	return []schema.Annotation{(*schema.TableAnnotation)(nil)}
+}
+
+type badJSON struct{}
+
+func (badJSON) Name() string                 { return "BadJSON" }
+func (badJSON) MarshalJSON() ([]byte, error) { panic("json boom") }
+
+type jsonPanics struct{ schema.Schema }
+
+func (jsonPanics) Annotations() []schema.Annotation { return []schema.Annotation{badJSON{}} }
+
+func TestMarshalRecoversAnnotationPanics(t *testing.T) {
+	for _, c := range []struct {
+		s    schema.Interface
+		want string
+	}{
+		{mergePanics{}, "schema mergePanics: panicked: merge boom"},
+		{jsonPanics{}, "schema jsonPanics: panicked: json boom"},
+		{nilAnno{}, "schema nilAnno: Annotations()[0] is nil"},
+	} {
+		if _, err := load.Marshal("p", c.s); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("got %v, want %q", err, c.want)
+		}
+	}
+}

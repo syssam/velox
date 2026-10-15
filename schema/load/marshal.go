@@ -58,7 +58,7 @@ func position(j int, mixin int, mixedIn bool) Position {
 	return Position{Index: j}
 }
 
-func loadSchema(s schema.Interface) (*Schema, error) {
+func loadSchema(s schema.Interface) (out *Schema, err error) {
 	t := reflect.TypeOf(s)
 	name := t.Name()
 	if t.Kind() == reflect.Pointer {
@@ -67,7 +67,14 @@ func loadSchema(s schema.Interface) (*Schema, error) {
 	if name == "" {
 		return nil, fmt.Errorf("schema %v: the type has no name", t)
 	}
-	out, err := build(name, t, s)
+	// Annotation methods and the JSON encoding of annotations and defaults run
+	// user code outside call; a panic there is still the schema's error.
+	defer func() {
+		if r := recover(); r != nil {
+			out, err = nil, fmt.Errorf("schema %s: panicked: %v", name, r)
+		}
+	}()
+	out, err = build(name, t, s)
 	if err != nil {
 		return nil, fmt.Errorf("schema %s: %w", name, err)
 	}
@@ -98,8 +105,13 @@ func read(fields func() []schema.Field, edges func() []schema.Edge, indexes func
 }
 
 func build(name string, t reflect.Type, s schema.Interface) (*Schema, error) {
+	// The method set of a value type leaves out pointer-receiver methods.
+	mt := t
+	if mt.Kind() != reflect.Pointer {
+		mt = reflect.PointerTo(t)
+	}
 	for _, h := range []string{"Hooks", "Policy", "Interceptors"} {
-		if _, ok := t.MethodByName(h); ok {
+		if _, ok := mt.MethodByName(h); ok {
 			return nil, fmt.Errorf("has a %s method; hooks and policies are methods on the generated entity (schema design §3), not in the schema", h)
 		}
 	}
@@ -163,7 +175,7 @@ func build(name string, t reflect.Type, s schema.Interface) (*Schema, error) {
 // otherwise.
 func mergeAnnotations(into map[string]schema.Annotation, list []schema.Annotation) error {
 	for i, a := range list {
-		if a == nil {
+		if isNil(a) {
 			return fmt.Errorf("Annotations()[%d] is nil", i)
 		}
 		n := a.Name()
