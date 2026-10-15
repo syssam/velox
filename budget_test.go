@@ -45,9 +45,11 @@ func TestOneRowAllocationBudget(t *testing.T) {
 }
 
 func BenchmarkOneRow(b *testing.B) {
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+	db := velox.OpenFake(velox.Postgres, e)
 	b.ReportAllocs()
 	for b.Loop() {
+		e.Log = e.Log[:0] // the fake keeps every statement's text: do not time the heap growing
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 			b.Fatal(err)
 		}
@@ -174,6 +176,47 @@ func BenchmarkOneRowWithDeadline(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// TestObservedOneRowBudget pins observability design §6: WithCallers and
+// WithSQLComment add at most one allocation, the comment's join, to a cached
+// one-row read. Its time is read from BenchmarkOneRowObserved against
+// BenchmarkOneRow.
+func TestObservedOneRowBudget(t *testing.T) {
+	tagged := velox.WithTags(ctx, "route", "GET /invoices/{id}")
+	measure := func(opts ...velox.Option) (float64, string) {
+		e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+		db := velox.OpenFake(velox.Postgres, e, opts...)
+		run := func() {
+			if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(tagged); err != nil {
+				t.Fatal(err)
+			}
+		}
+		run() // fill the render, call-site and comment caches
+		return testing.AllocsPerRun(200, run), e.SQL
+	}
+	plain, _ := measure()
+	observed, text := measure(velox.WithCallers(), velox.WithSQLComment("billing", "route"))
+	if !strings.Contains(text, "/*app='billing',caller='budget_test.go%3A") || !strings.HasSuffix(text, ",route='GET%20%2Finvoices%2F%7Bid%7D'*/") {
+		t.Fatalf("the comment is not as expected: %s", text)
+	}
+	t.Logf("with callers and comments %.0f allocations, without %.0f", observed, plain)
+	if observed > plain+1 {
+		t.Errorf("callers and comments add %.0f allocations to a cached one-row read: over the budget of 1 (observability design §6)", observed-plain)
+	}
+}
+
+func BenchmarkOneRowObserved(b *testing.B) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithCallers(), velox.WithSQLComment("billing", "route"))
+	tagged := velox.WithTags(ctx, "route", "GET /invoices/{id}")
+	b.ReportAllocs()
+	for b.Loop() {
+		e.Log = e.Log[:0] // as in BenchmarkOneRow: each statement's text is a new string here
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(tagged); err != nil {
 			b.Fatal(err)
 		}
 	}

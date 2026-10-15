@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // Caller is a statement's call site: the first stack frame outside velox and
@@ -52,6 +53,11 @@ type callers struct {
 	mods []string // module paths from the build info, longest first
 	main string   // BuildInfo.Path: the import path of package main
 
+	// depth is how many frames the last call site was down the stack, so the
+	// next unwinding reads about that many; unwinding costs about 60 ns a
+	// frame, skipped ones included. 0: not yet known.
+	depth atomic.Int32
+
 	mu  sync.RWMutex
 	pcs map[uintptr]pcFrame // at most maxPCs entries
 }
@@ -87,23 +93,56 @@ func (c *callers) load() {
 }
 
 // capture returns the call site of the statement being run: the first frame,
-// within 64, outside velox and skip; zero when there is none.
+// within 64, outside velox and skip; zero when there is none. The first batch
+// is as many frames as the last call site was down (4 to 8, 4 at first), the
+// next ones 8.
 func (c *callers) capture() Caller {
 	c.once.Do(c.load)
 	var pcs [8]uintptr
+	size := int(c.depth.Load())
+	if size < 4 || size > len(pcs) {
+		size = 4
+	}
 	// Skip runtime.Callers and capture; the frames above are velox's.
-	for skip := 2; skip < 2+64; skip += len(pcs) {
-		n := runtime.Callers(skip, pcs[:])
-		for _, pc := range pcs[:n] {
-			if f := c.frame(pc); f.app {
-				return f.caller
+	for skip := 2; skip < 2+64; {
+		n := runtime.Callers(skip, pcs[:size])
+		if i, caller, ok := c.find(pcs[:n]); ok {
+			if d := min(skip-2+i+1, len(pcs)); d != int(c.depth.Load()) {
+				c.depth.Store(int32(d))
 			}
+			return caller
 		}
-		if n < len(pcs) {
+		if n < size {
 			break
 		}
+		skip += size
+		size = len(pcs)
 	}
 	return Caller{}
+}
+
+// find returns the index and call site of the first of pcs outside velox and
+// skip, taking the read lock once for all the counters already cached.
+func (c *callers) find(pcs []uintptr) (int, Caller, bool) {
+	i := 0
+	c.mu.RLock()
+	for ; i < len(pcs); i++ {
+		f, ok := c.pcs[pcs[i]]
+		if !ok {
+			break
+		}
+		if f.app {
+			c.mu.RUnlock()
+			return i, f.caller, true
+		}
+	}
+	c.mu.RUnlock()
+	for ; i < len(pcs); i++ { // from the first counter not cached
+		if f := c.frame(pcs[i]); f.app {
+			return i, f.caller, true
+		}
+	}
+	return 0, Caller{}, false
 }
 
 // frame returns what pc resolves to, from the cache when it is there.

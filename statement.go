@@ -133,4 +133,8 @@ type Rewrite func(ctx context.Context, st *Statement) error
 // its own instead. It may call next again to retry after an error; running
 // the statement again after Iter has yielded rows is an error. The first
 // Around given to Open is the outermost.
+//
+// With Iter the caller's loop body runs inside the hooks, so a hook that
+// recovers a panic and returns normally makes Go report that a range function
+// recovered a loop body panic: let panics through.
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error

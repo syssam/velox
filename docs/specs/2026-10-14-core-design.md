@@ -465,15 +465,18 @@ build ─▶ rewrite ─▶ render ─▶ route ─▶ execute ─▶ scan
 |---|---|---|
 | build | The generic API fills a `Statement`: operation, entity info, predicates, assignments, order, limit, flags (`Unbounded`) | — |
 | rewrite | Ordered hooks may add predicates, set assignments, or refuse the statement | Tenant scoping, row-level policy, guardrails (sub-project 2) |
-| render | The dialect turns the statement into SQL and arguments | Dialects; observability adds the SQL comment (sub-project 3) |
+| render | The dialect turns the statement into SQL and arguments, and the fingerprint, stored in the render cache; observability appends the SQL comment after rendering | Dialects; observability (sub-project 3) |
 | route | Picks the executor: primary, replica, shard | Routing (sub-project 4); default: the `DB`'s own connection |
 | execute | Ordered `around` hooks wrap running the statement and reading its rows: the innermost `next` sends it through the executor (`database/sql` or pgx), scans every row (the scan stage) and closes the rows before it returns, so a span or a deadline covers the whole query; with `Iter`, the caller's loop body runs inside it too | Spans and fingerprints (sub-project 3), retries |
 | scan | Rows into entities through the generated scan plan, inside execute's `next` | — |
 
 The pipeline is configured on `velox.Open` and immutable afterwards. Core
-ships the rewrite and around stages (`velox.WithRewrite`, `velox.WithAround`).
-The route stage's option and the statement's `Tags` field arrive with
-sub-projects 4 and 3; adding an option and a field breaks no caller.
+ships the rewrite and around stages (`velox.WithRewrite`, `velox.WithAround`),
+and `velox.WithTxAround`, which wraps each `db.Tx` call the way an around hook
+wraps a statement: it runs once per call, and its `next` runs every
+`RetrySerializable` attempt and the commit (observability design §2.2). The
+route stage's option arrives with sub-project 4; adding an option breaks no
+caller.
 
 ```go
 type Statement struct {
@@ -497,13 +500,20 @@ type Statement struct {
     PolicyBypass string          // the SkipPolicy reason, when it applied
     DryRun       bool            // built for SQL(ctx), not sent
     InTx         bool
-    SQL          string          // set by render
+    Tx           *TxInfo         // the transaction it runs in, when the DB has hooks; nil otherwise
+    Dialect      Dialect         // the DB's: an Around hook has only the statement
+    Tags         []Tag           // the context's WithTags tags; a Rewrite hook gets its own copy
+    Caller       Caller          // the call site, with WithCallers; zero otherwise
+    SQL          string          // set by render, after the rewrite hooks; WithSQLComment's comment included
+    Fingerprint  string          // set by render: the shape's ID, the hash of SQL without the comment
     Args         []any           // set by render
+    Result       Result          // set by each execution: Rows read, rows Affected (-1 for a read)
 }
 ```
 
 `MaxRows`, `Tenant`, `TenantBypass`, `PolicyBypass` and `DryRun` come from the
-policy design (§2.3, §4); so does `ConflictClause.Where`, the condition of an
+policy design (§2.3, §4); `Dialect`, `Tags`, `Caller`, `Tx`, `Fingerprint` and
+`Result` from the observability design (§1, §2); so does `ConflictClause.Where`, the condition of an
 upsert's update branch, which PostgreSQL and SQLite render as
 `DO UPDATE … WHERE` and velox refuses on MySQL.
 
@@ -579,6 +589,14 @@ same fake driver, with the shape cache built:
 | One-row query | 607 ns, 6 allocations | 4 allocations |
 | 100-row query | 11.7 µs, 105 allocations | 202 allocations |
 | Metadata, first use of an entity | 2.7 µs, 30 allocations | |
+| One-row query, `WithCallers` and `WithSQLComment` | 1.03 µs, 7 allocations (observability design §6) | |
+
+The one-row row with callers and comments was measured on 2026-10-15 against
+`BenchmarkOneRow`'s 0.69 µs, 6 allocations: the minimum of 600 alternating
+batches of 2,000 reads, because the machine was busy (load average above 20)
+and its medians moved by a third. The added 340 ns are the comment's join (80
+ns) and one `runtime.Callers` (260 ns; unwinding costs about 60 ns a frame, the
+skipped ones included).
 
 The allocation budgets are tests (`budget_test.go`, `meta_bench_test.go`);
 the time budgets are read from the benchmarks, not asserted, because times

@@ -42,7 +42,7 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 
 ## Sub-project 3 (observability)
 
-- Document on `Around`: `Iter`'s loop body runs inside the around hooks, so a hook that recovers a panic and returns normally hits Go's "range function recovered a loop body panic" error.
+- Resolved in observability: `Around`'s doc says that `Iter`'s loop body runs inside the hooks, so a hook must not recover a panic and return normally.
 
 ## CI
 

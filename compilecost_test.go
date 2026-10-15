@@ -2,6 +2,9 @@ package velox
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -139,7 +142,15 @@ var genericObjects = []struct {
 	// it. One ordinary method adds about 20 KiB to a handle (NumberCol: 14846 →
 	// 35782), which exceeds that margin; a velox type reaching reflect.Type adds
 	// about 134 KiB, which the cap keeps above the margin of the largest rows.
-	// linux/amd64 and linux/arm64 measure within 3% of darwin/arm64.
+	// linux/amd64 and linux/arm64 measure within 3% of darwin/arm64. The rows
+	// that moved were remeasured on 2026-10-15 after observability: Statement
+	// gained Dialect, Tags, Caller, Tx, Fingerprint and Result, and their
+	// types (Caller, Tag, Result, TxInfo, TxRetry) are export data in every
+	// package that reaches a Statement or a DB: +242 bytes for Statement
+	// (566 → 808 against the commit before the plan), up to +240 for the
+	// handles, 3.3 KiB for entity and 7.9 KiB for entityUse. Nothing in
+	// observability is generic (TestObservabilityIsNotGeneric), so this is
+	// export data only; some rows had also drifted since 2026-10-14.
 	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14312
 	{"OrderedCol", "velox.OrderedCol[E, int64]", "", 19456},         // measured 14924
 	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},           // measured 14846
@@ -151,21 +162,21 @@ var genericObjects = []struct {
 	{"Pred", "velox.Pred[E]", "", 5120},                             // measured 1014
 	{"Order", "velox.Order[E]", "", 6144},                           // measured 1114
 	{"Setter", "velox.Setter[E]", "", 8192},                         // measured 3168
-	{"Query", "velox.Query[E]", "", 10240},                          // measured 5270
-	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 4502
-	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 4502
-	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 5402
+	{"Query", "velox.Query[E]", "", 10240},                          // measured 5584
+	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 4818
+	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 4818
+	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 5718
 	{"Rel", "velox.Rel[E, E]", "", 8192},                            // measured 3528
 	{"One", "velox.One[E]", "", 20480},                              // measured 15972
 	{"Many", "velox.Many[E]", "", 20480},                            // measured 16044
-	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 5470
-	{"Shape", "velox.Shape[E]", "", 7168},                           // measured 2910
-	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 2316
-	{"ColumnDef", "velox.ColumnDef[int64]", "", 6144},               // measured 1530
-	{"RelDef", "velox.RelDef[E]", "", 6144},                         // measured 1680
-	{"Statement", "velox.Statement", "", 5120},                      // measured 368
-	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 294
-	{"Schema", "*velox.Schema", "", 5120},                           // measured 282
+	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6000
+	{"Shape", "velox.Shape[E]", "", 8192},                           // measured 3440
+	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 2846
+	{"ColumnDef", "velox.ColumnDef[int64]", "", 7168},               // measured 2060
+	{"RelDef", "velox.RelDef[E]", "", 7168},                         // measured 2210
+	{"Statement", "velox.Statement", "", 5120},                      // measured 808
+	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 824
+	{"Schema", "*velox.Schema", "", 5120},                           // measured 812
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	// The entity packages, remeasured on 2026-10-15 after policy 2. An
 	// entity's package carries the export data of every velox type its API
@@ -175,23 +186,23 @@ var genericObjects = []struct {
 	// a *Statement, about 2.3 KiB); those four methods with Policy[E] and
 	// Mutation[E] add about 8 KiB more. entityUse also compiles the insert
 	// path's new generic steps (oneStatement, prepareMany, batch, check).
-	{"entity", "", entitySrc, 150528},           // measured 119896 (98878 before policy 2)
-	{"entityUse", "", entityUseSrc, 775168},     // measured 708658 (673936 before policy 2)
+	{"entity", "", entitySrc, 154624},           // measured 123318 (119972 before observability, 98878 before policy 2)
+	{"entityUse", "", entityUseSrc, 784384},     // measured 717868 (709930 before observability, 673936 before policy 2)
 	{"Policy", "velox.Policy[E]", "", 8192},     // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 8192}, // measured 3874
+	{"Mutation", "velox.Mutation[E]", "", 9216}, // measured 4132
 }
 
 // policyGrowthMax bounds the bytes a Policy and the three entity hooks add to
 // an entity's package (entityPolicySrc over entityUseSrc): the measured growth
 // plus genericObjects' margin (policy design §7). On 2026-10-15, darwin/arm64,
-// Go 1.27.1, they add 98988. Measured in packages with a shorter import path
+// Go 1.27.1, they add 98984. Measured in packages with a shorter import path
 // they add 92266, of which the six functions alone, assigned to variables
 // instead of declared, take 41948, and velox's generic Policy, BeforeInsert,
 // BeforeUpdate, BeforeDelete and mutationHook, instantiated for E with their
 // closures, the other 50318. Bodies barely count (a Read returning Pred[E]{}
 // costs as much as one returning a condition); every instantiated symbol's
 // name spells out E's shape and package path.
-const policyGrowthMax = 123904 // measured 98988
+const policyGrowthMax = 123904 // measured 98984
 
 // TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one
 // package: it measures each row's own object cost, the bytes its package
@@ -254,4 +265,29 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 			t.Errorf("a Policy and the three entity hooks add %d bytes to an entity's package, over the recorded %d (policy design §7)", got, policyGrowthMax)
 		}
 	})
+}
+
+// TestObservabilityIsNotGeneric pins observability design success criterion
+// 5: nothing in Core's observability files is instantiated per entity.
+func TestObservabilityIsNotGeneric(t *testing.T) {
+	fset := token.NewFileSet()
+	for _, name := range []string{"tags.go", "callers.go", "comment.go", "txhook.go"} {
+		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch d := n.(type) {
+			case *ast.FuncDecl:
+				if d.Type.TypeParams != nil {
+					t.Errorf("%s: %s is generic", fset.Position(d.Pos()), d.Name.Name)
+				}
+			case *ast.TypeSpec:
+				if d.TypeParams != nil {
+					t.Errorf("%s: %s is generic", fset.Position(d.Pos()), d.Name.Name)
+				}
+			}
+			return true
+		})
+	}
 }

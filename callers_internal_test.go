@@ -93,3 +93,28 @@ func TestPCCacheIsBounded(t *testing.T) {
 		t.Errorf("%d PCs cached, want 2", len(c.pcs))
 	}
 }
+
+// descend calls capture n frames down.
+func descend(c *callers, n int) Caller {
+	if n > 0 {
+		return descend(c, n-1)
+	}
+	return c.capture()
+}
+
+// TestCaptureReadsDeepStacks: the first unwinding is sized by the last call
+// site's depth, and the search goes on in batches to 64 frames, whatever the
+// order of shallow and deep sites. Every frame of this test is velox's own, so
+// the call site is testing's frame above it.
+func TestCaptureReadsDeepStacks(t *testing.T) {
+	c := &callers{}
+	for _, n := range []int{0, 1, 5, 2, 7, 8, 9, 20, 3, 40, 0, 52, 4, 0} {
+		if got := descend(c, n); got.Func != "testing.tRunner" {
+			t.Errorf("%d frames down: %+v", n, got)
+		}
+	}
+	// Past 64 frames there is no call site.
+	if got := descend(c, 100); got != (Caller{}) {
+		t.Errorf("100 frames down: %+v", got)
+	}
+}
