@@ -141,10 +141,12 @@ Left by the observability plan:
 
 - The `Graph` that `gen.Build` returns is plan 3's input: the generator reads it, not the model.
 - `Index.Where` is PostgreSQL-only, and nothing refuses it on other dialects yet.
-- `edge.Symbol` and `edge.Immutable` are recorded but unused until the migration planner.
+- `edge.Symbol` and `edge.Immutable` are carried into the Graph's `Edge` (`symbols`, `immutable`); the migration planner is the first to use the symbols. Rule 34 refuses an edge whose immutability differs from its bound field's, as ent does.
 - Irregular plurals need `schema.Table`.
-- `singular()` is the simple inverse of plural (`children` gives `children_id`, where ent says `child_id`); a self-M2M edge named after its own type (edge `nodes` on `Node`) gives a duplicate column that nothing catches.
+- `singular()` is the simple inverse of plural (`children` gives `children_id`, where ent says `child_id`). A self-M2M edge named after its own type (edge `nodes` on `Node`) gives a join table with two `node_id` columns; rule 35 refuses it and asks for `edge.Columns`.
 - Rule 31 is stricter than ent: `edge.Column` with a bound field whose column differs is refused (ent lets the field adopt the edge's column).
 - `desc.GoTypeOf` does not collect imports from generic type arguments (`pkg.Box[time.Time]`) or from unnamed func, struct and interface types; plan 3's generator must not rely on `Imports` for those.
 - Rule 12 accepts a bound foreign key whose `GoType` differs from the ID's for int and string kinds; generated code may need conversions.
-- A typed-nil func given to `DefaultFunc` or `UpdateDefault` passes the builder's check.
+- `velox-gen` finds only the types that embed `schema.Schema` directly. A type that embeds another struct which embeds `schema.Schema` is not found, and is not loaded.
+- velox2 names a default index `<table>_<cols>` (`users_org_id_name`), where ent uses `<lower(type)>_<cols>` (`user_org_id_name`). Against a database ent created, the migration planner will see each such index as a rename.
+- velox2's default ID is `int64`, and ent's is `int`. A ported edge field declared `field.Int("x_id")` must become `field.Int64("x_id")`, or the schema must declare its ID with `field.Int("id")`; rule 12's error says so.
