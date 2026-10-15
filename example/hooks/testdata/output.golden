@@ -1,0 +1,10 @@
+Insert with no title: velox: model.Task: before insert: a task needs a title
+Insert: id 1, slug "write-the-readme", created by ada
+InsertAll: slugs "fix-ci" and "tag-v1"
+SQL: UPDATE "tasks" SET "title" = ?, "slug" = ? WHERE "slug" = ? [Tag v1.0 tag-v1.0 tag-v1]
+audit log after SQL(ctx): 0 entries
+audit log after Exec: [ada renamed a task to Tag v1.0]
+Update to no title: velox: model.Task: before update: a task needs a title
+Save: title "Write the docs", slug "write-the-docs"
+SQL: DELETE FROM "tasks" WHERE "done" = ?
+Delete All: 1 removed, 2 left

@@ -1,0 +1,8 @@
+start:    alice=100 bob=50
+commit:   alice=70 bob=80 (err=<nil>)
+rollback: alice=70 bob=80 (err=no account "carol")
+no tx:    alice=70 bob=80 (errFunds=true)
+savepoint: unique constraint on accounts.name; opening bob2 instead
+nested:   alice=70 bob=80 bob2=5 (err=<nil>)
+retry:    alice=75 bob=80 bob2=0 (attempts=1, err=<nil>)
+timeout:  alice=75 bob=80 bob2=0 (ErrTimeout=true, DeadlineExceeded=true)

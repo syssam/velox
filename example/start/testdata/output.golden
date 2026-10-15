@@ -1,0 +1,19 @@
+Insert: Ada has id 1
+InsertAll: 3 users
+All: Barbara, 52
+All: Grace, 45
+All: Ada, 36
+One: Grace has id 2
+One: ErrNotFound=true
+Count: 1 name starts with B
+Iter: Ada
+Iter: Barbara
+Iter: Grace
+Iter: Linus
+SQL: SELECT "id", "name", "email", "age" FROM "users" WHERE "age" BETWEEN ? AND ? LIMIT ? [30 50 5]
+Update: 2 birthdays
+Save: Grace's email is grace.hopper@example.com
+Delete: 1 user under 30
+Count: 3 users left
+no Limit: ErrUnbounded=true
+no Where: ErrNoWhere=true

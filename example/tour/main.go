@@ -1,4 +1,4 @@
-// Command example walks through velox2 on an in-memory SQLite database: it
+// Command tour walks through velox2 on an in-memory SQLite database: it
 // inserts, reads and changes the invoices of package billing as two
 // organizations, and prints what each step did.
 package main
@@ -18,7 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/example/billing"
+	"github.com/syssam/velox2/example/tour/billing"
 )
 
 func main() {
