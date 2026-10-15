@@ -207,6 +207,82 @@ func TestBuildRelations(t *testing.T) {
 	}
 }
 
+// A unique assoc edge with a non-unique inverse: the foreign key is in the
+// assoc owner's table.
+type Seat struct{ schema.Schema }
+
+func (Seat) Edges() []schema.Edge { return []schema.Edge{edge.To("venue", Venue.Type).Unique()} }
+
+type Venue struct{ schema.Schema }
+
+func (Venue) Edges() []schema.Edge { return []schema.Edge{edge.From("seats", Seat.Type).Ref("venue")} }
+
+func TestBuildUniqueAssocInverse(t *testing.T) {
+	g := mustBuild(t, Seat{}, Venue{})
+	s, v := g.Entity("Seat"), g.Entity("Venue")
+	venue, seats := s.Edge("venue"), v.Edge("seats")
+	if venue.Rel.Kind != "M2O" || seats.Rel.Kind != "O2M" || venue.Rel.Table != "seats" || seats.Rel.Table != "seats" ||
+		venue.Rel.Columns[0] != "seat_venue" || seats.Rel.Columns[0] != "seat_venue" || venue.Field != "seat_venue" || seats.Field != "seat_venue" {
+		t.Fatalf("venue %+v seats %+v", venue, seats)
+	}
+	if f := s.Field("seat_venue"); f == nil || f.Implicit != "venue" || !f.Optional || f.Unique || v.Field("seat_venue") != nil {
+		t.Fatalf("seat_venue %+v", f)
+	}
+}
+
+// A unique edge to its own schema is a bidirectional O2O.
+type Person struct{ schema.Schema }
+
+func (Person) Edges() []schema.Edge { return []schema.Edge{edge.To("spouse", Person.Type).Unique()} }
+
+func TestBuildO2OBidi(t *testing.T) {
+	p := mustBuild(t, Person{}).Entity("Person")
+	sp := p.Edge("spouse")
+	if sp.Rel.Kind != "O2O" || !sp.Bidi || sp.Rel.Table != "persons" || sp.Rel.Columns[0] != "person_spouse" || sp.Field != "person_spouse" {
+		t.Fatalf("spouse %+v", sp)
+	}
+	if f := p.Field("person_spouse"); f == nil || !f.Unique || !f.Nillable || f.Implicit != "spouse" {
+		t.Fatalf("person_spouse %+v", f)
+	}
+}
+
+// edge.Columns on the inverse of an M2M still names the assoc owner's column
+// first, as in ent.
+type Tag struct{ schema.Schema }
+
+func (Tag) Edges() []schema.Edge { return []schema.Edge{edge.To("articles", Article.Type)} }
+
+type Article struct{ schema.Schema }
+
+func (Article) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("tags", Tag.Type).Ref("articles").StorageKey(edge.Columns("tag_ref", "article_ref"))}
+}
+
+func TestBuildM2MColumnsOnInverse(t *testing.T) {
+	g := mustBuild(t, Tag{}, Article{})
+	a, i := g.Entity("Tag").Edge("articles"), g.Entity("Article").Edge("tags")
+	if a.Rel.Table != "tag_articles" || a.Rel.Columns[0] != "tag_ref" || a.Rel.Columns[1] != "article_ref" ||
+		i.Rel.Columns[0] != "article_ref" || i.Rel.Columns[1] != "tag_ref" {
+		t.Fatalf("articles %+v tags %+v", a, i)
+	}
+}
+
+// edge.Column equal to the bound field's column is accepted.
+type columnFieldMatch struct{ schema.Schema }
+
+func (columnFieldMatch) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Optional()}
+}
+func (columnFieldMatch) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", columnFieldMatch.Type).Unique().Field("parent_id").StorageKey(edge.Column("parent_id"))}
+}
+
+func TestBuildColumnMatchesField(t *testing.T) {
+	if e := mustBuild(t, columnFieldMatch{}).Entity("columnFieldMatch").Edge("parent"); e.Field != "parent_id" || e.Rel.Columns[0] != "parent_id" {
+		t.Fatalf("parent %+v", e)
+	}
+}
+
 // --- one schema type (or pair) per rule
 
 type uuidValue [16]byte
@@ -353,6 +429,16 @@ type dupEnum struct{ schema.Schema }
 
 func (dupEnum) Fields() []schema.Field { return []schema.Field{field.Enum("s").Values("a", "b", "a")} }
 
+type statusValues string
+
+func (statusValues) Values() []string { return []string{"a", "b"} }
+
+type enumGoTypeDup struct{ schema.Schema }
+
+func (enumGoTypeDup) Fields() []schema.Field {
+	return []schema.Field{field.Enum("s").Values("a").GoType(statusValues(""))}
+}
+
 type badEnum struct{ schema.Schema }
 
 func (badEnum) Fields() []schema.Field { return []schema.Field{field.Enum("s").Values("in-progress")} }
@@ -410,6 +496,96 @@ func (inlineOther) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("pets", Pet.Type).From("owner")}
 }
 
+type tableOnO2M struct{ schema.Schema }
+
+func (tableOnO2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Table("x"))}
+}
+
+type badFieldName struct{ schema.Schema }
+
+func (badFieldName) Fields() []schema.Field { return []schema.Field{field.String("in-stock")} }
+
+type emptyFieldName struct{ schema.Schema }
+
+func (emptyFieldName) Fields() []schema.Field { return []schema.Field{field.String("")} }
+
+type badEdgeName struct{ schema.Schema }
+
+func (badEdgeName) Edges() []schema.Edge { return []schema.Edge{edge.To("my-peers", badEdgeName.Type)} }
+
+type fieldGoNames struct{ schema.Schema }
+
+func (fieldGoNames) Fields() []schema.Field {
+	return []schema.Field{field.Int64("org_id"), field.Int64("orgID")}
+}
+
+type edgeGoNames struct{ schema.Schema }
+
+func (edgeGoNames) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("user_posts", edgeGoNames.Type), edge.To("userPosts", edgeGoNames.Type)}
+}
+
+type enumGoNames struct{ schema.Schema }
+
+func (enumGoNames) Fields() []schema.Field {
+	return []schema.Field{field.Enum("s").NamedValues("A", "a", "A", "b")}
+}
+
+type clashOwner struct{ schema.Schema }
+
+func (clashOwner) Edges() []schema.Edge { return []schema.Edge{edge.To("pets", clashPet.Type)} }
+
+type clashPet struct{ schema.Schema }
+
+func (clashPet) Fields() []schema.Field { return []schema.Field{field.Int64("clashOwnerPets")} }
+
+type columnFieldMismatch struct{ schema.Schema }
+
+func (columnFieldMismatch) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Optional()}
+}
+func (columnFieldMismatch) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", columnFieldMismatch.Type).Unique().Field("parent_id").StorageKey(edge.Column("pid"))}
+}
+
+type keyA struct{ schema.Schema }
+
+func (keyA) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("b", keyB.Type).StorageKey(edge.Column("x"))}
+}
+
+type keyB struct{ schema.Schema }
+
+func (keyB) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("a", keyA.Type).Ref("b").Unique().StorageKey(edge.Column("y"))}
+}
+
+type oneColumnM2M struct{ schema.Schema }
+
+func (oneColumnM2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("peers", oneColumnM2M.Type).StorageKey(edge.Column("x"))}
+}
+
+type twoColumnsO2M struct{ schema.Schema }
+
+func (twoColumnsO2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Columns("a", "b"))}
+}
+
+type invAssoc struct{ schema.Schema }
+
+func (invAssoc) Edges() []schema.Edge { return []schema.Edge{edge.To("items", invItem.Type)} }
+
+type invItem struct{ schema.Schema }
+
+func (invItem) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.From("a", invAssoc.Type).Ref("items").Unique(),
+		edge.From("b", invAssoc.Type).Ref("items").Unique(),
+	}
+}
+
 func TestBuildRules(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -438,6 +614,7 @@ func TestBuildRules(t *testing.T) {
 		{"17 bytes tenant", []schema.Interface{bytesTenant{}}, `schema bytesTenant: field "org": the tenant field must be of a comparable type`},
 		{"18 empty enum", []schema.Interface{emptyEnum{}}, `schema emptyEnum: field "s": an enum needs Values`},
 		{"19 duplicate enum value", []schema.Interface{dupEnum{}}, `schema dupEnum: field "s": value "a" is given twice`},
+		{"19 value from Values and GoType", []schema.Interface{enumGoTypeDup{}}, `schema enumGoTypeDup: field "s": value "a" is given twice`},
 		{"20 enum go name", []schema.Interface{badEnum{}}, `schema badEnum: field "s": value "in-progress" has no Go name; use NamedValues`},
 		{"21 optional id", []schema.Interface{optionalID{}}, `schema optionalID: field "id": the ID must be required, not Nillable, and have no UpdateDefault`},
 		{"22 float id", []schema.Interface{floatID{}}, `schema floatID: field "id": the ID cannot be of type float64`},
@@ -449,6 +626,19 @@ func TestBuildRules(t *testing.T) {
 		{"27 join table clash", []schema.Interface{joinClash{}, clashTable{}}, `schema joinClash: edge "links": join table join_clash_links is also the table of schema clashTable`},
 		{"5 inline inverse", []schema.Interface{inlineNotSchema{}}, `schema inlineNotSchema: edge "x": type notSchema is not a schema of this package`},
 		{"28 inline inverse to another schema", []schema.Interface{inlineOther{}, Pet{}}, `schema inlineOther: edge "owner": From(...) inline is allowed only on an edge to its own schema`},
+		{"29 table on O2M", []schema.Interface{tableOnO2M{}, Pet{}}, `schema tableOnO2M: edge "pets": edge.Table is allowed only on many-to-many edges`},
+		{"30 field go name", []schema.Interface{badFieldName{}}, `schema badFieldName: field "in-stock": its Go name In-stock is not a Go identifier`},
+		{"30 empty field name", []schema.Interface{emptyFieldName{}}, `schema emptyFieldName: field "": its Go name "" is not a Go identifier`},
+		{"30 edge go name", []schema.Interface{badEdgeName{}}, `schema badEdgeName: edge "my-peers": its Go name My-peers is not a Go identifier`},
+		{"30 fields share a go name", []schema.Interface{fieldGoNames{}}, `schema fieldGoNames: field "orgID": its Go name OrgID is also field "org_id"'s`},
+		{"30 edges share a go name", []schema.Interface{edgeGoNames{}}, `schema edgeGoNames: edge "userPosts": its Go name UserPosts is also edge "user_posts"'s`},
+		{"30 enum values share a go name", []schema.Interface{enumGoNames{}}, `schema enumGoNames: field "s": values "a" and "b" have one Go name A`},
+		{"30 implicit field shares a go name", []schema.Interface{clashOwner{}, clashPet{}}, `schema clashPet: field "clash_owner_pets": its Go name ClashOwnerPets is also field "clashOwnerPets"'s`},
+		{"31 column differs from field", []schema.Interface{columnFieldMismatch{}}, `schema columnFieldMismatch: edge "parent": column "pid" differs from field "parent_id"'s column "parent_id"`},
+		{"32 keys on both edges", []schema.Interface{keyA{}, keyB{}}, `schema keyB: edge "a": storage keys are declared on both keyA.b and this edge`},
+		{"32 one column on M2M", []schema.Interface{oneColumnM2M{}}, `schema oneColumnM2M: edge "peers": a many-to-many edge needs two columns`},
+		{"32 two columns on O2M", []schema.Interface{twoColumnsO2M{}, Pet{}}, `schema twoColumnsO2M: edge "pets": edge.Columns is allowed only on many-to-many edges; use edge.Column`},
+		{"33 second inverse", []schema.Interface{invAssoc{}, invItem{}}, `schema invItem: edge "b": invAssoc.items already has the inverse edge "a"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -469,6 +659,9 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{defaultTenant{}}, {bytesTenant{}}, {emptyEnum{}}, {dupEnum{}}, {badEnum{}}, {optionalID{}}, {floatID{}},
 		{unknownIndexField{}}, {unknownIndexEdge{}}, {indexForeignEdge{}, Pet{}}, {emptyIndex{}}, {otherNoType{}},
 		{joinClash{}, clashTable{}}, {inlineOther{}, Pet{}}, {inlineNotSchema{}},
+		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
+		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
+		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

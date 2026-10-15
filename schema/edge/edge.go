@@ -48,16 +48,18 @@ func newEdge(name string, t any, inverse bool) *desc.Edge {
 // constraint symbols.
 type StorageOption func(*desc.Edge)
 
-// Table sets the join table of a many-to-many edge, or the table that holds
-// the foreign key of any other edge.
+// Table sets the join table of a many-to-many edge. It is refused on any other
+// edge, whose foreign key is in the table of the schema that holds it, as in
+// ent.
 func Table(name string) StorageOption { return func(d *desc.Edge) { d.Table = name } }
 
 // Column sets the foreign-key column of an edge that has one.
 func Column(name string) StorageOption { return func(d *desc.Edge) { d.Columns = []string{name} } }
 
-// Columns sets the two columns of a many-to-many join table: to is the column
-// that references the edge's owner and from the one that references its
-// target.
+// Columns sets the two columns of a many-to-many join table, as ent reads
+// them: to is the column that references the owner of the edge declared with
+// To, and from the one that references that edge's target. That holds also
+// when the option is given on the inverse edge, declared with From.
 func Columns(to, from string) StorageOption {
 	return func(d *desc.Edge) { d.Columns = []string{to, from} }
 }

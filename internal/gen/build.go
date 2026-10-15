@@ -67,6 +67,7 @@ type edgeState struct {
 	owner  *node
 	target *node      // nil when the target is not a schema of the package
 	pair   *edgeState // the other edge of an inverse pair
+	column string     // the foreign-key column a storage key set, on a non-M2M relation
 }
 
 // fail records that schema s breaks rule.
@@ -242,6 +243,10 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 		}
 		return
 	}
+	if r.pair != nil {
+		b.fail(33, n.ent.Name, edgeAt(le.Name), "%s.%s already has the inverse edge %q", t.ent.Name, r.le.Name, r.pair.le.Name)
+		return
+	}
 	if le.Required && r.le.Required {
 		b.fail(9, n.ent.Name, edgeAt(le.Name), "cannot be required in both directions with %s.%s", t.ent.Name, r.le.Name)
 	}
@@ -249,7 +254,7 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 	ref := r.ed
 	ed.Ref, ref.Ref = ref.Name, ed.Name
 	e := n.ent
-	table, column := e.Table, t.ent.Label+"_"+snake(ref.Name)
+	table, cols := e.Table, []string{t.ent.Label + "_" + snake(ref.Name)}
 	switch au, iu := ref.Unique, le.Unique; {
 	case au && iu:
 		ed.Rel.Kind, ref.Rel.Kind = "O2O", "O2O"
@@ -261,54 +266,43 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 	default:
 		ed.Rel.Kind, ref.Rel.Kind = "M2M", "M2M"
 		table = t.ent.Label + "_" + ref.Name
+		// The assoc edge's owner's column, then its target's.
+		c1, c2 := t.ent.Label+"_id", e.Label+"_id"
+		if c1 == c2 {
+			c2 = singular(le.Name) + "_id"
+		}
+		cols = []string{c1, c2}
 	}
 	// The storage key of the pair is the assoc edge's, or else the inverse's.
-	key, keyOnAssoc := r.le, true
-	if key.Table == "" && len(key.Columns) == 0 {
-		key, keyOnAssoc = le, false
+	if hasKey(r.le) && hasKey(le) {
+		b.fail(32, n.ent.Name, edgeAt(le.Name), "storage keys are declared on both %s.%s and this edge", t.ent.Name, r.le.Name)
 	}
-	table = cmp.Or(key.Table, table)
+	switch {
+	case hasKey(r.le):
+		table, cols = b.applyKey(r, ref.Rel.Kind, table, cols)
+	case hasKey(le):
+		table, cols = b.applyKey(s, ed.Rel.Kind, table, cols)
+	}
 	ed.Rel.Table, ref.Rel.Table = table, table
-	if ed.Rel.Kind != "M2M" {
-		if len(key.Columns) > 0 {
-			column = key.Columns[0]
-		}
-		ed.Rel.Columns, ref.Rel.Columns = []string{column}, []string{column}
-		return
+	ref.Rel.Columns = cols
+	ed.Rel.Columns = slices.Clone(cols)
+	if ed.Rel.Kind == "M2M" {
+		slices.Reverse(ed.Rel.Columns) // the inverse's owner is the assoc's target
+	} else {
+		c := cmp.Or(r.column, s.column)
+		s.column, r.column = c, c
 	}
-	// c1 refers to the assoc edge's owner and c2 to its target.
-	c1, c2 := t.ent.Label+"_id", e.Label+"_id"
-	if c1 == c2 {
-		c2 = singular(le.Name) + "_id"
-	}
-	switch cols := key.Columns; {
-	case keyOnAssoc && len(cols) > 1:
-		c1, c2 = cols[0], cols[1]
-	case keyOnAssoc && len(cols) == 1:
-		c1 = cols[0]
-	case len(cols) > 1:
-		c2, c1 = cols[0], cols[1]
-	case len(cols) == 1:
-		c2 = cols[0]
-	}
-	ed.Rel.Columns, ref.Rel.Columns = []string{c2, c1}, []string{c1, c2}
 }
 
 // resolveAssoc resolves the assoc edge s of n, which no inverse edge claimed.
 func (b *builder) resolveAssoc(n *node, s *edgeState) {
 	le, ed, t := s.le, s.ed, s.target
+	cols := []string{n.ent.Label + "_" + snake(le.Name)}
 	switch {
 	case !le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "M2M", true
 		ed.Rel.Table = n.ent.Label + "_" + le.Name
-		c1, c2 := n.ent.Label+"_id", singular(le.Name)+"_id"
-		if len(le.Columns) > 0 {
-			c1 = le.Columns[0]
-		}
-		if len(le.Columns) > 1 {
-			c2 = le.Columns[1]
-		}
-		ed.Rel.Columns = []string{c1, c2}
+		cols = []string{n.ent.Label + "_id", singular(le.Name) + "_id"}
 	case le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "O2O", true
 		ed.Rel.Table = n.ent.Table
@@ -319,14 +313,43 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 		ed.Rel.Kind = "O2M"
 		ed.Rel.Table = t.ent.Table
 	}
-	ed.Rel.Table = cmp.Or(le.Table, ed.Rel.Table)
-	if ed.Rel.Kind != "M2M" {
-		column := n.ent.Label + "_" + snake(le.Name)
-		if len(le.Columns) > 0 {
-			column = le.Columns[0]
-		}
-		ed.Rel.Columns = []string{column}
+	if hasKey(le) {
+		ed.Rel.Table, cols = b.applyKey(s, ed.Rel.Kind, ed.Rel.Table, cols)
 	}
+	ed.Rel.Columns = cols
+}
+
+// hasKey reports whether le declares a storage key.
+func hasKey(le *load.Edge) bool { return le.Table != "" || len(le.Columns) > 0 }
+
+// applyKey applies the storage key of s, one edge of a relation of kind, to
+// the relation's table and columns, and returns them. For M2M the columns are
+// the assoc edge's owner's and its target's, whichever edge declares them, as
+// in ent. The parts of the key ent refuses are reported (rules 29 and 32) and
+// not applied.
+func (b *builder) applyKey(s *edgeState, kind, table string, cols []string) (string, []string) {
+	le, where := s.le, edgeAt(s.le.Name)
+	m2m := kind == "M2M"
+	switch {
+	case le.Table == "":
+	case m2m:
+		table = le.Table
+	default:
+		b.fail(29, s.owner.ent.Name, where, "edge.Table is allowed only on many-to-many edges")
+	}
+	switch n := len(le.Columns); {
+	case n == 0:
+	case m2m && n == 1:
+		b.fail(32, s.owner.ent.Name, where, "a many-to-many edge needs two columns")
+	case !m2m && n > 1:
+		b.fail(32, s.owner.ent.Name, where, "edge.Columns is allowed only on many-to-many edges; use edge.Column")
+	default:
+		cols = slices.Clone(le.Columns)
+		if !m2m {
+			s.column = cols[0]
+		}
+	}
+	return table, cols
 }
 
 // ownFK reports whether the foreign key of the edge is in its owner's table,
@@ -374,6 +397,9 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		}
 		if f.Optional == le.Required {
 			b.fail(13, n.ent.Name, edgeAt(le.Name), "field %q must be Optional exactly when the edge is not Required", f.Name)
+		}
+		if c := s.column; c != "" && c != f.Column {
+			b.fail(31, n.ent.Name, edgeAt(le.Name), "column %q differs from field %q's column %q", c, f.Name, f.Column)
 		}
 		b.bind(s, f.Name, f.Column)
 		return
@@ -477,6 +503,63 @@ func (b *builder) validate() {
 	for _, n := range b.nodes {
 		b.validateFields(n.ent)
 		b.validateEdges(n)
+		b.validateNames(n.ent)
+	}
+}
+
+// shown is a Go name as an error shows it: "" when it is empty.
+func shown(goName string) string {
+	if goName == "" {
+		return `""`
+	}
+	return goName
+}
+
+// validateNames checks the Go names plan 3 generates from (rule 30): each
+// field's and edge's must be an identifier, unique among the fields and among
+// the edges, and each enum value's unique within its field. An edge with a
+// field's Go name is rule 4; elements of one name are rules 1, 2 and 3.
+func (b *builder) validateNames(e *Entity) {
+	for i, f := range e.Fields {
+		if !ident(f.GoName) {
+			b.fail(30, e.Name, fieldAt(f.Name), "its Go name %s is not a Go identifier", shown(f.GoName))
+			continue
+		}
+		for _, g := range e.Fields[:i] {
+			if g.GoName == f.GoName && g.Name != f.Name {
+				b.fail(30, e.Name, fieldAt(f.Name), "its Go name %s is also field %q's", f.GoName, g.Name)
+				break
+			}
+		}
+	}
+	for i, ed := range e.Edges {
+		if !ident(ed.GoName) {
+			b.fail(30, e.Name, edgeAt(ed.Name), "its Go name %s is not a Go identifier", shown(ed.GoName))
+			continue
+		}
+		for _, g := range e.Edges[:i] {
+			if g.GoName == ed.GoName && g.Name != ed.Name {
+				b.fail(30, e.Name, edgeAt(ed.Name), "its Go name %s is also edge %q's", ed.GoName, g.Name)
+				break
+			}
+		}
+	}
+	for _, f := range e.Fields {
+		if f.Type != "enum" {
+			continue
+		}
+		for i, v := range f.Enums {
+			name := pascal(v.Name)
+			if !ident(name) {
+				continue // rule 20
+			}
+			for _, w := range f.Enums[:i] {
+				if w.Value != v.Value && pascal(w.Name) == name {
+					b.fail(30, e.Name, fieldAt(f.Name), "values %q and %q have one Go name %s", w.Value, v.Value, name)
+					break
+				}
+			}
+		}
 	}
 }
 
