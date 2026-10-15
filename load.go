@@ -139,11 +139,11 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	switch {
 	case len(keys) == 0:
 	case l.join != nil:
-		if all, targets, err = fetchThrough(ctx, db, l, sp, keys, maxRows, byKey); err != nil {
-			return &loadError{owner: owner.Name, rel: r.name, err: err}
+		if all, targets, err = fetchThrough(ctx, db, owner, r, l, sp, keys, maxRows, byKey); err != nil {
+			return err
 		}
 	default:
-		if all, targets, err = fetch(ctx, db, t, l, sp, keys, maxRows); err != nil {
+		if all, targets, err = fetch(ctx, db, t, []int{l.targetCol}, sp, keys, maxRows); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
 		for i, p := range targets {
@@ -152,7 +152,10 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 			}
 		}
 	}
-	if all != nil && len(sp.with) > 0 { // all is nil when nothing was fetched
+	// When a query ran, all holds its []T, so it is not nil even when the
+	// []T is empty; it is nil only when nothing was fetched (no owner had a
+	// key, or no join row held a target key), and there is nothing to load.
+	if all != nil && len(sp.with) > 0 {
 		if err := loadRelations(ctx, db, t, targets, sp.with, maxRows); err != nil {
 			return err
 		}
@@ -180,61 +183,118 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 // rows hold, which are the ones sp's options apply to. It fills byKey with
 // each owner key's targets, as indexes into the targets returned, in their
 // fetched order and each once. It returns a nil all when the join rows hold
-// no target key, and so no target was fetched.
-func fetchThrough(ctx context.Context, db *DB, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+// no target key, and so no target was fetched. Its errors name the owner and
+// the relation.
+//
+// The targets are read in statements that each hold the target keys of a run
+// of whole owners, so that each owner's come from one query, in the order it
+// asked for; a target of owners in two statements is read, and held, twice.
+func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
 	j, t := l.join, l.target
-	_, rows, err := fetch(ctx, db, j, link{target: j, targetCol: l.joinOwner}, loadSpec{}, keys, maxRows)
+	_, rows, err := fetch(ctx, db, j, []int{l.joinOwner, l.joinTarget}, loadSpec{}, keys, maxRows)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
 	}
-	// Each owner key's target keys, in join-row order; and the distinct
-	// target keys, in the same order.
+	// Each owner key's target keys, in join-row order and each once.
 	byOwner := make(map[any][]any, len(keys))
-	var targetKeys []any
-	seen := make(map[any]bool, len(rows))
+	seen := make(map[[2]any]bool, len(rows))
 	for _, p := range rows {
 		own, okOwner := keyOf(j.kit.value(p, l.joinOwner))
 		tk, okTarget := keyOf(j.kit.value(p, l.joinTarget))
-		if !okOwner || !okTarget {
+		if !okOwner || !okTarget || seen[[2]any{own, tk}] {
 			continue
 		}
+		seen[[2]any{own, tk}] = true
 		byOwner[own] = append(byOwner[own], tk)
-		if !seen[tk] {
-			seen[tk] = true
-			targetKeys = append(targetKeys, tk)
-		}
 	}
-	if len(targetKeys) == 0 {
+	// The statements: each holds the distinct target keys of a run of
+	// owners, in the owners' order, at most per of them.
+	type chunk struct{ keys, owners []any }
+	order, per := fetchPlan(db, t, sp)
+	var chunks []chunk
+	var cur chunk
+	inCur := map[any]bool{}
+	for _, own := range keys {
+		tks := byOwner[own]
+		if len(tks) > per {
+			return nil, nil, fmt.Errorf("velox: %s: relation %s: an owner has %d related rows, more than one statement can load in order", owner.Name, r.name, len(tks))
+		}
+		if len(tks) == 0 {
+			continue
+		}
+		added := 0
+		for _, tk := range tks {
+			if !inCur[tk] {
+				added++
+			}
+		}
+		if len(cur.keys)+added > per {
+			chunks = append(chunks, cur)
+			cur, inCur = chunk{}, map[any]bool{}
+		}
+		for _, tk := range tks {
+			if !inCur[tk] {
+				inCur[tk] = true
+				cur.keys = append(cur.keys, tk)
+			}
+		}
+		cur.owners = append(cur.owners, own)
+	}
+	if len(cur.keys) == 0 {
 		return nil, nil, nil
 	}
-	all, targets, err := fetch(ctx, db, t, link{target: t, targetCol: l.targetCol}, sp, targetKeys, maxRows)
-	if err != nil {
-		return nil, nil, err
-	}
-	byTarget := make(map[any][]int, len(targets)) // target key → indexes into all
-	for i, p := range targets {
-		if k, ok := keyOf(t.kit.value(p, l.targetCol)); ok {
-			byTarget[k] = append(byTarget[k], i)
+	chunks = append(chunks, cur)
+	parts := make([]any, len(chunks)) // each chunk's []T
+	for i, c := range chunks {
+		if parts[i], err = fetchPart(ctx, db, t, []int{l.targetCol}, sp, order, c.keys, maxRows); err != nil {
+			return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
 	}
-	for own, tks := range byOwner {
-		var idx []int
-		for _, tk := range tks {
-			idx = append(idx, byTarget[tk]...)
+	all, targets := t.kit.join(parts)
+	start := 0 // the chunk's first index into all
+	for i, c := range chunks {
+		end := start + reflect.ValueOf(parts[i]).Len()
+		byTarget := make(map[any][]int, end-start) // target key → indexes into all
+		for k := start; k < end; k++ {
+			if tk, ok := keyOf(t.kit.value(targets[k], l.targetCol)); ok {
+				byTarget[tk] = append(byTarget[tk], k)
+			}
 		}
-		// The fetched order, which sp's OrderBy set; a join row repeated
-		// repeats no target.
-		slices.Sort(idx)
-		byKey[own] = slices.Compact(idx)
+		for _, own := range c.owners {
+			var idx []int
+			for _, tk := range byOwner[own] {
+				idx = append(idx, byTarget[tk]...)
+			}
+			slices.Sort(idx) // the fetched order, which sp's OrderBy set
+			byKey[own] = idx
+		}
+		start = end
 	}
 	return all, targets, nil
 }
 
 // fetch reads the related rows for keys, in chunks that keep each statement
 // under the dialect's parameter limit, ordered within each owner as asked
-// (by the target's primary key when nothing is asked). 64 parameters are left
-// for conditions that rewrite hooks add, such as a tenant's.
-func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys []any, maxRows int) (any, []unsafe.Pointer, error) {
+// (by the target's primary key when nothing is asked). cols are the columns
+// of t its caller reads, the keys' column first.
+func fetch(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSpec, keys []any, maxRows int) (any, []unsafe.Pointer, error) {
+	order, per := fetchPlan(db, t, sp)
+	var parts []any // each chunk's []T
+	for start := 0; start < len(keys); start += per {
+		part, err := fetchPart(ctx, db, t, cols, sp, order, keys[start:min(start+per, len(keys))], maxRows)
+		if err != nil {
+			return nil, nil, err
+		}
+		parts = append(parts, part)
+	}
+	all, ptrs := t.kit.join(parts) // pointers into the one slice pick and ptr index
+	return all, ptrs, nil
+}
+
+// fetchPlan returns the order a relation's rows are read in, and how many
+// keys one statement holds. 64 parameters are left for conditions that
+// rewrite hooks add, such as a tenant's.
+func fetchPlan(db *DB, t *EntityInfo, sp loadSpec) ([]OrderTerm, int) {
 	order := sp.order
 	if len(order) == 0 {
 		for _, k := range t.PrimaryKey {
@@ -247,37 +307,38 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, l link, sp loadSpec, keys
 		w.pred(p.n)
 		fixed += len(w.args)
 	}
-	per := max(1, maxParams[db.d]-fixed-64)
-	var parts []any // each chunk's []T
-	for start := 0; start < len(keys); start += per {
-		chunk := keys[start:min(start+per, len(keys))]
-		st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.inTx, OrderBy: order,
-			Where: append([]Predicate{{node{op: opIn, col: int32(l.targetCol), v: chunk}}}, sp.where...)}
-		var part any
-		read := func(r rows) (err error) {
-			// st is as the hooks left it.
-			if st.Columns != nil && !slices.Contains(st.Columns, l.targetCol) {
-				return fmt.Errorf("velox: %s: a Rewrite hook left out the relation's key column %s", t.Name, t.Columns[l.targetCol].Name)
-			}
-			if len(sp.with) > 0 && st.Columns != nil {
-				if err := checkLoads(t, st.Columns, sp.with); err != nil {
-					return err
+	return order, max(1, maxParams[db.d]-fixed-64)
+}
+
+// fetchPart reads, in one statement, t's rows whose column cols[0] holds one
+// of keys, with sp's options, in order. A Rewrite hook may not leave out any
+// of cols, the columns the caller reads.
+func fetchPart(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSpec, order []OrderTerm, keys []any, maxRows int) (any, error) {
+	st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.inTx, OrderBy: order,
+		Where: append([]Predicate{{node{op: opIn, col: int32(cols[0]), v: keys}}}, sp.where...)}
+	var part any
+	read := func(r rows) (err error) {
+		// st is as the hooks left it.
+		if st.Columns != nil {
+			for _, c := range cols {
+				if !slices.Contains(st.Columns, c) {
+					return fmt.Errorf("velox: %s: a Rewrite hook left out the relation's key column %s", t.Name, t.Columns[c].Name)
 				}
 			}
-			part, err = t.kit.scan(r, st.Columns)
-			return err
 		}
-		var err error
-		if db.hooked() {
-			err = db.run(ctx, &st, read, nil)
-		} else {
-			err = db.plain(ctx, &st, read, nil)
+		if len(sp.with) > 0 && st.Columns != nil {
+			if err := checkLoads(t, st.Columns, sp.with); err != nil {
+				return err
+			}
 		}
-		if err != nil {
-			return nil, nil, err
-		}
-		parts = append(parts, part)
+		part, err = t.kit.scan(r, st.Columns)
+		return err
 	}
-	all, ptrs := t.kit.join(parts) // pointers into the one slice pick and ptr index
-	return all, ptrs, nil
+	var err error
+	if db.hooked() {
+		err = db.run(ctx, &st, read, nil)
+	} else {
+		err = db.plain(ctx, &st, read, nil)
+	}
+	return part, err
 }

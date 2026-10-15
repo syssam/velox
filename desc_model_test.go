@@ -225,7 +225,15 @@ func dBookTagDesc() velox.Desc[dBookTag] {
 		Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
-		Addr:       func(x *dBookTag, i int) any { return [...]any{&x.BookID, &x.TagID}[i] },
+		Addr: func(x *dBookTag, i int) any {
+			switch i {
+			case 0:
+				return &x.BookID
+			case 1:
+				return &x.TagID
+			}
+			return nil
+		},
 	}
 }
 
@@ -246,6 +254,14 @@ func dPickDesc() velox.Desc[dPick] {
 		Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
-		Addr:       func(x *dPick, i int) any { return [...]any{&x.BookID, &x.TagID}[i] },
+		Addr: func(x *dPick, i int) any {
+			switch i {
+			case 0:
+				return &x.BookID
+			case 1:
+				return &x.TagID
+			}
+			return nil
+		},
 	}
 }

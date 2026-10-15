@@ -208,6 +208,15 @@ func (r *relation) buildThrough(owner *EntityInfo, l link, fail func(string, ...
 	if err != nil {
 		return fail("its join entity is invalid: %s", strings.TrimPrefix(err.Error(), "velox: "))
 	}
+	// Has reads the join rows inside its EXISTS, where nothing scopes them,
+	// while loading reads them with a query of their own, which would be
+	// scoped: the two would disagree. A generated join entity has neither.
+	if j.Tenant != -1 {
+		return fail("its join entity %s has a tenant column; a join entity can have none", j.Name)
+	}
+	if p := j.policy; p != nil && (p.read != nil || p.write != nil || p.insert != nil) {
+		return fail("its join entity %s has a policy; a join entity can have none", j.Name)
+	}
 	for _, c := range [...]int{r.through.ownerCol, r.through.targetCol} {
 		if c < 0 || c >= len(j.Columns) {
 			return fail("its key names column %d of %s, which has %d", c, j.Name, len(j.Columns))

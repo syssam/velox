@@ -233,9 +233,8 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation 
 //
 // Loading it reads J's rows for the owners' keys, then T's rows for the keys
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and
-// Read policy apply, as they do to any relation's target. J is meant to have
-// neither: should it have them, Has does not apply them, while loading, which
-// reads J's rows with a query of J, does.
+// Read policy apply, as they do to any relation's target. J can have neither
+// a tenant column nor a policy: the relation is refused when it resolves.
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) Relation {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	r.through = &through{

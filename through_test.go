@@ -1,6 +1,7 @@
 package velox_test
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -209,14 +210,18 @@ type dBadThrough struct {
 	Target   velox.Many[dAuthor]
 	Single   velox.One[dTag]
 	BadJoin  velox.Many[dTag]
+	TenantJ  velox.Many[dTag]
+	PolicyJ  velox.Many[dTag]
 }
 
 var dBadThroughs = struct {
 	Mismatch, JoinCol velox.Rel[dBadThrough, dTag]
 	Target            velox.Rel[dBadThrough, dAuthor]
 	Single, BadJoin   velox.Rel[dBadThrough, dTag]
+	TenantJ, PolicyJ  velox.Rel[dBadThrough, dTag]
 }{velox.Rel[dBadThrough, dTag]{I: 0}, velox.Rel[dBadThrough, dTag]{I: 1}, velox.Rel[dBadThrough, dAuthor]{I: 2},
-	velox.Rel[dBadThrough, dTag]{I: 3}, velox.Rel[dBadThrough, dTag]{I: 4}}
+	velox.Rel[dBadThrough, dTag]{I: 3}, velox.Rel[dBadThrough, dTag]{I: 4}, velox.Rel[dBadThrough, dTag]{I: 5},
+	velox.Rel[dBadThrough, dTag]{I: 6}}
 
 var dBadThroughMeta velox.MetaOnce[dBadThrough]
 
@@ -228,15 +233,17 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 			PrimaryKey: []int{1},
 			Tenant:     -1,
 			Relations: []velox.Relation{
-				velox.EdgeThrough[dBookTag, dTag]("Mismatch", 0, 0, 1, 0),  // a string owner key, an int64 join key
-				velox.EdgeThrough[dBookTag, dTag]("JoinCol", 1, 2, 1, 0),   // the join has two columns
-				velox.EdgeThrough[dBookTag, dAuthor]("Target", 1, 0, 1, 2), // an int64 join key, a string target key
-				velox.EdgeThrough[dBookTag, dTag]("Single", 1, 0, 1, 0),    // a One
-				velox.EdgeThrough[badDesc, dTag]("BadJoin", 1, 0, 0, 0),    // the join entity is invalid
+				velox.EdgeThrough[dBookTag, dTag]("Mismatch", 0, 0, 1, 0),   // a string owner key, an int64 join key
+				velox.EdgeThrough[dBookTag, dTag]("JoinCol", 1, 2, 1, 0),    // the join has two columns
+				velox.EdgeThrough[dBookTag, dAuthor]("Target", 1, 0, 1, 2),  // an int64 join key, a string target key
+				velox.EdgeThrough[dBookTag, dTag]("Single", 1, 0, 1, 0),     // a One
+				velox.EdgeThrough[badDesc, dTag]("BadJoin", 1, 0, 0, 0),     // the join entity is invalid
+				velox.EdgeThrough[dAuthor, dTag]("TenantJ", 1, 0, 0, 0),     // the join entity has a tenant
+				velox.EdgeThrough[dPolicyJoin, dTag]("PolicyJ", 1, 0, 1, 0), // the join entity has a policy
 			},
 			Addr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
 			RelAddr: func(x *dBadThrough, i int) any {
-				return [...]any{&x.Mismatch, &x.JoinCol, &x.Target, &x.Single, &x.BadJoin}[i]
+				return [...]any{&x.Mismatch, &x.JoinCol, &x.Target, &x.Single, &x.BadJoin, &x.TenantJ, &x.PolicyJ}[i]
 			},
 		}
 	})
@@ -253,11 +260,303 @@ func TestThroughRefusals(t *testing.T) {
 		{dBadThroughs.Target.Has(), "velox: velox_test.dBadThrough.Target: the key types differ: velox_test.dBookTag.TagID is int64 and velox_test.dAuthor.Name is string"},
 		{dBadThroughs.Single.Has(), "velox: velox_test.dBadThrough.Single: a many-to-many relation needs a Many field"},
 		{dBadThroughs.BadJoin.Has(), "velox: velox_test.dBadThrough.BadJoin: its join entity is invalid: velox_test.badDesc: the tenant names column 3, of 1"},
+		{dBadThroughs.TenantJ.Has(), "velox: velox_test.dBadThrough.TenantJ: its join entity velox_test.dAuthor has a tenant column; a join entity can have none"},
+		{dBadThroughs.PolicyJ.Has(), "velox: velox_test.dBadThrough.PolicyJ: its join entity velox_test.dPolicyJoin has a policy; a join entity can have none"},
 	} {
 		_, _, err := db.Query[dBadThrough]().Where(c.p).Limit(1).SQL(ctx)
 		var se *velox.SchemaError
 		if !errors.As(err, &se) || err.Error() != c.want {
 			t.Errorf("got  %v\nwant %s", err, c.want)
+		}
+	}
+}
+
+// dPolicyJoin is a join entity with a policy, which a join entity cannot have.
+type dPolicyJoin struct{ BookID, TagID int64 }
+
+var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
+
+func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
+	return dPolicyJoinMeta.Load(func() velox.Desc[dPolicyJoin] {
+		return velox.Desc[dPolicyJoin]{
+			Table:      "policy_joins",
+			Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
+			PrimaryKey: []int{0, 1},
+			Tenant:     -1,
+			Addr: func(x *dPolicyJoin, i int) any {
+				switch i {
+				case 0:
+					return &x.BookID
+				case 1:
+					return &x.TagID
+				}
+				return nil
+			},
+		}
+	})
+}
+
+func (*dPolicyJoin) Policy() velox.Policy[dPolicyJoin] {
+	return velox.Policy[dPolicyJoin]{Insert: func(context.Context, *dPolicyJoin) error { return nil }}
+}
+
+// TestThroughLoadChunksByOwner: when the targets need several statements,
+// each holds whole owners, so that every owner's targets come from one query
+// in the order asked; an owner with more targets than one statement holds is
+// refused.
+func TestThroughLoadChunksByOwner(t *testing.T) {
+	defer velox.SetMaxParams(velox.Postgres, 66)() // 64 are kept for hooks: two keys a statement
+	e := &velox.FakeExec{Results: [][][]any{
+		{{int64(1), int64(1), "a"}, {int64(2), int64(1), "b"}, {int64(3), int64(1), "c"}},
+		{{int64(1), int64(1)}, {int64(1), int64(2)}, {int64(2), int64(2)}, {int64(2), int64(3)}}, // books 1 and 2
+		{{int64(3), int64(3)}},                                 // book 3
+		{{int64(2), int64(7), "b"}, {int64(1), int64(7), "a"}}, // tags 1 and 2, for book 1
+		{{int64(3), int64(7), "c"}, {int64(2), int64(7), "b"}}, // tags 2 and 3, for books 2 and 3
+	}}
+	db := velox.OpenFake(velox.Postgres, e)
+	bs, err := db.Query[dBook]().With(dBooks.Tags.OrderBy(dTags.Name.Desc())).Limit(3).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"b", "a"}, {"c", "b"}, {"c"}}
+	for i, b := range bs {
+		if got := tagNames(t, b.Tags); !reflect.DeepEqual(got, want[i]) {
+			t.Errorf("book %d: tags %v, want %v", b.ID, got, want[i])
+		}
+	}
+	if len(e.Log) != 5 || !reflect.DeepEqual(e.Args, []any{int64(2), int64(3)}) {
+		t.Errorf("queries %q, last args %v", e.Log, e.Args)
+	}
+	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" IN ($1, $2) ORDER BY "name" DESC`; e.Log[3] != want {
+		t.Errorf("target SQL %s", e.Log[3])
+	}
+
+	e = &velox.FakeExec{Results: [][][]any{
+		{{int64(1), int64(1), "a"}},
+		{{int64(1), int64(1)}, {int64(1), int64(2)}, {int64(1), int64(3)}},
+	}}
+	_, err = velox.OpenFake(velox.Postgres, e).Query[dBook]().With(dBooks.Tags).Limit(1).All(ctx)
+	if want := "velox: velox_test.dBook: relation Tags: an owner has 3 related rows, more than one statement can load in order"; err == nil || err.Error() != want {
+		t.Errorf("got %v", err)
+	}
+	if len(e.Log) != 2 {
+		t.Errorf("queries %q", e.Log)
+	}
+}
+
+// TestThroughJoinRewriteKeepsKeys: a Rewrite hook may not leave either key
+// column out of the join query; the keys would read as zero values.
+func TestThroughJoinRewriteKeepsKeys(t *testing.T) {
+	for kept, missing := range []string{"tag_id", "book_id"} {
+		narrow := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Entity.Name == "velox_test.dBookTag" {
+				st.Columns = []int{kept}
+			}
+			return nil
+		})
+		e := &velox.FakeExec{Results: [][][]any{{{int64(1), int64(1), "a"}}, {{int64(1)}}}}
+		_, err := velox.OpenFake(velox.Postgres, e, narrow).Query[dBook]().With(dBooks.Tags).Limit(1).All(ctx)
+		// The plain relation's error reads the same (TestWithRewriteNarrowsColumns).
+		want := "velox: velox_test.dBookTag: a Rewrite hook left out the relation's key column " + missing
+		if err == nil || !strings.HasPrefix(err.Error(), "velox: velox_test.dBook: loading Tags: ") || !strings.Contains(err.Error(), want) {
+			t.Errorf("got  %v\nwant %s", err, want)
+		}
+	}
+}
+
+// TestThroughLoadMaxRows: the owner query's row cap covers the join query,
+// and its MaxRows raises it there too.
+func TestThroughLoadMaxRows(t *testing.T) {
+	results := func() [][][]any {
+		return [][][]any{
+			{{int64(1), int64(1), "a"}},
+			{{int64(1), int64(1)}, {int64(1), int64(2)}, {int64(1), int64(3)}},
+			{{int64(1), int64(7), "a"}, {int64(2), int64(7), "b"}, {int64(3), int64(7), "c"}},
+		}
+	}
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Results: results()}, velox.WithMaxRows(2))
+	_, err := db.Query[dBook]().With(dBooks.Tags).Limit(1).All(ctx)
+	const want = "velox: velox_test.dBook: loading Tags: velox_test.dBookTag: read more rows than the cap: more than 2; raise it with the query's MaxRows"
+	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
+		t.Errorf("got  %v\nwant %s", err, want)
+	}
+	db = velox.OpenFake(velox.Postgres, &velox.FakeExec{Results: results()}, velox.WithMaxRows(2))
+	bs, err := db.Query[dBook]().With(dBooks.Tags).Limit(1).MaxRows(3).All(ctx)
+	if err != nil || len(tagNames(t, bs[0].Tags)) != 3 {
+		t.Errorf("MaxRows(3): %v", err)
+	}
+}
+
+// dNote has a nullable key: SameBook is the notes on its book, through the
+// book's join rows, so its owner key and its target key are both *int64,
+// against the join's int64.
+type dNote struct {
+	ID       int64
+	BookID   *int64
+	SameBook velox.Many[dNote]
+}
+
+var dNoteSameBook = velox.Rel[dNote, dNote]{I: 0}
+
+var dNoteMeta velox.MetaOnce[dNote]
+
+func (*dNote) VeloxMeta() *velox.Meta[dNote] {
+	return dNoteMeta.Load(func() velox.Desc[dNote] {
+		return velox.Desc[dNote]{
+			Table:      "notes",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "BookID", Name: "book_id"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Relations:  []velox.Relation{velox.EdgeThrough[dBookTag, dNote]("SameBook", 1, 0, 0, 1)},
+			Addr: func(x *dNote, i int) any {
+				switch i {
+				case 0:
+					return &x.ID
+				case 1:
+					return &x.BookID
+				}
+				return nil
+			},
+			RelAddr: func(x *dNote, i int) any {
+				if i == 0 {
+					return &x.SameBook
+				}
+				return nil
+			},
+		}
+	})
+}
+
+// TestThroughNullableKeys: an owner whose key is a nil pointer loads empty
+// without being asked for, and pointer keys match the join's plain ones.
+func TestThroughNullableKeys(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{
+		{{int64(1), int64(1)}, {int64(2), nil}, {int64(3), int64(1)}},
+		{{int64(1), int64(1)}, {int64(1), int64(2)}}, // book 1's join rows, twice the same book
+		{{int64(1), int64(1)}, {int64(3), int64(1)}},
+	}}
+	ns, err := velox.OpenFake(velox.Postgres, e).Query[dNote]().With(dNoteSameBook).Limit(3).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]int64{{1, 3}, {}, {1, 3}}
+	for i, n := range ns {
+		same, ok := n.SameBook.Get()
+		got := []int64{}
+		for _, s := range same {
+			got = append(got, s.ID)
+		}
+		if !ok || same == nil || !reflect.DeepEqual(got, want[i]) {
+			t.Errorf("note %d: %v %v, want %v", n.ID, got, ok, want[i])
+		}
+	}
+	if !reflect.DeepEqual(e.Args, []any{int64(1)}) || e.Log[1] != `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" IN ($1) ORDER BY "book_id", "tag_id"` {
+		t.Errorf("%q %v", e.Log, e.Args)
+	}
+}
+
+// dPeer's Read policy uses a many-to-many HasWhere: through dBookTag to tags
+// (the peer's id standing in for a book's), or, under peerCycle, through
+// dFriend back to dPeer, which is a cycle.
+type dPeer struct {
+	ID      int64
+	Friends velox.Many[dPeer]
+	Tags    velox.Many[dTag]
+}
+
+var dPeers = struct {
+	ID      velox.NumberCol[dPeer, int64]
+	Friends velox.Rel[dPeer, dPeer]
+	Tags    velox.Rel[dPeer, dTag]
+}{velox.NumberCol[dPeer, int64]{I: 0}, velox.Rel[dPeer, dPeer]{I: 0}, velox.Rel[dPeer, dTag]{I: 1}}
+
+type peerCycle struct{}
+
+var dPeerMeta velox.MetaOnce[dPeer]
+
+func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
+	return dPeerMeta.Load(func() velox.Desc[dPeer] {
+		return velox.Desc[dPeer]{
+			Table:      "peers",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Relations: []velox.Relation{
+				velox.EdgeThrough[dFriend, dPeer]("Friends", 0, 0, 1, 0),
+				velox.EdgeThrough[dBookTag, dTag]("Tags", 0, 0, 1, 0),
+			},
+			Addr: func(x *dPeer, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return nil
+			},
+			RelAddr: func(x *dPeer, i int) any {
+				switch i {
+				case 0:
+					return &x.Friends
+				case 1:
+					return &x.Tags
+				}
+				return nil
+			},
+		}
+	})
+}
+
+func (*dPeer) Policy() velox.Policy[dPeer] {
+	return velox.Policy[dPeer]{Read: func(ctx context.Context) (velox.Pred[dPeer], error) {
+		if ctx.Value(peerCycle{}) != nil {
+			return dPeers.Friends.HasWhere(dPeers.ID.GT(0)), nil
+		}
+		return dPeers.Tags.HasWhere(dTags.Name.EQ("public")), nil
+	}}
+}
+
+// dFriend is the join entity of dPeer.Friends.
+type dFriend struct{ PeerID, FriendID int64 }
+
+var dFriendMeta velox.MetaOnce[dFriend]
+
+func (*dFriend) VeloxMeta() *velox.Meta[dFriend] {
+	return dFriendMeta.Load(func() velox.Desc[dFriend] {
+		return velox.Desc[dFriend]{
+			Table:      "friends",
+			Columns:    []velox.ColumnDesc{{Field: "PeerID", Name: "peer_id"}, {Field: "FriendID", Name: "friend_id"}},
+			PrimaryKey: []int{0, 1},
+			Tenant:     -1,
+			Addr: func(x *dFriend, i int) any {
+				switch i {
+				case 0:
+					return &x.PeerID
+				case 1:
+					return &x.FriendID
+				}
+				return nil
+			},
+		}
+	})
+}
+
+// TestThroughTargetPolicy: the target's Read policy, itself a many-to-many
+// HasWhere, lands inside the inner EXISTS; a Read policy that reaches its own
+// Read back through a join is refused as a cycle.
+func TestThroughTargetPolicy(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	got, _, err := db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1).SQL(ctx)
+	inner := `EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND ` +
+		`EXISTS (SELECT 1 FROM "book_tags" AS "vx3" WHERE "vx3"."book_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx4" WHERE "vx4"."id" = "vx3"."tag_id" AND "name" = $`
+	if err != nil || !strings.Contains(got, inner) {
+		t.Errorf("got  %s, %v\nwant it to hold %s", got, err, inner)
+	}
+	cyc := context.WithValue(ctx, peerCycle{}, true)
+	const want = "velox: velox_test.dPeer: the Read policy of velox_test.dPeer reaches its own Read through an EXISTS; such a policy cannot be applied"
+	for name, q := range map[string]velox.Query[dPeer]{
+		"direct":         db.Query[dPeer]().Limit(1),
+		"from an EXISTS": db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1),
+	} {
+		if _, _, err := q.SQL(cyc); err == nil || err.Error() != want || errors.Is(err, velox.ErrDenied) {
+			t.Errorf("%s: %v", name, err)
 		}
 	}
 }
