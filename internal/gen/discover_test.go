@@ -24,6 +24,12 @@ type Alias = Post
 	if err != nil || strings.Join(got, ",") != "Post,User" {
 		t.Fatalf("got %v %v", got, err)
 	}
+	// Only a direct embedding is found: Derived embeds Base, which embeds
+	// schema.Schema, and is not a schema.
+	got, err = discover(map[string][]byte{"d.go": []byte("package s\nimport \"github.com/syssam/velox2/schema\"\ntype Base struct{ schema.Schema }\ntype Derived struct{ Base }\n")})
+	if err != nil || strings.Join(got, ",") != "Base" {
+		t.Fatalf("got %v %v", got, err)
+	}
 	_, err = discover(map[string][]byte{"c.go": []byte("package s\nimport \"github.com/syssam/velox2/schema\"\ntype user struct{ schema.Schema }\n")})
 	if err == nil || !strings.Contains(err.Error(), "schema type user is unexported") {
 		t.Fatalf("got %v", err)

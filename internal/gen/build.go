@@ -88,6 +88,9 @@ var numeric = map[string]bool{
 	"float32": true, "float64": true,
 }
 
+// integer reports whether the field type t is a Go integer.
+func integer(t string) bool { return numeric[t] && t != "float32" && t != "float64" }
+
 // idTypes are the field types an ID may have.
 var idTypes = map[string]bool{
 	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
@@ -169,7 +172,7 @@ func (n *node) edge(name string) *edgeState {
 // declared returns n's first field named name that the schema declares, or nil.
 func (n *node) declared(name string) *Field {
 	for _, f := range n.ent.Fields {
-		if f.Name == name && !f.AutoID && f.Implicit == "" {
+		if f.Name == name && isDeclared(f) {
 			return f
 		}
 	}
@@ -184,7 +187,8 @@ func (b *builder) resolveEdges() {
 		for _, le := range n.schema.Edges {
 			ed := &Edge{
 				Name: le.Name, GoName: pascal(le.Name), Target: le.Type, Unique: le.Unique, Required: le.Required,
-				Inverse: le.Inverse, Comment: le.Comment, Annotations: le.Annotations,
+				Inverse: le.Inverse, Immutable: le.Immutable, Symbols: slices.Clone(le.Symbols),
+				Comment: le.Comment, Annotations: le.Annotations,
 			}
 			s := &edgeState{ed: ed, le: le, owner: n}
 			if le.TypePkg == b.pkg {
@@ -284,6 +288,9 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 		table, cols = b.applyKey(s, ed.Rel.Kind, table, cols)
 	}
 	ed.Rel.Table, ref.Rel.Table = table, table
+	if ed.Rel.Kind == "M2M" {
+		b.checkJoinColumns(s, table, cols)
+	}
 	ref.Rel.Columns = cols
 	ed.Rel.Columns = slices.Clone(cols)
 	if ed.Rel.Kind == "M2M" {
@@ -316,7 +323,20 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 	if hasKey(le) {
 		ed.Rel.Table, cols = b.applyKey(s, ed.Rel.Kind, ed.Rel.Table, cols)
 	}
+	if ed.Rel.Kind == "M2M" {
+		b.checkJoinColumns(s, ed.Rel.Table, cols)
+	}
 	ed.Rel.Columns = cols
+}
+
+// checkJoinColumns reports a join table whose two columns have one name (rule
+// 35), as the singular fallback gives for an edge to its own schema named
+// after it: edge "nodes" on Node makes node_id twice. s is the edge whose name
+// gave the second column.
+func (b *builder) checkJoinColumns(s *edgeState, table string, cols []string) {
+	if cols[0] == cols[1] {
+		b.fail(35, s.owner.ent.Name, edgeAt(s.le.Name), "join table %s has two columns named %s; name them with edge.Columns", table, cols[0])
+	}
 }
 
 // hasKey reports whether le declares a storage key.
@@ -393,10 +413,21 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		}
 		id := s.target.ent.Fields[0]
 		if !sameType(&f.Field, &id.Field) {
-			b.fail(12, n.ent.Name, edgeAt(le.Name), "field %q is %s; %s's ID is %s", f.Name, typeName(&f.Field), s.target.ent.Name, typeName(&id.Field))
+			reason := fmt.Sprintf("field %q is %s; %s's ID is %s", f.Name, typeName(&f.Field), s.target.ent.Name, typeName(&id.Field))
+			if id.AutoID && integer(f.Type) && integer(id.Type) {
+				// A schema ported from ent, whose default ID is an int.
+				reason += `; declare it field.Int64, or declare the ID with field.Int("id")`
+			}
+			b.fail(12, n.ent.Name, edgeAt(le.Name), "%s", reason)
 		}
 		if f.Optional == le.Required {
 			b.fail(13, n.ent.Name, edgeAt(le.Name), "field %q must be Optional exactly when the edge is not Required", f.Name)
+		}
+		switch {
+		case le.Immutable && !f.Immutable:
+			b.fail(34, n.ent.Name, edgeAt(le.Name), "is Immutable but field %q is not", f.Name)
+		case f.Immutable && !le.Immutable:
+			b.fail(34, n.ent.Name, edgeAt(le.Name), "field %q is Immutable but the edge is not", f.Name)
 		}
 		if c := s.column; c != "" && c != f.Column {
 			b.fail(31, n.ent.Name, edgeAt(le.Name), "column %q differs from field %q's column %q", c, f.Name, f.Column)
@@ -563,10 +594,14 @@ func (b *builder) validateNames(e *Entity) {
 	}
 }
 
+// isDeclared reports whether the schema declares f: it is neither the ID velox
+// added nor an implicit foreign key.
+func isDeclared(f *Field) bool { return !f.AutoID && f.Implicit == "" }
+
 func (b *builder) validateFields(e *Entity) {
 	seen := map[string]bool{}
 	for _, f := range e.Fields {
-		if f.AutoID || f.Implicit != "" {
+		if !isDeclared(f) {
 			continue
 		}
 		if seen[f.Name] {
@@ -584,7 +619,12 @@ func (b *builder) validateFields(e *Entity) {
 		if first.Name == f.Name && first.Implicit == "" && f.Implicit == "" {
 			continue // rule 1
 		}
-		b.fail(2, e.Name, fieldAt(f.Name), "column %q is also field %q's", f.Column, first.Name)
+		reason := fmt.Sprintf("column %q is also field %q's", f.Column, first.Name)
+		if isDeclared(first) && f.Implicit != "" || isDeclared(f) && first.Implicit != "" {
+			// The foreign key of an edge is declared but not bound to it.
+			reason += "; bind it with edge.Field(...)"
+		}
+		b.fail(2, e.Name, fieldAt(f.Name), "%s", reason)
 	}
 	for _, f := range e.Fields {
 		if !f.Tenant {

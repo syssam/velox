@@ -208,7 +208,7 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String("name")
 		t.Fatalf("default package: %d %q %q", code, out, errs)
 	}
 	code, _, errs = velox(t, dir, "describe", "./nothing")
-	if code != 1 || !strings.HasPrefix(errs, "velox-gen: ") {
+	if code != 1 || !strings.HasPrefix(errs, "velox-gen: ") || strings.Contains(errs, "velox-gen: velox-gen: ") {
 		t.Fatalf("%d %q", code, errs)
 	}
 }

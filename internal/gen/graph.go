@@ -31,6 +31,10 @@ type Entity struct {
 
 // Field is a field of an entity: a field of the model, the ID velox adds when
 // the schema declares none, or a foreign key velox adds for an edge.
+//
+// Position, from load.Field, is meaningful only for a declared field: one with
+// !AutoID && Implicit == "". The ID velox adds and the implicit foreign keys
+// have no position in the schema and leave it zero.
 type Field struct {
 	load.Field
 	GoName   string `json:"go_name"`
@@ -51,7 +55,9 @@ type Edge struct {
 	Bidi        bool                       `json:"bidi,omitempty"`
 	Ref         string                     `json:"ref,omitempty"` // the paired edge on Target
 	Rel         Rel                        `json:"rel"`
-	Field       string                     `json:"field,omitempty"` // the foreign-key field, on whichever entity's table holds the column; "" for M2M
+	Field       string                     `json:"field,omitempty"`     // the foreign-key field, on whichever entity's table holds the column; "" for M2M
+	Immutable   bool                       `json:"immutable,omitempty"` // the edge cannot be changed after create
+	Symbols     []string                   `json:"symbols,omitempty"`   // the foreign-key constraint names: one, or two for M2M
 	Comment     string                     `json:"comment,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 }

@@ -283,6 +283,29 @@ func TestBuildColumnMatchesField(t *testing.T) {
 	}
 }
 
+// An edge's Immutable and Symbols are in the Graph.
+type symA struct{ schema.Schema }
+
+func (symA) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("bs", symB.Type).Immutable().StorageKey(edge.Symbols("a_fk", "b_fk"))}
+}
+
+type symB struct{ schema.Schema }
+
+func (symB) Edges() []schema.Edge { return []schema.Edge{edge.From("as", symA.Type).Ref("bs")} }
+
+func TestBuildEdgeImmutableSymbols(t *testing.T) {
+	g := mustBuild(t, symA{}, symB{})
+	bs, as := g.Entity("symA").Edge("bs"), g.Entity("symB").Edge("as")
+	if !bs.Immutable || len(bs.Symbols) != 2 || bs.Symbols[0] != "a_fk" || bs.Symbols[1] != "b_fk" || as.Immutable || as.Symbols != nil {
+		t.Fatalf("bs %+v as %+v", bs, as)
+	}
+	j, _ := json.Marshal(bs)
+	if !strings.Contains(string(j), `"immutable":true`) || !strings.Contains(string(j), `"symbols":["a_fk","b_fk"]`) {
+		t.Fatalf("json %s", j)
+	}
+}
+
 // --- one schema type (or pair) per rule
 
 type uuidValue [16]byte
@@ -586,6 +609,54 @@ func (invItem) Edges() []schema.Edge {
 	}
 }
 
+type fkUnbound struct{ schema.Schema }
+
+func (fkUnbound) Fields() []schema.Field {
+	return []schema.Field{field.Int64("fk_unbound_parent").Optional()}
+}
+func (fkUnbound) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", fkUnbound.Type).Unique()}
+}
+
+type fieldStringFK struct{ schema.Schema }
+
+func (fieldStringFK) Fields() []schema.Field {
+	return []schema.Field{field.String("parent_id").Optional()}
+}
+func (fieldStringFK) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", fieldStringFK.Type).Unique().Field("parent_id")}
+}
+
+type immutableEdge struct{ schema.Schema }
+
+func (immutableEdge) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Optional()}
+}
+func (immutableEdge) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", immutableEdge.Type).Unique().Field("parent_id").Immutable()}
+}
+
+type immutableField struct{ schema.Schema }
+
+func (immutableField) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Optional().Immutable()}
+}
+func (immutableField) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", immutableField.Type).Unique().Field("parent_id")}
+}
+
+// loop's edge "loops" names its second join column, singular("loops")_id,
+// after the schema itself: loop_id twice.
+type loop struct{ schema.Schema }
+
+func (loop) Edges() []schema.Edge { return []schema.Edge{edge.To("loops", loop.Type)} }
+
+type cycle struct{ schema.Schema }
+
+func (cycle) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("next", cycle.Type).From("cycles")}
+}
+
 func TestBuildRules(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -594,6 +665,7 @@ func TestBuildRules(t *testing.T) {
 	}{
 		{"1 duplicate field", []schema.Interface{dupField{}}, `schema dupField: field "a": declared twice`},
 		{"2 duplicate column", []schema.Interface{dupColumn{}}, `schema dupColumn: field "b": column "a" is also field "a"'s`},
+		{"2 unbound foreign key", []schema.Interface{fkUnbound{}}, `schema fkUnbound: field "fk_unbound_parent": column "fk_unbound_parent" is also field "fk_unbound_parent"'s; bind it with edge.Field(...)`},
 		{"3 duplicate edge", []schema.Interface{dupEdge{}}, `schema dupEdge: edge "e": declared twice`},
 		{"4 edge go name", []schema.Interface{edgeGoName{}}, `schema edgeGoName: edge "owner": its Go name Owner is also field "owner"'s`},
 		{"5 unknown target", []schema.Interface{unknownTarget{}}, `schema unknownTarget: edge "x": type notSchema is not a schema of this package`},
@@ -606,7 +678,8 @@ func TestBuildRules(t *testing.T) {
 		{"10 field missing", []schema.Interface{fieldMissing{}}, `schema fieldMissing: edge "parent": field "parent_id" is not declared`},
 		{"11 field wrong side", []schema.Interface{fieldWrongSide{}, Pet{}}, `schema fieldWrongSide: edge "pets": binds field "x", but the foreign key is in table pets`},
 		{"11 field on M2M", []schema.Interface{fieldMany{}}, `schema fieldMany: edge "peers": binds field "x", but the foreign key is in table field_many_peers`},
-		{"12 field wrong type", []schema.Interface{fieldWrongType{}}, `schema fieldWrongType: edge "parent": field "parent_id" is int; fieldWrongType's ID is int64`},
+		{"12 field wrong type", []schema.Interface{fieldStringFK{}}, `schema fieldStringFK: edge "parent": field "parent_id" is string; fieldStringFK's ID is int64`},
+		{"12 ported int field", []schema.Interface{fieldWrongType{}}, `schema fieldWrongType: edge "parent": field "parent_id" is int; fieldWrongType's ID is int64; declare it field.Int64, or declare the ID with field.Int("id")`},
 		{"13 field optional", []schema.Interface{fieldOptional{}}, `schema fieldOptional: edge "parent": field "parent_id" must be Optional exactly when the edge is not Required`},
 		{"14 two tenants", []schema.Interface{twoTenants{}}, `schema twoTenants: field "b": a second tenant field; "a" is the tenant`},
 		{"15 optional tenant", []schema.Interface{optionalTenant{}}, `schema optionalTenant: field "org": the tenant field must be required and not Nillable`},
@@ -639,6 +712,10 @@ func TestBuildRules(t *testing.T) {
 		{"32 one column on M2M", []schema.Interface{oneColumnM2M{}}, `schema oneColumnM2M: edge "peers": a many-to-many edge needs two columns`},
 		{"32 two columns on O2M", []schema.Interface{twoColumnsO2M{}, Pet{}}, `schema twoColumnsO2M: edge "pets": edge.Columns is allowed only on many-to-many edges; use edge.Column`},
 		{"33 second inverse", []schema.Interface{invAssoc{}, invItem{}}, `schema invItem: edge "b": invAssoc.items already has the inverse edge "a"`},
+		{"34 immutable edge", []schema.Interface{immutableEdge{}}, `schema immutableEdge: edge "parent": is Immutable but field "parent_id" is not`},
+		{"34 immutable field", []schema.Interface{immutableField{}}, `schema immutableField: edge "parent": field "parent_id" is Immutable but the edge is not`},
+		{"35 join columns collide", []schema.Interface{loop{}}, `schema loop: edge "loops": join table loop_loops has two columns named loop_id; name them with edge.Columns`},
+		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -662,6 +739,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
+		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

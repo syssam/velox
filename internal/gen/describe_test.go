@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox2/schema/index"
 )
 
 func TestDescribeText(t *testing.T) {
@@ -15,6 +19,23 @@ func TestDescribeText(t *testing.T) {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("missing %q in\n%s", want, b.String())
 		}
+	}
+}
+
+type partial struct{ schema.Schema }
+
+func (partial) Fields() []schema.Field { return []schema.Field{field.Int64("a"), field.Int64("b")} }
+func (partial) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("a").Where("a < b AND b > 0 & 1")}
+}
+
+func TestDescribeJSONDoesNotEscapeHTML(t *testing.T) {
+	var b bytes.Buffer
+	if err := Describe(&b, mustBuild(t, partial{}), true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), `"where": "a < b AND b > 0 & 1"`) || !strings.HasSuffix(b.String(), "}\n") {
+		t.Fatalf("got\n%s", b.String())
 	}
 }
 

@@ -13,12 +13,11 @@ import (
 // one block per entity with its fields, then its edges.
 func Describe(w io.Writer, g *Graph, asJSON bool) error {
 	if asJSON {
-		b, err := json.MarshalIndent(g, "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = w.Write(append(b, '\n'))
-		return err
+		// Not HTML-escaped: a partial index's Where shows "a < b" as written.
+		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		return enc.Encode(g)
 	}
 	var buf bytes.Buffer
 	for i, e := range g.Entities {

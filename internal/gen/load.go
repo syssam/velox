@@ -98,21 +98,21 @@ func decodeModel(b []byte) (*load.Model, error) {
 func list(dir, pattern string, env []string) (*listed, error) {
 	out, stderr, err := run(dir, env, "list", "-json=ImportPath,Name,Dir,GoFiles,Module,Error", pattern)
 	if err != nil {
-		return nil, fmt.Errorf("velox-gen: go list %s: %w\n%s", pattern, err, strings.TrimRight(stderr, "\n"))
+		return nil, fmt.Errorf("go list %s: %w\n%s", pattern, err, strings.TrimRight(stderr, "\n"))
 	}
 	dec := json.NewDecoder(strings.NewReader(out))
 	var pkg listed
 	if err := dec.Decode(&pkg); err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("velox-gen: %s names no package", pattern)
+			return nil, fmt.Errorf("%s names no package", pattern)
 		}
-		return nil, fmt.Errorf("velox-gen: reading go list output: %w", err)
+		return nil, fmt.Errorf("reading go list output: %w", err)
 	}
 	if dec.More() {
-		return nil, fmt.Errorf("velox-gen: %s names more than one package; name the schema package", pattern)
+		return nil, fmt.Errorf("%s names more than one package; name the schema package", pattern)
 	}
 	if pkg.Error != nil {
-		return nil, fmt.Errorf("velox-gen: %s: %s", pattern, pkg.Error.Err)
+		return nil, fmt.Errorf("%s: %s", pattern, pkg.Error.Err)
 	}
 	if pkg.Module == nil || pkg.Module.Dir == "" {
 		return nil, errors.New("the schema package must be in a module")
@@ -152,7 +152,9 @@ func program(importPath string, names []string) []byte {
 }
 
 // discover returns the exported struct types of the package's files that
-// embed schema.Schema, sorted, and an error for an unexported one.
+// embed schema.Schema, sorted, and an error for an unexported one. Only a type
+// that embeds schema.Schema directly is found: a type that embeds another
+// struct which embeds schema.Schema is not, and is not loaded.
 func discover(files map[string][]byte) ([]string, error) {
 	fnames := make([]string, 0, len(files))
 	for name := range files {

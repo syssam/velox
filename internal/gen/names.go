@@ -36,20 +36,27 @@ func pascal(s string) string {
 }
 
 // snake is the snake_case of an identifier: OrgID → org_id, HTTPServer →
-// http_server. It is cmd/velox-gen's rule, which this module cannot import.
+// http_server, S3Bucket → s3bucket, OAuth2Token → oauth2token. It is ent's
+// snake (entc/gen/func.go), ported exactly, so that labels, default tables and
+// foreign-key columns match ent's: an underscore goes before an upper-case
+// letter that is neither first nor last when the previous letter is lower
+// case, or when the next is lower case and the previous is a letter that did
+// not itself start a word. A digit never starts a word.
 func snake(s string) string {
-	lower := func(c byte) bool { return 'a' <= c && c <= 'z' || '0' <= c && c <= '9' }
-	upper := func(c byte) bool { return 'A' <= c && c <= 'Z' }
-	var b strings.Builder
-	for i := range len(s) {
-		c := s[i]
-		if upper(c) {
-			if i > 0 && (lower(s[i-1]) || upper(s[i-1]) && i+1 < len(s) && lower(s[i+1])) {
-				b.WriteByte('_')
+	var (
+		j int
+		b strings.Builder
+	)
+	for i := 0; i < len(s); i++ {
+		r := rune(s[i])
+		if i > 0 && i < len(s)-1 && unicode.IsUpper(r) {
+			if unicode.IsLower(rune(s[i-1])) ||
+				j != i-1 && unicode.IsLower(rune(s[i+1])) && unicode.IsLetter(rune(s[i-1])) {
+				j = i
+				b.WriteString("_")
 			}
-			c += 'a' - 'A'
 		}
-		b.WriteByte(c)
+		b.WriteRune(unicode.ToLower(r))
 	}
 	return b.String()
 }
