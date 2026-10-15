@@ -64,6 +64,7 @@ func TestNumberTypes(t *testing.T) {
 		{field.Int("a"), "int"}, {field.Int8("a"), "int8"}, {field.Int16("a"), "int16"}, {field.Int32("a"), "int32"},
 		{field.Int64("a"), "int64"}, {field.Uint("a"), "uint"}, {field.Uint8("a"), "uint8"}, {field.Uint16("a"), "uint16"},
 		{field.Uint32("a"), "uint32"}, {field.Uint64("a"), "uint64"}, {field.Float32("a"), "float32"}, {field.Float64("a"), "float64"},
+		{field.Float("a"), "float64"},
 	} {
 		if got := c.f.Descriptor().Type; got != c.want {
 			t.Errorf("got %s, want %s", got, c.want)
@@ -103,6 +104,46 @@ func TestDefaultFuncs(t *testing.T) {
 	type name string
 	if d := field.String("s").GoType(name("")).DefaultFunc(func() name { return "x" }).Descriptor(); d.Err != nil {
 		t.Errorf("a DefaultFunc of the GoType is allowed: %v", d.Err)
+	}
+}
+
+func TestDefaultAndDefaultFunc(t *testing.T) {
+	err := field.Int64("n").Default(1).DefaultFunc(func() int64 { return 2 }).Descriptor().Err
+	if err == nil || err.Error() != `field "n": Default and DefaultFunc are both set` {
+		t.Fatalf("got %v", err)
+	}
+	// A time or uuid field's Default is a func and counts as the default. Their
+	// builders have no DefaultFunc, so set it on the descriptor; Descriptor
+	// checks again on every call.
+	for name, f := range map[string]schema.Field{
+		"time": field.Time("t").Default(time.Now),
+		"uuid": field.UUID("t", id{}).Default(func() id { return id{} }),
+	} {
+		d := f.Descriptor()
+		if d.Err != nil {
+			t.Fatalf("%s: %v", name, d.Err)
+		}
+		d.DefaultFunc = d.Default
+		if err := f.Descriptor().Err; err == nil || err.Error() != `field "t": Default and DefaultFunc are both set` {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+}
+
+func TestTypedNilFuncs(t *testing.T) {
+	for name, c := range map[string]struct {
+		f      schema.Field
+		option string
+	}{
+		"DefaultFunc":   {field.Int64("n").DefaultFunc((func() int64)(nil)), "DefaultFunc"},
+		"UpdateDefault": {field.Int64("n").UpdateDefault((func() int64)(nil)), "UpdateDefault"},
+		"time Default":  {field.Time("t").Default((func() time.Time)(nil)), "Default"},
+		"uuid Default":  {field.UUID("u", id{}).Default((func() id)(nil)), "Default"},
+	} {
+		err := c.f.Descriptor().Err
+		if err == nil || !strings.Contains(err.Error(), c.option+" must be a func() ") {
+			t.Errorf("%s: got %v", name, err)
+		}
 	}
 }
 

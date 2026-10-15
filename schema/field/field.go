@@ -125,6 +125,9 @@ func sameKind(t, base reflect.Type) bool {
 // finish checks the options that depend on one another. It runs on every
 // Descriptor call and records an error only once.
 func finish(d *desc.Field) {
+	if d.Default != nil && d.DefaultFunc != nil {
+		fail(d, "Default and DefaultFunc are both set")
+	}
 	checkFunc(d, "DefaultFunc", d.DefaultFunc)
 	checkFunc(d, "UpdateDefault", d.UpdateDefault)
 	switch d.Type {
@@ -143,14 +146,15 @@ func finish(d *desc.Field) {
 	}
 }
 
-// checkFunc fails unless fn, when set, is a func() returning the field's Go type.
+// checkFunc fails unless fn, when set, is a non-nil func() returning the
+// field's Go type. A typed nil, such as (func() int64)(nil), is refused.
 func checkFunc(d *desc.Field, option string, fn any) {
 	if fn == nil {
 		return
 	}
 	rt, _ := d.RType.(reflect.Type)
 	t := reflect.TypeOf(fn)
-	if t.Kind() != reflect.Func || t.NumIn() != 0 || t.NumOut() != 1 || (rt != nil && !t.Out(0).AssignableTo(rt)) {
+	if t.Kind() != reflect.Func || reflect.ValueOf(fn).IsNil() || t.NumIn() != 0 || t.NumOut() != 1 || (rt != nil && !t.Out(0).AssignableTo(rt)) {
 		fail(d, "%s must be a func() %v", option, rt)
 	}
 }

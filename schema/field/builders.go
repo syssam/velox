@@ -71,6 +71,9 @@ func Uint32(name string) *numberBuilder[uint32] { return newNumber[uint32](name)
 // Uint64 declares a uint64 field.
 func Uint64(name string) *numberBuilder[uint64] { return newNumber[uint64](name) }
 
+// Float declares a float64 field.
+func Float(name string) *numberBuilder[float64] { return newNumber[float64](name) }
+
 // Float32 declares a float32 field.
 func Float32(name string) *numberBuilder[float32] { return newNumber[float32](name) }
 
