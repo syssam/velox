@@ -55,7 +55,7 @@ func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E] {
 }
 
 // statement is the UPDATE Exec and SQL run: Set's assignments, then one for
-// every column with OnUpdate that Set did not name. A column assigned twice
+// every column with an UpdateDefault that Set did not name. A column assigned twice
 // is an error.
 func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if u.meta.err != nil {
@@ -71,7 +71,7 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 		return Statement{}, err
 	}
 	st := cloneStatement(&u.st)
-	st.Set = withOnUpdate(u.meta.info, st.Set)
+	st.Set = withUpdateDefaults(u.meta.info, st.Set)
 	return st, nil
 }
 
@@ -170,8 +170,8 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 }
 
 // Save writes the named columns of *x to the row with x's primary key, and
-// every column with OnUpdate. Once the row was written, it stores in *x every
-// value the statement as sent assigned, the OnUpdate values and those a
+// every column with an UpdateDefault. Once the row was written, it stores in
+// *x every value the statement as sent assigned, the UpdateDefault values and those a
 // BeforeUpdate or Rewrite hook set included, when the field can hold it; after
 // an error, including ErrNotFound, *x is as it was.
 // Its error wraps ErrNotFound when no row has that key. Naming a column twice
@@ -201,7 +201,7 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 	if err := checkAssignedOnce(in, st.Set); err != nil {
 		return err
 	}
-	st.Set = withOnUpdate(in, st.Set)
+	st.Set = withUpdateDefaults(in, st.Set)
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(m, p, k)))
 	}
@@ -234,16 +234,16 @@ func checkAssignedOnce(info *EntityInfo, set []Assignment) error {
 	return nil
 }
 
-// withOnUpdate appends an assignment for every column with OnUpdate that set
-// does not assign.
-func withOnUpdate(info *EntityInfo, set []Assignment) []Assignment {
+// withUpdateDefaults appends an assignment for every column with an
+// UpdateDefault that set does not assign.
+func withUpdateDefaults(info *EntityInfo, set []Assignment) []Assignment {
 	named := make(map[int]bool, len(set))
 	for _, a := range set {
 		named[a.Column] = true
 	}
 	out := slices.Clip(set)
 	for i := range info.Columns {
-		if f := info.Columns[i].OnUpdate; f != nil && !named[i] {
+		if f := info.Columns[i].UpdateDefault; f != nil && !named[i] {
 			out = append(out, Assignment{Column: i, Op: AssignSet, Value: f()})
 		}
 	}

@@ -90,7 +90,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // Exec runs the insert.
 //
 // Exec first fills, in each entity, every zero field whose column has Default
-// or DefaultFunc, and every column with OnUpdate. On a tenant-scoped entity
+// or DefaultFunc, and every column with an UpdateDefault. On a tenant-scoped entity
 // it then sets a zero tenant field to the context's tenant, and refuses a
 // field set to another one (ErrTenantMismatch) or, under AllTenants, left at
 // zero (ErrNoTenant). Then the BeforeInsert hooks run, the tenant is checked
@@ -182,7 +182,7 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 }
 
 // fillDefaults sets, in *p, every zero field whose column has Default or
-// DefaultFunc, and every column with OnUpdate.
+// DefaultFunc, and every column with an UpdateDefault.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
 		fillDefault(&m.info.Columns[i], m.addr(p, i))
@@ -190,13 +190,13 @@ func fillDefaults[E any](m *Meta[E], p *E) {
 }
 
 // fillDefault sets the field that ptr points to as column c's Default,
-// DefaultFunc or OnUpdate says. It is not generic, so that the reflect.Value
+// DefaultFunc or UpdateDefault says. It is not generic, so that the reflect.Value
 // it uses is not compiled into every package that inserts (design §3 rule 7).
 func fillDefault(c *ColumnInfo, ptr any) {
 	v := reflect.ValueOf(ptr).Elem()
 	switch {
-	case c.OnUpdate != nil:
-		v.Set(reflect.ValueOf(c.OnUpdate()))
+	case c.UpdateDefault != nil:
+		v.Set(reflect.ValueOf(c.UpdateDefault()))
 	case c.HasDefault && v.IsZero():
 		v.Set(defaultValue(c.Default))
 	case c.DefaultFunc != nil && v.IsZero():

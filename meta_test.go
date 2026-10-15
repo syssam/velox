@@ -89,7 +89,7 @@ func TestEntityInfo(t *testing.T) {
 	if code := info.Columns[4]; !code.HasDefault || code.Default != "none" {
 		t.Errorf("code: %+v", code)
 	}
-	if info.Columns[1].OnUpdate == nil {
+	if info.Columns[1].UpdateDefault == nil {
 		t.Error("the mixin's OnUpdate on updated_at was not applied")
 	}
 	if !reflect.DeepEqual(info.PrimaryKey, []int{2}) || info.Tenant != 3 {
@@ -444,10 +444,10 @@ func TestOnUpdateReturnsTheGivenFunctionsValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Columns[0].OnUpdate != nil || info.Columns[2].OnUpdate != nil {
+	if info.Columns[0].UpdateDefault != nil || info.Columns[2].UpdateDefault != nil {
 		t.Error("OnUpdate set on a column that did not declare one")
 	}
-	f := info.Columns[1].OnUpdate
+	f := info.Columns[1].UpdateDefault
 	if f == nil {
 		t.Fatal("OnUpdate is nil on the column that declared one")
 	}

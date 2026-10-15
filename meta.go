@@ -25,8 +25,9 @@ type EntityInfo struct {
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none
 	Indexes    []IndexInfo
-	rels       []*relation // in the order of the generated shape
-	kit        *kit        // set by MetaOnce.Get; nil in tests that call buildInfo
+	rels       []*relation                // in the order of the generated shape
+	kit        *kit                       // set by MetaOnce.Get and Load; nil in tests that call buildInfo
+	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
 
 	// The entity's policy and hooks, wrapped once by the generic Schema
 	// methods into functions over the entity's address and its statement.
@@ -62,8 +63,12 @@ type ColumnInfo struct {
 	Default     any
 	HasDefault  bool
 	DefaultFunc func() any // nil when none
-	OnUpdate    func() any // nil when none
-	off         uintptr    // the field's offset in the entity
+	// UpdateDefault is the function whose result every insert and update
+	// writes to the column; nil when none.
+	UpdateDefault func() any
+	Immutable     bool    // an update may not assign the column (Desc only)
+	Sensitive     bool    // the column holds a secret (Desc only; velox logs no values)
+	off           uintptr // the field's offset in the entity
 }
 
 // GoType returns the Go type of column c's field. ColumnInfo.Type holds it
@@ -348,8 +353,8 @@ func validate(info *EntityInfo) error {
 			fail(c.Field, "the tenant column must be NOT NULL and comparable")
 		}
 		// Filled by a default, a row would land in a tenant the context
-		// never named; and OnUpdate would move rows between tenants.
-		if c := info.Columns[info.Tenant]; c.HasDefault || c.DefaultFunc != nil || c.OnUpdate != nil {
+		// never named; and UpdateDefault would move rows between tenants.
+		if c := info.Columns[info.Tenant]; c.HasDefault || c.DefaultFunc != nil || c.UpdateDefault != nil {
 			fail(c.Field, "the tenant column cannot have Default, DefaultFunc or OnUpdate: the context's tenant fills it")
 		}
 	}

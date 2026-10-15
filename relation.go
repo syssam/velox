@@ -64,11 +64,17 @@ type holder struct {
 	loaded bool
 }
 
-// Relation is one relation field of a generated Shape: its name and how to
-// reach its target entity.
+// Relation is one relation field of a generated Shape or Desc: its name, how
+// to reach its target entity and, when EdgeTo or EdgeThrough made it, the
+// columns that key it.
 type Relation struct {
 	name   string
 	target func() (*EntityInfo, error)
+
+	explicit  bool     // EdgeTo or EdgeThrough: the key is ownerCol and targetCol
+	ownerCol  int      // an index into the owner's Columns
+	targetCol int      // an index into the target's Columns
+	through   *through // EdgeThrough's join entity; nil for any other relation
 }
 
 // RelationTo is what velox-gen writes for a relation field whose target is
@@ -94,6 +100,13 @@ type relation struct {
 	fkOff  uintptr // ForeignKey: the target field's offset...
 	fkTyp  any     // ...and reflect.Type, computed during Schema
 	hasFK  bool
+
+	// A relation of the Desc path names its key (EdgeTo): the inference
+	// above, from References, ForeignKey and field names, is the old path's.
+	explicit  bool
+	ownerCol  int
+	targetCol int
+	through   *through // EdgeThrough; Task 4 loads it
 
 	once sync.Once
 	link link
@@ -130,6 +143,19 @@ func (r *relation) build(owner *EntityInfo) (link, error) {
 		kind = "Many"
 	}
 	switch {
+	case r.explicit:
+		if r.through != nil {
+			return fail("many-to-many relations arrive in Task 4")
+		}
+		// The indexes are literals in generated code: an index out of range
+		// is stale or hand-edited code, and would panic on first use.
+		if r.ownerCol < 0 || r.ownerCol >= len(owner.Columns) {
+			return fail("its key names column %d of %s, which has %d", r.ownerCol, owner.Name, len(owner.Columns))
+		}
+		if r.targetCol < 0 || r.targetCol >= len(t.Columns) {
+			return fail("its key names column %d of %s, which has %d", r.targetCol, t.Name, len(t.Columns))
+		}
+		l.ownerCol, l.targetCol = r.ownerCol, r.targetCol
 	case r.ref == -2:
 		return fail("References names no column")
 	case r.ref >= 0:

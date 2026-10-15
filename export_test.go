@@ -296,3 +296,19 @@ func ExistsOn(p Predicate) *EntityInfo {
 	}
 	return p.n.v.(link).target
 }
+
+// LoadDesc builds entity E's metadata from d, as MetaOnce.Load does on the
+// entity's first use, then resolves its relations, as CheckEntity does.
+func LoadDesc[E any](d Desc[E]) (*EntityInfo, error) {
+	var o MetaOnce[E]
+	m := o.Load(func() Desc[E] { return d })
+	if m.err != nil {
+		return nil, m.err
+	}
+	for _, r := range m.info.rels {
+		if _, err := r.resolve(m.info); err != nil {
+			return m.info, err
+		}
+	}
+	return m.info, nil
+}

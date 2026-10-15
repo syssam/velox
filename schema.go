@@ -197,9 +197,10 @@ func (c *ColumnDef[V]) DefaultFunc[_ Lazy[V]](f func() V) *ColumnDef[V] {
 	return c
 }
 
-// OnUpdate sets a function whose result every insert and update writes to the column.
+// OnUpdate sets a function whose result every insert and update writes to
+// the column: its ColumnInfo.UpdateDefault.
 func (c *ColumnDef[V]) OnUpdate[_ Lazy[V]](f func() V) *ColumnDef[V] {
-	colInfo(c.s, c.i).OnUpdate = func() any { return f() }
+	colInfo(c.s, c.i).UpdateDefault = func() any { return f() }
 	return c
 }
 
