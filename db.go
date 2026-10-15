@@ -32,10 +32,11 @@ type config struct {
 	rewrites  []Rewrite
 	arounds   []Around
 	cache     renderCache
-	maxLimit  int       // WithMaxLimit; 0: none
-	maxRows   int       // WithMaxRows; 0: none
-	deadlines Deadlines // WithDeadlines
-	callers   *callers  // WithCallers; nil: off
+	maxLimit  int        // WithMaxLimit; 0: none
+	maxRows   int        // WithMaxRows; 0: none
+	deadlines Deadlines  // WithDeadlines
+	callers   *callers   // WithCallers; nil: off
+	comment   *commenter // WithSQLComment; nil: off
 }
 
 // Option configures a DB's pipeline.
@@ -132,8 +133,8 @@ func dbErr(info *EntityInfo, err error) error {
 // through run, or may take the shortcut of plain.
 func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
 
-// plain runs a statement on a DB with no hooks: guard, scope, rendering and
-// execution.
+// plain runs a statement on a DB with no hooks: guard, scope, rendering (the
+// SQL comment included) and execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
@@ -144,9 +145,16 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 		return err
 	}
 	db.capLimit(st)
-	st.Dialect = db.d
+	if db.cfg.comment != nil {
+		db.observe(ctx, st) // the comment reads the call site and tags
+	} else {
+		st.Dialect = db.d
+	}
 	e, args := db.cfg.cache.get(db.d, st)
 	st.SQL, st.Fingerprint, st.Args = e.text, e.fp, args
+	if db.cfg.comment != nil {
+		st.SQL += db.cfg.comment.text(st)
+	}
 	if !db.timed() {
 		return db.exec(ctx, st, read, res)
 	}
@@ -193,7 +201,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 // prepare takes a statement through every stage before execution, for run
 // and for SQL(ctx): guard, observe, the entity's BeforeUpdate or BeforeDelete
 // hooks, rewrite hooks and their checks, scope, the row cap, and rendering
-// into st.SQL and st.Args.
+// into st.SQL (comment included) and st.Args.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.guard(st); err != nil {
 		return err
@@ -272,6 +280,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// made for this statement alone; caching by it would fill the cache.
 		st.SQL, st.Args = render(db.d, st)
 		st.Fingerprint = fingerprint(st.SQL)
+	}
+	// After the fingerprint, which is of the text without the comment.
+	if db.cfg.comment != nil {
+		st.SQL += db.cfg.comment.text(st)
 	}
 	return nil
 }

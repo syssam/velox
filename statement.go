@@ -96,7 +96,7 @@ type Statement struct {
 	// Caller is the statement's call site, with WithCallers; zero
 	// otherwise. A Rewrite hook may change it, as Tags.
 	Caller      Caller
-	SQL         string // set by rendering, after the rewrite hooks
+	SQL         string // set by rendering, after the rewrite hooks: the text sent, WithSQLComment's comment included
 	Fingerprint string // set by rendering: the shape's ID, the hash of SQL without the comment
 	Args        []any  // set by rendering
 	// Result is set by each execution, before next returns to the Around
