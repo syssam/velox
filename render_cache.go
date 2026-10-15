@@ -1,7 +1,9 @@
 package velox
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"sync"
 )
 
@@ -12,12 +14,26 @@ import (
 var maxShapes = 4096
 
 // maxCacheBytes bounds the cache's memory: the bytes of keys and texts it
-// holds, across entities. In lists of many lengths are the shapes that grow it.
+// holds, across entities: each shape's key, text and fingerprint. In lists of
+// many lengths are the shapes that grow it.
 var maxCacheBytes = 4 << 20
 
-// renderCache keeps the SQL text of each statement shape: everything about a
-// statement except its argument values. A statement whose shape is cached
-// only collects its arguments.
+// cached is what the cache keeps for a shape: its SQL text and its
+// fingerprint.
+type cached struct{ text, fp string }
+
+// fingerprint names a statement's shape: the first 8 bytes, as 16 lowercase
+// hex characters, of the SHA-256 of its SQL text without any comment
+// (observability design §1.1). velox sends every value as a parameter, so the
+// text is the shape.
+func fingerprint(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:8])
+}
+
+// renderCache keeps the SQL text and fingerprint of each statement shape:
+// everything about a statement except its argument values. A statement whose
+// shape is cached only collects its arguments.
 //
 // It is keyed first by the statement's *EntityInfo. A key holds the pointer,
 // so an EntityInfo in the cache is never freed and its address never reused
@@ -25,41 +41,51 @@ var maxCacheBytes = 4 << 20
 // rewrite hook replaced, so a hook's per-statement EntityInfo never fills it.
 type renderCache struct {
 	mu    sync.RWMutex
-	m     map[*EntityInfo]map[string]string // entity, then shape
+	m     map[*EntityInfo]map[string]cached // entity, then shape
 	n     int                               // shapes held, across entities
-	bytes int                               // key and text bytes held
+	bytes int                               // key, text and fingerprint bytes held
 }
 
+// render is get for the tests that look only at the text.
 func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
+	e, args := c.get(d, st)
+	return e.text, args
+}
+
+// get returns the shape's cached text and fingerprint, and the statement's
+// arguments. A shape past the cache's bounds is rendered each time, and gets
+// its fingerprint each time.
+func (c *renderCache) get(d Dialect, st *Statement) (cached, []any) {
 	var buf [256]byte
 	key := shapeKey(buf[:0], d, st)
 	c.mu.RLock()
-	text, ok := c.m[st.Entity][string(key)]
+	e, ok := c.m[st.Entity][string(key)]
 	c.mu.RUnlock()
 	if ok {
 		w := writer{d: d, in: st.Entity, argsOnly: true, args: make([]any, 0, 8)}
 		w.statement(st)
-		return text, w.args
+		return e, w.args
 	}
 	text, args := render(d, st)
+	e = cached{text, fingerprint(text)}
 	c.mu.Lock()
-	if c.n < maxShapes && c.bytes+len(key)+len(text) <= maxCacheBytes {
+	if c.n < maxShapes && c.bytes+len(key)+len(e.text)+len(e.fp) <= maxCacheBytes {
 		if c.m == nil {
-			c.m = make(map[*EntityInfo]map[string]string)
+			c.m = make(map[*EntityInfo]map[string]cached)
 		}
 		shapes := c.m[st.Entity]
 		if shapes == nil {
-			shapes = make(map[string]string)
+			shapes = make(map[string]cached)
 			c.m[st.Entity] = shapes
 		}
 		if _, dup := shapes[string(key)]; !dup { // another goroutine may have added it
-			shapes[string(key)] = text
+			shapes[string(key)] = e
 			c.n++
-			c.bytes += len(key) + len(text)
+			c.bytes += len(key) + len(e.text) + len(e.fp)
 		}
 	}
 	c.mu.Unlock()
-	return text, args
+	return e, args
 }
 
 // size returns the number of shapes held.

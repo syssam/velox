@@ -89,6 +89,7 @@ type Statement struct {
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool
 	SQL          string // set by rendering, after the rewrite hooks
+	Fingerprint  string // set by rendering: the shape's ID, the hash of SQL without the comment
 	Args         []any  // set by rendering
 }
 

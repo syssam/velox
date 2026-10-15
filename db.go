@@ -143,7 +143,8 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 		return err
 	}
 	db.capLimit(st)
-	st.SQL, st.Args = db.cfg.cache.render(db.d, st)
+	e, args := db.cfg.cache.get(db.d, st)
+	st.SQL, st.Fingerprint, st.Args = e.text, e.fp, args
 	if !db.timed() {
 		return db.exec(ctx, st, read, res)
 	}
@@ -260,11 +261,13 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	db.capLimit(st)
 	if st.Entity == entity {
-		st.SQL, st.Args = db.cfg.cache.render(db.d, st)
+		e, args := db.cfg.cache.get(db.d, st)
+		st.SQL, st.Fingerprint, st.Args = e.text, e.fp, args
 	} else {
 		// A hook pointed the statement at its own EntityInfo, likely one
 		// made for this statement alone; caching by it would fill the cache.
 		st.SQL, st.Args = render(db.d, st)
+		st.Fingerprint = fingerprint(st.SQL)
 	}
 	return nil
 }
