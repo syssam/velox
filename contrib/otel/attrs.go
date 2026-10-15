@@ -29,6 +29,22 @@ const (
 	attrTenant       = "velox.tenant"
 	attrTenantBypass = "velox.tenant_bypass"
 	attrPolicyBypass = "velox.policy_bypass"
+
+	attrTxIsolation = "velox.tx.isolation"
+	attrTxReadOnly  = "velox.tx.read_only"
+	attrTxAttempts  = "velox.tx.attempts"
+	attrTxOutcome   = "velox.tx.outcome"
+	attrTxRetried   = "velox.tx.retried"
+)
+
+// The span, event and instrument names (spec §2.2 and §2.3).
+const (
+	spanTx     = "velox.tx"
+	eventRetry = "retry"
+
+	metricDuration     = "db.client.operation.duration"
+	metricReturnedRows = "db.client.response.returned_rows"
+	metricTxDuration   = "velox.tx.duration"
 )
 
 // dbSystem is db.system.name's value for d.

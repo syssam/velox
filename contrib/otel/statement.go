@@ -3,6 +3,7 @@ package veloxotel
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -12,7 +13,7 @@ import (
 )
 
 // around is the Around hook: one client span per execution of a statement,
-// from the call to next to its return.
+// from the call to next to its return, and its metric points.
 func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 	// In a transaction, the parent is the span on the transaction's context,
 	// whatever context the statement was given.
@@ -34,7 +35,9 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 		}
 	}()
 
+	start := time.Now()
 	err := next(sctx)
+	seconds := time.Since(start).Seconds()
 	switch st.Op {
 	case velox.OpSelect:
 		span.SetAttributes(attribute.Int64(attrReturnedRows, st.Result.Rows))
@@ -50,6 +53,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}
 	ended = true
 	span.End()
+	a.record(sctx, st, seconds, err)
 	return err
 }
 

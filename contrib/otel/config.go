@@ -9,7 +9,8 @@ import (
 )
 
 // Config configures the adapter. The zero Config traces into the global
-// TracerProvider, with no SQL comment.
+// TracerProvider and measures into the global MeterProvider, with no SQL
+// comment.
 type Config struct {
 	TracerProvider trace.TracerProvider // nil: otel.GetTracerProvider()
 	MeterProvider  metric.MeterProvider // nil: otel.GetMeterProvider()
@@ -24,29 +25,40 @@ type Config struct {
 	MetricFingerprint bool // add velox.fingerprint to the statement metrics
 }
 
-// Options returns the velox options that trace every statement: WithCallers,
-// WithAround, and WithSQLComment when App is set. Place them after an Around
-// hook of your own that retries, to get one span per attempt.
+// Options returns the velox options that trace and measure every statement
+// and transaction: WithCallers, WithAround, WithTxAround, and WithSQLComment
+// when App is set. Place them after an Around hook of your own that retries,
+// to get one span per attempt.
 func Options(cfg Config) []velox.Option {
 	a := newAdapter(cfg)
-	opts := []velox.Option{velox.WithCallers(), velox.WithAround(a.around)}
+	opts := []velox.Option{velox.WithCallers(), velox.WithAround(a.around), velox.WithTxAround(a.txAround)}
 	if cfg.App != "" {
 		opts = append(opts, velox.WithSQLComment(cfg.App, cfg.CommentTags...))
 	}
 	return opts
 }
 
-// Around returns the hook that makes a span per statement, alone. Without
-// velox.WithCallers the spans carry no call site.
+// Around returns the hook that makes a span per statement and records the
+// statement metrics, alone. Without velox.WithCallers the spans carry no call
+// site.
 func Around(cfg Config) velox.Around { return newAdapter(cfg).around }
+
+// TxAround returns the hook that makes the velox.tx span per transaction and
+// records velox.tx.duration, alone.
+func TxAround(cfg Config) velox.TxAround { return newAdapter(cfg).txAround }
 
 // scope is the instrumentation scope: the tracer's and meter's name.
 const scope = "github.com/syssam/velox2/contrib/otel"
 
-// adapter turns velox's statements into spans, for one Config.
+// adapter turns velox's statements and transactions into spans and metric
+// points, for one Config.
 type adapter struct {
 	cfg    Config
 	tracer trace.Tracer
+
+	duration   metric.Float64Histogram // db.client.operation.duration, s
+	returned   metric.Int64Histogram   // db.client.response.returned_rows, {row}
+	txDuration metric.Float64Histogram // velox.tx.duration, s
 }
 
 func newAdapter(cfg Config) *adapter {
@@ -54,5 +66,11 @@ func newAdapter(cfg Config) *adapter {
 	if tp == nil {
 		tp = otel.GetTracerProvider()
 	}
-	return &adapter{cfg: cfg, tracer: tp.Tracer(scope)}
+	mp := cfg.MeterProvider
+	if mp == nil {
+		mp = otel.GetMeterProvider()
+	}
+	a := &adapter{cfg: cfg, tracer: tp.Tracer(scope)}
+	a.instruments(mp.Meter(scope))
+	return a
 }

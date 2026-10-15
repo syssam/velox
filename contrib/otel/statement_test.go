@@ -356,16 +356,20 @@ func TestOneSpanPerAttempt(t *testing.T) {
 
 // TestParent: in a transaction a statement's span is a child of the span on
 // the transaction's context, even when the statement runs on another
-// context; outside one, of the span on the statement's context.
+// context; outside one, of the span on the statement's context. The
+// transaction's span here is the application's own: Around alone, without
+// veloxotel's TxAround.
 func TestParent(t *testing.T) {
-	var tr trace.Tracer
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	tr := tp.Tracer("t")
 	txSpan := velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
 		ctx, s := tr.Start(ctx, "tx")
 		defer s.End()
 		return next(ctx)
 	})
-	db, exp, tp := traced(t, &fakeDB{}, veloxotel.Config{}, txSpan)
-	tr = tp.Tracer("t")
+	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), txSpan, velox.WithAround(veloxotel.Around(veloxotel.Config{TracerProvider: tp})))
 
 	err := db.Tx(ctx, func(tx *velox.DB) error {
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx) // the outer ctx: no span

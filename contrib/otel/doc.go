@@ -1,18 +1,21 @@
-// Package veloxotel traces velox statements with OpenTelemetry. It uses the
-// OpenTelemetry API only: the application chooses and configures the SDK.
+// Package veloxotel traces and measures velox statements and transactions
+// with OpenTelemetry. It uses the OpenTelemetry API only: the application
+// chooses and configures the SDK.
 //
 // Options returns the velox options that trace every statement, to give to
 // velox.Open after any of the application's own:
 //
 //	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
 //		TracerProvider: tp,        // default otel.GetTracerProvider()
+//		MeterProvider:  mp,        // default otel.GetMeterProvider()
 //		App:            "billing", // enables the SQL comment
 //		CommentTags:    []string{"route"},
 //	})...)
 //
 // They are velox.WithCallers, velox.WithAround with a hook that makes one span
-// per statement, and velox.WithSQLComment when Config.App is set. Around
-// returns that hook alone, for an application that wants only the spans.
+// per statement, velox.WithTxAround with a hook that makes one span per
+// transaction, and velox.WithSQLComment when Config.App is set. Around and
+// TxAround return those hooks alone, for an application that wants only part.
 //
 // A statement's span is of kind client, named for its operation and table
 // ("SELECT invoices"), and covers sending it and reading every row; with
@@ -24,6 +27,25 @@
 // transaction's context (the velox.tx span once the transaction hook is
 // installed), whatever context the code passes to the query: a statement run
 // on a request's context inside fn still nests under its transaction.
+//
+// The transaction's span, velox.tx, is of kind internal and covers every
+// attempt RetrySerializable makes and the commit. It carries the isolation
+// level, the read-only flag, the final attempt count and the outcome
+// (commit, rollback or error), with a "retry" event per retried attempt. A
+// savepoint (a nested Tx) makes no span of its own.
+//
+// A panic in the transaction's function, or in an Iter loop body, ends the
+// open spans with the status Error and the description "panic", and goes on:
+// the adapter never recovers one.
+//
+// The metrics are three histograms: db.client.operation.duration (seconds)
+// and db.client.response.returned_rows (reads only) per statement, and
+// velox.tx.duration (seconds) per transaction. Their attributes are bounded:
+// the database system, operation, table, entity and error type for a
+// statement, and the outcome, read-only flag and whether it retried for a
+// transaction. Tags, the tenant, the SQL text and the call site are on spans
+// only; the fingerprint is added to the statement metrics only with
+// Config.MetricFingerprint.
 //
 // A statement that velox refuses before it is sent (a guard, the tenant
 // scope, a policy or a hook) reaches no Around hook, so it makes no
