@@ -262,6 +262,9 @@ func CacheSize(db *DB) int { return db.cfg.cache.size() }
 // TenantOf returns the context's tenant state, as scope reads it.
 func TenantOf(ctx context.Context) (id any, all string) { return tenantOf(ctx) }
 
+// TagsOf returns the context's WithTags tags, as observe reads them.
+func TagsOf(ctx context.Context) []Tag { return tagsOf(ctx) }
+
 // PolicyBypass returns the context's SkipPolicy reason.
 func PolicyBypass(ctx context.Context) string { return policyBypass(ctx) }
 

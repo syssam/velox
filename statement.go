@@ -88,9 +88,32 @@ type Statement struct {
 	PolicyBypass string          // the SkipPolicy reason, when it applied
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool
-	SQL          string // set by rendering, after the rewrite hooks
-	Fingerprint  string // set by rendering: the shape's ID, the hash of SQL without the comment
-	Args         []any  // set by rendering
+	Dialect      Dialect // the DB's: an Around hook has only the statement
+	// Tags are the context's WithTags tags, set before the hooks run. A
+	// Rewrite hook gets its own copy; it may change them, and the SQL
+	// comment is rendered from what it leaves.
+	Tags []Tag
+	// Caller is the statement's call site, with WithCallers; zero
+	// otherwise. A Rewrite hook may change it, as Tags.
+	Caller      Caller
+	SQL         string // set by rendering, after the rewrite hooks
+	Fingerprint string // set by rendering: the shape's ID, the hash of SQL without the comment
+	Args        []any  // set by rendering
+	// Result is set by each execution, before next returns to the Around
+	// hooks; a hook that retries sees the last attempt's.
+	Result Result
+}
+
+// Result is what executing a statement did.
+type Result struct {
+	// Rows counts the rows read, an INSERT … RETURNING's and Count's single
+	// row included. Rows are counted only when the DB has an Around hook or
+	// the statement a row cap: otherwise nothing can read it, and it is 0.
+	Rows int64
+	// Affected is the rows a write affected: the driver's count for one sent
+	// without RETURNING, the rows returned for one sent with it. It is -1
+	// for a read, for a failed statement, and when the driver does not say.
+	Affected int64
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or

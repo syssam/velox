@@ -35,6 +35,7 @@ type config struct {
 	maxLimit  int       // WithMaxLimit; 0: none
 	maxRows   int       // WithMaxRows; 0: none
 	deadlines Deadlines // WithDeadlines
+	callers   *callers  // WithCallers; nil: off
 }
 
 // Option configures a DB's pipeline.
@@ -143,6 +144,7 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 		return err
 	}
 	db.capLimit(st)
+	st.Dialect = db.d
 	e, args := db.cfg.cache.get(db.d, st)
 	st.SQL, st.Fingerprint, st.Args = e.text, e.fp, args
 	if !db.timed() {
@@ -189,13 +191,14 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 }
 
 // prepare takes a statement through every stage before execution, for run
-// and for SQL(ctx): guard, the entity's BeforeUpdate or BeforeDelete hooks,
-// rewrite hooks and their checks, scope, the row cap, and rendering into
-// st.SQL and st.Args.
+// and for SQL(ctx): guard, observe, the entity's BeforeUpdate or BeforeDelete
+// hooks, rewrite hooks and their checks, scope, the row cap, and rendering
+// into st.SQL and st.Args.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.guard(st); err != nil {
 		return err
 	}
+	db.observe(ctx, st)
 	if err := db.entityHooks(ctx, st); err != nil {
 		return err
 	}
@@ -208,6 +211,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		st.Columns = slices.Clone(st.Columns)
 		st.Set = slices.Clone(st.Set)
 		st.Returning = slices.Clone(st.Returning)
+		st.Tags = slices.Clone(st.Tags)
 		if st.Rows != nil {
 			rows := make([][]any, len(st.Rows))
 			for i, r := range st.Rows {
@@ -270,6 +274,16 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		st.Fingerprint = fingerprint(st.SQL)
 	}
 	return nil
+}
+
+// observe sets what st's hooks and adapters read about it: its Dialect, its
+// Tags and, with WithCallers, its Caller.
+func (db *DB) observe(ctx context.Context, st *Statement) {
+	st.Dialect = db.d
+	st.Tags = tagsOf(ctx)
+	if c := db.cfg.callers; c != nil {
+		st.Caller = c.capture()
+	}
 }
 
 // dryRun prepares st, with DryRun set, and returns what run would send, or
@@ -444,7 +458,7 @@ func (db *DB) rowCap(st *Statement) int {
 
 // capLimit lowers st's Limit to its row cap plus one, so that the database
 // stops at the row that trips the cap instead of sending every row; exec's
-// cappedRows still does the counting. It runs just before rendering: the
+// countedRows still does the counting. It runs just before rendering: the
 // guard and the Rewrite hooks have seen the caller's Limit.
 func (db *DB) capLimit(st *Statement) {
 	if n := db.rowCap(st); n > 0 && n < math.MaxInt && (st.Limit == 0 || st.Limit > n) {
@@ -452,30 +466,37 @@ func (db *DB) capLimit(st *Statement) {
 	}
 }
 
-// cappedRows ends the rows after left of them, and records that there were
-// more.
-type cappedRows struct {
+// countedRows counts the rows read and, when capped, ends them after
+// left of them and records that there were more.
+type countedRows struct {
 	rows
-	left int
-	over bool
+	n      int64
+	left   int
+	capped bool
+	over   bool
 }
 
-func (c *cappedRows) Next() bool {
+func (c *countedRows) Next() bool {
 	if !c.rows.Next() {
 		return false
 	}
-	if c.left == 0 {
-		c.over = true
-		return false
+	if c.capped {
+		if c.left == 0 {
+			c.over = true // the row that trips the cap is not counted
+			return false
+		}
+		c.left--
 	}
-	c.left--
+	c.n++
 	return true
 }
 
 // exec sends a rendered statement, reads its rows with read and closes them;
 // with a nil read it sends a statement that returns no rows and fills *res.
-// Errors from the database, the driver or read name the entity.
+// Either way it sets st.Result. Errors from the database, the driver or read
+// name the entity.
 func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, res *result) (err error) {
+	st.Result = Result{Affected: -1}
 	if err := checkParams(db.d, st); err != nil {
 		return err
 	}
@@ -484,6 +505,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 		if err != nil {
 			return dbErr(st.Entity, err)
 		}
+		st.Result.Affected = r.affected
 		if res != nil {
 			*res = r
 		}
@@ -493,10 +515,12 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 	if err != nil {
 		return dbErr(st.Entity, err)
 	}
-	var capped *cappedRows
-	if n := db.rowCap(st); n > 0 {
-		capped = &cappedRows{rows: r, left: n}
-		r = capped
+	// Count the rows only when something reads the count: an Around hook
+	// reads Result.Rows, and the cap needs it. Wrapping them allocates.
+	var counted *countedRows
+	if n := db.rowCap(st); n > 0 || len(db.cfg.arounds) > 0 {
+		counted = &countedRows{rows: r, left: n, capped: n > 0}
+		r = counted
 	}
 	defer func() {
 		// Deferred, so that the rows are closed even when the loop body of
@@ -506,11 +530,18 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 		if rerr := r.Err(); rerr != nil && err == nil {
 			err = dbErr(st.Entity, rerr)
 		}
+		if counted != nil {
+			st.Result.Rows = counted.n
+			if st.Op != OpSelect && err == nil {
+				// The rows a write returned are the rows it affected.
+				st.Result.Affected = counted.n
+			}
+		}
 	}()
 	if err := read(r); err != nil {
 		return dbErr(st.Entity, err)
 	}
-	if capped != nil && capped.over {
+	if counted != nil && counted.over {
 		return fmt.Errorf("velox: %s: %w: more than %d; raise it with the query's MaxRows", st.Entity.Name, ErrTooManyRows, db.rowCap(st))
 	}
 	return nil
