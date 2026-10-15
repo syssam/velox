@@ -126,6 +126,9 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 			Immutable: c.Immutable, Sensitive: c.Sensitive, off: off}
+		if c.Immutable && c.UpdateDefault != nil {
+			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
+		}
 		if c.Default != nil {
 			if boolOrNumber(ft) {
 				// The rule ColumnDef.Default enforces, for the reason given there.

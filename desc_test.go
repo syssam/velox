@@ -172,6 +172,10 @@ func TestDescRefusals(t *testing.T) {
 		}, "the tenant column cannot have Default"},
 		{"Default on a bool", func(d *velox.Desc[dRow]) { d.Columns[1].Default = true }, "dRow.Flag: Default on bool/numeric field Flag would overwrite an explicit false or 0 on insert"},
 		{"Default of another type", func(d *velox.Desc[dRow]) { d.Columns[3].Default = 7 }, "dRow.Name: Default is a int, not a string"},
+		{"Immutable with an UpdateDefault", func(d *velox.Desc[dRow]) {
+			d.Columns[3].Immutable = true
+			d.Columns[3].UpdateDefault = func() any { return "x" }
+		}, "dRow.Name: Immutable column Name has an UpdateDefault; every update would be refused"},
 		{"duplicate column name", func(d *velox.Desc[dRow]) { d.Columns[3].Name = "flag" }, `column name "flag" is also the name of Flag`},
 		{"panic in Addr", func(d *velox.Desc[dRow]) {
 			d.Addr = func(x *dRow, i int) any { panic("addr") }

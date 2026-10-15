@@ -9,10 +9,11 @@ import (
 // ValidationError is a value a column's validators refused; nothing was sent.
 // Find it with errors.As; errors.Is reaches the validator's own error.
 //
-// What validators check (plan 2, Ruling 7):
+// What validators check:
 //   - For an insert, every column the statement sends.
-//   - For an update or Save, every assignment made by Set; not Add or Sub.
-//   - A nil pointer is never checked, because it is the absence of a value.
+//   - For an update or Save, the value of every Set assignment; not Add or Sub.
+//   - A nil pointer, or a nil value, is never checked, because it is the
+//     absence of a value; a non-nil pointer is checked as its element.
 type ValidationError struct {
 	Entity string // the Go type, e.g. "gen.User"
 	Field  string // the Go field name

@@ -53,6 +53,21 @@ func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 	}
 }
 
+func TestInsertValidatesAPointerColumnByItsElement(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	bad := "ada"
+	err := db.Insert(&dAuthor{Name: "ada", Email: &bad}).Exec(velox.WithTenant(ctx, int64(7)))
+	var ve *velox.ValidationError
+	if !errors.As(err, &ve) || ve.Field != "Email" || err.Error() != "velox: velox_test.dAuthor: Email: not an email" || e.Calls != 0 {
+		t.Fatalf("got %v", err)
+	}
+	ok := "ada@example.com"
+	if err := db.Insert(&dAuthor{Name: "ada", Email: &ok}).Exec(velox.WithTenant(ctx, int64(7))); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNilPointerIsNotValidated(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	if err := db.Insert(&dAuthor{Name: "ada"}).Exec(velox.WithTenant(ctx, int64(7))); err != nil {

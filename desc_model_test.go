@@ -2,6 +2,9 @@ package velox_test
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/syssam/velox2"
@@ -72,11 +75,20 @@ func dAuthorDesc() velox.Desc[dAuthor] {
 			return nil
 		},
 		Check: func(col int, v any) error {
-			if col == 2 {
+			// velox hands a validator the value, never nil or a pointer.
+			if v == nil || reflect.TypeOf(v).Kind() == reflect.Pointer {
+				return fmt.Errorf("check got %T", v)
+			}
+			switch col {
+			case 2:
 				if s := v.(string); s == "" {
 					return errEmptyName
 				} else if len(s) > 20 {
 					return errors.New("longer than 20")
+				}
+			case 3:
+				if !strings.Contains(v.(string), "@") {
+					return errors.New("not an email")
 				}
 			}
 			return nil

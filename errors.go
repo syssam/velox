@@ -49,7 +49,7 @@ var (
 	// update.
 	ErrPolicyUpsert = errors.New("upsert cannot apply the policy")
 	// ErrImmutable: an update, Save or upsert's Update list assigned an
-	// Immutable column. An insert may set one.
+	// Immutable column, including one a hook adds. An insert may set one.
 	ErrImmutable = errors.New("column is immutable")
 )
 
