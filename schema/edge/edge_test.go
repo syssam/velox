@@ -1,0 +1,51 @@
+package edge_test
+
+import (
+	"testing"
+
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+)
+
+type User struct{ schema.Schema }
+type Post struct{ schema.Schema }
+
+func TestTo(t *testing.T) {
+	d := edge.To("posts", Post.Type).Required().StorageKey(edge.Column("author_id"), edge.Symbol("posts_author")).Comment("c").Descriptor()
+	if d.Err != nil || d.Name != "posts" || d.Type != "Post" || d.TypePkg != "github.com/syssam/velox2/schema/edge_test" ||
+		d.Inverse || !d.Required || d.Columns[0] != "author_id" || d.Symbols[0] != "posts_author" || d.Comment != "c" {
+		t.Fatalf("%+v", d)
+	}
+}
+
+func TestFrom(t *testing.T) {
+	d := edge.From("author", User.Type).Ref("posts").Unique().Field("author_id").Descriptor()
+	if d.Err != nil || !d.Inverse || d.RefName != "posts" || !d.Unique || d.Field != "author_id" || d.Type != "User" {
+		t.Fatalf("%+v", d)
+	}
+}
+
+func TestInlineInverse(t *testing.T) {
+	d := edge.To("children", User.Type).From("parent").Unique().Descriptor()
+	if d.Err != nil || d.Name != "children" || d.Ref == nil || d.Ref.Name != "parent" || !d.Ref.Unique || !d.Ref.Inverse || d.Ref.Type != "User" {
+		t.Fatalf("%+v ref %+v", d, d.Ref)
+	}
+}
+
+func TestBadType(t *testing.T) {
+	for _, v := range []any{nil, "User", func() {}, func(int) {}} {
+		if d := edge.To("x", v).Descriptor(); d.Err == nil {
+			t.Errorf("edge.To with %T: no error", v)
+		}
+		if d := edge.From("x", v).Descriptor(); d.Err == nil {
+			t.Errorf("edge.From with %T: no error", v)
+		}
+	}
+}
+
+func TestM2MStorage(t *testing.T) {
+	d := edge.To("groups", User.Type).StorageKey(edge.Table("memberships"), edge.Columns("user_id", "group_id"), edge.Symbols("fk_user", "fk_group")).Descriptor()
+	if d.Table != "memberships" || len(d.Columns) != 2 || d.Columns[1] != "group_id" || len(d.Symbols) != 2 || d.Symbols[1] != "fk_group" {
+		t.Fatalf("%+v", d)
+	}
+}
