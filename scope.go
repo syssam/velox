@@ -83,8 +83,8 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 }
 
 // scopeInsert applies the context's tenant and the entity's policy to an
-// INSERT. prepareRow has filled and checked each row's tenant and asked the
-// Insert policy; scopeInsert checks that the Rewrite hooks left every row in
+// INSERT. prepareRow has filled and checked each row's tenant, and
+// insertAllowed has asked the Insert policy; scopeInsert checks that the Rewrite hooks left every row in
 // the tenant. An upsert that updates must reach neither another tenant's row
 // nor one the policy hides from an update. On PostgreSQL and SQLite its
 // conflict columns must hold the tenant column, and its update branch gets
@@ -108,7 +108,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	}
 	pol := in.policy
 	if pol != nil && pol.insert != nil {
-		sc.policyOn() // records a SkipPolicy that prepareRow obeyed
+		sc.policyOn() // records a SkipPolicy that insertAllowed obeyed
 	}
 	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
 		if tenant {

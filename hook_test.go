@@ -90,9 +90,12 @@ func TestHookPassesVeloxErrorsThrough(t *testing.T) {
 func TestHooksUnderSQL(t *testing.T) {
 	trace = nil
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
-	q, _, err := db.Insert(&dBook{AuthorID: 1, Title: " x "}).SQL(ctx)
+	q, args, err := db.Insert(&dBook{AuthorID: 1, Title: " x "}).SQL(ctx)
 	if err != nil || !strings.HasPrefix(q, "INSERT") || strings.Join(trace, "|") != "outer before insert|outer after" {
 		t.Fatalf("%q %v %v", q, err, trace)
+	}
+	if len(args) != 2 || args[1] != "x" {
+		t.Fatalf("SQL returns the arguments as the hook left them: %v", args)
 	}
 }
 
@@ -178,10 +181,12 @@ func TestSaveRunsTheHooks(t *testing.T) {
 	}
 }
 
-// hFlex's one hook runs flexHook, which each test sets.
+// hFlex's one hook runs flexHook, which each test sets. Stamp has an
+// UpdateDefault.
 type hFlex struct {
 	ID    int64
 	Title string
+	Stamp int64
 }
 
 var flexHook func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error
@@ -200,20 +205,28 @@ func (*hFlex) VeloxMeta() *velox.Meta[hFlex] { return hFlexMeta.Load(hFlexDesc) 
 
 func hFlexDesc() velox.Desc[hFlex] {
 	return velox.Desc[hFlex]{
-		Table:      "flex",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"}},
+		Table: "flex",
+		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
+			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Addr: func(x *hFlex, i int) any {
-			if i == 0 {
+			switch i {
+			case 0:
 				return &x.ID
+			case 1:
+				return &x.Title
 			}
-			return &x.Title
+			return &x.Stamp
 		},
 	}
 }
 
-var hfTitle = velox.StringCol[hFlex, string]{I: 1}
+var (
+	hfID    = velox.NumberCol[hFlex, int64]{I: 0}
+	hfTitle = velox.StringCol[hFlex, string]{I: 1}
+	hfStamp = velox.NumberCol[hFlex, int64]{I: 2}
+)
 
 func TestMutationResult(t *testing.T) {
 	var got int64 = -1
@@ -397,5 +410,168 @@ func TestDescInsertBudget(t *testing.T) {
 	t.Logf("a one-row Insert: %.0f allocations on the Desc path, %.0f on the old path", d, o)
 	if d > o {
 		t.Errorf("an entity with no hooks pays %.0f allocations for them on a one-row Insert", d-o)
+	}
+}
+
+// TestNextTwiceSendsOnce: a second call of next sends nothing and fails the
+// write, whether the hook returns that error or drops it.
+func TestNextTwiceSendsOnce(t *testing.T) {
+	for _, keep := range []bool{true, false} {
+		flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+			if err := next.Mutate(ctx, m); err != nil {
+				return err
+			}
+			err := next.Mutate(ctx, m)
+			if keep {
+				return err
+			}
+			return nil
+		}
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(velox.Postgres, e)
+		err := db.Insert(&hFlex{ID: 1}).Exec(ctx)
+		if err == nil || err.Error() != "velox: velox_test.hFlex: hook: a hook called next twice" || e.Calls != 1 {
+			t.Fatalf("keep %v: %v, %d calls", keep, err, e.Calls)
+		}
+	}
+}
+
+// TestValidatorsRunBeforeTheInsertPolicy: a row that fails both is a
+// *ValidationError (Ruling 5), and nothing is sent.
+func TestValidatorsRunBeforeTheInsertPolicy(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	tctx := velox.WithTenant(ctx, int64(7))
+	var ve *velox.ValidationError
+	bad := "no at sign"
+	err := db.Insert(&dAuthor{Name: "mallory", Email: &bad}).Exec(tctx)
+	if !errors.As(err, &ve) || errors.Is(err, velox.ErrDenied) || e.Calls != 0 {
+		t.Fatalf("Insert: %v, %d calls", err, e.Calls)
+	}
+	err = db.InsertAll([]dAuthor{{Name: "ada"}, {Name: "mallory", Email: &bad}}).Exec(tctx)
+	if !errors.As(err, &ve) || errors.Is(err, velox.ErrDenied) || e.Calls != 0 {
+		t.Fatalf("InsertAll: %v, %d calls", err, e.Calls)
+	}
+}
+
+// TestMisuseWithoutNextIsReported: a hook that records a misuse and returns
+// nil without calling next fails the write, and nothing is sent.
+func TestMisuseWithoutNextIsReported(t *testing.T) {
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		m.Where(velox.Pred[hFlex]{})
+		return nil
+	}
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	_, err := db.Delete[hFlex]().Where(hfID.EQ(1)).Exec(ctx)
+	if err == nil || !strings.HasPrefix(err.Error(), "velox: velox_test.hFlex: hook: ") || !strings.Contains(err.Error(), "zero Predicate") || e.Calls != 0 {
+		t.Fatalf("%v, %d calls", err, e.Calls)
+	}
+}
+
+// TestHooksDoNotSeeUpdateDefaults: next adds them (Ruling 5).
+func TestHooksDoNotSeeUpdateDefaults(t *testing.T) {
+	var before, after bool
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		_, before = m.Value(hfStamp)
+		err := next.Mutate(ctx, m)
+		_, after = m.Value(hfStamp)
+		return err
+	}
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if before || !after || len(e.Args) != 2 || e.Args[1] != int64(9) {
+		t.Fatalf("before next %v, after %v, args %v", before, after, e.Args)
+	}
+}
+
+// hNilMut's hook returns a nil Mutator.
+type hNilMut struct{ ID int64 }
+
+func (*hNilMut) Hooks() []velox.Hook[hNilMut] {
+	return []velox.Hook[hNilMut]{func(velox.Mutator[hNilMut]) velox.Mutator[hNilMut] { return nil }}
+}
+
+var hNilMutMeta velox.MetaOnce[hNilMut]
+
+func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
+	return hNilMutMeta.Load(func() velox.Desc[hNilMut] {
+		return velox.Desc[hNilMut]{Table: "m", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *hNilMut, i int) any { return &x.ID }}
+	})
+}
+
+// hPanicHooks's Hooks reads its receiver, which is nil.
+type hPanicHooks struct{ ID int64 }
+
+func (x *hPanicHooks) Hooks() []velox.Hook[hPanicHooks] {
+	_ = x.ID
+	return nil
+}
+
+var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
+
+func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
+	return hPanicHooksMeta.Load(func() velox.Desc[hPanicHooks] {
+		return velox.Desc[hPanicHooks]{Table: "ph", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *hPanicHooks, i int) any { return &x.ID }}
+	})
+}
+
+func TestNilMutatorAndPanickingHooks(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	err := db.Insert(&hNilMut{ID: 1}).Exec(ctx)
+	if err == nil || err.Error() != "velox: velox_test.hNilMut: hook: a hook returned a nil Mutator" || e.Calls != 0 {
+		t.Fatalf("%v, %d calls", err, e.Calls)
+	}
+	var se *velox.SchemaError
+	err = db.Insert(&hPanicHooks{ID: 1}).Exec(ctx)
+	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.hPanicHooks: Hooks() panicked: ") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// oHooked and oPoliced are old-path entities with the Desc path's methods,
+// which would be ignored.
+type oHooked struct{ ID int64 }
+
+func (*oHooked) Schema(*velox.Schema)         {}
+func (*oHooked) Hooks() []velox.Hook[oHooked] { return nil }
+
+var oHookedMeta velox.MetaOnce[oHooked]
+
+func (*oHooked) VeloxMeta() *velox.Meta[oHooked] {
+	return oHookedMeta.Get(func() velox.Shape[oHooked] {
+		return velox.Shape[oHooked]{Columns: []string{"ID"}, Addr: func(x *oHooked, i int) any { return &x.ID }}
+	})
+}
+
+type oPoliced struct{ ID int64 }
+
+func (*oPoliced) Schema(*velox.Schema)           {}
+func (*oPoliced) Policy() velox.Policy[oPoliced] { return velox.Policy[oPoliced]{} }
+
+var oPolicedMeta velox.MetaOnce[oPoliced]
+
+func (*oPoliced) VeloxMeta() *velox.Meta[oPoliced] {
+	return oPolicedMeta.Get(func() velox.Shape[oPoliced] {
+		return velox.Shape[oPoliced]{Columns: []string{"ID"}, Addr: func(x *oPoliced, i int) any { return &x.ID }}
+	})
+}
+
+func TestOldPathRefusesDescMethods(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	var se *velox.SchemaError
+	err := db.Insert(&oHooked{ID: 1}).Exec(ctx)
+	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.oHooked: has a Hooks method, which only generated (Desc) entities use") {
+		t.Fatalf("got %v", err)
+	}
+	err = db.Insert(&oPoliced{ID: 1}).Exec(ctx)
+	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.oPoliced: has a Policy method, which only generated (Desc) entities use") {
+		t.Fatalf("got %v", err)
 	}
 }

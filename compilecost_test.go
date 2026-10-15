@@ -186,8 +186,11 @@ var genericObjects = []struct {
 	// a *Statement, about 2.3 KiB); those four methods with Policy[E] and
 	// Mutation[E] add about 8 KiB more. entityUse also compiles the insert
 	// path's new generic steps (oneStatement, prepareMany, batch, check).
-	{"entity", "", entitySrc, 154624},           // measured 123318 (119972 before observability, 98878 before policy 2)
-	{"entityUse", "", entityUseSrc, 784384},     // measured 717868 (709930 before observability, 673936 before policy 2)
+	// Remeasured on 2026-10-15 after schema plan 2's typed hooks: EntityInfo
+	// reaches the hooks' mutation, and entityUse compiles the hooks branch of
+	// each write and insertBatches.
+	{"entity", "", entitySrc, 154624},           // measured 134630 (127904 before typed hooks, 123318 when last recorded, 119972 before observability, 98878 before policy 2)
+	{"entityUse", "", entityUseSrc, 784384},     // measured 761664 (731746 before typed hooks, 717868 when last recorded, 709930 before observability, 673936 before policy 2)
 	{"Policy", "velox.Policy[E]", "", 8192},     // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 9216}, // measured 4132
 }

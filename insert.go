@@ -99,7 +99,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // it then sets a zero tenant field to the context's tenant, and refuses a
 // field set to another one (ErrTenantMismatch) or, under AllTenants, left at
 // zero (ErrNoTenant). Then the old BeforeInsert hooks run, the tenant is
-// checked again, the policy's Insert is asked and the validators run; every
+// checked again, the validators run and the policy's Insert is asked; every
 // entity is prepared before anything is sent.
 //
 // Under WithTenant, an upsert that updates must name the tenant column in
@@ -143,7 +143,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // returns "" for an InsertAll of nothing. It runs every stage Exec runs
 // before execution: like Exec, it runs the entity's hooks, fills defaults and
 // the tenant into the caller's entities and runs the old BeforeInsert hooks on
-// them, then asks the policy's Insert, runs the validators and runs the
+// them, then runs the validators, asks the policy's Insert and runs the
 // Rewrite hooks, the scope and rendering. So the
 // hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
 // hook from Statement.DryRun, that the statement will not be sent. Around
@@ -188,8 +188,8 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
 }
 
 // send is Exec's work inside the hooks, their next: it prepares every row
-// (defaults, tenant, the old BeforeInsert hooks, the policy's Insert and the
-// validators) and sends the statements. It sets mu.res.
+// (defaults, tenant, the old BeforeInsert hooks, the validators and the
+// policy's Insert) and sends the statements. It sets mu.res.
 func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error {
 	if q.one != nil {
 		return insertOne(ctx, q.db, q.meta, q.one, q.conflict, &mu.res)
@@ -330,6 +330,9 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 	if err := validateRow(m.info, unsafe.Pointer(p), cols); err != nil {
 		return Statement{}, -1, err
 	}
+	if err := insertAllowed(ctx, m.info, unsafe.Pointer(p)); err != nil {
+		return Statement{}, -1, err
+	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
 	if gen >= 0 && db.d != MySQL {
 		st.Returning = []int{gen}
@@ -394,9 +397,10 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 
 // prepareRow readies the row at p, of entity in, to be inserted, once its
 // defaults are filled: it fills or checks the tenant column, runs the
-// BeforeInsert hooks, checks the tenant again on what they left, and asks the
-// policy's Insert. It changes the caller's entity, and the changes stay when
-// the insert then fails.
+// BeforeInsert hooks and checks the tenant again on what they left. The
+// validators, then the policy's Insert (insertAllowed), run after it. It
+// changes the caller's entity, and the changes stay when the insert then
+// fails.
 func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 	var id any
 	var all string
@@ -416,6 +420,12 @@ func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// insertAllowed asks the policy's Insert about the row of in at p, prepared
+// and validated, unless SkipPolicy.
+func insertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 	if pol := in.policy; pol != nil && pol.insert != nil && policyBypass(ctx) == "" {
 		if err := pol.insert(ctx, p); err != nil {
 			return &PolicyError{Entity: in.Name, Op: OpInsert, Err: err}
@@ -530,6 +540,11 @@ func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols [
 	}
 	for i := range xs {
 		if err := validateRow(m.info, unsafe.Pointer(&xs[i]), cols); err != nil {
+			return nil, 0, err
+		}
+	}
+	for i := range xs {
+		if err := insertAllowed(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
 			return nil, 0, err
 		}
 	}

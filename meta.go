@@ -162,7 +162,25 @@ func buildEntity(x any, base unsafe.Pointer, shape func() (cols []string, rels [
 	if err == nil && !addr { // after buildInfo, so that stale code is reported as such
 		err = &SchemaError{Entity: t.String(), Reason: "the generated code has no scan plan (Shape.Addr is nil); run go tool velox-gen"}
 	}
+	if err == nil {
+		err = descMethods(t)
+	}
 	return info, err
+}
+
+// descMethods refuses, on an entity built from its Schema method, a Hooks or
+// Policy method: only generated (Desc) entities' are read, so it would be
+// ignored. The names are constants, so that the linker can still drop the
+// methods nobody calls.
+func descMethods(t reflect.Type) error {
+	pt := reflect.PointerTo(t)
+	if _, ok := pt.MethodByName("Hooks"); ok {
+		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, which only generated (Desc) entities use; declare hooks with s.BeforeInsert, s.BeforeUpdate and s.BeforeDelete in Schema, or move to the Desc path"}
+	}
+	if _, ok := pt.MethodByName("Policy"); ok {
+		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, which only generated (Desc) entities use; declare the policy with s.Policy in Schema, or move to the Desc path"}
+	}
+	return nil
 }
 
 // Entity is the constraint velox's generic API puts on an entity type E: its

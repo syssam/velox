@@ -106,7 +106,8 @@ type Policy[E any] struct {
 	// cannot be changed.
 	Write func(ctx context.Context) (Pred[E], error)
 	// Insert checks every inserted or upserted row, after the entity's
-	// hooks, the defaults, the tenant fill and the old BeforeInsert hooks.
+	// hooks, the defaults, the tenant fill, the old BeforeInsert hooks and
+	// the validators.
 	Insert func(ctx context.Context, x *E) error
 }
 
@@ -179,9 +180,11 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 	return out
 }
 
-// Result returns what the write did, once next has returned: Affected is the
-// rows inserted, matched or deleted. It is zero before next, after an error,
-// and under SQL(ctx).
+// Result returns what the write did, once next has returned. Only Affected
+// is meaningful: the rows inserted, matched or deleted. Rows is always 0.
+// Unlike a Statement's Result, which an Around hook reads, Affected is never
+// -1: it is 0 before next returns, after next returned an error, and under
+// SQL(ctx), which sends nothing.
 func (m *Mutation[E]) Result[_ Lazy[E]]() Result { return m.res }
 
 // Value returns the value the statement assigns to column c, and whether it

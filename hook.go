@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -29,7 +30,9 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 // which velox calls once, when it builds the entity's metadata, on a nil
 // *E: the method must not read its receiver. The first hook listed is the
-// outermost. Every insert (Insert and InsertAll, whose hooks run once over all
+// outermost. Each hook function itself is called on every write: velox builds
+// the chain anew for each one, so a hook may keep per-write state in its
+// closure. Calling next a second time sends nothing and fails the write. Every insert (Insert and InsertAll, whose hooks run once over all
 // its rows), update, delete and Save of the entity runs them, and so do their
 // SQL(ctx) methods, where next renders the statement instead of sending it
 // and IsDryRun(ctx) is true.
@@ -65,15 +68,16 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 // *DB: EntityInfo reaches it, and every entity's package would then carry
 // DB's export data, its generic methods' bodies included.
 type mutation struct {
-	op   Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
-	st   *Statement       // the update or delete; nil for an insert
-	rows []unsafe.Pointer // an insert's rows
-	res  Result
-	err  error // a misuse recorded by Value, Set or Where
-	core error // the error next returned, to pass through unwrapped
-	dry  bool  // under SQL(ctx): the core renders and does not send
-	sql  string
-	args []any // what the core rendered under SQL(ctx)
+	op     Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
+	st     *Statement       // the update or delete; nil for an insert
+	rows   []unsafe.Pointer // an insert's rows
+	res    Result
+	err    error // a misuse recorded by Value, Set or Where
+	core   error // the error next returned, to pass through unwrapped
+	called bool  // next has been called
+	dry    bool  // under SQL(ctx): the core renders and does not send
+	sql    string
+	args   []any // what the core rendered under SQL(ctx)
 }
 
 type mutateFn func(ctx context.Context, mu *mutation) error
@@ -89,6 +93,15 @@ func mutate(ctx context.Context, in *EntityInfo, mu *mutation, core mutateFn) er
 		return core(ctx, mu)
 	}
 	next := func(ctx context.Context, mu *mutation) error {
+		if mu.called {
+			// Running the core again would send the write again.
+			if mu.err == nil {
+				mu.err = errNextTwice
+			}
+			mu.core = &hookError{in.Name, "hook", errNextTwice}
+			return mu.core
+		}
+		mu.called = true
 		if mu.err != nil {
 			// Refuse before sending: the misuse would otherwise be
 			// reported only after the write was made.
@@ -134,8 +147,12 @@ func erase[E any](h Hook[E]) hookFn {
 	}
 }
 
-// errNilMutator is the error of a hook that returned a nil Mutator.
-var errNilMutator = fmt.Errorf("a hook returned a nil Mutator")
+var (
+	// errNilMutator is the error of a hook that returned a nil Mutator.
+	errNilMutator = errors.New("a hook returned a nil Mutator")
+	// errNextTwice is the error of a hook that called next twice.
+	errNextTwice = errors.New("a hook called next twice")
+)
 
 // entityMethods reads the Policy and Hooks methods of the entity E, if it
 // declares them, into info. They are called on a nil *E.
