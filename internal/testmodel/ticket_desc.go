@@ -38,7 +38,9 @@ func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDe
 
 func ticketDesc() velox.Desc[Ticket] {
 	return velox.Desc[Ticket]{
-		Table: "tickets",
+		Policy: (*Ticket).Policy,
+		Hooks:  (*Ticket).Hooks,
+		Table:  "tickets",
 		Columns: []velox.ColumnDesc{
 			{Field: "CreatedBy", Name: "created_by"},
 			{Field: "ID", Name: "id"},

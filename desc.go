@@ -17,12 +17,36 @@ type Desc[E any] struct {
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
 	Columns    []ColumnDesc
 	PrimaryKey []int // indexes into Columns
-	Tenant     int   // index into Columns; -1 when the entity has none
+	Tenant     int   // index into Columns; -1 when the entity has none (so velox-gen always writes it: 0 is column 0)
 	Indexes    []IndexInfo
-	Relations  []Relation                 // in the order of the generated relation handles
-	Addr       func(x *E, i int) any      // &x.<field of column i>
-	RelAddr    func(x *E, i int) any      // &x.<field of relation i>: a *One[T] or *Many[T]
-	Check      func(col int, v any) error // the validators of column col, given its value (never a nil pointer); nil when none
+	Relations  []Relation            // in the order of the generated relation handles
+	Addr       func(x *E, i int) any // &x.<field of column i>
+	RelAddr    func(x *E, i int) any // &x.<field of relation i>: a *One[T] or *Many[T]
+
+	// Check runs the validators of column col on its value v, and is nil
+	// when no column has any. For a pointer field, v is the value the
+	// pointer points to: velox never calls Check for a nil pointer, which is
+	// the absence of a value, nor with a pointer.
+	Check func(col int, v any) error
+
+	// Policy and Hooks bind the entity's Policy and Hooks methods, when it
+	// declares them: velox-gen writes the method expressions (*E).Policy and
+	// (*E).Hooks, and leaves the fields nil when the entity has no such
+	// method. A method with another signature therefore does not compile
+	// (which is why no test checks it at run time), and an entity whose
+	// pointer type has a Policy or Hooks method that its Desc does not bind is
+	// refused at first use with a *SchemaError, so a policy or a hook is never
+	// silently left out.
+	//
+	// Load calls each once, when it builds the metadata, on a nil *E: neither
+	// may read its receiver, and a panic in either becomes the entity's
+	// *SchemaError. Neither may read the entity's own metadata in its body,
+	// outside the functions it returns: a Has or HasWhere on a relation from
+	// or to the entity, or anything else that calls its VeloxMeta, waits on
+	// the build in progress and deadlocks. Build such predicates inside the
+	// returned functions, which run on each statement.
+	Policy func(*E) Policy[E]
+	Hooks  func(*E) []Hook[E]
 }
 
 // ColumnDesc describes one column of a Desc.
@@ -48,6 +72,8 @@ type descFields struct {
 	indexes    []IndexInfo
 	relations  []Relation
 	check      func(col int, v any) error
+	policy     bool // Desc.Policy is set
+	hooks      bool // Desc.Hooks is set
 }
 
 // descView is a Desc with E erased: its fields, and its Addr and RelAddr
@@ -60,11 +86,14 @@ type descView struct {
 }
 
 // Load returns the entity's Meta, building it from desc the first time. Like
-// Get, a panic in desc, Policy or Hooks becomes the Meta's *SchemaError.
+// Get, a panic in desc, or in the Desc's Policy or Hooks, becomes the Meta's
+// *SchemaError.
 //
 // It does no more than call desc and bind its functions to a new entity: the
-// build, which uses reflect, is buildDesc's, so that Load, compiled in every
-// entity's package, holds no reflect.Type (design §3 rule 7).
+// build, which uses reflect, is buildDesc's, and the binding of Policy and
+// Hooks is not generic, so that Load, compiled in every entity's package,
+// holds no reflect.Type (design §3 rule 7) and instantiates nothing for an
+// entity that has no policy or hook.
 func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 	o.once.Do(func() {
 		x := new(E)
@@ -72,7 +101,8 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 		info, err := buildDesc(x, unsafe.Pointer(x), func() descView {
 			d = desc()
 			v := descView{d: &descFields{table: d.Table, schema: d.Schema, columns: d.Columns, primaryKey: d.PrimaryKey,
-				tenant: d.Tenant, indexes: d.Indexes, relations: d.Relations, check: d.Check}}
+				tenant: d.Tenant, indexes: d.Indexes, relations: d.Relations, check: d.Check,
+				policy: d.Policy != nil, hooks: d.Hooks != nil}}
 			if a := d.Addr; a != nil {
 				v.addr = func(i int) any { return a(x, i) }
 			}
@@ -82,8 +112,14 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 			return v
 		})
 		addr := d.Addr
-		if err == nil {
-			err = entityMethods[E](info)
+		// The binding is not generic: it takes the two functions with E
+		// erased (see erasedPolicy), so that an entity whose Desc leaves them
+		// nil does not compile a Policy or Hook instantiation it never uses.
+		if err == nil && d.Policy != nil {
+			err = bindPolicy(info, *(*erasedPolicy)(unsafe.Pointer(&d.Policy)))
+		}
+		if err == nil && d.Hooks != nil {
+			err = bindHooks(info, *(*erasedHooks)(unsafe.Pointer(&d.Hooks)))
 		}
 		if err != nil {
 			info, addr = nil, nil // an error Meta has no scan plan, as in Get
@@ -116,6 +152,9 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 	}
 	if v.addr == nil {
 		return fail("", "the generated metadata has no Addr; run go tool velox-gen")
+	}
+	if err := unboundMethods(t, d); err != nil {
+		return nil, err
 	}
 	cols := make([]ColumnInfo, len(d.columns))
 	anyImmutable := false
@@ -187,6 +226,20 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 	return info, nil
 }
 
+// unboundMethods refuses an entity whose pointer type has a Policy or Hooks
+// method that the Desc does not bind: velox would never call it. The names
+// are constants, so that the linker can still drop the methods nobody calls.
+func unboundMethods(t reflect.Type, d *descFields) error {
+	pt := reflect.PointerTo(t)
+	if _, ok := pt.MethodByName("Policy"); ok && !d.policy {
+		return &SchemaError{Entity: t.String(), Reason: "has a Policy method, but the generated metadata does not bind it; run go tool velox-gen"}
+	}
+	if _, ok := pt.MethodByName("Hooks"); ok && !d.hooks {
+		return &SchemaError{Entity: t.String(), Reason: "has a Hooks method, but the generated metadata does not bind it; run go tool velox-gen"}
+	}
+	return nil
+}
+
 // fieldOf returns the offset from base and the type of the field p points
 // to, and whether p is a non-nil pointer into the size bytes at base.
 func fieldOf(p any, base unsafe.Pointer, size uintptr) (uintptr, reflect.Type, bool) {
@@ -234,7 +287,11 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation 
 // Loading it reads J's rows for the owners' keys, then T's rows for the keys
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and
 // Read policy apply, as they do to any relation's target. J can have neither
-// a tenant column nor a policy: the relation is refused when it resolves.
+// a tenant column nor a Read policy: the relation is refused when it
+// resolves. Join rows are therefore not tenant-scoped, and velox does not
+// check that a link's two endpoints are rows the caller may see or change:
+// an application that writes links checks both endpoints itself, in J's
+// Policy (Insert, and Write for updates and deletes) or in a hook on J.
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) Relation {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	r.through = &through{

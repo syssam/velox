@@ -239,7 +239,7 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 				velox.EdgeThrough[dBookTag, dTag]("Single", 1, 0, 1, 0),     // a One
 				velox.EdgeThrough[badDesc, dTag]("BadJoin", 1, 0, 0, 0),     // the join entity is invalid
 				velox.EdgeThrough[dAuthor, dTag]("TenantJ", 1, 0, 0, 0),     // the join entity has a tenant
-				velox.EdgeThrough[dPolicyJoin, dTag]("PolicyJ", 1, 0, 1, 0), // the join entity has a policy
+				velox.EdgeThrough[dPolicyJoin, dTag]("PolicyJ", 1, 0, 1, 0), // the join entity has a Read policy
 			},
 			Addr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
 			RelAddr: func(x *dBadThrough, i int) any {
@@ -260,8 +260,8 @@ func TestThroughRefusals(t *testing.T) {
 		{dBadThroughs.Target.Has(), "velox: velox_test.dBadThrough.Target: the key types differ: velox_test.dBookTag.TagID is int64 and velox_test.dAuthor.Name is string"},
 		{dBadThroughs.Single.Has(), "velox: velox_test.dBadThrough.Single: a many-to-many relation needs a Many field"},
 		{dBadThroughs.BadJoin.Has(), "velox: velox_test.dBadThrough.BadJoin: its join entity is invalid: velox_test.badDesc: the tenant names column 3, of 1"},
-		{dBadThroughs.TenantJ.Has(), "velox: velox_test.dBadThrough.TenantJ: its join entity velox_test.dAuthor has a tenant column; a join entity can have none"},
-		{dBadThroughs.PolicyJ.Has(), "velox: velox_test.dBadThrough.PolicyJ: its join entity velox_test.dPolicyJoin has a policy; a join entity can have none"},
+		{dBadThroughs.TenantJ.Has(), "velox: velox_test.dBadThrough.TenantJ: its join entity velox_test.dAuthor has a tenant column; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy"},
+		{dBadThroughs.PolicyJ.Has(), "velox: velox_test.dBadThrough.PolicyJ: its join entity velox_test.dPolicyJoin has a Read policy; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy"},
 	} {
 		_, _, err := db.Query[dBadThrough]().Where(c.p).Limit(1).SQL(ctx)
 		var se *velox.SchemaError
@@ -271,7 +271,8 @@ func TestThroughRefusals(t *testing.T) {
 	}
 }
 
-// dPolicyJoin is a join entity with a policy, which a join entity cannot have.
+// dPolicyJoin is a join entity with a Read policy, which a join entity cannot
+// have: loading would scope its rows, and Has would not.
 type dPolicyJoin struct{ BookID, TagID int64 }
 
 var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
@@ -279,6 +280,7 @@ var dPolicyJoinMeta velox.MetaOnce[dPolicyJoin]
 func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 	return dPolicyJoinMeta.Load(func() velox.Desc[dPolicyJoin] {
 		return velox.Desc[dPolicyJoin]{
+			Policy:     (*dPolicyJoin).Policy,
 			Table:      "policy_joins",
 			Columns:    []velox.ColumnDesc{{Field: "BookID", Name: "book_id"}, {Field: "TagID", Name: "tag_id"}},
 			PrimaryKey: []int{0, 1},
@@ -297,7 +299,106 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 }
 
 func (*dPolicyJoin) Policy() velox.Policy[dPolicyJoin] {
-	return velox.Policy[dPolicyJoin]{Insert: func(context.Context, *dPolicyJoin) error { return nil }}
+	return velox.Policy[dPolicyJoin]{Read: func(context.Context) (velox.Pred[dPolicyJoin], error) { return velox.Pred[dPolicyJoin]{}, nil }}
+}
+
+// dLinker has tags through dLink, a join entity whose Insert policy checks a
+// link's endpoints, which is how an application guards a link it writes.
+type dLinker struct {
+	ID   int64
+	Tags velox.Many[dTag]
+}
+
+var dLinkers = struct {
+	ID   velox.NumberCol[dLinker, int64]
+	Tags velox.Rel[dLinker, dTag]
+}{velox.NumberCol[dLinker, int64]{I: 0}, velox.Rel[dLinker, dTag]{I: 0}}
+
+var dLinkerMeta velox.MetaOnce[dLinker]
+
+func (*dLinker) VeloxMeta() *velox.Meta[dLinker] {
+	return dLinkerMeta.Load(func() velox.Desc[dLinker] {
+		return velox.Desc[dLinker]{
+			Table:      "linkers",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Relations:  []velox.Relation{velox.EdgeThrough[dLink, dTag]("Tags", 0, 0, 1, 0)},
+			Addr:       func(x *dLinker, i int) any { return &x.ID },
+			RelAddr:    func(x *dLinker, i int) any { return &x.Tags },
+		}
+	})
+}
+
+type dLink struct{ LinkerID, TagID int64 }
+
+var dLinkMeta velox.MetaOnce[dLink]
+
+func (*dLink) VeloxMeta() *velox.Meta[dLink] {
+	return dLinkMeta.Load(func() velox.Desc[dLink] {
+		return velox.Desc[dLink]{
+			Policy:     (*dLink).Policy,
+			Table:      "links",
+			Columns:    []velox.ColumnDesc{{Field: "LinkerID", Name: "linker_id"}, {Field: "TagID", Name: "tag_id"}},
+			PrimaryKey: []int{0, 1},
+			Tenant:     -1,
+			Addr: func(x *dLink, i int) any {
+				switch i {
+				case 0:
+					return &x.LinkerID
+				case 1:
+					return &x.TagID
+				}
+				return nil
+			},
+		}
+	})
+}
+
+// Policy refuses a link to tag 13, standing for an endpoint the caller may
+// not see.
+func (*dLink) Policy() velox.Policy[dLink] {
+	return velox.Policy[dLink]{
+		Insert: func(_ context.Context, l *dLink) error {
+			if l.TagID == 13 {
+				return velox.Deny("not that tag")
+			}
+			return nil
+		},
+		Write: func(context.Context) (velox.Pred[dLink], error) { return velox.Pred[dLink]{}, nil },
+	}
+}
+
+// TestThroughJoinEntityWithInsertPolicy: a join entity with Insert and Write
+// policies is allowed. Its relation loads and answers Has, and the policy
+// refuses a link written to an endpoint it rejects.
+func TestThroughJoinEntityWithInsertPolicy(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{
+		{{int64(1)}},
+		{{int64(1), int64(7)}},
+		{{int64(7), int64(1), "go"}},
+	}}
+	db := velox.OpenFake(velox.Postgres, e)
+	ls, err := db.Query[dLinker]().With(dLinkers.Tags).Limit(1).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagNames(t, ls[0].Tags); !reflect.DeepEqual(got, []string{"go"}) {
+		t.Errorf("tags %v", got)
+	}
+	got, _, err := db.Query[dLinker]().Where(dLinkers.Tags.Has()).Limit(1).SQL(ctx)
+	if want := `SELECT "id" FROM "linkers" WHERE EXISTS (SELECT 1 FROM "links" AS "vx1" WHERE "vx1"."linker_id" = "linkers"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT $1`; err != nil || got != want {
+		t.Errorf("got  %s, %v\nwant %s", got, err, want)
+	}
+	e2 := &velox.FakeExec{Affected: 1}
+	db = velox.OpenFake(velox.Postgres, e2)
+	if err := db.Insert(&dLink{LinkerID: 1, TagID: 2}).Exec(ctx); err != nil || e2.Calls != 1 {
+		t.Fatalf("an allowed link: %v, %d calls", err, e2.Calls)
+	}
+	err = db.Insert(&dLink{LinkerID: 1, TagID: 13}).Exec(ctx)
+	if !errors.Is(err, velox.ErrDenied) || e2.Calls != 1 {
+		t.Fatalf("a refused link: %v, %d calls", err, e2.Calls)
+	}
 }
 
 // TestThroughLoadChunksByOwner: when the targets need several statements,
@@ -477,6 +578,7 @@ var dPeerMeta velox.MetaOnce[dPeer]
 func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 	return dPeerMeta.Load(func() velox.Desc[dPeer] {
 		return velox.Desc[dPeer]{
+			Policy:     (*dPeer).Policy,
 			Table:      "peers",
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},

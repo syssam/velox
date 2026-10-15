@@ -45,6 +45,7 @@
 // A schema holds only declarative structure. Nothing in it runs at program
 // start. Policies and hooks are not part of it: they are methods, Policy and
 // Hooks, that you write on the generated entity in the generated package, typed
-// with the generated handles. velox finds them by an interface check when the
-// entity's metadata is first built.
+// with the generated handles. velox-gen binds them in the generated
+// metadata when the entity declares them, so a wrong signature does not
+// compile.
 package schema

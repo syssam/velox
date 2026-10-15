@@ -28,14 +28,22 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 //	func (*E) Hooks() []velox.Hook[E]
 //
-// which velox calls once, when it builds the entity's metadata, on a nil
-// *E: the method must not read its receiver. The first hook listed is the
-// outermost. Each hook function itself is called on every write: velox builds
-// the chain anew for each one, so a hook may keep per-write state in its
-// closure. Calling next a second time sends nothing and fails the write. Every insert (Insert and InsertAll, whose hooks run once over all
-// its rows), update, delete and Save of the entity runs them, and so do their
-// SQL(ctx) methods, where next renders the statement instead of sending it
-// and IsDryRun(ctx) is true.
+// which velox-gen binds in the generated metadata (Desc.Hooks is (*E).Hooks):
+// a method with another signature does not compile, and one the metadata does
+// not bind is refused at the entity's first use. velox calls it once, when it
+// builds the entity's metadata, on a nil *E: the method must not read its
+// receiver. Nor may its body, outside the hooks it returns, read the entity's
+// own metadata (a Has or HasWhere on a relation from or to it, say): that
+// waits on the build in progress and deadlocks. Build such predicates inside
+// the hook functions.
+//
+// The first hook listed is the outermost. Each hook function itself is
+// called on every write: velox builds the chain anew for each one, so a hook
+// may keep per-write state in its closure. Calling next a second time sends
+// nothing and fails the write. Every insert (Insert and InsertAll, whose
+// hooks run once over all its rows), update, delete and Save of the entity
+// runs them, and so do their SQL(ctx) methods, where next renders the
+// statement instead of sending it and IsDryRun(ctx) is true.
 //
 // The guard (ErrNoWhere and the like) runs on an update or delete as the
 // caller built it, before the hooks, and again inside next: a condition a
@@ -137,19 +145,6 @@ func identical(err, core error) bool {
 	return t == reflect.TypeOf(core) && t.Comparable() && err == core
 }
 
-// erase returns h with E erased.
-func erase[E any](h Hook[E]) hookFn {
-	return func(next mutateFn) mutateFn {
-		typed := h(MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error { return next(ctx, (*mutation)(m)) }))
-		return func(ctx context.Context, mu *mutation) error {
-			if typed == nil {
-				return errNilMutator
-			}
-			return typed.Mutate(ctx, (*Mutation[E])(mu))
-		}
-	}
-}
-
 var (
 	// errNilMutator is the error of a hook that returned a nil Mutator.
 	errNilMutator = errors.New("a hook returned a nil Mutator")
@@ -157,27 +152,62 @@ var (
 	errNextTwice = errors.New("a hook called next twice")
 )
 
-// entityMethods reads the Policy and Hooks methods of the entity E, if it
-// declares them, into info. They are called on a nil *E.
-func entityMethods[E any](info *EntityInfo) error {
-	if p, ok := any((*E)(nil)).(interface{ Policy() Policy[E] }); ok {
-		var pol Policy[E]
-		if err := recovered(info.Name, "Policy()", func() { pol = p.Policy() }); err != nil {
-			return err
-		}
-		info.policy = policyOf(pol)
+// erasedPolicy is Desc.Policy, a func(*E) Policy[E], with E erased. The types
+// have one memory layout and one calling convention: *E is an unsafe.Pointer,
+// and Policy[E] is policy with Pred[E] for Predicate and *E for
+// unsafe.Pointer, all of them one pointer or one struct of pointers.
+// TestErasedLayouts checks it. Load converts the function's address rather
+// than instantiating a conversion of Policy[E] and every closure in it for
+// each entity, which cost about 25 KiB in every entity package, used or not.
+type erasedPolicy = func(unsafe.Pointer) policy
+
+// erasedHooks is Desc.Hooks, a func(*E) []Hook[E], with E erased: a Hook[E]
+// is a func(Mutator[E]) Mutator[E], and Mutator[E] an interface of the one
+// method Mutate(ctx, *Mutation[E]), which is called through the interface's
+// method table and so does not care which interface type holds it.
+type erasedHooks = func(unsafe.Pointer) []func(rawMutator) rawMutator
+
+// rawMutator is a Mutator[E] with E erased, as the hook functions see it.
+type rawMutator interface {
+	Mutate(ctx context.Context, m *mutation) error
+}
+
+// rawNext is a mutateFn as a rawMutator.
+type rawNext mutateFn
+
+func (f rawNext) Mutate(ctx context.Context, m *mutation) error { return f(ctx, m) }
+
+// bindPolicy calls f, the Desc's Policy, on a nil *E and keeps its result in
+// info.
+func bindPolicy(info *EntityInfo, f erasedPolicy) error {
+	var pol policy
+	if err := recovered(info.Name, "Policy()", func() { pol = f(nil) }); err != nil {
+		return err
 	}
-	if h, ok := any((*E)(nil)).(interface{ Hooks() []Hook[E] }); ok {
-		var hs []Hook[E]
-		if err := recovered(info.Name, "Hooks()", func() { hs = h.Hooks() }); err != nil {
-			return err
+	info.policy = &pol
+	return nil
+}
+
+// bindHooks calls f, the Desc's Hooks, on a nil *E and keeps its hooks, with
+// the mutation type erased, in info. A nil hook is refused.
+func bindHooks(info *EntityInfo, f erasedHooks) error {
+	var hs []func(rawMutator) rawMutator
+	if err := recovered(info.Name, "Hooks()", func() { hs = f(nil) }); err != nil {
+		return err
+	}
+	for i, h := range hs {
+		if h == nil {
+			return errNilHook(info.Name, i)
 		}
-		for i, f := range hs {
-			if f == nil {
-				return errNilHook(info.Name, i)
+		info.hooks = append(info.hooks, func(next mutateFn) mutateFn {
+			typed := h(rawNext(next))
+			return func(ctx context.Context, mu *mutation) error {
+				if typed == nil {
+					return errNilMutator
+				}
+				return typed.Mutate(ctx, mu)
 			}
-			info.hooks = append(info.hooks, erase(f))
-		}
+		})
 	}
 	return nil
 }

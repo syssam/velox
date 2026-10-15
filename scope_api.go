@@ -90,10 +90,18 @@ func policyBypass(ctx context.Context) string {
 //
 //	func (*E) Policy() velox.Policy[E]
 //
-// which velox calls once, when it builds the metadata, on a nil *E (so the
-// method must not read its receiver), or, on the old path, in its Schema
-// method with Schema.Policy. Any field may be nil. A predicate function's zero
-// Pred[E]{} restricts nothing; any error it returns denies the statement.
+// or, on the old path, in its Schema method with Schema.Policy. velox-gen
+// binds the method in the generated metadata (Desc.Policy is (*E).Policy): a
+// method with another signature does not compile, and one the metadata does
+// not bind is refused at the entity's first use. velox calls it once, when it
+// builds the metadata, on a nil *E, so the method must not read its receiver.
+// Nor may its body, outside the functions it returns, read the entity's own
+// metadata (a Has or HasWhere on a relation from or to it, say): that waits on
+// the build in progress and deadlocks. Build such predicates inside Read,
+// Write and Insert, which run on each statement.
+//
+// Any field may be nil. A predicate function's zero Pred[E]{} restricts
+// nothing; any error it returns denies the statement.
 type Policy[E any] struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into
@@ -183,8 +191,9 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 // Result returns what the write did, once next has returned. Only Affected
 // is meaningful: the rows inserted, matched or deleted. Rows is always 0.
 // Unlike a Statement's Result, which an Around hook reads, Affected is never
-// -1: it is 0 before next returns, after next returned an error, and under
-// SQL(ctx), which sends nothing.
+// -1: it is 0 before next returns, after next returned an error (an insert
+// sets it only when every statement succeeded and no upsert was denied), and
+// under SQL(ctx), which sends nothing.
 func (m *Mutation[E]) Result[_ Lazy[E]]() Result { return m.res }
 
 // Value returns the value the statement assigns to column c, and whether it

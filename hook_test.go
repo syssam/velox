@@ -207,6 +207,7 @@ func (*hFlex) VeloxMeta() *velox.Meta[hFlex] { return hFlexMeta.Load(hFlexDesc) 
 
 func hFlexDesc() velox.Desc[hFlex] {
 	return velox.Desc[hFlex]{
+		Hooks: (*hFlex).Hooks,
 		Table: "flex",
 		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Title", Name: "title"},
 			{Field: "Stamp", Name: "stamp", UpdateDefault: func() any { return int64(9) }}},
@@ -302,7 +303,7 @@ var hNilMeta velox.MetaOnce[hNil]
 
 func (*hNil) VeloxMeta() *velox.Meta[hNil] {
 	return hNilMeta.Load(func() velox.Desc[hNil] {
-		return velox.Desc[hNil]{Table: "n", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hNil]{Hooks: (*hNil).Hooks, Table: "n", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hNil, i int) any { return &x.ID }}
 	})
 }
@@ -319,7 +320,7 @@ var hPanicMeta velox.MetaOnce[hPanic]
 
 func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 	return hPanicMeta.Load(func() velox.Desc[hPanic] {
-		return velox.Desc[hPanic]{Table: "p", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hPanic]{Policy: (*hPanic).Policy, Table: "p", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hPanic, i int) any { return &x.ID }}
 	})
 }
@@ -502,7 +503,7 @@ var hNilMutMeta velox.MetaOnce[hNilMut]
 
 func (*hNilMut) VeloxMeta() *velox.Meta[hNilMut] {
 	return hNilMutMeta.Load(func() velox.Desc[hNilMut] {
-		return velox.Desc[hNilMut]{Table: "m", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hNilMut]{Hooks: (*hNilMut).Hooks, Table: "m", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hNilMut, i int) any { return &x.ID }}
 	})
 }
@@ -519,7 +520,7 @@ var hPanicHooksMeta velox.MetaOnce[hPanicHooks]
 
 func (*hPanicHooks) VeloxMeta() *velox.Meta[hPanicHooks] {
 	return hPanicHooksMeta.Load(func() velox.Desc[hPanicHooks] {
-		return velox.Desc[hPanicHooks]{Table: "ph", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+		return velox.Desc[hPanicHooks]{Hooks: (*hPanicHooks).Hooks, Table: "ph", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
 			Addr: func(x *hPanicHooks, i int) any { return &x.ID }}
 	})
 }
@@ -576,5 +577,129 @@ func TestOldPathRefusesDescMethods(t *testing.T) {
 	err = db.Insert(&oPoliced{ID: 1}).Exec(ctx)
 	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.oPoliced: has a Policy method, which only generated (Desc) entities use") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// uPolicy and uHooks declare a Policy and a Hooks method that their Desc
+// does not bind: stale generated code, which must not leave them unrun.
+type uPolicy struct{ ID int64 }
+
+func (*uPolicy) Policy() velox.Policy[uPolicy] {
+	return velox.Policy[uPolicy]{Insert: func(context.Context, *uPolicy) error { return velox.Deny("never") }}
+}
+
+var uPolicyMeta velox.MetaOnce[uPolicy]
+
+func (*uPolicy) VeloxMeta() *velox.Meta[uPolicy] {
+	return uPolicyMeta.Load(func() velox.Desc[uPolicy] {
+		return velox.Desc[uPolicy]{Table: "up", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *uPolicy, i int) any { return &x.ID }}
+	})
+}
+
+type uHooks struct{ ID int64 }
+
+func (*uHooks) Hooks() []velox.Hook[uHooks] { return nil }
+
+var uHooksMeta velox.MetaOnce[uHooks]
+
+func (*uHooks) VeloxMeta() *velox.Meta[uHooks] {
+	return uHooksMeta.Load(func() velox.Desc[uHooks] {
+		return velox.Desc[uHooks]{Table: "uh", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *uHooks, i int) any { return &x.ID }}
+	})
+}
+
+// uPlain has neither method, and its Desc binds neither.
+type uPlain struct{ ID int64 }
+
+var uPlainMeta velox.MetaOnce[uPlain]
+
+func (*uPlain) VeloxMeta() *velox.Meta[uPlain] {
+	return uPlainMeta.Load(func() velox.Desc[uPlain] {
+		return velox.Desc[uPlain]{Table: "pl", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *uPlain, i int) any { return &x.ID }}
+	})
+}
+
+// A Policy or Hooks method with the wrong signature needs no test here: the
+// method expression velox-gen writes into Desc.Policy or Desc.Hooks does not
+// compile.
+func TestUnboundMethodsAreRefused(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	var se *velox.SchemaError
+	err := db.Insert(&uPolicy{ID: 1}).Exec(ctx)
+	if !errors.As(err, &se) || err.Error() != "velox: velox_test.uPolicy: has a Policy method, but the generated metadata does not bind it; run go tool velox-gen" {
+		t.Fatalf("got %v", err)
+	}
+	err = db.Insert(&uHooks{ID: 1}).Exec(ctx)
+	if !errors.As(err, &se) || err.Error() != "velox: velox_test.uHooks: has a Hooks method, but the generated metadata does not bind it; run go tool velox-gen" {
+		t.Fatalf("got %v", err)
+	}
+	if e.Calls != 0 {
+		t.Fatalf("%d calls", e.Calls)
+	}
+	if err := velox.CheckEntity[uPlain](); err != nil {
+		t.Fatalf("nil Policy and Hooks with no methods: %v", err)
+	}
+	if err := db.Insert(&uPlain{ID: 1}).Exec(ctx); err != nil || e.Calls != 1 {
+		t.Fatalf("%v, %d calls", err, e.Calls)
+	}
+}
+
+// hUp has a Read policy, so that an upsert's update branch is conditioned on
+// it, and a hook that reads the Result of the write once next returns.
+type hUp struct{ ID, N int64 }
+
+var hUps = struct {
+	ID, N velox.NumberCol[hUp, int64]
+}{velox.NumberCol[hUp, int64]{I: 0}, velox.NumberCol[hUp, int64]{I: 1}}
+
+var hUpAffected int64 = -1
+
+func (*hUp) Policy() velox.Policy[hUp] {
+	return velox.Policy[hUp]{Read: func(context.Context) (velox.Pred[hUp], error) { return hUps.N.GT(0), nil }}
+}
+
+func (*hUp) Hooks() []velox.Hook[hUp] {
+	return []velox.Hook[hUp]{func(next velox.Mutator[hUp]) velox.Mutator[hUp] {
+		return velox.MutateFunc[hUp](func(ctx context.Context, m *velox.Mutation[hUp]) error {
+			err := next.Mutate(ctx, m)
+			hUpAffected = m.Result().Affected
+			return err
+		})
+	}}
+}
+
+var hUpMeta velox.MetaOnce[hUp]
+
+func (*hUp) VeloxMeta() *velox.Meta[hUp] {
+	return hUpMeta.Load(func() velox.Desc[hUp] {
+		return velox.Desc[hUp]{
+			Policy: (*hUp).Policy, Hooks: (*hUp).Hooks,
+			Table: "ups", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "N", Name: "n"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *hUp, i int) any { return [...]any{&x.ID, &x.N}[i] },
+		}
+	})
+}
+
+// A write's Result.Affected is 0 after an error: an upsert whose existing row
+// the policy hides fails after the statement ran, and reports none of the
+// rows it affected.
+func TestMutationResultAfterAnError(t *testing.T) {
+	for _, affected := range []int64{0, 1} {
+		hUpAffected = -1
+		e := &velox.FakeExec{Affected: affected}
+		db := velox.OpenFake(velox.Postgres, e)
+		err := db.InsertAll([]hUp{{ID: 1, N: 1}, {ID: 2, N: 1}}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx)
+		if !errors.Is(err, velox.ErrDenied) || hUpAffected != 0 {
+			t.Errorf("affected %d: %v, Result().Affected %d", affected, err, hUpAffected)
+		}
+	}
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if err := db.Insert(&hUp{ID: 1, N: 1}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx); err != nil || hUpAffected != 1 {
+		t.Errorf("%v, Result().Affected %d", err, hUpAffected)
 	}
 }

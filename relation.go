@@ -13,8 +13,9 @@ import (
 )
 
 // kit is the code velox needs to handle an entity whose type it does not
-// know at the point of use: loading a relation to it. MetaOnce.Get builds it,
-// so it is compiled once, in the entity's own package.
+// know at the point of use: loading a relation to it. MetaOnce.Get and
+// MetaOnce.Load build it, so it is compiled once, in the entity's own
+// package.
 type kit struct {
 	value func(p unsafe.Pointer, col int) any       // the value of column col of the entity at p
 	scan  func(r rows, cols []int) (any, error)     // every row, into a new []E; cols as in Statement.Columns
@@ -210,12 +211,15 @@ func (r *relation) buildThrough(owner *EntityInfo, l link, fail func(string, ...
 	}
 	// Has reads the join rows inside its EXISTS, where nothing scopes them,
 	// while loading reads them with a query of their own, which would be
-	// scoped: the two would disagree. A generated join entity has neither.
+	// scoped: the two would disagree. So a join entity can have neither a
+	// tenant column nor a Read policy. Its Insert and Write policies apply
+	// only to writes of its rows, which they may check: join rows are not
+	// tenant-scoped, so a link's endpoints are checked there or in a hook.
 	if j.Tenant != -1 {
-		return fail("its join entity %s has a tenant column; a join entity can have none", j.Name)
+		return fail("its join entity %s has a tenant column; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy", j.Name)
 	}
-	if p := j.policy; p != nil && (p.read != nil || p.write != nil || p.insert != nil) {
-		return fail("its join entity %s has a policy; a join entity can have none", j.Name)
+	if p := j.policy; p != nil && p.read != nil {
+		return fail("its join entity %s has a Read policy; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy", j.Name)
 	}
 	for _, c := range [...]int{r.through.ownerCol, r.through.targetCol} {
 		if c < 0 || c >= len(j.Columns) {

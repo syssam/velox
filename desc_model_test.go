@@ -42,7 +42,9 @@ var errEmptyName = errors.New("must not be empty")
 
 func dAuthorDesc() velox.Desc[dAuthor] {
 	return velox.Desc[dAuthor]{
-		Table: "authors",
+		Policy: (*dAuthor).Policy,
+		Hooks:  (*dAuthor).Hooks,
+		Table:  "authors",
 		Columns: []velox.ColumnDesc{
 			{Field: "ID", Name: "id"},
 			{Field: "OrgID", Name: "org_id"},
@@ -124,6 +126,7 @@ func (*dBook) VeloxMeta() *velox.Meta[dBook] { return dBookMeta.Load(dBookDesc) 
 
 func dBookDesc() velox.Desc[dBook] {
 	return velox.Desc[dBook]{
+		Hooks:      (*dBook).Hooks,
 		Table:      "books",
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},

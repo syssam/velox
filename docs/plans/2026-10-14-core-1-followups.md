@@ -154,7 +154,16 @@ Left by the observability plan:
 ## Left by schema plan 2
 
 - The old path is removed in plan 3, once velox-gen writes `Desc` literals and every entity has moved: `Schema`, `Mixer`, `BeforeInsert`, `BeforeUpdate` and `BeforeDelete`, `Shape`, `MetaOnce.Get`, `RelationTo`, and the reflection over structs that finds columns and infers relation keys. `cmd/velox-gen/testdata/testmodel`, the test model on the old path, goes with the old generator.
-- A join entity (`EdgeThrough`) has no tenant or policy of its own: the relation is refused when it resolves. Loading applies the target's tenant and `Read` policy only.
+- A join entity (`EdgeThrough`) can have neither a tenant column nor a `Read` policy: the relation is refused when it resolves, since `Has` would not apply them and loading would. Its `Insert` and `Write` policies are allowed. Join rows are therefore not tenant-scoped, and velox does not check a link's two endpoints: an application that writes links checks both, using the join entity's `Policy()` (`Insert`, and `Write` for updates and deletes) or a hook. Loading applies the target's tenant and `Read` policy only.
 - `InsertAll` still reads no keys back, so after `next` the rows of an `InsertAll` that `Rows()` returns have no generated IDs.
 - A hook can change the rows of an insert, but not how many there are: `Rows()` returns the rows, not the slice that holds them.
 - Until plan 3, the root `bin/velox-gen verify ./...` in CI checks no entities ("velox-gen verify: no entities"): the test model is on the Desc path, which the old generator does not see. `TestGeneratedEntities` runs `CheckEntity` on every test model entity meanwhile.
+- `Has` or `HasWhere` (or anything that reads the entity's metadata) in the body of `Policy()` or `Hooks()`, outside the functions they return, deadlocks on the metadata's `once`. Both are documented to build such predicates inside the returned functions. Lazy resolution of opExists would remove the hazard; decide in plan 3.
+- Hooks cannot reach the caller's transaction: `Mutation` holds no DB and the context carries no transaction, so a write a hook makes itself runs outside it. Plan 3 decides how to expose it, for example `velox.TxOf(ctx)`.
+- The generator must honor the Graph's `Field.Pointer` for bool and number fields with a literal `Default`, because `buildDesc` refuses a non-pointer one (a `Default` would overwrite an explicit false or 0).
+- `UpdateDefault` also fills on insert (velox's old `OnUpdate` rule), while ent applies it on update only. It becomes update-only when plan 3 removes the old path.
+- `EdgeTo[T]` is not checked against the field's `One[T]` or `Many[T]`. A mismatch loads empty, and `HasWhere` indexes the wrong table. Plan 3 should check it at resolve time.
+- The generated `Addr` and `RelAddr` must be allocation-free switches (as the test model's are not yet: some build an array per call).
+- `Desc.Tenant`'s zero value means column 0, so the generator always writes it (`-1` for none).
+- `ValidationError` names the Go field, while `ErrImmutable` names the column.
+- `MetaOnce.Load` binds `Desc.Policy` and `Desc.Hooks` through `unsafe` conversions of the two functions, not generic code, so that an entity without them compiles no Policy or Hook instantiation (about 78 KiB). `TestErasedLayouts` pins the layouts the conversion relies on; a change to `Policy`, `Hook`, `Mutator` or `Mutation` must keep it passing.
