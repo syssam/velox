@@ -1,0 +1,587 @@
+package gen
+
+import (
+	"cmp"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"path"
+	"slices"
+	"strings"
+
+	"github.com/syssam/velox2/schema/load"
+)
+
+// Build resolves m into a Graph and checks every rule of the model. It returns
+// all the rules m breaks, as *Error values joined with errors.Join, ordered by
+// schema name and then by rule.
+//
+// Build does not change m. The Graph shares m's annotations, checks and other
+// reference values.
+func Build(m *load.Model) (*Graph, error) {
+	b := &builder{pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}}}
+	b.entities(m)
+	b.resolveEdges()
+	b.foreignKeys()
+	b.indexes()
+	b.validate()
+	if len(b.errs) > 0 {
+		slices.SortStableFunc(b.errs, func(x, y ruleError) int {
+			return cmp.Or(strings.Compare(x.err.Schema, y.err.Schema), cmp.Compare(x.rule, y.rule))
+		})
+		errs := make([]error, len(b.errs))
+		for i, e := range b.errs {
+			errs[i] = e.err
+		}
+		return nil, errors.Join(errs...)
+	}
+	return b.g, nil
+}
+
+// builder holds the state of one Build.
+type builder struct {
+	pkg   string
+	g     *Graph
+	nodes []*node // in the order of g.Entities
+	errs  []ruleError
+}
+
+// ruleError is an Error with the number of the rule it reports, which orders
+// the errors of one schema.
+type ruleError struct {
+	rule int
+	err  *Error
+}
+
+// node is an entity with the model it came from.
+type node struct {
+	ent    *Entity
+	schema *load.Schema
+	edges  []*edgeState // in the order of ent.Edges
+}
+
+// edgeState is an edge with what resolving it found.
+type edgeState struct {
+	ed     *Edge
+	le     *load.Edge
+	owner  *node
+	target *node      // nil when the target is not a schema of the package
+	pair   *edgeState // the other edge of an inverse pair
+}
+
+// fail records that schema s breaks rule.
+func (b *builder) fail(rule int, s, where, format string, args ...any) {
+	b.errs = append(b.errs, ruleError{rule, &Error{Schema: s, Where: where, Reason: fmt.Sprintf(format, args...)}})
+}
+
+func fieldAt(name string) string { return fmt.Sprintf("field %q", name) }
+
+func edgeAt(name string) string { return fmt.Sprintf("edge %q", name) }
+
+func indexAt(i int) string { return fmt.Sprintf("index %d", i) }
+
+// numeric are the field types of Go numbers.
+var numeric = map[string]bool{
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+	"float32": true, "float64": true,
+}
+
+// idTypes are the field types an ID may have.
+var idTypes = map[string]bool{
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+	"string": true, "uuid": true,
+}
+
+// newField resolves a field of the model.
+func newField(lf *load.Field) *Field {
+	f := &Field{Field: *lf, GoName: pascal(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name)}
+	f.Pointer = f.Nillable || (len(f.Default) > 0 && (f.Type == "bool" || numeric[f.Type]))
+	return f
+}
+
+// entities makes one Entity per schema, with its table, its fields and its ID
+// (steps 1 and 2).
+func (b *builder) entities(m *load.Model) {
+	schemas := slices.Clone(m.Schemas)
+	slices.SortStableFunc(schemas, func(x, y *load.Schema) int { return strings.Compare(x.Name, y.Name) })
+	for _, s := range schemas {
+		e := &Entity{Name: s.Name, Label: snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations}
+		e.Table = plural(e.Label)
+		if raw, ok := s.Annotations["Table"]; ok {
+			var t struct{ Schema, Table string }
+			if err := json.Unmarshal(raw, &t); err == nil {
+				e.Table, e.TableSchema = cmp.Or(t.Table, e.Table), t.Schema
+			}
+		}
+		id := -1
+		for i, lf := range s.Fields {
+			if lf.Name == "id" && id < 0 {
+				id = i
+			}
+			e.Fields = append(e.Fields, newField(lf))
+		}
+		if id >= 0 {
+			f := e.Fields[id]
+			copy(e.Fields[1:id+1], e.Fields[:id])
+			e.Fields[0] = f
+		} else {
+			auto := &Field{Field: load.Field{Name: "id", Type: "int64"}, GoName: "ID", Column: "id", AutoID: true}
+			e.Fields = append([]*Field{auto}, e.Fields...)
+		}
+		b.g.Entities = append(b.g.Entities, e)
+		b.nodes = append(b.nodes, &node{ent: e, schema: s})
+	}
+}
+
+// node returns the node of the entity named name, or nil.
+func (b *builder) node(name string) *node {
+	for _, n := range b.nodes {
+		if n.ent.Name == name {
+			return n
+		}
+	}
+	return nil
+}
+
+// assoc returns n's first edge named name that is not an inverse, or nil.
+func (n *node) assoc(name string) *edgeState {
+	for _, s := range n.edges {
+		if s.ed.Name == name && !s.le.Inverse {
+			return s
+		}
+	}
+	return nil
+}
+
+// edge returns n's first edge named name, or nil.
+func (n *node) edge(name string) *edgeState {
+	for _, s := range n.edges {
+		if s.ed.Name == name {
+			return s
+		}
+	}
+	return nil
+}
+
+// declared returns n's first field named name that the schema declares, or nil.
+func (n *node) declared(name string) *Field {
+	for _, f := range n.ent.Fields {
+		if f.Name == name && !f.AutoID && f.Implicit == "" {
+			return f
+		}
+	}
+	return nil
+}
+
+// resolveEdges makes the edges and resolves their relations, as ent's resolve
+// does (step 3). Inverse edges are resolved first, together with their assoc
+// edges; the assoc edges no inverse claimed are resolved alone after them.
+func (b *builder) resolveEdges() {
+	for _, n := range b.nodes {
+		for _, le := range n.schema.Edges {
+			ed := &Edge{
+				Name: le.Name, GoName: pascal(le.Name), Target: le.Type, Unique: le.Unique, Required: le.Required,
+				Inverse: le.Inverse, Comment: le.Comment, Annotations: le.Annotations,
+			}
+			s := &edgeState{ed: ed, le: le, owner: n}
+			if le.TypePkg == b.pkg {
+				s.target = b.node(le.Type)
+			}
+			// An inline inverse has its assoc edge's type, which reports it.
+			if s.target == nil && !le.Inline {
+				t := le.Type
+				if le.TypePkg != b.pkg && le.TypePkg != "" {
+					t = path.Base(le.TypePkg) + "." + t
+				}
+				b.fail(5, n.ent.Name, edgeAt(le.Name), "type %s is not a schema of this package", t)
+			}
+			n.ent.Edges = append(n.ent.Edges, ed)
+			n.edges = append(n.edges, s)
+		}
+	}
+	for _, n := range b.nodes {
+		for _, s := range n.edges {
+			if s.le.Inverse {
+				b.resolveInverse(n, s)
+			}
+		}
+	}
+	for _, n := range b.nodes {
+		for _, s := range n.edges {
+			if !s.le.Inverse && s.target != nil && s.ed.Rel.Kind == "" {
+				b.resolveAssoc(n, s)
+			}
+		}
+	}
+}
+
+// resolveInverse resolves the inverse edge s of n and its assoc edge.
+func (b *builder) resolveInverse(n *node, s *edgeState) {
+	le, ed, t := s.le, s.ed, s.target
+	if t == nil {
+		return // rule 5
+	}
+	if le.Inline && t != n {
+		b.fail(28, n.ent.Name, edgeAt(le.Name), "From(...) inline is allowed only on an edge to its own schema")
+		return
+	}
+	if le.Ref == "" {
+		b.fail(6, n.ent.Name, edgeAt(le.Name), "an inverse edge needs Ref(name)")
+		return
+	}
+	r := t.assoc(le.Ref)
+	if r == nil {
+		b.fail(7, n.ent.Name, edgeAt(le.Name), "%s has no edge %q to refer to", t.ent.Name, le.Ref)
+		return
+	}
+	if r.target != n {
+		if r.target != nil {
+			b.fail(8, n.ent.Name, edgeAt(le.Name), "%s.%s points to %s, not to this schema", t.ent.Name, r.le.Name, r.le.Type)
+		}
+		return
+	}
+	if le.Required && r.le.Required {
+		b.fail(9, n.ent.Name, edgeAt(le.Name), "cannot be required in both directions with %s.%s", t.ent.Name, r.le.Name)
+	}
+	s.pair, r.pair = r, s
+	ref := r.ed
+	ed.Ref, ref.Ref = ref.Name, ed.Name
+	e := n.ent
+	table, column := e.Table, t.ent.Label+"_"+snake(ref.Name)
+	switch au, iu := ref.Unique, le.Unique; {
+	case au && iu:
+		ed.Rel.Kind, ref.Rel.Kind = "O2O", "O2O"
+	case !au && iu:
+		ed.Rel.Kind, ref.Rel.Kind = "M2O", "O2M"
+	case au && !iu:
+		ed.Rel.Kind, ref.Rel.Kind = "O2M", "M2O"
+		table = t.ent.Table
+	default:
+		ed.Rel.Kind, ref.Rel.Kind = "M2M", "M2M"
+		table = t.ent.Label + "_" + ref.Name
+	}
+	// The storage key of the pair is the assoc edge's, or else the inverse's.
+	key, keyOnAssoc := r.le, true
+	if key.Table == "" && len(key.Columns) == 0 {
+		key, keyOnAssoc = le, false
+	}
+	table = cmp.Or(key.Table, table)
+	ed.Rel.Table, ref.Rel.Table = table, table
+	if ed.Rel.Kind != "M2M" {
+		if len(key.Columns) > 0 {
+			column = key.Columns[0]
+		}
+		ed.Rel.Columns, ref.Rel.Columns = []string{column}, []string{column}
+		return
+	}
+	// c1 refers to the assoc edge's owner and c2 to its target.
+	c1, c2 := t.ent.Label+"_id", e.Label+"_id"
+	if c1 == c2 {
+		c2 = singular(le.Name) + "_id"
+	}
+	switch cols := key.Columns; {
+	case keyOnAssoc && len(cols) > 1:
+		c1, c2 = cols[0], cols[1]
+	case keyOnAssoc && len(cols) == 1:
+		c1 = cols[0]
+	case len(cols) > 1:
+		c2, c1 = cols[0], cols[1]
+	case len(cols) == 1:
+		c2 = cols[0]
+	}
+	ed.Rel.Columns, ref.Rel.Columns = []string{c2, c1}, []string{c1, c2}
+}
+
+// resolveAssoc resolves the assoc edge s of n, which no inverse edge claimed.
+func (b *builder) resolveAssoc(n *node, s *edgeState) {
+	le, ed, t := s.le, s.ed, s.target
+	switch {
+	case !le.Unique && t == n:
+		ed.Rel.Kind, ed.Bidi = "M2M", true
+		ed.Rel.Table = n.ent.Label + "_" + le.Name
+		c1, c2 := n.ent.Label+"_id", singular(le.Name)+"_id"
+		if len(le.Columns) > 0 {
+			c1 = le.Columns[0]
+		}
+		if len(le.Columns) > 1 {
+			c2 = le.Columns[1]
+		}
+		ed.Rel.Columns = []string{c1, c2}
+	case le.Unique && t == n:
+		ed.Rel.Kind, ed.Bidi = "O2O", true
+		ed.Rel.Table = n.ent.Table
+	case le.Unique:
+		ed.Rel.Kind = "M2O"
+		ed.Rel.Table = n.ent.Table
+	default:
+		ed.Rel.Kind = "O2M"
+		ed.Rel.Table = t.ent.Table
+	}
+	ed.Rel.Table = cmp.Or(le.Table, ed.Rel.Table)
+	if ed.Rel.Kind != "M2M" {
+		column := n.ent.Label + "_" + snake(le.Name)
+		if len(le.Columns) > 0 {
+			column = le.Columns[0]
+		}
+		ed.Rel.Columns = []string{column}
+	}
+}
+
+// ownFK reports whether the foreign key of the edge is in its owner's table,
+// as ent's Edge.OwnFK does.
+func ownFK(ed *Edge) bool {
+	switch ed.Rel.Kind {
+	case "M2O":
+		return true
+	case "O2O":
+		return ed.Inverse || ed.Bidi
+	}
+	return false
+}
+
+// foreignKeys binds every non-M2M relation to the field that holds its foreign
+// key, adding that field when no edge binds one (step 4, Ruling 5).
+func (b *builder) foreignKeys() {
+	for _, n := range b.nodes {
+		for _, s := range n.edges {
+			b.foreignKey(n, s)
+		}
+	}
+}
+
+func (b *builder) foreignKey(n *node, s *edgeState) {
+	le, ed := s.le, s.ed
+	if ed.Rel.Kind == "" {
+		return // unresolved: an error is recorded
+	}
+	own := ownFK(ed)
+	if le.Field != "" {
+		f := n.declared(le.Field)
+		if f == nil {
+			b.fail(10, n.ent.Name, edgeAt(le.Name), "field %q is not declared", le.Field)
+		}
+		if !own {
+			b.fail(11, n.ent.Name, edgeAt(le.Name), "binds field %q, but the foreign key is in table %s", le.Field, ed.Rel.Table)
+		}
+		if f == nil || !own {
+			return
+		}
+		id := s.target.ent.Fields[0]
+		if !sameType(&f.Field, &id.Field) {
+			b.fail(12, n.ent.Name, edgeAt(le.Name), "field %q is %s; %s's ID is %s", f.Name, typeName(&f.Field), s.target.ent.Name, typeName(&id.Field))
+		}
+		if f.Optional == le.Required {
+			b.fail(13, n.ent.Name, edgeAt(le.Name), "field %q must be Optional exactly when the edge is not Required", f.Name)
+		}
+		b.bind(s, f.Name, f.Column)
+		return
+	}
+	switch {
+	case own && (s.pair == nil || s.pair.le.Field == ""):
+		b.implicit(n, s.target, s, le.Required, ed.Rel.Kind == "O2O", le.Immutable)
+	case ed.Rel.Kind == "O2M" && s.pair == nil:
+		// No edge on the target's side: the foreign key references n's ID.
+		b.implicit(s.target, n, s, false, false, false)
+	}
+}
+
+// implicit adds to holder the foreign-key field of the edge s, which references
+// ref's ID.
+func (b *builder) implicit(holder, ref *node, s *edgeState, required, unique, immutable bool) {
+	id := ref.ent.Fields[0]
+	name := s.ed.Rel.Columns[0]
+	lf := load.Field{
+		Name: name, Type: id.Type, Size: id.Size, SchemaType: id.SchemaType,
+		Optional: !required, Nillable: !required, Unique: unique, Immutable: immutable,
+	}
+	if id.GoType != nil {
+		g := *id.GoType
+		lf.GoType = &g
+	}
+	holder.ent.Fields = append(holder.ent.Fields, &Field{
+		Field: lf, GoName: pascal(name), Column: name, Pointer: !required, Implicit: s.ed.Name,
+	})
+	b.bind(s, name, name)
+}
+
+// bind records that the field named name, stored in column, holds the foreign
+// key of s and of its pair.
+func (b *builder) bind(s *edgeState, name, column string) {
+	s.ed.Field, s.ed.Rel.Columns[0] = name, column
+	if p := s.pair; p != nil {
+		p.ed.Field, p.ed.Rel.Columns[0] = name, column
+	}
+}
+
+// typeName names the type of f in errors: its Go type, or its field type.
+func typeName(f *load.Field) string {
+	if f.GoType != nil {
+		return f.GoType.Ident
+	}
+	return f.Type
+}
+
+// sameType reports whether a foreign-key field of type f can hold an ID of
+// type id. The field types must be equal; a uuid, json or other type must also
+// have the same Go type.
+func sameType(f, id *load.Field) bool {
+	if f.Type != id.Type {
+		return false
+	}
+	switch f.Type {
+	case "uuid", "json", "other":
+		return typeName(f) == typeName(id)
+	}
+	return true
+}
+
+// indexes resolves the indexes of every entity (step 5).
+func (b *builder) indexes() {
+	for _, n := range b.nodes {
+		e := n.ent
+		for i, li := range n.schema.Indexes {
+			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Annotations: li.Annotations}
+			if len(li.Fields) == 0 && len(li.Edges) == 0 {
+				b.fail(25, e.Name, indexAt(i), "names no fields or edges")
+			}
+			for _, name := range li.Fields {
+				f := e.Field(name)
+				if f == nil {
+					b.fail(23, e.Name, indexAt(i), "names unknown field %q", name)
+					continue
+				}
+				ix.Columns = append(ix.Columns, f.Column)
+			}
+			for _, name := range li.Edges {
+				s := n.edge(name)
+				switch {
+				case s == nil:
+					b.fail(23, e.Name, indexAt(i), "names unknown edge %q", name)
+				case s.ed.Rel.Kind == "":
+				case !ownFK(s.ed):
+					b.fail(24, e.Name, indexAt(i), "edge %q has no column in table %s", name, e.Table)
+				default:
+					ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
+				}
+			}
+			ix.Name = cmp.Or(li.StorageKey, strings.Join(append([]string{e.Table}, ix.Columns...), "_"))
+			e.Indexes = append(e.Indexes, ix)
+		}
+	}
+}
+
+// validate checks the rules the earlier steps do not (step 6).
+func (b *builder) validate() {
+	for _, n := range b.nodes {
+		b.validateFields(n.ent)
+		b.validateEdges(n)
+	}
+}
+
+func (b *builder) validateFields(e *Entity) {
+	seen := map[string]bool{}
+	for _, f := range e.Fields {
+		if f.AutoID || f.Implicit != "" {
+			continue
+		}
+		if seen[f.Name] {
+			b.fail(1, e.Name, fieldAt(f.Name), "declared twice")
+		}
+		seen[f.Name] = true
+	}
+	columns := map[string]*Field{}
+	for _, f := range e.Fields {
+		first, ok := columns[f.Column]
+		if !ok {
+			columns[f.Column] = f
+			continue
+		}
+		if first.Name == f.Name && first.Implicit == "" && f.Implicit == "" {
+			continue // rule 1
+		}
+		b.fail(2, e.Name, fieldAt(f.Name), "column %q is also field %q's", f.Column, first.Name)
+	}
+	for _, f := range e.Fields {
+		if !f.Tenant {
+			continue
+		}
+		if e.Tenant == "" {
+			e.Tenant = f.Name
+		} else {
+			b.fail(14, e.Name, fieldAt(f.Name), "a second tenant field; %q is the tenant", e.Tenant)
+		}
+		if f.Optional || f.Nillable {
+			b.fail(15, e.Name, fieldAt(f.Name), "the tenant field must be required and not Nillable")
+		}
+		if len(f.Default) > 0 || f.DefaultFunc || f.UpdateDefault {
+			b.fail(16, e.Name, fieldAt(f.Name), "the tenant field cannot have a default: the context's tenant fills it")
+		}
+		if f.Type == "json" || f.Type == "bytes" {
+			b.fail(17, e.Name, fieldAt(f.Name), "the tenant field must be of a comparable type")
+		}
+	}
+	for _, f := range e.Fields {
+		switch f.Type {
+		case "enum":
+			b.validateEnum(e, f)
+		case "other":
+			if len(f.SchemaType) == 0 {
+				b.fail(26, e.Name, fieldAt(f.Name), "an Other field needs SchemaType")
+			}
+		}
+	}
+	if id := e.Fields[0]; !id.AutoID {
+		if id.Optional || id.Nillable || id.UpdateDefault {
+			b.fail(21, e.Name, fieldAt(id.Name), "the ID must be required, not Nillable, and have no UpdateDefault")
+		}
+		if !idTypes[id.Type] {
+			b.fail(22, e.Name, fieldAt(id.Name), "the ID cannot be of type %s", id.Type)
+		}
+	}
+}
+
+func (b *builder) validateEnum(e *Entity, f *Field) {
+	if len(f.Enums) == 0 {
+		b.fail(18, e.Name, fieldAt(f.Name), "an enum needs Values")
+	}
+	count := map[string]int{}
+	for _, v := range f.Enums {
+		if count[v.Value]++; count[v.Value] == 2 {
+			b.fail(19, e.Name, fieldAt(f.Name), "value %q is given twice", v.Value)
+		}
+	}
+	reported := map[string]bool{}
+	for _, v := range f.Enums {
+		if !ident(pascal(v.Name)) && !reported[v.Value] {
+			b.fail(20, e.Name, fieldAt(f.Name), "value %q has no Go name; use NamedValues", v.Value)
+			reported[v.Value] = true
+		}
+	}
+}
+
+func (b *builder) validateEdges(n *node) {
+	e := n.ent
+	seen := map[string]bool{}
+	for _, ed := range e.Edges {
+		if seen[ed.Name] {
+			b.fail(3, e.Name, edgeAt(ed.Name), "declared twice")
+		}
+		seen[ed.Name] = true
+		for _, f := range e.Fields {
+			if f.GoName == ed.GoName {
+				b.fail(4, e.Name, edgeAt(ed.Name), "its Go name %s is also field %q's", ed.GoName, f.Name)
+				break
+			}
+		}
+		if ed.Rel.Kind == "M2M" && !ed.Inverse {
+			for _, other := range b.g.Entities {
+				if other.Table == ed.Rel.Table {
+					b.fail(27, e.Name, edgeAt(ed.Name), "join table %s is also the table of schema %s", ed.Rel.Table, other.Name)
+					break
+				}
+			}
+		}
+	}
+}
