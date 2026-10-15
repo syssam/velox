@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"bytes"
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,6 +40,10 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), Hash: hex.EncodeToString(sum[:])},
 		joins: map[string]*join{},
 	}
+	l.owned = map[string]string{
+		"velox": "github.com/syssam/velox2", "sch": l.out.SchemaPath, "errors": "errors", "fmt": "fmt",
+		"regexp": "regexp", "time": "time", "json": "encoding/json",
+	}
 	l.entities()
 	l.relations()
 	l.finish()
@@ -60,6 +66,7 @@ type lowerer struct {
 	errs  []*Error
 	state map[string]*entState // by entity name
 	joins map[string]*join     // by join table
+	owned map[string]string    // the package names the generated code uses, with their paths
 	enums []*enumDecl
 }
 
@@ -83,7 +90,6 @@ type entState struct {
 	name    string // the schema or join entity's name, for errors
 	out     *OutEntity
 	paths   map[string]string // import name → path
-	std     map[string]bool   // the standard packages the code uses
 	sch     bool              // the code reads the schema package
 	regexps int
 	valids  int
@@ -98,6 +104,10 @@ func (s *entState) fail(where, format string, args ...any) {
 // use adds the import path p, which the code refers to as name. Two paths with
 // one name are an error.
 func (s *entState) use(p, name, where string) {
+	if owner, ok := s.l.owned[name]; ok && owner != p {
+		s.fail(where, "imports %s, but the generated code uses the name %s for %s", p, name, owner)
+		return
+	}
 	if old, ok := s.paths[name]; ok && old != p {
 		s.fail(where, "imports %s and %s both named %s", old, p, name)
 		return
@@ -109,7 +119,7 @@ func (s *entState) use(p, name, where string) {
 func (l *lowerer) entities() {
 	l.state = make(map[string]*entState, len(l.g.Entities))
 	for _, e := range l.g.Entities {
-		s := &entState{l: l, name: e.Name, paths: map[string]string{}, std: map[string]bool{}}
+		s := &entState{l: l, name: e.Name, paths: map[string]string{}}
 		s.out = &OutEntity{
 			Name: e.Name, Label: e.Label, Handles: plural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
 			Tenant: -1, Bound: l.cfg.Bound[e.Name],
@@ -173,11 +183,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	}
 	if f.GoType == nil && f.Type == "time" {
 		s.use("time", "time", where)
-		s.std["time"] = true
 	}
 	var h string
 	switch {
-	case elem == "time.Time":
+	case f.Type == "time" || elem == "time.Time":
 		h = "OrderedCol"
 	case numeric[kind]:
 		h = "NumberCol"
@@ -190,6 +199,9 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		h = "Null" + h
 	}
 	o.Handle = fmt.Sprintf("velox.%s[%s, %s]", h, s.name, elem)
+	if f.Sensitive && f.StructTag != "" && reflect.StructTag(f.StructTag).Get("json") != "-" {
+		s.fail(where, "a Sensitive field's StructTag must not expose it to JSON")
+	}
 	switch {
 	case f.StructTag != "":
 		o.Tag = quoteTag(f.StructTag)
@@ -308,9 +320,9 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 	s.sch = true
 	p := f.Position
 	if p.MixedIn {
-		return fmt.Sprintf("sch.%s{}.Mixin()[%d].Fields()[%d].Descriptor()", e.Name, p.MixinIndex, p.Index)
+		return fmt.Sprintf("(&sch.%s{}).Mixin()[%d].Fields()[%d].Descriptor()", e.Name, p.MixinIndex, p.Index)
 	}
-	return fmt.Sprintf("sch.%s{}.Fields()[%d].Descriptor()", e.Name, p.Index)
+	return fmt.Sprintf("(&sch.%s{}).Fields()[%d].Descriptor()", e.Name, p.Index)
 }
 
 // defaults writes the code of f's Default, DefaultFunc and UpdateDefault
@@ -328,6 +340,10 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 			o.DefaultCode = lit
 		case !ok:
 			// An error is recorded.
+		case f.Type == "bytes" || f.Type == "json":
+			// Decoded on each call, so that no two rows share a slice or a map.
+			s.use("encoding/json", "json", where)
+			o.DefaultFuncCode = fmt.Sprintf("func() any { var v %s; _ = json.Unmarshal([]byte(%s), &v); return v }", elem, strconv.Quote(compact(f.Default)))
 		default:
 			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s.Default }", s.descriptor(e, f))
 		}
@@ -364,17 +380,7 @@ func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
 		}
 		return conv(strconv.FormatBool(v)), true
 	case numeric[f.Type]:
-		var err error
-		if integer(f.Type) {
-			if f.Type[0] == 'u' {
-				_, err = strconv.ParseUint(raw, 10, 64)
-			} else {
-				_, err = strconv.ParseInt(raw, 10, 64)
-			}
-		} else {
-			_, err = strconv.ParseFloat(raw, 64)
-		}
-		if err != nil {
+		if !fits(f.Type, raw) {
 			s.fail(where, "its Default %s is not a %s", raw, f.Type)
 			return "", false
 		}
@@ -401,6 +407,35 @@ func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
 		return q, true
 	}
 	return "", true
+}
+
+// compact is the JSON raw without insignificant white space.
+func compact(raw []byte) string {
+	var b bytes.Buffer
+	if json.Compact(&b, raw) != nil {
+		return string(raw)
+	}
+	return b.String()
+}
+
+// fits reports whether the JSON number raw is a value of the number type t:
+// an integer in its range (no sign on an unsigned type), or a float that does
+// not overflow.
+func fits(t, raw string) bool {
+	bits := 64
+	if n := strings.TrimLeft(t, "uinfloat"); n != "" {
+		bits, _ = strconv.Atoi(n)
+	}
+	var err error
+	switch {
+	case strings.HasPrefix(t, "float"):
+		_, err = strconv.ParseFloat(raw, bits)
+	case strings.HasPrefix(t, "u"):
+		_, err = strconv.ParseUint(raw, 10, bits)
+	default:
+		_, err = strconv.ParseInt(raw, 10, bits)
+	}
+	return err == nil
 }
 
 // base is the Go type of the values a field's Validate functions take: the
@@ -456,17 +491,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 				s.fail(where, "check %s needs an argument", c.Kind)
 				return "", "", false
 			}
-			var err error
-			switch {
-			case integer(f.Type):
-				_, err = strconv.ParseInt(args[i], 10, 64)
-				if err != nil && f.Type[0] == 'u' {
-					_, err = strconv.ParseUint(args[i], 10, 64)
-				}
-			default:
-				_, err = strconv.ParseFloat(args[i], 64)
-			}
-			if err != nil {
+			if !fits(f.Type, args[i]) {
 				s.fail(where, "check %s: %s is not a %s", c.Kind, args[i], f.Type)
 				return "", "", false
 			}
@@ -578,7 +603,6 @@ func (s *entState) numberCheck(kind string, arg func(int) (string, string, bool)
 // useStd records that the code uses the standard package p.
 func (s *entState) useStd(p, where string) {
 	s.use(p, p, where)
-	s.std[p] = true
 }
 
 // relations lowers the edges of every entity, and makes the join entities of
@@ -634,9 +658,12 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 			s.fail(where, "join table %s has no Go name for its entity", ed.Rel.Table)
 			name = "Join"
 		}
-		js := &entState{l: l, name: name, paths: map[string]string{}, std: map[string]bool{}}
+		js := &entState{l: l, name: name, paths: map[string]string{}}
+		if owner.TableSchema != target.TableSchema {
+			s.fail(where, "join table %s lies between tables in different schemas (%q and %q)", ed.Rel.Table, owner.TableSchema, target.TableSchema)
+		}
 		js.out = &OutEntity{
-			Name: name, Label: snake(name), Handles: plural(name), Table: ed.Rel.Table,
+			TableSchema: owner.TableSchema, Name: name, Label: snake(name), Handles: plural(name), Table: ed.Rel.Table,
 			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bound: l.cfg.Bound[name],
 		}
 		for i, ent := range []*Entity{owner, target} {
@@ -724,6 +751,35 @@ func (l *lowerer) finish() {
 			add(j.ent.Handles, "handles variable", j.owner, j.where)
 		}
 	}
+
+	// A join table is not an entity's table, and Task 2 names the functions of
+	// an entity by its label, so no two entities share one.
+	for _, j := range joins {
+		for _, e := range l.g.Entities {
+			if e.Table == j.ent.Table && e.TableSchema == j.ent.TableSchema {
+				l.errs = append(l.errs, &Error{Schema: j.owner, Where: j.where, Reason: fmt.Sprintf("join table %s is also the table of schema %s", j.ent.Table, e.Name)})
+			}
+		}
+	}
+	labels := map[string]string{}
+	for _, o := range l.out.Entities {
+		if old, ok := labels[o.Label]; ok && old != o.Name { // one name is reported as a collision already
+			schema, where := o.Name, ""
+			if j := l.joins[o.Table]; o.Join && j != nil {
+				schema, where = j.owner, j.where
+			}
+			l.errs = append(l.errs, &Error{Schema: schema, Where: where, Reason: fmt.Sprintf("%s %s has label %s, which is also %s's", kindOf(o), o.Name, o.Label, old)})
+			continue
+		}
+		labels[o.Label] = o.Name
+	}
+}
+
+func kindOf(o *OutEntity) string {
+	if o.Join {
+		return "join entity"
+	}
+	return "schema"
 }
 
 // complete writes the check code, the imports and NeedsSch of an entity.

@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"encoding/json"
 	"errors"
 	"math/rand"
 	randv2 "math/rand/v2"
@@ -13,7 +14,11 @@ import (
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox2/schema/load"
 	"github.com/syssam/velox2/schema/mixin"
+
+	errpkg "github.com/syssam/velox2/internal/gen/internal/errors"
+	schpkg "github.com/syssam/velox2/internal/gen/internal/sch"
 )
 
 const lowerSchemaPath = "github.com/syssam/velox2/internal/gen"
@@ -223,8 +228,8 @@ func TestLowerChecks(t *testing.T) {
 	}
 	for _, want := range []string{
 		`re0 := regexp.MustCompile("^[a-z]+$")`,
-		`v0 := sch.LwChecked{}.Fields()[0].Descriptor().Validators[0].(func(string) error)`,
-		`v1 := sch.LwChecked{}.Fields()[1].Descriptor().Validators[0].(func(int) error)`,
+		`v0 := (&sch.LwChecked{}).Fields()[0].Descriptor().Validators[0].(func(string) error)`,
+		`v1 := (&sch.LwChecked{}).Fields()[1].Descriptor().Validators[0].(func(int) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -293,16 +298,19 @@ func (LwMixed) Fields() []schema.Field {
 		field.String("lit").Default("hi"),
 		field.Int("count").Default(5),
 		field.Float("ratio").Default(1.5),
+		field.Strings("labels").Default([]string{"a", "b"}),
+		field.Other("pt", uuidValue{}).SchemaType(map[string]string{"postgres": "uuid"}).Default(uuidValue{1}),
+		field.Enum("tier").Values("free", "paid").Default("paid"),
 	}
 }
 
 func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
-	const mix = "sch.LwMixed{}.Mixin()[1].Fields()"
+	const mix = "(&sch.LwMixed{}).Mixin()[1].Fields()"
 	for _, want := range []string{
 		`v0 := ` + mix + `[0].Descriptor().Validators[0].(func(string) error)`,
-		`v1 := sch.LwMixed{}.Fields()[0].Descriptor().Validators[0].(func(string) error)`,
+		`v1 := (&sch.LwMixed{}).Fields()[0].Descriptor().Validators[0].(func(string) error)`,
 	} {
 		if !strings.Contains(e.CheckSetup, want) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
@@ -311,9 +319,12 @@ func TestLowerMixinPosition(t *testing.T) {
 	for _, c := range []struct{ name, def, fn, upd string }{
 		{"made", "", `func() any { return ` + mix + `[1].Descriptor().Default.(func() time.Time)() }`, ""},
 		{"rev", "", `func() any { return ` + mix + `[2].Descriptor().DefaultFunc.(func() int64)() }`, ""},
-		{"own", "", `func() any { return sch.LwMixed{}.Fields()[0].Descriptor().DefaultFunc.(func() string)() }`, ""},
-		{"touched", "", "", `func() any { return sch.LwMixed{}.Fields()[1].Descriptor().UpdateDefault.(func() time.Time)() }`},
-		{"blob", "", `func() any { return sch.LwMixed{}.Fields()[2].Descriptor().Default }`, ""},
+		{"own", "", `func() any { return (&sch.LwMixed{}).Fields()[0].Descriptor().DefaultFunc.(func() string)() }`, ""},
+		{"touched", "", "", `func() any { return (&sch.LwMixed{}).Fields()[1].Descriptor().UpdateDefault.(func() time.Time)() }`},
+		{"blob", "", `func() any { var v []byte; _ = json.Unmarshal([]byte("\"Yg==\""), &v); return v }`, ""},
+		{"labels", "", `func() any { var v []string; _ = json.Unmarshal([]byte("[\"a\",\"b\"]"), &v); return v }`, ""},
+		{"pt", "", `func() any { return (&sch.LwMixed{}).Fields()[7].Descriptor().Default }`, ""},
+		{"tier", "LwMixedTierPaid", "", ""},
 		{"lit", `"hi"`, "", ""},
 		{"count", `int(5)`, "", ""},
 		{"ratio", `float64(1.5)`, "", ""},
@@ -323,7 +334,7 @@ func TestLowerMixinPosition(t *testing.T) {
 			t.Errorf("%s: %+v, want %q %q %q", c.name, f, c.def, c.fn, c.upd)
 		}
 	}
-	if !reflect.DeepEqual(e.Imports, []string{"time"}) {
+	if !reflect.DeepEqual(e.Imports, []string{"encoding/json", "errors", "github.com/syssam/velox2/internal/gen", "time"}) {
 		t.Errorf("imports %v", e.Imports)
 	}
 }
@@ -465,5 +476,266 @@ func TestLowerTenantIndexGoTypes(t *testing.T) {
 	}
 	if r := a.rel("profile"); r.Desc != `velox.EdgeTo[Profile]("Profile", 0, 1)` {
 		t.Errorf("profile %s", r.Desc)
+	}
+}
+
+// Two rows never share a decoded default: the code decodes the literal on
+// each call. The descriptor is not read for it.
+func TestLowerJSONDefaultNeedsNoSchema(t *testing.T) {
+	o := mustLower(t, Config{}, LwDecoded{})
+	e := o.entity("LwDecoded")
+	if e.NeedsSch || o.NeedsSch || !reflect.DeepEqual(e.Imports, []string{"encoding/json"}) {
+		t.Errorf("sch %v imports %v", e.NeedsSch, e.Imports)
+	}
+	want := `func() any { var v map[string]int; _ = json.Unmarshal([]byte("{\"a\":1}"), &v); return v }`
+	if f := e.field("m"); f.DefaultFuncCode != want || f.DefaultCode != "" {
+		t.Errorf("m %q", f.DefaultFuncCode)
+	}
+}
+
+type LwDecoded struct{ schema.Schema }
+
+func (LwDecoded) Fields() []schema.Field {
+	return []schema.Field{field.JSON("m", map[string]int{}).Default(map[string]int{"a": 1})}
+}
+
+type LwSecret struct{ schema.Schema }
+
+func (LwSecret) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("a").Sensitive().StructTag(`json:"-"`),
+		field.String("b").Sensitive().StructTag(`json:"b" db:"x"`),
+		field.String("c").Sensitive().StructTag(`db:"c"`),
+		field.String("d").Sensitive(),
+	}
+}
+
+func TestLowerSensitiveTag(t *testing.T) {
+	_, err := lower(t, Config{}, LwSecret{})
+	if err == nil {
+		t.Fatal("no error")
+	}
+	for _, f := range []string{"b", "c"} {
+		if w := `schema LwSecret: field "` + f + `": a Sensitive field's StructTag must not expose it to JSON`; !strings.Contains(err.Error(), w) {
+			t.Errorf("error lacks %q: %v", w, err)
+		}
+	}
+	if n := strings.Count(err.Error(), "\n") + 1; n != 2 {
+		t.Errorf("%d errors: %v", n, err)
+	}
+}
+
+type LwSchemaA struct{ schema.Schema }
+
+func (LwSchemaA) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("app", "lw_schema_as")}
+}
+func (LwSchemaA) Edges() []schema.Edge { return []schema.Edge{edge.To("bs", LwSchemaB.Type)} }
+
+type LwSchemaB struct{ schema.Schema }
+
+func (LwSchemaB) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("as", LwSchemaA.Type).Ref("bs")}
+}
+
+type LwSchemaC struct{ schema.Schema }
+
+func (LwSchemaC) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("app", "lw_schema_cs")}
+}
+func (LwSchemaC) Edges() []schema.Edge { return []schema.Edge{edge.To("ds", LwSchemaD.Type)} }
+
+type LwSchemaD struct{ schema.Schema }
+
+func (LwSchemaD) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("app", "lw_schema_ds")}
+}
+func (LwSchemaD) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("cs", LwSchemaC.Type).Ref("ds")}
+}
+
+func TestLowerJoinTableSchema(t *testing.T) {
+	// Both sides in "app": the join table is there too.
+	o := mustLower(t, Config{}, LwSchemaC{}, LwSchemaD{})
+	var join *OutEntity
+	for _, e := range o.Entities {
+		if e.Join {
+			join = e
+		}
+	}
+	if join == nil || join.TableSchema != "app" {
+		t.Fatalf("join %+v", join)
+	}
+	// One side in "app", the other in the default schema.
+	_, err := lower(t, Config{}, LwSchemaA{}, LwSchemaB{})
+	want := `schema LwSchemaA: edge "bs": join table lw_schemaa_bs lies between tables in different schemas ("app" and "")`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want %s", err, want)
+	}
+}
+
+// Numbers are checked against the element type, which the DSL's typed
+// builders cannot get wrong: a model edited by hand can.
+func TestLowerNumbersFit(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		edit  func(*Field)
+		field string
+		want  string
+	}{
+		{"default overflows", func(f *Field) { f.Default = []byte("300") }, "n", `field "n": its Default 300 is not a int8`},
+		{"default negative unsigned", func(f *Field) { f.Default = []byte("-1") }, "u", `field "u": its Default -1 is not a uint8`},
+		{"default float32 overflow", func(f *Field) { f.Default = []byte("1e300") }, "f", `field "f": its Default 1e300 is not a float32`},
+		{"check negative unsigned", func(f *Field) { f.Checks = []load.Check{{Kind: "Min", Args: []json.RawMessage{[]byte("-1")}}} }, "u", `field "u": check Min: -1 is not a uint8`},
+		{"check overflow", func(f *Field) { f.Checks = []load.Check{{Kind: "Max", Args: []json.RawMessage{[]byte("128")}}} }, "n", `field "n": check Max: 128 is not a int8`},
+		{"check fraction", func(f *Field) { f.Checks = []load.Check{{Kind: "Min", Args: []json.RawMessage{[]byte("1.5")}}} }, "n", `field "n": check Min: 1.5 is not a int8`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			g := mustBuild(t, LwNumbers{})
+			c.edit(g.Entity("LwNumbers").Field(c.field))
+			_, err := Lower(g, Config{})
+			if err == nil || !strings.Contains(err.Error(), "schema LwNumbers: "+c.want) {
+				t.Fatalf("err = %v, want %s", err, c.want)
+			}
+		})
+	}
+	// Edge values fit.
+	g := mustBuild(t, LwNumbers{})
+	g.Entity("LwNumbers").Field("n").Default = []byte("-128")
+	g.Entity("LwNumbers").Field("u").Default = []byte("255")
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := o.entity("LwNumbers").field("n"); f.DefaultCode != "int8(-128)" {
+		t.Errorf("n %q", f.DefaultCode)
+	}
+}
+
+type LwNumbers struct{ schema.Schema }
+
+func (LwNumbers) Fields() []schema.Field {
+	return []schema.Field{field.Int8("n"), field.Uint8("u"), field.Float32("f")}
+}
+
+func TestLowerJoinTableIsEntityTable(t *testing.T) {
+	g := mustBuild(t, LwUser{}, LwPost{}, LwGroup{})
+	g.Entity("LwPost").Table = "lw_user_groups" // Build refuses this; Lower does too
+	_, err := Lower(g, Config{})
+	want := `schema LwUser: edge "groups": join table lw_user_groups is also the table of schema LwPost`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want %s", err, want)
+	}
+}
+
+// LWUserGroup has the label of the join entity LwUserGroup.
+type LWUserGroup struct{ schema.Schema }
+
+func (LWUserGroup) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("lw_ugs")}
+}
+
+func TestLowerJoinLabelCollision(t *testing.T) {
+	_, err := lower(t, Config{}, LwUser{}, LwPost{}, LwGroup{}, LWUserGroup{})
+	want := `schema LwUser: edge "groups": join entity LwUserGroup has label lw_user_group, which is also LWUserGroup's`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %v, want %s", err, want)
+	}
+}
+
+type LwPkgClash struct{ schema.Schema }
+
+func (LwPkgClash) Fields() []schema.Field {
+	return []schema.Field{
+		field.JSON("a", &errpkg.T{}),
+		field.JSON("b", &schpkg.T{}),
+		field.JSON("c", &json.Decoder{}), // the package the generated code means by json
+		field.Time("d").GoType(time.Time{}),
+	}
+}
+
+func TestLowerPackageNameClash(t *testing.T) {
+	_, err := lower(t, Config{SchemaPath: lowerSchemaPath}, LwPkgClash{})
+	if err == nil {
+		t.Fatal("no error")
+	}
+	for _, w := range []string{
+		`schema LwPkgClash: field "a": imports github.com/syssam/velox2/internal/gen/internal/errors, but the generated code uses the name errors for errors`,
+		`schema LwPkgClash: field "b": imports github.com/syssam/velox2/internal/gen/internal/sch, but the generated code uses the name sch for ` + lowerSchemaPath,
+	} {
+		if !strings.Contains(err.Error(), w) {
+			t.Errorf("error lacks %q: %v", w, err)
+		}
+	}
+	if n := strings.Count(err.Error(), "\n") + 1; n != 2 {
+		t.Errorf("%d errors: %v", n, err)
+	}
+}
+
+type lwTime struct{ time.Time }
+
+type LwWhen struct{ schema.Schema }
+
+func (LwWhen) Fields() []schema.Field {
+	return []schema.Field{field.Time("at").GoType(lwTime{}), field.Time("opt").Optional().GoType(lwTime{})}
+}
+
+func TestLowerTimeIsOrdered(t *testing.T) {
+	e := mustLower(t, Config{}, LwWhen{}).entity("LwWhen")
+	if f := e.field("at"); f.Handle != "velox.OrderedCol[LwWhen, gen.lwTime]" {
+		t.Errorf("at %+v", f)
+	}
+	if f := e.field("opt"); f.Handle != "velox.NullOrderedCol[LwWhen, gen.lwTime]" || f.GoType != "*gen.lwTime" {
+		t.Errorf("opt %+v", f)
+	}
+}
+
+type lwStatus string
+
+func (lwStatus) Values() []string { return []string{"on", "off"} }
+
+type LwStatusful struct{ schema.Schema }
+
+func (LwStatusful) Fields() []schema.Field {
+	return []schema.Field{field.Enum("st").GoType(lwStatus("")).Default("off")}
+}
+
+func TestLowerEnumDefault(t *testing.T) {
+	o := mustLower(t, Config{}, LwStatusful{})
+	f := o.entity("LwStatusful").field("st")
+	if f.DefaultCode != `gen.lwStatus("off")` || f.GoType != "gen.lwStatus" {
+		t.Errorf("st %+v", f)
+	}
+	if len(o.Enums) != 0 {
+		t.Errorf("a GoType enum generates no type: %+v", o.Enums[0])
+	}
+	// An enum with no Go type has its constant: see LwMixed.tier.
+}
+
+func TestLowerOneToOneDesc(t *testing.T) {
+	o := mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{}, Person{})
+	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("Account", 1, 0)` {
+		t.Errorf("inverse %+v", r) // the key is in Profile, the inverse's owner
+	}
+	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeTo[Person]("Spouse", 1, 0)` {
+		t.Errorf("bidi %+v", r)
+	}
+}
+
+type LwReserved struct{ schema.Schema }
+
+func (LwReserved) Fields() []schema.Field {
+	return []schema.Field{field.String("velox_meta"), field.String("policy")}
+}
+
+func TestLowerReservedNames(t *testing.T) {
+	_, err := lower(t, Config{}, LwReserved{})
+	for _, w := range []string{
+		`schema LwReserved: field "velox_meta": its Go name VeloxMeta is reserved`,
+		`schema LwReserved: field "policy": its Go name Policy is reserved`,
+	} {
+		if err == nil || !strings.Contains(err.Error(), w) {
+			t.Errorf("err = %v, want %s", err, w)
+		}
 	}
 }
