@@ -248,7 +248,7 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 		core = func(ctx context.Context, mu *mutation) error { return saveCore(ctx, db, mu) }
 	}
 	mu := &mutation{op: st.Op, st: st, dry: dry}
-	if err := mutate(ctx, st.Entity, mu, core); err != nil {
+	if err := mutate(ctx, db, st.Entity, mu, core); err != nil {
 		return 0, "", nil, err
 	}
 	return mu.res.Affected, mu.sql, mu.args, nil

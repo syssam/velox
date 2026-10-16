@@ -135,11 +135,14 @@ func dbErr(info *EntityInfo, err error) error {
 // through run, or may take the shortcut of plain.
 func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
 
-// plain runs a statement on a DB with no hooks: guard, scope, rendering (the
+// plain runs a statement on a DB with no hooks: resolving relations, guard, scope, rendering (the
 // SQL comment included) and execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+	if err := st.resolve(); err != nil {
+		return err
+	}
 	if err := db.guard(st); err != nil {
 		return err
 	}
@@ -201,10 +204,14 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 }
 
 // prepare takes a statement through every stage before execution, for run
-// and for SQL(ctx): guard, observe, the entity's BeforeUpdate or BeforeDelete
+// and for SQL(ctx): resolving the relations in its conditions (HasWhere
+// leaves them to the statement), guard, observe, the entity's BeforeUpdate or BeforeDelete
 // hooks, rewrite hooks and their checks, scope, the row cap, and rendering
 // into st.SQL (comment included) and st.Args.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
+	if err := st.resolve(); err != nil {
+		return err
+	}
 	if err := db.guard(st); err != nil {
 		return err
 	}
@@ -433,8 +440,13 @@ func checkColumns(st *Statement) error {
 			return nil
 		case opExists:
 			// Only the owner's column is the statement's entity's; the kids
-			// are conditions on the target, made by HasWhere.
-			return bad(nd.v.(link).ownerCol)
+			// are conditions on the target, made by HasWhere. A Rewrite hook
+			// may have added one whose relation is not resolved yet.
+			l, err := existsLink(nd)
+			if err != nil {
+				return err
+			}
+			return bad(l.ownerCol)
 		case opInvalid:
 			return nd.v.(error)
 		}

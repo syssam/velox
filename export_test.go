@@ -312,3 +312,38 @@ func LoadDesc[E any](d Desc[E]) (*EntityInfo, error) {
 	}
 	return m.info, nil
 }
+
+// SamePreds reports whether a and b are the same conditions. A relation not
+// yet resolved is a relRef, which holds a function: reflect.DeepEqual never
+// finds two equal, so relRefs are compared by their relation index.
+func SamePreds(a, b []Predicate) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !sameNode(a[i].n, b[i].n) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameNode(a, b node) bool {
+	if a.op != b.op || a.col != b.col || len(a.kids) != len(b.kids) || !reflect.DeepEqual(a.w, b.w) {
+		return false
+	}
+	ra, aok := a.v.(relRef)
+	rb, bok := b.v.(relRef)
+	switch {
+	case aok != bok || aok && ra.i != rb.i:
+		return false
+	case !aok && !reflect.DeepEqual(a.v, b.v):
+		return false
+	}
+	for i := range a.kids {
+		if !sameNode(a.kids[i], b.kids[i]) {
+			return false
+		}
+	}
+	return true
+}

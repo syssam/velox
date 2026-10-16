@@ -76,6 +76,10 @@ type Relation struct {
 	ownerCol  int      // an index into the owner's Columns
 	targetCol int      // an index into the target's Columns
 	through   *through // EdgeThrough's join entity; nil for any other relation
+
+	// holders are the reflect.Types of One[T] and Many[T] for the target T:
+	// the types the relation's field may have. Nil for RelationTo's.
+	holders [2]any
 }
 
 // RelationTo is what velox-gen writes for a relation field whose target is
@@ -365,16 +369,35 @@ func (o One[T]) MarshalJSON() ([]byte, error) { return json.Marshal(o.v) }
 // loaded; see One.MarshalJSON.
 func (m Many[T]) MarshalJSON() ([]byte, error) { return json.Marshal(m.v) }
 
-// relLink resolves relation i of entity E.
-func relLink[E any](i int32) (link, error) {
+// relRef names relation i of an entity without reading the entity's
+// metadata: the owner function reads it, and runs only when the statement
+// that holds the condition does (resolve). Building a condition inside an
+// entity's Policy or Hooks, which Load calls while it builds that entity's
+// metadata, then does not wait on itself.
+type relRef struct {
+	owner func() (*EntityInfo, error)
+	i     int32
+}
+
+// ownerOf is relRef.owner for entity E.
+func ownerOf[E any]() (*EntityInfo, error) {
 	m, err := metaOf[E]()
+	if err != nil {
+		return nil, err
+	}
+	return m.info, nil
+}
+
+// link resolves the relation.
+func (r relRef) link() (link, error) {
+	in, err := r.owner()
 	if err != nil {
 		return link{}, err
 	}
-	if i < 0 || int(i) >= len(m.info.rels) {
-		return link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", m.info.Name, i)
+	if r.i < 0 || int(r.i) >= len(in.rels) {
+		return link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", in.Name, r.i)
 	}
-	return m.info.rels[i].resolve(m.info)
+	return in.rels[r.i].resolve(in)
 }
 
 // Has is true when the relation holds at least one entity. On MySQL, an UPDATE
@@ -386,17 +409,17 @@ func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E] { return r.HasWhere() }
 // EXISTS (SELECT 1 FROM target WHERE key = owner's key AND ps…). On MySQL, an
 // UPDATE or DELETE whose condition's EXISTS reads the table being changed (a
 // relation of an entity to itself) fails with error 1093.
+//
+// HasWhere reads no metadata, so it may be called anywhere, an entity's
+// Policy and Hooks bodies included. A relation that cannot be resolved fails
+// the statement that holds the condition, not HasWhere.
 func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
-	l, err := relLink[E](r.I)
-	if err == nil {
-		for _, p := range ps {
-			if err = predErr(p.n); err != nil {
-				break
-			}
+	for _, p := range ps {
+		if err := predErr(p.n); err != nil {
+			return Pred[E]{node{op: opInvalid, v: err}}
 		}
 	}
-	if err != nil {
-		return Pred[E]{node{op: opInvalid, v: err}}
-	}
-	return Pred[E]{node{op: opExists, col: r.I, v: l, kids: nodes(ps)}}
+	// The relation resolves when a statement holding the condition runs, not
+	// here: see relRef.
+	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], i: r.I}, kids: nodes(ps)}}
 }

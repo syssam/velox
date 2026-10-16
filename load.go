@@ -52,6 +52,13 @@ func checkLoads(owner *EntityInfo, cols []int, specs []loadSpec) error {
 		if sp.err != nil {
 			return sp.err
 		}
+		// The load's conditions resolve with its statement, after the owner
+		// query; a mistake in them is reported before it.
+		for _, p := range sp.where {
+			if err := resolveErr(p.n); err != nil {
+				return err
+			}
+		}
 		r, l, err := specRelation(owner, sp)
 		if err != nil {
 			return err

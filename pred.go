@@ -1,6 +1,9 @@
 package velox
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type op uint8
 
@@ -21,7 +24,7 @@ const (
 	opAnd
 	opOr
 	opNot
-	opExists  // col is the relation index, v its link, kids the target's conditions
+	opExists  // col is the relation index, v its relRef, or its link once resolved, kids the target's conditions
 	opInvalid // v is the error
 )
 
@@ -79,11 +82,120 @@ func predErr(n node) error {
 		return n.v.(error)
 	}
 	if n.op == opExists {
-		return nil // its kids were checked when HasWhere made it
+		// An unresolved relRef is valid: the statement resolves it, and
+		// fails with the relation's error. Its kids were checked when
+		// HasWhere made it.
+		return nil
 	}
 	for _, k := range n.kids {
 		if err := predErr(k); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// existsLink returns the link of the opExists node n: its own once resolved,
+// else the relRef's, which resolves the relation.
+func existsLink(n node) (link, error) {
+	if r, ok := n.v.(relRef); ok {
+		return r.link()
+	}
+	return n.v.(link), nil
+}
+
+// resolveNode returns n with every opExists in it resolved, and whether that
+// changed anything. It never edits n: a changed node is a copy, with a new
+// kids slice when a kid changed, and unchanged subtrees are shared with n,
+// which may be in a Pred other goroutines hold (scoper.node's rule).
+func resolveNode(n node) (node, bool, error) {
+	switch n.op {
+	case opAnd, opOr, opNot, opExists:
+	default:
+		return n, false, nil
+	}
+	var kids []node // nil until a kid changes
+	for i, k := range n.kids {
+		nk, changed, err := resolveNode(k)
+		if err != nil {
+			return n, false, err
+		}
+		if !changed {
+			continue
+		}
+		if kids == nil {
+			kids = slices.Clone(n.kids)
+		}
+		kids[i] = nk
+	}
+	changed := kids != nil
+	if r, ok := n.v.(relRef); ok && n.op == opExists {
+		l, err := r.link()
+		if err != nil {
+			return n, false, err
+		}
+		n.v, changed = l, true // n is a copy
+	}
+	if kids != nil {
+		n.kids = kids
+	}
+	return n, changed, nil
+}
+
+// resolveErr returns the error resolving n would fail with, without
+// allocating.
+func resolveErr(n node) error {
+	if r, ok := n.v.(relRef); ok && n.op == opExists {
+		if _, err := r.link(); err != nil {
+			return err
+		}
+	}
+	for _, k := range n.kids {
+		if err := resolveErr(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resolvePreds returns ps with every relation resolved, on a copy when any
+// was not: ps may be the query's, shared with other runs.
+func resolvePreds(ps []Predicate) ([]Predicate, error) {
+	out := ps
+	for i, p := range ps {
+		n, changed, err := resolveNode(p.n)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			continue
+		}
+		if &out[0] == &ps[0] {
+			out = slices.Clone(ps)
+		}
+		out[i] = Predicate{n}
+	}
+	return out, nil
+}
+
+// resolve resolves the relations in st's conditions, before anything else
+// reads them: the guard, the Rewrite hooks, the scope and rendering see only
+// links. A relation that cannot be resolved fails the statement.
+func (st *Statement) resolve() error {
+	where, err := resolvePreds(st.Where)
+	if err != nil {
+		return err
+	}
+	st.Where = where
+	if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
+		cw, err := resolvePreds(cf.Where)
+		if err != nil {
+			return err
+		}
+		if &cw[0] != &cf.Where[0] {
+			c := *cf // the caller's clause may be shared with other runs
+			c.Where = cw
+			st.Conflict = &c
 		}
 	}
 	return nil

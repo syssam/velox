@@ -1,7 +1,9 @@
 package velox
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -89,5 +91,33 @@ func TestCachedExistsRendersLikeRender(t *testing.T) {
 		if c.size() != 1 {
 			t.Errorf("%v: %d shapes", d, c.size())
 		}
+	}
+}
+
+// TestRewriteHookMayAddAnUnresolvedRelation: a Rewrite hook's condition made
+// by HasWhere is a relRef, which checkColumns and the scope resolve; the
+// caller's own conditions were resolved before the hooks ran.
+func TestRewriteHookMayAddAnUnresolvedRelation(t *testing.T) {
+	co := (*company)(nil).VeloxMeta().info
+	ref := func(i int32) node {
+		return node{op: opExists, col: i, v: relRef{owner: func() (*EntityInfo, error) { return co, nil }, i: i}}
+	}
+	e := &FakeExec{}
+	db := OpenFake(Postgres, e, WithRewrite(func(_ context.Context, st *Statement) error {
+		st.Where = append(st.Where, Predicate{ref(0)})
+		return nil
+	}))
+	st := Statement{Op: OpSelect, Entity: co, Columns: []int{0}, Limit: 1, Where: []Predicate{{ref(0)}}}
+	if err := db.run(context.Background(), &st, func(rows) error { return nil }, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(st.SQL, "EXISTS"); n != 2 {
+		t.Errorf("%d EXISTS in %s, want 2", n, st.SQL)
+	}
+	// An unresolvable one fails the statement, and sends nothing.
+	e.Calls = 0
+	bad := Statement{Op: OpSelect, Entity: co, Columns: []int{0}, Limit: 1, Where: []Predicate{{ref(9)}}}
+	if err := db.run(context.Background(), &bad, func(rows) error { return nil }, nil); err == nil || !strings.Contains(err.Error(), "has no relation 9") || e.Calls != 0 {
+		t.Errorf("%v (calls %d)", err, e.Calls)
 	}
 }

@@ -182,7 +182,7 @@ func FuzzScope(f *testing.F) {
 			walk(p, 0)
 		}
 
-		if !reflect.DeepEqual(in, want.Where) {
+		if !velox.SamePreds(in, want.Where) {
 			t.Fatalf("the run changed the caller's conditions:\n got %#v\nwant %#v", in, want.Where)
 		}
 	})

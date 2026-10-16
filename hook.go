@@ -33,9 +33,9 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 // the metadata does not bind is refused at the entity's first use. velox calls it once, when it
 // builds the entity's metadata, on a nil *E: the method must not read its
 // receiver. Nor may its body, outside the hooks it returns, read the entity's
-// own metadata (a Has or HasWhere on a relation from or to it, say): that
-// waits on the build in progress and deadlocks. Build such predicates inside
-// the hook functions.
+// own metadata (a query on it, say): that waits on the build in progress and
+// deadlocks. A Has or HasWhere reads none, so the body may build them: a
+// relation resolves when a statement holding the condition runs.
 //
 // The first hook listed is the outermost. Each hook function itself is
 // called on every write: velox builds the chain anew for each one, so a hook
@@ -96,13 +96,38 @@ type mutateFn func(ctx context.Context, mu *mutation) error
 // hookFn is a Hook[E] with E erased, made once when the metadata is built.
 type hookFn func(next mutateFn) mutateFn
 
-// mutate runs in's hooks around core. With no hooks it calls core alone. The
-// writes call core directly when in has no hooks, so that none of them pays
-// for the closure and the mutation this takes.
-func mutate(ctx context.Context, in *EntityInfo, mu *mutation, core mutateFn) error {
+// dbKey is the context key of the DB a write runs on, for DBOf.
+type dbKey struct{}
+
+// DBOf returns the DB a write runs on, inside that write's entity hooks: the
+// transaction's, inside db.Tx, or the database's. ok is false outside a hook.
+//
+// A hook that reads or writes other rows uses it, so that its work commits or
+// rolls back with the write:
+//
+//	if db, ok := velox.DBOf(ctx); ok {
+//		err = db.Insert(&audit).Exec(ctx)
+//	}
+//
+// Only a write of an entity that has hooks carries it, so the writes that
+// have none pay nothing. The context a hook passes to next, and to the
+// statements it makes, keeps it.
+func DBOf(ctx context.Context) (*DB, bool) {
+	db, ok := ctx.Value(dbKey{}).(*DB)
+	return db, ok
+}
+
+// mutate runs in's hooks around core, which runs on db. With no hooks it
+// calls core alone. The writes call core directly when in has no hooks, so
+// that none of them pays for the closure and the mutation this takes.
+//
+// db is a parameter, not a field of mutation: EntityInfo reaches mutation,
+// and a *DB there would make every entity's package carry DB's export data.
+func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core mutateFn) error {
 	if len(in.hooks) == 0 {
 		return core(ctx, mu)
 	}
+	ctx = context.WithValue(ctx, dbKey{}, db)
 	next := func(ctx context.Context, mu *mutation) error {
 		if mu.called {
 			// Running the core again would send the write again.

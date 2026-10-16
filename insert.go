@@ -132,7 +132,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 		return nil
 	}
 	if len(q.meta.info.hooks) > 0 {
-		return mutate(ctx, q.meta.info, q.mutation(false), func(ctx context.Context, mu *mutation) error { return q.send(ctx, mu) })
+		return mutate(ctx, q.db, q.meta.info, q.mutation(false), func(ctx context.Context, mu *mutation) error { return q.send(ctx, mu) })
 	}
 	var mu mutation
 	return q.send(ctx, &mu)
@@ -161,7 +161,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	}
 	if len(q.meta.info.hooks) > 0 {
 		mu := q.mutation(true)
-		if err := mutate(ctx, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil {
+		if err := mutate(ctx, q.db, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil {
 			return "", nil, err
 		}
 		return mu.sql, mu.args, nil

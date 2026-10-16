@@ -211,3 +211,32 @@ func TestDescRefusals(t *testing.T) {
 		})
 	}
 }
+
+func TestEdgeToHolderMismatch(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		edit func(d *velox.Desc[dRow])
+		want string
+	}{
+		{"EdgeTo at a One of another entity", func(d *velox.Desc[dRow]) {
+			d.Relations = []velox.Relation{velox.EdgeTo[dBook]("Author", 0, 0)}
+		}, "velox: velox_test.dRow: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
+		{"EdgeThrough at a One of another entity", func(d *velox.Desc[dRow]) {
+			d.Relations = []velox.Relation{velox.EdgeThrough[dBookTag, dBook]("Author", 0, 0, 1, 0)}
+		}, "velox: velox_test.dRow: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := rowDesc()
+			c.edit(&d)
+			_, err := velox.LoadDesc(d)
+			var se *velox.SchemaError
+			if !errors.As(err, &se) || err.Error() != c.want {
+				t.Fatalf("got %v, want a *SchemaError %q", err, c.want)
+			}
+		})
+	}
+	// A One or a Many of the right entity is accepted.
+	if _, err := velox.LoadDesc(rowDesc()); err != nil {
+		t.Fatal(err)
+	}
+}

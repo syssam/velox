@@ -467,8 +467,18 @@ func (sc *scoper) node(n node) (node, bool, error) {
 		}
 		kids[i] = nk
 	}
+	resolved := false
 	if n.op == opExists {
-		t := n.v.(link).target
+		// A relation is resolved here when the condition came from a policy
+		// or a Rewrite hook: the statement's own were resolved by prepare.
+		l, err := existsLink(n)
+		if err != nil {
+			return n, false, err
+		}
+		if _, lazy := n.v.(relRef); lazy {
+			n.v, resolved = l, true // n is a copy
+		}
+		t := l.target
 		tenant, read, err := sc.target(t)
 		if err != nil {
 			// An error from an EXISTS in t's policy names its own target,
@@ -492,7 +502,7 @@ func (sc *scoper) node(n node) (node, bool, error) {
 		}
 	}
 	if kids == nil {
-		return n, false, nil
+		return n, resolved, nil
 	}
 	n.kids = kids // n is a copy
 	return n, true, nil

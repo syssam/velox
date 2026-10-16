@@ -46,11 +46,11 @@ type Desc[E any] struct {
 	// Load calls each function once, when it builds the metadata: the
 	// methods run on a nil *E, so neither may read its receiver, and a panic
 	// in either becomes the entity's *SchemaError. Neither method may read the
-	// entity's own metadata in its body, outside the functions it returns: a
-	// Has or HasWhere on a relation from or to the entity, or anything else
-	// that calls its VeloxMeta, waits on the build in progress and deadlocks.
-	// Build such predicates inside the returned functions, which run on each
-	// statement.
+	// entity's own metadata in its body, outside the functions it returns:
+	// anything that calls its VeloxMeta waits on the build in progress and
+	// deadlocks. A Has or HasWhere does not: it names its relation, and the
+	// statement that holds the condition resolves it, so the body may build
+	// them.
 	Policy func() BoundPolicy
 	Hooks  func() BoundHooks
 }
@@ -221,6 +221,11 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		if !ok || !isRelation(rt) {
 			return fail(r.name, "RelAddr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
 		}
+		if r.holders[0] != nil && rt != r.holders[0] && rt != r.holders[1] {
+			// The field holds another entity's relation: loading would fill
+			// it with the wrong type.
+			return fail("", "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
+		}
 		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, target: r.target,
 			explicit: true, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
@@ -278,10 +283,13 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 }
 
 // EdgeTo is a relation to entity T keyed owner.Columns[ownerCol] =
-// T.Columns[targetCol].
+// T.Columns[targetCol]. Its field must be a One[T] or a Many[T]: the metadata
+// is refused at first use when RelAddr returns another type, such as the
+// holder of another entity, as stale or hand-edited code would.
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation {
 	r := RelationTo[T, PT](name)
 	r.explicit, r.ownerCol, r.targetCol = true, ownerCol, targetCol
+	r.holders = [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))}
 	return r
 }
 

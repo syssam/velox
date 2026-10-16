@@ -96,9 +96,10 @@ func policyBypass(ctx context.Context) string {
 // one the metadata does not bind is refused at the entity's first use. velox calls it once, when it
 // builds the metadata, on a nil *E, so the method must not read its receiver.
 // Nor may its body, outside the functions it returns, read the entity's own
-// metadata (a Has or HasWhere on a relation from or to it, say): that waits on
-// the build in progress and deadlocks. Build such predicates inside Read,
-// Write and Insert, which run on each statement.
+// metadata (a query on it, say): that waits on the build in progress and
+// deadlocks. A Has or HasWhere reads none, so the body may build them, and the
+// functions it returns may share them: a relation resolves when a statement
+// holding the condition runs.
 //
 // Any field may be nil. A predicate function's zero Pred[E]{} restricts
 // nothing; any error it returns denies the statement.
