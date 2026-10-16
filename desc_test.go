@@ -143,6 +143,24 @@ func TestDescAcceptsAndConverts(t *testing.T) {
 	}
 }
 
+// TestDescDefaultRules: a Default is refused on a bool or numeric field that
+// is not a pointer, and DefaultFunc and a pointer field's Default are not.
+func TestDescDefaultRules(t *testing.T) {
+	d := rowDesc()
+	d.Columns[0].DefaultFunc = func() any { return int64(5) } // a numeric field
+	info, err := velox.LoadDesc(d)
+	if err != nil {
+		t.Fatalf("DefaultFunc on a numeric field: %v", err)
+	}
+	if c := info.Columns[0]; c.DefaultFunc == nil || c.HasDefault {
+		t.Errorf("id %+v", c)
+	}
+	// Opt is a *bool: its Default is accepted (rowDesc gives it one).
+	if info, err = velox.LoadDesc(rowDesc()); err != nil || !info.Columns[2].HasDefault {
+		t.Errorf("Default on a pointer field: %v", err)
+	}
+}
+
 func TestDescRefusals(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -171,6 +189,9 @@ func TestDescRefusals(t *testing.T) {
 			d.Tenant = 3
 		}, "the tenant column cannot have Default"},
 		{"Default on a bool", func(d *velox.Desc[dRow]) { d.Columns[1].Default = true }, "dRow.Flag: Default on bool/numeric field Flag would overwrite an explicit false or 0 on insert"},
+		{"Default on a number", func(d *velox.Desc[dRow]) { d.Columns[0].Default = int64(3) }, "dRow.ID: Default on bool/numeric field ID would overwrite an explicit false or 0 on insert"},
+		{"unique index naming no column", func(d *velox.Desc[dRow]) { d.Indexes = []velox.IndexInfo{{Unique: true}} }, "a unique index names no fields"},
+		{"index naming a column twice", func(d *velox.Desc[dRow]) { d.Indexes = []velox.IndexInfo{{Columns: []int{1, 1}}} }, "dRow.Flag: an index names the field twice"},
 		{"Default of another type", func(d *velox.Desc[dRow]) { d.Columns[3].Default = 7 }, "dRow.Name: Default is a int, not a string"},
 		{"Immutable with an UpdateDefault", func(d *velox.Desc[dRow]) {
 			d.Columns[3].Immutable = true

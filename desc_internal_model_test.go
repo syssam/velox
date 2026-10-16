@@ -415,8 +415,8 @@ func onUpdateTenantDesc() Desc[onUpdateTenant] {
 	}
 }
 
-// hooked has an embedded struct, so that its hook needs the field's offset,
-// an insert hook, update and delete hooks, and a Read and an Insert policy.
+// hooked has an embedded struct, so that a column is a promoted field, an
+// insert hook, update and delete hooks, and a Read and an Insert policy.
 type tagMix struct{ Tag string }
 
 type hooked struct {

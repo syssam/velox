@@ -111,7 +111,10 @@ func TestSchemaPolicyHooks(t *testing.T) {
 	if err := db.Insert(&x).Exec(ctx); !errors.Is(err, ErrDenied) {
 		t.Fatalf("insert of an untitled row: %v", err)
 	}
-	x = hooked{Title: "t"} // the hook ran on the refused row too
+	if x.Tag != "entity;" {
+		t.Fatalf("the hook runs before the policy, so on the refused row too: Tag %q", x.Tag)
+	}
+	x = hooked{Title: "t"}
 	if err := db.Insert(&x).Exec(ctx); err != nil || x.Tag != "entity;" {
 		t.Fatalf("the insert hook, run before the write: Tag %q, err %v", x.Tag, err)
 	}
