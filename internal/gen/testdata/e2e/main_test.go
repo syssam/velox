@@ -24,6 +24,7 @@ CREATE TABLE users (
 	nickname TEXT, age INTEGER, password_hash TEXT NOT NULL, score REAL NOT NULL);
 CREATE TABLE posts (
 	id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, views INTEGER NOT NULL);
+CREATE TABLE notes (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, text TEXT NOT NULL);
 CREATE TABLE groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));`
 
@@ -203,13 +204,19 @@ func TestImmutable(t *testing.T) {
 	if !errors.Is(err, velox.ErrImmutable) {
 		t.Fatalf("got %v", err)
 	}
-	// A mutable column updates, and updated_at moves with it.
+	// A mutable column updates, and updated_at moves with it: the UpdateDefault
+	// is read from the schema's descriptor.
+	before, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(u.ID)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
 	n, err := db.Update[gen.User]().Set(gen.Users.Name.Set("ada2")).Where(gen.Users.ID.EQ(u.ID)).Exec(ctx)
 	if err != nil || n != 1 {
 		t.Fatalf("update: %d, %v", n, err)
 	}
 	got, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(u.ID)).One(ctx)
-	if err != nil || got.Name != "ada2" || got.UpdatedAt.Before(got.CreatedAt) {
+	if err != nil || got.Name != "ada2" || !got.UpdatedAt.After(before.UpdatedAt) || !got.CreatedAt.Equal(before.CreatedAt) {
 		t.Errorf("after update: %+v, %v", got, err)
 	}
 }
@@ -384,9 +391,56 @@ func TestCheckEntity(t *testing.T) {
 		"Post":      velox.CheckEntity[gen.Post],
 		"Group":     velox.CheckEntity[gen.Group],
 		"UserGroup": velox.CheckEntity[gen.UserGroup],
+		"Note":      velox.CheckEntity[gen.Note],
 	} {
 		if err := f(); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestTenant(t *testing.T) {
+	db := open(t)
+	org := func(id int64) context.Context { return velox.WithTenant(ctx, id) }
+	// An insert under WithTenant stamps org_id.
+	for _, n := range []struct {
+		org  int64
+		text string
+	}{{1, "one"}, {1, "uno"}, {2, "two"}} {
+		x := gen.Note{Text: n.text}
+		if err := db.Insert(&x).Exec(org(n.org)); err != nil {
+			t.Fatal(err)
+		}
+		if x.OrgID != n.org {
+			t.Errorf("%s: OrgID %d, want %d", n.text, x.OrgID, n.org)
+		}
+	}
+	// Reads see only the tenant's rows.
+	texts := func(c context.Context) []string {
+		t.Helper()
+		ns, err := db.Query[gen.Note]().OrderBy(gen.Notes.ID.Asc()).Limit(10).All(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, n := range ns {
+			out = append(out, n.Text)
+		}
+		return out
+	}
+	wantStrings(t, "org 1", texts(org(1)), []string{"one", "uno"})
+	wantStrings(t, "org 2", texts(org(2)), []string{"two"})
+	wantStrings(t, "org 3", texts(org(3)), nil)
+	wantStrings(t, "all tenants", texts(velox.AllTenants(ctx, "e2e test")), []string{"one", "uno", "two"})
+	// No tenant: refused.
+	if err := db.Insert(&gen.Note{Text: "x"}).Exec(ctx); !errors.Is(err, velox.ErrNoTenant) {
+		t.Errorf("insert without a tenant: %v", err)
+	}
+	if _, err := db.Query[gen.Note]().Limit(10).All(ctx); !errors.Is(err, velox.ErrNoTenant) {
+		t.Errorf("query without a tenant: %v", err)
+	}
+	// Another tenant's id on the row is refused.
+	if err := db.Insert(&gen.Note{OrgID: 2, Text: "x"}).Exec(org(1)); !errors.Is(err, velox.ErrTenantMismatch) {
+		t.Errorf("insert for another tenant: %v", err)
 	}
 }

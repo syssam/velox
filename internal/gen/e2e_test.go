@@ -102,8 +102,8 @@ func TestWrongPolicySignatureDoesNotCompile(t *testing.T) {
 	if err == nil {
 		t.Fatal("go vet accepted a Policy method that returns a pointer")
 	}
-	if !strings.Contains(out, "BindPolicy") && !strings.Contains(out, "cannot use") {
-		t.Errorf("the error names neither BindPolicy nor a type mismatch:\n%s", out)
+	if !strings.Contains(out, "BindPolicy") || !strings.Contains(out, "Policy[Post]") || !strings.Contains(out, "does not match") {
+		t.Errorf("the error does not name BindPolicy and the mismatched *velox.Policy[Post]:\n%s", out)
 	}
 	if !strings.Contains(out, "post_velox.go") {
 		t.Errorf("the error is not in the generated file:\n%s", out)
