@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,6 +123,96 @@ func TestPolicyBodyMayBuildHas(t *testing.T) {
 	})
 }
 
+// lzRace is first used by TestSharedHasWherePreds, so that its metadata and
+// relation are resolved by the goroutines of that test. Its Policy returns
+// one Pred, with a HasWhere, to every statement.
+type lzRace struct {
+	ID        int64
+	ProjectID int64
+	Project   velox.One[lzProject]
+}
+
+var lzRaces = struct {
+	ID      velox.NumberCol[lzRace, int64]
+	Project velox.Rel[lzRace, lzProject]
+}{velox.NumberCol[lzRace, int64]{I: 0}, velox.Rel[lzRace, lzProject]{I: 0}}
+
+var lzRaceMeta velox.MetaOnce[lzRace]
+
+func (*lzRace) VeloxMeta() *velox.Meta[lzRace] { return lzRaceMeta.Load(lzRaceDesc) }
+
+func (*lzRace) Policy() velox.Policy[lzRace] {
+	shared := lzRaces.Project.HasWhere(lzProjects.Done.EQ(false))
+	return velox.Policy[lzRace]{
+		Read:  func(context.Context) (velox.Pred[lzRace], error) { return shared, nil },
+		Write: func(context.Context) (velox.Pred[lzRace], error) { return shared, nil },
+	}
+}
+
+func lzRaceDesc() velox.Desc[lzRace] {
+	return velox.Desc[lzRace]{
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*lzRace)(nil).Policy()) },
+		Table:      "lz_races",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Relations:  []velox.Relation{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Addr:       func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
+		RelAddr:    func(x *lzRace, i int) any { return &x.Project },
+	}
+}
+
+// TestSharedHasWherePreds: goroutines run one query value whose Where holds a
+// shared HasWhere Pred, and the policy of the entity returns another shared
+// one, so that resolving, which copies on write, is raced on both. Run under
+// go test -race.
+func TestSharedHasWherePreds(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	hasDone := lzRaces.Project.HasWhere(lzProjects.Done.EQ(true))
+	q := db.Query[lzRace]().Where(hasDone, lzRaces.ID.EQ(1)).Limit(1)
+	var want string
+	const goroutines = 16
+	texts := make([]string, goroutines)
+	errs := make([]error, goroutines)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for range 20 {
+				texts[i], _, errs[i] = q.SQL(ctx)
+				if errs[i] != nil {
+					return
+				}
+				if _, errs[i] = q.All(ctx); errs[i] != nil {
+					return
+				}
+				if _, errs[i] = db.Delete[lzRace]().Where(hasDone).Exec(ctx); errs[i] != nil {
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	for i := range texts {
+		if errs[i] != nil {
+			t.Fatalf("goroutine %d: %v", i, errs[i])
+		}
+		if want == "" {
+			want = texts[i]
+		}
+		if texts[i] != want {
+			t.Errorf("goroutine %d: %s, want %s", i, texts[i], want)
+		}
+	}
+	if n := strings.Count(want, "EXISTS"); n != 2 {
+		t.Errorf("%d EXISTS in %s, want the query's and the policy's", n, want)
+	}
+}
+
 // lzLate points at an invalid entity, and counts the times its own metadata
 // is built.
 type lzLate struct {
@@ -215,10 +306,10 @@ func (*lzNote) Hooks() []velox.Hook[lzNote] {
 			if m.Op() != velox.OpInsert {
 				return nil
 			}
-			hdb, ok := velox.DBOf(ctx)
-			lzSawDB = append(lzSawDB, ok)
-			if !ok {
-				return errors.New("DBOf: no DB in a hook")
+			hdb := m.DB()
+			lzSawDB = append(lzSawDB, hdb != nil)
+			if hdb == nil {
+				return errors.New("Mutation.DB is nil in a hook")
 			}
 			for _, n := range m.Rows() {
 				if err := hdb.Insert(&lzAudit{Note: n.Title}).Exec(ctx); err != nil {
@@ -255,10 +346,7 @@ func lzAuditDesc() velox.Desc[lzAudit] {
 	}
 }
 
-func TestDBOfIsTheTransaction(t *testing.T) {
-	if _, ok := velox.DBOf(context.Background()); ok {
-		t.Fatal("DBOf outside a hook is ok")
-	}
+func TestMutationDBIsTheTransaction(t *testing.T) {
 	raw, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
 		t.Fatal(err)

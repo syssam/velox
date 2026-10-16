@@ -224,7 +224,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		if r.holders[0] != nil && rt != r.holders[0] && rt != r.holders[1] {
 			// The field holds another entity's relation: loading would fill
 			// it with the wrong type.
-			return fail("", "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
+			return fail(r.name, "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
 		}
 		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, target: r.target,
 			explicit: true, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}

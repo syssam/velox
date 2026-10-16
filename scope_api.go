@@ -189,6 +189,19 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 	return out
 }
 
+// DB returns the DB the write runs on: the transaction's, inside db.Tx, or
+// else the database's. A hook that reads or writes other rows uses it, so
+// that its work commits or rolls back with the write:
+//
+//	err := m.DB().Insert(&audit).Exec(ctx)
+//
+// It is set only for the writes of entities that have hooks, which are the
+// only ones that see a Mutation.
+func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
+	db, _ := m.db.(*DB)
+	return db
+}
+
 // Result returns what the write did, once next has returned. Only Affected
 // is meaningful: the rows inserted, matched or deleted. Rows is always 0.
 // Unlike a Statement's Result, which an Around hook reads, Affected is never

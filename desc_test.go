@@ -220,10 +220,10 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 	}{
 		{"EdgeTo at a One of another entity", func(d *velox.Desc[dRow]) {
 			d.Relations = []velox.Relation{velox.EdgeTo[dBook]("Author", 0, 0)}
-		}, "velox: velox_test.dRow: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
+		}, "velox: velox_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
 		{"EdgeThrough at a One of another entity", func(d *velox.Desc[dRow]) {
 			d.Relations = []velox.Relation{velox.EdgeThrough[dBookTag, dBook]("Author", 0, 0, 1, 0)}
-		}, "velox: velox_test.dRow: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
+		}, "velox: velox_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			d := rowDesc()

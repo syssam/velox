@@ -255,6 +255,7 @@ func (*E) Hooks() []velox.Hook[E] {
 		velox.On(func(next velox.Mutator[E]) velox.Mutator[E] {
 			return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
 				m.Set(eName.Set("u"))
+				_ = m.DB()
 				return next.Mutate(ctx, m)
 			})
 		}, velox.OpUpdate),
@@ -341,7 +342,12 @@ var genericObjects = []struct {
 	// Remeasured on 2026-10-15 after schema plan 2's typed hooks: EntityInfo
 	// reaches the hooks' mutation, and entityUse compiles the hooks branch of
 	// each write and insertBatches.
-	{"entity", "", entitySrc, 154624},       // measured 132168 (134630 when last recorded, 127904 before typed hooks, 123318 before that, 119972 before observability, 98878 before policy 2)
+	// entity grew 79 KiB (132290 → 211116) with Mutation.DB, whose *DB brings
+	// DB's export data to every old-path entity: its Schema methods take a
+	// Mutation[E]. The Desc rows do not carry it. The row goes with the old
+	// path (schema plan 4, task 5), so its maximum is raised, not the
+	// design's.
+	{"entity", "", entitySrc, 264192},       // measured 211116 (132168 before Mutation.DB, 134630 when last recorded, 127904 before typed hooks, 123318 before that, 119972 before observability, 98878 before policy 2)
 	{"entityUse", "", entityUseSrc, 784384}, // measured 759910 (761664 when last recorded, 731746 before typed hooks, 717868 before that, 709930 before observability, 673936 before policy 2)
 	// The Desc path, remeasured on 2026-10-15 after Desc gained Policy and
 	// Hooks. entityDesc is entity on the Desc path: with nothing bound it is

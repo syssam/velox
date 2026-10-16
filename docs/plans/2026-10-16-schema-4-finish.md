@@ -10,7 +10,7 @@
 **Architecture:**
 - **Runtime fixes first** (Task 1):
   - `HasWhere` resolves its relation lazily, which removes the deadlock in `Policy()`/`Hooks()` bodies;
-  - `velox.DBOf(ctx)` lets a hook query in the write's own transaction;
+  - `Mutation.DB()` lets a hook query in the write's own transaction;
   - `EdgeTo`'s target is checked against the field.
 - **Migrations next** (Tasks 2–4). Each keeps CI green because the old path still exists.
 - **The removal** (Task 5) deletes the old path and its tests, simplifies velox-gen to one mode, and makes `UpdateDefault` update-only.
@@ -55,10 +55,10 @@ The followups document's "Left by schema plan 2" and "Left by schema plan 3" sec
    - `prepare` resolves every `opExists` node before the guard runs, copying on write as the scope does.
    - Why: a `Policy()` or `Hooks()` body that builds a predicate ran inside the entity's metadata build and deadlocked on its `once`.
    - If wrong: an invalid relation is reported when the statement runs, not when the predicate is built. That is the same error with a different trigger.
-2. **`velox.DBOf(ctx) (*DB, bool)`.** Inside a write's hooks, the context carries the `*DB` the write runs on: the transaction's, or the database's.
+2. **`Mutation.DB()`.** `func (m *Mutation[E]) DB() *DB` returns the `*DB` the write runs on: the transaction's, inside `db.Tx`, or the database's.
    - A hook that reads or writes other rows uses it, so its work commits or rolls back with the write.
-   - It is set only when the entity has hooks, so writes without hooks pay nothing.
-   - If wrong: the API name. Ent's equivalent is `m.Client()`.
+   - It is set only when the entity has hooks, so writes without hooks pay nothing. It is stored in `mutation` as an `any` and converted in the method: a typed `*DB` field made every Desc entity's package 79 KiB larger.
+   - It replaces `velox.DBOf(ctx)`, a context key the user found ugly. Ent's equivalent is `m.Client()`.
 3. **`EdgeTo` and `EdgeThrough` record their target's holder types.** `EdgeTo[T]` records `*One[T]` and `*Many[T]`. `buildDesc` refuses a relation whose `RelAddr` field has neither type: "relation %s is a %v, not a One or Many of %s". Mismatched hand-written or stale code is refused at first use, not loaded empty.
 4. **`UpdateDefault` fills on update only, as in ent.** An insert fills a column from `Default` or `DefaultFunc` alone. `mixin.Time`'s `updated_at` has both `Default(time.Now)` and `UpdateDefault(time.Now)`, so inserts still fill it. Today's insert-time fill is the old path's `OnUpdate` rule, and it goes with the old path.
 5. **bench/scale measures one generated package,** the user's choice ("orm is hard to per domain").
@@ -76,7 +76,7 @@ The followups document's "Left by schema plan 2" and "Left by schema plan 3" sec
      - an update hook through `Mutation`;
      - a delete hook narrowing with `Where`;
      - `On`;
-     - `DBOf` for an audit row in the same transaction.
+     - `m.DB()` for an audit row in the same transaction.
    - The mixin example becomes a generic hook function the entity lists, since mixins carry no behaviour (spec §3).
 7. **velox-gen has one mode after Task 5:**
 
@@ -92,7 +92,7 @@ The followups document's "Left by schema plan 2" and "Left by schema plan 3" sec
 ## Review Focus
 
 1. **A `Policy()` whose body builds `Has()` outside its returned functions** must load and enforce the policy, not hang. Pinned in Task 1: `TestPolicyBodyMayBuildHas`, which uses a timeout.
-2. **A hook that uses `DBOf(ctx)` inside `db.Tx`** must write in the same transaction, so a rollback undoes its row. Pinned in Task 1: `TestDBOfIsTheTransaction`.
+2. **A hook that uses `m.DB()` inside `db.Tx`** must write in the same transaction, so a rollback undoes its row. Pinned in Task 1: `TestMutationDBIsTheTransaction`.
 3. **A test moved off the old path** must assert what it asserted before. Pinned by review: Task 2's report lists every moved test with its old and new entity.
 4. **After the removal**, no exported identifier of the old path may remain:
    - `Schema` the type, `Schemer`, `Mixer`, `ColumnDef`, `RelDef`, `Shape`, `RelationTo`;
@@ -108,7 +108,7 @@ The followups document's "Left by schema plan 2" and "Left by schema plan 3" sec
 | File | Responsibility |
 |---|---|
 | `relation.go`, `db.go`, `render.go`, `scope.go`, `render_cache.go`, `pred.go` | lazy `opExists` resolution (Task 1) |
-| `hook.go` | `DBOf` (Task 1) |
+| `hook.go`, `scope_api.go` | `Mutation.DB` (Task 1) |
 | `desc.go` | the holder-type check (Task 1); the "plan 3" header comment (Task 5) |
 | root `*_test.go` with old-path entities | moved to `Desc` entities (Task 2) |
 | `example/*/model` → `example/*/schema` + `example/*/gen` | the examples (Task 3) |
@@ -121,6 +121,8 @@ The followups document's "Left by schema plan 2" and "Left by schema plan 3" sec
 ---
 
 ### Task 1: Runtime fixes — lazy `HasWhere`, `DBOf`, the holder check
+
+(Revised after review: `DBOf(ctx)` became `Mutation.DB()`; see Ruling 2. The text below is as first written.)
 
 **Files:**
 - Modify: `relation.go` (`HasWhere`, `relLink`), `pred.go` (the `opExists` value), `db.go` (`prepare` resolves), `scope.go`, `render.go`, `render_cache.go` (read the resolved link), `hook.go` (`DBOf`), `desc.go` (`EdgeTo`/`EdgeThrough` record the holder types; `buildDesc` checks them)
@@ -227,7 +229,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
      - an update hook reading `m.Value(gen.Tasks.Title)` and `m.Set(gen.Tasks.Slug.Set(…))`;
      - a delete hook narrowing with `m.Where`;
      - `On`;
-     - an audit row written with `velox.DBOf(ctx)`, which rolls back with the write;
+     - an audit row written with `m.DB()`, which rolls back with the write;
      - a reusable generic hook function, which replaces the `Audit` mixin's `BeforeInsert`;
      - `IsDryRun`.
 
@@ -341,7 +343,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Modify:
   - `docs/specs/2026-10-14-core-design.md`: §1 and §2 open with a note, "Superseded by `2026-10-15-schema-design.md` (entities are declared in the schema DSL and generated)", and keep their text as history.
-  - `docs/specs/2026-10-15-schema-design.md`: §3 documents `DBOf`, the lazy `HasWhere` (the deadlock note becomes "building predicates in the method body is fine"), and `UpdateDefault` update-only. §6 says "replaced" in the past tense, and Status becomes "implemented (schema plans 1–4)".
+  - `docs/specs/2026-10-15-schema-design.md`: §3 documents `Mutation.DB`, the lazy `HasWhere` (the deadlock note becomes "building predicates in the method body is fine"), and `UpdateDefault` update-only. §6 says "replaced" in the past tense, and Status becomes "implemented (schema plans 1–4)".
   - `docs/specs/2026-10-14-policy-design.md`: §2.2/§3's `s.Policy`/`BeforeX` forms carry a note pointing to the schema design §3.
   - `docs/plans/2026-10-14-core-1-followups.md`:
     - remove each item this plan closed (the old path, `UpdateDefault`, the deadlock, tx access in hooks, the `EdgeTo` check, plan 3's mode-selection notes);

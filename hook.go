@@ -75,10 +75,11 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// mutation is a write in flight, without E: what Mutation[E] is. It holds no
-// *DB: EntityInfo reaches it, and every entity's package would then carry
-// DB's export data, its generic methods' bodies included.
+// mutation is a write in flight, without E: what Mutation[E] is. Its db is an
+// any, converted by Mutation.DB: EntityInfo reaches mutation, and a *DB field
+// made every Desc entity's package 79 KiB larger (compilecost_test.go).
 type mutation struct {
+	db     any              // the *DB the write runs on; set only when in has hooks
 	op     Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
 	st     *Statement       // the update or delete; nil for an insert
 	rows   []unsafe.Pointer // an insert's rows
@@ -96,38 +97,15 @@ type mutateFn func(ctx context.Context, mu *mutation) error
 // hookFn is a Hook[E] with E erased, made once when the metadata is built.
 type hookFn func(next mutateFn) mutateFn
 
-// dbKey is the context key of the DB a write runs on, for DBOf.
-type dbKey struct{}
-
-// DBOf returns the DB a write runs on, inside that write's entity hooks: the
-// transaction's, inside db.Tx, or the database's. ok is false outside a hook.
-//
-// A hook that reads or writes other rows uses it, so that its work commits or
-// rolls back with the write:
-//
-//	if db, ok := velox.DBOf(ctx); ok {
-//		err = db.Insert(&audit).Exec(ctx)
-//	}
-//
-// Only a write of an entity that has hooks carries it, so the writes that
-// have none pay nothing. The context a hook passes to next, and to the
-// statements it makes, keeps it.
-func DBOf(ctx context.Context) (*DB, bool) {
-	db, ok := ctx.Value(dbKey{}).(*DB)
-	return db, ok
-}
-
-// mutate runs in's hooks around core, which runs on db. With no hooks it
-// calls core alone. The writes call core directly when in has no hooks, so
-// that none of them pays for the closure and the mutation this takes.
-//
-// db is a parameter, not a field of mutation: EntityInfo reaches mutation,
-// and a *DB there would make every entity's package carry DB's export data.
+// mutate runs in's hooks around core, which runs on db: the hooks reach it
+// as Mutation.DB. With no hooks it calls core alone. The writes call core
+// directly when in has no hooks, so that none of them pays for the closure
+// and the mutation this takes, or for setting mu.db.
 func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core mutateFn) error {
 	if len(in.hooks) == 0 {
 		return core(ctx, mu)
 	}
-	ctx = context.WithValue(ctx, dbKey{}, db)
+	mu.db = db
 	next := func(ctx context.Context, mu *mutation) error {
 		if mu.called {
 			// Running the core again would send the write again.
