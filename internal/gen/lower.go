@@ -149,6 +149,14 @@ func (l *lowerer) entities() {
 			}
 			s.out.Indexes = append(s.out.Indexes, oi)
 		}
+		// A field's Unique is a single-column unique index, after the
+		// declared ones, which the runtime's uniqueness rules read. The ID is
+		// unique by being the primary key.
+		for i, f := range e.Fields {
+			if f.Unique && i != 0 {
+				s.out.Indexes = append(s.out.Indexes, OutIndex{Columns: []int{i}, Unique: true})
+			}
+		}
 		l.state[e.Name] = s
 		l.out.Entities = append(l.out.Entities, s.out)
 	}

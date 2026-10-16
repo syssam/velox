@@ -112,22 +112,35 @@ func firstDiff(a, b string) int {
 	return min(len(x), len(y)) + 1
 }
 
+// Generate gives the same bytes for the same Graph, and for a Graph built
+// from the same schemas listed in another order.
 func TestRenderDeterministic(t *testing.T) {
-	g := mustBuild(t, User{}, Post{}, Group{})
-	a, err := Generate(g, Config{Bound: map[string]Bound{"User": {Policy: true, Hooks: true}}})
-	if err != nil {
-		t.Fatal(err)
+	cfg := Config{Bound: map[string]Bound{"User": {Policy: true, Hooks: true}}}
+	var runs [][]File
+	for _, g := range []*Graph{
+		mustBuild(t, User{}, Post{}, Group{}),
+		mustBuild(t, User{}, Post{}, Group{}),
+		mustBuild(t, Group{}, Post{}, User{}),
+		mustBuild(t, Post{}, Group{}, User{}),
+	} {
+		files, err := Generate(g, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runs = append(runs, files)
 	}
-	b, err := Generate(g, Config{Bound: map[string]Bound{"User": {Policy: true, Hooks: true}}})
-	if err != nil {
-		t.Fatal(err)
+	a := runs[0]
+	if len(a) == 0 {
+		t.Fatal("no files")
 	}
-	if len(a) != len(b) || len(a) == 0 {
-		t.Fatalf("%d files, then %d", len(a), len(b))
-	}
-	for i := range a {
-		if a[i].Name != b[i].Name || !bytes.Equal(a[i].Data, b[i].Data) {
-			t.Fatalf("file %s differs between two runs", a[i].Name)
+	for r, b := range runs[1:] {
+		if len(a) != len(b) {
+			t.Fatalf("run %d: %d files, then %d", r+1, len(a), len(b))
+		}
+		for i := range a {
+			if a[i].Name != b[i].Name || !bytes.Equal(a[i].Data, b[i].Data) {
+				t.Fatalf("run %d: file %s differs", r+1, a[i].Name)
+			}
 		}
 	}
 }

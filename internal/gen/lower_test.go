@@ -14,6 +14,7 @@ import (
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox2/schema/index"
 	"github.com/syssam/velox2/schema/load"
 	"github.com/syssam/velox2/schema/mixin"
 
@@ -737,5 +738,22 @@ func TestLowerReservedNames(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), w) {
 			t.Errorf("err = %v, want %s", err, w)
 		}
+	}
+}
+
+// A field's Unique is a single-column unique index, after the declared
+// indexes and in field order; the ID has none.
+type LwUniq struct{ schema.Schema }
+
+func (LwUniq) Fields() []schema.Field {
+	return []schema.Field{field.String("email").Unique(), field.String("name"), field.Int("n").Unique()}
+}
+func (LwUniq) Indexes() []schema.Index { return []schema.Index{index.Fields("name", "n").Unique()} }
+
+func TestLowerFieldUniqueIndex(t *testing.T) {
+	e := mustLower(t, Config{}, LwUniq{}).entity("LwUniq")
+	want := []OutIndex{{Columns: []int{2, 3}, Unique: true}, {Columns: []int{1}, Unique: true}, {Columns: []int{3}, Unique: true}}
+	if !reflect.DeepEqual(e.Indexes, want) {
+		t.Fatalf("indexes %+v, want %+v", e.Indexes, want)
 	}
 }

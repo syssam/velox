@@ -100,6 +100,7 @@ func userDesc() velox.Desc[User] {
 		Tenant:     4,
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{4, 5}, Unique: true},
+			{Columns: []int{6}, Unique: true},
 		},
 		Relations: []velox.Relation{
 			velox.EdgeTo[Post]("Posts", 0, 1),
