@@ -318,7 +318,7 @@ func (Group) Edges() []schema.Edge {
 func TestVerifyGeneratedNeedsTheOutputPackage(t *testing.T) {
 	dir := genModule(t, nil)
 	code, _, errs := velox(t, dir, "verify", "-out", "gen", "./schema")
-	if code != 1 || !strings.HasPrefix(errs, "velox-gen verify: ") && !strings.HasPrefix(errs, "velox-gen: ") {
+	if code != 1 || errs != "velox-gen verify: gen is not a directory; run velox-gen to generate it first\n" {
 		t.Errorf("%d %q", code, errs)
 	}
 }
@@ -330,5 +330,51 @@ func TestVerifyOutNeedsASchemaPackage(t *testing.T) {
 	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
 	if code, _, errs := velox(t, dir, "verify", "-out", "gen", "./billing"); code != 1 || !strings.Contains(errs, "-out needs a schema package") {
 		t.Errorf("%d %q", code, errs)
+	}
+}
+
+// TestRelativeDirAsTheBinaryRuns runs the command as main does, with dir "."
+// and the working directory in the module, and a relative -out.
+func TestRelativeDirAsTheBinaryRuns(t *testing.T) {
+	dir := genModule(t, nil)
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	inCwd := func(args ...string) (int, string, string) {
+		var out, errs strings.Builder
+		code := run(args, ".", offlineEnv(), &out, &errs)
+		return code, out.String(), errs.String()
+	}
+	code, out, errs := inCwd("-out", "gen", "./schema")
+	if want := "gen/tag_velox.go\ngen/user_velox.go\ngen/velox.go\n"; code != 0 || out != want {
+		t.Fatalf("generate: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := inCwd("-check", "-out", "gen", "./schema"); code != 0 || out != "" || errs != "" {
+		t.Fatalf("-check: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := inCwd("verify", "-out", "gen", "./schema"); code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
+		t.Fatalf("verify: %d %q %q", code, out, errs)
+	}
+	// The defaults too.
+	if code, out, errs := inCwd("verify"); code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
+		t.Fatalf("verify, defaults: %d %q %q", code, out, errs)
+	}
+}
+
+func TestOrderedAndNumberAreOldModeOnly(t *testing.T) {
+	dir := genModule(t, nil)
+	for _, flag := range []string{"-ordered=a.B", "-number=a.B"} {
+		code, out, errs := velox(t, dir, flag, "./schema")
+		if code != 1 || out != "" || errs != "velox-gen: -ordered and -number apply to the old mode only\n" {
+			t.Errorf("%s: %d %q %q", flag, code, out, errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+		t.Error("files were written")
 	}
 }

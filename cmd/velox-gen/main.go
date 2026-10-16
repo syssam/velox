@@ -101,6 +101,12 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 		return 1
 	}
 	if isSchema {
+		for _, name := range []string{"ordered", "number"} {
+			if slices.Contains(set, name) {
+				_, _ = fmt.Fprintln(stderr, "velox-gen: -ordered and -number apply to the old mode only")
+				return 1
+			}
+		}
 		f := genFlags{out: *outDir, pkg: *pkgName, check: *checkOnly, rerun: append(rerun, patterns...)}
 		if verify {
 			return runGenerateVerify(f, pattern, dir, env, stdout, stderr)

@@ -51,12 +51,20 @@ type genFlags struct {
 	rerun    []string // the flags the user set, as a command line, for the -check hint
 }
 
-// outDir is the absolute path of the output directory.
+// outDir is the absolute path of the output directory. It is absolute so that
+// go list reads it as a directory: a relative "gen" would be an import path.
+// Symlinks in dir are resolved, as relPath does, so that paths print relative.
 func (f genFlags) outDir(dir string) string {
 	if filepath.IsAbs(f.out) {
 		return filepath.Clean(f.out)
 	}
-	return filepath.Join(dir, f.out)
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	} else if r, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = r
+	}
+	return filepath.Join(abs, f.out)
 }
 
 // packageName is -package, or the base name of -out.
@@ -218,9 +226,12 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 		return fail(err)
 	}
 	out := f.outDir(dir)
+	if fi, err := os.Stat(out); err != nil || !fi.IsDir() {
+		return fail(fmt.Errorf("%s is not a directory; run velox-gen to generate it first", relPath(dir, out)))
+	}
 	outPath, _, err := gen.Inspect(dir, out, env)
 	if err != nil {
-		return fail(fmt.Errorf("%w; run velox-gen first", err))
+		return fail(err)
 	}
 	mod, err := moduleDir(dir, out, env)
 	if err != nil {
