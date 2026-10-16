@@ -33,6 +33,8 @@ go test -run XXX -fuzz FuzzScope -fuzztime 10s .
 go -C cmd/velox-gen build -o "$PWD/bin/velox-gen" .
 bin/velox-gen -check ./...
 bin/velox-gen verify ./...
+bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
+bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
 
 # The example is its own module: its own vet, lint, tests and generated files.
 (

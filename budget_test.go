@@ -32,7 +32,7 @@ func TestOneRowAllocationBudget(t *testing.T) {
 		for r.Next() {
 			out = append(out, testmodel.Invoice{})
 			x := &out[len(out)-1]
-			if err := r.Scan(&x.CreatedAt, &x.UpdatedAt, &x.ID, &x.OrgID, &x.Number, &x.Total, &x.Paid, &x.PaidAt, &x.Note, &x.Data); err != nil {
+			if err := r.Scan(&x.ID, &x.CreatedAt, &x.UpdatedAt, &x.OrgID, &x.Number, &x.Total, &x.Paid, &x.PaidAt, &x.Note, &x.Data); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -83,7 +83,7 @@ func TestTenantScopedOneRowBudget(t *testing.T) {
 		for r.Next() {
 			out = append(out, testmodel.Invoice{})
 			x := &out[len(out)-1]
-			if err := r.Scan(&x.CreatedAt, &x.UpdatedAt, &x.ID, &x.OrgID, &x.Number, &x.Total, &x.Paid, &x.PaidAt, &x.Note, &x.Data); err != nil {
+			if err := r.Scan(&x.ID, &x.CreatedAt, &x.UpdatedAt, &x.OrgID, &x.Number, &x.Total, &x.Paid, &x.PaidAt, &x.Note, &x.Data); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -149,7 +149,7 @@ func TestHundredRowAllocationBudget(t *testing.T) {
 		for r.Next() {
 			out = append(out, testmodel.Invoice{})
 			x := &out[len(out)-1]
-			if err := r.Scan(&x.CreatedAt, &x.UpdatedAt, &x.ID, &x.OrgID, &x.Number, &x.Total, &x.Paid, &x.PaidAt, &x.Note, &x.Data); err != nil {
+			if err := r.Scan(&x.ID, &x.CreatedAt, &x.UpdatedAt, &x.OrgID, &x.Number, &x.Total, &x.Paid, &x.PaidAt, &x.Note, &x.Data); err != nil {
 				t.Fatal(err)
 			}
 		}

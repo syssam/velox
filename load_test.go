@@ -178,7 +178,7 @@ func TestRelationsInJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != `{"Items":[{"ID":10,"InvoiceID":1,"SKU":"A","Qty":2,"Invoice":null}]}` {
+	if string(b) != `{"Items":[{"id":10,"invoice_id":1,"SKU":"A","qty":2}]}` {
 		t.Errorf("loaded: %s", b)
 	}
 }

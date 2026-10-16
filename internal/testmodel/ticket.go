@@ -17,27 +17,6 @@ func AsUser(ctx context.Context, user string) context.Context {
 
 func userOf(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }
 
-// Stamp is embedded in Ticket: it records who created the row. Ticket's
-// first hook, stamp, fills it.
-type Stamp struct {
-	CreatedBy string
-}
-
-// Ticket is tenant-scoped, unique by OrgID and Title, and has a policy and
-// hooks for every kind of write.
-type Ticket struct {
-	Stamp
-	ID        int64
-	OrgID     int64
-	Owner     string
-	Title     string
-	Done      bool
-	InvoiceID int64
-	ParentID  *int64
-	Invoice   velox.One[Invoice]
-	Parent    velox.One[Ticket]
-}
-
 // Policy lets a user see and change only their own tickets, and create only
 // tickets they own; "admin" sees, changes and creates every ticket. velox
 // calls it once, on a nil *Ticket.

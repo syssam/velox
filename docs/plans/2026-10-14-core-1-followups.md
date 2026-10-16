@@ -167,3 +167,13 @@ Left by the observability plan:
 - `Desc.Tenant`'s zero value means column 0, so the generator always writes it (`-1` for none).
 - `ValidationError` names the Go field, while `ErrImmutable` names the column.
 - The generator writes `Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) }` and the like for `Hooks` (`BindHooks`), only for an entity that declares the method. `Load` itself holds no Policy or Hook generic, so an entity without them pays nothing (about 80 KiB each otherwise).
+
+## Left by schema plan 3
+
+- `Optional` means a pointer field (Ruling 2): the column is NULL-able and velox scans a NULL only into a pointer. Ent gives `T`, so a ported schema's `Optional()` fields become `*T`. This is an ent difference.
+- Join entity naming: each many-to-many join table becomes an entity named `pascal(singular(table))` (`user_groups` gives `UserGroup`), which can collide with a schema of that name; the generator refuses the collision, and the only remedy is a different join table name (`edge.Table`).
+- `velox.yaml` and generator plugins arrive with the GraphQL sub-project.
+- The old scanner, the old path, the examples, `bench/scale` and the inline test entities (in `_test.go` files) move to the schema in plan 4, which also removes `GeneratedCodeIsVersion2`. Until then `bin/velox-gen -check ./...` and `verify ./...` in CI stay, and find no old-path entities in the root module.
+- The test model is generated from `internal/testmodel/schema`. A field's Go name comes from `pascal` of its name, so `SKU` is declared `field.String("SKU").StorageKey("sku")`: the name `sku` would give `Sku`. The named types `Status`, `Cents` and `Score` live in `internal/testmodel/kind` because the schema package names them in `GoType` and the generated package imports them; `testmodel` re-exports them as aliases.
+- The generated test model carries the DSL's behaviour, not the hand-written descriptors': `created_at` is immutable and `updated_at` also has an insert default (`mixin.Time`), entities print through a generated `String()`, and JSON keys are the field names (`id`, `invoice_id`).
+- The ID is now column 0 of every test entity (Invoice's `created_at` and `updated_at`, and Ticket's `created_by`, came before it). `Line` gained the inverse edge `Sample`, because a to-many edge binds its foreign key field only from the inverse side. `Ticket.Parent` and `Sample.Parent`, a unique `To` edge with a bound field and no inverse, resolve as O2O in the Graph; the generated relation is the same `EdgeTo` as before.

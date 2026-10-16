@@ -21,10 +21,10 @@ var (
 	It  = testmodel.Items
 )
 
-const allCols = `"created_at", "updated_at", "id", "org_id", "number", "total", "paid", "paid_at", "note", "data"`
+const allCols = `"id", "created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "note", "data"`
 
 func invoiceRow(id int64) []any {
-	return []any{t0, t0, id, int64(1), fmt.Sprintf("INV-%d", id), 12.5, true, t0, nil, []byte("d")}
+	return []any{id, t0, t0, int64(1), fmt.Sprintf("INV-%d", id), 12.5, true, t0, nil, []byte("d")}
 }
 
 func TestAllScansEveryColumn(t *testing.T) {
@@ -83,7 +83,7 @@ func TestColumnsAndOmit(t *testing.T) {
 	if err != nil || got[0].ID != 6 || got[0].Note != nil {
 		t.Fatalf("%+v, %v", got, err)
 	}
-	if want := `SELECT "created_at", "updated_at", "id", "org_id", "number", "total", "paid", "paid_at", "data" FROM "invoices"`; e.SQL != want {
+	if want := `SELECT "id", "created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "data" FROM "invoices"`; e.SQL != want {
 		t.Errorf("Omit SQL %s", e.SQL)
 	}
 }
@@ -148,7 +148,7 @@ func TestSQLNeedsNoDatabase(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.MySQL, e)
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Number.HasPrefix("A")).Limit(3).SQL(ctx))
-	want := "SELECT `created_at`, `updated_at`, `id`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '\\\\' LIMIT ?"
+	want := "SELECT `id`, `created_at`, `updated_at`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '\\\\' LIMIT ?"
 	if text != want || !reflect.DeepEqual(args, []any{"A%", 3}) || e.Calls != 0 {
 		t.Errorf("%s %v calls %d", text, args, e.Calls)
 	}

@@ -51,6 +51,8 @@ jobs:
           go -C cmd/velox-gen build -o "$PWD/bin/velox-gen" .
           bin/velox-gen -check ./...
           bin/velox-gen verify ./...
+          bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
+          bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
       - name: example
         working-directory: example
         run: |

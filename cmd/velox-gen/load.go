@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 
@@ -42,4 +43,17 @@ func isGenerated(path string) bool {
 	defer func() { _ = f.Close() }()
 	line, _ := bufio.NewReader(f).ReadString('\n')
 	return line == header+"\n"
+}
+
+// isOldGenerated reports whether the file at path is one the old mode wrote:
+// it starts with velox-gen's header and does not refer to
+// GeneratedCodeIsVersion3, which the new mode's files do. The old mode removes
+// only these, so that it leaves the new mode's files in the same module alone.
+// Plan 4 removes this with the old mode.
+func isOldGenerated(path string) bool {
+	if !isGenerated(path) {
+		return false
+	}
+	src, err := os.ReadFile(path)
+	return err == nil && !bytes.Contains(src, []byte("GeneratedCodeIsVersion3"))
 }

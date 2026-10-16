@@ -16,7 +16,7 @@ import (
 
 var Tk = testmodel.Tickets
 
-const ticketCols = `"created_by", "id", "org_id", "owner", "title", "done", "invoice_id", "parent_id"`
+const ticketCols = `"id", "created_by", "org_id", "owner", "title", "done", "invoice_id", "parent_id"`
 
 // tenant returns a context scoped to tenant id, with the policy skipped: the
 // tenant tests check the scope alone.
@@ -25,7 +25,7 @@ func tenant(id any) context.Context {
 }
 
 func ticketRow(id, org int64, parent any) []any {
-	return []any{"ann", id, org, "ann", fmt.Sprintf("T-%d", id), false, int64(1), parent}
+	return []any{id, "ann", org, "ann", fmt.Sprintf("T-%d", id), false, int64(1), parent}
 }
 
 func wantSent(t *testing.T, e *velox.FakeExec, sql string, args ...any) {

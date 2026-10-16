@@ -393,7 +393,7 @@ func TestUpsertConditionFromAHookIsScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `INSERT INTO "tickets" (`+ticketCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $9) AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
-		"ann", int64(1), int64(7), "ann", "t", false, int64(3), (*int64)(nil), int64(7), "ann", "ann")
+		int64(1), "ann", int64(7), "ann", "t", false, int64(3), (*int64)(nil), int64(7), "ann", "ann")
 }
 
 // TestUpsertConditionThatWouldBeDropped: a Rewrite hook's condition on an

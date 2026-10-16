@@ -39,7 +39,7 @@ func plan(ps []*packages.Package, cfg config) (result, []problem) {
 			res.write[e.out] = src
 		}
 		for _, f := range p.GoFiles {
-			if _, ok := res.write[f]; !ok && isGenerated(f) {
+			if _, ok := res.write[f]; !ok && isOldGenerated(f) {
 				res.remove = append(res.remove, f)
 			}
 		}
