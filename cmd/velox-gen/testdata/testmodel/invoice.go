@@ -1,7 +1,7 @@
 // Package testmodel is velox's test model as it was on the old path, with
 // Schema methods, before internal/testmodel moved to the Desc path (schema
-// plan 2). It is velox-gen's fixture until schema plan 3 replaces the
-// generator. Its *_velox.go files are written by velox-gen; velox-gen's
+// plan 2). It is velox-gen's fixture until schema plan 4 removes the
+// old generator. Its *_velox.go files are written by velox-gen; velox-gen's
 // golden test fails when they differ from what it writes.
 package testmodel
 

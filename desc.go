@@ -1,5 +1,5 @@
 // This file is the metadata path velox-gen writes (schema design §2); the
-// struct-scanning path in meta.go and schema.go remains until schema plan 3.
+// struct-scanning path in meta.go and schema.go remains until schema plan 4.
 
 package velox
 
