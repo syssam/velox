@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"go/token"
 	"io"
 	"maps"
@@ -22,9 +24,13 @@ const defaultSchema = "./schema"
 
 // schemaPackage decides the mode (Ruling 1). The new mode runs when exactly one
 // pattern is named, or none, which means ./schema, and the package declares
-// schemas; it returns that package's pattern. Any other pattern, or a package
-// without schemas, is the old mode: ok is false. An error is a schema package
-// that cannot be read.
+// schemas; it returns that package's pattern. A pattern with "...", or that
+// does not name exactly one package of a module, is the old mode: ok is false.
+// So is a package named by an import path that declares no schemas.
+//
+// An error is a package that cannot be read, as go list says it, or a
+// directory with Go files and no schemas, which is a mistake in the new mode
+// unless it holds old-mode entities (a method Schema).
 func schemaPackage(dir string, patterns, env []string) (pattern string, ok bool, err error) {
 	switch len(patterns) {
 	case 0:
@@ -34,14 +40,63 @@ func schemaPackage(dir string, patterns, env []string) (pattern string, ok bool,
 	default:
 		return "", false, nil
 	}
-	_, schemas, err := gen.Inspect(dir, pattern, env)
+	if strings.Contains(pattern, "...") {
+		return "", false, nil // several packages: the old mode reads them all
+	}
+	importPath, schemas, err := gen.Inspect(dir, pattern, env)
 	if errors.Is(err, gen.ErrNotPackage) {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	return pattern, len(schemas) > 0, nil
+	if len(schemas) == 0 {
+		if d := patternDir(dir, pattern); d != "" && !declaresOldSchema(d) {
+			return "", false, fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema", importPath)
+		}
+		return "", false, nil
+	}
+	return pattern, true, nil
+}
+
+// patternDir is the directory that pattern names, relative to dir when it is
+// not absolute, or "" when pattern is not the path of a directory (an import
+// path, say).
+func patternDir(dir, pattern string) string {
+	if !filepath.IsAbs(pattern) {
+		pattern = filepath.Join(dir, pattern)
+	}
+	if fi, err := os.Stat(pattern); err != nil || !fi.IsDir() {
+		return ""
+	}
+	return pattern
+}
+
+// declaresOldSchema reports whether a file of the package in dir declares a
+// method Schema: a package of the old mode, which the old scanner reads. It
+// does not look at the method's signature; the old scanner reports a wrong one.
+func declaresOldSchema(dir string) bool {
+	des, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	fset := token.NewFileSet()
+	for _, de := range des {
+		name := de.Name()
+		if de.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+		if err != nil {
+			continue
+		}
+		for _, d := range f.Decls {
+			if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv != nil && fd.Name.Name == "Schema" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // genFlags are the flags of the new mode.
@@ -130,6 +185,9 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	}
 	out := f.outDir(dir)
 	bound, err := gen.Methods(out, gm.names)
+	if fe := (*gen.FileError)(nil); errors.As(err, &fe) {
+		return fail(fmt.Errorf("%s: %s", relPath(dir, fe.Path), fe.Reason))
+	}
 	if err != nil {
 		return fail(err)
 	}

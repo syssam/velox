@@ -8,8 +8,11 @@
 //
 // The old mode scans the structs that declare func (x *T) Schema(s
 // *velox.Schema) and writes the typed column handles beside each one. It runs
-// when the argument is not one package that declares schemas, and it is removed
-// in schema plan 4.
+// when the argument has "..." or names no package or several, or names a
+// package by its import path that declares no schemas, and it is removed in
+// schema plan 4. A directory that holds Go files and declares no schemas is an
+// error in the new mode, not an old-mode package, and so is any other failure
+// of go list for the argument, such as a go.mod that needs go mod tidy.
 //
 // Install it as a tool of your module and run it from the module root:
 //
@@ -35,9 +38,10 @@
 // rewrites and deletes only files that start with its header "Code generated
 // by velox-gen. DO NOT EDIT."; a file of yours at a path it would write is an
 // error. The files you add to the output directory stay: a method Policy or
-// Hooks on a generated entity E, with receiver E or *E, in a file of yours
-// there, is bound into E's metadata. Your own file must not declare a type
-// named like a generated one.
+// Hooks on a generated entity E, with receiver *E, in a file of yours there,
+// is bound into E's metadata. A value receiver is an error, because velox
+// calls the method on a nil *E. Your own file must not declare a type named
+// like a generated one.
 //
 // verify -out builds a program in a temporary .velox-verify-* directory of
 // your module, imports the generated package and reports, for every entity,

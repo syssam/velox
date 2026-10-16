@@ -210,8 +210,24 @@ func TestGenerateRefusesAForeignFile(t *testing.T) {
 func TestGenerateRefusesARedeclaredType(t *testing.T) {
 	dir := genModule(t, map[string]string{"gen/mine.go": "package gen\n\ntype User struct{}\n"})
 	code, _, errs := velox(t, dir, "./schema")
-	if code != 1 || !strings.Contains(errs, "type User") || !strings.HasPrefix(errs, "velox-gen: ") {
-		t.Fatalf("%d %q", code, errs)
+	if want := "velox-gen: gen/mine.go: declares type User, which velox-gen generates\n"; code != 1 || errs != want {
+		t.Fatalf("%d %q, want %q", code, errs, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen", "user_velox.go")); !os.IsNotExist(err) {
+		t.Error("a file was written")
+	}
+}
+
+// A Policy or Hooks method with a value receiver is an error, with a path
+// relative to the working directory, and nothing is written.
+func TestGenerateRefusesAValueReceiver(t *testing.T) {
+	dir := genModule(t, map[string]string{
+		"gen/user_policy.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n",
+	})
+	code, out, errs := velox(t, dir, "./schema")
+	want := "velox-gen: gen/user_policy.go: User.Policy must have a pointer receiver (func (*User) Policy())\n"
+	if code != 1 || out != "" || errs != want {
+		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gen", "user_velox.go")); !os.IsNotExist(err) {
 		t.Error("a file was written")
@@ -257,6 +273,30 @@ func TestOutNeedsASchemaPackage(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "billing", "invoice_velox.go")); !os.IsNotExist(err) {
 		t.Error("the old mode ran")
+	}
+}
+
+// A directory with Go files and no schemas is a mistake in the new mode, not an
+// old-mode package, unless it declares old-mode entities (a method Schema),
+// which ./billing does.
+func TestOutOnAPackageWithoutSchemas(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"billing/invoice.go": invoiceSrc, "plain/doc.go": "package plain\n"})
+	code, out, errs := velox(t, dir, "-out", "gen", "./plain")
+	if want := "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"; code != 1 || out != "" || errs != want {
+		t.Errorf("%d %q %q, want %q", code, out, errs, want)
+	}
+	// The same without -out, and the import path of an old-mode package.
+	if code, out, errs := velox(t, dir, "./plain"); code != 1 || out != "" || !strings.Contains(errs, "no schemas in example.com/app/plain") {
+		t.Errorf("%d %q %q", code, out, errs)
+	}
+	if code, out, errs := velox(t, dir, "./billing"); code != 0 || out != "billing/invoice_velox.go\n" {
+		t.Errorf("old-mode package: %d %q %q", code, out, errs)
+	}
+	if code, _, errs := velox(t, dir, "example.com/app/plain"); code != 0 {
+		t.Errorf("an import path is the old mode: %d %q", code, errs)
 	}
 }
 
@@ -376,5 +416,90 @@ func TestOrderedAndNumberAreOldModeOnly(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
 		t.Error("files were written")
+	}
+}
+
+// veloxEnv is velox with the environment env.
+func veloxEnv(t *testing.T, dir string, env []string, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errs strings.Builder
+	code := run(args, dir, env, &out, &errs)
+	return code, out.String(), errs.String()
+}
+
+// A go.mod that needs go mod tidy is the error go list gives, not the message
+// of the old mode that it falls back to when a pattern is no package.
+func TestModeSelectionShowsGoListErrors(t *testing.T) {
+	dir := genModule(t, nil)
+	// The library needs a newer go than this go.mod says, which -mod=readonly
+	// refuses to change.
+	b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "go.mod"), strings.Replace(string(b), "go 1.27.0", "go 1.22", 1))
+	env := append(offlineEnv(), "GOFLAGS=-mod=readonly")
+	for _, args := range [][]string{{"./schema"}, {}, {"-check", "./schema"}} {
+		code, out, errs := veloxEnv(t, dir, env, args...)
+		if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: ") || !strings.Contains(errs, "go mod tidy") || strings.Contains(errs, "no packages") {
+			t.Errorf("%v: %d %q %q", args, code, out, errs)
+		}
+	}
+}
+
+func TestSchemaDirectoryWithoutSchemas(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"schema/doc.go": "package schema\n"})
+	const want = "velox-gen: no schemas in example.com/app/schema: a schema is a struct that embeds schema.Schema\n"
+	// Named, and by default.
+	for _, args := range [][]string{{"./schema"}, {}, {"-check"}, {"verify"}} {
+		if code, out, errs := velox(t, dir, args...); code != 1 || out != "" || errs != want {
+			t.Errorf("%v: %d %q %q", args, code, out, errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+		t.Error("files were written")
+	}
+}
+
+// A file of another package in the schema directory is the error go list
+// gives for it.
+func TestSchemaDirectoryWithAStrayPackage(t *testing.T) {
+	dir := genModule(t, nil)
+	writeFile(t, filepath.Join(dir, "schema", "stray.go"), "package other\n")
+	for _, args := range [][]string{{"./schema"}, {}} {
+		code, out, errs := velox(t, dir, args...)
+		if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: ") || !strings.Contains(errs, "found packages ") || !strings.Contains(errs, "other (stray.go)") {
+			t.Errorf("%v: %d %q %q", args, code, out, errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+		t.Error("files were written")
+	}
+}
+
+// A pattern that is no single package goes to the old mode, which has its own
+// messages.
+func TestModeSelectionKeepsTheOldMode(t *testing.T) {
+	dir := genModule(t, map[string]string{"billing/invoice.go": invoiceSrc})
+	if code, out, errs := velox(t, dir, "./..."); code != 0 || out != "billing/invoice_velox.go\n" {
+		t.Errorf("./...: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := velox(t, dir, "-out", "gen", "./..."); code != 1 || out != "" || !strings.Contains(errs, "-out needs a schema package") {
+		t.Errorf("-out ./...: %d %q %q", code, out, errs)
+	}
+	// A pattern that names nothing and two packages are the old mode's too.
+	for _, args := range [][]string{{"./nothing"}, {"./billing", "./schema"}} {
+		code, _, errs := velox(t, dir, append([]string{"-out", "gen"}, args...)...)
+		if code != 1 || !strings.Contains(errs, "-out needs a schema package") {
+			t.Errorf("%v: %d %q", args, code, errs)
+		}
+	}
+	// Without ./schema, and with no pattern, the old mode runs on ".".
+	old := tempModule(t, map[string]string{"invoice.go": invoiceSrc})
+	if code, out, errs := velox(t, old); code != 0 || out != "invoice_velox.go\n" {
+		t.Errorf("no pattern: %d %q %q", code, out, errs)
 	}
 }

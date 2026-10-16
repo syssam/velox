@@ -107,6 +107,9 @@ func TestInspect(t *testing.T) {
 		"plain/doc.go":    "package plain\n",
 		"plain/sub/b.go":  "package sub\n",
 		"unexp/schema.go": "package unexp\n\nimport \"github.com/syssam/velox2/schema\"\n\ntype user struct{ schema.Schema }\n",
+		"empty/notes.txt": "no Go here\n",
+		"mixed/a.go":      "package a\n",
+		"mixed/b.go":      "package b\n",
 	})
 	path, schemas, err := Inspect(dir, "./schema", offline())
 	if err != nil || path != "example.com/tmp/schema" || !slices.Equal(schemas, []string{"User"}) {
@@ -117,10 +120,14 @@ func TestInspect(t *testing.T) {
 		t.Errorf("plain: %q %v %v", path, schemas, err)
 	}
 	// Not a package: the caller may try another mode.
-	for _, pattern := range []string{"./nothing", "./..."} {
+	for _, pattern := range []string{"./nothing", "./empty", "./...", "example.com/tmp/nothing"} {
 		if _, _, err := Inspect(dir, pattern, offline()); !errors.Is(err, ErrNotPackage) {
 			t.Errorf("%s: %v does not wrap ErrNotPackage", pattern, err)
 		}
+	}
+	// Another failure of go list is shown as go wrote it.
+	if _, _, err := Inspect(dir, "./mixed", offline()); err == nil || errors.Is(err, ErrNotPackage) || !strings.Contains(err.Error(), "found packages a (a.go) and b (b.go)") {
+		t.Errorf("mixed: %v", err)
 	}
 	// A package that cannot be read is not "not a package".
 	if _, _, err := Inspect(dir, "./unexp", offline()); err == nil || errors.Is(err, ErrNotPackage) || !strings.Contains(err.Error(), "unexported") {

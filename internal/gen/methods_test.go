@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,12 +20,12 @@ func methodsDir(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-func TestMethodsFindsPointerAndValueReceivers(t *testing.T) {
+func TestMethodsFindsPointerReceivers(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
 		"user_policy.go": "package gen\n\nfunc (*User) Policy() int { return 0 }\n",
-		"post.go":        "package gen\n\nfunc (p Post) Hooks() int { return 0 }\n\nfunc (p *Post) Other() {}\n",
-		"both.go":        "package gen\n\nfunc (t *Tag) Policy() {}\nfunc (t Tag) Hooks() {}\n",
-		"other.go":       "package gen\n\nfunc (*Comment) Policies() {}\nfunc Policy() {}\nfunc (*Stranger) Policy() {}\n",
+		"post.go":        "package gen\n\nfunc (p *Post) Hooks() int { return 0 }\n\nfunc (p Post) Other() {}\n",
+		"both.go":        "package gen\n\nfunc (t *Tag) Policy() {}\nfunc (t *Tag) Hooks() {}\n",
+		"other.go":       "package gen\n\nfunc (*Comment) Policies() {}\nfunc Policy() {}\nfunc (*Stranger) Policy() {}\nfunc (Stranger) Hooks() {}\n",
 	})
 	got, err := Methods(dir, []string{"User", "Post", "Tag", "Comment"})
 	if err != nil {
@@ -33,6 +34,25 @@ func TestMethodsFindsPointerAndValueReceivers(t *testing.T) {
 	want := map[string]Bound{"User": {Policy: true}, "Post": {Hooks: true}, "Tag": {Policy: true, Hooks: true}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// A value receiver would be called on a nil *E by the binding and panic at the
+// entity's first use, so Methods refuses it.
+func TestMethodsRefusesValueReceivers(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		{"policy", "package gen\n\nfunc (User) Policy() int { return 0 }\n", "User.Policy must have a pointer receiver (func (*User) Policy())"},
+		{"hooks", "package gen\n\nfunc (u User) Hooks() int { return 0 }\n", "User.Hooks must have a pointer receiver (func (*User) Hooks())"},
+	} {
+		dir := methodsDir(t, map[string]string{"mine.go": c.src})
+		_, err := Methods(dir, []string{"User"})
+		var fe *FileError
+		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Reason != c.want {
+			t.Errorf("%s: err = %v; want a FileError for mine.go: %s", c.name, err, c.want)
+		}
+		if err != nil && err.Error() != filepath.Join(dir, "mine.go")+": "+c.want {
+			t.Errorf("%s: message %q", c.name, err)
+		}
 	}
 }
 
