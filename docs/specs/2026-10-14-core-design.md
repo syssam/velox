@@ -638,7 +638,8 @@ profiles, not about what users wait on.
 - **Scale harness.** The simulation used for this design is `bench/scale`: it
   generates an application of N entities and S services and reports cold
   build, incremental rebuilds, the service binary's size and the linker's peak
-  memory. The thresholds are in `bench/scale/thresholds.json`; CI runs it at
+  memory (since 2026-10-16 the entities are one generated package and the
+  rebuild is the one after a schema edit; see A.6). The thresholds are in `bench/scale/thresholds.json`; CI runs it at
   N=500 and fails when one is exceeded. The full N=2,000 run is a release
   check.
 - **Fuzzing** of the SQL builder (`fuzz_test.go`: placeholders match
@@ -799,3 +800,26 @@ The service binary does not grow with the application and the link memory
 barely does (§3 rules 2 and 5); the root-edit rebuild is §3 rule 6. Times
 include the harness's `-toolexec` wrapper. The recorded CI thresholds for
 N=500 are in `bench/scale/thresholds.json`.
+
+**Note, 2026-10-16: the scale figures now measure one generated package.**
+The table above is the history of the per-domain layout and stays as it was
+measured. `bench/scale` no longer writes a tree of domain packages with
+struct-and-`Schema` entities. It writes N schemas (the schema DSL, `schema/e<i>.go`),
+generates them with velox-gen into one `gen` package, and builds S services
+that each query five entities of `gen`. One package has no leaves and roots, so
+the two rebuild rows became one, `schema_edit_rebuild_s`: add a field to one
+schema, regenerate, and rebuild every service. The relation shape is the old
+one (`bench/scale/main.go`, `generate`). Measured on the same machine (M3 Max)
+at N=500, S=100, three idle runs (the largest of each):
+
+| | Per-domain packages (2026-10-14) | One generated package (2026-10-16) |
+|---|---|---|
+| Cold build | 14.3 s | 29.4 s |
+| Rebuild after a schema edit | 1.05 s (leaf), 5.9 s (root) | 27.1 s (edit, regenerate, rebuild every service) |
+| One service's binary | 5.47 MB | 23.6 MB |
+| Linker peak memory | 187 MB | 404 MB |
+
+The service binary and the link memory now grow with N (23.6 MB at N=500, 14.5
+MB at N=250, 9.1 MB at N=100), which the per-domain layout did not; §3 rules 2
+and 5 describe the old layout. The CI thresholds for N=500 were re-baselined
+from these runs.

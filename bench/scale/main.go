@@ -1,9 +1,9 @@
-// Command scale generates an application of n velox entities in a tree of
-// domain packages, with s services that each use five entities, and measures
-// what velox costs it to build: a cold build, rebuilds after editing a leaf
-// and a root entity, a service's binary size and the linker's peak memory
-// (design §9). With -check it compares the measurements with recorded
-// thresholds and exits 1 when one is exceeded.
+// Command scale generates an application of n velox schemas, generated into
+// one gen package, with s services that each use five entities, and measures
+// what velox costs it to build: a cold build, the rebuild after adding a field
+// to one schema and regenerating, a service's binary size and the linker's
+// peak memory (design §9). With -check it compares the measurements with
+// recorded thresholds and exits 1 when one is exceeded.
 //
 // Every build runs under a -toolexec wrapper that reads the linker's peak
 // memory, so the times include that wrapper's overhead. The overhead is the
@@ -32,13 +32,12 @@ type config struct {
 }
 
 type report struct {
-	N               int     `json:"n"`
-	Services        int     `json:"services"`
-	ColdBuildS      float64 `json:"cold_build_s"`
-	LeafRebuildS    float64 `json:"leaf_rebuild_s"`
-	RootRebuildS    float64 `json:"root_rebuild_s"`
-	ServiceBinaryMB float64 `json:"service_binary_mb"`
-	LinkPeakMB      float64 `json:"link_peak_mb"`
+	N                  int     `json:"n"`
+	Services           int     `json:"services"`
+	ColdBuildS         float64 `json:"cold_build_s"`
+	SchemaEditRebuildS float64 `json:"schema_edit_rebuild_s"`
+	ServiceBinaryMB    float64 `json:"service_binary_mb"`
+	LinkPeakMB         float64 `json:"link_peak_mb"`
 }
 
 func main() {
@@ -57,8 +56,8 @@ func main() {
 		b, _ := json.MarshalIndent(r, "", "  ")
 		fmt.Println(string(b))
 	} else {
-		fmt.Printf("n=%d services=%d cold %.1fs, leaf rebuild %.2fs, root rebuild %.2fs, service %.1f MB, link peak %.0f MB\n",
-			r.N, r.Services, r.ColdBuildS, r.LeafRebuildS, r.RootRebuildS, r.ServiceBinaryMB, r.LinkPeakMB)
+		fmt.Printf("n=%d services=%d cold %.1fs, schema edit + regenerate + rebuild %.2fs, service %.1f MB, link peak %.0f MB\n",
+			r.N, r.Services, r.ColdBuildS, r.SchemaEditRebuildS, r.ServiceBinaryMB, r.LinkPeakMB)
 	}
 	if *thresholds != "" {
 		if problems := check(r, c.n, *thresholds); len(problems) > 0 {
@@ -103,8 +102,11 @@ func run(c config) (report, error) {
 			return r, err
 		}
 	}
-	domains := c.n / 10
-	if err := tempmod.Write(app, root, generate(domains, c.services)); err != nil {
+	schemas, services := generate(c.n, c.services)
+	// The services import gen, which does not exist until velox-gen has run, and
+	// go mod tidy cannot resolve an import of a missing package: the module is
+	// written and tidied with the schemas alone, and the services follow gen.
+	if err := tempmod.Write(app, root, schemas); err != nil {
 		return r, err
 	}
 	gen := filepath.Join(tools, "velox-gen")
@@ -115,56 +117,65 @@ func run(c config) (report, error) {
 	if err := buildWrapper(wrapper); err != nil {
 		return r, err
 	}
-	velox := func(pkgs ...string) error {
-		cmd := exec.Command(gen, pkgs...)
+	velox := func() error {
+		cmd := exec.Command(gen, "-out", "gen", "./schema")
 		cmd.Dir = app
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("velox-gen %v: %v\n%s", pkgs, err, out)
+			return fmt.Errorf("velox-gen: %v\n%s", err, out)
 		}
 		return nil
 	}
-	if err := velox("./..."); err != nil {
+	if err := velox(); err != nil {
 		return r, err
 	}
+	for name, src := range services {
+		p := filepath.Join(app, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return r, err
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			return r, err
+		}
+	}
 	memFile := filepath.Join(tools, "linkmem.txt")
-	build := func() (float64, error) {
-		start := time.Now()
+	build := func() error {
 		cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", bin+string(filepath.Separator), "./...")
 		cmd.Dir = app
 		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+memFile)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return 0, fmt.Errorf("go build: %v\n%s", err, out)
+			return fmt.Errorf("go build: %v\n%s", err, out)
 		}
-		return time.Since(start).Seconds(), nil
+		return nil
 	}
-	if r.ColdBuildS, err = build(); err != nil {
+	start := time.Now()
+	if err := build(); err != nil {
 		return r, err
 	}
-	edit := func(domain int) (float64, error) {
-		p := filepath.Join(app, fmt.Sprintf("d%d", domain), "e5.go")
-		src, err := os.ReadFile(p)
-		if err != nil {
-			return 0, err
-		}
-		field := fmt.Sprintf("\tExtra%d int64\n}", time.Now().UnixNano())
-		changed := strings.Replace(string(src), "\n}\n\nfunc (x *E5) Schema", "\n"+field+"\n\nfunc (x *E5) Schema", 1)
-		if changed == string(src) {
-			return 0, fmt.Errorf("cannot edit %s", p)
-		}
-		if err := os.WriteFile(p, []byte(changed), 0o644); err != nil {
-			return 0, err
-		}
-		if err := velox(fmt.Sprintf("./d%d", domain)); err != nil {
-			return 0, err
-		}
-		return build()
-	}
-	if r.LeafRebuildS, err = edit(domains - 1); err != nil {
+	r.ColdBuildS = time.Since(start).Seconds()
+
+	// The schema edit: a new field on the last schema. The edit itself is not
+	// timed; the regeneration and the rebuild of every service are.
+	p := filepath.Join(app, "schema", fmt.Sprintf("e%d.go", c.n-1))
+	src, err := os.ReadFile(p)
+	if err != nil {
 		return r, err
 	}
-	if r.RootRebuildS, err = edit(0); err != nil {
+	changed := strings.Replace(string(src), noteField, noteField+fmt.Sprintf("\n\t\tfield.Int64(\"extra_%d\"),", time.Now().UnixNano()), 1)
+	if changed == string(src) {
+		return r, fmt.Errorf("cannot edit %s", p)
+	}
+	if err := os.WriteFile(p, []byte(changed), 0o644); err != nil {
 		return r, err
 	}
+	start = time.Now()
+	if err := velox(); err != nil {
+		return r, err
+	}
+	if err := build(); err != nil {
+		return r, err
+	}
+	r.SchemaEditRebuildS = time.Since(start).Seconds()
+
 	if fi, err := os.Stat(filepath.Join(bin, "s0")); err == nil {
 		r.ServiceBinaryMB = float64(fi.Size()) / (1 << 20)
 	} else {
@@ -174,50 +185,89 @@ func run(c config) (report, error) {
 	return r, err
 }
 
-// generate writes the application's packages (path → source).
-func generate(domains, services int) map[string]string {
-	files := map[string]string{}
-	for d := range domains {
-		pkg := fmt.Sprintf("d%d", d)
-		for k := range 10 {
-			var b strings.Builder
-			fmt.Fprintf(&b, "package %s\n\nimport (\n\t\"time\"\n\n\t\"github.com/syssam/velox2\"\n", pkg)
-			if k == 0 && d > 0 {
-				fmt.Fprintf(&b, "\n\t\"example.com/tmp/d%d\"\n", (d-1)/2)
-			}
-			fmt.Fprintf(&b, ")\n\n// E%d is a generated entity.\ntype E%d struct {\n\tID        int64\n\tName      string\n\tAmount    float64\n\tCreatedAt time.Time\n\tNote      *string\n", k, k)
-			switch {
-			case k == 0 && d > 0:
-				fmt.Fprintf(&b, "\tUpID      int64\n\tUp        velox.One[d%d.E0]\n", (d-1)/2)
-			case k > 0:
-				fmt.Fprintf(&b, "\tPrevID    int64\n\tPrev      velox.One[E%d]\n", k-1)
-			}
-			if k == 0 {
-				b.WriteString("\tNext      velox.Many[E1]\n")
-			}
-			if k == 1 {
-				b.WriteString("\tE0ID      int64\n")
-			}
-			fmt.Fprintf(&b, "}\n\nfunc (x *E%d) Schema(s *velox.Schema) {}\n", k)
-			files[filepath.Join(pkg, fmt.Sprintf("e%d.go", k))] = b.String()
-		}
+// noteField is the line of every schema that the edit appends a field after.
+const noteField = `field.String("note").Optional(),`
+
+// generate returns the application's files (path → source): n schemas e0..e<n-1>
+// of the schema package, which velox-gen turns into the gen package, and
+// services s0..s<services-1> that each query five entities of gen.
+//
+// The schemas have the fields name (string), amount (float64), created_at
+// (time) and note (an optional string), and these relations, which keep the
+// shape of the old tree of domain packages. The schemas fall into groups of ten,
+// and group g holds e<10g> to e<10g+9>.
+//   - e<j> with j%10 != 0 belongs to e<j-1>, the previous schema of its group:
+//     it has the inverse edge From("prev", E<j-1>.Type).Ref("next").Unique().Required()
+//     bound to its field prev_id, and E<j-1> has the matching To("next").
+//   - e<10k> with k > 0, the head of group k, belongs to e<10*((k-1)/2)>, the
+//     head of group (k-1)/2: From("up", ...).Ref("downs<10k>").Unique().Required() bound
+//     to up_id, and the matching To("downs<10k>") on that head. A head has
+//     two children at most, so the old edge name "downs" would be declared
+//     twice on one schema, which Build refuses; the child's number makes the
+//     name unique.
+//
+// Every foreign key is a plain field of the schema that holds it, as an inverse
+// edge needs one to bind with Field, and the edge is Required because Build
+// wants the field Optional exactly when the edge is not Required.
+func generate(n, services int) (schemas, svc map[string]string) {
+	groups := n / 10
+	parent := func(k int) int { return 10 * ((k - 1) / 2) } // the head a group head k > 0 belongs to
+	downs := map[int][]int{}                                // head → the group heads that belong to it
+	for k := 1; k < groups; k++ {
+		downs[parent(k)] = append(downs[parent(k)], 10*k)
 	}
+	schemas = map[string]string{}
+	for i := range n {
+		var fields, edges strings.Builder
+		fields.WriteString("\t\tfield.String(\"name\"),\n\t\tfield.Float(\"amount\"),\n\t\tfield.Time(\"created_at\"),\n\t\t" + noteField + "\n")
+		switch {
+		case i%10 != 0:
+			fields.WriteString("\t\tfield.Int64(\"prev_id\"),\n")
+			fmt.Fprintf(&edges, "\t\tedge.From(\"prev\", E%d.Type).Ref(\"next\").Unique().Required().Field(\"prev_id\"),\n", i-1)
+		case i > 0:
+			fields.WriteString("\t\tfield.Int64(\"up_id\"),\n")
+			fmt.Fprintf(&edges, "\t\tedge.From(\"up\", E%d.Type).Ref(\"downs%d\").Unique().Required().Field(\"up_id\"),\n", parent(i/10), i)
+		}
+		if i%10 != 9 {
+			fmt.Fprintf(&edges, "\t\tedge.To(\"next\", E%d.Type),\n", i+1)
+		}
+		for _, d := range downs[i] {
+			fmt.Fprintf(&edges, "\t\tedge.To(\"downs%d\", E%d.Type),\n", d, d)
+		}
+		schemas[filepath.Join("schema", fmt.Sprintf("e%d.go", i))] = fmt.Sprintf(`package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/field"
+)
+
+// E%[1]d is a generated schema.
+type E%[1]d struct{ schema.Schema }
+
+func (E%[1]d) Fields() []schema.Field {
+	return []schema.Field{
+%[2]s	}
+}
+
+func (E%[1]d) Edges() []schema.Edge {
+	return []schema.Edge{
+%[3]s	}
+}
+`, i, fields.String(), edges.String())
+	}
+	svc = map[string]string{}
 	for s := range services {
-		var imp, use strings.Builder
-		seen := map[int]bool{}
+		var use strings.Builder
 		for m := range 5 {
-			d := (s*7 + m) % domains
-			if !seen[d] {
-				seen[d] = true
-				fmt.Fprintf(&imp, "\t\"example.com/tmp/d%d\"\n", d)
-			}
-			fmt.Fprintf(&use, "\tsink(db.Query[d%d.E%d]().Where(d%d.E%ds.ID.EQ(1)).Limit(1).SQL(ctx))\n", d, m, d, m)
+			e := 10*((s*7+m)%groups) + m
+			fmt.Fprintf(&use, "\tsink(db.Query[gen.E%d]().Where(gen.E%ds.ID.EQ(1)).Limit(1).SQL(ctx))\n", e, e)
 		}
-		files[filepath.Join(fmt.Sprintf("s%d", s), "main.go")] = fmt.Sprintf(
-			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n%s)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
-			imp.String(), use.String())
+		svc[filepath.Join(fmt.Sprintf("s%d", s), "main.go")] = fmt.Sprintf(
+			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n\t\"example.com/tmp/gen\"\n)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
+			use.String())
 	}
-	return files
+	return schemas, svc
 }
 
 // buildWrapper builds the -toolexec program that runs each tool and, for the
@@ -310,7 +360,7 @@ func check(r report, n int, path string) []string {
 		return []string{fmt.Sprintf("no thresholds for n=%d in %s", n, path)}
 	}
 	got := map[string]float64{
-		"cold_build_s": r.ColdBuildS, "leaf_rebuild_s": r.LeafRebuildS, "root_rebuild_s": r.RootRebuildS,
+		"cold_build_s": r.ColdBuildS, "schema_edit_rebuild_s": r.SchemaEditRebuildS,
 		"service_binary_mb": r.ServiceBinaryMB, "link_peak_mb": r.LinkPeakMB,
 	}
 	var problems []string
@@ -330,6 +380,11 @@ func check(r report, n int, path string) []string {
 		}
 		if v > max {
 			problems = append(problems, fmt.Sprintf("%s = %.2f, over %.2f", k, v, max))
+		}
+	}
+	for k := range got {
+		if _, ok := th[k]; !ok {
+			problems = append(problems, "missing threshold "+k)
 		}
 	}
 	return problems
