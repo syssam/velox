@@ -38,12 +38,13 @@ var groupMeta velox.MetaOnce[Group]
 func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDesc) }
 
 func groupDesc() velox.Desc[Group] {
+	d0 := (&sch.Group{}).Fields()[1].Descriptor().DefaultFunc.(func() string)
 	return velox.Desc[Group]{
 		Table: "groups",
 		Columns: []velox.ColumnDesc{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
-			{Field: "Token", Name: "token", DefaultFunc: func() any { return (&sch.Group{}).Fields()[1].Descriptor().DefaultFunc.(func() string)() }},
+			{Field: "Token", Name: "token", DefaultFunc: func() any { return d0() }},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -72,6 +73,9 @@ func groupDesc() velox.Desc[Group] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Group) String() string {
+func (x Group) String() string {
 	return fmt.Sprintf("Group(ID=%v, Name=%v, Token=%v)", x.ID, x.Name, x.Token)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Group) GoString() string { return x.String() }

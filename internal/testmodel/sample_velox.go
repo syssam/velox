@@ -139,7 +139,7 @@ func sampleDesc() velox.Desc[Sample] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Sample) String() string {
+func (x Sample) String() string {
 	var p3 any
 	if x.Prev != nil {
 		p3 = *x.Prev
@@ -162,3 +162,6 @@ func (x *Sample) String() string {
 	}
 	return fmt.Sprintf("Sample(ID=%v, Name=%v, Status=%v, Prev=%v, Price=%v, Ratio=%v, Flag=%v, MaybeFlag=%v, When=%v, MaybeWhen=%v, Blob=%v, ParentID=%v, Score=%v)", x.ID, x.Name, x.Status, p3, x.Price, p5, x.Flag, p7, x.When, p9, x.Blob, p11, x.Score)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Sample) GoString() string { return x.String() }

@@ -75,16 +75,17 @@ var userMeta velox.MetaOnce[User]
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDesc) }
 
 func userDesc() velox.Desc[User] {
+	d0 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
+	d1 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
+	d2 := (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
 	v0 := (&sch.User{}).Mixin()[1].Fields()[0].Descriptor().Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Desc[User]{
 		Table: "users",
 		Columns: []velox.ColumnDesc{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)() }, UpdateDefault: func() any {
-				return (&sch.User{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)()
-			}},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
 			{Field: "CreatedBy", Name: "created_by"},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "Name", Name: "name"},
@@ -153,7 +154,7 @@ func userDesc() velox.Desc[User] {
 				if len(x) < 2 {
 					return errors.New("length is less than 2")
 				}
-				if err := v0(string(x)); err != nil {
+				if err := v0(x); err != nil {
 					return err
 				}
 			case 5:
@@ -166,7 +167,7 @@ func userDesc() velox.Desc[User] {
 				}
 			case 6:
 				x := v.(string)
-				if !re0.MatchString(string(x)) {
+				if !re0.MatchString(x) {
 					return errors.New("does not match ^[^@]+@[^@]+$")
 				}
 			case 7:
@@ -178,10 +179,10 @@ func userDesc() velox.Desc[User] {
 				}
 			case 10:
 				x := v.(int)
-				if x < int(0) {
+				if x < 0 {
 					return errors.New("is less than 0")
 				}
-				if x > int(150) {
+				if x > 150 {
 					return errors.New("is more than 150")
 				}
 			}
@@ -191,7 +192,7 @@ func userDesc() velox.Desc[User] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *User) String() string {
+func (x User) String() string {
 	var p8 any
 	if x.Nickname != nil {
 		p8 = *x.Nickname
@@ -210,3 +211,6 @@ func (x *User) String() string {
 	}
 	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, p8, p9, p10, p12)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x User) GoString() string { return x.String() }

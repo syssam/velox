@@ -242,13 +242,13 @@ func TestLowerChecks(t *testing.T) {
 		"x := v.(string)",
 		`if x == "" {`, `errors.New("must not be empty")`,
 		"if len(x) > 5 {", `errors.New("length is more than 5")`,
-		"if !re0.MatchString(string(x)) {", `errors.New("does not match ^[a-z]+$")`,
-		"if err := v0(string(x)); err != nil {",
+		"if !re0.MatchString(x) {", `errors.New("does not match ^[a-z]+$")`,
+		"if err := v0(x); err != nil {",
 		"case 2:",
 		"x := v.(int)",
-		"if x < int(1) {", `errors.New("is less than 1")`,
-		"if x > int(120) {", `errors.New("is more than 120")`,
-		"if err := v1(int(x)); err != nil {",
+		"if x < 1 {", `errors.New("is less than 1")`,
+		"if x > 120 {", `errors.New("is more than 120")`,
+		"if err := v1(x); err != nil {",
 		"case 3:",
 		"x := v.(LwCheckedState)",
 		`case "on", "off":`, "default:", `errors.New("is not one of the values")`,
@@ -317,14 +317,27 @@ func TestLowerMixinPosition(t *testing.T) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
 		}
 	}
+	// Each descriptor read is a statement of the setup, run once; the closure
+	// of a column only calls or returns what it read.
+	for _, want := range []string{
+		`d0 := ` + mix + `[1].Descriptor().Default.(func() time.Time)`,
+		`d1 := ` + mix + `[2].Descriptor().DefaultFunc.(func() int64)`,
+		`d2 := (&sch.LwMixed{}).Fields()[0].Descriptor().DefaultFunc.(func() string)`,
+		`d3 := (&sch.LwMixed{}).Fields()[1].Descriptor().UpdateDefault.(func() time.Time)`,
+		`d4 := (&sch.LwMixed{}).Fields()[7].Descriptor().Default` + "\n",
+	} {
+		if !strings.Contains(e.CheckSetup+"\n", want) {
+			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
+		}
+	}
 	for _, c := range []struct{ name, def, fn, upd string }{
-		{"made", "", `func() any { return ` + mix + `[1].Descriptor().Default.(func() time.Time)() }`, ""},
-		{"rev", "", `func() any { return ` + mix + `[2].Descriptor().DefaultFunc.(func() int64)() }`, ""},
-		{"own", "", `func() any { return (&sch.LwMixed{}).Fields()[0].Descriptor().DefaultFunc.(func() string)() }`, ""},
-		{"touched", "", "", `func() any { return (&sch.LwMixed{}).Fields()[1].Descriptor().UpdateDefault.(func() time.Time)() }`},
+		{"made", "", `func() any { return d0() }`, ""},
+		{"rev", "", `func() any { return d1() }`, ""},
+		{"own", "", `func() any { return d2() }`, ""},
+		{"touched", "", "", `func() any { return d3() }`},
 		{"blob", "", `func() any { var v []byte; _ = json.Unmarshal([]byte("\"Yg==\""), &v); return v }`, ""},
 		{"labels", "", `func() any { var v []string; _ = json.Unmarshal([]byte("[\"a\",\"b\"]"), &v); return v }`, ""},
-		{"pt", "", `func() any { return (&sch.LwMixed{}).Fields()[7].Descriptor().Default }`, ""},
+		{"pt", "", `func() any { return d4 }`, ""},
 		{"tier", "LwMixedTierPaid", "", ""},
 		{"lit", `"hi"`, "", ""},
 		{"count", `int(5)`, "", ""},
@@ -333,6 +346,14 @@ func TestLowerMixinPosition(t *testing.T) {
 		f := e.field(c.name)
 		if f == nil || f.DefaultCode != c.def || f.DefaultFuncCode != c.fn || f.UpdateDefaultCode != c.upd {
 			t.Errorf("%s: %+v, want %q %q %q", c.name, f, c.def, c.fn, c.upd)
+		}
+	}
+	// The per-row cost (Ruling 5): no closure reads a descriptor.
+	for _, f := range e.Fields {
+		for _, code := range []string{f.DefaultFuncCode, f.UpdateDefaultCode} {
+			if strings.Contains(code, "Descriptor") || strings.Contains(code, "sch.") {
+				t.Errorf("%s: the closure reads the descriptor per call: %s", f.GoName, code)
+			}
 		}
 	}
 	if !reflect.DeepEqual(e.Imports, []string{"encoding/json", "errors", "github.com/syssam/velox2/internal/gen", "time"}) {
@@ -726,7 +747,7 @@ func TestLowerOneToOneDesc(t *testing.T) {
 type LwReserved struct{ schema.Schema }
 
 func (LwReserved) Fields() []schema.Field {
-	return []schema.Field{field.String("velox_meta"), field.String("policy")}
+	return []schema.Field{field.String("velox_meta"), field.String("policy"), field.String("go_string")}
 }
 
 func TestLowerReservedNames(t *testing.T) {
@@ -734,6 +755,7 @@ func TestLowerReservedNames(t *testing.T) {
 	for _, w := range []string{
 		`schema LwReserved: field "velox_meta": its Go name VeloxMeta is reserved`,
 		`schema LwReserved: field "policy": its Go name Policy is reserved`,
+		`schema LwReserved: field "go_string": its Go name GoString is reserved`,
 	} {
 		if err == nil || !strings.Contains(err.Error(), w) {
 			t.Errorf("err = %v, want %s", err, w)
@@ -755,5 +777,65 @@ func TestLowerFieldUniqueIndex(t *testing.T) {
 	want := []OutIndex{{Columns: []int{2, 3}, Unique: true}, {Columns: []int{1}, Unique: true}, {Columns: []int{3}, Unique: true}}
 	if !reflect.DeepEqual(e.Indexes, want) {
 		t.Fatalf("indexes %+v, want %+v", e.Indexes, want)
+	}
+}
+
+// A declared single-column unique index on a Unique field is that field's
+// index: it is not emitted twice.
+type LwUniq2 struct{ schema.Schema }
+
+func (LwUniq2) Fields() []schema.Field {
+	return []schema.Field{field.String("email").Unique(), field.String("code").Unique(), field.String("plain")}
+}
+func (LwUniq2) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("email").Unique(), index.Fields("code"), index.Fields("plain").Unique()}
+}
+
+func TestLowerFieldUniqueIndexIsNotRepeated(t *testing.T) {
+	e := mustLower(t, Config{}, LwUniq2{}).entity("LwUniq2")
+	want := []OutIndex{
+		{Columns: []int{1}, Unique: true}, // email: declared, and by Unique()
+		{Columns: []int{2}},               // code: declared, not unique
+		{Columns: []int{3}, Unique: true}, // plain: declared only
+		{Columns: []int{2}, Unique: true}, // code: by Unique() only; the declared one is not unique
+	}
+	if !reflect.DeepEqual(e.Indexes, want) {
+		t.Fatalf("indexes %+v, want %+v", e.Indexes, want)
+	}
+}
+
+// A conversion in the Check code is there only where the types differ: x is
+// already a string or an int when the field has no Go type of its own.
+type lwCents int64
+type lwSlug string
+
+type LwConv struct{ schema.Schema }
+
+func (LwConv) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("plain").Match(regexp.MustCompile(`^a`)).Validate(func(string) error { return nil }),
+		field.String("slug").GoType(lwSlug("")).Match(regexp.MustCompile(`^b`)).Validate(func(string) error { return nil }),
+		field.Int64("n").Range(0, 9).Validate(func(int64) error { return nil }),
+		field.Int64("cents").GoType(lwCents(0)).Range(0, 9).Validate(func(int64) error { return nil }),
+	}
+}
+
+func TestLowerChecksConvertOnlyWhenTypesDiffer(t *testing.T) {
+	e := mustLower(t, Config{}, LwConv{}).entity("LwConv")
+	for _, want := range []string{
+		"x := v.(string)", "re0.MatchString(x)", "v0(x)",
+		"x := v.(gen.lwSlug)", "re1.MatchString(string(x))", "v1(string(x))",
+		"x := v.(int64)", "if x < 0 {", "if x > 9 {", "v2(x)",
+		"x := v.(gen.lwCents)", "if x < gen.lwCents(0) {", "if x > gen.lwCents(9) {", "v3(int64(x))",
+	} {
+		if !strings.Contains(e.CheckCode, want) {
+			t.Errorf("CheckCode lacks %q:\n%s", want, e.CheckCode)
+		}
+	}
+	if strings.Contains(e.CheckCode, "int64(x)") && strings.Count(e.CheckCode, "int64(x)") != 1 {
+		t.Errorf("a redundant int64(x):\n%s", e.CheckCode)
+	}
+	if strings.Count(e.CheckCode, "string(x)") != 2 {
+		t.Errorf("want string(x) twice (the GoType field only):\n%s", e.CheckCode)
 	}
 }

@@ -112,10 +112,13 @@ func ticketDesc() velox.Desc[Ticket] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Ticket) String() string {
+func (x Ticket) String() string {
 	var p7 any
 	if x.ParentID != nil {
 		p7 = *x.ParentID
 	}
 	return fmt.Sprintf("Ticket(ID=%v, CreatedBy=%v, OrgID=%v, Owner=%v, Title=%v, Done=%v, InvoiceID=%v, ParentID=%v)", x.ID, x.CreatedBy, x.OrgID, x.Owner, x.Title, x.Done, x.InvoiceID, p7)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Ticket) GoString() string { return x.String() }

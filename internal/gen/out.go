@@ -44,7 +44,7 @@ type OutEntity struct {
 	NeedsSch bool
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
-	CheckSetup string // statements run once inside Desc before the literal (regexps, validator funcs), "" when none
+	CheckSetup string // statements run once inside Desc before the literal (regexps, validator funcs, descriptor reads), "" when none
 }
 
 // OutField is a column of an entity.

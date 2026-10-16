@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -382,6 +383,69 @@ func TestStringAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"posts":[`) || strings.Contains(string(b), `"groups"`) {
 		t.Errorf("json with posts loaded: %s", b)
+	}
+}
+
+// A Sensitive field is not printed by any verb, for an entity value (an
+// element of the []E that All returns) as for a pointer, alone, in a slice or
+// inside another value.
+func TestSensitiveNeverPrints(t *testing.T) {
+	db := open(t)
+	seed(t, db)
+	us, err := db.Query[gen.User]().OrderBy(gen.Users.ID.Asc()).Limit(10).All(ctx)
+	if err != nil || len(us) != 3 {
+		t.Fatalf("%d users, %v", len(us), err)
+	}
+	if us[0].PasswordHash != "s3cret" {
+		t.Fatalf("password not read: %+v", us[0])
+	}
+	u := us[0] // a value, as All returns it
+	for what, s := range map[string]string{
+		"%v value":        fmt.Sprintf("%v", u),
+		"%+v value":       fmt.Sprintf("%+v", u),
+		"%#v value":       fmt.Sprintf("%#v", u),
+		"%s value":        fmt.Sprintf("%s", u),
+		"Sprint value":    fmt.Sprint(u),
+		"%v pointer":      fmt.Sprintf("%v", &u),
+		"%+v pointer":     fmt.Sprintf("%+v", &u),
+		"%#v pointer":     fmt.Sprintf("%#v", &u),
+		"%v slice":        fmt.Sprintf("%v", us),
+		"%+v slice":       fmt.Sprintf("%+v", us),
+		"%#v slice":       fmt.Sprintf("%#v", us),
+		"%v element":      fmt.Sprintf("%v", us[1]),
+		"%+v in a struct": fmt.Sprintf("%+v", struct{ U gen.User }{u}),
+		"%v in a map":     fmt.Sprintf("%v", map[string]gen.User{"a": u}),
+	} {
+		if strings.Contains(s, "s3cret") || strings.Contains(s, "PasswordHash") {
+			t.Errorf("%s prints the sensitive field: %s", what, s)
+		}
+		if !strings.Contains(s, "ada") && !strings.Contains(s, "bob") {
+			t.Errorf("%s does not print the entity: %s", what, s)
+		}
+	}
+}
+
+// A column default does no descriptor read per call: the read happens once, in
+// Desc (Ruling 5). Boxing a time.Time is the one allocation a call may make;
+// the read of mixin.Time's descriptor used to cost about sixteen more.
+func TestColumnDefaultsDoNotReadTheDescriptorPerCall(t *testing.T) {
+	var sink any
+	n := 0
+	for _, c := range gen.UserDesc().Columns {
+		for kind, f := range map[string]func() any{"DefaultFunc": c.DefaultFunc, "UpdateDefault": c.UpdateDefault} {
+			if f == nil {
+				continue
+			}
+			n++
+			if allocs := testing.AllocsPerRun(100, func() { sink = f() }); allocs > 1 {
+				t.Errorf("%s of %s: %v allocations per call", kind, c.Name, allocs)
+			}
+		}
+	}
+	_ = sink
+	// mixin.Time: created_at's DefaultFunc, updated_at's DefaultFunc and UpdateDefault.
+	if n < 3 {
+		t.Errorf("only %d defaults found", n)
 	}
 }
 

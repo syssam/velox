@@ -77,6 +77,9 @@ func itemDesc() velox.Desc[Item] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Item) String() string {
+func (x Item) String() string {
 	return fmt.Sprintf("Item(ID=%v, InvoiceID=%v, SKU=%v, Qty=%v)", x.ID, x.InvoiceID, x.SKU, x.Qty)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Item) GoString() string { return x.String() }

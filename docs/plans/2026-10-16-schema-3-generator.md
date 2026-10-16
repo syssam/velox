@@ -78,6 +78,7 @@ Plans 1 and 2 (merged) produced the `Graph` (`internal/gen/graph.go`) and the ru
    - A literal `Default` on a bool, number, string or enum field is written as a typed Go literal of the field's element type: `int64(5)`, `"x"`, `true`, `UserRoleViewer`, `MyType("x")` for a `GoType`.
    - Every other default is read on first use from the schema package's descriptor and wrapped in `func() any`: `DefaultFunc`, `UpdateDefault`, a time or uuid `Default` function, and a literal `Default` of a bytes, JSON or other field.
    - The descriptor expression is `<sch>.User{}.Fields()[i].Descriptor()`, or `<sch>.User{}.Mixin()[m].Fields()[i].Descriptor()` for a mixed-in field, by `Field.Position`.
+   - Each descriptor read happens once, in the setup block at the top of the entity's `Desc` function (which runs once, on first use): `d1 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)`, and the column's `DefaultFunc` is `func() any { return d1() }`. A call per row does no descriptor read. (Amended after the whole-branch review: the first version read the descriptor on every call, about 16 allocations per insert for `mixin.Time`.) The decoding of a bytes or JSON default stays per call, so that no two rows share a slice or a map.
    - `gen` therefore imports the schema package, under the alias `sch`, only when some entity needs it.
 6. **Validators are code in the `Check` function.**
    - The built-in checks (`NotEmpty`, `MinLen`, `MaxLen`, `Match`, `Range`, `Min`, `Max`, `Positive`, `Negative`, `NonNegative`) and an enum's membership check are written inline.
@@ -96,8 +97,10 @@ Plans 1 and 2 (merged) produced the `Graph` (`internal/gen/graph.go`) and the ru
      - `is not one of the values` (enum)
 
      velox wraps each as `*ValidationError`.
-7. **Reserved Go names.** A field or edge whose Go name is `VeloxMeta`, `String`, `Policy` or `Hooks` is an error, because those are methods of the entity. So is a handles variable (`plural(Name)`) that collides with an entity, a join entity or an enum type.
-8. **`String()`.** Each entity gets `func (x *E) String() string`. It prints `E(Field=value, …)` with every field except `Sensitive` ones and edges, using `%v` for the values. A `Sensitive` field gets the JSON tag `json:"-"`.
+7. **Reserved Go names.** A field or edge whose Go name is `VeloxMeta`, `String`, `GoString`, `Policy` or `Hooks` is an error, because those are methods of the entity. So is a handles variable (`plural(Name)`) that collides with an entity, a join entity or an enum type.
+8. **`String()`.** Each entity gets `func (x E) String() string`, with a value receiver, and `func (x E) GoString() string { return x.String() }`. It prints `E(Field=value, …)` with every field except `Sensitive` ones and edges, using `%v` for the values. A `Sensitive` field gets the JSON tag `json:"-"`.
+   - The receiver is a value because `All()` returns `[]E`: with a pointer receiver, `%v`, `%+v` or `%v` of a slice of values would print the Sensitive fields through the default struct formatting. `GoString` closes `%#v` the same way.
+   - Amended after the whole-branch review.
 9. **JSON tags.**
    - A field gets `json:"<name>,omitempty"`.
    - An edge gets `json:"<name>,omitzero"`, so an edge that was not loaded is left out (runtime `One`/`Many` docs).
@@ -106,7 +109,7 @@ Plans 1 and 2 (merged) produced the `Graph` (`internal/gen/graph.go`) and the ru
     - `velox.go` records the model's SHA-256 in a comment (`// Model: sha256:<hex>`) and references `velox.GeneratedCodeIsVersion3`.
     - The spec's "compile-time check that the generated package matches the schema" cannot be done at compile time across packages. `-check`, which regenerates in memory and compares, is that check in CI.
 11. **Method detection.**
-    - velox-gen parses every `.go` file in the output directory that is not a test and does not start with the header. A method `Policy` or `Hooks` with receiver `*E` or `E`, for a generated entity `E`, binds that method.
+    - velox-gen parses every `.go` file in the output directory that is not a test and does not start with the header. A method `Policy` or `Hooks` with receiver `*E`, for a generated entity `E`, binds that method. A value receiver `E` is an error, `<file>: E.Policy must have a pointer receiver (func (*E) Policy())`, because the binding calls the method on a nil `*E` (amended after the whole-branch review).
     - A non-test file that declares a type with an entity's name is an error (the user redeclared a generated type).
 12. **`GeneratedCodeIsVersion3`** is added to the runtime beside `GeneratedCodeIsVersion2`. Plan 4 removes `2` with the old scanner.
 
@@ -398,7 +401,7 @@ func Generate(g *Graph, cfg Config) ([]File, error)
      - `Relations`;
      - `Addr` and `RelAddr` as `switch`es;
      - `Check: func(col int, v any) error { switch col { <CheckCode> }; return nil }` when `CheckCode != ""`.
-10. `func (x *E) String() string`, per Ruling 8.
+10. `func (x E) String() string` and `func (x E) GoString() string`, per Ruling 8.
 
 `velox.go` holds:
 - the header and package;
@@ -490,7 +493,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```go
 // Methods reads the non-test .go files in dir that do not start with
 // velox-gen's header, and reports which of entities have a Policy or Hooks
-// method (receiver E or *E). A file that declares a type named like an
+// method (receiver *E; a value receiver is an error). A file that declares a type named like an
 // entity is an error (Ruling 11). A missing dir is no files.
 func Methods(dir string, entities []string) (map[string]Bound, error)
 ```

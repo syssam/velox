@@ -19,7 +19,7 @@ import (
 
 // reserved are the Go names of the methods an entity has, which no field or
 // edge may take (Ruling 7).
-var reserved = map[string]bool{"VeloxMeta": true, "String": true, "Policy": true, "Hooks": true}
+var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": true, "Policy": true, "Hooks": true}
 
 // Lower maps g to the model Render writes: Go names and types, handle kinds,
 // enums, the join entities of many-to-many relations, and the code of
@@ -93,6 +93,7 @@ type entState struct {
 	sch     bool              // the code reads the schema package
 	regexps int
 	valids  int
+	reads   int // descriptor reads hoisted into setup
 	setup   []string
 	cases   []string
 }
@@ -151,10 +152,15 @@ func (l *lowerer) entities() {
 		}
 		// A field's Unique is a single-column unique index, after the
 		// declared ones, which the runtime's uniqueness rules read. The ID is
-		// unique by being the primary key.
+		// unique by being the primary key. A declared unique index on the
+		// field alone already is that index, and is not repeated.
 		for i, f := range e.Fields {
-			if f.Unique && i != 0 {
-				s.out.Indexes = append(s.out.Indexes, OutIndex{Columns: []int{i}, Unique: true})
+			if !f.Unique || i == 0 {
+				continue
+			}
+			ix := OutIndex{Columns: []int{i}, Unique: true}
+			if !slices.ContainsFunc(s.out.Indexes, func(d OutIndex) bool { return d.Unique && slices.Equal(d.Columns, ix.Columns) }) {
+				s.out.Indexes = append(s.out.Indexes, ix)
 			}
 		}
 		l.state[e.Name] = s
@@ -341,12 +347,21 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 }
 
 // defaults writes the code of f's Default, DefaultFunc and UpdateDefault
-// (Ruling 5).
+// (Ruling 5). Each read of the descriptor is a statement of the setup block,
+// which runs once, so the closure of a column does no descriptor read per row.
 func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	elem := o.ElemType
-	// call reads a function from the descriptor and calls it.
+	// hoist adds the statement that reads expr once and returns its variable.
+	hoist := func(expr string) string {
+		name := "d" + strconv.Itoa(s.reads)
+		s.reads++
+		s.setup = append(s.setup, name+" := "+expr)
+		return name
+	}
+	// call reads a function from the descriptor once and calls it per row.
 	call := func(member string) string {
-		return fmt.Sprintf("func() any { return %s.%s.(func() %s)() }", s.descriptor(e, f), member, elem)
+		d := hoist(fmt.Sprintf("%s.%s.(func() %s)", s.descriptor(e, f), member, elem))
+		return fmt.Sprintf("func() any { return %s() }", d)
 	}
 	if len(f.Default) > 0 {
 		lit, ok := s.literal(f, elem, where)
@@ -359,8 +374,9 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 			// Decoded on each call, so that no two rows share a slice or a map.
 			s.use("encoding/json", "json", where)
 			o.DefaultFuncCode = fmt.Sprintf("func() any { var v %s; _ = json.Unmarshal([]byte(%s), &v); return v }", elem, strconv.Quote(compact(f.Default)))
-		default:
-			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s.Default }", s.descriptor(e, f))
+		case !f.DefaultFunc: // else DefaultFunc below replaces it, and nothing reads this
+			d := hoist(s.descriptor(e, f) + ".Default")
+			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s }", d)
 		}
 	}
 	if f.DefaultFunc {
@@ -495,6 +511,13 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 		line(1, "}")
 		s.useStd("errors", where)
 	}
+	// conv is x as the type t, when its type is another.
+	conv := func(t string) string {
+		if o.ElemType == t {
+			return "x"
+		}
+		return t + "(x)"
+	}
 	for _, c := range f.Checks {
 		args := make([]string, len(c.Args))
 		for i, a := range c.Args {
@@ -509,6 +532,9 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 			if !fits(f.Type, args[i]) {
 				s.fail(where, "check %s: %s is not a %s", c.Kind, args[i], f.Type)
 				return "", "", false
+			}
+			if o.ElemType == f.Type {
+				return args[i], args[i], true // an untyped constant is already of the type
 			}
 			return o.ElemType + "(" + args[i] + ")", args[i], true
 		}
@@ -554,7 +580,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 			}
 			s.useStd("regexp", where)
 			s.setup = append(s.setup, fmt.Sprintf("re%d := regexp.MustCompile(%s)", s.regexps, strconv.Quote(pat)))
-			line(1, "if !re%d.MatchString(string(x)) {", s.regexps)
+			line(1, "if !re%d.MatchString(%s) {", s.regexps, conv("string"))
 			s.regexps++
 			fail("does not match " + pat)
 			line(1, "}")
@@ -575,7 +601,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 			break
 		}
 		s.setup = append(s.setup, fmt.Sprintf("v%d := %s.Validators[%d].(func(%s) error)", s.valids, s.descriptor(e, f), j, v))
-		line(1, "if err := v%d(%s(x)); err != nil {", s.valids, v)
+		line(1, "if err := v%d(%s); err != nil {", s.valids, conv(v))
 		line(2, "return err")
 		line(1, "}")
 		s.valids++

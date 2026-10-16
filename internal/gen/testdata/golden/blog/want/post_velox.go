@@ -112,7 +112,7 @@ func postDesc() velox.Desc[Post] {
 				}
 			case 3:
 				x := v.(string)
-				if err := v0(string(x)); err != nil {
+				if err := v0(x); err != nil {
 					return err
 				}
 			case 4:
@@ -124,7 +124,7 @@ func postDesc() velox.Desc[Post] {
 				}
 			case 7:
 				x := v.(int)
-				if x < int(0) {
+				if x < 0 {
 					return errors.New("is less than 0")
 				}
 			}
@@ -134,7 +134,7 @@ func postDesc() velox.Desc[Post] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Post) String() string {
+func (x Post) String() string {
 	var p5 any
 	if x.PublishedAt != nil {
 		p5 = *x.PublishedAt
@@ -145,3 +145,6 @@ func (x *Post) String() string {
 	}
 	return fmt.Sprintf("Post(ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Views=%v)", x.ID, x.AuthorID, x.Title, x.Slug, x.Status, p5, x.Tags, p7)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Post) GoString() string { return x.String() }

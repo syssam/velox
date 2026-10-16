@@ -52,6 +52,9 @@ func userGroupDesc() velox.Desc[UserGroup] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *UserGroup) String() string {
+func (x UserGroup) String() string {
 	return fmt.Sprintf("UserGroup(UserID=%v, GroupID=%v)", x.UserID, x.GroupID)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x UserGroup) GoString() string { return x.String() }

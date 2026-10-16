@@ -317,12 +317,15 @@ func ints(is []int) string {
 	return "[]int{" + strings.Join(s, ", ") + "}"
 }
 
-// entityString writes e's String method: its fields except the sensitive
-// ones, with a pointer field's value, or nil.
+// entityString writes e's String and GoString methods: String prints its
+// fields except the sensitive ones, with a pointer field's value, or nil, and
+// GoString (for %#v) is the same text. Both have a value receiver, so that an
+// entity value, such as an element of the []E that All returns, prints without
+// its sensitive fields under %v, %+v and %#v as well as a pointer.
 func entityString(w *writer, e *OutEntity) {
 	var verbs, args []string
 	w.p("// String returns the entity's fields except its sensitive ones.")
-	w.p("func (x *%s) String() string {", e.Name)
+	w.p("func (x %s) String() string {", e.Name)
 	for i, f := range e.Fields {
 		if f.Sensitive {
 			continue
@@ -345,4 +348,7 @@ func entityString(w *writer, e *OutEntity) {
 	}
 	w.p("return fmt.Sprintf(%s)", call)
 	w.p("}")
+	w.p("")
+	w.p("// GoString is String, so that %%#v does not print the sensitive fields either.")
+	w.p("func (x %s) GoString() string { return x.String() }", e.Name)
 }

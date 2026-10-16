@@ -78,10 +78,13 @@ func categoryDesc() velox.Desc[Category] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Category) String() string {
+func (x Category) String() string {
 	var p2 any
 	if x.CategoryChildren != nil {
 		p2 = *x.CategoryChildren
 	}
 	return fmt.Sprintf("Category(ID=%v, Title=%v, CategoryChildren=%v)", x.ID, x.Title, p2)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Category) GoString() string { return x.String() }

@@ -65,6 +65,9 @@ func lineDesc() velox.Desc[Line] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Line) String() string {
+func (x Line) String() string {
 	return fmt.Sprintf("Line(ID=%v, SampleID=%v)", x.ID, x.SampleID)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Line) GoString() string { return x.String() }

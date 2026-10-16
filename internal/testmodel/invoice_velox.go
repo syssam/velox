@@ -60,14 +60,15 @@ var invoiceMeta velox.MetaOnce[Invoice]
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDesc) }
 
 func invoiceDesc() velox.Desc[Invoice] {
+	d0 := (&sch.Invoice{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)
+	d1 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)
+	d2 := (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)
 	return velox.Desc[Invoice]{
 		Table: "invoices",
 		Columns: []velox.ColumnDesc{
 			{Field: "ID", Name: "id"},
-			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return (&sch.Invoice{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)() }, Immutable: true},
-			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().Default.(func() time.Time)() }, UpdateDefault: func() any {
-				return (&sch.Invoice{}).Mixin()[0].Fields()[1].Descriptor().UpdateDefault.(func() time.Time)()
-			}},
+			{Field: "CreatedAt", Name: "created_at", DefaultFunc: func() any { return d0() }, Immutable: true},
+			{Field: "UpdatedAt", Name: "updated_at", DefaultFunc: func() any { return d1() }, UpdateDefault: func() any { return d2() }},
 			{Field: "OrgID", Name: "org_id"},
 			{Field: "Number", Name: "number"},
 			{Field: "Total", Name: "total"},
@@ -120,7 +121,7 @@ func invoiceDesc() velox.Desc[Invoice] {
 }
 
 // String returns the entity's fields except its sensitive ones.
-func (x *Invoice) String() string {
+func (x Invoice) String() string {
 	var p7 any
 	if x.PaidAt != nil {
 		p7 = *x.PaidAt
@@ -131,3 +132,6 @@ func (x *Invoice) String() string {
 	}
 	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, p7, p8, x.Data)
 }
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (x Invoice) GoString() string { return x.String() }
