@@ -44,7 +44,7 @@ and works on a `*velox.Mutation[Task]`.
 - **Update hook.** `renamed` reads the new title with `m.Value(Tasks.Title)`
   and adds the slug with `m.Set(Tasks.Slug.Set(…))`. It sees an `Update` and a
   `Save`, and `Save` writes back every value the hook set.
-- **Audit row in the same transaction.** After `next` succeeds, `renamed`
+- **Audit row on the write's DB.** After `next` succeeds, `renamed`
   inserts an `Audit` row with `m.DB().Insert(&audit).Exec(ctx)`. `m.DB()` is
   the `*velox.DB` the write runs on: inside `db.Tx` it is the transaction, so
   the row commits or rolls back with the update. Outside a transaction it is

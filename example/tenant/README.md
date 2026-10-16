@@ -10,11 +10,11 @@ go run ./tenant
 ```
 
 ```go
-ctx = velox.WithTenant(ctx, acme)    // acme is an int64: the tenant column's exact Go type
+ctx = velox.WithTenant(ctx, acme)      // acme is an int64: the tenant column's exact Go type
 
-db.Insert(&p).Exec(ctx)              // fills p.OrgID
-db.Query[gen.Project]().Count(ctx) // ... WHERE "org_id" = ?
-db.Update[gen.Project]()...Exec(ctx) // changes only this tenant's rows
+db.Insert(&p).Exec(ctx)                // fills p.OrgID
+db.Query[gen.Project]().Count(ctx)     // ... WHERE "org_id" = ?
+db.Update[gen.Project]()...Exec(ctx)   // changes only this tenant's rows
 
 db.Insert(&p).OnConflict(P.OrgID, P.Name).Update(P.Status).Exec(ctx) // a tenant-safe upsert
 

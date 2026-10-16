@@ -37,7 +37,8 @@ func (Task) Fields() []schema.Field {
 }
 
 // Audit is a row of the audit trail: who changed what. Task's update hook
-// inserts one in the same transaction as the update.
+// inserts one on the write's DB: inside db.Tx it commits or rolls back with
+// the update.
 type Audit struct{ schema.Schema }
 
 // Fields returns the columns after the ID.

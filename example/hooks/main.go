@@ -1,8 +1,8 @@
 // Command hooks shows entity hooks, the Hooks method of gen.Task: an insert
 // hook that validates and derives a field, a generic hook that any entity
 // lists, an update hook that works through a Mutation and writes an audit row
-// in the write's own transaction, a delete hook that narrows, On, Save storing
-// what hooks set, and IsDryRun.
+// on the write's DB (inside db.Tx, it commits or rolls back with the write), a
+// delete hook that narrows, On, Save storing what hooks set, and IsDryRun.
 package main
 
 import (

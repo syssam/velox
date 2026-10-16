@@ -10,7 +10,7 @@ a README, and a golden test of its output.
 | [relations](relations) | One-to-many and belongs-to, declared with `edge.To` and `edge.From`; `With` eager loading, nested and filtered; `Has`/`HasWhere`; keyset pagination with `After` | `go run ./relations` |
 | [tenant](tenant) | `WithTenant` scoping of reads, writes and inserts; `ErrNoTenant`, `ErrTenantMismatch`, `ErrTenantImmutable`; `AllTenants` with a reason; a tenant-safe upsert | `go run ./tenant` |
 | [policy](policy) | `Policy[E]` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `SkipPolicy`; `SQL(ctx)` | `go run ./policy` |
-| [hooks](hooks) | The typed `Hooks()` of an entity: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation` and writes an audit row in the write's own transaction (`m.DB()`), a delete hook narrowing with `Where`, `On`, a generic hook any entity can list, `Save` writing back, `IsDryRun` | `go run ./hooks` |
+| [hooks](hooks) | The typed `Hooks()` of an entity: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation` and writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), a delete hook narrowing with `Where`, `On`, a generic hook any entity can list, `Save` writing back, `IsDryRun` | `go run ./hooks` |
 | [tx](tx) | `db.Tx` commit and rollback, a nested `Tx` savepoint, `ConstraintError`, `RetrySerializable`, `Timeout` and `WithDeadlines` | `go run ./tx` |
 | [otel](otel) | Tracing and metrics with `contrib/otel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
 | [tour](tour) | One walkthrough that touches everything once | `go run ./tour` |
@@ -47,7 +47,7 @@ After changing a schema, run from `example/`, for the example `<x>`:
 go tool velox-gen -out ./<x>/gen ./<x>/schema
 ```
 
-For the tour, `<x>` is `tour`. `go tool velox-gen -check -out ./<x>/gen ./<x>/schema`
+`go tool velox-gen -check -out ./<x>/gen ./<x>/schema`
 writes nothing and fails when a generated file is out of date, and
 `go tool velox-gen verify -out ./<x>/gen ./<x>/schema` builds every entity's
 schema and reports its mistakes. CI runs both for every example, with
