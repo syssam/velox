@@ -11,6 +11,13 @@ package velox
 // change. (Version 2: relations in Shape and Rel handles.)
 const GeneratedCodeIsVersion2 = true
 
+// GeneratedCodeIsVersion3 is referenced by every file velox-gen writes from a
+// schema package, so that generated code and this library fail to compile
+// together when they disagree. It is replaced by GeneratedCodeIsVersion4 when
+// generated code must change. (Version 3: Desc literals and switch-based Addr
+// and RelAddr, generated from a schema package.)
+const GeneratedCodeIsVersion3 = true
+
 // Lazy is the constraint of the type parameter that every method of a
 // generic velox type carries, and that callers never write. A generic method
 // is compiled only where it is called; an ordinary method of a generic type is

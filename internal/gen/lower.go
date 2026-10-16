@@ -124,6 +124,13 @@ func (l *lowerer) entities() {
 			Name: e.Name, Label: e.Label, Handles: plural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
 			Tenant: -1, Bound: l.cfg.Bound[e.Name],
 		}
+		if raw, ok := e.Annotations["Comment"]; ok {
+			var c struct{ Text string }
+			if err := json.Unmarshal(raw, &c); err != nil {
+				s.fail("", "its Comment annotation is not a comment: %v", err)
+			}
+			s.out.Comment = c.Text
+		}
 		for i, f := range e.Fields {
 			s.out.Fields = append(s.out.Fields, s.field(e, i, f))
 			if f.Name == e.Tenant && e.Tenant != "" {

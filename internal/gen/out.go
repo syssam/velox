@@ -30,7 +30,8 @@ type OutEntity struct {
 	PrimaryKey                               []int
 	Tenant                                   int // -1 none
 	Indexes                                  []OutIndex
-	Join                                     bool // a many-to-many join entity
+	Join                                     bool   // a many-to-many join entity
+	Comment                                  string // the Comment annotation's text, "" when none
 	Bound                                    Bound
 
 	// Imports are the import paths this entity's file needs besides velox and
