@@ -1,26 +1,55 @@
-// Command velox-gen writes the typed column handles and the scan plan of every
-// velox entity: one file, <entity>_velox.go, beside each struct that declares
-// func (x *T) Schema(s *velox.Schema).
+// Command velox-gen generates the Go code of velox entities. It has two modes,
+// chosen by its argument.
+//
+// The new mode reads a schema package, a package whose structs embed
+// schema.Schema, and writes the gen package: one file, <entity>_velox.go,
+// for every entity and for every join entity of a many-to-many relation, and
+// velox.go, which holds the enums and the hash of the model.
+//
+// The old mode scans the structs that declare func (x *T) Schema(s
+// *velox.Schema) and writes the typed column handles beside each one. It runs
+// when the argument is not one package that declares schemas, and it is removed
+// in schema plan 4.
 //
 // Install it as a tool of your module and run it from the module root:
 //
 //	go get -tool github.com/syssam/velox2/cmd/velox-gen
-//	go tool velox-gen ./...
+//	go tool velox-gen ./schema
 //
 // Usage:
 //
-//	velox-gen [-check] [-ordered=path.Type,...] [-number=path.Type,...] [packages]
-//	velox-gen verify [packages]
+//	velox-gen [-out dir] [-package name] [-check] [package]
+//	velox-gen verify -out dir [package]
 //	velox-gen describe [-json] [package]
 //
-// velox-gen writes nothing when any entity has a problem. -check writes
-// nothing and exits 1 when a generated file is out of date; CI runs it.
-// verify builds every entity's metadata and reports mistakes in Schema and
-// Mixin methods, which velox-gen itself cannot see because it never runs your
-// code. verify builds its program in a temporary .velox-verify-* directory of
-// your module and removes it, but a killed process leaves it behind; ignore
-// .velox-verify-*/ in git. describe prints the entities, columns and
-// relations that the schema package (default ./schema) declares.
+//	velox-gen [-check] [-ordered=path.Type,...] [-number=path.Type,...] [patterns]
+//	velox-gen verify [patterns]
+//
+// The first three lines are the new mode. The package defaults to ./schema,
+// -out to ./gen and -package to the base name of -out. velox-gen writes
+// nothing when any entity has a problem. -check writes nothing and exits 1
+// when a generated file is out of date, missing or left over; CI runs it, and
+// it is the check that the generated package matches the schema. A run
+// rewrites the files that changed, deletes the generated files that no entity
+// produces any more, and prints each path it wrote or deleted. It writes,
+// rewrites and deletes only files that start with its header "Code generated
+// by velox-gen. DO NOT EDIT."; a file of yours at a path it would write is an
+// error. The files you add to the output directory stay: a method Policy or
+// Hooks on a generated entity E, with receiver E or *E, in a file of yours
+// there, is bound into E's metadata. Your own file must not declare a type
+// named like a generated one.
+//
+// verify -out builds a program in a temporary .velox-verify-* directory of
+// your module, imports the generated package and reports, for every entity,
+// the mistakes that velox.CheckEntity finds. It removes the directory, but a
+// killed process leaves it behind; ignore .velox-verify-*/ in git.
+//
+// describe prints the entities, columns and relations that the schema package
+// (default ./schema) declares.
+//
+// The old mode (the last two lines) writes nothing when any entity has a
+// problem; -check, verify and the flags -ordered and -number are as before.
+// -out and -package are errors in it.
 package main
 
 import (
@@ -29,6 +58,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -48,13 +78,41 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 	}
 	fs := flag.NewFlagSet("velox-gen", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	fs.Usage = usage(fs)
 	checkOnly := fs.Bool("check", false, "write nothing; exit 1 when a generated file is out of date")
 	ordered := fs.String("ordered", "", "comma-separated types, as import/path.Name, whose handles are ordered")
 	number := fs.String("number", "", "comma-separated types, as import/path.Name, whose handles are numbers")
+	outDir := fs.String("out", "./gen", "the directory of the generated package, for a schema package")
+	pkgName := fs.String("package", "", "the generated package's name, for a schema package (default: the base name of -out)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	patterns := fs.Args()
+	var set, rerun []string
+	fs.Visit(func(f *flag.Flag) {
+		set = append(set, f.Name)
+		if f.Name == "out" || f.Name == "package" {
+			rerun = append(rerun, "-"+f.Name, f.Value.String())
+		}
+	})
+	pattern, isSchema, err := schemaPackage(dir, patterns, env)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
+		return 1
+	}
+	if isSchema {
+		f := genFlags{out: *outDir, pkg: *pkgName, check: *checkOnly, rerun: append(rerun, patterns...)}
+		if verify {
+			return runGenerateVerify(f, pattern, dir, env, stdout, stderr)
+		}
+		return runGenerate(f, pattern, dir, env, stdout, stderr)
+	}
+	for _, name := range []string{"out", "package"} {
+		if slices.Contains(set, name) {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: -%s needs a schema package\n", name)
+			return 1
+		}
+	}
 	if len(patterns) == 0 {
 		patterns = []string{"."}
 	}

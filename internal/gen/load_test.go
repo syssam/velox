@@ -2,8 +2,10 @@ package gen
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -96,6 +98,33 @@ func TestLoadNoSchemas(t *testing.T) {
 	_, err := Load(dir, "./schema", offline())
 	if err == nil || !strings.Contains(err.Error(), "no schemas in example.com/tmp/schema") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestInspect(t *testing.T) {
+	dir := module(t, map[string]string{
+		"schema/user.go":  userSchema,
+		"plain/doc.go":    "package plain\n",
+		"plain/sub/b.go":  "package sub\n",
+		"unexp/schema.go": "package unexp\n\nimport \"github.com/syssam/velox2/schema\"\n\ntype user struct{ schema.Schema }\n",
+	})
+	path, schemas, err := Inspect(dir, "./schema", offline())
+	if err != nil || path != "example.com/tmp/schema" || !slices.Equal(schemas, []string{"User"}) {
+		t.Errorf("schema: %q %v %v", path, schemas, err)
+	}
+	path, schemas, err = Inspect(dir, "./plain", offline())
+	if err != nil || path != "example.com/tmp/plain" || len(schemas) != 0 {
+		t.Errorf("plain: %q %v %v", path, schemas, err)
+	}
+	// Not a package: the caller may try another mode.
+	for _, pattern := range []string{"./nothing", "./..."} {
+		if _, _, err := Inspect(dir, pattern, offline()); !errors.Is(err, ErrNotPackage) {
+			t.Errorf("%s: %v does not wrap ErrNotPackage", pattern, err)
+		}
+	}
+	// A package that cannot be read is not "not a package".
+	if _, _, err := Inspect(dir, "./unexp", offline()); err == nil || errors.Is(err, ErrNotPackage) || !strings.Contains(err.Error(), "unexported") {
+		t.Errorf("unexp: %v", err)
 	}
 }
 

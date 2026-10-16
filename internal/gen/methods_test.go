@@ -1,0 +1,80 @@
+package gen
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func methodsDir(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestMethodsFindsPointerAndValueReceivers(t *testing.T) {
+	dir := methodsDir(t, map[string]string{
+		"user_policy.go": "package gen\n\nfunc (*User) Policy() int { return 0 }\n",
+		"post.go":        "package gen\n\nfunc (p Post) Hooks() int { return 0 }\n\nfunc (p *Post) Other() {}\n",
+		"both.go":        "package gen\n\nfunc (t *Tag) Policy() {}\nfunc (t Tag) Hooks() {}\n",
+		"other.go":       "package gen\n\nfunc (*Comment) Policies() {}\nfunc Policy() {}\nfunc (*Stranger) Policy() {}\n",
+	})
+	got, err := Methods(dir, []string{"User", "Post", "Tag", "Comment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]Bound{"User": {Policy: true}, "Post": {Hooks: true}, "Tag": {Policy: true, Hooks: true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestMethodsIgnoresTestAndGeneratedFiles(t *testing.T) {
+	dir := methodsDir(t, map[string]string{
+		"user_test.go":  "package gen\n\nfunc (*User) Policy() int { return 0 }\n\ntype Post struct{}\n",
+		"user_velox.go": header + "package gen\n\ntype User struct{}\n\nfunc (*User) Hooks() {}\n",
+		"notes.txt":     "func (*User) Policy()",
+	})
+	if err := os.Mkdir(filepath.Join(dir, "dir.go"), 0o755); err != nil { // a directory is not a file
+		t.Fatal(err)
+	}
+	got, err := Methods(dir, []string{"User", "Post"})
+	if err != nil || len(got) != 0 {
+		t.Errorf("got %v, %v; want none", got, err)
+	}
+}
+
+func TestMethodsRefusesARedeclaredType(t *testing.T) {
+	for name, src := range map[string]string{
+		"struct":  "package gen\n\ntype User struct{}\n",
+		"grouped": "package gen\n\ntype (\n\tOther int\n\tUser  string\n)\n",
+		"alias":   "package gen\n\ntype User = int\n",
+	} {
+		dir := methodsDir(t, map[string]string{"mine.go": src})
+		_, err := Methods(dir, []string{"User"})
+		if err == nil || !strings.Contains(err.Error(), "mine.go") || !strings.Contains(err.Error(), "type User") {
+			t.Errorf("%s: err = %v; want one naming mine.go and type User", name, err)
+		}
+	}
+}
+
+func TestMethodsMissingDirIsNoFiles(t *testing.T) {
+	got, err := Methods(filepath.Join(t.TempDir(), "absent"), []string{"User"})
+	if err != nil || len(got) != 0 {
+		t.Errorf("got %v, %v", got, err)
+	}
+}
+
+func TestMethodsReportsASyntaxError(t *testing.T) {
+	dir := methodsDir(t, map[string]string{"bad.go": "package gen\n\nfunc (\n"})
+	if _, err := Methods(dir, []string{"User"}); err == nil || !strings.Contains(err.Error(), "bad.go") {
+		t.Errorf("err = %v", err)
+	}
+}

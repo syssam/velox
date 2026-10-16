@@ -29,23 +29,59 @@ type listed struct {
 	Error      *struct{ Err string }
 }
 
-// Load loads the schema package that pattern names, from the module that
-// holds dir, by compiling and running a program that marshals its schemas.
-// env is the environment of the go commands it runs; nil means os.Environ().
-func Load(dir, pattern string, env []string) (*load.Model, error) {
+// ErrNotPackage is wrapped by the error of Inspect and Load when the pattern
+// does not name exactly one package of a module, as opposed to a package that
+// cannot be read.
+var ErrNotPackage = errors.New("not a package")
+
+// notPackage is an error that Is ErrNotPackage and keeps its own message.
+type notPackage struct{ error }
+
+func (e notPackage) Unwrap() error      { return e.error }
+func (notPackage) Is(target error) bool { return target == ErrNotPackage }
+
+// Inspect runs go list for pattern, in the module that holds dir, and reports
+// the import path of the one package it names and the schemas the package
+// declares: the exported structs that embed schema.Schema, sorted. It does not
+// run any of the package's code. env is the environment of the go command; nil
+// means os.Environ().
+//
+// An error that wraps ErrNotPackage says that pattern names no package, more
+// than one, or one outside a module. A package that has no schemas is not an
+// error: schemas is empty.
+func Inspect(dir, pattern string, env []string) (importPath string, schemas []string, err error) {
+	pkg, names, err := inspect(dir, pattern, env)
+	if err != nil {
+		return "", nil, err
+	}
+	return pkg.ImportPath, names, nil
+}
+
+func inspect(dir, pattern string, env []string) (*listed, []string, error) {
 	pkg, err := list(dir, pattern, env)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	files := make(map[string][]byte, len(pkg.GoFiles))
 	for _, name := range pkg.GoFiles {
 		src, err := os.ReadFile(filepath.Join(pkg.Dir, name))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		files[name] = src
 	}
 	names, err := discover(files)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pkg, names, nil
+}
+
+// Load loads the schema package that pattern names, from the module that
+// holds dir, by compiling and running a program that marshals its schemas.
+// env is the environment of the go commands it runs; nil means os.Environ().
+func Load(dir, pattern string, env []string) (*load.Model, error) {
+	pkg, names, err := inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
 	}
@@ -98,24 +134,24 @@ func decodeModel(b []byte) (*load.Model, error) {
 func list(dir, pattern string, env []string) (*listed, error) {
 	out, stderr, err := run(dir, env, "list", "-json=ImportPath,Name,Dir,GoFiles,Module,Error", pattern)
 	if err != nil {
-		return nil, fmt.Errorf("go list %s: %w\n%s", pattern, err, strings.TrimRight(stderr, "\n"))
+		return nil, notPackage{fmt.Errorf("go list %s: %w\n%s", pattern, err, strings.TrimRight(stderr, "\n"))}
 	}
 	dec := json.NewDecoder(strings.NewReader(out))
 	var pkg listed
 	if err := dec.Decode(&pkg); err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%s names no package", pattern)
+			return nil, notPackage{fmt.Errorf("%s names no package", pattern)}
 		}
 		return nil, fmt.Errorf("reading go list output: %w", err)
 	}
 	if dec.More() {
-		return nil, fmt.Errorf("%s names more than one package; name the schema package", pattern)
+		return nil, notPackage{fmt.Errorf("%s names more than one package; name the schema package", pattern)}
 	}
 	if pkg.Error != nil {
-		return nil, fmt.Errorf("%s: %s", pattern, pkg.Error.Err)
+		return nil, notPackage{fmt.Errorf("%s: %s", pattern, pkg.Error.Err)}
 	}
 	if pkg.Module == nil || pkg.Module.Dir == "" {
-		return nil, errors.New("the schema package must be in a module")
+		return nil, notPackage{errors.New("the schema package must be in a module")}
 	}
 	return &pkg, nil
 }
