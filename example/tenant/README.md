@@ -1,7 +1,7 @@
 # tenant
 
-`model.Project` belongs to an organization. `s.Tenant(&x.OrgID)` in its
-`Schema` makes every statement on it scoped to the tenant the context names,
+`gen.Project` belongs to an organization. `field.Int64("org_id").Tenant()` in
+its schema makes every statement on it scoped to the tenant the context names,
 and fail when the context names none.
 
 ```sh
@@ -13,8 +13,8 @@ go run ./tenant
 ctx = velox.WithTenant(ctx, acme)    // acme is an int64: the tenant column's exact Go type
 
 db.Insert(&p).Exec(ctx)              // fills p.OrgID
-db.Query[model.Project]().Count(ctx) // ... WHERE "org_id" = ?
-db.Update[model.Project]()...Exec(ctx) // changes only this tenant's rows
+db.Query[gen.Project]().Count(ctx) // ... WHERE "org_id" = ?
+db.Update[gen.Project]()...Exec(ctx) // changes only this tenant's rows
 
 db.Insert(&p).OnConflict(P.OrgID, P.Name).Update(P.Status).Exec(ctx) // a tenant-safe upsert
 

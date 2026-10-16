@@ -45,6 +45,10 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
   go test -race -count=1 ./...
   go tool velox-gen -check ./...
   go tool velox-gen verify ./...
+  for x in start relations tenant policy hooks tx otel tour; do
+    go tool velox-gen -check -out "./$x/gen" "./$x/schema"
+    go tool velox-gen verify -out "./$x/gen" "./$x/schema"
+  done
 )
 
 # contrib/otel is its own module: its own vet, lint and tests. Its PostgreSQL

@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/example/relations/model"
+	"github.com/syssam/velox2/example/relations/gen"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 	}
 }
 
-// ddl creates the tables by hand: planning migrations from the structs is a
+// ddl creates the tables by hand: planning migrations from the schemas is a
 // later velox2 sub-project.
 const ddl = `
 CREATE TABLE authors  (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
@@ -44,7 +44,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	A, P := model.Authors, model.Posts
+	A, P := gen.Authors, gen.Posts
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
 	if err := seed(ctx, db); err != nil {
@@ -53,7 +53,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// With loads a relation with one more query (WHERE author_id IN (...)).
 	// Nothing is ever loaded lazily: Get reports whether it was loaded.
-	authors, err := db.Query[model.Author]().
+	authors, err := db.Query[gen.Author]().
 		OrderBy(A.Name.Asc()).
 		With(A.Posts).
 		Limit(10).
@@ -68,7 +68,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// A relation takes its own Where and OrderBy, and With for a nested
 	// relation: posts with 10 votes or more, best first, with their comments.
-	authors, err = db.Query[model.Author]().
+	authors, err = db.Query[gen.Author]().
 		Where(A.Name.EQ("Grace")).
 		With(A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments)).
 		Limit(1).
@@ -84,7 +84,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// Belongs-to: each post loads its author. Owners with the same key share
 	// one loaded Author.
-	top, err := db.Query[model.Post]().OrderBy(P.Votes.Desc()).With(P.Author).Limit(3).All(ctx)
+	top, err := db.Query[gen.Post]().OrderBy(P.Votes.Desc()).With(P.Author).Limit(3).All(ctx)
 	if err != nil {
 		return err
 	}
@@ -97,19 +97,19 @@ func run(ctx context.Context, w io.Writer) error {
 	// with no posts.
 	for _, c := range []struct {
 		name string
-		pred velox.Pred[model.Author]
+		pred velox.Pred[gen.Author]
 	}{
 		{"Has", A.Posts.Has()},
 		{"HasWhere votes > 20", A.Posts.HasWhere(P.Votes.GT(20))},
 		{"Not Has", velox.Not(A.Posts.Has())},
 	} {
-		got, err := db.Query[model.Author]().Where(c.pred).OrderBy(A.Name.Asc()).Limit(10).All(ctx)
+		got, err := db.Query[gen.Author]().Where(c.pred).OrderBy(A.Name.Asc()).Limit(10).All(ctx)
 		if err != nil {
 			return err
 		}
 		say("%s: %s", c.name, names(got))
 	}
-	text, _, err := db.Query[model.Author]().Where(A.Posts.HasWhere(P.Votes.GT(20))).Limit(10).SQL(ctx)
+	text, _, err := db.Query[gen.Author]().Where(A.Posts.HasWhere(P.Votes.GT(20))).Limit(10).SQL(ctx)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// After continues after the previous page's last row: keyset pagination.
 	// The OrderBy must include the primary key or a unique column.
-	page := db.Query[model.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(2)
+	page := db.Query[gen.Post]().OrderBy(P.Votes.Desc(), P.ID.Asc()).Limit(2)
 	for i := 1; ; i++ {
 		got, err := page.All(ctx)
 		if err != nil {
@@ -137,13 +137,13 @@ func run(ctx context.Context, w io.Writer) error {
 func seed(ctx context.Context, db *velox.DB) error {
 	ids := map[string]int64{}
 	for _, name := range []string{"Ada", "Grace", "Linus"} {
-		a := model.Author{Name: name}
+		a := gen.Author{Name: name}
 		if err := db.Insert(&a).Exec(ctx); err != nil {
 			return err
 		}
 		ids[name] = a.ID
 	}
-	posts := []model.Post{
+	posts := []gen.Post{
 		{AuthorID: ids["Ada"], Title: "Engines", Votes: 12},
 		{AuthorID: ids["Ada"], Title: "Notes", Votes: 3},
 		{AuthorID: ids["Grace"], Title: "Compilers", Votes: 30},
@@ -156,14 +156,14 @@ func seed(ctx context.Context, db *velox.DB) error {
 		}
 	}
 	// InsertAll reads no keys back; these rows need none.
-	return db.InsertAll([]model.Comment{
+	return db.InsertAll([]gen.Comment{
 		{PostID: posts[2].ID, Body: "Classic."},
 		{PostID: posts[2].ID, Body: "Still true."},
 		{PostID: posts[4].ID, Body: "It runs the banks."},
 	}).Exec(ctx)
 }
 
-func titles(ps []model.Post) string {
+func titles(ps []gen.Post) string {
 	var s []string
 	for _, p := range ps {
 		s = append(s, p.Title)
@@ -171,7 +171,7 @@ func titles(ps []model.Post) string {
 	return "[" + strings.Join(s, ", ") + "]"
 }
 
-func names(as []model.Author) string {
+func names(as []gen.Author) string {
 	var s []string
 	for _, a := range as {
 		s = append(s, a.Name)

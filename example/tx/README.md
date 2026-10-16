@@ -1,6 +1,6 @@
 # tx
 
-Transactions on `model.Account`, through a `transfer` function that takes a
+Transactions on `gen.Account`, through a `transfer` function that takes a
 `*velox.DB` and so runs unchanged on `db` or on a transaction's `tx`.
 
 ```sh

@@ -11,11 +11,15 @@ go run ./tour
 
 ## Layout
 
-- `billing/` is an entity package as the team that owns invoices would write
-  it. `invoice.go` declares `Invoice`, which embeds the `Timestamps` mixin, is
-  scoped to a tenant (`OrgID`), has a unique number per tenant, a `Lines`
-  relation, a policy and a `BeforeInsert` hook. `line.go` declares `Line`. The
-  `*_velox.go` files beside them are written by velox-gen.
+- `schema/` declares the entities in the ent-style DSL. `invoice.go` declares
+  `Invoice`, which lists the `mixin.Time` mixin (`created_at` and
+  `updated_at`), is scoped to a tenant (`OrgID`), has a unique number per
+  tenant, a `Lines` relation and a `status` enum. `line.go` declares `Line`.
+- `gen/` is written by `go tool velox-gen -out ./tour/gen ./tour/schema`,
+  except the files you write by hand: `invoice.go` has `Invoice`'s `Policy()`
+  and its `Hooks()`, `line.go` has `Line`'s `Policy()`, and `role.go` has the
+  billing role. velox-gen binds the `Policy` and `Hooks` methods into the
+  entities' metadata.
 - `main.go` creates the tables with plain DDL (the migration planner is a
   later velox2 sub-project) and runs the walkthrough.
 
@@ -23,7 +27,7 @@ go run ./tour
 
 1. A context carrying the tenant (`velox.WithTenant`) and a role for the
    policy; `Insert` and `InsertAll` fill the tenant column from it, and the
-   `BeforeInsert` hook refuses an invalid invoice.
+   insert hook refuses an invalid invoice.
 2. Reads: `Where`, `OrderBy`, `Limit` and `All`; `One`; `Count`; `Iter`;
    eager loading with `With`; `Has`.
 3. `SQL(ctx)`, which prints the statement a query would send, with the

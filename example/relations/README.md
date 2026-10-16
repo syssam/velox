@@ -1,31 +1,35 @@
 # relations
 
 An `Author` has many `Post`s, a `Post` belongs to its `Author` and has many
-`Comment`s. Relations are `velox.Many[T]` and `velox.One[T]` fields, never
-columns, and never loaded lazily.
+`Comment`s. Relations are `velox.Many[T]` and `velox.One[T]` fields that
+velox-gen writes into the entities, never columns, and never loaded lazily.
 
 ```sh
 cd example
 go run ./relations
 ```
 
-Keys follow a convention, so `Author.Posts` and `Post.Author` declare nothing:
-a `Many` finds the key in the target's field named after the owner
-(`Post.AuthorID`), and a `One` named `Author` uses the owner's `AuthorID`.
-`Post.Comments` writes its key out, as you would when a field is named
-otherwise:
+`schema/schema.go` declares each relation as an edge. The side that owns the
+rows has `edge.To`, and the side that holds the key has `edge.From` with the
+name of the `To` it mirrors. `Unique` makes it a belongs-to (a `velox.One`),
+and `Field` names the column that holds the key:
 
 ```go
-s.Many(&x.Comments).ForeignKey(func(c *Comment) *int64 { return &c.PostID })
-// for a One: s.One(&x.Writer).References(&x.WriterKey)
+// Author:  edge.To("posts", Post.Type)
+// Post:    edge.From("author", Author.Type).Ref("posts").Unique().Required().Field("author_id")
+//          edge.To("comments", Comment.Type)
+// Comment: edge.From("post", Post.Type).Ref("comments").Unique().Required().Field("post_id")
 ```
+
+The key is a field like any other (`Post.AuthorID`, `Comment.PostID`): you
+set it when you insert a row that belongs to another.
 
 Reading:
 
 ```go
-db.Query[model.Author]().With(A.Posts).Limit(10).All(ctx)          // one more query: IN (...)
+db.Query[gen.Author]().With(A.Posts).Limit(10).All(ctx)          // one more query: IN (...)
 A.Posts.Where(P.Votes.GTE(10)).OrderBy(P.Votes.Desc()).With(P.Comments) // filtered, ordered, nested
-db.Query[model.Post]().With(P.Author)                              // belongs-to
+db.Query[gen.Post]().With(P.Author)                              // belongs-to
 posts, loaded := author.Posts.Get()
 
 A.Posts.Has()                       // EXISTS

@@ -9,14 +9,19 @@ cd example
 go run ./policy
 ```
 
-The policy is declared in the entity's own `Schema`:
+`schema/schema.go` declares the entities' structure only. The policy is a
+method you write on the generated entity, in `gen/doc_policy.go`, typed with
+the generated handles (`Docs.Owner.EQ(u)`). velox-gen sees the method and binds
+it into `Doc`'s metadata; a wrong signature does not compile:
 
 ```go
-s.Policy(velox.Policy[Doc]{
-	Read:   func(ctx context.Context) (velox.Pred[Doc], error) { … }, // ANDed into every read
-	Write:  func(ctx context.Context) (velox.Pred[Doc], error) { … }, // ANDed into every update and delete
-	Insert: func(ctx context.Context, x *Doc) error { … },            // checks each new row
-})
+func (*Doc) Policy() velox.Policy[Doc] {
+	return velox.Policy[Doc]{
+		Read:   func(ctx context.Context) (velox.Pred[Doc], error) { … }, // ANDed into every read
+		Write:  func(ctx context.Context) (velox.Pred[Doc], error) { … }, // ANDed into every update and delete
+		Insert: func(ctx context.Context, x *Doc) error { … },            // checks each new row
+	}
+}
 ```
 
 - A zero `velox.Pred[Doc]{}` restricts nothing; an error denies the statement

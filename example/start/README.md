@@ -1,30 +1,31 @@
 # start
 
-Create, read, update and delete on one entity, `model.User`. Start here.
+Create, read, update and delete on one entity, `gen.User`. Start here.
 
 ```sh
 cd example
 go run ./start
 ```
 
-`model/user.go` is the whole schema: a plain struct and a `Schema` method.
-`go tool velox-gen ./...` writes `model/user_velox.go` beside it, which holds
-`model.Users`, the typed handle of every column.
+`schema/user.go` is the whole schema: a struct that embeds `schema.Schema` and
+lists the entity's fields. `go tool velox-gen -out ./start/gen ./start/schema`
+writes the `gen` package from it: `gen.User`, the struct a query returns, and
+`gen.Users`, the typed handle of every column.
 
 ```go
-U := model.Users
+U := gen.Users
 
 db.Insert(&ada).Exec(ctx)                        // reads the new ID into ada
 db.InsertAll(users).Exec(ctx)                    // one statement, no IDs read back
 
-db.Query[model.User]().Where(U.Age.GT(30)).OrderBy(U.Age.Desc()).Limit(10).All(ctx)
-db.Query[model.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row
-db.Query[model.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
-for u, err := range db.Query[model.User]().Unbounded().Iter(ctx) { … }
+db.Query[gen.User]().Where(U.Age.GT(30)).OrderBy(U.Age.Desc()).Limit(10).All(ctx)
+db.Query[gen.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row
+db.Query[gen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
+for u, err := range db.Query[gen.User]().Unbounded().Iter(ctx) { … }
 
-db.Update[model.User]().Set(U.Age.Add(1)).Where(U.Name.In("Ada", "Linus")).Exec(ctx)
+db.Update[gen.User]().Set(U.Age.Add(1)).Where(U.Name.In("Ada", "Linus")).Exec(ctx)
 db.Save(ctx, grace, U.Email)                     // the named columns of a loaded struct
-db.Delete[model.User]().Where(U.Age.LT(30)).Exec(ctx)
+db.Delete[gen.User]().Where(U.Age.LT(30)).Exec(ctx)
 ```
 
 Guards are always on: a query with no `Limit` fails with `velox.ErrUnbounded`

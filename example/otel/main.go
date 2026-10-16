@@ -19,7 +19,7 @@ import (
 
 	"github.com/syssam/velox2"
 	veloxotel "github.com/syssam/velox2/contrib/otel"
-	"github.com/syssam/velox2/example/otel/model"
+	"github.com/syssam/velox2/example/otel/gen"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 }
 
 // ddl creates and fills the table by hand: planning migrations from the
-// structs is a later velox2 sub-project.
+// schemas is a later velox2 sub-project.
 const ddl = `
 CREATE TABLE invoices (
 	id          INTEGER PRIMARY KEY,
@@ -46,13 +46,13 @@ INSERT INTO invoices (number, customer, status, total_cents) VALUES
 // pay marks an invoice paid: the handler of POST /invoices/{number}/pay.
 // Nothing in it knows about tracing.
 func pay(ctx context.Context, db *velox.DB, number string) error {
-	I := model.Invoices
+	I := gen.Invoices
 	return db.Tx(ctx, func(tx *velox.DB) error {
-		inv, err := tx.Query[model.Invoice]().Where(I.Number.EQ(number)).One(ctx)
+		inv, err := tx.Query[gen.Invoice]().Where(I.Number.EQ(number)).One(ctx)
 		if err != nil {
 			return err
 		}
-		inv.Status = model.Paid
+		inv.Status = gen.InvoiceStatusPaid
 		return tx.Save(ctx, inv, I.Status)
 	})
 }

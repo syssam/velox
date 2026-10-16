@@ -16,7 +16,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/example/tx/model"
+	"github.com/syssam/velox2/example/tx/gen"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 	}
 }
 
-// ddl creates the table by hand: planning migrations from the structs is a
+// ddl creates the table by hand: planning migrations from the schemas is a
 // later velox2 sub-project.
 const ddl = `
 CREATE TABLE accounts (
@@ -40,8 +40,8 @@ var errFunds = errors.New("insufficient funds")
 // transfer moves amount between two accounts. It takes a *velox.DB, so it
 // runs unchanged on db or on a transaction's tx.
 func transfer(ctx context.Context, db *velox.DB, from, to string, amount int64) error {
-	A := model.Accounts
-	n, err := db.Update[model.Account]().
+	A := gen.Accounts
+	n, err := db.Update[gen.Account]().
 		Set(A.Balance.Sub(amount)).
 		Where(A.Name.EQ(from), A.Balance.GTE(amount)).
 		Exec(ctx)
@@ -51,7 +51,7 @@ func transfer(ctx context.Context, db *velox.DB, from, to string, amount int64) 
 	if n == 0 {
 		return fmt.Errorf("%s: %w", from, errFunds)
 	}
-	n, err = db.Update[model.Account]().Set(A.Balance.Add(amount)).Where(A.Name.EQ(to)).Exec(ctx)
+	n, err = db.Update[gen.Account]().Set(A.Balance.Add(amount)).Where(A.Name.EQ(to)).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}))
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 	balances := func() string {
-		as, err := db.Query[model.Account]().OrderBy(model.Accounts.Name.Asc()).Limit(10).All(ctx)
+		as, err := db.Query[gen.Account]().OrderBy(gen.Accounts.Name.Asc()).Limit(10).All(ctx)
 		if err != nil {
 			return err.Error()
 		}
@@ -90,7 +90,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return strings.Join(s, " ")
 	}
 
-	err = db.InsertAll([]model.Account{{Name: "alice", Balance: 100}, {Name: "bob", Balance: 50}}).Exec(ctx)
+	err = db.InsertAll([]gen.Account{{Name: "alice", Balance: 100}, {Name: "bob", Balance: 50}}).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// the outer transaction goes on. A unique violation is a
 	// *velox.ConstraintError on every dialect.
 	err = db.Tx(ctx, func(tx *velox.DB) error {
-		acct := model.Account{Name: "bob", Balance: 5}
+		acct := gen.Account{Name: "bob", Balance: 5}
 		err := tx.Tx(ctx, func(tx *velox.DB) error { return tx.Insert(&acct).Exec(ctx) })
 		var ce *velox.ConstraintError
 		if errors.As(err, &ce) && ce.Kind == velox.Unique {

@@ -3,7 +3,7 @@
 Insert: INV-001 has id 1 and org_id 1
 InsertAll: 3 lines, each with org_id 1
 InsertAll: INV-002 and INV-003 for org 1, INV-001 for org 2
-BeforeInsert refused: velox: billing.Invoice: before insert: invoice number "2026-17" does not start with INV-
+insert hook refused: velox: gen.Invoice: hook: invoice number "2026-17" does not start with INV-
 
 == 2. Reading
 All: INV-001 Initech sent
@@ -30,25 +30,25 @@ Save: INV-002 customer is now Umbrella Corp
 Delete: 1 empty line removed
 
 == 5. Guards
-no Limit: ErrUnbounded=true: velox: billing.Invoice: query has no Limit: add Limit, or Unbounded to read every row
-no Where: ErrNoWhere=true: velox: billing.Line: update or delete has no Where: add Where, or All to change every row
+no Limit: ErrUnbounded=true: velox: gen.Invoice: query has no Limit: add Limit, or Unbounded to read every row
+no Where: ErrNoWhere=true: velox: gen.Line: update or delete has no Where: add Where, or All to change every row
 
 == 6. Policy and tenants
-viewer's update: ErrDenied=true: velox: billing.Invoice: update denied by policy: only accountants change billing data
+viewer's update: ErrDenied=true: velox: gen.Invoice: update denied by policy: only accountants change billing data
 viewer sees 2 invoices of org 1 (not the draft)
 org 2 sees 1 invoice
 org 2 asks for org 1's INV-003: ErrNotFound=true
-no tenant in the context: ErrNoTenant=true: velox: billing.Invoice: no tenant in the context
+no tenant in the context: ErrNoTenant=true: velox: gen.Invoice: no tenant in the context
 
 == 7. Transactions
 INV-003 is taken (unique constraint on invoices.org_id, invoices.number); using INV-004
 committed: org 1 has 4 invoices
 
 == 8. AllTenants
-SELECT "created_at", "updated_at", "id", "org_id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "status" <> ?
+SELECT "id", "created_at", "updated_at", "org_id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "status" <> ?
 org 1: 2750.00
 org 2: 990.00
 
 == 9. Deadlines
 transaction past its Timeout: ErrTimeout=true, context.DeadlineExceeded=true
-  velox: billing.Invoice: deadline set by velox passed: context deadline exceeded
+  velox: gen.Invoice: deadline set by velox passed: context deadline exceeded

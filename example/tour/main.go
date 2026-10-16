@@ -1,5 +1,5 @@
 // Command tour walks through velox2 on an in-memory SQLite database: it
-// inserts, reads and changes the invoices of package billing as two
+// inserts, reads and changes the invoices of package gen as two
 // organizations, and prints what each step did.
 package main
 
@@ -18,7 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/example/tour/billing"
+	"github.com/syssam/velox2/example/tour/gen"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	}
 }
 
-// ddl creates the tables by hand. Planning migrations from the structs is a
+// ddl creates the tables by hand. Planning migrations from the schemas is a
 // later velox2 sub-project.
 const ddl = `
 CREATE TABLE invoices (
@@ -76,18 +76,18 @@ func run(ctx context.Context, w io.Writer) error {
 		Tx:           5 * time.Second,
 		MaxTx:        30 * time.Second,
 	}))
-	I, L := billing.Invoices, billing.Lines
+	I, L := gen.Invoices, gen.Lines
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
 	// 1. The context says who is asking: the tenant for velox, the role for
-	// billing's policy. Middleware would set both.
+	// the policy. Middleware would set both.
 	say("\n== 1. Contexts and inserts")
-	acct := billing.WithRole(velox.WithTenant(ctx, acme), billing.Accountant)
-	viewer := billing.WithRole(velox.WithTenant(ctx, acme), billing.Viewer)
-	globexAcct := billing.WithRole(velox.WithTenant(ctx, globex), billing.Accountant)
+	acct := gen.WithRole(velox.WithTenant(ctx, acme), gen.Accountant)
+	viewer := gen.WithRole(velox.WithTenant(ctx, acme), gen.Viewer)
+	globexAcct := gen.WithRole(velox.WithTenant(ctx, globex), gen.Accountant)
 
 	// Insert fills OrgID from the context and reads the generated ID back.
-	inv := billing.Invoice{Number: "INV-001", Customer: "Initech", Status: billing.Sent, TotalCents: 150000}
+	inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 150000}
 	if err := db.Insert(&inv).Exec(acct); err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// InsertAll sends one statement for many rows and fills each row's OrgID.
 	// It reads no IDs back.
-	lines := []billing.Line{
+	lines := []gen.Line{
 		{InvoiceID: inv.ID, Description: "Consulting", AmountCents: 120000},
 		{InvoiceID: inv.ID, Description: "Travel", AmountCents: 30000},
 		{InvoiceID: inv.ID, Description: "Parking", AmountCents: 0},
@@ -105,29 +105,29 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("InsertAll: %d lines, each with org_id %d", len(lines), lines[2].OrgID)
 
-	more := []billing.Invoice{
-		{Number: "INV-002", Customer: "Umbrella", Status: billing.Draft},
-		{Number: "INV-003", Customer: "Initech", Status: billing.Paid, TotalCents: 45000},
+	more := []gen.Invoice{
+		{Number: "INV-002", Customer: "Umbrella", Status: gen.InvoiceStatusDraft},
+		{Number: "INV-003", Customer: "Initech", Status: gen.InvoiceStatusPaid, TotalCents: 45000},
 	}
 	if err := db.InsertAll(more).Exec(acct); err != nil {
 		return err
 	}
 	// The same number in another organization: the unique key includes OrgID.
-	theirs := []billing.Invoice{{Number: "INV-001", Customer: "Hooli", Status: billing.Sent, TotalCents: 99000}}
+	theirs := []gen.Invoice{{Number: "INV-001", Customer: "Hooli", Status: gen.InvoiceStatusSent, TotalCents: 99000}}
 	if err := db.InsertAll(theirs).Exec(globexAcct); err != nil {
 		return err
 	}
 	say("InsertAll: INV-002 and INV-003 for org 1, INV-001 for org 2")
 
-	// Invoice's BeforeInsert hook validates the number.
-	err = db.Insert(&billing.Invoice{Number: "2026-17", Customer: "Initech", Status: billing.Draft}).Exec(acct)
-	say("BeforeInsert refused: %v", err)
+	// Invoice's insert hook validates the number.
+	err = db.Insert(&gen.Invoice{Number: "2026-17", Customer: "Initech", Status: gen.InvoiceStatusDraft}).Exec(acct)
+	say("insert hook refused: %v", err)
 
 	// 2. Reading. A query is a value: build it, then run it with All, One,
 	// Iter or Count.
 	say("\n== 2. Reading")
-	unpaid, err := db.Query[billing.Invoice]().
-		Where(I.Status.NEQ(billing.Paid)).
+	unpaid, err := db.Query[gen.Invoice]().
+		Where(I.Status.NEQ(gen.InvoiceStatusPaid)).
 		OrderBy(I.Number.Asc()).
 		Limit(10).
 		All(acct)
@@ -138,13 +138,13 @@ func run(ctx context.Context, w io.Writer) error {
 		say("All: %s %s %s", x.Number, x.Customer, x.Status)
 	}
 
-	paid, err := db.Query[billing.Invoice]().Where(I.Status.EQ(billing.Paid)).One(acct)
+	paid, err := db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)).One(acct)
 	if err != nil {
 		return err
 	}
 	say("One: %s %s", paid.Number, money(paid.TotalCents))
 
-	n, err := db.Query[billing.Invoice]().Where(I.Customer.EQ("Initech")).Count(acct)
+	n, err := db.Query[gen.Invoice]().Where(I.Customer.EQ("Initech")).Count(acct)
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// Iter holds one row at a time. Unbounded says on purpose that there is
 	// no Limit.
 	var numbers []string
-	for x, err := range db.Query[billing.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(acct) {
+	for x, err := range db.Query[gen.Invoice]().OrderBy(I.ID.Asc()).Unbounded().Iter(acct) {
 		if err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ func run(ctx context.Context, w io.Writer) error {
 	say("Iter: %s", strings.Join(numbers, " "))
 
 	// With loads a relation with one more query; nothing is loaded lazily.
-	first, err := db.Query[billing.Invoice]().
+	first, err := db.Query[gen.Invoice]().
 		Where(I.Number.EQ("INV-001")).
 		With(I.Lines.OrderBy(L.AmountCents.Desc())).
 		One(acct)
@@ -175,7 +175,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 
 	// Has is an EXISTS on the relation.
-	withLines, err := db.Query[billing.Invoice]().Where(I.Lines.Has()).Limit(10).All(acct)
+	withLines, err := db.Query[gen.Invoice]().Where(I.Lines.Has()).Limit(10).All(acct)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// 3. SQL(ctx) prints the statement a query would send for that context,
 	// with the tenant and policy conditions, without sending it.
 	say("\n== 3. SQL(ctx)")
-	q := db.Query[billing.Invoice]().Where(I.Customer.EQ("Initech")).Limit(10)
+	q := db.Query[gen.Invoice]().Where(I.Customer.EQ("Initech")).Limit(10)
 	for _, c := range []struct {
 		who string
 		ctx context.Context
@@ -199,8 +199,8 @@ func run(ctx context.Context, w io.Writer) error {
 	// 4. Writing. Updates are set-based or name their columns; there is no
 	// write-back of a whole struct.
 	say("\n== 4. Writing")
-	n, err = db.Update[billing.Invoice]().
-		Set(I.Status.Set(billing.Paid)).
+	n, err = db.Update[gen.Invoice]().
+		Set(I.Status.Set(gen.InvoiceStatusPaid)).
 		Where(I.Number.EQ("INV-001")).
 		Exec(acct)
 	if err != nil {
@@ -209,8 +209,8 @@ func run(ctx context.Context, w io.Writer) error {
 	say("Update: %d row marked paid", n)
 
 	// Save writes the named columns of a loaded struct, and UpdatedAt through
-	// the mixin's OnUpdate.
-	draft, err := db.Query[billing.Invoice]().Where(I.Number.EQ("INV-002")).One(acct)
+	// the mixin's UpdateDefault.
+	draft, err := db.Query[gen.Invoice]().Where(I.Number.EQ("INV-002")).One(acct)
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("Save: %s customer is now %s", draft.Number, draft.Customer)
 
-	n, err = db.Delete[billing.Line]().Where(L.AmountCents.EQ(0)).Exec(acct)
+	n, err = db.Delete[gen.Line]().Where(L.AmountCents.EQ(0)).Exec(acct)
 	if err != nil {
 		return err
 	}
@@ -229,33 +229,33 @@ func run(ctx context.Context, w io.Writer) error {
 	// 5. Guards are always on: a read without a Limit, and an update or
 	// delete without a Where, are refused before anything is sent.
 	say("\n== 5. Guards")
-	_, err = db.Query[billing.Invoice]().All(acct)
+	_, err = db.Query[gen.Invoice]().All(acct)
 	say("no Limit: ErrUnbounded=%t: %v", errors.Is(err, velox.ErrUnbounded), err)
-	_, err = db.Delete[billing.Line]().Exec(acct)
+	_, err = db.Delete[gen.Line]().Exec(acct)
 	say("no Where: ErrNoWhere=%t: %v", errors.Is(err, velox.ErrNoWhere), err)
 
 	// 6. Policy and tenant isolation.
 	say("\n== 6. Policy and tenants")
-	_, err = db.Update[billing.Invoice]().
-		Set(I.Status.Set(billing.Sent)).
+	_, err = db.Update[gen.Invoice]().
+		Set(I.Status.Set(gen.InvoiceStatusSent)).
 		Where(I.Number.EQ("INV-002")).
 		Exec(viewer)
 	say("viewer's update: ErrDenied=%t: %v", errors.Is(err, velox.ErrDenied), err)
 
-	seen, err := db.Query[billing.Invoice]().Count(viewer)
+	seen, err := db.Query[gen.Invoice]().Count(viewer)
 	if err != nil {
 		return err
 	}
 	say("viewer sees %d invoices of org 1 (not the draft)", seen)
 
-	seen, err = db.Query[billing.Invoice]().Count(globexAcct)
+	seen, err = db.Query[gen.Invoice]().Count(globexAcct)
 	if err != nil {
 		return err
 	}
 	say("org 2 sees %d invoice", seen)
-	_, err = db.Query[billing.Invoice]().Where(I.Number.EQ("INV-003")).One(globexAcct)
+	_, err = db.Query[gen.Invoice]().Where(I.Number.EQ("INV-003")).One(globexAcct)
 	say("org 2 asks for org 1's INV-003: ErrNotFound=%t", errors.Is(err, velox.ErrNotFound))
-	_, err = db.Query[billing.Invoice]().Count(ctx)
+	_, err = db.Query[gen.Invoice]().Count(ctx)
 	say("no tenant in the context: ErrNoTenant=%t: %v", errors.Is(err, velox.ErrNoTenant), err)
 
 	// 7. A transaction: fn's error rolls it back, nil commits. tx is a
@@ -264,7 +264,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// failed statement would otherwise abort the whole transaction).
 	say("\n== 7. Transactions")
 	err = db.Tx(acct, func(tx *velox.DB) error {
-		next := billing.Invoice{Number: "INV-003", Customer: "Initech", Status: billing.Sent, TotalCents: 80000}
+		next := gen.Invoice{Number: "INV-003", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 80000}
 		err := tx.Tx(acct, func(tx *velox.DB) error { return tx.Insert(&next).Exec(acct) })
 		if ce := (*velox.ConstraintError)(nil); errors.As(err, &ce) && ce.Kind == velox.Unique {
 			say("%s is taken (%s constraint on %s); using INV-004", next.Number, ce.Kind, ce.Constraint)
@@ -274,14 +274,14 @@ func run(ctx context.Context, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		return tx.InsertAll([]billing.Line{
+		return tx.InsertAll([]gen.Line{
 			{InvoiceID: next.ID, Description: "Licences", AmountCents: 80000},
 		}).Exec(acct)
 	})
 	if err != nil {
 		return err
 	}
-	n, err = db.Query[billing.Invoice]().Count(acct)
+	n, err = db.Query[gen.Invoice]().Count(acct)
 	if err != nil {
 		return err
 	}
@@ -290,8 +290,8 @@ func run(ctx context.Context, w io.Writer) error {
 	// 8. AllTenants lifts the tenant scope for one context, and requires a
 	// reason. The policy still applies, so the report runs as an accountant.
 	say("\n== 8. AllTenants")
-	report := billing.WithRole(velox.AllTenants(ctx, "monthly revenue report"), billing.Accountant)
-	revenue := db.Query[billing.Invoice]().Where(I.Status.NEQ(billing.Draft)).Unbounded()
+	report := gen.WithRole(velox.AllTenants(ctx, "monthly revenue report"), gen.Accountant)
+	revenue := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded()
 	text, _, err := revenue.SQL(report)
 	if err != nil {
 		return err
@@ -314,7 +314,7 @@ func run(ctx context.Context, w io.Writer) error {
 	say("\n== 9. Deadlines")
 	err = db.Tx(acct, func(tx *velox.DB) error {
 		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
-		_, err := tx.Query[billing.Invoice]().Count(acct)
+		_, err := tx.Query[gen.Invoice]().Count(acct)
 		return err
 	}, velox.Timeout(10*time.Millisecond))
 	say("transaction past its Timeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",
