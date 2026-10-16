@@ -6,59 +6,6 @@ import (
 	"testing"
 )
 
-// hnote's BeforeUpdate and BeforeDelete run the function in the context
-// under hnoteKey, if any.
-type hnote struct {
-	ID    int64
-	Title string
-	Note  string
-	N     int64
-	Due   *int64
-}
-
-type hnoteKey struct{}
-
-func hnoteHook(ctx context.Context, m *Mutation[hnote]) error {
-	if f, ok := ctx.Value(hnoteKey{}).(func(*Mutation[hnote]) error); ok {
-		return f(m)
-	}
-	return nil
-}
-
-func (x *hnote) Schema(s *Schema) {
-	s.Table("hnotes")
-	s.BeforeUpdate(hnoteHook)
-	s.BeforeDelete(hnoteHook)
-}
-
-var hnoteMeta MetaOnce[hnote]
-
-func (*hnote) VeloxMeta() *Meta[hnote] {
-	return hnoteMeta.Get(func() Shape[hnote] {
-		return Shape[hnote]{Columns: []string{"ID", "Title", "Note", "N", "Due"}, Addr: func(x *hnote, i int) any {
-			switch i {
-			case 0:
-				return &x.ID
-			case 1:
-				return &x.Title
-			case 2:
-				return &x.Note
-			case 3:
-				return &x.N
-			}
-			return &x.Due
-		}}
-	})
-}
-
-var hn = struct {
-	ID    NumberCol[hnote, int64]
-	Title StringCol[hnote, string]
-	Note  StringCol[hnote, string]
-	N     NumberCol[hnote, int64]
-	Due   NullNumberCol[hnote, int64]
-}{NumberCol[hnote, int64]{I: 0}, StringCol[hnote, string]{I: 1}, StringCol[hnote, string]{I: 2}, NumberCol[hnote, int64]{I: 3}, NullNumberCol[hnote, int64]{I: 4}}
-
 // withHook returns a context whose hnote hooks run f.
 func withHook(f func(*Mutation[hnote]) error) context.Context {
 	return context.WithValue(context.Background(), hnoteKey{}, f)
@@ -142,7 +89,7 @@ func TestMutationSetOnADelete(t *testing.T) {
 		return nil
 	})
 	_, err := db.Delete[hnote]().Where(hn.ID.EQ(1)).Exec(ctx)
-	const text = "velox: velox.hnote: before delete: a delete assigns no columns: Set is for updates"
+	const text = "velox: velox.hnote: hook: a delete assigns no columns: Set is for updates"
 	if err == nil || err.Error() != text {
 		t.Errorf("got %v, want %q", err, text)
 	}
@@ -191,15 +138,15 @@ func TestMutationErrors(t *testing.T) {
 		f    func(*Mutation[hnote]) error
 		text string
 	}{
-		{func(*Mutation[hnote]) error { return bad }, "velox: velox.hnote: before update: bad"},
+		{func(*Mutation[hnote]) error { return bad }, "velox: velox.hnote: hook: bad"},
 		{func(m *Mutation[hnote]) error { m.Where(Pred[hnote]{}); return nil },
-			"velox: velox.hnote: before update: a condition is the zero Predicate; make conditions with column handles, And, Or and Not"},
+			"velox: velox.hnote: hook: a condition is the zero Predicate; make conditions with column handles, And, Or and Not"},
 		{func(m *Mutation[hnote]) error {
 			m.Where(Pred[hnote]{node{op: opInvalid, v: errors.Join(errors.New("velox: velox.hnote: has no relation 3"), bad)}})
 			return nil
-		}, "velox: velox.hnote: before update: has no relation 3\nbad"},
+		}, "velox: velox.hnote: hook: has no relation 3\nbad"},
 		{func(*Mutation[hnote]) error { return errors.Join(errors.New("velox: testmodel.Other: x"), bad) },
-			"velox: velox.hnote: before update: velox: testmodel.Other: x\nbad"},
+			"velox: velox.hnote: hook: velox: testmodel.Other: x\nbad"},
 	}
 	for _, c := range cases {
 		_, err := db.Update[hnote]().Set(hn.Title.Set("t")).Where(hn.ID.EQ(1)).Exec(withHook(c.f))

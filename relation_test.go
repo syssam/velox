@@ -9,53 +9,6 @@ import (
 	"unsafe"
 )
 
-// The relation fixtures: a company has employees, each with a manager.
-type company struct {
-	ID    int64
-	Staff Many[employee]
-}
-
-func (x *company) Schema(*Schema) {}
-
-var companyMeta MetaOnce[company]
-
-func (*company) VeloxMeta() *Meta[company] {
-	return companyMeta.Get(func() Shape[company] {
-		return Shape[company]{Columns: []string{"ID"}, Relations: []Relation{RelationTo[employee]("Staff")},
-			Addr: func(x *company, i int) any { return &x.ID }}
-	})
-}
-
-type employee struct {
-	ID        int64
-	CompanyID int64
-	BossID    *int64
-	Boss      One[employee]
-	Company   One[company]
-}
-
-func (x *employee) Schema(s *Schema) { s.One(&x.Boss).References(&x.BossID) }
-
-var employeeMeta MetaOnce[employee]
-
-func (*employee) VeloxMeta() *Meta[employee] {
-	return employeeMeta.Get(func() Shape[employee] {
-		return Shape[employee]{Columns: []string{"ID", "CompanyID", "BossID"},
-			Relations: []Relation{RelationTo[employee]("Boss"), RelationTo[company]("Company")},
-			Addr: func(x *employee, i int) any {
-				switch i {
-				case 0:
-					return &x.ID
-				case 1:
-					return &x.CompanyID
-				case 2:
-					return &x.BossID
-				}
-				return nil
-			}}
-	})
-}
-
 // TestRelationsResolveWithoutDeadlock is half of Review Focus 1.
 func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 	var wg sync.WaitGroup
@@ -88,32 +41,9 @@ func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 	}
 }
 
-type keyed struct {
-	ID    string
-	Lines Many[keyedLine]
-}
-
-func (x *keyed) Schema(*Schema) {}
-
-type keyedLine struct {
-	ID      int64
-	KeyedID int64 // an int64 cannot refer to keyed's string key
-}
-
-func (x *keyedLine) Schema(*Schema) {}
-
-var keyedLineMeta MetaOnce[keyedLine]
-
-func (*keyedLine) VeloxMeta() *Meta[keyedLine] {
-	return keyedLineMeta.Get(func() Shape[keyedLine] {
-		return Shape[keyedLine]{Columns: []string{"ID", "KeyedID"}, Addr: func(*keyedLine, int) any { return nil }}
-	})
-}
-
 // TestResolveRefusesMismatchedKeys is half of Review Focus 2.
 func TestResolveRefusesMismatchedKeys(t *testing.T) {
-	x := new(keyed)
-	info, err := buildInfo(reflect.TypeFor[keyed](), unsafe.Pointer(x), any(x), []string{"ID"}, []Relation{RelationTo[keyedLine]("Lines")})
+	info, err := loadDesc(keyedDesc())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,30 +270,13 @@ func TestCompositeKeysAreRefused(t *testing.T) {
 		"velox.compTarget has a composite primary key; a relation needs a single-column key")
 }
 
-type blobOwner struct {
-	ID    []byte
-	Lines Many[blobLine]
-}
-
-func (x *blobOwner) Schema(s *Schema) {
-	s.Many(&x.Lines).ForeignKey(func(l *blobLine) *[]byte { return &l.Owner })
-}
-
-type blobLine struct {
-	ID    int64
-	Owner []byte
-}
-
-func (x *blobLine) Schema(*Schema) {}
-
-var blobLineMeta MetaOnce[blobLine]
-
-func (*blobLine) VeloxMeta() *Meta[blobLine] {
-	return blobLineMeta.Get(func() Shape[blobLine] { return shapeOf[blobLine]([]string{"ID", "Owner"}) })
-}
-
 func TestNonComparableKeyIsRefused(t *testing.T) {
-	wantErr(t, resolveAll[blobOwner]([]string{"ID"}, RelationTo[blobLine]("Lines")), "Lines: a key of type []uint8 cannot be compared")
+	info, err := loadDesc(blobOwnerDesc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = info.rels[0].resolve(info)
+	wantErr(t, err, "Lines: a key of type []uint8 cannot be compared")
 }
 
 type refThenFK struct {
@@ -451,26 +364,13 @@ func TestForeignKeyInEmbeddedStruct(t *testing.T) {
 }
 
 func TestInvalidTargetIsNamed(t *testing.T) {
-	// brokenTarget's generated shape is stale, so it cannot build.
-	err := resolveAll[invalidHolder]([]string{"ID"}, RelationTo[brokenTarget]("T"))
-	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: generated code is out of date")
-}
-
-type invalidHolder struct {
-	ID int64
-	T  One[brokenTarget]
-}
-
-func (x *invalidHolder) Schema(*Schema) {}
-
-type brokenTarget struct{ ID int64 }
-
-func (x *brokenTarget) Schema(*Schema) {}
-
-var brokenTargetMeta MetaOnce[brokenTarget]
-
-func (*brokenTarget) VeloxMeta() *Meta[brokenTarget] {
-	return brokenTargetMeta.Get(func() Shape[brokenTarget] { return shapeOf[brokenTarget]([]string{"Nope"}) })
+	// brokenTarget's Desc has no Addr, so it cannot build.
+	info, err := loadDesc(invalidHolderDesc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = info.rels[0].resolve(info)
+	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
 }
 
 func TestTypeNameUpperCasesTheFirstRune(t *testing.T) {

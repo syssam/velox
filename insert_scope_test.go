@@ -469,43 +469,6 @@ func TestUpsertAllOfAHiddenRowRollsBack(t *testing.T) {
 	}
 }
 
-// tunique's primary key holds its tenant, but its unique code does not: on
-// MySQL a conflict on the code could reach another tenant's row.
-type tunique struct {
-	OrgID int64
-	ID    int64
-	Code  string
-}
-
-func (x *tunique) Schema(s *velox.Schema) {
-	s.Table("tuniques")
-	s.PrimaryKey(&x.OrgID, &x.ID)
-	s.Tenant(&x.OrgID)
-	s.Unique(&x.Code)
-}
-
-var tuniqueMeta velox.MetaOnce[tunique]
-
-func (*tunique) VeloxMeta() *velox.Meta[tunique] {
-	return tuniqueMeta.Get(func() velox.Shape[tunique] {
-		return velox.Shape[tunique]{Columns: []string{"OrgID", "ID", "Code"}, Addr: func(x *tunique, i int) any {
-			switch i {
-			case 0:
-				return &x.OrgID
-			case 1:
-				return &x.ID
-			}
-			return &x.Code
-		}}
-	})
-}
-
-var tu = struct {
-	OrgID velox.NumberCol[tunique, int64]
-	ID    velox.NumberCol[tunique, int64]
-	Code  velox.StringCol[tunique, string]
-}{velox.NumberCol[tunique, int64]{I: 0}, velox.NumberCol[tunique, int64]{I: 1}, velox.StringCol[tunique, string]{I: 2}}
-
 // TestUpsertOnMySQLNamesTheUniqueIndex: a primary key that holds the tenant
 // is not enough on MySQL; a unique index without it is named.
 func TestUpsertOnMySQLNamesTheUniqueIndex(t *testing.T) {

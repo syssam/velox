@@ -284,31 +284,7 @@ func TestBaseQueryIsSafeToExtendConcurrently(t *testing.T) {
 	wg.Wait()
 }
 
-type panickyEntity struct{ ID int64 }
-
-func (*panickyEntity) Schema(*velox.Schema) { panic("no schema today") }
-
-var panickyMeta velox.MetaOnce[panickyEntity]
-
-func (*panickyEntity) VeloxMeta() *velox.Meta[panickyEntity] {
-	return panickyMeta.Get(func() velox.Shape[panickyEntity] {
-		return velox.Shape[panickyEntity]{Columns: []string{"ID"}, Addr: func(x *panickyEntity, _ int) any { return &x.ID }}
-	})
-}
-
-type addrlessEntity struct{ ID int64 }
-
-func (*addrlessEntity) Schema(*velox.Schema) {}
-
-var addrlessMeta velox.MetaOnce[addrlessEntity]
-
-func (*addrlessEntity) VeloxMeta() *velox.Meta[addrlessEntity] {
-	return addrlessMeta.Get(func() velox.Shape[addrlessEntity] {
-		return velox.Shape[addrlessEntity]{Columns: []string{"ID"}}
-	})
-}
-
-// TestBrokenMetadataIsAnErrorOnEveryUse: a Schema method that panics, or
+// TestBrokenMetadataIsAnErrorOnEveryUse: a Desc that panics, or
 // generated code with no scan plan, makes every query on the entity return a
 // *SchemaError naming it, not just the first, and none panics.
 func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
@@ -337,7 +313,7 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 			}
 		}
 	}
-	check("Schema panics", "velox_test.panickyEntity", "Schema panicked: no schema today", func() error {
+	check("Desc panics", "velox_test.panickyEntity", "the generated metadata panicked: no schema today", func() error {
 		_, err := db.Query[panickyEntity]().All(ctx)
 		return err
 	})

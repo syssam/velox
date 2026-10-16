@@ -308,69 +308,6 @@ func TestScopedSQLGolden(t *testing.T) {
 	}
 }
 
-// A dnote records, in the dryRuns its context carries, what IsDryRun told
-// each of its hooks and policy functions.
-type dnote struct {
-	ID    int64
-	Owner string
-}
-
-// dryRuns maps a hook's name to what IsDryRun told it, call by call.
-type dryRuns map[string][]bool
-
-type dryRunsKey struct{}
-
-func noteDryRun(ctx context.Context, hook string) {
-	if m, ok := ctx.Value(dryRunsKey{}).(dryRuns); ok {
-		m[hook] = append(m[hook], velox.IsDryRun(ctx))
-	}
-}
-
-func (x *dnote) Schema(s *velox.Schema) {
-	s.Table("dnotes")
-	s.Policy(velox.Policy[dnote]{
-		Read: func(ctx context.Context) (velox.Pred[dnote], error) {
-			noteDryRun(ctx, "Read")
-			return velox.Pred[dnote]{}, nil
-		},
-		Write: func(ctx context.Context) (velox.Pred[dnote], error) {
-			noteDryRun(ctx, "Write")
-			return velox.Pred[dnote]{}, nil
-		},
-		Insert: func(ctx context.Context, _ *dnote) error {
-			noteDryRun(ctx, "Insert")
-			return nil
-		},
-	})
-	s.BeforeInsert(func(ctx context.Context, _ *dnote) error {
-		noteDryRun(ctx, "BeforeInsert")
-		return nil
-	})
-	s.BeforeUpdate(func(ctx context.Context, _ *velox.Mutation[dnote]) error {
-		noteDryRun(ctx, "BeforeUpdate")
-		return nil
-	})
-	s.BeforeDelete(func(ctx context.Context, _ *velox.Mutation[dnote]) error {
-		noteDryRun(ctx, "BeforeDelete")
-		return nil
-	})
-}
-
-var dnoteMeta velox.MetaOnce[dnote]
-
-func (*dnote) VeloxMeta() *velox.Meta[dnote] {
-	return dnoteMeta.Get(func() velox.Shape[dnote] {
-		return velox.Shape[dnote]{Columns: []string{"ID", "Owner"}, Addr: func(x *dnote, i int) any {
-			if i == 0 {
-				return &x.ID
-			}
-			return &x.Owner
-		}}
-	})
-}
-
-var dnoteID = velox.NumberCol[dnote, int64]{I: 0}
-
 // TestIsDryRun: under SQL(ctx), every hook and policy function sees
 // IsDryRun, entity hooks included, which are given no Statement; when the
 // statement is sent, none does.

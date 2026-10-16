@@ -120,63 +120,6 @@ func TestInsertAllBatchesInOneTransaction(t *testing.T) {
 	}
 }
 
-// Small entities with a hand-written scan plan, for what Invoice cannot show.
-
-type keyOnly struct{ ID int64 }
-
-func (*keyOnly) Schema(*velox.Schema) {}
-
-var keyOnlyMeta velox.MetaOnce[keyOnly]
-
-func (*keyOnly) VeloxMeta() *velox.Meta[keyOnly] {
-	return keyOnlyMeta.Get(func() velox.Shape[keyOnly] {
-		return velox.Shape[keyOnly]{Columns: []string{"ID"}, Addr: func(x *keyOnly, i int) any { return &x.ID }}
-	})
-}
-
-type wideKey struct {
-	ID  uint64
-	Opt *bool
-}
-
-func (x *wideKey) Schema(s *velox.Schema) {
-	yes := true
-	s.Column(&x.Opt).Default(&yes)
-}
-
-var wideKeyMeta velox.MetaOnce[wideKey]
-
-func (*wideKey) VeloxMeta() *velox.Meta[wideKey] {
-	return wideKeyMeta.Get(func() velox.Shape[wideKey] {
-		return velox.Shape[wideKey]{Columns: []string{"ID", "Opt"}, Addr: func(x *wideKey, i int) any {
-			if i == 0 {
-				return &x.ID
-			}
-			return &x.Opt
-		}}
-	})
-}
-
-type tinyKey struct {
-	ID   int8
-	Name string
-}
-
-func (*tinyKey) Schema(*velox.Schema) {}
-
-var tinyKeyMeta velox.MetaOnce[tinyKey]
-
-func (*tinyKey) VeloxMeta() *velox.Meta[tinyKey] {
-	return tinyKeyMeta.Get(func() velox.Shape[tinyKey] {
-		return velox.Shape[tinyKey]{Columns: []string{"ID", "Name"}, Addr: func(x *tinyKey, i int) any {
-			if i == 0 {
-				return &x.ID
-			}
-			return &x.Name
-		}}
-	})
-}
-
 func TestInsertOfANilPointerIsAnError(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)

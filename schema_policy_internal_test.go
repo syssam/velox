@@ -9,20 +9,6 @@ import (
 	"unsafe"
 )
 
-type nullTenant struct {
-	ID    int64
-	OrgID *int64
-}
-
-func (x *nullTenant) Schema(s *Schema) { s.Tenant(&x.OrgID) }
-
-type sliceTenant struct {
-	ID  int64
-	Org []byte
-}
-
-func (x *sliceTenant) Schema(s *Schema) { s.Tenant(&x.Org) }
-
 type policyTwice struct{ ID int64 }
 
 func (*policyTwice) Schema(s *Schema) {
@@ -78,9 +64,9 @@ func schemaErr(t *testing.T, err error, parts ...string) {
 }
 
 func TestSchemaPolicyTenantColumn(t *testing.T) {
-	_, err := infoOf[nullTenant]([]string{"ID", "OrgID"}, nil)
+	_, err := loadDesc(nullTenantDesc())
 	schemaErr(t, err, "velox: velox.nullTenant.OrgID: the tenant column must be NOT NULL and comparable")
-	_, err = infoOf[sliceTenant]([]string{"ID", "Org"}, nil)
+	_, err = loadDesc(sliceTenantDesc())
 	schemaErr(t, err, "velox: velox.sliceTenant.Org: the tenant column must be NOT NULL and comparable")
 }
 
@@ -108,66 +94,26 @@ func TestSchemaPolicyHookOnAnotherStruct(t *testing.T) {
 	)
 }
 
-// tagMix is embedded after ID, so that its hook needs the field's offset.
-type tagMix struct{ Tag string }
-
-func (*tagMix) Mixin(s *Schema) {
-	s.BeforeInsert(func(_ context.Context, x *tagMix) error {
-		x.Tag += "mixin;"
-		return nil
-	})
-}
-
-type hooked struct {
-	ID int64
-	tagMix
-	Title string
-}
-
-var (
-	hookedTag   = Col[hooked, string]{I: 1}
-	hookedTitle = Col[hooked, string]{I: 2}
-)
-
-func (x *hooked) Schema(s *Schema) {
-	s.BeforeInsert(func(_ context.Context, x *hooked) error {
-		x.Tag += "entity;"
-		return nil
-	})
-	s.Policy(Policy[hooked]{
-		Read: func(context.Context) (Pred[hooked], error) { return hookedTitle.EQ("r"), nil },
-		Insert: func(_ context.Context, x *hooked) error {
-			if x.Title == "" {
-				return Deny("no title")
-			}
-			return nil
-		},
-	})
-	s.BeforeUpdate(func(_ context.Context, m *Mutation[hooked]) error {
-		m.Set(hookedTag.Set("updated"))
-		return nil
-	})
-	s.BeforeDelete(func(_ context.Context, m *Mutation[hooked]) error {
-		m.Set(hookedTag.Set("x"))
-		return nil
-	})
-}
-
+// TestSchemaPolicyHooks: an entity's hooks and policy, bound from its Hooks and
+// Policy methods, act on its writes.
 func TestSchemaPolicyHooks(t *testing.T) {
-	info, err := infoOf[hooked]([]string{"ID", "Tag", "Title"}, nil)
+	info, err := loadDesc(hookedDesc())
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if len(info.beforeInsert) != 2 {
-		t.Fatalf("%d BeforeInsert hooks, want 2", len(info.beforeInsert))
+	if len(info.hooks) != 3 {
+		t.Fatalf("%d hooks, want 3", len(info.hooks))
 	}
+	e := &FakeExec{Rows: [][]any{{int64(1)}}, Affected: 1}
+	db := OpenFake(Postgres, e)
 	var x hooked
-	if err := info.beforeInsert[0](ctx, unsafe.Pointer(&x)); err != nil || x.Tag != "mixin;" {
-		t.Fatalf("the mixin's hook, run first: Tag %q, err %v", x.Tag, err)
+	if err := db.Insert(&x).Exec(ctx); !errors.Is(err, ErrDenied) {
+		t.Fatalf("insert of an untitled row: %v", err)
 	}
-	if err := info.beforeInsert[1](ctx, unsafe.Pointer(&x)); err != nil || x.Tag != "mixin;entity;" {
-		t.Fatalf("the entity's hook, run second: Tag %q, err %v", x.Tag, err)
+	x = hooked{Title: "t"} // the hook ran on the refused row too
+	if err := db.Insert(&x).Exec(ctx); err != nil || x.Tag != "entity;" {
+		t.Fatalf("the insert hook, run before the write: Tag %q, err %v", x.Tag, err)
 	}
 
 	p := info.policy
@@ -177,6 +123,7 @@ func TestSchemaPolicyHooks(t *testing.T) {
 	if pr, err := p.read(ctx); err != nil || pr.n.op != opEQ || pr.n.col != 2 || pr.n.v != "r" {
 		t.Errorf("read: %+v, %v", pr, err)
 	}
+	x.Title = ""
 	if err := p.insert(ctx, unsafe.Pointer(&x)); !errors.Is(err, ErrDenied) {
 		t.Errorf("insert of an untitled row: %v", err)
 	}
@@ -185,22 +132,22 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Errorf("insert of a titled row: %v", err)
 	}
 
-	st := Statement{Op: OpUpdate, Entity: info, Set: []Assignment{{Column: 2, Op: AssignSet, Value: "t"}}}
-	if len(info.beforeUpdate) != 1 || info.beforeUpdate[0](ctx, &st) != nil {
-		t.Fatalf("BeforeUpdate hooks %d", len(info.beforeUpdate))
+	// The update hook's Set follows the query's own.
+	if _, err := db.Update[hooked]().Set(hookedTitle.Set("t")).Where(hookedTitle.EQ("u")).Exec(ctx); err != nil {
+		t.Fatal(err)
 	}
-	if want := []Assignment{{2, AssignSet, "t"}, {1, AssignSet, "updated"}}; !reflect.DeepEqual(st.Set, want) {
-		t.Errorf("set %+v, want %+v", st.Set, want)
+	if !strings.HasPrefix(e.SQL, `UPDATE "hooked" SET "title" = $1, "tag" = $2 WHERE `) || e.Args[0] != "t" || e.Args[1] != "updated" {
+		t.Errorf("update: %s %v", e.SQL, e.Args)
 	}
 	// Set on a delete is the hook's error, though the hook returned nil.
-	del := Statement{Op: OpDelete, Entity: info}
-	if err := info.beforeDelete[0](ctx, &del); err == nil || del.Set != nil {
-		t.Errorf("Set on a delete: %v, set %+v", err, del.Set)
+	calls := e.Calls
+	if _, err := db.Delete[hooked]().Where(hookedTitle.EQ("u")).Exec(ctx); err == nil || e.Calls != calls {
+		t.Errorf("Set on a delete: %v, %d statements sent", err, e.Calls-calls)
 	}
 }
 
 func TestMutation(t *testing.T) {
-	info, err := infoOf[hooked]([]string{"ID", "Tag", "Title"}, nil)
+	info, err := loadDesc(hookedDesc())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,43 +192,11 @@ func TestMutation(t *testing.T) {
 	}
 }
 
-// A tenant column that a default or OnUpdate would fill could put a row in a
-// tenant the context never named.
-type defaultTenant struct {
-	ID  int64
-	Org string
-}
-
-func (x *defaultTenant) Schema(s *Schema) {
-	s.Tenant(&x.Org)
-	s.Column(&x.Org).Default("acme")
-}
-
-type defaultFuncTenant struct {
-	ID    int64
-	OrgID int64
-}
-
-func (x *defaultFuncTenant) Schema(s *Schema) {
-	s.Tenant(&x.OrgID)
-	s.Column(&x.OrgID).DefaultFunc(func() int64 { return 1 })
-}
-
-type onUpdateTenant struct {
-	ID    int64
-	OrgID int64
-}
-
-func (x *onUpdateTenant) Schema(s *Schema) {
-	s.Tenant(&x.OrgID)
-	s.Column(&x.OrgID).OnUpdate(func() int64 { return 1 })
-}
-
 func TestSchemaPolicyTenantColumnIsNotFilled(t *testing.T) {
-	_, err := infoOf[defaultTenant]([]string{"ID", "Org"}, nil)
+	_, err := loadDesc(defaultTenantDesc())
 	schemaErr(t, err, "velox: velox.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = infoOf[defaultFuncTenant]([]string{"ID", "OrgID"}, nil)
+	_, err = loadDesc(defaultFuncTenantDesc())
 	schemaErr(t, err, "velox: velox.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = infoOf[onUpdateTenant]([]string{"ID", "OrgID"}, nil)
+	_, err = loadDesc(onUpdateTenantDesc())
 	schemaErr(t, err, "velox: velox.onUpdateTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 }
