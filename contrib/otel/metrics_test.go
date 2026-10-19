@@ -412,3 +412,23 @@ func TestFallbackCounterShard(t *testing.T) {
 		t.Errorf("attributes %v", pts[0].Attributes.ToSlice())
 	}
 }
+
+// TestFallbackCountedOncePerFailover: an outer Around hook that calls next
+// twice sees Route.Fallback still set on the second call, which did not fail
+// over; the failover counts once.
+func TestFallbackCountedOncePerFailover(t *testing.T) {
+	p, rep := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{errs: badConn()}
+	twice := velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return next(ctx)
+	})
+	db, r := metered(t, p, veloxotel.Config{}, twice, velox.WithReplicas(velox.SQLConn(rep.open())))
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if pts := fallbackPoints(t, r); len(pts) != 1 || pts[0].Value != 1 {
+		t.Errorf("points %v, want one of 1", pts)
+	}
+}

@@ -39,18 +39,21 @@
 // transaction's duration with the outcome rollback, and goes on: the adapter
 // never recovers one. runtime.Goexit is reported the same way.
 //
-// A statement's span says where it ran: velox.route.replica (whether a
-// replica ran it), velox.route.shard on a sharded DB, and velox.route.fallback
-// when a replica failed and the primary ran the read.
+// A statement's span says where it ran. velox.route.shard, on a sharded DB, is
+// a start attribute, so samplers and span processors see it. velox.route.replica
+// (whether a replica ran the statement) and velox.route.fallback (a replica
+// failed and the primary ran the read; only when true) are set when the
+// statement ends, because they can change while it runs.
 //
 // The metrics are three histograms: db.client.operation.duration (seconds)
-// and db.client.response.returned_rows (reads that succeeded) per
-// statement, and velox.tx.duration (seconds) per transaction; and a counter,
-// velox.route.fallbacks, of the reads that fell over to the primary. Their
-// attributes are bounded: the database system, operation, table, entity,
-// error type and, on a sharded DB, shard for a statement, and the outcome,
-// read-only flag and whether it retried for a transaction; the fallback
-// counter has the shard only. Tags, the tenant, the SQL text and the call site are on spans
+// and db.client.response.returned_rows (reads that succeeded) per statement,
+// and velox.tx.duration (seconds) per transaction; and a counter,
+// velox.route.fallbacks, of the reads that fell over to the primary, once per
+// failover even when an outer hook retries the statement. Their attributes
+// are bounded: the database system, operation, table, entity, error type and,
+// on a sharded DB, shard for a statement; the outcome, read-only flag and
+// whether it retried for a transaction; and the shard alone for the fallback
+// counter. Tags, the tenant, the SQL text and the call site are on spans
 // only; the fingerprint is added to the statement metrics only with
 // Config.MetricFingerprint.
 //

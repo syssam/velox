@@ -36,6 +36,9 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 		}
 	}()
 
+	// Fallback is sticky on the Statement: an outer hook that retries calls
+	// next again with it set. Only a failover in this run is counted.
+	wasFallback := st.Route.Fallback
 	start := time.Now()
 	err := next(sctx)
 	seconds := time.Since(start).Seconds()
@@ -58,17 +61,15 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}
 	ended = true
 	span.End()
-	a.record(sctx, st, seconds, err)
+	a.record(sctx, st, seconds, err, st.Route.Fallback && !wasFallback)
 	return err
 }
 
-// routeAttributes appends to kv the span attributes of where st ran: the
-// shard when there is one, whether a replica ran it, and a fallback when
-// there was one.
+// routeAttributes appends to kv the span attributes of where st ran that
+// can change while it runs: whether a replica ran it, and a fallback when
+// there was one. The shard is final before the hooks run, so it is a start
+// attribute (see attributes).
 func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
-	if st.Route.Shard != "" {
-		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
-	}
 	kv = append(kv, attribute.Bool(attrRouteReplica, st.Route.Replica >= 0))
 	if st.Route.Fallback {
 		kv = append(kv, attribute.Bool(attrRouteFallback, true))
@@ -78,7 +79,7 @@ func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.K
 
 // attributes are a statement's span attributes known before it runs.
 func (a *adapter) attributes(st *velox.Statement) []attribute.KeyValue {
-	kv := make([]attribute.KeyValue, 0, 13+len(st.Tags))
+	kv := make([]attribute.KeyValue, 0, 14+len(st.Tags))
 	kv = append(kv,
 		attribute.String(attrDBSystem, dbSystem(st.Dialect)),
 		attribute.String(attrDBOperation, operation(st)),
@@ -101,6 +102,9 @@ func (a *adapter) attributes(st *velox.Statement) []attribute.KeyValue {
 	}
 	for _, t := range st.Tags {
 		kv = append(kv, attribute.String(attrTagPrefix+t.Key, t.Value))
+	}
+	if st.Route.Shard != "" {
+		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
 	}
 	if st.TenantBypass != "" {
 		kv = append(kv, attribute.String(attrTenantBypass, st.TenantBypass))

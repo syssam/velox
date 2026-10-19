@@ -561,3 +561,43 @@ func TestRouteAttributes(t *testing.T) {
 		}
 	})
 }
+
+// startShards records velox.route.shard as a span processor sees it at start.
+type startShards struct {
+	sdktrace.SpanProcessor
+	got []string
+}
+
+func (s *startShards) OnStart(_ context.Context, sp sdktrace.ReadWriteSpan) {
+	for _, kv := range sp.Attributes() {
+		if kv.Key == "velox.route.shard" {
+			s.got = append(s.got, kv.Value.AsString())
+			return
+		}
+	}
+	s.got = append(s.got, "")
+}
+func (*startShards) OnEnd(sdktrace.ReadOnlySpan)      {}
+func (*startShards) Shutdown(context.Context) error   { return nil }
+func (*startShards) ForceFlush(context.Context) error { return nil }
+
+// TestRouteShardAtStart: a sharded statement's span has velox.route.shard
+// when it starts, for samplers and span processors.
+func TestRouteShardAtStart(t *testing.T) {
+	sp := &startShards{}
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+	db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+		"a": {Primary: velox.SQLConn(a1.open())},
+		"b": {Primary: velox.SQLConn(b1.open())},
+	}, append(veloxotel.Options(veloxotel.Config{TracerProvider: tp}), velox.WithShardFor(shardOf))...)
+	for _, n := range []int64{2, 1} {
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(sp.got, []string{"b", "a"}) {
+		t.Errorf("shards at start %q", sp.got)
+	}
+}

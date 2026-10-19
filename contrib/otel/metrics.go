@@ -49,7 +49,7 @@ func handle(err error) {
 // after it ran (not on a panic). Its attributes are bounded: never the tags,
 // tenant, SQL or call site, and the fingerprint only with
 // Config.MetricFingerprint.
-func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error) {
+func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error, fellOver bool) {
 	kv := make([]attribute.KeyValue, 0, 7)
 	kv = append(kv,
 		attribute.String(attrDBSystem, dbSystem(st.Dialect)),
@@ -68,7 +68,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float
 	}
 	set := metric.WithAttributeSet(attribute.NewSet(kv...))
 	a.duration.Record(ctx, seconds, set)
-	if st.Route.Fallback {
+	if fellOver {
 		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
 	}
 	if st.Op == velox.OpSelect && err == nil {
@@ -79,7 +79,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float
 // shardSet is the attributes of a fallback count: the shard, when there is one.
 func shardSet(shard string) metric.AddOption {
 	if shard == "" {
-		return metric.WithAttributeSet(attribute.NewSet())
+		return metric.WithAttributes()
 	}
 	return metric.WithAttributes(attribute.String(attrRouteShard, shard))
 }
