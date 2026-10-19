@@ -52,6 +52,13 @@ func PgxConn(pool *pgxpool.Pool) Conn {
 // the replica the query read. Writes, and every statement in a transaction,
 // go to the primary. Statement.Route records the choice.
 //
+// Give each replica's pool a connect timeout shorter than your request
+// deadlines: pgx's connect_timeout, a MySQL DSN's timeout=. Neither driver
+// sets one, so a replica that drops packets stalls the dial until the
+// operating system gives up. A dial that times out falls over to the primary
+// and puts the replica in back-off; a dial still hanging when the request's
+// context ends is the context's error, and neither retries nor backs off.
+//
 // A zero Conn panics, and a PgxConn on a DB whose dialect is not PostgreSQL
 // panics in Open.
 func WithReplicas(conns ...Conn) Option {
@@ -66,7 +73,11 @@ func WithReplicas(conns ...Conn) Option {
 
 // Shard is one shard of a DB opened with OpenShards: a primary and its read
 // replicas, among which the shard's statements are routed as WithReplicas
-// routes a DB's.
+// routes a DB's. As there, each replica's pool needs a connect timeout
+// shorter than the request deadlines (pgx's connect_timeout, a MySQL DSN's
+// timeout=): a dial that times out falls over to the shard's primary, but a
+// dial still hanging when the request's context ends is the context's error,
+// and neither retries nor backs the replica off.
 type Shard struct {
 	Primary  Conn
 	Replicas []Conn
@@ -136,6 +147,9 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 // and Tx whose context has a tenant and no OnShard, so it should be fast; a
 // SQL(ctx) dry run calls it too. Its error refuses the statement, which then
 // matches both ErrNoShard and the error.
+//
+// f is called concurrently, from the goroutine of every statement, so it must
+// be safe for that, and fast: a map lookup or a hash, not a query.
 //
 // It is required with OpenShards; given to Open or OpenPgx, it panics there.
 // A nil f panics.
@@ -224,6 +238,9 @@ func WithPinWindow(d time.Duration) Option {
 // WithReplicaBackoff sets how long a replica is skipped after a read sent to
 // it failed with a connection error; the default is 5 seconds. The read
 // itself is retried once on the primary, with Statement.Route's Fallback set.
+// A read whose context has ended is neither retried nor backs the replica
+// off; see WithReplicas for the connect timeout that keeps a hung dial from
+// ending that way.
 // A negative d panics.
 func WithReplicaBackoff(d time.Duration) Option {
 	if d < 0 {

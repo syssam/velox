@@ -33,9 +33,9 @@ var errShardLookup = errors.New("the tenant is being moved")
 // openShards opens a shardSet; hooked adds an Around hook that records each
 // statement's Route once it ran, a fallback included, so the statements take
 // run's path instead of plain's.
-func openShards(hooked bool) *shardSet {
+func openShards(hooked bool, extra ...velox.Option) *shardSet {
 	s := &shardSet{euP: &velox.FakeExec{}, euR: &velox.FakeExec{}, usP: &velox.FakeExec{}}
-	opts := []velox.Option{velox.WithShardFor(s.shardFor)}
+	opts := append([]velox.Option{velox.WithShardFor(s.shardFor)}, extra...)
 	if hooked {
 		opts = append(opts, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 			err := next(ctx)
@@ -307,14 +307,23 @@ func TestTxWithNoShard(t *testing.T) {
 		want string
 		is   error
 	}{
-		"no tenant":       {bg, "", nil},
-		"unknown shard":   {velox.WithTenant(bg, int64(3)), `"mars"`, nil},
-		"a failed lookup": {velox.WithTenant(bg, int64(4)), "", errShardLookup},
+		"no tenant":                  {bg, "", nil},
+		"unknown shard":              {velox.WithTenant(bg, int64(3)), `"mars"`, nil},
+		"an unknown OnShard":         {velox.OnShard(bg, "nope"), `"nope"`, nil},
+		"AllTenants without OnShard": {velox.AllTenants(bg, "report"), "", nil},
+		"a failed lookup":            {velox.WithTenant(bg, int64(4)), "", errShardLookup},
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := openShards(false)
+			hooks := 0
+			s := openShards(false, velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+				hooks++
+				return next(ctx)
+			}))
 			ran := false
 			err := s.db.Tx(c.ctx, func(*velox.DB) error { ran = true; return nil })
+			if hooks != 0 {
+				t.Errorf("%d TxAround hooks ran; a refused Tx runs none", hooks)
+			}
 			prefix := "velox: transaction: no shard for the statement: "
 			if !errors.Is(err, velox.ErrNoShard) || !strings.HasPrefix(err.Error(), prefix) || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("Tx: %v, want ErrNoShard as %q…%s", err, prefix, c.want)

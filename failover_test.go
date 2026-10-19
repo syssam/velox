@@ -410,6 +410,30 @@ func TestRowsErrorFallsOver(t *testing.T) {
 			s.check(t, hooked, [3]int{1, 2, 0}, onR0, fellOver)
 		})
 	})
+	t.Run("a reader's own error is not a failover", func(t *testing.T) {
+		// pgx reports a failed Scan again through rows.Err(), wrapping its
+		// cause; a Scanner that fails with io.ErrUnexpectedEOF must not
+		// look like a broken connection. The fake's Scan fails on a row
+		// with the wrong column count.
+		bothPaths(t, func(t *testing.T, hooked bool) {
+			s := openFailover(hooked)
+			s.r0.Rows = [][]any{{int64(1)}}
+			s.r0.RowsErr = fmt.Errorf("can't scan into dest[0]: %w", io.ErrUnexpectedEOF)
+			_, err := s.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
+			if err == nil || !strings.Contains(err.Error(), "destinations") || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: ") {
+				t.Fatalf("got %v, want the reader's scan error, named", err)
+			}
+			if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+				t.Errorf("replica 0 is in back-off until %v", d)
+			}
+			s.check(t, hooked, [3]int{0, 1, 0}, onR0)
+			// Replica 0 is still in rotation: it serves its next turn.
+			s.r0.Rows, s.r0.RowsErr = [][]any{invoiceRow(1)}, nil
+			readOne(t, s.db, ctx) // replica 1
+			readOne(t, s.db, ctx) // replica 0
+			s.check(t, hooked, [3]int{0, 2, 1}, onR0, onR1, onR0)
+		})
+	})
 	t.Run("a query error from the rows leaves the replica in rotation", func(t *testing.T) {
 		s := openFailover(false)
 		s.r0.RowsErr = &pgconn.PgError{Code: "22012", Message: "division by zero"}

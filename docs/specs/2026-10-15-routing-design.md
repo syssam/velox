@@ -68,15 +68,15 @@ type Route struct {
 
 ## 3. Read-your-writes
 
-`velox.WithSession(ctx)` returns a context carrying a new session. A session records the time of the last write made through it:
+`velox.WithSession(ctx)` returns a context carrying a new session. A session records the end of its pin, set by each write made through it to the time of the write plus the DB's window, and never lowered:
 - any INSERT, UPDATE, DELETE or upsert that succeeded;
 - the commit of a `db.Tx` that made one.
 
-`velox.WithPinWindow(d)` sets how long after that write the session's reads go to the primary. The default is 2 s, sized to typical replica lag, so a larger lag needs a larger window.
+`velox.WithPinWindow(d)` sets how long after a write the session's reads go to the primary; `velox.PinUntil(ctx, t)` raises the pin's end to `t`, and `velox.PinnedUntil(ctx)` returns it. The default is 2 s, sized to typical replica lag, so a larger lag needs a larger window.
 
 - Without a session in the context, nothing is pinned. The documentation says so, and the example shows request middleware that starts a session.
 - A session is safe for concurrent use. Recording a write and reading the time use atomics.
-- A session lives only in its context. Pinning across requests is out of scope: an application stores the last-write time itself and restarts the session's pin with `velox.PinUntil(ctx, t)`.
+- A session lives only in its context. Pinning across requests is out of scope: an application stores the pin's end, from `velox.PinnedUntil(ctx)`, and restarts the session's pin with `velox.PinUntil(ctx, t)`.
 
 ## 4. Failover
 
@@ -90,6 +90,8 @@ Nothing else falls over:
 - an error after a row was returned. In particular, once `Iter` has yielded a row, nothing is retried.
 
 When every replica is skipped, reads go to the primary.
+
+An unreachable replica needs a connect timeout to fall over. Give each replica's pool one shorter than the request deadlines: pgx's `connect_timeout`, a MySQL DSN's `timeout=`. Neither driver sets one, so a replica that drops packets stalls the dial until the operating system gives up. A dial that times out is a dial error and falls over. A dial still hanging when the request's context ends is the context's error: it neither retries nor backs the replica off (Ruling 5).
 
 ## 5. Shards
 
@@ -182,5 +184,6 @@ From the review rounds, where they change behaviour:
 - MySQL numbers that occur only when connecting or when the server is going away fall over like pgx's `ConnectError`: 1040, 1045, 1053, 1129, 1130, 1203, 1226 and 1927.
 - MySQL's `ErrInvalidConn` is matched by type and text, without importing the driver, which would run its `init` in every program; a driver error reading "invalid connection" from another driver also falls over, once.
 - `OpenShards` also panics on a shard named `""`, a zero replica `Conn` and a `PgxConn` primary on a non-PostgreSQL DB; `OnShard(ctx, "")` fails closed.
+- An error from the rows counts for failover only when the reader itself returned no error: pgx reports a failed `Scan` again through `rows.Err()`, so a `Scanner` failing with `io.ErrUnexpectedEOF` would otherwise look like a broken connection and evict a healthy replica.
 - A `WithShardFor` error matches both `ErrNoShard` and the application's error.
 - On a tenant-scoped entity, a context with no tenant fails with `ErrNoTenant` before routing; `AllTenants` without `OnShard` is what shows `ErrNoShard`.

@@ -161,6 +161,20 @@ Left by the observability plan:
 
 - Read-only transactions on replicas: `db.Tx(ctx, fn, ReadOnly())` runs on the primary, like every transaction.
 - `TxInfo` has no shard, so `contrib/otel`'s transaction spans carry no `velox.route.shard`; their statements' spans do.
+- The session pin covers every shard and every DB the context is used with, not one shard: it errs toward the primary.
+- A savepoint (nested `Tx`) does not check its context's shard; its statements do.
+- An Around hook that replaces `*st` after `next` unpins the query's `With` loads, which run where `st.ran` says.
+- `pinnedTo` allocates a DB copy per `All` with loads on a routed DB.
+- The failover test's socket path (`refusedConnectError`) follows `TMPDIR`, which a socket path's length limit can break.
+- Shard resolution is written twice in `route.go`.
+- No sharded test of `Iter`, `Count` or `Exists`; they share `route` with `All` and `One`.
+- The itest's 100/150 ms pin timing, and the pgx terminate test's assumptions (the connection is idle under a second; `pg_terminate_backend` has taken effect by the next read), can flake on a slow runner.
+- The MySQL driver logs "closing bad idle connection" under `-v` in the failover itests.
+- An empty database name in `VELOX_TEST_POSTGRES` fails late, with a connection error rather than a message naming the variable.
+- A retried span after a failover keeps `velox.route.fallback=true`.
+- The example's 50/150 ms pin timing flakes only on a stall of more than 50 ms between a write and the next read; widen it if that is ever seen.
+- An ambiguous write (a timeout after commit, a scan error on `RETURNING`) does not pin its session, though it may have committed: a stale read within the window is possible. Spec §3 pins on a write that succeeded.
+- The itest's CI guard keys on the generic `CI=true`, which a contributor's extra job without databases would trip, loudly. A velox-specific variable would be safer.
 
 ## 1.0 release
 

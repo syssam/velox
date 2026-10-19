@@ -549,7 +549,8 @@ func (c *countedRows) Next() bool {
 // the driver or read name the entity.
 //
 // A read on a replica whose connection fails before any row reached the
-// caller, whether the query call or the rows report it, is sent again, once,
+// caller, whether the query call or the rows report it (the rows, only when
+// read itself returned no error), is sent again, once,
 // to the primary (routing spec §4), and the replica is put in back-off. read
 // runs again from the start, as it does when an Around hook retries. Once
 // Iter has handed the caller a row, the replica's error is returned and only
@@ -598,7 +599,11 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		r = counted
 	}
 	rerr, rowsErr := readRows(r, read)
-	if rowsErr != nil && db.broken(ctx, t, rowsErr) {
+	// The rows error counts for failover only when read returned nil: a
+	// broken connection ends the rows with Next false, so read finishes
+	// cleanly, while pgx also reports read's own scan error through
+	// rows.Err(), where a Scanner's io.ErrUnexpectedEOF would look like one.
+	if rerr == nil && rowsErr != nil && db.broken(ctx, t, rowsErr) {
 		if st.handed {
 			// Iter has handed the caller a row, which cannot be taken
 			// back: the error is returned, and only the replica pays.

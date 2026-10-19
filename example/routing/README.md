@@ -37,7 +37,10 @@ velox.OnShard(ctx, "us")                        // name a shard without a tenant
 - The example never copies a write to the replica, so the read after the
   window is stale. Real replication is out of scope: the replica here is an
   old copy of the file. If a replica fails to answer, the read is retried once
-  on the primary (`Route.Fallback`). The example's `Around` hook records each
+  on the primary (`Route.Fallback`); in production, give each replica's pool
+  a connect timeout shorter than your request deadlines (pgx `connect_timeout`,
+  MySQL DSN `timeout=`), or a replica that drops packets stalls reads until
+  their deadline. The example's `Around` hook records each
   statement's `Statement.Route`, and the output says where each one ran.
 - The three files at the end of the output show where the writes went: the
   `eu` primary has the update, the replica has not, and `us` has only its own

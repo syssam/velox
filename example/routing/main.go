@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -96,18 +97,15 @@ func bodies(ctx context.Context, db *sql.DB) (string, error) {
 		return "", err
 	}
 	defer func() { _ = rows.Close() }()
-	s := "["
+	var parts []string
 	for rows.Next() {
 		var b string
 		if err := rows.Scan(&b); err != nil {
 			return "", err
 		}
-		if len(s) > 1 {
-			s += " "
-		}
-		s += b
+		parts = append(parts, b)
 	}
-	return s + "]", rows.Err()
+	return "[" + strings.Join(parts, " ") + "]", rows.Err()
 }
 
 func run(ctx context.Context, w io.Writer) error {
@@ -182,7 +180,7 @@ func run(ctx context.Context, w io.Writer) error {
 		if err := read(ctx, "read, after"); err != nil {
 			return err
 		}
-		say("%-18s the stale read above is the replica's lag; replication is out of scope", "")
+		say("%-18s the stale read above is a stand-in for replication lag; replication is out of scope", "")
 
 		// Primary forces the primary for one read that must be current.
 		return read(velox.Primary(ctx), "read, Primary")

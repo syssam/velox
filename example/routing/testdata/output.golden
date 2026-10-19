@@ -1,7 +1,7 @@
 write:             set v2 on eu primary
 read, in window:   "v2" from eu primary
 read, after:       "v1" from eu replica 0
-                   the stale read above is the replica's lag; replication is out of scope
+                   the stale read above is a stand-in for replication lag; replication is out of scope
 read, Primary:     "v2" from eu primary
 insert:            "us note" for tenant 2 on us primary
   file eu         [v2]
