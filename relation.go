@@ -131,26 +131,48 @@ type link struct {
 	joinTarget int         // join's column equal to target.Columns[targetCol]
 }
 
+// useTarget is a relation's target as the use site names it: the getter of
+// the target's metadata, and the reflect.Types of One[T] and Many[T], which
+// the owner's field must be one of. The types are type descriptors only
+// (One and Many hold their value as any), so naming them does not link T's
+// metadata or its code. The zero value names no target.
+type useTarget struct {
+	get       func() (*EntityInfo, error)
+	one, many any
+}
+
+// targetOf is the use site's target for a relation to entity T. It calls
+// elemType with a nil pointer where non-generic code would use reflect.TypeFor
+// (design §3 rule 7).
+func targetOf[T any]() useTarget {
+	return useTarget{get: ownerOf[T], one: elemType((*One[T])(nil)), many: elemType((*Many[T])(nil))}
+}
+
 // resolve returns the relation's link. An EdgeTo relation has no target of
 // its own, so that the owner's metadata does not keep the target's code in
 // every program that links the owner: the use site, which names the target's
 // type, passes use. A relation that has its own target ignores use. The first
-// resolution is kept.
-func (r *relation) resolve(owner *EntityInfo, use func() (*EntityInfo, error)) (link, error) {
+// resolution is kept, and it checks that use names the entity the field holds.
+func (r *relation) resolve(owner *EntityInfo, use useTarget) (link, error) {
 	r.once.Do(func() { r.link, r.err = r.build(owner, use) })
 	return r.link, r.err
 }
 
-func (r *relation) build(owner *EntityInfo, use func() (*EntityInfo, error)) (link, error) {
+func (r *relation) build(owner *EntityInfo, use useTarget) (link, error) {
 	fail := func(format string, args ...any) (link, error) {
 		return link{}, &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
 	}
 	target := r.target
 	if target == nil {
-		target = use
-	}
-	if target == nil {
-		return fail("it has no target in the generated code; run go tool velox-gen")
+		if use.get == nil {
+			return fail("it has no target in the generated code; run go tool velox-gen")
+		}
+		// The handle's T must be the entity the field holds, or loading would
+		// fill the field with rows of another type and Get would find none.
+		if ft := rtype(r.typ); ft != rtype(use.one) && ft != rtype(use.many) {
+			return fail("the field is a %v, but the Rel handle names %s; run go tool velox-gen", ft, targetName(rtype(use.one)))
+		}
+		target = use.get
 	}
 	t, err := target()
 	if err != nil {
@@ -366,7 +388,7 @@ func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
 
 // spec is the relation's load options, without types.
 func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
-	return loadSpec{rel: r.I, target: ownerOf[T], where: r.where, order: r.order, with: r.with, err: r.err}
+	return loadSpec{rel: r.I, target: targetOf[T](), where: r.where, order: r.order, with: r.with, err: r.err}
 }
 
 // MarshalJSON writes the related entity, or null when there is none or it
@@ -386,12 +408,12 @@ func (m Many[T]) MarshalJSON() ([]byte, error) { return json.Marshal(m.v) }
 // metadata, then does not wait on itself.
 type relRef struct {
 	owner  func() (*EntityInfo, error)
-	target func() (*EntityInfo, error) // the relation's target, named by the use site
+	target useTarget // the relation's target, named by the use site
 	i      int32
 }
 
-// ownerOf is relRef.owner for entity E, and relRef.target and loadSpec.target
-// for the target E of a relation.
+// ownerOf is relRef.owner for entity E, and the getter in useTarget for the
+// target E of a relation.
 func ownerOf[E any]() (*EntityInfo, error) {
 	m, err := metaOf[E]()
 	if err != nil {
@@ -418,7 +440,7 @@ func (r relRef) link() (link, error) {
 // generated code names its target only where it is used. velox-gen verify
 // calls it for every relation: velox.CheckRelation(gen.Users.Posts).
 func CheckRelation[E, T any](r Rel[E, T]) error {
-	_, err := relRef{owner: ownerOf[E], target: ownerOf[T], i: r.I}.link()
+	_, err := relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}.link()
 	return err
 }
 
@@ -443,5 +465,5 @@ func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	}
 	// The relation resolves when a statement holding the condition runs, not
 	// here: see relRef.
-	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], target: ownerOf[T], i: r.I}, kids: nodes(ps)}}
+	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}, kids: nodes(ps)}}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -325,27 +326,7 @@ func TestVerifyGenerated(t *testing.T) {
 }
 
 func TestVerifyGeneratedCountsJoinEntities(t *testing.T) {
-	dir := tempModule(t, map[string]string{
-		"schema/user.go": `package schema
-
-import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-)
-
-type User struct{ schema.Schema }
-
-func (User) Fields() []schema.Field { return []schema.Field{field.String("name")} }
-func (User) Edges() []schema.Edge   { return []schema.Edge{edge.To("groups", Group.Type)} }
-
-type Group struct{ schema.Schema }
-
-func (Group) Fields() []schema.Field { return []schema.Field{field.String("name")} }
-func (Group) Edges() []schema.Edge {
-	return []schema.Edge{edge.From("users", User.Type).Ref("groups")}
-}
-`})
+	dir := tempModule(t, map[string]string{"schema/user.go": genUserGroupSchema})
 	if code, _, errs := velox(t, dir, "./schema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
@@ -504,6 +485,27 @@ func TestModeSelectionKeepsTheOldMode(t *testing.T) {
 	}
 }
 
+const genUserGroupSchema = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+func (User) Edges() []schema.Edge   { return []schema.Edge{edge.To("groups", Group.Type)} }
+
+type Group struct{ schema.Schema }
+
+func (Group) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+func (Group) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("users", User.Type).Ref("groups")}
+}
+`
+
 const genPostUserSchema = `package schema
 
 import (
@@ -554,7 +556,7 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 		if !strings.Contains(string(b), old) {
 			t.Fatalf("%s has no %q", file, old)
 		}
-		if err := os.WriteFile(p, []byte(strings.Replace(string(b), old, repl, 1)), 0o644); err != nil {
+		if err := os.WriteFile(p, []byte(strings.ReplaceAll(string(b), old, repl)), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -565,10 +567,50 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 		t.Errorf("a bad key: %d %q %q", code, out, errs)
 	}
 	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", 0, 9)`, `velox.EdgeTo[Post]("Posts", 0, 2)`)
+	// A handle that names another entity than the field holds: the target comes
+	// from the handle, so verify must compare it with the field.
+	edit("user_velox.go", "velox.Rel[User, Post]", "velox.Rel[User, User]")
+	code, out, errs = velox(t, dir, "verify", "-out", "gen", "./schema")
+	if code != 1 || !strings.Contains(errs, "User.Posts: the field is a velox.Many[") || !strings.Contains(errs, "but the Rel handle names") || !strings.Contains(out, "with errors") {
+		t.Errorf("a mismatched handle: %d %q %q", code, out, errs)
+	}
+	edit("user_velox.go", "velox.Rel[User, User]", "velox.Rel[User, Post]")
 	// A target whose metadata is broken: the relation names it, and says so.
 	edit("post_velox.go", "Tenant:     -1,", "Tenant:     9,")
 	code, out, errs = velox(t, dir, "verify", "-out", "gen", "./schema")
 	if code != 1 || !strings.Contains(errs, "User.Posts: its target") || !strings.Contains(errs, "the tenant names column 9") || !strings.Contains(out, "with errors") {
 		t.Errorf("a broken target: %d %q %q", code, out, errs)
+	}
+}
+
+// TestVerifyGeneratedChecksThroughRelations: a many-to-many relation's key
+// through its join entity is checked too; a column of the join entity that
+// does not exist is caught by verify, which names the relation.
+func TestVerifyGeneratedChecksThroughRelations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"schema/schema.go": genUserGroupSchema})
+	if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("generate: %d %q", code, errs)
+	}
+	if code, out, errs := velox(t, dir, "verify", "-out", "gen", "./schema"); code != 0 || out != "velox-gen verify: 3 entities, 0 with errors\n" {
+		t.Fatalf("a good model: %d %q %q", code, out, errs)
+	}
+	p := filepath.Join(dir, "gen", "user_velox.go")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`(velox\.EdgeThrough\[UserGroup, Group\]\("Groups", \d+, \d+, )\d+(, \d+\))`)
+	if !re.Match(b) {
+		t.Fatalf("no EdgeThrough for Groups in\n%s", b)
+	}
+	if err := os.WriteFile(p, re.ReplaceAll(b, []byte("${1}9${2}")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := velox(t, dir, "verify", "-out", "gen", "./schema")
+	if code != 1 || !strings.Contains(errs, "User.Groups") || !strings.Contains(out, "with errors") {
+		t.Errorf("a broken through relation: %d %q %q", code, out, errs)
 	}
 }

@@ -13,7 +13,7 @@ import (
 // filtered, ordered, and with relations of its own.
 type loadSpec struct {
 	rel    int32
-	target func() (*EntityInfo, error) // the relation's target, named by Rel
+	target useTarget // the relation's target, named by Rel
 	where  []Predicate
 	order  []OrderTerm
 	with   []loadSpec

@@ -391,9 +391,11 @@ func validate(info *EntityInfo) error {
 
 // CheckEntity builds entity E's metadata and returns what is wrong: a mistake
 // in its Schema or Mixin methods, or generated code that is out of date. It
-// resolves the relations of the old Shape path; a relation of generated code
-// names its target only where a Rel handle is used, so CheckRelation checks
-// those. velox-gen verify calls both for every entity and relation.
+// resolves the relations of the old Shape path only. A relation of generated
+// code names its target where a Rel handle is used, so CheckEntity does not
+// check it: call CheckRelation for each relation (a test that calls only
+// CheckEntity leaves the relations unchecked). velox-gen verify calls
+// CheckEntity for every entity and CheckRelation for every relation.
 func CheckEntity[E any, PE Entity[E]]() error {
 	m := PE(nil).VeloxMeta()
 	if m.err != nil {
@@ -404,7 +406,7 @@ func CheckEntity[E any, PE Entity[E]]() error {
 		if r.target == nil {
 			continue // an EdgeTo's target comes from its use site: CheckRelation
 		}
-		if _, err := r.resolve(m.info, nil); err != nil {
+		if _, err := r.resolve(m.info, useTarget{}); err != nil {
 			errs = append(errs, err)
 		}
 	}

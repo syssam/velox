@@ -29,11 +29,11 @@ func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 		rel           int
 		target        *EntityInfo
 		ownerCol, col string
-		use           func() (*EntityInfo, error) // the target as the use site names it
+		use           useTarget // the target as the use site names it
 	}{
-		{co, 0, em, "id", "company_id", ownerOf[employee]}, // Many: employee.CompanyID
-		{em, 0, em, "boss_id", "id", ownerOf[employee]},    // One
-		{em, 1, co, "company_id", "id", ownerOf[company]},  // One: employee.CompanyID
+		{co, 0, em, "id", "company_id", targetOf[employee]()}, // Many: employee.CompanyID
+		{em, 0, em, "boss_id", "id", targetOf[employee]()},    // One
+		{em, 1, co, "company_id", "id", targetOf[company]()},  // One: employee.CompanyID
 	} {
 		l, err := c.owner.rels[c.rel].resolve(c.owner, c.use)
 		if err != nil || l.target != c.target || c.owner.Columns[l.ownerCol].Name != c.ownerCol || l.target.Columns[l.targetCol].Name != c.col {
@@ -48,7 +48,7 @@ func TestResolveRefusesMismatchedKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, ownerOf[keyedLine])
+	_, err = info.rels[0].resolve(info, targetOf[keyedLine]())
 	var se *SchemaError
 	if !errors.As(err, &se) || !strings.Contains(err.Error(), "the key types differ: velox.keyed.ID is string and velox.keyedLine.KeyedID is int64") {
 		t.Errorf("%v", err)
@@ -91,7 +91,7 @@ func TestMissingConventionalKey(t *testing.T) {
 	x := new(lonely)
 	info, err := buildInfo(reflect.TypeFor[lonely](), unsafe.Pointer(x), any(x), []string{"ID"}, []Relation{RelationTo[keyedLine]("Lines")})
 	if err == nil {
-		_, err = info.rels[0].resolve(info, nil)
+		_, err = info.rels[0].resolve(info, useTarget{})
 	}
 	if err == nil || !strings.Contains(err.Error(), "velox.keyedLine has no field LonelyID; name one, or declare the key with s.Many(&x.Lines).ForeignKey") {
 		t.Errorf("%v", err)
@@ -125,7 +125,7 @@ func resolveAll[E any](cols []string, rels ...Relation) error {
 	if err != nil {
 		return err
 	}
-	_, err = info.rels[0].resolve(info, nil)
+	_, err = info.rels[0].resolve(info, useTarget{})
 	return err
 }
 
@@ -276,7 +276,7 @@ func TestNonComparableKeyIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, ownerOf[blobLine])
+	_, err = info.rels[0].resolve(info, targetOf[blobLine]())
 	wantErr(t, err, "Lines: a key of type []uint8 cannot be compared")
 }
 
@@ -322,7 +322,7 @@ func TestOnePrefersTheOwnersKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := info.rels[0].resolve(info, nil)
+	l, err := info.rels[0].resolve(info, useTarget{})
 	if err != nil || info.Columns[l.ownerCol].Name != "parent_id" || l.target.Columns[l.targetCol].Name != "id" {
 		t.Errorf("%+v, %v", l, err)
 	}
@@ -358,7 +358,7 @@ func TestForeignKeyInEmbeddedStruct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := info.rels[0].resolve(info, nil)
+	l, err := info.rels[0].resolve(info, useTarget{})
 	if err != nil || l.target.Columns[l.targetCol].Name != "owner_ref" || info.Columns[l.ownerCol].Name != "id" {
 		t.Errorf("%+v, %v", l, err)
 	}
@@ -370,7 +370,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, ownerOf[brokenTarget])
+	_, err = info.rels[0].resolve(info, targetOf[brokenTarget]())
 	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
 }
 

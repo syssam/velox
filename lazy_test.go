@@ -424,3 +424,98 @@ func TestCheckRelation(t *testing.T) {
 		t.Errorf("%d statements were sent", e.Calls)
 	}
 }
+
+// The owners mmA and mmB each hold Many[mmItem]. A handle that names another
+// entity than the field holds is stale or hand-edited code: Rel[mmA, mmOther]
+// would load []mmOther into a Many[mmItem], whose Get then finds nothing.
+type mmItem struct{ ID, OwnerID int64 }
+
+type mmOther struct{ ID, OwnerID int64 }
+
+type mmA struct {
+	ID    int64
+	Items velox.Many[mmItem]
+}
+
+type mmB struct {
+	ID    int64
+	Items velox.Many[mmItem]
+}
+
+var (
+	mmItemMeta  velox.MetaOnce[mmItem]
+	mmOtherMeta velox.MetaOnce[mmOther]
+	mmAMeta     velox.MetaOnce[mmA]
+	mmBMeta     velox.MetaOnce[mmB]
+
+	mmAs = struct{ Items velox.Rel[mmA, mmOther] }{velox.Rel[mmA, mmOther]{I: 0}} // the stale handle
+	mmBs = struct{ Items velox.Rel[mmB, mmItem] }{velox.Rel[mmB, mmItem]{I: 0}}
+)
+
+func mmItemDesc() velox.Desc[mmItem] {
+	return velox.Desc[mmItem]{
+		Table: "mm_items", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
+		PrimaryKey: []int{0}, Tenant: -1,
+		Addr: func(x *mmItem, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
+	}
+}
+
+func (*mmItem) VeloxMeta() *velox.Meta[mmItem] { return mmItemMeta.Load(mmItemDesc) }
+
+func (*mmOther) VeloxMeta() *velox.Meta[mmOther] {
+	return mmOtherMeta.Load(func() velox.Desc[mmOther] {
+		return velox.Desc[mmOther]{
+			Table: "mm_others", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}},
+			PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *mmOther, i int) any { return [...]any{&x.ID, &x.OwnerID}[i] },
+		}
+	})
+}
+
+func (*mmA) VeloxMeta() *velox.Meta[mmA] {
+	return mmAMeta.Load(func() velox.Desc[mmA] {
+		return velox.Desc[mmA]{
+			Table: "mm_as", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Relations: []velox.Relation{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			Addr:      func(x *mmA, i int) any { return &x.ID },
+			RelAddr:   func(x *mmA, i int) any { return &x.Items },
+		}
+	})
+}
+
+func (*mmB) VeloxMeta() *velox.Meta[mmB] {
+	return mmBMeta.Load(func() velox.Desc[mmB] {
+		return velox.Desc[mmB]{
+			Table: "mm_bs", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Relations: []velox.Relation{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			Addr:      func(x *mmB, i int) any { return &x.ID },
+			RelAddr:   func(x *mmB, i int) any { return &x.Items },
+		}
+	})
+}
+
+// TestHandleMustNameTheFieldsEntity: the target comes from the handle, so the
+// first resolution checks that it is the entity the field holds, and every
+// use (CheckRelation, With, HasWhere) reports the same SchemaError.
+func TestHandleMustNameTheFieldsEntity(t *testing.T) {
+	if err := velox.CheckRelation(mmBs.Items); err != nil {
+		t.Fatalf("a matching handle: %v", err)
+	}
+	const want = "velox: velox_test.mmA.Items: the field is a velox.Many[github.com/syssam/velox2_test.mmItem], but the Rel handle names github.com/syssam/velox2_test.mmOther; run go tool velox-gen"
+	err := velox.CheckRelation(mmAs.Items)
+	var se *velox.SchemaError
+	if !errors.As(err, &se) || err.Error() != want {
+		t.Fatalf("CheckRelation: %v, want %s", err, want)
+	}
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Query[mmA]().With(mmAs.Items).Limit(1).All(ctx); err == nil || err.Error() != want {
+		t.Errorf("With: %v", err)
+	}
+	if _, err := db.Query[mmA]().Where(mmAs.Items.Has()).Limit(1).All(ctx); err == nil || err.Error() != want {
+		t.Errorf("Has: %v", err)
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements were sent", e.Calls)
+	}
+}
