@@ -1,8 +1,8 @@
 # velox2 Schema DSL and code generation — design
 
-Status: draft for review · 2026-10-15 · Go 1.27+
+Status: implemented (schema plans 1–4) · designed 2026-10-15 · Go 1.27+
 
-This design replaces Core §1 (entity model) and §2 (generated code) of `2026-10-14-core-design.md`. Entities were plain structs with a `Schema(*velox.Schema)` method. They are now declared in an ent-style schema DSL, following the old velox's schema API. velox-gen generates the entity structs from it.
+This design replaced Core §1 (entity model) and §2 (generated code) of `2026-10-14-core-design.md`. Entities were plain structs with a `Schema(*velox.Schema)` method. They are now declared in an ent-style schema DSL, following the old velox's schema API. velox-gen generates the entity structs from it. The struct-first path is gone from the code: the DSL is the only way to declare an entity.
 
 The runtime is unchanged:
 - the generic query and mutation API;
@@ -82,7 +82,8 @@ Options, which carry their ent meanings:
 |---|---|
 | `Optional()` | not required on create, and the column is NULL-able |
 | `Nillable()` | the Go field is a pointer |
-| `Default(v)`, `DefaultFunc(f)`, `UpdateDefault(f)` | values on insert, and on every update |
+| `Default(v)`, `DefaultFunc(f)` | the value of a column an insert does not set |
+| `UpdateDefault(f)` | the value an update sets when it does not set the column; **update only**, as in ent. `mixin.Time`'s `updated_at` has both a `Default` and an `UpdateDefault`, so an insert fills it too |
 | `Immutable()` | refused in `Update`, `Save` and upsert update lists |
 | `Unique()` | a single-column unique index |
 | `StorageKey(name)` | the column name; the default is the field name |
@@ -111,7 +112,7 @@ A failure is a `*ValidationError{Entity, Field, Err}`.
 - `StorageKey(...)` names the foreign-key column or join table.
 - Many-to-many edges use a join table.
 
-The generated struct holds the edges as `velox.Many[T]` and `velox.One[T]`, with the semantics of Core §1: never loaded lazily, and the zero value means not loaded. `With`, `Has` and `HasWhere` use generated relation handles.
+The generated struct holds the edges as `velox.Many[T]` and `velox.One[T]`, with the semantics of Core §1: never loaded lazily, and the zero value means not loaded. `With`, `Has` and `HasWhere` use generated relation handles, `gen.Users.Posts`, a `velox.Rel[User, Post]`. How a relation names its target is in §2.
 
 ### 1.3 Indexes, mixins, annotations
 
@@ -130,8 +131,11 @@ For each entity it writes:
 - **The struct.** Every field has its Go type: a pointer for `Nillable`, a named enum type for `Enum`. Edge fields are `velox.Many[T]` / `velox.One[T]`. JSON tags are on every field, and `Sensitive` fields are omitted from JSON.
 - **The typed enums**, with constants and validation.
 - **The handles variable,** for example `gen.Users.Name` and `gen.Users.Posts`. These are the column and relation handles of today (`Col`, `OrderedCol`, `NumberCol`, `StringCol` and their `Null…` forms, and `Rel`).
-- **The metadata.** A literal table of columns, keys, indexes, tenant, edges, validators, defaults and annotations, turned into the runtime's `EntityInfo` on first use. That replaces `Schema(*velox.Schema)` and the reflection over struct fields.
-- **The stale check.** `GeneratedCodeIsVersion3` and a compile-time check that the generated package matches the schema it was generated from (a hash of the model).
+- **The metadata.** A `velox.Desc` literal of columns, keys, indexes, tenant, relations, validators and defaults, turned into the runtime's `EntityInfo` on first use. That replaced `Schema(*velox.Schema)` and the reflection over struct fields.
+  - **A relation names no target.** The `Desc` records the relation's key and the types of its holder (`*One[T]` or `*Many[T]`), and nothing that would link the target's metadata. The handle's use site supplies the target: `Where`, `Has`, `HasWhere` and `With` on a `Rel[User, Post]` take `Post` from the handle's type parameter, and `velox.CheckRelation(gen.Users.Posts)` resolves one relation. The first resolution checks the handle's `T` against the field's `One[T]` or `Many[T]`, so a stale or hand-edited handle fails there with a `*SchemaError` naming the relation and both types, not at compile time.
+  - **Why.** With the target in the `Desc`, linking one entity linked every entity reachable through relations, and inverse edges make a whole schema one connected component. A service that queries five entities of 500 was 23.6 MB. Without it the binary is 5.66 MB at any N (core spec, A.6, note of 2026-10-19). `EdgeThrough` keeps its join entity, which has no relations of its own, so that is one hop.
+  - **What it costs.** An invalid relation target is reported where the relation is used, not at the owner's first use. `velox-gen verify` calls `CheckEntity` for every entity, which checks the entity only, and `CheckRelation` for every relation, so CI finds it. The linker still reads the whole `gen` package, so its memory grows with N (185 MB at N=100, 279 MB at N=500), though the binary does not.
+- **The stale check.** `GeneratedCodeIsVersion3`, which fails to compile when generated code and the library disagree, and the model's hash in `velox.go`, which `velox-gen -check` compares in CI: a compile-time check across packages is not possible.
 
 The API of the runtime does not change:
 
@@ -146,11 +150,18 @@ You write policies and hooks as methods in your own files in `gen/`. velox-gen w
 
 ```go
 // gen/user_policy.go — yours
-func (*User) Policy() velox.Policy[User] { return velox.Policy[User]{Read: …, Write: …, Insert: …} }
+func (*User) Policy() velox.Policy[User] {
+    return velox.Policy[User]{
+        // Read is ANDed into every SELECT, UPDATE and DELETE; Write and Insert are the other two.
+        Read: func(ctx context.Context) (velox.Pred[User], error) {
+            return Users.DeletedAt.IsNull(), nil
+        },
+    }
+}
 
 func (*User) Hooks() []velox.Hook[User] {
     return []velox.Hook[User]{
-        velox.On(audit.Hook[User](), velox.OpInsert, velox.OpUpdate, velox.OpDelete),
+        velox.On(auditHook[User](), velox.OpInsert, velox.OpUpdate, velox.OpDelete),
         func(next velox.Mutator[User]) velox.Mutator[User] {
             return velox.MutateFunc[User](func(ctx context.Context, m *velox.Mutation[User]) error {
                 // before: m.Rows() on insert (mutable); m.Value/Set/Where on update and delete
@@ -168,12 +179,13 @@ func (*User) Hooks() []velox.Hook[User] {
 - `MutateFunc[E]` adapts a function to a `Mutator[E]`.
 - `velox.On(h, ops...)` runs a hook only for the given operations, the `Op` constants that `Statement.Op` uses: `OpInsert`, `OpUpdate`, `OpDelete`, listed as arguments.
 - Hooks run in the order listed, each wrapping the next.
-- Generic hooks are reusable across entities, for example `audit.Hook[E]()`.
+- A generic hook function, such as `auditHook[E any]() velox.Hook[E]`, is reusable across entities: each entity lists it.
 
 `Mutation[E]` covers every operation:
 - `Op()`;
 - `Rows() []*E` for an insert (all rows of an `Insert` or `InsertAll` statement), changeable before `next`;
 - `Value(col)`, `Set(...)` and `Where(...)` for an update or delete, as in the policy design §3;
+- `DB()`, the database the write runs on: the transaction's inside `db.Tx`, else the database's. A hook that writes or reads other rows uses `m.DB().Insert(&audit).Exec(ctx)`, so its work commits or rolls back with the write inside a transaction (ent's `m.Client()`). It is set for the writes of entities that have hooks, which are the only ones that see a `Mutation`;
 - `Result()` after `next`: its `Affected` is the rows inserted, matched or deleted. A generated key is written back into its row, so after `next` an `Insert`'s `m.Rows()[0].ID` holds it; `InsertAll` reads no keys back.
 
 **Order of a write:**
@@ -181,23 +193,23 @@ func (*User) Hooks() []velox.Hook[User] {
 2. The hooks' code before `next` runs.
 3. Inside `next`, velox runs:
    - for an insert: the defaults, the tenant (fill, then check), the validators, and the policy's `Insert` check;
-   - for an update: the `UpdateDefault` assignments, the immutable check, and the validators;
+   - for an update: the `UpdateDefault` assignments (an insert does not apply them), the immutable check, and the validators;
    - then the pipeline: the guard again, the Rewrite hooks, the scope, render, and execute.
 4. The hooks' code after `next` runs.
 
-Validators therefore see what hooks set. In a transaction, the code after `next` runs before the commit; hooks after commit are out of scope. A hook cannot yet reach the caller's transaction: `Mutation` holds no DB and the context carries no transaction, so a write a hook makes itself runs outside it. Plan 3 decides how to expose it, for example `velox.TxOf(ctx)`. Under `SQL(ctx)`, `next` does not execute: `Result()` is empty and `velox.IsDryRun(ctx)` is true.
+Validators therefore see what hooks set. In a transaction, the code after `next` runs before the commit; hooks after commit are out of scope. A write a hook makes through `m.DB()` is part of the caller's transaction; through any other `*DB` it is not. Under `SQL(ctx)`, `next` does not execute: `Result()` is empty and `velox.IsDryRun(ctx)` is true.
 
 **Detection:** velox-gen binds `Policy()` and `Hooks()` in the generated metadata (`velox.BindPolicy` and `velox.BindHooks`) when the entity declares them; a wrong signature does not compile, and an entity whose method the metadata does not bind is refused at first use. Nothing runs at program start.
 
-Neither method's body may read the entity's own metadata outside the functions it returns: a `Has` or `HasWhere` there waits on the metadata's build in progress and deadlocks. Such predicates are built inside the returned functions.
+Building predicates in the method bodies is fine, `Has` and `HasWhere` included. `HasWhere` reads no metadata: it records the relation and its target, and the statement that holds the condition resolves it (its `prepare`, before the guard runs). A relation that cannot be resolved therefore fails that statement, not the call that built the condition. (Until plan 4, a `Has` in a `Policy()` body deadlocked on the metadata build in progress.)
 
 Hooks for every entity stay the statement-level `WithAround` and `WithRewrite`, which are untyped by nature. **Mixins** carry no behaviour: a reusable hook is a generic function that each entity lists.
 
-This replaces the policy design §3's `BeforeInsert`, `BeforeUpdate` and `BeforeDelete`. Their uses map onto a hook's code before `next`.
+This replaced the policy design §3's `BeforeInsert`, `BeforeUpdate` and `BeforeDelete`. Their uses map onto a hook's code before `next`.
 
 ## 4. velox-gen
 
-1. **Load:** compile and run a small program that imports the schema package and serialises each schema's fields, edges, indexes, mixins and annotations to a model (JSON, versioned). This is the mechanism `verify` uses today.
+1. **Load:** compile and run a small program that imports the schema package and serialises each schema's fields, edges, indexes, mixins and annotations to a model (JSON, versioned). `verify` uses the same mechanism.
 2. **Validate:** check the model:
    - duplicate fields and columns;
    - unknown edge targets, inverse edges that do not match, and foreign keys bound to missing fields;
@@ -208,7 +220,21 @@ This replaces the policy design §3's `BeforeInsert`, `BeforeUpdate` and `Before
 3. **Generate:** write the `gen` package from the model with `go/format`, deterministically.
 4. **Generators:** pass the model to registered generators (`contrib/graphql`, `contrib/grpc`), each writing its own files.
 
-Commands: `go tool velox-gen ./schema` (configured by flags or a `velox.yaml`), `-check`, and `describe -json`, which prints the model.
+Commands:
+
+```
+velox-gen [-out dir] [-package name] [-check] [./schema]
+velox-gen verify [-out dir] [./schema]
+velox-gen describe [-json] [./schema]
+```
+
+- The package is one schema package, `./schema` by default; `./...` and a pattern that names no schemas are errors.
+- `-out` is the generated package's directory (default `./gen`), `-package` its name.
+- `-check` writes nothing and exits 1 when a generated file is out of date, missing or left over. This is the stale check of §2.
+- `verify` builds a program that imports the generated package and reports what `velox.CheckEntity` finds for every entity and `velox.CheckRelation` for every relation.
+- `describe` prints the resolved model; `-json` prints it as JSON.
+
+Flags are all the configuration there is. A `velox.yaml` arrives with the generator plugins, with GraphQL.
 
 ## 5. Repository layout
 
@@ -232,12 +258,12 @@ velox2/
 - The root package keeps `Open(d, *sql.DB)` working.
 - `dialect/pgx` and `dialect/sql` construct a DB through an internal executor interface shared under `internal/`.
 
-## 6. What this replaces
+## 6. What this replaced
 
-- Core §1 and §2: struct-first entities, `Schema(*velox.Schema)`, `Mixin(*velox.Schema)`, `s.Policy`, `s.BeforeInsert` and the rest, and velox-gen's struct scanner.
-- `meta.go`'s reflection-based `buildInfo`, which becomes a builder from generated metadata.
-- `internal/testmodel`, `example/` and `bench/scale`'s generator, which are rewritten in the DSL.
-- The policy design §2.2 and §3 API forms (`s.Policy`, `s.BeforeInsert`), which become methods. Their semantics are unchanged.
+- Core §1 and §2: struct-first entities, `Schema(*velox.Schema)`, `Mixin(*velox.Schema)`, `s.Policy`, `s.BeforeInsert` and the rest, and velox-gen's struct scanner. All were removed in plan 4.
+- `meta.go`'s reflection-based `buildInfo`, which became a builder from generated metadata.
+- `internal/testmodel`, `example/` and `bench/scale`'s generator, which were rewritten in the DSL.
+- The policy design §2.2 and §3 API forms (`s.Policy`, `s.BeforeInsert`), which became methods. Their semantics are unchanged.
 
 ## 7. Testing
 

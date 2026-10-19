@@ -1,37 +1,28 @@
-# Core 1 — follow-ups for plans 2–5
+# Core 1 — follow-ups
 
-Findings from the reviews of Core 1 that were deliberately left for later. Each later plan takes the items under its name before it is written. Items already fixed on the branch are not listed.
+Findings from the reviews of Core 1 and of the plans after it that were deliberately left for later. Items already fixed are not listed; the schema DSL plans (1 to 4) closed the old struct-first path's items, which are gone from this file.
 
-## Still open from before plan 3
+## Still open from before core plan 3
 
 - The LIKE escape depends on server settings: MySQL's `ESCAPE '\\'` assumes `NO_BACKSLASH_ESCAPES` is off, and PostgreSQL's `ESCAPE '\'` assumes `standard_conforming_strings` is on. A non-backslash escape character (e.g. `!`) removes both dependencies.
-- Golden SQL for MySQL and SQLite on the read-path render cases that still assert PostgreSQL only (writes cover all three since plan 3), an OR-between-siblings case, and the NEQ/GTE/LT/LTE operators.
+- Golden SQL for MySQL and SQLite on the read-path render cases that still assert PostgreSQL only (writes cover all three since core plan 3), an OR-between-siblings case, and the NEQ/GTE/LT/LTE operators.
 
-## Plan 2 (generator)
+## Left by core plan 4 (relations)
 
-- Resolved in plan 2: nested mixins and embedded structs that add no columns are refused by velox-gen; a field that is not a column is named in its `SchemaError`.
-- Resolved in plan 5: a field's type change fails to compile (velox-gen's type-check function).
-
-## Left by plan 4 (relations)
-
-- velox-gen does not refuse a relation to a type that is not an entity (the generated `RelationTo` then fails to compile), and has no fixture with a relation target in an aliased package.
 - A rewrite hook that points a statement at another table (tenancy, sharding) does not redirect the tables inside `EXISTS` subqueries; relation loads do go through the hooks.
-- `HasWhere` does not check that `Rel`'s `T` is the relation's resolved target (only a hand-built `Rel` can differ).
 - `One` loads relations for the two rows it reads before returning `ErrNotSingular`.
 - A has-one relation with several matching rows loads the first in the relation's order.
 - On MySQL, an `UPDATE` or `DELETE` whose `EXISTS` reads the table being changed fails with error 1093 (documented on `Has`).
 - A `time.Time` cursor made in memory, finer than the column's precision, can skip or repeat a row with `After` (documented: `x` must be a row a query returned).
 
-## Left by plan 5 (scale guards)
+## Left by core plan 5 (scale guards)
 
-- `bench/scale`'s time thresholds are 4x an M3 Max (sizes and memory 2x). Recalibrate them from the first GitHub run: set each to a margin over the figures that run reports.
-- The object-size guard's large rows (`entityUse` and similar) carry a fixed per-package cost, so a 2x threshold on them tolerates a bigger absolute growth than on the small rows.
-- The spec's "98 lines per entity" (the generated code's size, §2) was not re-measured after the type-check function was added to generated code.
+- `bench/scale`'s time thresholds are 4x the largest of three runs on an M3 Max (sizes and memory 1.5x, re-baselined on 2026-10-19). Recalibrate them from the first GitHub run: set each to a margin over the figures that run reports.
+- The object-size guard's large rows (`entityDescUse` and similar) carry a fixed per-package cost, so a 2x threshold on them tolerates a bigger absolute growth than on the small rows.
+- The spec's "98 lines per entity" (the generated code's size, §2) was not re-measured for the schema DSL's generated `Desc` literals.
 - `TestRewriteCanReplaceTheEntity` can only catch a regression when the allocator reuses an address, and the bypass that renders uncached when a hook replaced the entity has no test pinning that the cache stays flat. The hook-replaced-entity cache check was not mutation-tested.
 - `TestCacheKeepsShapesApart` does not pin limit/offset presence, order or nesting as separate shapes (`FuzzRender` compares the cached path with the uncached one, which covers them only for the inputs it generates).
 - `Sum` and `Avg` on `NumberCol` await aggregates (sub-project 2 or later).
-- Resolved in plan 5's final review: `snake` keeps a digit with the acronym before it (`ID2` → `id2`, `OrgID2` → `org_id2`, `SHA256Sum` → `sha256_sum`).
-- Resolved in plan 5's final review: a zero-size field is refused as a column (a `SchemaError` asking for `velox:"-"`): it holds no value and shares its address with the next field. velox-gen still writes a handle for one; `verify` reports the error.
 
 ## Sub-project 2 (guardrails and policy)
 
@@ -58,16 +49,14 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 - A package-level helper named `flag` in the root package invites a collision.
 - `Count` calls `r.Err()` while rows are still open after the first row; `export_test`'s `assign` panics on a wrongly typed fake value.
 
-## Left by plan 2 (generator)
+## Left by core plan 2 (generator)
 
 - `velox-gen verify`'s temporary directory survives SIGINT/SIGKILL: there is no signal handling and no sweep of stale `.velox-verify-*` directories. Applications should ignore `.velox-verify-*/` in git (said in velox-gen's package comment).
-- `apply` is not atomic and, on an error, does not say which files it already changed.
-- Entities in nested `internal/` packages of the module are not reachable from verify's program at the module root; they fail to compile instead of being skipped.
-- Naming edge cases: the plural of names ending in an uppercase S or X ("DNSs"), a digit before y, and lowerCamel of "IDs" ("iDs").
-- `resolved` does not look inside func, chan or struct types; registered types take precedence over the underlying kind (untested).
+- velox-gen writes and deletes its files one at a time; an error part-way leaves the files already changed (it prints each path as it goes).
+- Naming edge cases of `internal/gen/names.go`: the plural of names ending in an uppercase S or X ("DNSs"), a digit before y, and lowerCamel of "IDs" ("iDs").
 - verify's messages start `velox-gen verify: `, and a compile failure of its program is not explained beyond the compiler's output.
 
-## Left by plan 3 (writes)
+## Left by core plan 3 (writes)
 
 - Detached rollbacks have no timeout, and RetrySerializable retries immediately, with no backoff and no context check between attempts.
 - A rollback or savepoint error after the statement ran: sqlExecutor.exec returns an error when RowsAffected fails although the statement ran; begin on a transaction executor would dereference nil (unreachable: nested Tx uses savepoints).
@@ -89,12 +78,11 @@ Findings from the reviews of Core 1 that were deliberately left for later. Each 
 
 ## Left by policy plan 2
 
-- Compile cost: a Policy and the three entity hooks add about 99 KB to an entity's package, about 50 KB of it velox's generic registration (`Policy`, `BeforeInsert`, `BeforeUpdate`, `BeforeDelete`, `mutationHook` instantiated per entity). Cut velox's share, for example with non-generic registration through layout-identical func types (policy design §7).
 - PostgreSQL with a schema-qualified table in `DO UPDATE … WHERE` is verified only on SQLite.
 - Errors inside nested `EXISTS`: `existsError` names the statement's entity and the innermost target only, dropping the middle of the path.
 - `Mutation`'s `Set` clones the assignments for every replacement; `ConflictClause`'s unexported policy flag lives on an exported type.
 - `scoper.node`'s walk is O(nodes) per statement.
-- Test gaps: `Op.String`'s "unknown"; `TestSchemaPolicyHooks` indexes `beforeDelete[0]` without a length check; the Review Focus 1 test of policy 2's Task 2 runs its base query on a shared DB without per-run argument checks; the count case with only an `EXISTS` does not assert its SQL; policy tests use package-level counters; the order of a Delete's predicates is not asserted; the hidden-row check through `run` (with hooks); the post-hook guard backstop; `hooks_internal_test`'s text-compare case and its `Errs` case assert only `err != nil`; `TestOverWaitsForAPassedDeadline` lacks block and early-cancel cases; the split `InsertAll` `SQL(ctx)` test does not compare arguments; `FuzzScope`'s input-tree check compares only up to the shorter length and its "copy" is a rebuild; `ExistsOn` makes an unchecked type assertion; the CI fuzz regex is looser than `^FuzzScope$`.
+- Test gaps: `Op.String`'s "unknown"; the Review Focus 1 test of policy 2's Task 2 runs its base query on a shared DB without per-run argument checks; the count case with only an `EXISTS` does not assert its SQL; policy tests use package-level counters; the order of a Delete's predicates is not asserted; the hidden-row check through `run` (with hooks); the post-hook guard backstop; `hooks_internal_test`'s text-compare case and its `Errs` case assert only `err != nil`; `TestOverWaitsForAPassedDeadline` lacks block and early-cancel cases; the split `InsertAll` `SQL(ctx)` test does not compare arguments; `FuzzScope`'s input-tree check compares only up to the shorter length and its "copy" is a rebuild; `ExistsOn` makes an unchecked type assertion; the CI fuzz regex is looser than `^FuzzScope$`.
 - The itest seed has no cross-org parent, so `With(Parent)`'s tenant condition on the load is not exercised against a row it must hide.
 - The upsert's update branch is asserted on the real databases only through `done`.
 - An `InsertAll` runs in a transaction when velox predicts, before the Rewrite hooks, that its upsert will carry a policy condition. A hook that makes it conditioned (adds `Conflict`, clears `DoNothing`, fills `Update`) defeats the prediction: a hidden existing row then returns the `*PolicyError` after the visible rows are written. No row crosses tenants. Backstop: refuse a policy-conditioned statement with more than one row and `!InTx` in `scopeInsert`.
@@ -116,7 +104,7 @@ API rough spots found while building `./example`:
 API rough spots found while splitting `./example` into one directory per topic:
 - A policy function gets no `*DB`, so an inherited policy cannot check on insert that the parent is visible: `example/policy`'s `Comment` inherits `Doc`'s `Read` through `Has`, which covers reads only.
 - A `Write` policy filters rather than denies, so a forbidden update returns 0 rows, not an error.
-- `Mutation.Value` returns `any`, so a `BeforeUpdate` hook type-asserts the value of a column it named through a typed handle.
+- `Mutation.Value` returns `any`, so an update hook type-asserts the value of a column it named through a typed handle.
 - `RetrySerializable` cannot be shown retrying on single-connection SQLite: `example/tx`'s retry runs once.
 
 Left by the observability plan:
@@ -139,13 +127,12 @@ Left by the observability plan:
 
 ## Left by schema plan 1
 
-- The `Graph` that `gen.Build` returns is plan 3's input: the generator reads it, not the model.
 - `Index.Where` is PostgreSQL-only, and nothing refuses it on other dialects yet.
 - `edge.Symbol` and `edge.Immutable` are carried into the Graph's `Edge` (`symbols`, `immutable`); the migration planner is the first to use the symbols. Rule 34 refuses an edge whose immutability differs from its bound field's, as ent does.
 - Irregular plurals need `schema.Table`.
 - `singular()` is the simple inverse of plural (`children` gives `children_id`, where ent says `child_id`). A self-M2M edge named after its own type (edge `nodes` on `Node`) gives a join table with two `node_id` columns; rule 35 refuses it and asks for `edge.Columns`.
 - Rule 31 is stricter than ent: `edge.Column` with a bound field whose column differs is refused (ent lets the field adopt the edge's column).
-- `desc.GoTypeOf` does not collect imports from generic type arguments (`pkg.Box[time.Time]`) or from unnamed func, struct and interface types; plan 3's generator must not rely on `Imports` for those.
+- `desc.GoTypeOf` does not collect imports from generic type arguments (`pkg.Box[time.Time]`) or from unnamed func, struct and interface types; the generator must not rely on `Imports` for those.
 - Rule 12 accepts a bound foreign key whose `GoType` differs from the ID's for int and string kinds; generated code may need conversions.
 - `velox-gen` finds only the types that embed `schema.Schema` directly. A type that embeds another struct which embeds `schema.Schema` is not found, and is not loaded.
 - velox2 names a default index `<table>_<cols>` (`users_org_id_name`), where ent uses `<lower(type)>_<cols>` (`user_org_id_name`). Against a database ent created, the migration planner will see each such index as a rename.
@@ -153,27 +140,19 @@ Left by the observability plan:
 
 ## Left by schema plan 2
 
-- The old path is removed in plan 4, once velox-gen writes `Desc` literals and every entity has moved: `Schema`, `Mixer`, `BeforeInsert`, `BeforeUpdate` and `BeforeDelete`, `Shape`, `MetaOnce.Get`, `RelationTo`, and the reflection over structs that finds columns and infers relation keys. `cmd/velox-gen/testdata/testmodel`, the test model on the old path, goes with the old generator.
 - A join entity (`EdgeThrough`) can have neither a tenant column nor a `Read` policy: the relation is refused when it resolves, since `Has` would not apply them and loading would. Its `Insert` and `Write` policies are allowed. Join rows are therefore not tenant-scoped, and velox does not check a link's two endpoints: an application that writes links checks both, using the join entity's `Policy()` (`Insert`, and `Write` for updates and deletes) or a hook. Loading applies the target's tenant and `Read` policy only.
-- `InsertAll` still reads no keys back, so after `next` the rows of an `InsertAll` that `Rows()` returns have no generated IDs.
+- `InsertAll` reads no generated keys back, so after `next` the rows of an `InsertAll` that a hook's `Rows()` returns have no generated IDs.
 - A hook can change the rows of an insert, but not how many there are: `Rows()` returns the rows, not the slice that holds them.
-- Until plan 4, the root `bin/velox-gen verify ./...` in CI checks no entities ("velox-gen verify: no entities"): the old scanner finds nothing in the test model, which velox-gen now generates from its DSL schema (`internal/testmodel/schema`). CI checks the test model with `bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema` and `verify -out internal/testmodel ./internal/testmodel/schema`, and `TestGeneratedEntities` runs `CheckEntity` on every test model entity.
-- `Has` or `HasWhere` (or anything that reads the entity's metadata) in the body of `Policy()` or `Hooks()`, outside the functions they return, deadlocks on the metadata's `once`. Both are documented to build such predicates inside the returned functions. Lazy resolution of opExists would remove the hazard; decide in plan 3.
-- Hooks cannot reach the caller's transaction: `Mutation` holds no DB and the context carries no transaction, so a write a hook makes itself runs outside it. Plan 3 decides how to expose it, for example `velox.TxOf(ctx)`.
-- The generator must honor the Graph's `Field.Pointer` for bool and number fields with a literal `Default`, because `buildDesc` refuses a non-pointer one (a `Default` would overwrite an explicit false or 0).
-- `UpdateDefault` also fills on insert (velox's old `OnUpdate` rule), while ent applies it on update only. It becomes update-only when plan 4 removes the old path.
-- `EdgeTo[T]` is not checked against the field's `One[T]` or `Many[T]`. A mismatch loads empty, and `HasWhere` indexes the wrong table. Plan 3 should check it at resolve time.
-- The generated `Addr` and `RelAddr` are allocation-free switches (`return &x.Field`), and so are the test model's, which velox-gen generates; the budgets pin it.
-- `Desc.Tenant`'s zero value means column 0, so the generator always writes it (`-1` for none).
 - `ValidationError` names the Go field, while `ErrImmutable` names the column.
-- The generator writes `Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) }` and the like for `Hooks` (`BindHooks`), only for an entity that declares the method. `Load` itself holds no Policy or Hook generic, so an entity without them pays nothing (about 80 KiB each otherwise).
 
 ## Left by schema plan 3
 
 - `Optional` means a pointer field (Ruling 2): the column is NULL-able and velox scans a NULL only into a pointer. Ent gives `T`, so a ported schema's `Optional()` fields become `*T`. This is an ent difference.
 - Join entity naming: each many-to-many join table becomes an entity named `pascal(singular(table))` (`user_groups` gives `UserGroup`), which can collide with a schema of that name; the generator refuses the collision, and the only remedy is a different join table name (`edge.Table`).
 - `velox.yaml` and generator plugins arrive with the GraphQL sub-project.
-- The old scanner, the old path, the examples, `bench/scale` and the inline test entities (in `_test.go` files) move to the schema in plan 4, which also removes `GeneratedCodeIsVersion2`. Until then `bin/velox-gen -check ./...` and `verify ./...` in CI stay, and find no old-path entities in the root module.
 - The test model is generated from `internal/testmodel/schema`. A field's Go name comes from `pascal` of its name, so `SKU` is declared `field.String("SKU").StorageKey("sku")`: the name `sku` would give `Sku`. The named types `Status`, `Cents` and `Score` live in `internal/testmodel/kind` because the schema package names them in `GoType` and the generated package imports them; `testmodel` re-exports them as aliases.
-- The generated test model carries the DSL's behaviour, not the hand-written descriptors': `created_at` is immutable and `updated_at` also has an insert default (`mixin.Time`), entities print through a generated `String()`, and JSON keys are the field names (`id`, `invoice_id`).
-- The ID is now column 0 of every test entity (Invoice's `created_at` and `updated_at`, and Ticket's `created_by`, came before it). `Line` gained the inverse edge `Sample`, because a to-many edge binds its foreign key field only from the inverse side. `Ticket.Parent` and `Sample.Parent`, a unique `To` edge with a bound field and no inverse, resolve as O2O in the Graph; the generated relation is the same `EdgeTo` as before.
+
+## Left by schema plan 4
+
+- The link peak grows with N, though a service's binary does not: the linker reads the whole `gen` package's object file. It was 185 MB at N=100 and 279 MB at N=500 (about 0.2 MB per entity). This is inherent to the choice of one generated package (core spec, A.6, note of 2026-10-19); splitting `gen` by domain is out of scope until after 1.0.
+- A relation's `Rel` handle is checked at its first resolution, not at compile time: a hand-edited `Rel[User, Comment]` over a `Many[Post]` field compiles, and fails with a `*SchemaError` when a statement first uses the relation (and in `velox-gen verify`, which calls `CheckRelation` for every generated handle).

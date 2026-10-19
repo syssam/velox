@@ -2,6 +2,13 @@
 
 Status: draft for review · 2026-10-14 · Go 1.27+
 
+> **Note, 2026-10-19.** Entities are no longer plain structs with a `Schema`
+> method: §1 and §2 are superseded by `2026-10-15-schema-design.md`, which is
+> implemented. Later sections that mention `Schema`, `s.Column`, `Shape`,
+> `MetaOnce.Get`, `OnUpdate` or `BeforeInsert` describe the struct-first design
+> they were measured on; the DSL's equivalents are `Desc`, `UpdateDefault`
+> (update only) and the `Hooks()` method.
+
 velox2 is an open-source ORM for Go. Its author is its first production user;
 it is built to hold up at the scale of a large company: thousands of tables,
 hundreds of services, many teams. This document specifies **Core**, the first of
@@ -29,6 +36,10 @@ Made by the author during design (2026-10-14):
   that owns it.
 - **Metadata goes in a typed `Schema(s *velox.Schema)` method** that refers to
   fields by pointer.
+
+  *Note, 2026-10-19.* Both of these decisions were replaced on 2026-10-15:
+  entities are declared in the schema DSL and generated (`2026-10-15-schema-design.md`,
+  implemented in schema plans 1 to 4), and the struct-first path is gone.
 - **PostgreSQL, MySQL and SQLite** are all supported in 1.0. PostgreSQL is the
   reference dialect.
 - 1.0 ships guardrails, observability, the migration planner and routing.
@@ -55,6 +66,13 @@ Taken on the designer's recommendation, open to change at review:
    dialect-specific and refused on the others.
 
 ## 1. Entity model
+
+> **Superseded by `2026-10-15-schema-design.md`** (entities are declared in the
+> schema DSL and generated). This section keeps its text as history. What still
+> holds from it: `One[T]` and `Many[T]`, and NULL in the type (`*T` allows NULL).
+> What does not: `Schema(*velox.Schema)`,
+> `velox:"-"`, mixins as embedded structs, and the inference of relation keys from
+> struct fields.
 
 ```go
 package billing
@@ -131,6 +149,13 @@ Rules:
    when `Paid` is a `bool` (verified on Go 1.27.1).
 
 ## 2. Generated code
+
+> **Superseded by `2026-10-15-schema-design.md`** (entities are declared in the
+> schema DSL and generated). This section keeps its text as history. The handle
+> types in its table, the determinism rule and the `-check` rule still hold; the
+> struct scanner, `Shape`, `GeneratedCodeIsVersion2` and `velox-gen ./...` do not.
+> The generator now reads a schema package (`go tool velox-gen ./schema`) and
+> writes one gen package of `Desc` literals; see the schema design §2 and §4.
 
 `go tool velox-gen ./...` runs once from the module root (installed as a tool
 dependency in `go.mod`). It loads struct shapes with `go/packages` and never

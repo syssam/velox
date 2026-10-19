@@ -2,6 +2,11 @@
 
 Status: draft for review · 2026-10-14 · Go 1.27+
 
+> **Note, 2026-10-19.** The `Schema` method, `s.Policy` and `s.BeforeInsert`,
+> `s.BeforeUpdate` and `s.BeforeDelete` below are the struct-first forms. They
+> became the methods `Policy()` and `Hooks()` on the generated entity, with the
+> same semantics: `2026-10-15-schema-design.md` §3.
+
 Sub-project 2 of five (Core design, `2026-10-14-core-design.md`, table at the
 top). It plugs into Core's pipeline (§5 there) and nothing else, and adds:
 tenant scoping, row-level policy, typed entity hooks, required limits and row
@@ -17,7 +22,8 @@ Made by the author during design (2026-10-14):
   too. A service cannot forget to turn them on.
 - **Declared in `Schema`.** An entity's tenant column, policy and hooks are
   declared in its own `Schema` method, so the team that owns the struct owns
-  them.
+  them. (Since 2026-10-15 they are methods `Policy()` and `Hooks()` beside the
+  generated entity: schema design §3.)
 - **Hooks** means typed per-entity hooks (`BeforeInsert`, `BeforeUpdate`,
   `BeforeDelete`). There are no after-hooks and no after-commit hooks.
 - **Policy is filter and decide.** A read policy is a predicate added to every
@@ -187,6 +193,11 @@ every tenant's rows anyway, and they do not apply:
 
 ### 2.2 Policy
 
+> **Note, 2026-10-19.** The `Schema`/`s.Policy` form below is replaced by a method
+> `func (*Invoice) Policy() velox.Policy[Invoice]` written beside the generated
+> entity; velox-gen binds it. The semantics are unchanged. See
+> `2026-10-15-schema-design.md` §3.
+
 ```go
 func (x *Invoice) Schema(s *velox.Schema) {
     s.Policy(velox.Policy[Invoice]{
@@ -291,6 +302,14 @@ Where []Predicate // on the existing row; a conflicting row it rejects is neithe
 - MySQL never gets one: velox refuses there first (§2.1, §2.2).
 
 ## 3. Entity hooks
+
+> **Note, 2026-10-19.** `s.BeforeInsert`, `s.BeforeUpdate` and `s.BeforeDelete`
+> were replaced by one typed `Hooks() []velox.Hook[Invoice]` method on the
+> generated entity (ent's middleware shape; `velox.On` limits a hook to some
+> writes, and `m.DB()` is the database the write runs on). Their uses map onto a
+> hook's code before `next`. Core's `OnUpdate` is the DSL's `UpdateDefault`,
+> which fills on update only. See `2026-10-15-schema-design.md` §3; the text
+> below is the original design.
 
 Timestamps need no hooks: Core's `OnUpdate` column option already sets them on
 every insert and update path. Hooks are for validation and derived fields.

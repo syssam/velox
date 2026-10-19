@@ -1,5 +1,7 @@
 # Schema DSL, Plan 3: the generator — Implementation Plan
 
+> **Note, 2026-10-19.** Plan 4 (`2026-10-16-schema-4-finish.md`) removed the old struct scanner. velox-gen now has one mode, so Ruling 1 (coexistence), the old-mode line of the command table and the old-mode steps below are superseded; they stay as the record of how plan 3 was built. The example of descriptor reads (Ruling 5) is also changed: the generator numbers its reads from `d0`, and `UpdateDefault` fills on update only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** velox-gen writes the `gen` package from a schema package. The package holds the entity structs, typed enums, handles, and `Desc` metadata literals with their validators, defaults and relations; join entities for many-to-many edges; and the binding of the `Policy()` and `Hooks()` methods users write beside it. The internal test model is then generated from a DSL schema.
@@ -11,7 +13,7 @@
 - **velox-gen gains a new mode:**
   - `velox-gen [-out dir] [-package name] [-check] ./schema` loads, builds and writes;
   - `velox-gen verify -out dir ./schema` runs `CheckEntity` on every generated entity.
-- **The old struct scanner stays for `./...`-style patterns until plan 4**, which migrates the examples, bench/scale and the remaining test entities and deletes the old path.
+- **The old struct scanner stays for `./...`-style patterns until plan 4**, which migrates the examples, bench/scale and the remaining test entities and deletes the old path. *(Superseded: plan 4 deleted it; `./...` is now an error.)*
 
 **Tech Stack:** Go 1.27, standard library (`go/format`, `go/parser`, `text/template` or `strings.Builder`), `internal/tempmod`, SQLite (`modernc.org/sqlite`) for the end-to-end test.
 
@@ -58,7 +60,7 @@ Plans 1 and 2 (merged) produced the `Graph` (`internal/gen/graph.go`) and the ru
 
 ## Rulings this plan makes on the spec
 
-1. **Coexistence until plan 4.** velox-gen picks its mode from its argument.
+1. **Coexistence until plan 4.** *(Superseded by plan 4: velox-gen has one mode, and a pattern that names no schema package is an error, "no schemas in …".)* velox-gen picks its mode from its argument.
    - A single-package pattern whose package declares schemas (types embedding `schema.Schema`, found by `internal/gen`'s `discover`) runs the new generator.
    - Any other pattern runs the old struct scanner, exactly as today.
 
@@ -78,7 +80,7 @@ Plans 1 and 2 (merged) produced the `Graph` (`internal/gen/graph.go`) and the ru
    - A literal `Default` on a bool, number, string or enum field is written as a typed Go literal of the field's element type: `int64(5)`, `"x"`, `true`, `UserRoleViewer`, `MyType("x")` for a `GoType`.
    - Every other default is read on first use from the schema package's descriptor and wrapped in `func() any`: `DefaultFunc`, `UpdateDefault`, a time or uuid `Default` function, and a literal `Default` of a bytes, JSON or other field.
    - The descriptor expression is `<sch>.User{}.Fields()[i].Descriptor()`, or `<sch>.User{}.Mixin()[m].Fields()[i].Descriptor()` for a mixed-in field, by `Field.Position`.
-   - Each descriptor read happens once, in the setup block at the top of the entity's `Desc` function (which runs once, on first use): `d1 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)`, and the column's `DefaultFunc` is `func() any { return d1() }`. A call per row does no descriptor read. (Amended after the whole-branch review: the first version read the descriptor on every call, about 16 allocations per insert for `mixin.Time`.) The decoding of a bytes or JSON default stays per call, so that no two rows share a slice or a map.
+   - Each descriptor read happens once, in the setup block at the top of the entity's `Desc` function (which runs once, on first use): `d0 := (&sch.User{}).Mixin()[0].Fields()[0].Descriptor().Default.(func() time.Time)` (the reads are numbered from `d0`), and the column's `DefaultFunc` is `func() any { return d0() }`. A call per row does no descriptor read. (Amended after the whole-branch review: the first version read the descriptor on every call, about 16 allocations per insert for `mixin.Time`.) The decoding of a bytes or JSON default stays per call, so that no two rows share a slice or a map.
    - `gen` therefore imports the schema package, under the alias `sch`, only when some entity needs it.
 6. **Validators are code in the `Check` function.**
    - The built-in checks (`NotEmpty`, `MinLen`, `MaxLen`, `Match`, `Range`, `Min`, `Max`, `Positive`, `Negative`, `NonNegative`) and an enum's membership check are written inline.
@@ -504,14 +506,14 @@ func Methods(dir string, entities []string) (map[string]Bound, error)
 velox-gen [-out dir] [-package name] [-check] [package]       new mode, when package declares schemas (Ruling 1)
 velox-gen verify -out dir [package]                           new mode: CheckEntity on every generated entity
 velox-gen describe [-json] [package]                          as today
-velox-gen [-check] [-ordered …] [-number …] [patterns]        old mode, otherwise (until plan 4)
+velox-gen [-check] [-ordered …] [-number …] [patterns]        old mode, otherwise (until plan 4; removed by it)
 ```
 
 - **Defaults:** `-out ./gen`, `-package` is the base name of `-out`, and the package is `./schema`.
 - **Mode selection:**
   1. If there is exactly one pattern, and `go list` (through `gen.Load`'s first step, factored out as `gen.Inspect(dir, pattern, env) (importPath string, schemas []string, err error)`) finds schemas in it, use the new mode.
-  2. If the pattern names no package with schemas, the old mode runs.
-  3. `-out` given with an old-mode pattern is an error: "-out needs a schema package".
+  2. If the pattern names no package with schemas, the old mode runs. *(Plan 4: it is an error.)*
+  3. `-out` given with an old-mode pattern is an error: "-out needs a schema package". *(Plan 4: gone with the old mode.)*
 - **Generate:**
   1. Load and Build.
   2. `Methods(out, entityAndJoinNames)`.
@@ -547,12 +549,12 @@ velox-gen [-check] [-ordered …] [-number …] [patterns]        old mode, othe
 - **`TestOldModeUnchanged`:** the existing old-mode CLI tests still pass, unchanged.
 
 - [ ] **Step 2: Run them to see them fail.** Run: `go -C cmd/velox-gen test ./... -run 'Generate|Check|Verify'` and `go test ./internal/gen/ -run Methods`. Expected: FAIL.
-- [ ] **Step 3: Implement.** `main.go`'s doc comment documents both modes and says that the old mode is removed in schema plan 4.
+- [ ] **Step 3: Implement.** `main.go`'s doc comment documents both modes and says that the old mode is removed in schema plan 4 (superseded: plan 4 rewrote it for one mode).
 - [ ] **Step 4: Run every check.** Run:
   - `go test ./... && go vet ./...`;
   - `go -C cmd/velox-gen test ./...`;
   - golangci-lint in both modules;
-  - `(cd example && go tool velox-gen -check ./... && go test ./...)`, the old mode, unchanged.
+  - `(cd example && go tool velox-gen -check ./... && go test ./...)`, the old mode, unchanged (superseded by plan 4).
 
   Expected: PASS.
 - [ ] **Step 5: Commit**

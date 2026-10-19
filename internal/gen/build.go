@@ -546,7 +546,7 @@ func shown(goName string) string {
 	return goName
 }
 
-// validateNames checks the Go names plan 3 generates from (rule 30): each
+// validateNames checks the Go names the generator generates from (rule 30): each
 // field's and edge's must be an identifier, unique among the fields and among
 // the edges, and each enum value's unique within its field. An edge with a
 // field's Go name is rule 4; elements of one name are rules 1, 2 and 3.
