@@ -15,7 +15,7 @@ GraphQL and gRPC generation read the same model. Each gets its own design.
 
 Made by the author (2026-10-15):
 
-- **The schema is the single source of truth.** You write it in an ent-style DSL: `type User struct{ velox.Schema }` with `Fields`, `Edges`, `Indexes`, `Mixin` and `Annotations`. velox-gen generates the Go entities, their handles and their metadata. One model also drives the database DDL (migration planner), GraphQL and gRPC.
+- **The schema is the single source of truth.** You write it in an ent-style DSL: `type User struct{ schema.Schema }` with `Fields`, `Edges`, `Indexes`, `Mixin` and `Annotations`. velox-gen generates the Go entities, their handles and their metadata. One model also drives the database DDL (migration planner), GraphQL and gRPC.
 - **One schema package and one generated package,** as in ent and the old velox. Edges work in both directions.
 - **Generated code is velox2's own, built on generics.**
   - It holds structs, typed handles and metadata, not per-entity builders.
@@ -40,7 +40,7 @@ Made by the author (2026-10-15):
 package schema
 
 import (
-    "github.com/syssam/velox2/schema"         // velox.Schema, Field, Edge, Index, Mixin, Annotation
+    "github.com/syssam/velox2/schema"         // schema.Schema, Field, Edge, Index, Mixin, Annotation
     "github.com/syssam/velox2/schema/field"
     "github.com/syssam/velox2/schema/edge"
     "github.com/syssam/velox2/schema/index"
@@ -132,7 +132,7 @@ For each entity it writes:
 - **The typed enums**, with constants and validation.
 - **The handles variable,** for example `gen.Users.Name` and `gen.Users.Posts`. These are the column and relation handles of today (`Col`, `OrderedCol`, `NumberCol`, `StringCol` and their `Null…` forms, and `Rel`).
 - **The metadata.** A `velox.Desc` literal of columns, keys, indexes, tenant, relations, validators and defaults, turned into the runtime's `EntityInfo` on first use. That replaced `Schema(*velox.Schema)` and the reflection over struct fields.
-  - **A relation names no target.** The `Desc` records the relation's key and the types of its holder (`*One[T]` or `*Many[T]`), and nothing that would link the target's metadata. The handle's use site supplies the target: `Where`, `Has`, `HasWhere` and `With` on a `Rel[User, Post]` take `Post` from the handle's type parameter, and `velox.CheckRelation(gen.Users.Posts)` resolves one relation. The first resolution checks the handle's `T` against the field's `One[T]` or `Many[T]`, so a stale or hand-edited handle fails there with a `*SchemaError` naming the relation and both types, not at compile time.
+  - **A relation names no target.** The `Desc` records the relation's key and the types of its holder (`*One[T]` or `*Many[T]`), and nothing that would link the target's metadata. The handle's use site supplies the target: `Where`, `Has`, `HasWhere` and `With` on a `Rel[User, Post]` take `Post` from the handle's type parameter, and `velox.CheckRelation(gen.Users.Posts)` resolves one relation. Every resolution checks the handle's `T` against the field's `One[T]` or `Many[T]` (two comparisons, before the cached link is read), so a stale or hand-edited handle fails each time it is used, whichever handle resolved first, with a `*SchemaError` naming the relation and both types, not at compile time.
   - **Why.** With the target in the `Desc`, linking one entity linked every entity reachable through relations, and inverse edges make a whole schema one connected component. A service that queries five entities of 500 was 23.6 MB. Without it the binary is 5.66 MB at any N (core spec, A.6, note of 2026-10-19). `EdgeThrough` keeps its join entity, which has no relations of its own, so that is one hop.
   - **What it costs.** An invalid relation target is reported where the relation is used, not at the owner's first use. `velox-gen verify` calls `CheckEntity` for every entity, which checks the entity only, and `CheckRelation` for every relation, so CI finds it. The linker still reads the whole `gen` package, so its memory grows with N (185 MB at N=100, 279 MB at N=500), though the binary does not.
 - **The stale check.** `GeneratedCodeIsVersion3`, which fails to compile when generated code and the library disagree, and the model's hash in `velox.go`, which `velox-gen -check` compares in CI: a compile-time check across packages is not possible.

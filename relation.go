@@ -32,11 +32,10 @@ type One[T any] struct {
 	loaded bool
 }
 
-// The entities loaded through a One are shared by every owner with the same
-// key: they point at the same value, so changing one changes it for all.
-//
 // Get returns the related entity (nil when there is none) and whether the
-// relation was loaded.
+// relation was loaded. The entities loaded through a One are shared by every
+// owner with the same key: they point at the same value, so changing one
+// changes it for all.
 func (o One[T]) Get[_ Lazy[T]]() (*T, bool) {
 	p, _ := o.v.(*T)
 	return p, o.loaded
@@ -130,24 +129,33 @@ func targetOf[T any]() useTarget {
 // resolve returns the relation's link. A relation has no target of its own,
 // so that the owner's metadata does not keep the target's code in every
 // program that links the owner: the use site, which names the target's type,
-// passes use. The first resolution is kept, and it checks that use names the
-// entity the field holds.
+// passes use. Every resolution checks that use names the entity the field
+// holds, before the cached link is consulted: the link is built from the
+// owner's and the target's columns, never from the handle, so a handle that
+// fails the check neither gets the good handle's link nor spoils it. The check
+// is two comparisons and allocates nothing.
 func (r *relation) resolve(owner *EntityInfo, use useTarget) (link, error) {
-	r.once.Do(func() { r.link, r.err = r.build(owner, use) })
-	return r.link, r.err
-}
-
-func (r *relation) build(owner *EntityInfo, use useTarget) (link, error) {
-	fail := func(format string, args ...any) (link, error) {
-		return link{}, &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
-	}
 	if use.get == nil {
-		return fail("it has no target in the generated code; run go tool velox-gen")
+		return link{}, r.fail(owner, "it has no target in the generated code; run go tool velox-gen")
 	}
 	// The handle's T must be the entity the field holds, or loading would
 	// fill the field with rows of another type and Get would find none.
 	if ft := rtype(r.typ); ft != rtype(use.one) && ft != rtype(use.many) {
-		return fail("the field is a %v, but the Rel handle names %s; run go tool velox-gen", ft, targetName(rtype(use.one)))
+		return link{}, r.fail(owner, "the field is a %v, but the Rel handle names %s; run go tool velox-gen", ft, targetName(rtype(use.one)))
+	}
+	r.once.Do(func() { r.link, r.err = r.build(owner, use) })
+	return r.link, r.err
+}
+
+// fail is a *SchemaError about r, an error of owner's relation.
+func (r *relation) fail(owner *EntityInfo, format string, args ...any) error {
+	return &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
+}
+
+// build resolves the relation against use, whose handle resolve has checked.
+func (r *relation) build(owner *EntityInfo, use useTarget) (link, error) {
+	fail := func(format string, args ...any) (link, error) {
+		return link{}, r.fail(owner, format, args...)
 	}
 	t, err := use.get()
 	if err != nil {
@@ -242,7 +250,7 @@ func targetName(t reflect.Type) string {
 }
 
 // Rel is the handle of a relation of entity E to entity T, written by
-// velox-gen: I is the relation's index in E's shape. Passed to Query.With it
+// velox-gen: I is the relation's index in E's Desc relations. Passed to Query.With it
 // loads the relation; its Where, OrderBy and With say what to load. Like a
 // Query it is a value: each method returns a new Rel.
 type Rel[E, T any] struct {

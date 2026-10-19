@@ -55,7 +55,7 @@ Plans 1 and 2 (merged) produced the `Graph` (`internal/gen/graph.go`) and the ru
   - `gofmt`, `go vet` and golangci-lint v2.14.0 pass in the root module, `cmd/velox-gen`, `example` and `contrib/otel`.
   - `go test -race ./...` passes in all four.
   - Tests that build a temporary module skip under `-short`.
-- **No machine-specific paths in committed files.** Use `GOCACHE=/private/tmp/claude-501/velox2-gocache` and `GOFLAGS=-p=2` only in your shell, because the machine is memory-constrained.
+- **No machine-specific paths in committed files.** Use `GOCACHE=<scratchpad>/velox2-gocache` and `GOFLAGS=-p=2` only in your shell, because the machine is memory-constrained.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
 ## Rulings this plan makes on the spec

@@ -155,4 +155,9 @@ Left by the observability plan:
 ## Left by schema plan 4
 
 - The link peak grows with N, though a service's binary does not: the linker reads the whole `gen` package's object file. It was 185 MB at N=100 and 279 MB at N=500 (about 0.2 MB per entity). This is inherent to the choice of one generated package (core spec, A.6, note of 2026-10-19); splitting `gen` by domain is out of scope until after 1.0.
-- A relation's `Rel` handle is checked at its first resolution, not at compile time: a hand-edited `Rel[User, Comment]` over a `Many[Post]` field compiles, and fails with a `*SchemaError` when a statement first uses the relation (and in `velox-gen verify`, which calls `CheckRelation` for every generated handle).
+- A relation's `Rel` handle is checked at every use, not at compile time: a hand-edited `Rel[User, Comment]` over a `Many[Post]` field compiles, and fails with a `*SchemaError` each time a statement uses it, whichever handle used the relation first (and in `velox-gen verify`, which calls `CheckRelation` for every generated handle).
+
+## 1.0 release
+
+- The repo needs a `README.md` and a `LICENSE`.
+- bench/scale's thresholds were measured on darwin only. Recalibrate them from the first Linux CI run.

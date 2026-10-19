@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-func TestUpdateSetsOnUpdateColumns(t *testing.T) {
+func TestUpdateSetsUpdateDefaultColumns(t *testing.T) {
 	e := &velox.FakeExec{Affected: 2}
 	db := velox.OpenFake(velox.Postgres, e)
 	n, err := db.Update[testmodel.Invoice]().Set(I.Total.Add(5), I.Note.SetNull()).Where(I.OrgID.EQ(1)).Exec(ctx)
@@ -94,7 +94,7 @@ func TestSave(t *testing.T) {
 	}
 }
 
-func TestSaveStoresOnUpdateOnlyAfterSuccess(t *testing.T) {
+func TestSaveStoresUpdateDefaultOnlyAfterSuccess(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
 	inv := testmodel.Invoice{ID: 3, Number: "X", UpdatedAt: t0}

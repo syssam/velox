@@ -3,6 +3,7 @@ package velox
 import (
 	"slices"
 	"strings"
+	"sync"
 )
 
 type op uint8
@@ -217,7 +218,10 @@ func list[V any](vs []V) []any {
 	return out
 }
 
-var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+// likeEscaper is built on first use, not at program start.
+var likeEscaper = sync.OnceValue(func() *strings.Replacer {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+})
 
 // escapeLike makes s match itself in a LIKE pattern whose escape is \.
-func escapeLike(s string) string { return likeEscaper.Replace(s) }
+func escapeLike(s string) string { return likeEscaper().Replace(s) }

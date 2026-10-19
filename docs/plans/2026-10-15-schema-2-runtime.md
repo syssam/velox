@@ -56,7 +56,7 @@ Plan 1 (`docs/plans/2026-10-15-schema-1-dsl.md`, merged) produced the `Graph` th
   - `gofmt`, `go vet` and golangci-lint v2.14.0 are clean in the root module, `cmd/velox-gen`, `example` and `contrib/otel`.
   - `go test -race ./...` passes in all four.
   - `internal/itest` passes against PostgreSQL (pgx and database/sql) and MySQL under `scripts/ci-local.sh`.
-- **No machine-specific paths** in committed files. Use `GOCACHE=/private/tmp/claude-501/velox2-gocache` only in your shell.
+- **No machine-specific paths** in committed files. Use `GOCACHE=<scratchpad>/velox2-gocache` only in your shell.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
 ## Rulings this plan makes on the spec

@@ -102,8 +102,8 @@ func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
 }
 
 // OpenPgx returns a DB for PostgreSQL that runs statements through pool with
-// pgx's native protocol: about 0.4 times the time and allocations of
-// database/sql for a 1,000-row result (design, Appendix A.5).
+// pgx's native protocol, which takes about 0.4 times the time and allocations
+// of database/sql for a 1,000-row result.
 func OpenPgx(pool *pgxpool.Pool, opts ...Option) *DB {
 	return newDB(Postgres, pgxExecutor{c: pool, pool: pool}, opts)
 }

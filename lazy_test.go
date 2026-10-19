@@ -494,8 +494,8 @@ func (*mmB) VeloxMeta() *velox.Meta[mmB] {
 	})
 }
 
-// TestHandleMustNameTheFieldsEntity: the target comes from the handle, so the
-// first resolution checks that it is the entity the field holds, and every
+// TestHandleMustNameTheFieldsEntity: the target comes from the handle, so
+// every resolution checks that it is the entity the field holds, and every
 // use (CheckRelation, With, HasWhere) reports the same SchemaError.
 func TestHandleMustNameTheFieldsEntity(t *testing.T) {
 	if err := velox.CheckRelation(mmBs.Items); err != nil {
@@ -517,5 +517,85 @@ func TestHandleMustNameTheFieldsEntity(t *testing.T) {
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements were sent", e.Calls)
+	}
+}
+
+// mmE has two relations to mmItem, so that each order of a good and a stale
+// handle starts from a relation no handle has resolved.
+type mmE struct {
+	ID    int64
+	Items velox.Many[mmItem]
+	More  velox.Many[mmItem]
+}
+
+var mmEMeta velox.MetaOnce[mmE]
+
+func (*mmE) VeloxMeta() *velox.Meta[mmE] {
+	return mmEMeta.Load(func() velox.Desc[mmE] {
+		return velox.Desc[mmE]{
+			Table: "mm_es", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
+			Relations: []velox.Relation{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
+			Addr:      func(x *mmE, i int) any { return &x.ID },
+			RelAddr: func(x *mmE, i int) any {
+				if i == 0 {
+					return &x.Items
+				}
+				return &x.More
+			},
+		}
+	})
+}
+
+// uses runs every way to use relation i of mmE through a handle that names
+// mmItem (good) or mmOther (stale), and returns each use's error.
+func uses(i int32, good bool) map[string]error {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	out := map[string]error{}
+	if good {
+		h := velox.Rel[mmE, mmItem]{I: i}
+		out["CheckRelation"] = velox.CheckRelation(h)
+		_, out["With"] = db.Query[mmE]().With(h).Limit(1).All(ctx)
+		_, out["Has"] = db.Query[mmE]().Where(h.Has()).Limit(1).All(ctx)
+		_, out["HasWhere"] = db.Query[mmE]().Where(h.HasWhere(mmItemIDs.EQ(1))).Limit(1).All(ctx)
+	} else {
+		h := velox.Rel[mmE, mmOther]{I: i}
+		out["CheckRelation"] = velox.CheckRelation(h)
+		_, out["With"] = db.Query[mmE]().With(h).Limit(1).All(ctx)
+		_, out["Has"] = db.Query[mmE]().Where(h.Has()).Limit(1).All(ctx)
+		_, out["HasWhere"] = db.Query[mmE]().Where(h.HasWhere(mmOtherIDs.EQ(1))).Limit(1).All(ctx)
+	}
+	return out
+}
+
+var (
+	mmItemIDs  = velox.Col[mmItem, int64]{I: 0}
+	mmOtherIDs = velox.Col[mmOther, int64]{I: 0}
+)
+
+// TestHandleIsCheckedOnEveryUse: a stale handle fails each time it is used,
+// whether a good handle resolved the relation before it or not, and a good
+// handle succeeds each time, whether a stale handle was used before it or not.
+func TestHandleIsCheckedOnEveryUse(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		rel   int32
+		order []bool // true: the good handle
+	}{
+		{"good then stale", 0, []bool{true, false, true, false}},
+		{"stale then good", 1, []bool{false, true, false, true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for n, good := range tc.order {
+				for use, err := range uses(tc.rel, good) {
+					switch {
+					case good && err != nil:
+						t.Errorf("round %d, good handle, %s: %v", n, use, err)
+					case !good && (err == nil || !strings.Contains(err.Error(), "the field is a velox.Many[github.com/syssam/velox2_test.mmItem], but the Rel handle names github.com/syssam/velox2_test.mmOther")):
+						t.Errorf("round %d, stale handle, %s: %v", n, use, err)
+					}
+				}
+			}
+		})
 	}
 }

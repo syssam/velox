@@ -44,8 +44,8 @@ The followups document's "Left by schema plan 2" and "Left by schema plan 3" sec
   - itest on PostgreSQL and MySQL;
   - velox-gen `-check` and `verify` on every schema package;
   - bench/scale.
-- **No machine-specific paths** in committed files. Set `GOCACHE=/private/tmp/claude-501/velox2-gocache` and `GOFLAGS=-p=2` only in your shell; the machine is memory-constrained.
-- **The full gate** is `/private/tmp/claude-501/-Users-s-y-s-Jobs-go-velox2/307a7d09-1a6a-4283-a67c-6dfbe3e93815/scratchpad/fix1.sh`. It covers four modules, lint, the example, contrib/otel and itest on PostgreSQL and MySQL. Tasks 3–5 also change its velox-gen lines; update the script in step with CI.
+- **No machine-specific paths** in committed files. Set `GOCACHE=<scratchpad>/velox2-gocache` and `GOFLAGS=-p=2` only in your shell; the machine is memory-constrained.
+- **The full gate** is `<scratchpad>/fix1.sh`. It covers four modules, lint, the example, contrib/otel and itest on PostgreSQL and MySQL. Tasks 3–5 also change its velox-gen lines; update the script in step with CI.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
 ## Rulings this plan makes on the spec

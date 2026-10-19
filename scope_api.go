@@ -57,9 +57,10 @@ func SkipPolicy(ctx context.Context, reason string) context.Context {
 type dryRunKey struct{}
 
 // IsDryRun reports whether ctx is that of a SQL(ctx) method: the statement
-// being built will not be sent. The methods mark the context before anything
-// runs, so every hook and policy function sees it: entity hooks (Hooks), and a Rewrite hook may read it here or in
-// Statement.DryRun.
+// being built will not be sent. The SQL(ctx) methods mark the context before
+// anything runs, so everything handed that context sees it: the entity's
+// hooks (Hooks), the Policy functions and the Rewrite hooks. A Rewrite hook
+// can also read it from Statement.DryRun.
 func IsDryRun(ctx context.Context) bool {
 	dry, _ := ctx.Value(dryRunKey{}).(bool)
 	return dry

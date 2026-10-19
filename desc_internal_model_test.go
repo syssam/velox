@@ -402,16 +402,16 @@ func defaultFuncTenantDesc() Desc[defaultFuncTenant] {
 	}
 }
 
-type onUpdateTenant struct {
+type updateDefaultTenant struct {
 	ID    int64
 	OrgID int64
 }
 
-func onUpdateTenantDesc() Desc[onUpdateTenant] {
-	return Desc[onUpdateTenant]{
-		Table: "on_update_tenant", Columns: []ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", UpdateDefault: func() any { return int64(1) }}},
+func updateDefaultTenantDesc() Desc[updateDefaultTenant] {
+	return Desc[updateDefaultTenant]{
+		Table: "update_default_tenant", Columns: []ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id", UpdateDefault: func() any { return int64(1) }}},
 		PrimaryKey: []int{0}, Tenant: 1,
-		Addr: func(x *onUpdateTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
+		Addr: func(x *updateDefaultTenant, i int) any { return [...]any{&x.ID, &x.OrgID}[i] },
 	}
 }
 

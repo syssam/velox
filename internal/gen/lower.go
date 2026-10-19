@@ -793,8 +793,8 @@ func (l *lowerer) finish() {
 		}
 	}
 
-	// A join table is not an entity's table, and Task 2 names the functions of
-	// an entity by its label, so no two entities share one.
+	// A join table is not an entity's table, and the generated functions of an
+	// entity are named by its label, so no two entities share one.
 	for _, j := range joins {
 		for _, e := range l.g.Entities {
 			if e.Table == j.ent.Table && e.TableSchema == j.ent.TableSchema {

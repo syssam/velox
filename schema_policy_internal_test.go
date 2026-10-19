@@ -135,6 +135,6 @@ func TestSchemaPolicyTenantColumnIsNotFilled(t *testing.T) {
 	schemaErr(t, err, "velox: velox.defaultTenant.Org: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 	_, err = loadDesc(defaultFuncTenantDesc())
 	schemaErr(t, err, "velox: velox.defaultFuncTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
-	_, err = loadDesc(onUpdateTenantDesc())
-	schemaErr(t, err, "velox: velox.onUpdateTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
+	_, err = loadDesc(updateDefaultTenantDesc())
+	schemaErr(t, err, "velox: velox.updateDefaultTenant.OrgID: the tenant column cannot have Default, DefaultFunc or UpdateDefault")
 }

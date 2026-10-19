@@ -76,7 +76,7 @@
 - [ ] **Step 1: Initialize the repository and module**
 
 ```bash
-cd /Users/s.y.s/Jobs/go/velox2
+cd <repo>
 git init -b main
 go mod init github.com/syssam/velox2
 go mod edit -go=1.27.0
