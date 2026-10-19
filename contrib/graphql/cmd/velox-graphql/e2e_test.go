@@ -164,13 +164,14 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 	for _, want := range []string{
 		"\"\"\"A person who writes posts.\"\"\"\ntype Account implements Node {\n",
 		"  displayName: String! @goField(name: \"Name\")\n",
-		"  role: AccountRole!\n",
+		"  id: ID! @goField(name: \"IDGQL\")\n",
+		"  role: UserRole!\n",
 		"  quota: Uint64!\n",
 		"  seenAt: Time\n",
 		"  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection! @goField(name: \"PostsGQL\")\n",
 		"  groups: [Group!]! @goField(name: \"GroupsGQL\")\n",
 		"  author: Account! @goField(name: \"AuthorGQL\")\n",
-		"enum AccountRole {\n  ADMIN\n  REVIEWING\n}\n",
+		"enum UserRole {\n  ADMIN\n  REVIEWING\n}\n",
 		"  accounts(after: Cursor, first: Int, before: Cursor, last: Int): AccountConnection!\n",
 		"  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection!\n",
 	} {
@@ -178,7 +179,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 			t.Errorf("no %q in\n%s", want, got)
 		}
 	}
-	for _, absent := range []string{"orgID", "passwordHash", "authorID", "draft", "Secret", "UserGroup", "type User"} {
+	for _, absent := range []string{"orgID", "passwordHash", "authorID", "draft", "Secret", "UserGroup", "type User", "AccountRole"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("%q is in\n%s", absent, got)
 		}

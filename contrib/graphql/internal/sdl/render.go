@@ -2,6 +2,7 @@
 package sdl
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox2/contrib/graphql"
 	"github.com/syssam/velox2/plugin"
@@ -25,17 +28,28 @@ import (
 //
 // It fails, naming the schema and the element, on a model it cannot render:
 // a field type with no GraphQL type, a name that is not a GraphQL name, two
-// elements that would declare one name.
+// elements that would declare one name, a type with no field to show, or a
+// directive from graphql.Directives that GraphQL does not allow where it is.
+//
+// The application declares its own directives in its own schema files, so
+// the SDL is validated without them: it is rendered again with only the
+// directives GraphQL defines and @goField, and that SDL must be valid on its
+// own.
 func Render(m *plugin.Model) (string, error) {
 	g, err := build(m)
 	if err != nil {
 		return "", err
 	}
-	var w writer
+	w := writer{app: true}
 	g.write(&w)
 	out := w.String()
 	if err := parse(out); err != nil {
 		return "", fmt.Errorf("velox-graphql wrote an SDL that does not parse, which is a bug: %w", err)
+	}
+	var own writer
+	g.write(&own)
+	if _, err := Check(own.String()); err != nil {
+		return "", own.explain(err)
 	}
 	return out, nil
 }
@@ -44,6 +58,7 @@ func Render(m *plugin.Model) (string, error) {
 type graph struct {
 	objects []*object          // the entities with a type, in name order
 	byName  map[string]*object // by entity name
+	goEnums map[string]bool    // the enum types velox-gen declares
 	types   typeNames
 	query   []gqlField // the QueryFields, in entity name order
 }
@@ -56,14 +71,21 @@ type object struct {
 	eanns  []graphql.Annotation // the annotations of ent.Edges, by index
 	name   string               // the GraphQL type name
 	node   bool                 // a Node: its key is one column
-	dirs   []string             // rendered directives
+	dirs   []directive          // the type's directives
 	fields []gqlField           // fields, then edges
 	enums  []gqlEnum
 }
 
 type gqlField struct {
 	name, args, typ, desc string
-	dirs                  []string
+	dirs                  []directive
+	where                 string // the element, for errors
+}
+
+// directive is a rendered directive.
+type directive struct {
+	name string // without the @
+	text string // as written: @name(args)
 }
 
 type gqlEnum struct {
@@ -78,7 +100,10 @@ func build(m *plugin.Model) (*graph, error) {
 	if m == nil {
 		return nil, errors.New("no model")
 	}
-	g := &graph{byName: map[string]*object{}, types: newTypeNames()}
+	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, types: newTypeNames()}
+	for _, en := range m.Enums {
+		g.goEnums[en.Type] = true
+	}
 	ents := slices.SortedStableFunc(slices.Values(m.Entities), func(a, b *plugin.Entity) int { return cmp.Compare(a.Name, b.Name) })
 
 	// The types first, so that edges know their targets' names.
@@ -95,11 +120,13 @@ func build(m *plugin.Model) (*graph, error) {
 			continue
 		}
 		o := &object{ent: e, ann: a, name: e.Name, node: len(e.PrimaryKey) == 1}
-		if a.Type != "" {
-			if !validName(a.Type) {
-				return nil, fmt.Errorf("%s: graphql.Type(%q) is not a GraphQL name", where, a.Type)
-			}
+		switch {
+		case a.Type != "" && !validName(a.Type):
+			return nil, fmt.Errorf("%s: graphql.Type(%q) is not a GraphQL name", where, a.Type)
+		case a.Type != "":
 			o.name = a.Type
+		case !validName(e.Name):
+			return nil, fmt.Errorf("%s: %q is not a GraphQL name; name the type with graphql.Type", where, e.Name)
 		}
 		for _, n := range []string{o.name, o.name + "Connection", o.name + "Edge"} {
 			if err := g.types.add(n, where); err != nil {
@@ -159,7 +186,7 @@ func build(m *plugin.Model) (*graph, error) {
 				return nil, fmt.Errorf("%s and %s both declare the Query field %s", prev, where, q)
 			}
 			queryBy[q] = where
-			g.query = append(g.query, gqlField{name: q, args: connArgs, typ: o.name + "Connection!"})
+			g.query = append(g.query, gqlField{name: q, args: connArgs, typ: o.name + "Connection!", where: where})
 		}
 	}
 	return g, nil
@@ -172,7 +199,11 @@ func decode(anns map[string]json.RawMessage, where string) (graphql.Annotation, 
 	if !ok {
 		return a, nil
 	}
-	if err := json.Unmarshal(raw, &a); err != nil {
+	// UseNumber keeps a directive argument's number as written: an integer
+	// above 2^53 has no float64.
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if err := d.Decode(&a); err != nil {
 		return a, fmt.Errorf("%s: the graphql annotation: %w", where, err)
 	}
 	return a, nil
@@ -193,7 +224,11 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 	}
 	if o.node {
 		pk := e.Fields[e.PrimaryKey[0]]
-		if err := add(gqlField{name: "id", typ: "ID!", desc: pk.Comment}, "schema "+e.Name+", field "+pk.Name); err != nil {
+		// The key is the opaque global ID, which the method IDGQL returns: the
+		// struct's ID field is the raw key.
+		where := "schema " + e.Name + ", field " + pk.Name
+		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, dirs: []directive{bindTo("IDGQL")}, where: where}
+		if err := add(id, where); err != nil {
 			return err
 		}
 	}
@@ -204,12 +239,9 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 			continue
 		}
 		where := "schema " + e.Name + ", field " + f.Name
-		name := camel(f.GoName)
-		if a.FieldName != "" {
-			if !validName(a.FieldName) {
-				return fmt.Errorf("%s: graphql.FieldName(%q) is not a GraphQL name", where, a.FieldName)
-			}
-			name = a.FieldName
+		name, err := fieldName(camel(f.GoName), a.FieldName, where)
+		if err != nil {
+			return err
 		}
 		typ, err := g.fieldType(o, f, a, where)
 		if err != nil {
@@ -218,7 +250,7 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 		if !f.Nullable {
 			typ += "!"
 		}
-		var dirs []string
+		var dirs []directive
 		if !strings.EqualFold(name, f.GoName) {
 			// gqlgen binds a field to the Go field of its name, ignoring case.
 			dirs = append(dirs, bindTo(f.GoName))
@@ -227,7 +259,7 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 		if err != nil {
 			return err
 		}
-		if err := add(gqlField{name: name, typ: typ, desc: f.Comment, dirs: append(dirs, ds...)}, where); err != nil {
+		if err := add(gqlField{name: name, typ: typ, desc: f.Comment, dirs: append(dirs, ds...), where: where}, where); err != nil {
 			return err
 		}
 	}
@@ -238,13 +270,11 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 			continue
 		}
 		where := "schema " + e.Name + ", edge " + ed.Name
-		f := gqlField{name: camel(ed.GoName), desc: ed.Comment}
-		if a.FieldName != "" {
-			if !validName(a.FieldName) {
-				return fmt.Errorf("%s: graphql.FieldName(%q) is not a GraphQL name", where, a.FieldName)
-			}
-			f.name = a.FieldName
+		name, err := fieldName(camel(ed.GoName), a.FieldName, where)
+		if err != nil {
+			return err
 		}
+		f := gqlField{name: name, desc: ed.Comment, where: where}
 		switch {
 		case ed.Unique:
 			f.typ = t.name
@@ -262,12 +292,29 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 		if err != nil {
 			return err
 		}
-		f.dirs = append([]string{bindTo(ed.GoName + "GQL")}, ds...)
+		f.dirs = append([]directive{bindTo(ed.GoName + "GQL")}, ds...)
 		if err := add(f, where); err != nil {
 			return err
 		}
 	}
+	if len(o.fields) == 0 {
+		return fmt.Errorf("schema %s: its type would have no fields: each field is skipped, sensitive, the tenant or a foreign key, and each edge is skipped or leads to a skipped schema; skip the schema with graphql.Skip()", e.Name)
+	}
 	return nil
+}
+
+// fieldName is the GraphQL name of a field or edge: the FieldName
+// annotation's, or else camel, the name of its Go name.
+func fieldName(camel, annotated, where string) (string, error) {
+	switch {
+	case annotated != "" && !validName(annotated):
+		return "", fmt.Errorf("%s: graphql.FieldName(%q) is not a GraphQL name", where, annotated)
+	case annotated != "":
+		return annotated, nil
+	case !validName(camel):
+		return "", fmt.Errorf("%s: %q is not a GraphQL name; name it with graphql.FieldName", where, camel)
+	}
+	return camel, nil
 }
 
 // fieldType is the GraphQL type of f, without its non-null mark. An enum
@@ -300,7 +347,16 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		if err != nil {
 			return "", err
 		}
-		name := o.name + f.GoName
+		// The enum is named after velox-gen's Go enum type, <Schema><Field>,
+		// so that gqlgen binds it whatever graphql.Type names the type. An enum
+		// of the application's own Go type gets the same name; Plan 2 binds it.
+		name := o.ent.Name + f.GoName
+		if g.goEnums[f.Enum] {
+			name = f.Enum
+		}
+		if !validName(name) {
+			return "", fmt.Errorf("%s: the enum name %q is not a GraphQL name", where, name)
+		}
 		if err := g.types.add(name, where); err != nil {
 			return "", err
 		}
@@ -344,16 +400,19 @@ func enumValues(f *plugin.Field, a graphql.Annotation, where string) ([]string, 
 }
 
 // bindTo is the directive that binds a field to the Go field or method name.
-func bindTo(name string) string {
-	return "@goField(name: " + quote(name) + ")"
+func bindTo(name string) directive {
+	return directive{name: "goField", text: "@goField(name: " + quote(name) + ")"}
 }
 
 // directives renders ds, the directives of the element where.
-func directives(ds []graphql.Directive, where string) ([]string, error) {
-	out := make([]string, 0, len(ds))
+func directives(ds []graphql.Directive, where string) ([]directive, error) {
+	out := make([]directive, 0, len(ds))
 	for _, d := range ds {
-		if !validName(d.Name) {
+		switch {
+		case !validName(d.Name):
 			return nil, fmt.Errorf("%s: the directive name %q is not a GraphQL name", where, d.Name)
+		case d.Name == "goField":
+			return nil, fmt.Errorf("%s: @goField is velox-graphql's own: it binds fields to the Go code velox generates", where)
 		}
 		s := "@" + d.Name
 		if len(d.Args) > 0 {
@@ -370,7 +429,7 @@ func directives(ds []graphql.Directive, where string) ([]string, error) {
 			}
 			s += "(" + strings.Join(args, ", ") + ")"
 		}
-		out = append(out, s)
+		out = append(out, directive{name: d.Name, text: s})
 	}
 	return out, nil
 }
@@ -382,6 +441,8 @@ func value(v any) (string, error) {
 		return "null", nil
 	case bool:
 		return strconv.FormatBool(v), nil
+	case json.Number:
+		return v.String(), nil // JSON's number syntax is GraphQL's
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64), nil
 	case string:
@@ -444,13 +505,49 @@ func quote(s string) string {
 
 // ---- writing ----
 
-type writer struct{ strings.Builder }
+// writer writes the SDL, and remembers which element each line belongs to,
+// so that an error gqlparser finds names the element.
+type writer struct {
+	strings.Builder
+	app   bool     // write the application's directives too
+	at    string   // the element being written, "" for velox-graphql's own
+	where []string // the element of each line written so far
+}
 
 func (w *writer) line(parts ...string) {
 	for _, p := range parts {
 		w.WriteString(p)
 	}
 	w.WriteByte('\n')
+	w.where = append(w.where, w.at)
+}
+
+// prelude are the directives GraphQL defines, which gqlparser declares; any
+// other directive of graphql.Directives the application declares.
+var prelude = map[string]bool{"deprecated": true, "include": true, "skip": true, "specifiedBy": true, "defer": true, "oneOf": true}
+
+// dirs renders ds, each after a space, leaving out the application's own
+// directives unless w.app.
+func (w *writer) dirs(ds []directive) string {
+	var b strings.Builder
+	for _, d := range ds {
+		if w.app || d.name == "goField" || prelude[d.name] {
+			b.WriteString(" " + d.text)
+		}
+	}
+	return b.String()
+}
+
+// explain is err, an error gqlparser found in what w wrote, with the element
+// of the line it is on.
+func (w *writer) explain(err error) error {
+	var ge *gqlerror.Error
+	if errors.As(err, &ge) && len(ge.Locations) > 0 {
+		if l := ge.Locations[0].Line; l >= 1 && l <= len(w.where) && w.where[l-1] != "" {
+			return fmt.Errorf("%s: not valid GraphQL: %s", w.where[l-1], ge.Message)
+		}
+	}
+	return fmt.Errorf("velox-graphql wrote an SDL that is not valid GraphQL, which is a bug: %w", err)
 }
 
 // desc writes text as a description, at indent.
@@ -477,12 +574,11 @@ func (w *writer) desc(indent, text string) {
 }
 
 func (w *writer) field(f gqlField) {
+	at := w.at
+	w.at = f.where
 	w.desc("  ", f.desc)
-	dirs := ""
-	if len(f.dirs) > 0 {
-		dirs = " " + strings.Join(f.dirs, " ")
-	}
-	w.line("  ", f.name, f.args, ": ", f.typ, dirs)
+	w.line("  ", f.name, f.args, ": ", f.typ, w.dirs(f.dirs))
+	w.at = at
 }
 
 const vocabulary = `# The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
@@ -534,7 +630,9 @@ enum OrderDirection {
 `
 
 func (g *graph) write(w *writer) {
-	w.WriteString(vocabulary)
+	for l := range strings.SplitSeq(strings.TrimSuffix(vocabulary, "\n"), "\n") {
+		w.line(l)
+	}
 
 	w.line()
 	w.line("# The root query.")
@@ -562,19 +660,18 @@ func (g *graph) writeObject(w *writer, o *object) {
 		w.line("# ", o.ent.Name, ", as the type ", o.name)
 	}
 	w.line()
+	w.at = "schema " + o.ent.Name
 	w.desc("", o.ent.Comment)
 	head := "type " + o.name
 	if o.node {
 		head += " implements Node"
 	}
-	for _, d := range o.dirs {
-		head += " " + d
-	}
-	w.line(head, " {")
+	w.line(head, w.dirs(o.dirs), " {")
 	for _, f := range o.fields {
 		w.field(f)
 	}
 	w.line("}")
+	w.at = ""
 
 	for _, en := range o.enums {
 		w.line()

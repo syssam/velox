@@ -61,7 +61,7 @@ type Query {
 
 """A category of posts, in a tree."""
 type Category implements Node {
-  id: ID!
+  id: ID! @goField(name: "IDGQL")
   title: String!
   """The subcategories."""
   children(after: Cursor, first: Int, before: Cursor, last: Int): CategoryConnection! @goField(name: "ChildrenGQL")
@@ -89,7 +89,7 @@ type CategoryEdge {
 # Group
 
 type Group implements Node {
-  id: ID!
+  id: ID! @goField(name: "IDGQL")
   name: String!
   """Who can see the group; a String, as its enum is skipped."""
   visibility: String!
@@ -145,7 +145,7 @@ type LikeEdge {
 # Post
 
 type Post implements Node {
-  id: ID!
+  id: ID! @goField(name: "IDGQL")
   title: String!
   slug: String!
   status: PostStatus!
@@ -189,13 +189,13 @@ User is a person who writes posts.
 Its GraphQL type is Account.
 """
 type Account implements Node @key(fields: "id") {
-  id: ID!
+  id: ID! @goField(name: "IDGQL")
   createdAt: Time!
   updatedAt: Time!
   """The display name."""
   displayName: String! @goField(name: "Name")
   email: String!
-  role: AccountRole!
+  role: UserRole!
   nickname: String @deprecated(reason: "Use \"displayName\".")
   bio: String
   age: Int
@@ -211,7 +211,7 @@ type Account implements Node @key(fields: "id") {
   likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection! @goField(name: "LikesGQL")
 }
 
-enum AccountRole {
+enum UserRole {
   ADMIN
   EDITOR
   VIEWER

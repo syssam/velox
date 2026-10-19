@@ -263,6 +263,11 @@ func TestTypeMapping(t *testing.T) {
 	if got := typeOf(s, "User", "id"); got != "ID!" {
 		t.Errorf("id: %s", got)
 	}
+	// The id is the opaque global ID, from the method IDGQL, not the raw key
+	// in the struct's ID field.
+	if got := goField(s, "User", "id"); got != "IDGQL" {
+		t.Errorf("id binds to %q", got)
+	}
 	if got := s.Types["User"].Interfaces; !slices.Equal(got, []string{"Node"}) {
 		t.Errorf("User implements %v", got)
 	}
@@ -363,7 +368,7 @@ func TestTypeMapping(t *testing.T) {
 	})
 
 	t.Run("Type renames", func(t *testing.T) {
-		user := entity("User", &plugin.Field{Name: "role", GoName: "Role", Type: "enum", EnumValues: []string{"admin"}})
+		user := entity("User", &plugin.Field{Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"admin"}})
 		user.Annotations = ann(t, graphql.Type("Account"), graphql.QueryField("accounts"))
 		posts := edge("posts", "O2M", "Post")
 		user.Edges = []*plugin.Edge{posts}
@@ -373,13 +378,20 @@ func TestTypeMapping(t *testing.T) {
 		post.Edges = []*plugin.Edge{author}
 		group := entity("Group")
 		group.Edges = []*plugin.Edge{edge("users", "M2M", "User")}
-		s, sdl := load(t, model(group, post, user))
-		if s.Types["User"] != nil || s.Types["UserConnection"] != nil || s.Types["UserEdge"] != nil || s.Types["UserRole"] != nil {
+		m := model(group, post, user)
+		m.Enums = []*plugin.Enum{{Type: "UserRole", Values: []string{"admin"}}}
+		s, sdl := load(t, m)
+		if s.Types["User"] != nil || s.Types["UserConnection"] != nil || s.Types["UserEdge"] != nil {
 			t.Errorf("a User type is left:\n%s", sdl)
+		}
+		// The enum keeps the name of velox-gen's Go enum type, which gqlgen
+		// binds it to: Type renames the type, not its enums.
+		if s.Types["UserRole"] == nil || s.Types["AccountRole"] != nil {
+			t.Errorf("the enum is not UserRole:\n%s", sdl)
 		}
 		for _, c := range [][3]string{
 			{"Account", "id", "ID!"},
-			{"Account", "role", "AccountRole!"},
+			{"Account", "role", "UserRole!"},
 			{"AccountConnection", "edges", "[AccountEdge!]!"},
 			{"AccountEdge", "node", "Account!"},
 			{"Post", "author", "Account!"},
@@ -389,6 +401,20 @@ func TestTypeMapping(t *testing.T) {
 			if got := typeOf(s, c[0], c[1]); got != c[2] {
 				t.Errorf("%s.%s: %q, want %q", c[0], c[1], got, c[2])
 			}
+		}
+	})
+
+	t.Run("enum names", func(t *testing.T) {
+		// velox-gen's enum type (Enum is in Model.Enums), and a field of the
+		// application's own Go enum type (Enum names that type): both are
+		// <Schema><Field>.
+		role := &plugin.Field{Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"admin"}}
+		level := &plugin.Field{Name: "level", GoName: "Level", Type: "enum", Enum: "Level", EnumValues: []string{"low"}}
+		m := model(entity("User", role, level))
+		m.Enums = []*plugin.Enum{{Type: "UserRole", Values: []string{"admin"}}}
+		s, sdl := load(t, m)
+		if typeOf(s, "User", "role") != "UserRole!" || typeOf(s, "User", "level") != "UserLevel!" || s.Types["Level"] != nil {
+			t.Errorf("enum names:\n%s", sdl)
 		}
 	})
 
@@ -573,6 +599,14 @@ func TestCompositeKey(t *testing.T) {
 	if strings.Contains(sdl, "UserGroup") {
 		t.Errorf("the join entity is a type:\n%s", sdl)
 	}
+
+	// With its own fields skipped and its edge's target skipped, the type
+	// would have no fields: an error naming the schema, not a parse error.
+	for _, f := range like.Fields[1:] {
+		f.Annotations = ann(t, graphql.Skip())
+	}
+	u.Annotations = ann(t, graphql.Skip())
+	renderErr(t, model(like, u), "schema Like", "no fields", "graphql.Skip()")
 }
 
 func TestDescriptions(t *testing.T) {
@@ -632,6 +666,53 @@ input Opts { a: Boolean, b: String }
 	user.Annotations = nil
 	name.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "auth", Args: map[string]any{"1": 1}}))
 	renderErr(t, model(user), "User", "name", `"1"`)
+}
+
+// The plugin validates the SDL with only the directives GraphQL defines and
+// its own @goField: the application declares the rest elsewhere. A directive
+// GraphQL defines, used where it does not apply or with a wrong argument,
+// fails naming the element; @goField is the plugin's own.
+func TestDirectiveValidation(t *testing.T) {
+	build := func(ent, fld, edg []graphql.Directive) *plugin.Model {
+		name := field("name", "string")
+		name.Annotations = ann(t, graphql.Directives(fld...))
+		user := entity("User", name)
+		user.Annotations = ann(t, graphql.Directives(ent...))
+		posts := edge("posts", "O2M", "User")
+		posts.Annotations = ann(t, graphql.Directives(edg...))
+		user.Edges = []*plugin.Edge{posts}
+		return model(user)
+	}
+	dep := func(args map[string]any) []graphql.Directive {
+		return []graphql.Directive{{Name: "deprecated", Args: args}}
+	}
+	renderErr(t, build(dep(nil), nil, nil), "schema User:", "deprecated", "OBJECT")
+	// gqlparser's schema validation checks a directive's argument names, not
+	// the types of their values.
+	renderErr(t, build(nil, dep(map[string]any{"why": "old"}), nil), "schema User, field name:", "why")
+	renderErr(t, build(nil, []graphql.Directive{{Name: "include", Args: map[string]any{"if": true}}}, nil), "schema User, field name:", "include")
+	renderErr(t, build(nil, nil, []graphql.Directive{{Name: "goField", Args: map[string]any{"name": "X"}}}), "schema User, edge posts", "@goField")
+	renderErr(t, build(nil, []graphql.Directive{{Name: "goField"}}, nil), "schema User, field name", "@goField")
+
+	// Valid: @deprecated where it applies, and the application's own
+	// directives, which the plugin cannot check.
+	_, sdl := load(t, build(nil, dep(map[string]any{"reason": "old"}), []graphql.Directive{{Name: "cost"}}), "directive @cost on FIELD_DEFINITION")
+	if !strings.Contains(sdl, `name: String! @deprecated(reason: "old")`) || !strings.Contains(sdl, `@goField(name: "PostsGQL") @cost`) {
+		t.Errorf("directives:\n%s", sdl)
+	}
+}
+
+// Directive arguments are decoded as JSON numbers, so an integer above 2^53
+// keeps its value.
+func TestDirectiveNumbers(t *testing.T) {
+	name := field("name", "string")
+	name.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "limit", Args: map[string]any{
+		"n": int64(9007199254740993), "f": 0.5, "e": -12,
+	}}))
+	_, sdl := load(t, model(entity("User", name)), "directive @limit(n: Int, f: Float, e: Int) on FIELD_DEFINITION")
+	if !strings.Contains(sdl, "@limit(e: -12, f: 0.5, n: 9007199254740993)") {
+		t.Errorf("numbers:\n%s", sdl)
+	}
 }
 
 func TestQuery(t *testing.T) {
@@ -701,6 +782,16 @@ func TestNames(t *testing.T) {
 
 	f.Annotations = ann(t, graphql.FieldName("a-b"))
 	renderErr(t, model(entity("Doc", f)), "Doc", "title", `"a-b"`)
+
+	// Go identifiers may be any letters; GraphQL names are ASCII.
+	renderErr(t, model(entity("Café")), "schema Café", `"Café"`, "graphql.Type")
+	cafe := entity("Café")
+	cafe.Annotations = ann(t, graphql.Type("Cafe"))
+	load(t, model(cafe))
+	renderErr(t, model(entity("Doc", field("naïve", "string"))), "schema Doc, field naïve", `"naïve"`, "graphql.FieldName")
+	e := entity("Doc")
+	e.Edges = []*plugin.Edge{edge("crème", "O2M", "Doc")}
+	renderErr(t, model(e), "schema Doc, edge crème", "graphql.FieldName")
 }
 
 func TestCamel(t *testing.T) {
