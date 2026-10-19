@@ -1,0 +1,139 @@
+package sdl
+
+import (
+	"testing"
+
+	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/plugin"
+)
+
+// An annotation on an element it does not apply to, or that contradicts the
+// element, fails generation with the schema and the element named.
+func TestAnnotationMisuse(t *testing.T) {
+	// build is a User with a name, an optional nickname, a sensitive secret,
+	// a status enum, an immutable handle, the tenant and a posts edge, each
+	// with the annotations given.
+	type anns struct{ user, name, nickname, secret, status, handle, org, posts graphql.Annotation }
+	build := func(a anns) *plugin.Model {
+		name := field("name", "string")
+		name.Annotations = ann(t, a.name)
+		nickname := &plugin.Field{Name: "nickname", GoName: "Nickname", Type: "string", Nullable: true, Optional: true}
+		nickname.Annotations = ann(t, a.nickname)
+		secret := &plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}
+		secret.Annotations = ann(t, a.secret)
+		status := &plugin.Field{Name: "status", GoName: "Status", Type: "enum", EnumValues: []string{"ok"}}
+		status.Annotations = ann(t, a.status)
+		handle := &plugin.Field{Name: "handle", GoName: "Handle", Type: "string", Immutable: true}
+		handle.Annotations = ann(t, a.handle)
+		org := field("org_id", "int64")
+		org.Annotations = ann(t, a.org)
+		user := entity("User", name, nickname, secret, status, handle, org)
+		user.Tenant = 6
+		user.Annotations = ann(t, a.user)
+		posts := edge("posts", "O2M", "User")
+		posts.Annotations = ann(t, a.posts)
+		user.Edges = []*plugin.Edge{posts}
+		return model(user)
+	}
+	load(t, build(anns{})) // the model is fine without them
+
+	for _, c := range []struct {
+		name  string
+		a     anns
+		wants []string
+	}{
+		{"OrderField on an optional field", anns{nickname: graphql.OrderField("NICK")}, []string{"schema User, field nickname", "graphql.OrderField", "optional"}},
+		{"OrderField on a sensitive field", anns{secret: graphql.OrderField("SECRET")}, []string{"schema User, field secret", "graphql.OrderField", "sensitive"}},
+		{"OrderField on an edge", anns{posts: graphql.OrderField("POSTS")}, []string{"schema User, edge posts", "graphql.OrderField"}},
+		{"OrderField on a schema", anns{user: graphql.OrderField("X")}, []string{"schema User:", "graphql.OrderField"}},
+		{"Mutations on a field", anns{name: graphql.Mutations()}, []string{"schema User, field name", "graphql.Mutations"}},
+		{"Mutations on an edge", anns{posts: graphql.Mutations()}, []string{"schema User, edge posts", "graphql.Mutations"}},
+		{"MultiOrder on a field", anns{name: graphql.MultiOrder()}, []string{"schema User, field name", "graphql.MultiOrder"}},
+		{"QueryField on a field", anns{name: graphql.QueryField("names")}, []string{"schema User, field name", "graphql.QueryField"}},
+		{"Type on an edge", anns{posts: graphql.Type("Writings")}, []string{"schema User, edge posts", "graphql.Type"}},
+		{"WhereOps on an edge", anns{posts: graphql.WhereOps()}, []string{"schema User, edge posts", "graphql.WhereOps"}},
+		{"WhereEdge on a field", anns{name: graphql.WhereEdge()}, []string{"schema User, field name", "graphql.WhereEdge"}},
+		{"Connection on a field", anns{name: graphql.Connection(false)}, []string{"schema User, field name", "graphql.Connection"}},
+		{"CreateInput on an edge", anns{posts: graphql.CreateInput(false)}, []string{"schema User, edge posts", "graphql.CreateInput"}},
+		{"FieldName on a schema", anns{user: graphql.FieldName("x")}, []string{"schema User:", "graphql.FieldName"}},
+		{"EnumValues on a string", anns{name: graphql.EnumValues(map[string]string{"a": "A"})}, []string{"schema User, field name", "graphql.EnumValues"}},
+		{"an unknown EnumValues key", anns{status: graphql.EnumValues(map[string]string{"gone": "GONE"})}, []string{"schema User, field status", `"gone"`}},
+		{"WhereOps on a sensitive field", anns{secret: graphql.WhereOps()}, []string{"schema User, field secret", "graphql.WhereOps", "sensitive"}},
+		{"WhereOps on the tenant", anns{org: graphql.WhereOps()}, []string{"schema User, field org_id", "graphql.WhereOps", "tenant"}},
+		{"CreateInput(true) on the tenant", anns{org: graphql.CreateInput(true)}, []string{"schema User, field org_id", "graphql.CreateInput", "tenant"}},
+		{"UpdateInput(true) on an immutable field", anns{handle: graphql.UpdateInput(true)}, []string{"schema User, field handle", "graphql.UpdateInput", "immutable"}},
+		{"an unknown mutation", anns{user: graphql.Mutations("upsert")}, []string{"schema User", `"upsert"`}},
+		{"create with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipMutationCreateInput}}, []string{"schema User", "create", "SkipMutationCreateInput"}},
+		{"update with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"update"}, Skip: graphql.SkipMutationUpdateInput}}, []string{"schema User", "update", "SkipMutationUpdateInput"}},
+	} {
+		t.Run(c.name, func(t *testing.T) { renderErr(t, build(c.a), c.wants...) })
+	}
+
+	// A mutation kind listed twice is harmless.
+	m := build(anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create", "create"}}})
+	if s, _ := load(t, m); typeOf(s, "Mutation", "createUser") != "User!" {
+		t.Error("no createUser")
+	}
+
+	t.Run("QueryField on a join entity", func(t *testing.T) {
+		join := &plugin.Entity{Name: "UserGroup", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
+			Fields: []*plugin.Field{field("user_id", "int64"), field("group_id", "int64")}}
+		join.Annotations = ann(t, graphql.QueryField("userGroups"))
+		renderErr(t, model(entity("User"), join), "schema UserGroup", "graphql.QueryField", "join")
+		join.Annotations = ann(t, graphql.Mutations())
+		renderErr(t, model(entity("User"), join), "schema UserGroup", "graphql.Mutations", "join")
+	})
+
+	t.Run("update or delete without an ID", func(t *testing.T) {
+		for _, k := range []graphql.MutationKind{graphql.Update(), graphql.Delete()} {
+			like := &plugin.Entity{Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
+				Fields: []*plugin.Field{field("a", "string"), field("b", "string")}}
+			like.Annotations = ann(t, graphql.Mutations(k))
+			renderErr(t, model(like), "schema Like", string(k), "key")
+		}
+	})
+}
+
+// Two elements whose generated GraphQL names collide fail with both named.
+func TestNameCollisions(t *testing.T) {
+	ordered := func(name string) *plugin.Entity {
+		title := field("title", "string")
+		title.Annotations = ann(t, graphql.OrderField("TITLE"), graphql.WhereOps())
+		e := entity(name, title)
+		e.Annotations = ann(t, graphql.Mutations())
+		return e
+	}
+	renamed := func(name, typ string) *plugin.Entity {
+		e := entity(name)
+		e.Annotations = ann(t, graphql.Type(typ))
+		return e
+	}
+	for _, c := range []struct {
+		name  string
+		m     *plugin.Model
+		wants []string
+	}{
+		{"types", model(renamed("Article", "Post"), entity("Post")), []string{"schema Article", "schema Post", "Post"}},
+		{"connection", model(entity("Post"), entity("PostConnection")), []string{"schema Post", "schema PostConnection", "PostConnection"}},
+		{"order", model(ordered("Post"), entity("PostOrder")), []string{"schema Post", "schema PostOrder", "PostOrder"}},
+		{"order field", model(ordered("Post"), renamed("Article", "PostOrderField")), []string{"schema Post", "schema Article", "PostOrderField"}},
+		{"where input", model(ordered("Post"), renamed("Article", "PostWhereInput")), []string{"schema Post", "schema Article", "PostWhereInput"}},
+		{"create input", model(ordered("Post"), renamed("Article", "CreatePostInput")), []string{"schema Post", "schema Article", "CreatePostInput"}},
+		{"update input", model(ordered("Post"), renamed("Article", "UpdatePostInput")), []string{"schema Post", "schema Article", "UpdatePostInput"}},
+		{"enum and order", model(func() *plugin.Entity {
+			e := ordered("Post")
+			e.Fields = append(e.Fields, &plugin.Field{Name: "order_field", GoName: "OrderField", Type: "enum", EnumValues: []string{"a"}})
+			return e
+		}()), []string{"schema Post", "field order_field", "PostOrderField"}},
+		{"enum and entity", model(entity("User", &plugin.Field{Name: "role", GoName: "Role", Type: "enum", EnumValues: []string{"a"}}), entity("UserRole")), []string{"schema User, field role", "schema UserRole", "UserRole"}},
+	} {
+		t.Run(c.name, func(t *testing.T) { renderErr(t, c.m, c.wants...) })
+	}
+
+	// Input fields that collide: a field named like another's predicate.
+	n, nIn := field("name", "string"), field("name_in", "string")
+	n.Annotations = ann(t, graphql.WhereOps(graphql.OpIn))
+	nIn.GoName = "NameIn"
+	nIn.Annotations = ann(t, graphql.WhereOps(graphql.OpEQ))
+	renderErr(t, model(entity("User", n, nIn)), "schema User", "field name", "field name_in", "nameIn")
+}

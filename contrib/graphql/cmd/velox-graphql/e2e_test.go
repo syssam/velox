@@ -24,7 +24,7 @@ type User struct{ schema.Schema }
 func (User) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("org_id").Tenant(),
-		field.String("name").Comment("The display name.").Annotations(graphql.FieldName("displayName"), graphql.OrderField("NAME")),
+		field.String("name").Comment("The display name.").Annotations(graphql.FieldName("displayName"), graphql.OrderField("NAME"), graphql.WhereOps()),
 		field.Enum("role").Values("admin", "in_review").Default("admin").Annotations(graphql.EnumValues(map[string]string{"in_review": "REVIEWING"})),
 		field.String("password_hash").Sensitive(),
 		field.Uint64("quota"),
@@ -34,7 +34,7 @@ func (User) Fields() []schema.Field {
 
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.To("posts", Post.Type),
+		edge.To("posts", Post.Type).Annotations(graphql.WhereEdge()),
 		edge.To("groups", Group.Type).Annotations(graphql.Connection(false)),
 	}
 }
@@ -51,8 +51,8 @@ type Post struct{ schema.Schema }
 
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
-		field.Int64("author_id"),
-		field.String("title"),
+		field.Int64("author_id").Annotations(graphql.WhereOps()),
+		field.String("title").Annotations(graphql.OrderField("TITLE")),
 		field.String("draft").Annotations(graphql.Skip()),
 	}
 }
@@ -64,7 +64,10 @@ func (Post) Edges() []schema.Edge {
 }
 
 func (Post) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("posts")}
+	return []schema.Annotation{
+		graphql.QueryField("posts"),
+		graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete()),
+	}
 }
 
 type Group struct{ schema.Schema }
@@ -168,18 +171,30 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"  role: UserRole!\n",
 		"  quota: Uint64!\n",
 		"  seenAt: Time\n",
-		"  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection! @goField(name: \"PostsGQL\")\n",
+		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection! @goField(name: \"PostsGQL\")\n",
 		"  groups: [Group!]! @goField(name: \"GroupsGQL\")\n",
 		"  author: Account! @goField(name: \"AuthorGQL\")\n",
 		"enum UserRole {\n  ADMIN\n  REVIEWING\n}\n",
-		"  accounts(after: Cursor, first: Int, before: Cursor, last: Int): AccountConnection!\n",
-		"  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection!\n",
+		"  accounts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: AccountOrder, where: AccountWhereInput): AccountConnection!\n",
+		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection!\n",
+		"input AccountOrder {\n",
+		"  direction: OrderDirection! = ASC\n  \"\"\"The field to order by.\"\"\"\n  field: AccountOrderField!\n",
+		"enum AccountOrderField {\n  NAME\n}\n",
+		"enum PostOrderField {\n  TITLE\n}\n",
+		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n}\n",
+		"  or: [PostWhereInput!]\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n}\n",
+		"type Mutation {\n",
+		"  createPost(input: CreatePostInput!): Post!\n",
+		"  updatePost(id: ID!, input: UpdatePostInput!): Post!\n",
+		"  deletePost(id: ID!): ID!\n",
+		"input CreatePostInput {\n  title: String!\n  authorID: ID!\n}\n",
+		"input UpdatePostInput {\n  title: String\n  authorID: ID\n}\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in\n%s", want, got)
 		}
 	}
-	for _, absent := range []string{"orgID", "passwordHash", "authorID", "draft", "Secret", "UserGroup", "type User", "AccountRole"} {
+	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "draft", "Secret", "UserGroup", "type User", "AccountRole"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("%q is in\n%s", absent, got)
 		}

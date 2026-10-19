@@ -16,10 +16,12 @@
       ],
       "edges": [
         {"name": "children", "go_name": "Children", "target": "Category", "ref": "parent", "kind": "O2M", "field": "category_children", "field_on": "Category", "comment": "The subcategories."},
-        {"name": "parent", "go_name": "Parent", "target": "Category", "ref": "children", "kind": "M2O", "unique": true, "inverse": true, "field": "category_children", "field_on": "Category"}
+        {"name": "parent", "go_name": "Parent", "target": "Category", "ref": "children", "kind": "M2O", "unique": true, "inverse": true, "field": "category_children", "field_on": "Category",
+          "annotations": {"graphql": {"where_edge": true}}}
       ],
       "primary_key": [0],
-      "tenant": -1
+      "tenant": -1,
+      "annotations": {"graphql": {"query_field": "categories", "mutations": ["create", "update"]}}
     },
     {
       "name": "Group",
@@ -61,7 +63,8 @@
         {"name": "post", "go_name": "Post", "target": "Post", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "post_id", "field_on": "Like"}
       ],
       "primary_key": [0, 1],
-      "tenant": -1
+      "tenant": -1,
+      "annotations": {"graphql": {"mutations": ["create"]}}
     },
     {
       "name": "Post",
@@ -84,7 +87,9 @@
         {"name": "tags", "go_name": "Tags", "column": "tags", "type": "json", "go_type": "[]string", "elem_type": "[]string", "has_default": true},
         {"name": "views", "go_name": "Views", "column": "views", "type": "int", "go_type": "*int", "elem_type": "int", "pointer": true, "has_default": true,
           "annotations": {"graphql": {"order_field": "VIEWS", "create_input": false}}},
-        {"name": "rating", "go_name": "Rating", "column": "rating", "type": "float64", "go_type": "*float64", "elem_type": "float64", "pointer": true, "nullable": true, "optional": true}
+        {"name": "rating", "go_name": "Rating", "column": "rating", "type": "float64", "go_type": "*float64", "elem_type": "float64", "pointer": true, "nullable": true, "optional": true},
+        {"name": "edited_by", "go_name": "EditedBy", "column": "edited_by", "type": "string", "go_type": "string", "elem_type": "string", "update_default": true,
+          "comment": "Who last edited the post; the update default fills it."}
       ],
       "edges": [
         {"name": "author", "go_name": "Author", "target": "User", "ref": "posts", "kind": "M2O", "unique": true, "required": true, "inverse": true, "field": "author_id", "field_on": "Post",

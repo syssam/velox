@@ -52,9 +52,29 @@ type Query {
   node(id: ID!): Node
   """The nodes with these IDs, in their order; null for an ID with no node."""
   nodes(ids: [ID!]!): [Node]!
-  groups(after: Cursor, first: Int, before: Cursor, last: Int): GroupConnection!
-  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection!
-  accounts(after: Cursor, first: Int, before: Cursor, last: Int): AccountConnection!
+  categories(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
+  groups(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: GroupOrder): GroupConnection!
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+  accounts(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
+}
+
+# The root mutation.
+
+type Mutation {
+  """Creates one Category."""
+  createCategory(input: CreateCategoryInput!): Category!
+  """Updates the Category with this ID: only the fields given change."""
+  updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+  """Creates one Like."""
+  createLike(input: CreateLikeInput!): Like!
+  """Creates one Post."""
+  createPost(input: CreatePostInput!): Post!
+  """Updates the Post with this ID: only the fields given change."""
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+  """Deletes the Post with this ID, and returns the ID."""
+  deletePost(id: ID!): ID!
+  """Creates one Account."""
+  createAccount(input: CreateAccountInput!): Account!
 }
 
 # Category
@@ -64,7 +84,7 @@ type Category implements Node {
   id: ID! @goField(name: "IDGQL")
   title: String!
   """The subcategories."""
-  children(after: Cursor, first: Int, before: Cursor, last: Int): CategoryConnection! @goField(name: "ChildrenGQL")
+  children(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection! @goField(name: "ChildrenGQL")
   parent: Category @goField(name: "ParentGQL")
 }
 
@@ -86,6 +106,32 @@ type CategoryEdge {
   cursor: Cursor!
 }
 
+"""Filters Category nodes: a node matches when every predicate given holds."""
+input CategoryWhereInput {
+  not: CategoryWhereInput
+  and: [CategoryWhereInput!]
+  or: [CategoryWhereInput!]
+  hasParent: Boolean
+  hasParentWith: [CategoryWhereInput!]
+}
+
+"""The input of createCategory."""
+input CreateCategoryInput {
+  title: String!
+  childrenIDs: [ID!]
+  parentID: ID
+}
+
+"""The input of updateCategory: a field not given is left as it is."""
+input UpdateCategoryInput {
+  title: String
+  addChildrenIDs: [ID!]
+  removeChildrenIDs: [ID!]
+  clearChildren: Boolean
+  parentID: ID
+  clearParent: Boolean
+}
+
 # Group
 
 type Group implements Node {
@@ -93,7 +139,7 @@ type Group implements Node {
   name: String!
   """Who can see the group; a String, as its enum is skipped."""
   visibility: String!
-  users(after: Cursor, first: Int, before: Cursor, last: Int): AccountConnection! @goField(name: "UsersGQL")
+  users(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection! @goField(name: "UsersGQL")
 }
 
 """A connection to a list of Group."""
@@ -112,6 +158,19 @@ type GroupEdge {
   node: Group!
   """The cursor of this edge, for paging."""
   cursor: Cursor!
+}
+
+"""Ordering options for connections to Group."""
+input GroupOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: GroupOrderField!
+}
+
+"""The fields connections to Group can be ordered by."""
+enum GroupOrderField {
+  NAME
 }
 
 # Like
@@ -142,6 +201,14 @@ type LikeEdge {
   cursor: Cursor!
 }
 
+"""The input of createLike."""
+input CreateLikeInput {
+  weight: Int
+  createdAt: Time
+  userID: ID!
+  postID: ID!
+}
+
 # Post
 
 type Post implements Node {
@@ -153,6 +220,8 @@ type Post implements Node {
   tags: JSON!
   views: Int!
   rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
   """The user who wrote the post."""
   writer: Account! @goField(name: "AuthorGQL")
   likes: [Like!]! @goField(name: "LikesGQL")
@@ -182,6 +251,82 @@ type PostEdge {
   cursor: Cursor!
 }
 
+"""Ordering options for connections to Post."""
+input PostOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: PostOrderField!
+}
+
+"""The fields connections to Post can be ordered by."""
+enum PostOrderField {
+  TITLE
+  VIEWS
+}
+
+"""Filters Post nodes: a node matches when every predicate given holds."""
+input PostWhereInput {
+  not: PostWhereInput
+  and: [PostWhereInput!]
+  or: [PostWhereInput!]
+  writerID: ID
+  writerIDNEQ: ID
+  writerIDIn: [ID!]
+  writerIDNotIn: [ID!]
+  title: String
+  titleNEQ: String
+  titleIn: [String!]
+  titleNotIn: [String!]
+  titleContains: String
+  titleHasPrefix: String
+  titleHasSuffix: String
+  slug: String
+  slugNEQ: String
+  slugIn: [String!]
+  slugNotIn: [String!]
+  status: PostStatus
+  statusNEQ: PostStatus
+  statusIn: [PostStatus!]
+  statusNotIn: [PostStatus!]
+  publishedAt: Time
+  publishedAtNEQ: Time
+  publishedAtIn: [Time!]
+  publishedAtNotIn: [Time!]
+  publishedAtGT: Time
+  publishedAtGTE: Time
+  publishedAtLT: Time
+  publishedAtLTE: Time
+  publishedAtIsNil: Boolean
+  publishedAtNotNil: Boolean
+  hasWriter: Boolean
+  hasWriterWith: [AccountWhereInput!]
+}
+
+"""The input of createPost."""
+input CreatePostInput {
+  title: String!
+  slug: String!
+  status: PostStatus
+  publishedAt: Time
+  tags: JSON
+  rating: Float
+  writerID: ID!
+}
+
+"""The input of updatePost: a field not given is left as it is."""
+input UpdatePostInput {
+  title: String
+  status: PostStatus
+  publishedAt: Time
+  clearPublishedAt: Boolean
+  tags: JSON
+  views: Int
+  rating: Float
+  clearRating: Boolean
+  writerID: ID
+}
+
 # User, as the type Account
 
 """
@@ -206,7 +351,7 @@ type Account implements Node @key(fields: "id") {
   active: Boolean!
   settings: JSON
   """The posts the user wrote."""
-  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection! @goField(name: "PostsGQL") @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL") @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
   memberships: [Group!]! @goField(name: "GroupsGQL")
   likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection! @goField(name: "LikesGQL")
 }
@@ -233,4 +378,43 @@ type AccountEdge {
   node: Account!
   """The cursor of this edge, for paging."""
   cursor: Cursor!
+}
+
+"""Filters Account nodes: a node matches when every predicate given holds."""
+input AccountWhereInput {
+  not: AccountWhereInput
+  and: [AccountWhereInput!]
+  or: [AccountWhereInput!]
+  displayName: String
+  displayNameNEQ: String
+  displayNameIn: [String!]
+  displayNameNotIn: [String!]
+  displayNameContains: String
+  displayNameHasPrefix: String
+  displayNameHasSuffix: String
+  hasPosts: Boolean
+  hasPostsWith: [PostWhereInput!]
+}
+
+"""The input of createAccount."""
+input CreateAccountInput {
+  createdAt: Time
+  updatedAt: Time
+  """The display name."""
+  displayName: String!
+  email: String!
+  role: UserRole
+  nickname: String
+  bio: String
+  age: Int
+  passwordHash: String!
+  score: Float
+  externalID: UUID
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean
+  settings: JSON
+  postIDs: [ID!]
+  membershipIDs: [ID!]
+  bestFriendID: ID
 }

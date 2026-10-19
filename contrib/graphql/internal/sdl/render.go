@@ -22,14 +22,17 @@ import (
 // generated-file header, which velox-gen adds.
 //
 // Each entity that is neither skipped nor a join entity becomes a type with
-// its connection and edge types and its enums; the root Query has node, nodes
-// and each entity's QueryField. The output depends only on m: entities come
-// in name order, fields and edges in the model's order.
+// its connection and edge types, its enums, and as its annotations ask, its
+// order, its where input and its mutation inputs; the root Query has node,
+// nodes and each entity's QueryField, and the root Mutation, when an entity
+// has mutations, has them. The output depends only on m: entities come in
+// name order, fields and edges in the model's order.
 //
 // It fails, naming the schema and the element, on a model it cannot render:
 // a field type with no GraphQL type, a name that is not a GraphQL name, two
-// elements that would declare one name, a type with no field to show, or a
-// directive from graphql.Directives that GraphQL does not allow where it is.
+// elements that would declare one name, a type with no field to show, a
+// directive from graphql.Directives that GraphQL does not allow where it is,
+// or an annotation on an element it does not apply to.
 //
 // The application declares its own directives in its own schema files, so
 // the SDL is validated without them: it is rendered again with only the
@@ -56,11 +59,12 @@ func Render(m *plugin.Model) (string, error) {
 
 // graph is the GraphQL surface of a model.
 type graph struct {
-	objects []*object          // the entities with a type, in name order
-	byName  map[string]*object // by entity name
-	goEnums map[string]bool    // the enum types velox-gen declares
-	types   typeNames
-	query   []gqlField // the QueryFields, in entity name order
+	objects  []*object          // the entities with a type, in name order
+	byName   map[string]*object // by entity name
+	goEnums  map[string]bool    // the enum types velox-gen declares
+	types    typeNames
+	query    []gqlField // the QueryFields, in entity name order
+	mutation []gqlField // the mutations, in entity name order
 }
 
 // object is an entity's type.
@@ -74,12 +78,20 @@ type object struct {
 	dirs   []directive          // the type's directives
 	fields []gqlField           // fields, then edges
 	enums  []gqlEnum
+	fks    map[string]bool // the names of ent's foreign-key fields
+
+	order    *order     // nil for none
+	hasWhere bool       // it has a where input
+	where    []gqlField // the where input's fields
+	create   []gqlField // the create input's fields; nil for none
+	update   []gqlField // the update input's fields; nil for none
 }
 
 type gqlField struct {
 	name, args, typ, desc string
 	dirs                  []directive
-	where                 string // the element, for errors
+	where                 string  // the element, for errors
+	conn                  *object // for a connection, its nodes' type: args are set from it
 }
 
 // directive is a rendered directive.
@@ -91,10 +103,14 @@ type directive struct {
 type gqlEnum struct {
 	name   string
 	values []string
+	field  string // the field it is the type of
 }
 
-// connArgs are the paging arguments of a connection field.
-const connArgs = "(after: Cursor, first: Int, before: Cursor, last: Int)"
+// connArgs are the arguments of a connection to t's nodes: paging, and
+// orderBy and where when t has an order and a where input.
+func connArgs(t *object) string {
+	return "(after: Cursor, first: Int, before: Cursor, last: Int" + orderArg(t) + whereArg(t) + ")"
+}
 
 func build(m *plugin.Model) (*graph, error) {
 	if m == nil {
@@ -106,20 +122,35 @@ func build(m *plugin.Model) (*graph, error) {
 	}
 	ents := slices.SortedStableFunc(slices.Values(m.Entities), func(a, b *plugin.Entity) int { return cmp.Compare(a.Name, b.Name) })
 
+	// A foreign-key field bound to an edge is in no type and no input: the
+	// edge stands for it. An edge names its field on whichever entity holds
+	// it.
+	fks := map[string]map[string]bool{}
+	for _, e := range m.Entities {
+		for _, ed := range e.Edges {
+			if ed.Field != "" && ed.FieldOn != "" {
+				if fks[ed.FieldOn] == nil {
+					fks[ed.FieldOn] = map[string]bool{}
+				}
+				fks[ed.FieldOn][ed.Field] = true
+			}
+		}
+	}
+
 	// The types first, so that edges know their targets' names.
 	for _, e := range ents {
-		if e.Join {
-			continue
-		}
 		where := "schema " + e.Name
 		a, err := decode(e.Annotations, where)
 		if err != nil {
 			return nil, err
 		}
-		if a.Skip&graphql.SkipType != 0 {
+		if err := checkSchema(e, a, where); err != nil {
+			return nil, err
+		}
+		if e.Join || a.Skip&graphql.SkipType != 0 {
 			continue
 		}
-		o := &object{ent: e, ann: a, name: e.Name, node: len(e.PrimaryKey) == 1}
+		o := &object{ent: e, ann: a, name: e.Name, node: len(e.PrimaryKey) == 1, fks: fks[e.Name]}
 		switch {
 		case a.Type != "" && !validName(a.Type):
 			return nil, fmt.Errorf("%s: graphql.Type(%q) is not a GraphQL name", where, a.Type)
@@ -136,16 +167,24 @@ func build(m *plugin.Model) (*graph, error) {
 		if o.dirs, err = directives(a.Directives, where); err != nil {
 			return nil, err
 		}
-		for _, f := range e.Fields {
-			fa, err := decode(f.Annotations, where+", field "+f.Name)
+		for i, f := range e.Fields {
+			fw := where + ", field " + f.Name
+			fa, err := decode(f.Annotations, fw)
 			if err != nil {
+				return nil, err
+			}
+			if err := checkField(e, i, fa, o.fks[f.Name], fw); err != nil {
 				return nil, err
 			}
 			o.fanns = append(o.fanns, fa)
 		}
 		for _, ed := range e.Edges {
-			ea, err := decode(ed.Annotations, where+", edge "+ed.Name)
+			ew := where + ", edge " + ed.Name
+			ea, err := decode(ed.Annotations, ew)
 			if err != nil {
+				return nil, err
+			}
+			if err := misplaced(ea, onEdge, ew); err != nil {
 				return nil, err
 			}
 			o.eanns = append(o.eanns, ea)
@@ -154,23 +193,9 @@ func build(m *plugin.Model) (*graph, error) {
 		g.byName[e.Name] = o
 	}
 
-	// A foreign-key field bound to an edge is in no type: the edge stands for
-	// it. An edge names its field on whichever entity holds it.
-	fks := map[string]map[string]bool{}
-	for _, e := range m.Entities {
-		for _, ed := range e.Edges {
-			if ed.Field != "" && ed.FieldOn != "" {
-				if fks[ed.FieldOn] == nil {
-					fks[ed.FieldOn] = map[string]bool{}
-				}
-				fks[ed.FieldOn][ed.Field] = true
-			}
-		}
-	}
-
 	queryBy := map[string]string{"node": builtin, "nodes": builtin}
 	for _, o := range g.objects {
-		if err := g.fill(o, fks[o.ent.Name]); err != nil {
+		if err := g.fill(o); err != nil {
 			return nil, err
 		}
 		if q := o.ann.QueryField; q != "" {
@@ -186,8 +211,38 @@ func build(m *plugin.Model) (*graph, error) {
 				return nil, fmt.Errorf("%s and %s both declare the Query field %s", prev, where, q)
 			}
 			queryBy[q] = where
-			g.query = append(g.query, gqlField{name: q, args: connArgs, typ: o.name + "Connection!", where: where})
+			g.query = append(g.query, gqlField{name: q, typ: o.name + "Connection!", where: where, conn: o})
 		}
+	}
+
+	// The orders and where inputs, which connections to an entity take; then
+	// the mutations.
+	for _, o := range g.objects {
+		if err := g.orderOf(o); err != nil {
+			return nil, err
+		}
+		o.hasWhere = g.wantsWhere(o)
+	}
+	for _, o := range g.objects {
+		if err := g.whereOf(o); err != nil {
+			return nil, err
+		}
+	}
+	for _, o := range g.objects {
+		if err := g.mutationsOf(o); err != nil {
+			return nil, err
+		}
+	}
+	setArgs := func(fs []gqlField) {
+		for i := range fs {
+			if fs[i].conn != nil {
+				fs[i].args = connArgs(fs[i].conn)
+			}
+		}
+	}
+	setArgs(g.query)
+	for _, o := range g.objects {
+		setArgs(o.fields)
 	}
 	return g, nil
 }
@@ -209,9 +264,8 @@ func decode(anns map[string]json.RawMessage, where string) (graphql.Annotation, 
 	return a, nil
 }
 
-// fill computes o's fields, edges and enums. fks are the names of o's
-// foreign-key fields.
-func (g *graph) fill(o *object, fks map[string]bool) error {
+// fill computes o's fields, edges and enums.
+func (g *graph) fill(o *object) error {
 	e := o.ent
 	seen := map[string]string{} // GraphQL field name → the element
 	add := func(f gqlField, where string) error {
@@ -235,11 +289,11 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 	for i, f := range e.Fields {
 		a := o.fanns[i]
 		switch {
-		case o.node && i == e.PrimaryKey[0], i == e.Tenant, f.Sensitive, f.Implicit != "", fks[f.Name], a.Skip&graphql.SkipType != 0:
+		case o.node && i == e.PrimaryKey[0], i == e.Tenant, f.Sensitive, f.Implicit != "", o.fks[f.Name], a.Skip&graphql.SkipType != 0:
 			continue
 		}
 		where := "schema " + e.Name + ", field " + f.Name
-		name, err := fieldName(camel(f.GoName), a.FieldName, where)
+		name, err := o.fieldName(i)
 		if err != nil {
 			return err
 		}
@@ -270,7 +324,7 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 			continue
 		}
 		where := "schema " + e.Name + ", edge " + ed.Name
-		name, err := fieldName(camel(ed.GoName), a.FieldName, where)
+		name, err := o.edgeName(i)
 		if err != nil {
 			return err
 		}
@@ -284,7 +338,7 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 		case a.Connection != nil && !*a.Connection:
 			f.typ = "[" + t.name + "!]!"
 		default:
-			f.args, f.typ = connArgs, t.name+"Connection!"
+			f.typ, f.conn = t.name+"Connection!", t
 		}
 		// The entity's struct has a field of the edge's name, so the edge's
 		// method is <Edge>GQL.
@@ -303,6 +357,18 @@ func (g *graph) fill(o *object, fks map[string]bool) error {
 	return nil
 }
 
+// fieldName is the GraphQL name of o's field i.
+func (o *object) fieldName(i int) (string, error) {
+	f := o.ent.Fields[i]
+	return fieldName(camel(f.GoName), o.fanns[i].FieldName, "schema "+o.ent.Name+", field "+f.Name)
+}
+
+// edgeName is the GraphQL name of o's edge i.
+func (o *object) edgeName(i int) (string, error) {
+	ed := o.ent.Edges[i]
+	return fieldName(camel(ed.GoName), o.eanns[i].FieldName, "schema "+o.ent.Name+", edge "+ed.Name)
+}
+
 // fieldName is the GraphQL name of a field or edge: the FieldName
 // annotation's, or else camel, the name of its Go name.
 func fieldName(camel, annotated, where string) (string, error) {
@@ -318,7 +384,8 @@ func fieldName(camel, annotated, where string) (string, error) {
 }
 
 // fieldType is the GraphQL type of f, without its non-null mark. An enum
-// field adds its enum to o.
+// field adds its enum to o, once: the type, a where input and the mutation
+// inputs may each ask.
 func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, where string) (string, error) {
 	switch f.Type {
 	case "string":
@@ -354,13 +421,16 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		if g.goEnums[f.Enum] {
 			name = f.Enum
 		}
+		if slices.ContainsFunc(o.enums, func(en gqlEnum) bool { return en.name == name && en.field == f.Name }) {
+			return name, nil
+		}
 		if !validName(name) {
 			return "", fmt.Errorf("%s: the enum name %q is not a GraphQL name", where, name)
 		}
 		if err := g.types.add(name, where); err != nil {
 			return "", err
 		}
-		o.enums = append(o.enums, gqlEnum{name: name, values: values})
+		o.enums = append(o.enums, gqlEnum{name: name, values: values, field: f.Name})
 		return name, nil
 	default:
 		return "", fmt.Errorf("%s: a field of type %s has no GraphQL type; leave it out with graphql.Skip()", where, f.Type)
@@ -647,6 +717,17 @@ func (g *graph) write(w *writer) {
 	}
 	w.line("}")
 
+	if len(g.mutation) > 0 {
+		w.line()
+		w.line("# The root mutation.")
+		w.line()
+		w.line("type Mutation {")
+		for _, f := range g.mutation {
+			w.field(f)
+		}
+		w.line("}")
+	}
+
 	for _, o := range g.objects {
 		g.writeObject(w, o)
 	}
@@ -700,4 +781,22 @@ func (g *graph) writeObject(w *writer, o *object) {
 	w.line(`  """The cursor of this edge, for paging."""`)
 	w.line("  cursor: Cursor!")
 	w.line("}")
+
+	if o.order != nil {
+		w.order(o)
+	}
+	at := "schema " + o.ent.Name
+	if o.hasWhere {
+		w.at = at
+		w.input("Filters "+o.name+" nodes: a node matches when every predicate given holds.", o.name+"WhereInput", o.where)
+	}
+	if o.create != nil {
+		w.at = at
+		w.input(inputDesc(o, true), "Create"+o.name+"Input", o.create)
+	}
+	if o.update != nil {
+		w.at = at
+		w.input(inputDesc(o, false), "Update"+o.name+"Input", o.update)
+	}
+	w.at = ""
 }

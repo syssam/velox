@@ -85,3 +85,29 @@ func (n typeNames) add(name, owner string) error {
 		return fmt.Errorf("%s and %s both declare the GraphQL type %s", prev, owner, name)
 	}
 }
+
+// upper is name with its first letter in upper case: the part of a
+// generated name, as in has<Edge> or clear<Field>. GraphQL names are ASCII.
+func upper(name string) string {
+	if name == "" || name[0] < 'a' || name[0] > 'z' {
+		return name
+	}
+	return string(name[0]-'a'+'A') + name[1:]
+}
+
+// singular is the singular of an edge's name, for its <edge>IDs input
+// fields as entgql writes them: posts → post, categories → category, boxes →
+// box. It is velox-gen's rule, which inverts its plural; a name that does
+// not end in "s", such as children, is its own singular.
+func singular(s string) string {
+	switch {
+	case strings.HasSuffix(s, "ies") && len(s) > 3:
+		return s[:len(s)-3] + "y"
+	case strings.HasSuffix(s, "ses"), strings.HasSuffix(s, "xes"), strings.HasSuffix(s, "zes"),
+		strings.HasSuffix(s, "ches"), strings.HasSuffix(s, "shes"):
+		return s[:len(s)-2]
+	case strings.HasSuffix(s, "s") && len(s) > 1:
+		return s[:len(s)-1]
+	}
+	return s
+}

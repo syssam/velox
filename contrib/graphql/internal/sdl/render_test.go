@@ -208,6 +208,36 @@ func goField(s *ast.Schema, typ, name string) string {
 	return d.Arguments.ForName("name").Value.Raw
 }
 
+// fieldsOf lists typ's fields, or an input's, as "name: Type", with " = v"
+// for a default value; nil when typ is not declared.
+func fieldsOf(s *ast.Schema, typ string) []string {
+	def := s.Types[typ]
+	if def == nil {
+		return nil
+	}
+	out := []string{}
+	for _, f := range def.Fields {
+		if strings.HasPrefix(f.Name, "__") {
+			continue
+		}
+		d := f.Name + ": " + f.Type.String()
+		if f.DefaultValue != nil {
+			d += " = " + f.DefaultValue.String()
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// argsOf lists the arguments of typ.name as "name: Type".
+func argsOf(s *ast.Schema, typ, name string) []string {
+	out := []string{}
+	for _, a := range s.Types[typ].Fields.ForName(name).Arguments {
+		out = append(out, a.Name+": "+a.Type.String())
+	}
+	return out
+}
+
 func renderErr(t *testing.T, m *plugin.Model, wants ...string) {
 	t.Helper()
 	sdl, err := Render(m)
