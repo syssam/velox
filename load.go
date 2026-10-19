@@ -12,11 +12,12 @@ import (
 // loadSpec is what Query.With loads: relation rel of the query's entity,
 // filtered, ordered, and with relations of its own.
 type loadSpec struct {
-	rel   int32
-	where []Predicate
-	order []OrderTerm
-	with  []loadSpec
-	err   error
+	rel    int32
+	target func() (*EntityInfo, error) // the relation's target, named by Rel
+	where  []Predicate
+	order  []OrderTerm
+	with   []loadSpec
+	err    error
 }
 
 // specErr is the first error a load carries or one of its nested loads does.
@@ -38,7 +39,7 @@ func specRelation(owner *EntityInfo, sp loadSpec) (*relation, link, error) {
 		return nil, link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", owner.Name, sp.rel)
 	}
 	r := owner.rels[sp.rel]
-	l, err := r.resolve(owner)
+	l, err := r.resolve(owner, sp.target)
 	return r, l, err
 }
 

@@ -13,11 +13,11 @@ import (
 func TestRenderExists(t *testing.T) {
 	em := (*employee)(nil).VeloxMeta().info
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := co.rels[0].resolve(co)
+	staff, err := co.rels[0].resolve(co, ownerOf[employee])
 	if err != nil {
 		t.Fatal(err)
 	}
-	boss, err := em.rels[0].resolve(em)
+	boss, err := em.rels[0].resolve(em, ownerOf[employee])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +46,8 @@ func TestRenderExists(t *testing.T) {
 
 func TestCacheKeepsRelationsApart(t *testing.T) {
 	em := (*employee)(nil).VeloxMeta().info
-	boss, _ := em.rels[0].resolve(em)
-	comp, _ := em.rels[1].resolve(em)
+	boss, _ := em.rels[0].resolve(em, ownerOf[employee])
+	comp, _ := em.rels[1].resolve(em, ownerOf[company])
 	var c renderCache
 	a, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 0, v: boss}}}})
 	b, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 1, v: comp}}}})
@@ -63,11 +63,11 @@ func TestCacheKeepsRelationsApart(t *testing.T) {
 func TestCachedExistsRendersLikeRender(t *testing.T) {
 	em := (*employee)(nil).VeloxMeta().info
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := co.rels[0].resolve(co)
+	staff, err := co.rels[0].resolve(co, ownerOf[employee])
 	if err != nil {
 		t.Fatal(err)
 	}
-	boss, err := em.rels[0].resolve(em)
+	boss, err := em.rels[0].resolve(em, ownerOf[employee])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestCachedExistsRendersLikeRender(t *testing.T) {
 func TestRewriteHookMayAddAnUnresolvedRelation(t *testing.T) {
 	co := (*company)(nil).VeloxMeta().info
 	ref := func(i int32) node {
-		return node{op: opExists, col: i, v: relRef{owner: func() (*EntityInfo, error) { return co, nil }, i: i}}
+		return node{op: opExists, col: i, v: relRef{owner: func() (*EntityInfo, error) { return co, nil }, target: ownerOf[employee], i: i}}
 	}
 	e := &FakeExec{}
 	db := OpenFake(Postgres, e, WithRewrite(func(_ context.Context, st *Statement) error {

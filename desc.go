@@ -286,11 +286,16 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 // T.Columns[targetCol]. Its field must be a One[T] or a Many[T]: the metadata
 // is refused at first use when RelAddr returns another type, such as the
 // holder of another entity, as stale or hand-edited code would.
+//
+// The relation does not name T's metadata: if it did, every program that
+// links the owner would link T, and through T's own relations every entity
+// of the connected model (design §3 rule 2). Where the relation is used,
+// the handle Rel[E, T] says T, and CheckRelation checks the target.
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation {
-	r := RelationTo[T, PT](name)
-	r.explicit, r.ownerCol, r.targetCol = true, ownerCol, targetCol
-	r.holders = [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))}
-	return r
+	return Relation{
+		name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol,
+		holders: [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))},
+	}
 }
 
 // EdgeThrough is a many-to-many relation to T through the join entity J:

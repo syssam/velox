@@ -93,7 +93,7 @@ func TestHooksOnWrites(t *testing.T) {
 func TestHooksAndConditionsOfRelations(t *testing.T) {
 	ctx := context.Background()
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := co.rels[0].resolve(co)
+	staff, err := co.rels[0].resolve(co, ownerOf[employee])
 	if err != nil {
 		t.Fatal(err)
 	}

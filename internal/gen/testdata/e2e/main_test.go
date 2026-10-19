@@ -461,6 +461,18 @@ func TestCheckEntity(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
+	// The generated metadata names no relation's target: CheckRelation
+	// resolves each, with the target its handle names.
+	for name, err := range map[string]error{
+		"User.Posts":  velox.CheckRelation(gen.Users.Posts),
+		"User.Groups": velox.CheckRelation(gen.Users.Groups),
+		"Post.Author": velox.CheckRelation(gen.Posts.Author),
+		"Group.Users": velox.CheckRelation(gen.Groups.Users),
+	} {
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
 }
 
 func TestTenant(t *testing.T) {

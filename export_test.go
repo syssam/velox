@@ -297,16 +297,29 @@ func ExistsOn(p Predicate) *EntityInfo {
 	return p.n.v.(link).target
 }
 
+// TargetOf is the target of a relation to T as a use site names it: what Rel
+// puts in a load or a condition.
+func TargetOf[T any]() func() (*EntityInfo, error) { return ownerOf[T] }
+
 // LoadDesc builds entity E's metadata from d, as MetaOnce.Load does on the
-// entity's first use, then resolves its relations, as CheckEntity does.
-func LoadDesc[E any](d Desc[E]) (*EntityInfo, error) {
+// entity's first use, then resolves its relations, as CheckRelation does:
+// relation i of an EdgeTo takes the target targets[i], which a use site would
+// name. A relation with no target there is left unresolved.
+func LoadDesc[E any](d Desc[E], targets ...func() (*EntityInfo, error)) (*EntityInfo, error) {
 	var o MetaOnce[E]
 	m := o.Load(func() Desc[E] { return d })
 	if m.err != nil {
 		return nil, m.err
 	}
-	for _, r := range m.info.rels {
-		if _, err := r.resolve(m.info); err != nil {
+	for i, r := range m.info.rels {
+		var use func() (*EntityInfo, error)
+		if i < len(targets) {
+			use = targets[i]
+		}
+		if r.target == nil && use == nil {
+			continue
+		}
+		if _, err := r.resolve(m.info, use); err != nil {
 			return m.info, err
 		}
 	}

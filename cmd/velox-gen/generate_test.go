@@ -503,3 +503,72 @@ func TestModeSelectionKeepsTheOldMode(t *testing.T) {
 		t.Errorf("no pattern: %d %q %q", code, out, errs)
 	}
 }
+
+const genPostUserSchema = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+func (User) Edges() []schema.Edge   { return []schema.Edge{edge.To("posts", Post.Type)} }
+
+type Post struct{ schema.Schema }
+
+func (Post) Fields() []schema.Field {
+	return []schema.Field{field.String("title"), field.Int64("author_id")}
+}
+func (Post) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id")}
+}
+`
+
+// TestVerifyGeneratedChecksRelations: the generated metadata names no
+// relation's target, so CheckEntity cannot resolve a relation; verify calls
+// velox.CheckRelation for each, and so catches a stale or hand-edited key
+// (which every entity's own metadata accepts) and a relation whose target's
+// metadata is broken.
+func TestVerifyGeneratedChecksRelations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"schema/schema.go": genPostUserSchema})
+	if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("generate: %d %q", code, errs)
+	}
+	code, out, errs := velox(t, dir, "verify", "-out", "gen", "./schema")
+	if code != 0 || out != "velox-gen verify: 2 entities, 0 with errors\n" {
+		t.Fatalf("a good model: %d %q %q", code, out, errs)
+	}
+	edit := func(file, old, repl string) {
+		t.Helper()
+		p := filepath.Join(dir, "gen", file)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), old) {
+			t.Fatalf("%s has no %q", file, old)
+		}
+		if err := os.WriteFile(p, []byte(strings.Replace(string(b), old, repl, 1)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A key column that does not exist: both entities build, the relation does not.
+	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", 0, 2)`, `velox.EdgeTo[Post]("Posts", 0, 9)`)
+	code, out, errs = velox(t, dir, "verify", "-out", "gen", "./schema")
+	if code != 1 || out != "velox-gen verify: 2 entities, 1 with errors\n" || !strings.Contains(errs, "User.Posts: its key names column 9") {
+		t.Errorf("a bad key: %d %q %q", code, out, errs)
+	}
+	edit("user_velox.go", `velox.EdgeTo[Post]("Posts", 0, 9)`, `velox.EdgeTo[Post]("Posts", 0, 2)`)
+	// A target whose metadata is broken: the relation names it, and says so.
+	edit("post_velox.go", "Tenant:     -1,", "Tenant:     9,")
+	code, out, errs = velox(t, dir, "verify", "-out", "gen", "./schema")
+	if code != 1 || !strings.Contains(errs, "User.Posts: its target") || !strings.Contains(errs, "the tenant names column 9") || !strings.Contains(out, "with errors") {
+		t.Errorf("a broken target: %d %q %q", code, out, errs)
+	}
+}

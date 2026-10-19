@@ -140,6 +140,7 @@ type genModel struct {
 	graph      *gen.Graph
 	importPath string
 	names      []string
+	rels       []string // every relation's handle, e.g. "Users.Posts", join entities included
 }
 
 // loadModel loads and builds the schema package at pattern and lowers it to
@@ -164,6 +165,9 @@ func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
 	gm := &genModel{graph: g, importPath: importPath}
 	for _, e := range o.Entities {
 		gm.names = append(gm.names, e.Name)
+		for _, r := range e.Rels {
+			gm.rels = append(gm.rels, e.Handles+"."+r.GoName)
+		}
 	}
 	return gm, nil
 }
@@ -269,7 +273,9 @@ func staleFiles(out string, want map[string][]byte) (write, remove []string, err
 
 // runGenerateVerify is verify for a generated package: it builds a program in
 // the module of the output package that calls velox.CheckEntity for every
-// entity and join entity of the schema package at pattern.
+// entity and join entity of the schema package at pattern, and
+// velox.CheckRelation for every relation, which only the handle of a relation
+// can resolve: the generated metadata names no relation's target.
 func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, stderr io.Writer) int {
 	fail := func(err error) int {
 		_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
@@ -299,7 +305,11 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	for i, n := range gm.names {
 		types[i] = "g." + n
 	}
-	return runProgram(mod, checkProgram([][2]string{{"g", outPath}}, types), env, stdout, stderr)
+	rels := make([]string, len(gm.rels))
+	for i, r := range gm.rels {
+		rels[i] = "g." + r
+	}
+	return runProgram(mod, checkProgram([][2]string{{"g", outPath}}, types, rels), env, stdout, stderr)
 }
 
 // moduleDir is the directory of the module that holds the package at pattern.

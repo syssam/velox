@@ -29,12 +29,13 @@ func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 		rel           int
 		target        *EntityInfo
 		ownerCol, col string
+		use           func() (*EntityInfo, error) // the target as the use site names it
 	}{
-		{co, 0, em, "id", "company_id"}, // Many by convention: employee.CompanyID
-		{em, 0, em, "boss_id", "id"},    // One, declared References
-		{em, 1, co, "company_id", "id"}, // One by convention: employee.CompanyID
+		{co, 0, em, "id", "company_id", ownerOf[employee]}, // Many: employee.CompanyID
+		{em, 0, em, "boss_id", "id", ownerOf[employee]},    // One
+		{em, 1, co, "company_id", "id", ownerOf[company]},  // One: employee.CompanyID
 	} {
-		l, err := c.owner.rels[c.rel].resolve(c.owner)
+		l, err := c.owner.rels[c.rel].resolve(c.owner, c.use)
 		if err != nil || l.target != c.target || c.owner.Columns[l.ownerCol].Name != c.ownerCol || l.target.Columns[l.targetCol].Name != c.col {
 			t.Errorf("%s.%s: %+v, %v", c.owner.Name, c.owner.rels[c.rel].name, l, err)
 		}
@@ -47,7 +48,7 @@ func TestResolveRefusesMismatchedKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info)
+	_, err = info.rels[0].resolve(info, ownerOf[keyedLine])
 	var se *SchemaError
 	if !errors.As(err, &se) || !strings.Contains(err.Error(), "the key types differ: velox.keyed.ID is string and velox.keyedLine.KeyedID is int64") {
 		t.Errorf("%v", err)
@@ -90,7 +91,7 @@ func TestMissingConventionalKey(t *testing.T) {
 	x := new(lonely)
 	info, err := buildInfo(reflect.TypeFor[lonely](), unsafe.Pointer(x), any(x), []string{"ID"}, []Relation{RelationTo[keyedLine]("Lines")})
 	if err == nil {
-		_, err = info.rels[0].resolve(info)
+		_, err = info.rels[0].resolve(info, nil)
 	}
 	if err == nil || !strings.Contains(err.Error(), "velox.keyedLine has no field LonelyID; name one, or declare the key with s.Many(&x.Lines).ForeignKey") {
 		t.Errorf("%v", err)
@@ -124,7 +125,7 @@ func resolveAll[E any](cols []string, rels ...Relation) error {
 	if err != nil {
 		return err
 	}
-	_, err = info.rels[0].resolve(info)
+	_, err = info.rels[0].resolve(info, nil)
 	return err
 }
 
@@ -275,7 +276,7 @@ func TestNonComparableKeyIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info)
+	_, err = info.rels[0].resolve(info, ownerOf[blobLine])
 	wantErr(t, err, "Lines: a key of type []uint8 cannot be compared")
 }
 
@@ -321,7 +322,7 @@ func TestOnePrefersTheOwnersKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := info.rels[0].resolve(info)
+	l, err := info.rels[0].resolve(info, nil)
 	if err != nil || info.Columns[l.ownerCol].Name != "parent_id" || l.target.Columns[l.targetCol].Name != "id" {
 		t.Errorf("%+v, %v", l, err)
 	}
@@ -357,7 +358,7 @@ func TestForeignKeyInEmbeddedStruct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, err := info.rels[0].resolve(info)
+	l, err := info.rels[0].resolve(info, nil)
 	if err != nil || l.target.Columns[l.targetCol].Name != "owner_ref" || info.Columns[l.ownerCol].Name != "id" {
 		t.Errorf("%+v, %v", l, err)
 	}
@@ -369,7 +370,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info)
+	_, err = info.rels[0].resolve(info, ownerOf[brokenTarget])
 	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
 }
 
@@ -378,5 +379,24 @@ func TestTypeNameUpperCasesTheFirstRune(t *testing.T) {
 		if got := typeName(in); got != want {
 			t.Errorf("typeName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestEdgeToNamesNoTarget: the Desc path's relations carry no reference to
+// their target's metadata, so linking an entity does not link the entities it
+// relates to, and through them the whole connected model. The use site names
+// the target (Rel). EdgeThrough keeps its join entity's, which has no
+// relations of its own.
+func TestEdgeToNamesNoTarget(t *testing.T) {
+	for _, r := range []Relation{EdgeTo[employee]("Staff", 0, 1), EdgeThrough[company, employee]("Through", 0, 0, 0, 0)} {
+		if r.target != nil {
+			t.Errorf("%s has a target", r.name)
+		}
+	}
+	if r := EdgeThrough[company, employee]("Through", 0, 0, 0, 0); r.through == nil || r.through.join == nil {
+		t.Error("EdgeThrough lost its join entity")
+	}
+	if RelationTo[employee]("Old").target == nil {
+		t.Error("the old path's RelationTo lost its target")
 	}
 }

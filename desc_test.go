@@ -224,7 +224,9 @@ func TestDescRefusals(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := rowDesc()
 			c.edit(&d)
-			_, err := velox.LoadDesc(d)
+			// The relations of these cases all target dAuthor, as a use site
+			// of the handle would say.
+			_, err := velox.LoadDesc(d, velox.TargetOf[dAuthor]())
 			var se *velox.SchemaError
 			if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.dRow") || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("got %v, want a *SchemaError containing %q", err, c.want)

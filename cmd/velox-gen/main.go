@@ -45,8 +45,10 @@
 //
 // verify -out builds a program in a temporary .velox-verify-* directory of
 // your module, imports the generated package and reports, for every entity,
-// the mistakes that velox.CheckEntity finds. It removes the directory, but a
-// killed process leaves it behind; ignore .velox-verify-*/ in git.
+// the mistakes that velox.CheckEntity finds and, in the new mode,
+// velox.CheckRelation for every relation, whose target the generated metadata
+// does not name. It removes the directory, but a killed process leaves it
+// behind; ignore .velox-verify-*/ in git.
 //
 // describe prints the entities, columns and relations that the schema package
 // (default ./schema) declares.

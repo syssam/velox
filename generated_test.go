@@ -17,6 +17,15 @@ func TestGeneratedEntities(t *testing.T) {
 		velox.CheckEntity[testmodel.Line](),
 		velox.CheckEntity[testmodel.Item](),
 		velox.CheckEntity[testmodel.Ticket](),
+		// A relation of generated code names its target where it is used, so
+		// CheckEntity leaves it: CheckRelation resolves each.
+		velox.CheckRelation(testmodel.Invoices.Items),
+		velox.CheckRelation(testmodel.Items.Invoice),
+		velox.CheckRelation(testmodel.Lines.Sample),
+		velox.CheckRelation(testmodel.Samples.Lines),
+		velox.CheckRelation(testmodel.Samples.Parent),
+		velox.CheckRelation(testmodel.Tickets.Invoice),
+		velox.CheckRelation(testmodel.Tickets.Parent),
 	} {
 		if err != nil {
 			t.Error(err)

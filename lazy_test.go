@@ -398,3 +398,29 @@ func TestMutationDBIsTheTransaction(t *testing.T) {
 		t.Errorf("the hook ran %d times, want 2", len(lzSawDB))
 	}
 }
+
+// TestCheckRelation: a Desc relation names no target, so CheckEntity does not
+// resolve it and CheckRelation does, with the target the handle names. The
+// error is the one the first use reports.
+func TestCheckRelation(t *testing.T) {
+	if err := velox.CheckRelation(lzTasks.Project); err != nil {
+		t.Errorf("a valid relation: %v", err)
+	}
+	const want = "velox: velox_test.lzLate.Bad: its target github.com/syssam/velox2_test.badDesc is invalid: velox_test.badDesc: the tenant names column 3, of 1"
+	if err := velox.CheckRelation(lzLates.Bad); err == nil || err.Error() != want {
+		t.Errorf("an invalid target: %v, want %s", err, want)
+	}
+	// The owner's own metadata is valid, which CheckEntity says.
+	if err := velox.CheckEntity[lzLate](); err != nil {
+		t.Errorf("CheckEntity of the owner: %v", err)
+	}
+	// Loading the relation reports the same at use, and sends nothing.
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Query[lzLate]().With(lzLates.Bad).Limit(1).All(ctx); err == nil || err.Error() != want {
+		t.Errorf("With: %v, want %s", err, want)
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements were sent", e.Calls)
+	}
+}

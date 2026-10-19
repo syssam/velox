@@ -82,8 +82,9 @@ type Relation struct {
 	holders [2]any
 }
 
-// RelationTo is what velox-gen writes for a relation field whose target is
-// entity T. Nothing runs until the relation is first used.
+// RelationTo is what the old Shape path writes for a relation field whose
+// target is entity T. Nothing runs until the relation is first used. The
+// Desc path's EdgeTo carries no target: see EdgeTo.
 func RelationTo[T any, PT Entity[T]](name string) Relation {
 	return Relation{name: name, target: func() (*EntityInfo, error) {
 		m := PT(nil).VeloxMeta()
@@ -98,12 +99,12 @@ func RelationTo[T any, PT Entity[T]](name string) Relation {
 type relation struct {
 	name   string
 	many   bool
-	off    uintptr // the field's offset in the owner
-	typ    any     // the reflect.Type of One[T] or Many[T] (design §3 rule 7)
-	target func() (*EntityInfo, error)
-	ref    int     // References: the owner's column; -1 none, -2 invalid
-	fkOff  uintptr // ForeignKey: the target field's offset...
-	fkTyp  any     // ...and reflect.Type, computed during Schema
+	off    uintptr                     // the field's offset in the owner
+	typ    any                         // the reflect.Type of One[T] or Many[T] (design §3 rule 7)
+	target func() (*EntityInfo, error) // the old path's; nil for an EdgeTo, whose use site brings it
+	ref    int                         // References: the owner's column; -1 none, -2 invalid
+	fkOff  uintptr                     // ForeignKey: the target field's offset...
+	fkTyp  any                         // ...and reflect.Type, computed during Schema
 	hasFK  bool
 
 	// A relation of the Desc path names its key (EdgeTo): the inference
@@ -130,19 +131,28 @@ type link struct {
 	joinTarget int         // join's column equal to target.Columns[targetCol]
 }
 
-func (r *relation) resolve(owner *EntityInfo) (link, error) {
-	r.once.Do(func() { r.link, r.err = r.build(owner) })
+// resolve returns the relation's link. An EdgeTo relation has no target of
+// its own, so that the owner's metadata does not keep the target's code in
+// every program that links the owner: the use site, which names the target's
+// type, passes use. A relation that has its own target ignores use. The first
+// resolution is kept.
+func (r *relation) resolve(owner *EntityInfo, use func() (*EntityInfo, error)) (link, error) {
+	r.once.Do(func() { r.link, r.err = r.build(owner, use) })
 	return r.link, r.err
 }
 
-func (r *relation) build(owner *EntityInfo) (link, error) {
+func (r *relation) build(owner *EntityInfo, use func() (*EntityInfo, error)) (link, error) {
 	fail := func(format string, args ...any) (link, error) {
 		return link{}, &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
 	}
-	if r.target == nil {
+	target := r.target
+	if target == nil {
+		target = use
+	}
+	if target == nil {
 		return fail("it has no target in the generated code; run go tool velox-gen")
 	}
-	t, err := r.target()
+	t, err := target()
 	if err != nil {
 		return fail("its target %s is invalid: %s", targetName(rtype(r.typ)), strings.TrimPrefix(err.Error(), "velox: "))
 	}
@@ -356,7 +366,7 @@ func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
 
 // spec is the relation's load options, without types.
 func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
-	return loadSpec{rel: r.I, where: r.where, order: r.order, with: r.with, err: r.err}
+	return loadSpec{rel: r.I, target: ownerOf[T], where: r.where, order: r.order, with: r.with, err: r.err}
 }
 
 // MarshalJSON writes the related entity, or null when there is none or it
@@ -375,11 +385,13 @@ func (m Many[T]) MarshalJSON() ([]byte, error) { return json.Marshal(m.v) }
 // entity's Policy or Hooks, which Load calls while it builds that entity's
 // metadata, then does not wait on itself.
 type relRef struct {
-	owner func() (*EntityInfo, error)
-	i     int32
+	owner  func() (*EntityInfo, error)
+	target func() (*EntityInfo, error) // the relation's target, named by the use site
+	i      int32
 }
 
-// ownerOf is relRef.owner for entity E.
+// ownerOf is relRef.owner for entity E, and relRef.target and loadSpec.target
+// for the target E of a relation.
 func ownerOf[E any]() (*EntityInfo, error) {
 	m, err := metaOf[E]()
 	if err != nil {
@@ -397,7 +409,17 @@ func (r relRef) link() (link, error) {
 	if r.i < 0 || int(r.i) >= len(in.rels) {
 		return link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", in.Name, r.i)
 	}
-	return in.rels[r.i].resolve(in)
+	return in.rels[r.i].resolve(in, r.target)
+}
+
+// CheckRelation resolves the relation that r names and returns what is wrong
+// with it: its target is not an entity or has invalid metadata, or its key is
+// missing or mistyped. CheckEntity cannot do this, because a relation of
+// generated code names its target only where it is used. velox-gen verify
+// calls it for every relation: velox.CheckRelation(gen.Users.Posts).
+func CheckRelation[E, T any](r Rel[E, T]) error {
+	_, err := relRef{owner: ownerOf[E], target: ownerOf[T], i: r.I}.link()
+	return err
 }
 
 // Has is true when the relation holds at least one entity. On MySQL, an UPDATE
@@ -421,5 +443,5 @@ func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	}
 	// The relation resolves when a statement holding the condition runs, not
 	// here: see relRef.
-	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], i: r.I}, kids: nodes(ps)}}
+	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], target: ownerOf[T], i: r.I}, kids: nodes(ps)}}
 }
