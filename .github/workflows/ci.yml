@@ -26,6 +26,8 @@ jobs:
     env:
       VELOX_TEST_POSTGRES: postgres://velox:velox@127.0.0.1:55432/velox?sslmode=disable
       VELOX_TEST_MYSQL: velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true
+      # The root DSN: the routing tests make databases beside the CI one (PostgreSQL's velox can; MySQL's cannot).
+      VELOX_TEST_MYSQL_ADMIN: root:velox@tcp(127.0.0.1:53306)/?parseTime=true&clientFoundRows=true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

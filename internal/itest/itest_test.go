@@ -1,6 +1,8 @@
 // Package itest runs velox against real databases: SQLite always, PostgreSQL
 // and MySQL when VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name them
-// (scripts/ci-local.sh starts both and sets the variables).
+// (scripts/ci-local.sh starts both and sets the variables). The routing tests
+// also make databases beside the CI one, and MySQL needs a root DSN for that:
+// VELOX_TEST_MYSQL_ADMIN.
 package itest
 
 import (
