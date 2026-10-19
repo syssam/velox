@@ -2,13 +2,17 @@ package plugin
 
 import "encoding/json"
 
-// Version is the protocol version, sent as Request.Protocol and Model.Version.
+// Version is the protocol version and the model's JSON version; both are 1
+// today. A plugin checks Request.Protocol, the version of the protocol, and
+// refuses a request whose Protocol it does not know. Model.Version is the
+// version of the model's JSON, which changes only when a field is removed or
+// changes meaning; added fields do not change it.
 const Version = 1
 
 // Request is what velox-gen writes to a plugin's standard input.
 type Request struct {
-	Protocol   int    `json:"plugin_protocol"`
-	OutPackage string `json:"out_package"` // the generated package's name
+	Protocol   int    `json:"plugin_protocol"` // the protocol version, [Version]; a plugin checks it
+	OutPackage string `json:"out_package"`     // the generated package's name
 	Model      *Model `json:"model"`
 }
 
@@ -26,7 +30,7 @@ type File struct {
 
 // Model is the resolved model of a schema package, as velox-gen generates it.
 type Model struct {
-	Version    int       `json:"version"`
+	Version    int       `json:"version"`     // the version of the model's JSON, [Version]
 	SchemaPath string    `json:"schema_path"` // the schema package's import path
 	Entities   []*Entity `json:"entities"`    // the schemas', then the join entities', each sorted by Name
 	Enums      []*Enum   `json:"enums"`       // sorted by Type
@@ -38,8 +42,10 @@ type Entity struct {
 	Label       string                     `json:"label"`   // snake_case of Name
 	Handles     string                     `json:"handles"` // the plural of Name, e.g. "Users"
 	Table       string                     `json:"table"`
-	Join        bool                       `json:"join,omitempty"` // a many-to-many join entity
-	Fields      []*Field                   `json:"fields"`         // Fields[0] is the ID
+	Join        bool                       `json:"join,omitempty"`    // a many-to-many join entity
+	Comment     string                     `json:"comment,omitempty"` // the Comment annotation's text, for descriptions
+	Imports     []string                   `json:"imports"`           // the import paths of its fields' Go types, sorted
+	Fields      []*Field                   `json:"fields"`            // Fields[0] is the ID
 	Edges       []*Edge                    `json:"edges"`
 	PrimaryKey  []int                      `json:"primary_key"` // indexes into Fields
 	Tenant      int                        `json:"tenant"`      // the index in Fields of the tenant field, -1 for none
@@ -51,10 +57,11 @@ type Field struct {
 	Name          string                     `json:"name"`
 	GoName        string                     `json:"go_name"`
 	Column        string                     `json:"column"`
-	Type          string                     `json:"type"`      // the schema field type, e.g. "string", "enum", "time"
-	GoType        string                     `json:"go_type"`   // as written in the entity's struct, e.g. "*time.Time"
-	ElemType      string                     `json:"elem_type"` // GoType without the pointer
-	Pointer       bool                       `json:"pointer,omitempty"`
+	Type          string                     `json:"type"`               // the schema field type, e.g. "string", "enum", "time"
+	GoType        string                     `json:"go_type"`            // as written in the entity's struct, e.g. "*time.Time"
+	ElemType      string                     `json:"elem_type"`          // GoType without the pointer
+	Pointer       bool                       `json:"pointer,omitempty"`  // the Go struct holds a pointer; this is about the struct, not nullability: use Nullable
+	Nullable      bool                       `json:"nullable,omitempty"` // Optional || Nillable: the flag a plugin uses for nullability
 	Optional      bool                       `json:"optional,omitempty"`
 	Nillable      bool                       `json:"nillable,omitempty"`
 	Immutable     bool                       `json:"immutable,omitempty"`
@@ -63,8 +70,10 @@ type Field struct {
 	AutoID        bool                       `json:"auto_id,omitempty"` // the ID velox added, as the schema declares none
 	HasDefault    bool                       `json:"has_default,omitempty"`
 	UpdateDefault bool                       `json:"update_default,omitempty"`
-	Implicit      string                     `json:"implicit,omitempty"` // the edge whose foreign key this field is, when velox added it
-	Enum          string                     `json:"enum,omitempty"`     // the enum type's name, "" when the field is not an enum velox-gen declares
+	Implicit      string                     `json:"implicit,omitempty"`    // the edge whose foreign key this field is, when velox added it
+	Enum          string                     `json:"enum,omitempty"`        // the enum type's name: the type velox-gen declares, or for a custom Go type that type's name without its package; "" when not an enum
+	EnumValues    []string                   `json:"enum_values,omitempty"` // the stored values in declaration order, for every field of Type "enum"
+	Comment       string                     `json:"comment,omitempty"`     // for descriptions
 	Annotations   map[string]json.RawMessage `json:"annotations,omitempty"`
 }
 
@@ -79,8 +88,10 @@ type Edge struct {
 	Required    bool                       `json:"required,omitempty"`
 	Inverse     bool                       `json:"inverse,omitempty"`
 	Immutable   bool                       `json:"immutable,omitempty"`
-	Field       string                     `json:"field,omitempty"` // the foreign-key field's Name, on whichever entity holds it; "" for M2M
-	Join        string                     `json:"join,omitempty"`  // the join entity's Name for M2M, else ""
+	Field       string                     `json:"field,omitempty"`    // the foreign-key field's Name, on whichever entity holds it; "" for M2M
+	FieldOn     string                     `json:"field_on,omitempty"` // the Name of the entity whose table holds Field; "" for M2M
+	Comment     string                     `json:"comment,omitempty"`  // for descriptions
+	Join        string                     `json:"join,omitempty"`     // the join entity's Name for M2M, else ""
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 }
 

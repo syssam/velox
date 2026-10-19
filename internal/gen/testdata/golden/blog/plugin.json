@@ -7,6 +7,7 @@
       "label": "category",
       "handles": "Categories",
       "table": "categories",
+      "imports": [],
       "fields": [
         {
           "name": "id",
@@ -33,6 +34,7 @@
           "go_type": "*int64",
           "elem_type": "int64",
           "pointer": true,
+          "nullable": true,
           "optional": true,
           "nillable": true,
           "implicit": "parent"
@@ -45,7 +47,8 @@
           "target": "Category",
           "ref": "parent",
           "kind": "O2M",
-          "field": "category_children"
+          "field": "category_children",
+          "field_on": "Category"
         },
         {
           "name": "parent",
@@ -55,7 +58,8 @@
           "kind": "M2O",
           "unique": true,
           "inverse": true,
-          "field": "category_children"
+          "field": "category_children",
+          "field_on": "Category"
         }
       ],
       "primary_key": [
@@ -74,6 +78,7 @@
       "label": "group",
       "handles": "Groups",
       "table": "groups",
+      "imports": [],
       "fields": [
         {
           "name": "id",
@@ -123,6 +128,11 @@
       "label": "post",
       "handles": "Posts",
       "table": "posts",
+      "imports": [
+        "encoding/json",
+        "errors",
+        "time"
+      ],
       "fields": [
         {
           "name": "id",
@@ -165,7 +175,11 @@
           "go_type": "PostStatus",
           "elem_type": "PostStatus",
           "has_default": true,
-          "enum": "PostStatus"
+          "enum": "PostStatus",
+          "enum_values": [
+            "draft",
+            "published"
+          ]
         },
         {
           "name": "published_at",
@@ -175,6 +189,7 @@
           "go_type": "*time.Time",
           "elem_type": "time.Time",
           "pointer": true,
+          "nullable": true,
           "optional": true
         },
         {
@@ -207,7 +222,8 @@
           "unique": true,
           "required": true,
           "inverse": true,
-          "field": "author_id"
+          "field": "author_id",
+          "field_on": "Post"
         }
       ],
       "primary_key": [
@@ -220,6 +236,12 @@
       "label": "user",
       "handles": "Users",
       "table": "users",
+      "comment": "User is a person who writes posts.",
+      "imports": [
+        "errors",
+        "regexp",
+        "time"
+      ],
       "fields": [
         {
           "name": "id",
@@ -272,7 +294,8 @@
           "column": "name",
           "type": "string",
           "go_type": "string",
-          "elem_type": "string"
+          "elem_type": "string",
+          "comment": "The display name."
         },
         {
           "name": "email",
@@ -291,7 +314,12 @@
           "go_type": "UserRole",
           "elem_type": "UserRole",
           "has_default": true,
-          "enum": "UserRole"
+          "enum": "UserRole",
+          "enum_values": [
+            "admin",
+            "editor",
+            "viewer"
+          ]
         },
         {
           "name": "nickname",
@@ -301,6 +329,7 @@
           "go_type": "*string",
           "elem_type": "string",
           "pointer": true,
+          "nullable": true,
           "optional": true
         },
         {
@@ -311,6 +340,7 @@
           "go_type": "*string",
           "elem_type": "string",
           "pointer": true,
+          "nullable": true,
           "nillable": true
         },
         {
@@ -321,6 +351,7 @@
           "go_type": "*int",
           "elem_type": "int",
           "pointer": true,
+          "nullable": true,
           "optional": true
         },
         {
@@ -350,7 +381,8 @@
           "target": "Post",
           "ref": "author",
           "kind": "O2M",
-          "field": "author_id"
+          "field": "author_id",
+          "field_on": "Post"
         },
         {
           "name": "groups",
@@ -377,6 +409,7 @@
       "handles": "UserGroups",
       "table": "user_groups",
       "join": true,
+      "imports": [],
       "fields": [
         {
           "name": "user_id",

@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/field"
 )
 
 // blogModel loads the golden blog schema and lowers it, as TestGolden does.
@@ -120,6 +124,18 @@ func TestPluginModelGolden(t *testing.T) {
 	if bio := pluginField(t, user, "bio"); !bio.Nillable || !bio.Pointer || bio.GoType != "*string" || bio.ElemType != "string" {
 		t.Fatalf("bio %+v", bio)
 	}
+	if role := pluginField(t, user, "role"); strings.Join(role.EnumValues, ",") != "admin,editor,viewer" {
+		t.Fatalf("role values %v", role.EnumValues)
+	}
+	if author, posts := pluginEdge(t, post, "author"), pluginEdge(t, user, "posts"); author.FieldOn != "Post" || posts.FieldOn != "Post" {
+		t.Fatalf("foreign key owner: author %q, posts %q", author.FieldOn, posts.FieldOn)
+	}
+	if name := pluginField(t, user, "name"); name.Comment != "The display name." || name.Nullable {
+		t.Fatalf("name %+v", name)
+	}
+	if views := pluginField(t, post, "views"); !views.Pointer || views.Nullable {
+		t.Fatalf("views %+v: Pointer is about the struct, not nullability", views)
+	}
 	if len(m.Enums) != len(o.Enums) || m.Enums[0].Type != o.Enums[0].Type {
 		t.Fatalf("enums %+v", m.Enums)
 	}
@@ -165,5 +181,86 @@ func TestPluginModelRoundTrip(t *testing.T) {
 	b2, _ := json.Marshal(back)
 	if !bytes.Equal(b, b2) {
 		t.Fatal("the request does not survive a JSON round trip")
+	}
+}
+
+// A many-to-many edge between an int64 ID and a string ID, declared from
+// either side, so that a swap of the join entity's column types shows.
+type PlOwner struct{ schema.Schema }
+
+func (PlOwner) Fields() []schema.Field {
+	return []schema.Field{field.String("note").Optional().Comment("A note."), field.Enum("st").GoType(lwStatus("")).Default("off")}
+}
+func (PlOwner) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("keys", PlKey.Type).Comment("The keys."), edge.To("pets", PlPet.Type)}
+}
+func (PlOwner) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Comment("An owner.")}
+}
+
+type PlKey struct{ schema.Schema }
+
+func (PlKey) Fields() []schema.Field { return []schema.Field{field.String("id").MaxLen(36)} }
+func (PlKey) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owners", PlOwner.Type).Ref("keys")}
+}
+
+type PlPet struct{ schema.Schema }
+
+type PlSKey struct{ schema.Schema }
+
+func (PlSKey) Fields() []schema.Field { return []schema.Field{field.String("id").MaxLen(36)} }
+func (PlSKey) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("owners", PlOwner2.Type)}
+}
+
+type PlOwner2 struct{ schema.Schema }
+
+func (PlOwner2) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("skeys", PlSKey.Type).Ref("owners")}
+}
+
+func TestPluginModelJoinTypesAndComments(t *testing.T) {
+	g := mustBuild(t, PlOwner{}, PlKey{}, PlPet{}, PlSKey{}, PlOwner2{})
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := PluginModel(g, o)
+	types := func(name string) string {
+		j := pluginEntity(t, m, name)
+		return j.Fields[0].Type + "," + j.Fields[1].Type
+	}
+	// The owner's column comes first: PlOwner (int64) owns plowner_keys, PlSKey
+	// (string) owns plskey_owners.
+	if got := types(pluginEdge(t, pluginEntity(t, m, "PlOwner"), "keys").Join); got != "int64,string" {
+		t.Errorf("owner int64, target string: join types %s", got)
+	}
+	if got := types(pluginEdge(t, pluginEntity(t, m, "PlSKey"), "owners").Join); got != "string,int64" {
+		t.Errorf("owner string, target int64: join types %s", got)
+	}
+
+	owner := pluginEntity(t, m, "PlOwner")
+	if owner.Comment != "An owner." || pluginEdge(t, owner, "keys").Comment != "The keys." || pluginField(t, owner, "note").Comment != "A note." {
+		t.Errorf("comments: %q %q %q", owner.Comment, pluginEdge(t, owner, "keys").Comment, pluginField(t, owner, "note").Comment)
+	}
+	if n := pluginField(t, owner, "note"); !n.Nullable || !n.Optional || !n.Pointer {
+		t.Errorf("note %+v", n)
+	}
+	// An enum with a Go type declares no enum type: the field names the Go
+	// type, and holds the values.
+	st := pluginField(t, owner, "st")
+	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" {
+		t.Errorf("st %+v", st)
+	}
+	if len(owner.Imports) == 0 {
+		t.Errorf("imports %v", owner.Imports)
+	}
+	// The foreign key of an O2M is in the target's table; of an M2M, none.
+	if pets := pluginEdge(t, owner, "pets"); pets.FieldOn != "PlPet" || pets.Field == "" {
+		t.Errorf("pets %+v", pets)
+	}
+	if keys := pluginEdge(t, owner, "keys"); keys.FieldOn != "" || keys.Field != "" {
+		t.Errorf("keys %+v", keys)
 	}
 }

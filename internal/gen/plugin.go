@@ -1,13 +1,18 @@
 package gen
 
-import "github.com/syssam/velox2/plugin"
+import (
+	"strings"
+
+	"github.com/syssam/velox2/plugin"
+)
 
 // PluginModel is the model velox-gen hands to a plugin: g and o in the plugin
 // package's types. It copies and never recomputes. Names, handles, Go types,
 // join entities and enums are o's; relation kinds, annotations and the flags
 // the schema declares are g's. Entities and fields are matched by name.
 //
-// o must be the result of lowering g.
+// The annotation maps in the result are shared with g, not copied: they are
+// read-only. o must be the result of lowering g.
 func PluginModel(g *Graph, o *Out) *plugin.Model {
 	m := &plugin.Model{
 		Version:    plugin.Version,
@@ -30,6 +35,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 	for _, oe := range o.Entities {
 		pe := &plugin.Entity{
 			Name: oe.Name, Label: oe.Label, Handles: oe.Handles, Table: oe.Table, Join: oe.Join,
+			Comment: oe.Comment, Imports: append([]string{}, oe.Imports...),
 			Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{},
 			PrimaryKey: append([]int{}, oe.PrimaryKey...), Tenant: oe.Tenant,
 		}
@@ -45,11 +51,11 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			pe.Fields = append(pe.Fields, &plugin.Field{
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
 				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType,
-				Pointer: of.Pointer, Optional: gf.Optional, Nillable: gf.Nillable,
+				Pointer: of.Pointer, Nullable: gf.Optional || gf.Nillable, Optional: gf.Optional, Nillable: gf.Nillable,
 				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
 				AutoID: gf.AutoID, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "",
 				UpdateDefault: gf.UpdateDefault, Implicit: gf.Implicit,
-				Enum:        enumOf(gf, of, enums),
+				Enum: enumOf(gf, of, enums), EnumValues: enumValues(gf), Comment: gf.Comment,
 				Annotations: gf.Annotations,
 			})
 		}
@@ -57,8 +63,8 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			pe.Edges = append(pe.Edges, &plugin.Edge{
 				Name: ed.Name, GoName: ed.GoName, Target: ed.Target, Ref: ed.Ref,
 				Kind: ed.Rel.Kind, Unique: ed.Unique, Required: ed.Required, Inverse: ed.Inverse,
-				Immutable: ed.Immutable, Field: ed.Field, Join: joinOf(ed, joins),
-				Annotations: ed.Annotations,
+				Immutable: ed.Immutable, Field: ed.Field, FieldOn: fieldOn(ge, ed), Join: joinOf(ed, joins),
+				Comment: ed.Comment, Annotations: ed.Annotations,
 			})
 		}
 		m.Entities = append(m.Entities, pe)
@@ -66,12 +72,51 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 	return m
 }
 
-// enumOf is the name of the enum type velox-gen declares for the field, or "".
+// enumOf is the name of the enum type of the field, or "": the type velox-gen
+// declares, or for a custom Go type that type's name without its package.
 func enumOf(gf *Field, of *OutField, enums map[string]bool) string {
-	if gf.Type == "enum" && enums[of.ElemType] {
+	switch {
+	case gf.Type != "enum":
+		return ""
+	case enums[of.ElemType]:
 		return of.ElemType
+	case gf.GoType != nil:
+		_, name := cutLast(gf.GoType.Ident, ".")
+		return name
 	}
 	return ""
+}
+
+// cutLast splits s around the last sep; before is "" when there is none.
+func cutLast(s, sep string) (before, after string) {
+	if i := strings.LastIndex(s, sep); i >= 0 {
+		return s[:i], s[i+len(sep):]
+	}
+	return "", s
+}
+
+// enumValues are the stored values of an enum field, in declaration order.
+func enumValues(gf *Field) []string {
+	if gf.Type != "enum" {
+		return nil
+	}
+	vs := make([]string, 0, len(gf.Enums))
+	for _, v := range gf.Enums {
+		vs = append(vs, v.Value)
+	}
+	return vs
+}
+
+// fieldOn is the name of the entity whose table holds the foreign key of ed,
+// an edge of e: the owner when ownFK says so, else the target. M2M has none.
+func fieldOn(e *Entity, ed *Edge) string {
+	switch {
+	case ed.Field == "":
+		return ""
+	case ownFK(ed):
+		return e.Name
+	}
+	return ed.Target
 }
 
 // joinOf is the name of the join entity of the many-to-many edge ed, or "".
@@ -104,7 +149,7 @@ func joinFields(g *Graph, oe *OutEntity) []*plugin.Field {
 		fields = append(fields, &plugin.Field{
 			Name: of.Name, GoName: of.GoName, Column: of.Column,
 			Type: types[i], GoType: of.GoType, ElemType: of.ElemType,
-			Pointer: of.Pointer, Immutable: of.Immutable, Sensitive: of.Sensitive,
+			Pointer: of.Pointer, Immutable: of.Immutable, Sensitive: of.Sensitive, Comment: of.Comment,
 		})
 	}
 	return fields
