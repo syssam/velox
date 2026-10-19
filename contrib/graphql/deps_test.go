@@ -19,7 +19,7 @@ func TestAnnotationsImportOnlySchema(t *testing.T) {
 	}
 	for _, p := range strings.Fields(string(out)) {
 		std := !strings.Contains(strings.Split(p, "/")[0], ".")
-		if !std && p != "github.com/syssam/velox2/schema" {
+		if !std && !isSchema(p) {
 			t.Errorf("the annotations package imports %s", p)
 		}
 	}
@@ -29,8 +29,14 @@ func TestAnnotationsImportOnlySchema(t *testing.T) {
 	}
 	for _, p := range strings.Fields(string(out)) {
 		std := !strings.Contains(strings.Split(p, "/")[0], ".")
-		if !std && p != "github.com/syssam/velox2/contrib/graphql" && !strings.HasPrefix(p, "github.com/syssam/velox2/schema") {
+		if !std && p != "github.com/syssam/velox2/contrib/graphql" && !isSchema(p) {
 			t.Errorf("the annotations package depends on %s", p)
 		}
 	}
+}
+
+// isSchema reports whether p is velox2/schema or one of its packages, and not
+// a sibling such as velox2/schemaX.
+func isSchema(p string) bool {
+	return p == "github.com/syssam/velox2/schema" || strings.HasPrefix(p, "github.com/syssam/velox2/schema/")
 }

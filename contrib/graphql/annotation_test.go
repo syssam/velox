@@ -40,7 +40,7 @@ func TestAnnotationJSON(t *testing.T) {
 		{"UpdateInput(true)", graphql.UpdateInput(true), `{"update_input":true}`},
 		{"EnumValues", graphql.EnumValues(map[string]string{"b": "B", "a": "A"}), `{"enum_values":{"a":"A","b":"B"}}`},
 		{"Directives", graphql.Directives(graphql.Directive{Name: "auth", Args: map[string]any{"role": "admin"}}, graphql.Directive{Name: "x"}),
-			`{"directives":[{"Name":"auth","Args":{"role":"admin"}},{"Name":"x","Args":null}]}`},
+			`{"directives":[{"name":"auth","args":{"role":"admin"}},{"name":"x"}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b, err := json.Marshal(tc.a)

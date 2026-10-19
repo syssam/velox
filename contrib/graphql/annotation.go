@@ -62,8 +62,9 @@ const (
 	OpsAll = OpsEquality | OpsComparison | OpsString | OpsNullable
 
 	// OpsDefault is what WhereOps() with no arguments records: the plugin
-	// replaces it with the defaults for the field's type. It is not part of
-	// OpsAll.
+	// replaces it with the defaults for the field's type. Merged (ORed) with
+	// explicit ops, it means the field type's default predicates plus those
+	// ops. It is not part of OpsAll.
 	OpsDefault WhereOp = 1 << 31
 )
 
@@ -73,8 +74,8 @@ type MutationKind string
 // Directive is a GraphQL directive to put on the generated element. Args are
 // the directive's arguments, as JSON values.
 type Directive struct {
-	Name string
-	Args map[string]any
+	Name string         `json:"name"`
+	Args map[string]any `json:"args,omitempty"`
 }
 
 // Annotation is the GraphQL annotation of a schema, field or edge. Which of its
@@ -238,7 +239,9 @@ func FieldName(name string) Annotation { return Annotation{FieldName: name} }
 func OrderField(name string) Annotation { return Annotation{OrderField: name} }
 
 // WhereOps offers the field these predicates in the entity's where input; with
-// no arguments, the defaults for the field's type.
+// no arguments, the defaults for the field's type. Two WhereOps annotations on
+// one field merge by OR, so WhereOps() together with WhereOps(OpsString)
+// offers the type's default predicates plus OpsString.
 func WhereOps(ops ...WhereOp) Annotation {
 	var m WhereOp
 	for _, op := range ops {
