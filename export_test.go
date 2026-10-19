@@ -319,7 +319,7 @@ func LoadDesc[E any](d Desc[E], targets ...UseTarget) (*EntityInfo, error) {
 		if i < len(targets) {
 			use = targets[i]
 		}
-		if r.target == nil && use.get == nil {
+		if use.get == nil {
 			continue
 		}
 		if _, err := r.resolve(m.info, use); err != nil {

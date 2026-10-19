@@ -112,14 +112,14 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 			if mu.err == nil {
 				mu.err = errNextTwice
 			}
-			mu.core = &hookError{in.Name, "hook", errNextTwice}
+			mu.core = &hookError{in.Name, errNextTwice}
 			return mu.core
 		}
 		mu.called = true
 		if mu.err != nil {
 			// Refuse before sending: the misuse would otherwise be
 			// reported only after the write was made.
-			mu.core = &hookError{in.Name, "hook", mu.err}
+			mu.core = &hookError{in.Name, mu.err}
 			return mu.core
 		}
 		mu.core = core(ctx, mu)
@@ -131,11 +131,11 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 	err := next(ctx, mu)
 	switch {
 	case err == nil && mu.err != nil:
-		return &hookError{in.Name, "hook", mu.err}
+		return &hookError{in.Name, mu.err}
 	case err == nil, identical(err, mu.core):
 		return err
 	}
-	return &hookError{in.Name, "hook", err}
+	return &hookError{in.Name, err}
 }
 
 // identical reports whether err is core itself. An error whose type cannot be
@@ -177,6 +177,21 @@ type BoundHooks struct {
 // body outside the functions it returns, the entity's own metadata (see
 // Policy).
 func BindPolicy[E any](p Policy[E]) BoundPolicy { return BoundPolicy{policyOf(p)} }
+
+// policyOf is p with E erased.
+func policyOf[E any](p Policy[E]) *policy {
+	pol := &policy{}
+	if r := p.Read; r != nil {
+		pol.read = func(ctx context.Context) (Predicate, error) { q, err := r(ctx); return Predicate(q), err }
+	}
+	if w := p.Write; w != nil {
+		pol.write = func(ctx context.Context) (Predicate, error) { q, err := w(ctx); return Predicate(q), err }
+	}
+	if ins := p.Insert; ins != nil {
+		pol.insert = func(ctx context.Context, x unsafe.Pointer) error { return ins(ctx, (*E)(x)) }
+	}
+	return pol
+}
 
 // BindHooks erases hs's entity type, for Desc.Hooks. velox-gen writes
 //

@@ -9,47 +9,6 @@ import (
 	"unsafe"
 )
 
-type policyTwice struct{ ID int64 }
-
-func (*policyTwice) Schema(s *Schema) {
-	s.Policy(Policy[policyTwice]{})
-	s.Policy(Policy[policyTwice]{})
-}
-
-// policyMix declares what a mixin may not: a policy and update and delete hooks.
-type policyMix struct{ Note string }
-
-func (*policyMix) Mixin(s *Schema) {
-	s.Policy(Policy[policyMix]{})
-	s.BeforeUpdate(func(context.Context, *Mutation[policyMix]) error { return nil })
-	s.BeforeDelete(func(context.Context, *Mutation[policyMix]) error { return nil })
-}
-
-type mixesPolicy struct {
-	ID int64
-	policyMix
-}
-
-func (*mixesPolicy) Schema(*Schema) {}
-
-// strayMix's hook is typed on a struct other than itself.
-type strayMix struct{ Note string }
-
-func (*strayMix) Mixin(s *Schema) {
-	s.BeforeInsert(func(context.Context, *other) error { return nil })
-}
-
-type strayHooks struct {
-	ID int64
-	strayMix
-}
-
-func (*strayHooks) Schema(s *Schema) {
-	s.BeforeInsert(func(context.Context, *other) error { return nil })
-	s.BeforeUpdate(func(context.Context, *Mutation[other]) error { return nil })
-	s.Policy(Policy[other]{})
-}
-
 func schemaErr(t *testing.T, err error, parts ...string) {
 	t.Helper()
 	var se *SchemaError
@@ -68,30 +27,6 @@ func TestSchemaPolicyTenantColumn(t *testing.T) {
 	schemaErr(t, err, "velox: velox.nullTenant.OrgID: the tenant column must be NOT NULL and comparable")
 	_, err = loadDesc(sliceTenantDesc())
 	schemaErr(t, err, "velox: velox.sliceTenant.Org: the tenant column must be NOT NULL and comparable")
-}
-
-func TestSchemaPolicyDeclaredOnce(t *testing.T) {
-	_, err := infoOf[policyTwice]([]string{"ID"}, nil)
-	schemaErr(t, err, "Policy is declared twice")
-}
-
-func TestSchemaPolicyNotInAMixin(t *testing.T) {
-	_, err := infoOf[mixesPolicy]([]string{"ID", "Note"}, nil)
-	schemaErr(t, err,
-		"Policy is declared in mixin velox.policyMix",
-		"BeforeUpdate is declared in mixin velox.policyMix",
-		"BeforeDelete is declared in mixin velox.policyMix",
-	)
-}
-
-func TestSchemaPolicyHookOnAnotherStruct(t *testing.T) {
-	_, err := infoOf[strayHooks]([]string{"ID", "Note"}, nil)
-	schemaErr(t, err,
-		"BeforeInsert in mixin velox.strayMix is typed on velox.other",
-		"BeforeInsert is typed on velox.other, not on velox.strayHooks",
-		"BeforeUpdate is typed on velox.other, not on velox.strayHooks",
-		"Policy is typed on velox.other, not on velox.strayHooks",
-	)
 }
 
 // TestSchemaPolicyHooks: an entity's hooks and policy, bound from its Hooks and

@@ -367,53 +367,21 @@ func (*dPlain) VeloxMeta() *velox.Meta[dPlain] {
 	})
 }
 
-// oPlain is dPlain on the old path.
-type oPlain struct {
-	ID       int64
-	AuthorID int64
-	Title    string
-}
-
-func (*oPlain) Schema(s *velox.Schema) { s.Table("books") }
-
-var oPlainMeta velox.MetaOnce[oPlain]
-
-func (*oPlain) VeloxMeta() *velox.Meta[oPlain] {
-	return oPlainMeta.Get(func() velox.Shape[oPlain] {
-		return velox.Shape[oPlain]{Columns: []string{"ID", "AuthorID", "Title"}, Addr: func(x *oPlain, i int) any {
-			switch i {
-			case 0:
-				return &x.ID
-			case 1:
-				return &x.AuthorID
-			}
-			return &x.Title
-		}}
-	})
-}
-
-// TestDescInsertBudget: an entity on the Desc path without hooks pays
-// nothing for them: a cached one-row Insert allocates as the old path's does.
+// TestDescInsertBudget: an entity without hooks pays nothing for them: a
+// cached one-row Insert allocates 13 times (measured; the test fails above).
 func TestDescInsertBudget(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(5)}}})
-	desc := func() {
+	insert := func() {
 		x := dPlain{AuthorID: 1, Title: "dune"}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}
-	old := func() {
-		x := oPlain{AuthorID: 1, Title: "dune"}
-		if err := db.Insert(&x).Exec(ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	desc() // fill the render cache
-	old()
-	d, o := testing.AllocsPerRun(200, desc), testing.AllocsPerRun(200, old)
-	t.Logf("a one-row Insert: %.0f allocations on the Desc path, %.0f on the old path", d, o)
-	if d > o {
-		t.Errorf("an entity with no hooks pays %.0f allocations for them on a one-row Insert", d-o)
+	insert() // fill the render cache
+	n := testing.AllocsPerRun(200, insert)
+	t.Logf("a one-row Insert makes %.0f allocations", n)
+	if n > 13 {
+		t.Errorf("a one-row Insert of an entity with no hooks makes %.0f allocations, over 13", n)
 	}
 }
 
@@ -539,47 +507,6 @@ func TestNilMutatorAndPanickingHooks(t *testing.T) {
 	}
 }
 
-// oHooked and oPoliced are old-path entities with the Desc path's methods,
-// which would be ignored.
-type oHooked struct{ ID int64 }
-
-func (*oHooked) Schema(*velox.Schema)         {}
-func (*oHooked) Hooks() []velox.Hook[oHooked] { return nil }
-
-var oHookedMeta velox.MetaOnce[oHooked]
-
-func (*oHooked) VeloxMeta() *velox.Meta[oHooked] {
-	return oHookedMeta.Get(func() velox.Shape[oHooked] {
-		return velox.Shape[oHooked]{Columns: []string{"ID"}, Addr: func(x *oHooked, i int) any { return &x.ID }}
-	})
-}
-
-type oPoliced struct{ ID int64 }
-
-func (*oPoliced) Schema(*velox.Schema)           {}
-func (*oPoliced) Policy() velox.Policy[oPoliced] { return velox.Policy[oPoliced]{} }
-
-var oPolicedMeta velox.MetaOnce[oPoliced]
-
-func (*oPoliced) VeloxMeta() *velox.Meta[oPoliced] {
-	return oPolicedMeta.Get(func() velox.Shape[oPoliced] {
-		return velox.Shape[oPoliced]{Columns: []string{"ID"}, Addr: func(x *oPoliced, i int) any { return &x.ID }}
-	})
-}
-
-func TestOldPathRefusesDescMethods(t *testing.T) {
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
-	var se *velox.SchemaError
-	err := db.Insert(&oHooked{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.oHooked: has a Hooks method, which only generated (Desc) entities use") {
-		t.Fatalf("got %v", err)
-	}
-	err = db.Insert(&oPoliced{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.oPoliced: has a Policy method, which only generated (Desc) entities use") {
-		t.Fatalf("got %v", err)
-	}
-}
-
 // uPolicy and uHooks declare a Policy and a Hooks method that their Desc
 // does not bind: stale generated code, which must not leave them unrun.
 type uPolicy struct{ ID int64 }
@@ -639,6 +566,18 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 	}
 	if e.Calls != 0 {
 		t.Fatalf("%d calls", e.Calls)
+	}
+	// CheckEntity (velox-gen verify) reports the same.
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{velox.CheckEntity[uPolicy](), "velox: velox_test.uPolicy: has a Policy method, but the generated metadata does not bind it; run go tool velox-gen"},
+		{velox.CheckEntity[uHooks](), "velox: velox_test.uHooks: has a Hooks method, but the generated metadata does not bind it; run go tool velox-gen"},
+	} {
+		if !errors.As(c.err, &se) || c.err.Error() != c.want {
+			t.Errorf("CheckEntity: got %v, want %s", c.err, c.want)
+		}
 	}
 	if err := velox.CheckEntity[uPlain](); err != nil {
 		t.Fatalf("nil Policy and Hooks with no methods: %v", err)

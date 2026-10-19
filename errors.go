@@ -27,8 +27,6 @@ var (
 	// error also matches context.DeadlineExceeded; a deadline the caller set
 	// matches that alone.
 	ErrTimeout = errors.New("deadline set by velox passed")
-	// ErrStale: an entity's struct changed after velox-gen last ran.
-	ErrStale = errors.New("generated code is out of date")
 	// ErrNoTenant: a statement on a tenant-scoped entity whose context has
 	// neither WithTenant nor AllTenants.
 	ErrNoTenant = errors.New("no tenant in the context")
@@ -53,8 +51,8 @@ var (
 	ErrImmutable = errors.New("column is immutable")
 )
 
-// SchemaError reports a mistake in an entity's Schema method or in a
-// mixin's Mixin method.
+// SchemaError reports a mistake in an entity's generated metadata (its Desc,
+// or the Policy and Hooks methods it binds).
 type SchemaError struct {
 	Entity string // the Go type, e.g. "billing.Invoice"
 	Field  string // the Go field name; empty when the error is about the entity
@@ -115,14 +113,12 @@ func (e *ConstraintError) Error() string {
 
 func (e *ConstraintError) Unwrap() error { return e.Err }
 
-// hookError is the error of an entity hook: "velox: <Entity>: <stage>:
-// <err>", where stage is "hook" for the Hooks method's and "before insert",
-// "before update" or "before delete" for the old path's. An err whose text
-// already starts "velox: <Entity>: ", such as an invalid condition a Mutation
-// recorded, does not name the entity twice.
+// hookError is the error of an entity hook: "velox: <Entity>: hook: <err>".
+// An err whose text already starts "velox: <Entity>: ", such as an invalid
+// condition a Mutation recorded, does not name the entity twice.
 type hookError struct {
-	entity, stage string
-	err           error
+	entity string
+	err    error
 }
 
 func (e *hookError) Error() string {
@@ -130,7 +126,7 @@ func (e *hookError) Error() string {
 	if p := "velox: " + e.entity + ": "; strings.HasPrefix(msg, p) {
 		msg = msg[len(p):]
 	}
-	return "velox: " + e.entity + ": " + e.stage + ": " + msg
+	return "velox: " + e.entity + ": hook: " + msg
 }
 
 func (e *hookError) Unwrap() error { return e.err }

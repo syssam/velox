@@ -19,115 +19,8 @@ func repoRoot() string {
 	return filepath.Dir(file)
 }
 
-// entitySrc is a package shaped like a generated one: an entity with a Schema
-// method, its MetaOnce, VeloxMeta and shape function.
-const entitySrc = `package p
-
-import "github.com/syssam/velox2"
-
-type E struct{ ID int64 }
-
-func (*E) Schema(*velox.Schema) {}
-
-var eMeta velox.MetaOnce[E]
-
-func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Get(eShape) }
-
-func eShape() velox.Shape[E] {
-	return velox.Shape[E]{Columns: []string{"ID"}, Addr: func(x *E, i int) any { return &x.ID }}
-}
-`
-
-// entityUseSrc is an entity whose Schema declares a column option and two
-// relations, used by a function that queries with relations, inserts, saves,
-// updates and deletes it: the generic bodies velox compiles into such a
-// package must not reach reflect either.
-const entityUseSrc = `package p
-
-import (
-	"context"
-
-	"github.com/syssam/velox2"
-)
-
-type E struct {
-	ID       int64
-	Name     string
-	ParentID *int64
-	Parent   velox.One[E]
-	Kids     velox.Many[E]
-}
-
-func (x *E) Schema(s *velox.Schema) {
-	s.Column(&x.Name).Default("none")
-	s.One(&x.Parent).References(&x.ParentID)
-	s.Many(&x.Kids).ForeignKey(func(k *E) **int64 { return &k.ParentID })
-}
-
-var eMeta velox.MetaOnce[E]
-
-func (*E) VeloxMeta() *velox.Meta[E] { return eMeta.Get(eShape) }
-
-func eShape() velox.Shape[E] {
-	return velox.Shape[E]{
-		Columns:   []string{"ID", "Name", "ParentID"},
-		Relations: []velox.Relation{velox.RelationTo[E]("Parent"), velox.RelationTo[E]("Kids")},
-		Addr: func(x *E, i int) any {
-			switch i {
-			case 0:
-				return &x.ID
-			case 1:
-				return &x.Name
-			case 2:
-				return &x.ParentID
-			}
-			return nil
-		},
-	}
-}
-
-var (
-	eID     = velox.NumberCol[E, int64]{I: 0}
-	eName   = velox.StringCol[E, string]{I: 1}
-	eParent = velox.Rel[E, E]{I: 0}
-	eKids   = velox.Rel[E, E]{I: 1}
-)
-
-func Use(ctx context.Context, db *velox.DB, e *E) error {
-	if _, err := db.Query[E]().Where(eKids.Has()).With(eParent).Limit(1).All(ctx); err != nil {
-		return err
-	}
-	if err := db.Insert(e).Exec(ctx); err != nil {
-		return err
-	}
-	if err := db.Save(ctx, e); err != nil {
-		return err
-	}
-	if _, err := db.Update[E]().Set(eName.Set("x")).Where(eID.EQ(1)).Exec(ctx); err != nil {
-		return err
-	}
-	_, err := db.Delete[E]().Where(eID.EQ(1)).Exec(ctx)
-	return err
-}
-`
-
-// entityPolicySrc is entityUseSrc with a Policy and all three entity hooks
-// declared in its Schema: what they add to an entity's package is measured
-// against entityUseSrc (policy design §7).
-var entityPolicySrc = strings.Replace(entityUseSrc, `	s.Many(&x.Kids).ForeignKey(func(k *E) **int64 { return &k.ParentID })
-`, `	s.Many(&x.Kids).ForeignKey(func(k *E) **int64 { return &k.ParentID })
-	s.Policy(velox.Policy[E]{
-		Read:   func(context.Context) (velox.Pred[E], error) { return eName.EQ("r"), nil },
-		Write:  func(context.Context) (velox.Pred[E], error) { return velox.Pred[E]{}, nil },
-		Insert: func(_ context.Context, x *E) error { return nil },
-	})
-	s.BeforeInsert(func(_ context.Context, x *E) error { x.Name = "i"; return nil })
-	s.BeforeUpdate(func(_ context.Context, m *velox.Mutation[E]) error { m.Set(eName.Set("u")); return nil })
-	s.BeforeDelete(func(_ context.Context, m *velox.Mutation[E]) error { m.Where(eID.EQ(1)); return nil })
-`, 1)
-
-// entityDescSrc is entitySrc on the Desc path: the minimal entity velox-gen
-// writes, with no Policy or Hooks method.
+// entityDescSrc is the minimal entity velox-gen writes, with no Policy or
+// Hooks method.
 const entityDescSrc = `package p
 
 import "github.com/syssam/velox2"
@@ -149,8 +42,10 @@ func eDesc() velox.Desc[E] {
 }
 `
 
-// entityDescUseSrc is entityUseSrc on the Desc path: the same columns,
-// default, relations and Use function, from a Desc literal.
+// entityDescUseSrc is an entity with a default and two relations, from a Desc
+// literal, used by a function that queries with relations, inserts, saves,
+// updates and deletes it: the generic bodies velox compiles into such a
+// package must not reach reflect either.
 const entityDescUseSrc = `package p
 
 import (
@@ -301,9 +196,11 @@ var genericObjects = []struct {
 	// types (Caller, Tag, Result, TxInfo, TxRetry) are export data in every
 	// package that reaches a Statement or a DB: +242 bytes for Statement
 	// (566 → 808 against the commit before the plan), up to +240 for the
-	// handles, 3.3 KiB for entity and 7.75 KiB (7,938 bytes) for entityUse. Nothing in
-	// observability is generic (TestObservabilityIsNotGeneric), so this is
-	// export data only; some rows had also drifted since 2026-10-14.
+	// handles, and the same export data for the entity packages, whose rows
+	// were then the old struct-scanning path's (removed 2026-10-19; the
+	// entity rows below replace them). Nothing in observability is generic
+	// (TestObservabilityIsNotGeneric), so this is export data only; some rows
+	// had also drifted since 2026-10-14.
 	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14312
 	{"OrderedCol", "velox.OrderedCol[E, int64]", "", 19456},         // measured 14924
 	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},           // measured 14846
@@ -319,70 +216,41 @@ var genericObjects = []struct {
 	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 4950
 	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 4950
 	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 5850
-	{"Rel", "velox.Rel[E, E]", "", 8192},                            // measured 3528
+	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4416 (3528 before the use site named the target)
 	{"One", "velox.One[E]", "", 20480},                              // measured 15972
 	{"Many", "velox.Many[E]", "", 20480},                            // measured 16044
 	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6134
-	{"Shape", "velox.Shape[E]", "", 8192},                           // measured 3572
 	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 2978
-	{"ColumnDef", "velox.ColumnDef[int64]", "", 7168},               // measured 2194
-	{"RelDef", "velox.RelDef[E]", "", 7168},                         // measured 2344
 	{"Statement", "velox.Statement", "", 5120},                      // measured 940
 	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 956
-	{"Schema", "*velox.Schema", "", 5120},                           // measured 946
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
-	// The entity packages, remeasured on 2026-10-15 after policy 2. An
-	// entity's package carries the export data of every velox type its API
-	// reaches, and Schema's Policy, BeforeInsert, BeforeUpdate and
-	// BeforeDelete take functions of a context.Context (whose Deadline brings
-	// time.Time and its methods, about 9.5 KiB) and a Mutation[E] (which holds
-	// a *Statement, about 2.3 KiB); those four methods with Policy[E] and
-	// Mutation[E] add about 8 KiB more. entityUse also compiles the insert
-	// path's new generic steps (oneStatement, prepareMany, batch, check).
-	// Remeasured on 2026-10-15 after schema plan 2's typed hooks: EntityInfo
-	// reaches the hooks' mutation, and entityUse compiles the hooks branch of
-	// each write and insertBatches.
-	// entity grew 79 KiB (132290 → 211116) with Mutation.DB, whose *DB brings
-	// DB's export data to every old-path entity: its Schema methods take a
-	// Mutation[E]. The Desc rows do not carry it. The row goes with the old
-	// path (schema plan 4, task 5), so its maximum is raised, not the
-	// design's.
-	{"entity", "", entitySrc, 264192},       // measured 211116 (132168 before Mutation.DB, 134630 when last recorded, 127904 before typed hooks, 123318 before that, 119972 before observability, 98878 before policy 2)
-	{"entityUse", "", entityUseSrc, 784384}, // measured 759910 (761664 when last recorded, 731746 before typed hooks, 717868 before that, 709930 before observability, 673936 before policy 2)
-	// The Desc path, remeasured on 2026-10-15 after Desc gained Policy and
-	// Hooks. entityDesc is entity on the Desc path: with nothing bound it is
-	// 8 KiB under entity (Load takes no Policy or Hook generic). It was
-	// 237706 when Load checked E for Policy and Hooks methods through
-	// interfaces, and 157092 with an unsafe conversion of method expressions:
-	// 80 KiB of Policy and Hook instantiations in every entity's package,
-	// which an entity without the methods never used. The fields now hold
-	// E-erased BoundPolicy and BoundHooks, made by BindPolicy and BindHooks in
-	// the entity's own generated code, so that only an entity that declares
-	// the methods instantiates those generics. entityDescUse is entityUse on
-	// Desc (854600 with the interface check). entityDescHooks is that with a
-	// Policy and three hooks bound through the fields (990872 with the
-	// interface check, from the same source without the bindings); the
-	// generics it instantiates are the cost of having a policy and hooks.
-	// Their maxima follow the rule above.
-	{"entityDesc", "", entityDescSrc, 155648},              // measured 124438
-	{"entityDescUse", "", entityDescUseSrc, 787456},        // measured 721136
-	{"entityDescHooks", "", entityDescHooksBound, 1065984}, // measured 999852
+	// The entity packages, remeasured on 2026-10-19 when the old path went
+	// (schema plan 4, task 5), on darwin/arm64, Go 1.27.1. entityDesc is the
+	// minimal entity velox-gen writes: Load takes no Policy or Hook generic,
+	// and the Desc's Policy and Hooks fields hold E-erased BoundPolicy and
+	// BoundHooks that BindPolicy and BindHooks make in the entity's own
+	// generated code, so that only an entity that declares the methods
+	// instantiates those generics. entityDescUse adds a default, two
+	// relations and a Use function that queries, inserts, saves, updates and
+	// deletes. entityDescHooks is that with a Policy and three hooks bound
+	// through the fields; the generics it instantiates are the cost of having
+	// a policy and hooks (policyGrowthMax). The rows of the old struct-scanning
+	// path (entity, entityUse, Shape, ColumnDef, RelDef, Schema) are gone with
+	// it.
+	{"entityDesc", "", entityDescSrc, 153600},              // measured 122196
+	{"entityDescUse", "", entityDescUseSrc, 777216},        // measured 710722
+	{"entityDescHooks", "", entityDescHooksBound, 1058816}, // measured 993030
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 9216},            // measured 3572
+	{"Mutation", "velox.Mutation[E]", "", 8192},            // measured 3750
 }
 
-// policyGrowthMax bounds the bytes a Policy and the three entity hooks add to
-// an entity's package (entityPolicySrc over entityUseSrc): the measured growth
-// plus genericObjects' margin (policy design §7). On 2026-10-15, darwin/arm64,
-// Go 1.27.1, they added 98984 when the maximum was set, and 104764 when last
-// measured (it had drifted before the Desc path's fields), still inside it. Measured in packages with a shorter import path
-// they add 92266, of which the six functions alone, assigned to variables
-// instead of declared, take 41948, and velox's generic Policy, BeforeInsert,
-// BeforeUpdate, BeforeDelete and mutationHook, instantiated for E with their
-// closures, the other 50318. Bodies barely count (a Read returning Pred[E]{}
-// costs as much as one returning a condition); every instantiated symbol's
-// name spells out E's shape and package path.
-const policyGrowthMax = 123904 // measured 104764 (98984 when set)
+// policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
+// package (entityDescHooks over entityDescUse): the measured growth plus
+// genericObjects' margin (policy design §7). Bodies barely count; the cost is
+// the generics velox instantiates for E (BindPolicy, BindHooks, On, the
+// Mutator and Mutation methods) and the export data of the types the
+// functions mention.
+const policyGrowthMax = 348160 // measured 282308
 
 // TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one
 // package: it measures each row's own object cost, the bytes its package
@@ -404,10 +272,6 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 		}
 		files[g.name+"/p.go"] = src
 	}
-	if entityPolicySrc == entityUseSrc {
-		t.Fatal("entityPolicySrc adds nothing to entityUseSrc: its anchor, the Many line of E's Schema, is not in entityUseSrc")
-	}
-	files["entityPolicy/p.go"] = entityPolicySrc
 	if err := tempmod.Write(dir, repoRoot(), files); err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +303,7 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 	}
 	t.Run("policy and hooks", func(t *testing.T) {
 		t.Parallel()
-		got := size(t, "entityPolicy") - size(t, "entityUse")
+		got := size(t, "entityDescHooks") - size(t, "entityDescUse")
 		t.Logf("policy and hooks: +%d bytes", got)
 		if got > policyGrowthMax {
 			t.Errorf("a Policy and the three entity hooks add %d bytes to an entity's package, over the recorded %d (policy design §7)", got, policyGrowthMax)

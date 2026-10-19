@@ -89,8 +89,8 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the entity's hooks, the
-// UpdateDefault assignments and the checks, the guard again, the old
-// BeforeUpdate hooks, the Rewrite hooks, the tenant and policy scope and
+// UpdateDefault assignments and the checks, the guard again, the
+// Rewrite hooks, the tenant and policy scope and
 // rendering. So the hooks and the policy run, and can tell from
 // IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the statement
 // will not be sent. Around hooks, which wrap execution, do not run.
@@ -155,7 +155,7 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the entity's hooks, the
-// guard again, the old BeforeDelete hooks, the Rewrite hooks, the tenant and
+// guard again, the Rewrite hooks, the tenant and
 // policy scope and rendering. So the hooks and the policy run, and can tell
 // from IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the
 // statement will not be sent. Around hooks, which wrap execution, do not run.
@@ -176,7 +176,7 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 // every column with an UpdateDefault. The entity's hooks (Hooks) see it as an
 // update, OpUpdate. Once the row was written, it stores in *x every value the
 // statement as sent assigned, the UpdateDefault values and those a hook
-// (Hooks, BeforeUpdate or Rewrite) set included, when the field can hold it;
+// (Hooks or Rewrite) set included, when the field can hold it;
 // after an error, including ErrNotFound, *x is as it was, and so it is when a
 // hook returns nil without calling next.
 // Its error wraps ErrNotFound when no row has that key. Naming a column twice

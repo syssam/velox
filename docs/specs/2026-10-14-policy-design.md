@@ -448,7 +448,7 @@ Op Op; Err error}`, with `Unwrap` returning `Err` and `Is(ErrDenied)` true.
   budget (Core §8) unchanged.
 - A tenant-scoped one-row read stays within Core's one-row budget plus one
   allocation and 150 ns. A budget test pins it.
-- `Policy[E]`, `Mutation[E]` and the new `Schema` methods follow Core §3: every
+- `Policy[E]` and `Mutation[E]` follow Core §3: every
   method of a generic type is generic (`methods_test.go`), nothing runs at
   init, and no reachable type holds `reflect.Type` (rule 7).
 - A policy and all three hooks add about 99 KB of object to an entity's
@@ -461,8 +461,17 @@ Op Op; Err error}`, with `Unwrap` returning `Err` and `Is(ErrDenied)` true.
   per entity.
 - An entity package with no policy or hooks grew by about 21 KB during this
   work (98,878 to 119,896 bytes): export data, because its API now reaches
-  `context.Context`, `Statement` and the new `Schema` methods' signatures.
+  `context.Context`, `Statement` and the Policy and hook signatures.
   Its object code did not change. The guard is re-baselined to it.
+
+  *Note, 2026-10-19.* The figures above are the old struct-scanning path's,
+  which schema plan 4 removed. On the Desc path `compilecost_test.go` measures
+  a Policy and three hooks as `entityDescHooks` over `entityDescUse`: 282,308
+  bytes on darwin/arm64, Go 1.27.1, with a guard of 348,160. It costs more
+  than the old 99 KB because the generics instantiated in the entity's own
+  package are now the whole cost (`BindPolicy`, `BindHooks`, `On`, and the
+  `Mutator` and `Mutation` methods the hooks call), and the generated Desc
+  binds them there. The old figures stay as history.
 
 ## 8. Testing
 

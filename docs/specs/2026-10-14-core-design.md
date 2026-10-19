@@ -563,8 +563,7 @@ Constraint violations are normalized into `*velox.ConstraintError` with a kind
 ## 7. Errors
 
 Sentinels for `errors.Is`: `ErrNotFound`, `ErrNotSingular`, `ErrUnbounded`,
-`ErrNoWhere`, `ErrLimitTooLarge`, `ErrTooManyRows`, `ErrTimeout`, `ErrStale`
-(generated code out of date). Typed errors for
+`ErrNoWhere`, `ErrLimitTooLarge`, `ErrTooManyRows`, `ErrTimeout`. Typed errors for
 `errors.As`: `*ConstraintError{Entity, Kind, Constraint, Err}` with `Kind` one
 of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the
 constraint's name, except that SQLite reports the columns and a NOT NULL error

@@ -7,15 +7,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"unicode"
-	"unicode/utf8"
 	"unsafe"
 )
 
 // kit is the code velox needs to handle an entity whose type it does not
-// know at the point of use: loading a relation to it. MetaOnce.Get and
-// MetaOnce.Load build it, so it is compiled once, in the entity's own
-// package.
+// know at the point of use: loading a relation to it. MetaOnce.Load builds
+// it, so it is compiled once, in the entity's own package.
 type kit struct {
 	value func(p unsafe.Pointer, col int) any       // the value of column col of the entity at p
 	scan  func(r rows, cols []int) (any, error)     // every row, into a new []E; cols as in Statement.Columns
@@ -65,31 +62,20 @@ type holder struct {
 	loaded bool
 }
 
-// Relation is one relation field of a generated Shape or Desc: its name, how
-// to reach its target entity and, when EdgeTo or EdgeThrough made it, the
-// columns that key it.
+// Relation is one relation field of a generated Desc: its name and the
+// columns that key it. EdgeTo and EdgeThrough make it. It carries no target
+// entity: the use site supplies that (see EdgeTo).
 type Relation struct {
-	name   string
-	target func() (*EntityInfo, error)
+	name string
 
-	explicit  bool     // EdgeTo or EdgeThrough: the key is ownerCol and targetCol
+	explicit  bool     // EdgeTo or EdgeThrough made it; a literal Relation is refused
 	ownerCol  int      // an index into the owner's Columns
 	targetCol int      // an index into the target's Columns
 	through   *through // EdgeThrough's join entity; nil for any other relation
 
 	// holders are the reflect.Types of One[T] and Many[T] for the target T:
-	// the types the relation's field may have. Nil for RelationTo's.
+	// the types the relation's field may have.
 	holders [2]any
-}
-
-// RelationTo is what the old Shape path writes for a relation field whose
-// target is entity T. Nothing runs until the relation is first used. The
-// Desc path's EdgeTo carries no target: see EdgeTo.
-func RelationTo[T any, PT Entity[T]](name string) Relation {
-	return Relation{name: name, target: func() (*EntityInfo, error) {
-		m := PT(nil).VeloxMeta()
-		return m.info, m.err
-	}}
 }
 
 // relation is a relation field of an entity, resolved on first use.
@@ -97,19 +83,12 @@ func RelationTo[T any, PT Entity[T]](name string) Relation {
 // relations that point at each other, or at their own entity, cannot wait on
 // each other.
 type relation struct {
-	name   string
-	many   bool
-	off    uintptr                     // the field's offset in the owner
-	typ    any                         // the reflect.Type of One[T] or Many[T] (design §3 rule 7)
-	target func() (*EntityInfo, error) // the old path's; nil for an EdgeTo, whose use site brings it
-	ref    int                         // References: the owner's column; -1 none, -2 invalid
-	fkOff  uintptr                     // ForeignKey: the target field's offset...
-	fkTyp  any                         // ...and reflect.Type, computed during Schema
-	hasFK  bool
+	name string
+	many bool
+	off  uintptr // the field's offset in the owner
+	typ  any     // the reflect.Type of One[T] or Many[T] (design §3 rule 7)
 
-	// A relation of the Desc path names its key (EdgeTo): the inference
-	// above, from References, ForeignKey and field names, is the old path's.
-	explicit  bool
+	// The key, as EdgeTo and EdgeThrough wrote it.
 	ownerCol  int
 	targetCol int
 	through   *through // EdgeThrough's join entity; nil for any other relation
@@ -148,11 +127,11 @@ func targetOf[T any]() useTarget {
 	return useTarget{get: ownerOf[T], one: elemType((*One[T])(nil)), many: elemType((*Many[T])(nil))}
 }
 
-// resolve returns the relation's link. An EdgeTo relation has no target of
-// its own, so that the owner's metadata does not keep the target's code in
-// every program that links the owner: the use site, which names the target's
-// type, passes use. A relation that has its own target ignores use. The first
-// resolution is kept, and it checks that use names the entity the field holds.
+// resolve returns the relation's link. A relation has no target of its own,
+// so that the owner's metadata does not keep the target's code in every
+// program that links the owner: the use site, which names the target's type,
+// passes use. The first resolution is kept, and it checks that use names the
+// entity the field holds.
 func (r *relation) resolve(owner *EntityInfo, use useTarget) (link, error) {
 	r.once.Do(func() { r.link, r.err = r.build(owner, use) })
 	return r.link, r.err
@@ -162,72 +141,30 @@ func (r *relation) build(owner *EntityInfo, use useTarget) (link, error) {
 	fail := func(format string, args ...any) (link, error) {
 		return link{}, &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
 	}
-	target := r.target
-	if target == nil {
-		if use.get == nil {
-			return fail("it has no target in the generated code; run go tool velox-gen")
-		}
-		// The handle's T must be the entity the field holds, or loading would
-		// fill the field with rows of another type and Get would find none.
-		if ft := rtype(r.typ); ft != rtype(use.one) && ft != rtype(use.many) {
-			return fail("the field is a %v, but the Rel handle names %s; run go tool velox-gen", ft, targetName(rtype(use.one)))
-		}
-		target = use.get
+	if use.get == nil {
+		return fail("it has no target in the generated code; run go tool velox-gen")
 	}
-	t, err := target()
+	// The handle's T must be the entity the field holds, or loading would
+	// fill the field with rows of another type and Get would find none.
+	if ft := rtype(r.typ); ft != rtype(use.one) && ft != rtype(use.many) {
+		return fail("the field is a %v, but the Rel handle names %s; run go tool velox-gen", ft, targetName(rtype(use.one)))
+	}
+	t, err := use.get()
 	if err != nil {
 		return fail("its target %s is invalid: %s", targetName(rtype(r.typ)), strings.TrimPrefix(err.Error(), "velox: "))
 	}
 	l := link{target: t}
-	kind := "One"
-	if r.many {
-		kind = "Many"
+	// The indexes are literals in generated code: an index out of range
+	// is stale or hand-edited code, and would panic on first use.
+	if r.ownerCol < 0 || r.ownerCol >= len(owner.Columns) {
+		return fail("its key names column %d of %s, which has %d", r.ownerCol, owner.Name, len(owner.Columns))
 	}
-	switch {
-	case r.explicit:
-		// The indexes are literals in generated code: an index out of range
-		// is stale or hand-edited code, and would panic on first use.
-		if r.ownerCol < 0 || r.ownerCol >= len(owner.Columns) {
-			return fail("its key names column %d of %s, which has %d", r.ownerCol, owner.Name, len(owner.Columns))
-		}
-		if r.targetCol < 0 || r.targetCol >= len(t.Columns) {
-			return fail("its key names column %d of %s, which has %d", r.targetCol, t.Name, len(t.Columns))
-		}
-		l.ownerCol, l.targetCol = r.ownerCol, r.targetCol
-		if r.through != nil {
-			return r.buildThrough(owner, l, fail)
-		}
-	case r.ref == -2:
-		return fail("References names no column")
-	case r.ref >= 0:
-		l.ownerCol = r.ref
-		if l.targetCol, err = singleKey(t); err != nil {
-			return fail("%v", err)
-		}
-	case r.hasFK:
-		if l.targetCol = columnAt(t, r.fkOff, r.fkTyp); l.targetCol < 0 {
-			return fail("ForeignKey's function does not return a column of %s", t.Name)
-		}
-		if l.ownerCol, err = singleKey(owner); err != nil {
-			return fail("%v", err)
-		}
-	default:
-		if c, ok := fieldColumn(owner, r.name+"ID"); ok && !r.many {
-			l.ownerCol = c
-			if l.targetCol, err = singleKey(t); err != nil {
-				return fail("%v", err)
-			}
-			break
-		}
-		want := typeName(owner.Name) + "ID"
-		c, ok := fieldColumn(t, want)
-		if !ok {
-			return fail("%s has no field %s; name one, or declare the key with s.%s(&x.%s).ForeignKey", t.Name, want, kind, r.name)
-		}
-		l.targetCol = c
-		if l.ownerCol, err = singleKey(owner); err != nil {
-			return fail("%v", err)
-		}
+	if r.targetCol < 0 || r.targetCol >= len(t.Columns) {
+		return fail("its key names column %d of %s, which has %d", r.targetCol, t.Name, len(t.Columns))
+	}
+	l.ownerCol, l.targetCol = r.ownerCol, r.targetCol
+	if r.through != nil {
+		return r.buildThrough(owner, l, fail)
 	}
 	if err := sameKey(owner, l.ownerCol, t, l.targetCol); err != nil {
 		return fail("%v", err)
@@ -285,35 +222,6 @@ func sameKey(a *EntityInfo, ac int, b *EntityInfo, bc int) error {
 	return nil
 }
 
-// singleKey returns an entity's primary key column; relations need one.
-func singleKey(in *EntityInfo) (int, error) {
-	if len(in.PrimaryKey) != 1 {
-		return -1, fmt.Errorf("%s has a composite primary key; a relation needs a single-column key", in.Name)
-	}
-	return in.PrimaryKey[0], nil
-}
-
-// columnAt returns the column of the field at offset off with type typ, a
-// reflect.Type.
-func columnAt(in *EntityInfo, off uintptr, typ any) int {
-	for i, c := range in.Columns {
-		if c.off == off && c.Type == typ {
-			return i
-		}
-	}
-	return -1
-}
-
-// fieldColumn returns the column of the field named field.
-func fieldColumn(in *EntityInfo, field string) (int, bool) {
-	for i, c := range in.Columns {
-		if c.Field == field {
-			return i, true
-		}
-	}
-	return -1, false
-}
-
 // base is the reflect.Type v holds without one level of pointer: *int64 and
 // int64 are the same key.
 func base(v any) reflect.Type {
@@ -322,14 +230,6 @@ func base(v any) reflect.Type {
 		return t.Elem()
 	}
 	return t
-}
-
-// typeName is the type's name without its package, first letter upper-cased:
-// "Invoice" for "billing.Invoice" (and "Company" for an unexported company).
-func typeName(name string) string {
-	n := name[strings.LastIndexByte(name, '.')+1:]
-	r, size := utf8.DecodeRuneInString(n)
-	return string(unicode.ToUpper(r)) + n[size:]
 }
 
 // targetName is the name of T in the relation field type One[T] or Many[T].

@@ -1,15 +1,11 @@
-// Package velox is an ORM for Go 1.27 and later. Entities are plain structs
-// owned by the packages that use them; velox-gen writes a small file of typed
-// column handles beside each one.
+// Package velox is an ORM for Go 1.27 and later. Entities are described in a
+// schema package, in the DSL of the schema packages (schema, schema/field,
+// schema/edge, ...). velox-gen generates from it, into a single gen package,
+// the entity structs, their typed column handles and their metadata (Desc),
+// which velox reads on an entity's first use.
 package velox
 
 //go:generate go run ./internal/handlegen/gen
-
-// GeneratedCodeIsVersion2 is referenced by every file velox-gen writes, so
-// that generated code and this library fail to compile together when they
-// disagree. It is replaced by GeneratedCodeIsVersion3 when generated code must
-// change. (Version 2: relations in Shape and Rel handles.)
-const GeneratedCodeIsVersion2 = true
 
 // GeneratedCodeIsVersion3 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile

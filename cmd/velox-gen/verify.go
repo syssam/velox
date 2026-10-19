@@ -4,52 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"go/token"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-
-	"golang.org/x/tools/go/packages"
 )
-
-// runVerify builds every entity's metadata in a temporary program, inside the
-// module of the loaded packages, and prints what it reports: a mistake in a
-// Schema or Mixin method, or generated code that is out of date. The program
-// lives in a directory named .velox-verify-*, which ./... ignores, and is
-// removed afterwards.
-func runVerify(cfg config, ps []*packages.Package, stdout, stderr io.Writer) int {
-	var ents []*entity
-	var probs []problem
-	for _, p := range ps {
-		e, pr := discover(p, cfg)
-		ents, probs = append(ents, e...), append(probs, pr...)
-	}
-	if report(stderr, probs) {
-		return 1
-	}
-	var named []*entity
-	for _, e := range ents {
-		if !token.IsExported(e.name) || e.pkg.Name == "main" {
-			_, _ = fmt.Fprintf(stderr, "velox-gen verify: skipping %s.%s, which a program outside its package cannot name\n", e.pkg.Name, e.name)
-			continue
-		}
-		named = append(named, e)
-	}
-	if len(named) == 0 {
-		_, _ = fmt.Fprintln(stdout, "velox-gen verify: no entities")
-		return 0
-	}
-	mod := named[0].pkg.Module
-	for _, e := range named {
-		if mod == nil || e.pkg.Module == nil || e.pkg.Module.Dir != mod.Dir {
-			_, _ = fmt.Fprintln(stderr, "velox-gen verify: the entities must be in one module; run verify once per module")
-			return 1
-		}
-	}
-	return runProgram(mod.Dir, verifyProgram(named), cfg.env, stdout, stderr)
-}
 
 // runProgram runs src as a main package in a new .velox-verify-* directory of
 // the module at modDir, with stdout and stderr connected, and removes the
@@ -75,34 +34,6 @@ func runProgram(modDir string, src []byte, env []string, stdout, stderr io.Write
 		return 1
 	}
 	return 0
-}
-
-// verifyProgram is a main package that calls velox.CheckEntity for every
-// entity and exits 1 when any reports an error.
-func verifyProgram(ents []*entity) []byte {
-	sort.Slice(ents, func(i, j int) bool {
-		if ents[i].pkg.PkgPath != ents[j].pkg.PkgPath {
-			return ents[i].pkg.PkgPath < ents[j].pkg.PkgPath
-		}
-		return ents[i].name < ents[j].name
-	})
-	alias := map[string]string{}
-	var paths []string
-	for _, e := range ents {
-		if _, ok := alias[e.pkg.PkgPath]; !ok {
-			alias[e.pkg.PkgPath] = fmt.Sprintf("p%d", len(paths))
-			paths = append(paths, e.pkg.PkgPath)
-		}
-	}
-	imports := make([][2]string, len(paths))
-	for i, p := range paths {
-		imports[i] = [2]string{alias[p], p}
-	}
-	calls := make([]string, len(ents))
-	for i, e := range ents {
-		calls[i] = fmt.Sprintf("%s.%s", alias[e.pkg.PkgPath], e.name)
-	}
-	return checkProgram(imports, calls, nil)
 }
 
 // checkProgram is a main package that imports the packages ([alias, path]),

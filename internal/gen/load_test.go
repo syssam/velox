@@ -2,7 +2,6 @@ package gen
 
 import (
 	"bufio"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -119,18 +118,18 @@ func TestInspect(t *testing.T) {
 	if err != nil || path != "example.com/tmp/plain" || len(schemas) != 0 {
 		t.Errorf("plain: %q %v %v", path, schemas, err)
 	}
-	// Not a package: the caller may try another mode.
+	// Not a package.
 	for _, pattern := range []string{"./nothing", "./empty", "./...", "example.com/tmp/nothing"} {
-		if _, _, err := Inspect(dir, pattern, offline()); !errors.Is(err, ErrNotPackage) {
-			t.Errorf("%s: %v does not wrap ErrNotPackage", pattern, err)
+		if _, _, err := Inspect(dir, pattern, offline()); err == nil {
+			t.Errorf("%s: no error", pattern)
 		}
 	}
 	// Another failure of go list is shown as go wrote it.
-	if _, _, err := Inspect(dir, "./mixed", offline()); err == nil || errors.Is(err, ErrNotPackage) || !strings.Contains(err.Error(), "found packages a (a.go) and b (b.go)") {
+	if _, _, err := Inspect(dir, "./mixed", offline()); err == nil || !strings.Contains(err.Error(), "found packages a (a.go) and b (b.go)") {
 		t.Errorf("mixed: %v", err)
 	}
-	// A package that cannot be read is not "not a package".
-	if _, _, err := Inspect(dir, "./unexp", offline()); err == nil || errors.Is(err, ErrNotPackage) || !strings.Contains(err.Error(), "unexported") {
+	// A package that cannot be read says why.
+	if _, _, err := Inspect(dir, "./unexp", offline()); err == nil || !strings.Contains(err.Error(), "unexported") {
 		t.Errorf("unexp: %v", err)
 	}
 }

@@ -115,7 +115,7 @@ func TestUpdateDeleteSave(t *testing.T) {
 		if err != nil || again.Number != "CHANGED" {
 			t.Errorf("%+v, %v", again, err)
 		}
-		// Naming UpdatedAt keeps OnUpdate from firing, so every value sent equals
+		// Naming UpdatedAt keeps its UpdateDefault from firing, so every value sent equals
 		// the stored one (one.UpdatedAt is what the first Save sent) and the row
 		// is matched but not changed: only clientFoundRows makes MySQL count it.
 		if err := tg.db.Save(ctx, one, I.Number, I.UpdatedAt); err != nil {

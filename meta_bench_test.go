@@ -1,18 +1,11 @@
 package velox
 
-import (
-	"reflect"
-	"testing"
-	"unsafe"
-)
+import "testing"
 
+// buildOrder builds the metadata of a Desc entity from its literals, as the
+// first use of a generated entity does.
 func buildOrder() {
-	x := new(order)
-	rels := make([]Relation, len(orderRels))
-	for i, n := range orderRels {
-		rels[i] = Relation{name: n}
-	}
-	if _, err := buildInfo(reflect.TypeFor[order](), unsafe.Pointer(x), any(x), orderCols, rels); err != nil {
+	if _, err := loadDesc(orderedDesc()); err != nil {
 		panic(err)
 	}
 }

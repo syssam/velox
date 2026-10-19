@@ -58,9 +58,7 @@ type dryRunKey struct{}
 
 // IsDryRun reports whether ctx is that of a SQL(ctx) method: the statement
 // being built will not be sent. The methods mark the context before anything
-// runs, so every hook and policy function sees it: entity hooks (Hooks), and
-// the old BeforeInsert, BeforeUpdate and BeforeDelete, which are given no
-// Statement, read it here, and a Rewrite hook may read it here or in
+// runs, so every hook and policy function sees it: entity hooks (Hooks), and a Rewrite hook may read it here or in
 // Statement.DryRun.
 func IsDryRun(ctx context.Context) bool {
 	dry, _ := ctx.Value(dryRunKey{}).(bool)
@@ -90,8 +88,7 @@ func policyBypass(ctx context.Context) string {
 //
 //	func (*E) Policy() velox.Policy[E]
 //
-// or, on the old path, in its Schema method with Schema.Policy. velox-gen
-// binds the method in the generated metadata (Desc.Policy calls
+// velox-gen binds the method in the generated metadata (Desc.Policy calls
 // BindPolicy on it): a method with another signature does not compile, and
 // one the metadata does not bind is refused at the entity's first use. velox calls it once, when it
 // builds the metadata, on a nil *E, so the method must not read its receiver.
@@ -115,8 +112,8 @@ type Policy[E any] struct {
 	// cannot be changed.
 	Write func(ctx context.Context) (Pred[E], error)
 	// Insert checks every inserted or upserted row, after the entity's
-	// hooks, the defaults, the tenant fill, the old BeforeInsert hooks and
-	// the validators.
+	// hooks, the defaults, the tenant fill and the
+	// validators.
 	Insert func(ctx context.Context, x *E) error
 }
 
@@ -158,9 +155,8 @@ func (d denial) Error() string { return string(d) }
 // Is makes a denial match ErrDenied.
 func (d denial) Is(target error) bool { return target == ErrDenied }
 
-// Mutation is the write that an entity's hooks (Hooks) see and may change,
-// and the UPDATE or DELETE that an old BeforeUpdate or BeforeDelete hook
-// sees. A misuse (Set on a delete, a zero or invalid condition, Value, Set or
+// Mutation is the write that an entity's hooks (Hooks) see and may change.
+// A misuse (Set on a delete, a zero or invalid condition, Value, Set or
 // Where on an insert) is recorded and fails the write: before next sends
 // it, or once the hook returns.
 type Mutation[E any] mutation

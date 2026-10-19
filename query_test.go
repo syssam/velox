@@ -178,33 +178,6 @@ func TestQueryCanRunAgain(t *testing.T) {
 	}
 }
 
-type staleEntity struct {
-	ID   int64
-	Name string
-}
-
-func (*staleEntity) Schema(*velox.Schema) {}
-
-var staleMeta velox.MetaOnce[staleEntity]
-
-func (*staleEntity) VeloxMeta() *velox.Meta[staleEntity] {
-	return staleMeta.Get(func() velox.Shape[staleEntity] {
-		return velox.Shape[staleEntity]{Columns: []string{"ID"}}
-	})
-}
-
-func TestStaleGeneratedCodeIsReportedOnUse(t *testing.T) {
-	e := &velox.FakeExec{}
-	db := velox.OpenFake(velox.Postgres, e)
-	_, err := db.Query[staleEntity]().All(ctx)
-	if !errors.Is(err, velox.ErrStale) || !strings.Contains(err.Error(), "velox_test.staleEntity") || e.Calls != 0 {
-		t.Fatalf("%v, calls %d", err, e.Calls)
-	}
-	if text, _, err := db.Query[staleEntity]().SQL(ctx); text != "" || !errors.Is(err, velox.ErrStale) {
-		t.Errorf("SQL of an invalid entity: %q %v", text, err)
-	}
-}
-
 // TestChainingCopiesTheQuery: extending a query returns a new one and leaves
 // the query extended as it was, so one base query can be extended many ways.
 func TestChainingCopiesTheQuery(t *testing.T) {

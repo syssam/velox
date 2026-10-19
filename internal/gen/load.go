@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,29 +29,16 @@ type listed struct {
 	Error      *struct{ Err string }
 }
 
-// ErrNotPackage is wrapped by the error of Inspect and Load when the pattern
-// names no package, names more than one, or is not in a module. Any other
-// failure of go list is returned as it is: a caller that falls back to
-// another mode on ErrNotPackage does not hide it.
-var ErrNotPackage = errors.New("not a package")
-
-// notPackage is an error that Is ErrNotPackage and keeps its own message.
-type notPackage struct{ error }
-
-func (e notPackage) Unwrap() error      { return e.error }
-func (notPackage) Is(target error) bool { return target == ErrNotPackage }
-
 // Inspect runs go list for pattern, in the module that holds dir, and reports
 // the import path of the one package it names and the schemas the package
 // declares: the exported structs that embed schema.Schema, sorted. It does not
 // run any of the package's code. env is the environment of the go command; nil
 // means os.Environ().
 //
-// An error that wraps ErrNotPackage says that pattern names no package, more
-// than one, or is not in a module. Another error from go list, such as a go.mod
-// that needs go mod tidy, or a directory that holds two packages, is returned
-// as go wrote it. A package that has no schemas is not an error: schemas is
-// empty.
+// An error says that pattern names no package, more than one, or is not in a
+// module, or is one go list reports as it wrote it, such as a go.mod that needs
+// go mod tidy, or a directory that holds two packages. A package that has no
+// schemas is not an error: schemas is empty.
 func Inspect(dir, pattern string, env []string) (importPath string, schemas []string, err error) {
 	pkg, names, err := inspect(dir, pattern, env)
 	if err != nil {
@@ -141,13 +127,10 @@ func list(dir, pattern string, env []string) (*listed, error) {
 		msg := strings.TrimSpace(stderr)
 		switch {
 		case !inModule(dir, env):
-			return nil, notPackage{errors.New("the schema package must be in a module")}
+			return nil, errors.New("the schema package must be in a module")
 		case strings.Contains(pattern, "..."):
-			// Several packages, or none; the failure of one of them is for
-			// the mode that reads them all.
-			return nil, notPackage{fmt.Errorf("go list %s: %s", pattern, msg)}
-		case namesNoPackage(msg):
-			return nil, notPackage{errors.New(msg)}
+			// Several packages, or none: velox-gen reads exactly one.
+			return nil, fmt.Errorf("go list %s: %s", pattern, msg)
 		case msg == "":
 			return nil, fmt.Errorf("go list %s: %w", pattern, err)
 		}
@@ -157,42 +140,20 @@ func list(dir, pattern string, env []string) (*listed, error) {
 	var pkg listed
 	if err := dec.Decode(&pkg); err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, notPackage{fmt.Errorf("%s names no package", pattern)}
+			return nil, fmt.Errorf("%s names no package", pattern)
 		}
 		return nil, fmt.Errorf("reading go list output: %w", err)
 	}
 	if dec.More() {
-		return nil, notPackage{fmt.Errorf("%s names more than one package; name the schema package", pattern)}
+		return nil, fmt.Errorf("%s names more than one package; name the schema package", pattern)
 	}
 	if pkg.Error != nil {
-		if namesNoPackage(pkg.Error.Err) {
-			return nil, notPackage{fmt.Errorf("%s: %s", pattern, pkg.Error.Err)}
-		}
 		return nil, fmt.Errorf("%s: %s", pattern, pkg.Error.Err)
 	}
 	if pkg.Module == nil || pkg.Module.Dir == "" {
-		return nil, notPackage{errors.New("the schema package must be in a module")}
+		return nil, errors.New("the schema package must be in a module")
 	}
 	return &pkg, nil
-}
-
-// noPackage are the parts of the messages with which go list says that a
-// pattern names no package: a directory that is absent or holds no Go files
-// that build, an import path that nothing provides.
-var noPackage = []string{
-	"directory not found",
-	"no Go files in",
-	"no non-test Go files in",
-	"build constraints exclude all Go files",
-	"matched no packages",
-	"no required module provides package",
-	"cannot find module providing package",
-	"cannot find package",
-	"is not in std",
-}
-
-func namesNoPackage(msg string) bool {
-	return slices.ContainsFunc(noPackage, func(s string) bool { return strings.Contains(msg, s) })
 }
 
 // inModule reports whether the go command in dir runs in a module.

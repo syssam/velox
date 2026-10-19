@@ -41,7 +41,36 @@ func TestInsertKeepsAGivenKeyAndCreatedAt(t *testing.T) {
 		t.Errorf("%s, ID %d, CreatedAt %v", e.SQL, inv.ID, inv.CreatedAt)
 	}
 	if time.Since(inv.UpdatedAt) > time.Minute {
-		t.Error("OnUpdate column not set on insert")
+		t.Error("updated_at (its DefaultFunc) not set on insert")
+	}
+}
+
+// TestInsertFillsADefaultNotAnUpdateDefault: an UpdateDefault fills on update
+// only (Ruling 4). updated_at has both a DefaultFunc and an UpdateDefault, so
+// an insert fills it when it is zero and keeps a value the caller gave;
+// hFlex's Stamp has an UpdateDefault alone, so an insert leaves it as given.
+func TestInsertFillsADefaultNotAnUpdateDefault(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{ID: 7, OrgID: 1, Number: "N", UpdatedAt: t0}
+	if err := db.Insert(&inv).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !inv.UpdatedAt.Equal(t0) || e.Args[2] != t0 { // the args are id, created_at, updated_at, ...
+		t.Errorf("an updated_at the caller gave was replaced: %v, sent %v", inv.UpdatedAt, e.Args[2])
+	}
+
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		return next.Mutate(ctx, m)
+	}
+	for _, stamp := range []int64{0, 4} {
+		x := hFlex{ID: 1, Title: "t", Stamp: stamp}
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if x.Stamp != stamp || e.Args[2] != stamp {
+			t.Errorf("Stamp %d: an insert applied the UpdateDefault: row %d, sent %v", stamp, x.Stamp, e.Args[2])
+		}
 	}
 }
 

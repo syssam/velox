@@ -96,6 +96,12 @@ func TestDescErrors(t *testing.T) {
 	if err := velox.CheckEntity[dAuthor](); err != nil {
 		t.Fatal(err)
 	}
+	// CheckEntity reports the same errors, as *SchemaError.
+	for name, err := range map[string]error{"bad Desc": velox.CheckEntity[badDesc](), "panicking Desc": velox.CheckEntity[panicDesc]()} {
+		if !errors.As(err, &se) || err == nil {
+			t.Errorf("CheckEntity of a %s: got %v, want a *SchemaError", name, err)
+		}
+	}
 }
 
 // dRow is a model for the refusals of buildDesc.
@@ -167,6 +173,7 @@ func TestDescRefusals(t *testing.T) {
 		edit func(d *velox.Desc[dRow])
 		want string
 	}{
+		{"no Table", func(d *velox.Desc[dRow]) { d.Table = "" }, "dRow: the generated metadata has no Table"},
 		{"no Addr", func(d *velox.Desc[dRow]) { d.Addr = nil }, "dRow: the generated metadata has no Addr"},
 		{"Addr gives nil", func(d *velox.Desc[dRow]) {
 			d.Addr = func(x *dRow, i int) any { return nil }
@@ -206,7 +213,7 @@ func TestDescRefusals(t *testing.T) {
 			d.RelAddr = func(x *dRow, i int) any { return &x.ID }
 		}, "dRow.Author: RelAddr does not return a *One[T] or *Many[T]"},
 		{"relation not from EdgeTo", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.RelationTo[dAuthor]("Author")}
+			d.Relations = []velox.Relation{{}} // a literal, not made by EdgeTo
 		}, "relation 0 was not made by EdgeTo or EdgeThrough"},
 		{"EdgeTo owner column out of range", func(d *velox.Desc[dRow]) {
 			d.Relations = []velox.Relation{velox.EdgeTo[dAuthor]("Author", 9, 0)}

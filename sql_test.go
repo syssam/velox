@@ -347,7 +347,7 @@ func TestIsDryRun(t *testing.T) {
 		if err := errors.Join(errs...); err != nil {
 			t.Fatal(err)
 		}
-		for _, hook := range []string{"Read", "Write", "Insert", "BeforeInsert", "BeforeUpdate", "BeforeDelete", "Rewrite"} {
+		for _, hook := range []string{"Read", "Write", "Insert", "InsertHook", "UpdateHook", "DeleteHook", "Rewrite"} {
 			got := seen[hook]
 			if len(got) == 0 {
 				t.Errorf("dry run %v: %s did not run", dry, hook)

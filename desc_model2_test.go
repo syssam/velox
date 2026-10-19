@@ -387,9 +387,9 @@ func dnoteHook(name string) velox.Hook[dnote] {
 
 func (*dnote) Hooks() []velox.Hook[dnote] {
 	return []velox.Hook[dnote]{
-		velox.On(dnoteHook("BeforeInsert"), velox.OpInsert),
-		velox.On(dnoteHook("BeforeUpdate"), velox.OpUpdate),
-		velox.On(dnoteHook("BeforeDelete"), velox.OpDelete),
+		velox.On(dnoteHook("InsertHook"), velox.OpInsert),
+		velox.On(dnoteHook("UpdateHook"), velox.OpUpdate),
+		velox.On(dnoteHook("DeleteHook"), velox.OpDelete),
 	}
 }
 

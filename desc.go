@@ -1,5 +1,5 @@
-// This file is the metadata path velox-gen writes (schema design §2); the
-// struct-scanning path in meta.go and schema.go remains until schema plan 4.
+// This file is the only metadata path: the one velox-gen writes (schema
+// design §2).
 
 package velox
 
@@ -91,8 +91,8 @@ type descView struct {
 	relAddr func(i int) any // d.RelAddr(x, i)
 }
 
-// Load returns the entity's Meta, building it from desc the first time. Like
-// Get, a panic in desc, or in the Desc's Policy or Hooks, becomes the Meta's
+// Load returns the entity's Meta, building it from desc the first time. A
+// panic in desc, or in the Desc's Policy or Hooks, becomes the Meta's
 // *SchemaError.
 //
 // It does no more than call desc and bind its functions to a new entity: the
@@ -128,7 +128,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 			err = bindHooks(info, d.Hooks)
 		}
 		if err != nil {
-			info, addr = nil, nil // an error Meta has no scan plan, as in Get
+			info, addr = nil, nil // an error Meta has no scan plan
 		}
 		o.m = &Meta[E]{info: info, addr: addr, err: err}
 		if info != nil {
@@ -159,6 +159,9 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 	if v.addr == nil {
 		return fail("", "the generated metadata has no Addr; run go tool velox-gen")
 	}
+	if d.table == "" {
+		return fail("", "the generated metadata has no Table; run go tool velox-gen")
+	}
 	if err := unboundMethods(t, d); err != nil {
 		return nil, err
 	}
@@ -179,7 +182,8 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		if c.Default != nil {
 			if boolOrNumber(ft) {
-				// The rule ColumnDef.Default enforces, for the reason given there.
+				// A bool or numeric field cannot have a Default: its zero value is also a
+				// real value, and the insert would overwrite an explicit false or 0.
 				return fail(c.Field, "Default on bool/numeric field %s would overwrite an explicit false or 0 on insert; make the field a pointer (nil uses the default)", c.Field)
 			}
 			if ci.Default, ok = defaultOf(c.Default, ft); !ok {
@@ -214,20 +218,19 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 	for i, r := range d.relations {
 		if !r.explicit {
 			// Only EdgeTo and EdgeThrough say which columns key the
-			// relation; the old path's inference does not apply here.
+			// relation; the key must be explicit.
 			return fail(r.name, "relation %d was not made by EdgeTo or EdgeThrough; run go tool velox-gen", i)
 		}
 		off, rt, ok := fieldOf(v.relAddr(i), base, t.Size())
 		if !ok || !isRelation(rt) {
 			return fail(r.name, "RelAddr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
 		}
-		if r.holders[0] != nil && rt != r.holders[0] && rt != r.holders[1] {
+		if rt != r.holders[0] && rt != r.holders[1] {
 			// The field holds another entity's relation: loading would fill
 			// it with the wrong type.
 			return fail(r.name, "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
 		}
-		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, target: r.target,
-			explicit: true, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
+		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.table, Schema: d.schema, Columns: cols, PrimaryKey: d.primaryKey, Tenant: d.tenant,
 		Indexes: d.indexes, rels: rels, immutable: anyImmutable}
@@ -263,6 +266,12 @@ func fieldOf(p any, base unsafe.Pointer, size uintptr) (uintptr, reflect.Type, b
 		return 0, nil, false
 	}
 	return at - uintptr(base), pv.Type().Elem(), true
+}
+
+// boolOrNumber reports whether t, a reflect.Type, is a bool or numeric type.
+func boolOrNumber(t any) bool {
+	k := rtype(t).Kind()
+	return k == reflect.Bool || k >= reflect.Int && k <= reflect.Float64
 }
 
 // defaultOf is a Desc's Default d as ColumnInfo holds it for a field of type

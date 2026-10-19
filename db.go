@@ -205,8 +205,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 
 // prepare takes a statement through every stage before execution, for run
 // and for SQL(ctx): resolving the relations in its conditions (HasWhere
-// leaves them to the statement), guard, observe, the entity's BeforeUpdate or
-// BeforeDelete hooks, rewrite hooks and their checks, scope, the row cap, and
+// leaves them to the statement), guard, observe, rewrite hooks and their checks, scope, the row cap, and
 // rendering into st.SQL (comment included) and st.Args.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := st.resolve(); err != nil {
@@ -216,9 +215,6 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		return err
 	}
 	db.observe(ctx, st)
-	if err := db.entityHooks(ctx, st); err != nil {
-		return err
-	}
 	if db.hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
@@ -320,35 +316,6 @@ func (db *DB) dryRun(ctx context.Context, st *Statement) (string, []any, error) 
 		return "", nil, err
 	}
 	return st.SQL, st.Args, nil
-}
-
-// mutationHooks returns the BeforeUpdate or BeforeDelete hooks of st's
-// entity, and the stage that names their errors; none for other statements.
-func mutationHooks(st *Statement) ([]func(context.Context, *Statement) error, string) {
-	switch st.Op {
-	case OpUpdate:
-		return st.Entity.beforeUpdate, "before update"
-	case OpDelete:
-		return st.Entity.beforeDelete, "before delete"
-	}
-	return nil, ""
-}
-
-// entityHooks runs st's BeforeUpdate or BeforeDelete hooks, then the guard
-// again: a hook may have added a condition. The hooks change st's slices
-// only by copying or appending past their length, so the query st came from
-// stays as it was.
-func (db *DB) entityHooks(ctx context.Context, st *Statement) error {
-	hooks, stage := mutationHooks(st)
-	if len(hooks) == 0 {
-		return nil
-	}
-	for _, h := range hooks {
-		if err := h(ctx, st); err != nil {
-			return &hookError{st.Entity.Name, stage, err}
-		}
-	}
-	return db.guard(st)
 }
 
 // execute runs a rendered statement through the around hooks.
@@ -591,7 +558,7 @@ func checkParams(d Dialect, st *Statement) error {
 func execWrite(ctx context.Context, db *DB, st *Statement) (result, error) {
 	var res result
 	var err error
-	if hooks, _ := mutationHooks(st); db.hooked() || len(hooks) > 0 {
+	if db.hooked() {
 		err = db.run(ctx, st, nil, &res)
 	} else {
 		err = db.plain(ctx, st, nil, &res)

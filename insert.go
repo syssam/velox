@@ -27,8 +27,7 @@ type InsertQuery[E any] struct {
 //	db.Insert(&inv).Exec(ctx)
 //
 // Exec changes *x: the entity's hooks (Hooks) may change it, Exec fills
-// defaults and the tenant, runs the old BeforeInsert hooks and reads the
-// generated key back, and it leaves those changes in place even when the
+// defaults and the tenant and reads the generated key back, and it leaves those changes in place even when the
 // insert then fails.
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: x.VeloxMeta(), one: (*E)(x), single: true}
@@ -37,8 +36,7 @@ func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 // InsertAll starts an INSERT of every entity in xs, in as few statements as
 // the dialect's parameter limit allows. The entity's hooks (Hooks) run once,
 // over all of xs. Exec fills defaults and the tenant into xs[i], the caller's
-// own slice elements, runs the old BeforeInsert hooks on them, and leaves
-// those changes in place even when the insert then fails.
+// own slice elements, and leaves those changes in place even when the insert then fails.
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: PE(nil).VeloxMeta(), many: xs}
 }
@@ -95,12 +93,11 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // does the rest. An InsertAll of nothing runs nothing.
 //
 // Exec then fills, in each entity, every zero field whose column has Default
-// or DefaultFunc, and every column with an UpdateDefault. On a tenant-scoped entity
+// or DefaultFunc (an UpdateDefault fills on update only). On a tenant-scoped entity
 // it then sets a zero tenant field to the context's tenant, and refuses a
 // field set to another one (ErrTenantMismatch) or, under AllTenants, left at
-// zero (ErrNoTenant). Then the old BeforeInsert hooks run, the tenant is
-// checked again, the validators run and the policy's Insert is asked; every
-// entity is prepared before anything is sent.
+// zero (ErrNoTenant). Then the validators run and the policy's Insert is
+// asked; every entity is prepared before anything is sent.
 //
 // Under WithTenant, an upsert that updates must name the tenant column in
 // OnConflict (ErrTenantUpsert); on MySQL, where any unique key can conflict,
@@ -142,8 +139,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // the error Exec would fail with before sending it; it sends nothing, and
 // returns "" for an InsertAll of nothing. It runs every stage Exec runs
 // before execution: like Exec, it runs the entity's hooks, fills defaults and
-// the tenant into the caller's entities and runs the old BeforeInsert hooks on
-// them, then runs the validators, asks the policy's Insert and runs the
+// the tenant into the caller's entities, then runs the validators, asks the policy's Insert and runs the
 // Rewrite hooks, the scope and rendering. So the
 // hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
 // hook from Statement.DryRun, that the statement will not be sent. Around
@@ -188,7 +184,7 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
 }
 
 // send is Exec's work inside the hooks, their next: it prepares every row
-// (defaults, tenant, the old BeforeInsert hooks, the validators and the
+// (defaults, tenant, the validators and the
 // policy's Insert) and sends the statements. It sets mu.res only when they
 // all succeeded, so that Mutation.Result is 0 after an error whatever order
 // insertOne sets Affected and checks an upsert in.
@@ -251,21 +247,19 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 }
 
 // fillDefaults sets, in *p, every zero field whose column has Default or
-// DefaultFunc, and every column with an UpdateDefault.
+// DefaultFunc. An UpdateDefault fills on update only.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
 		fillDefault(&m.info.Columns[i], m.addr(p, i))
 	}
 }
 
-// fillDefault sets the field that ptr points to as column c's Default,
-// DefaultFunc or UpdateDefault says. It is not generic, so that the reflect.Value
+// fillDefault sets the field that ptr points to as column c's Default or
+// DefaultFunc says. It is not generic, so that the reflect.Value
 // it uses is not compiled into every package that inserts (design §3 rule 7).
 func fillDefault(c *ColumnInfo, ptr any) {
 	v := reflect.ValueOf(ptr).Elem()
 	switch {
-	case c.UpdateDefault != nil:
-		v.Set(reflect.ValueOf(c.UpdateDefault()))
 	case c.HasDefault && v.IsZero():
 		v.Set(defaultValue(c.Default))
 	case c.DefaultFunc != nil && v.IsZero():
@@ -405,29 +399,13 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 }
 
 // prepareRow readies the row at p, of entity in, to be inserted, once its
-// defaults are filled: it fills or checks the tenant column, runs the
-// BeforeInsert hooks and checks the tenant again on what they left. The
-// validators, then the policy's Insert (insertAllowed), run after it. It
-// changes the caller's entity, and the changes stay when the insert then
-// fails.
+// defaults are filled: it fills or checks the tenant column. The validators,
+// then the policy's Insert (insertAllowed), run after it. It changes the
+// caller's entity, and the changes stay when the insert then fails.
 func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
-	var id any
-	var all string
 	if in.Tenant >= 0 {
-		id, all = tenantOf(ctx)
-		if err := fillTenant(in, p, id, all); err != nil {
-			return err
-		}
-	}
-	for _, h := range in.beforeInsert {
-		if err := h(ctx, p); err != nil {
-			return &hookError{in.Name, "before insert", err}
-		}
-	}
-	if in.Tenant >= 0 && len(in.beforeInsert) > 0 {
-		if err := checkRowTenant(in, p, id, all, "a BeforeInsert hook set"); err != nil {
-			return err
-		}
+		id, all := tenantOf(ctx)
+		return fillTenant(in, p, id, all)
 	}
 	return nil
 }
