@@ -252,3 +252,40 @@ func BenchmarkOneRowObserved(b *testing.B) {
 		}
 	}
 }
+
+// TestReplicaOneRowBudget pins routing design §8: on a DB with replicas, a
+// cached one-row read makes no allocation more than on a DB without them
+// (TestOneRowAllocationBudget's 6): the route stage adds one context lookup
+// and a counter's increment.
+func TestReplicaOneRowBudget(t *testing.T) {
+	measure := func(replicas bool) (float64, *velox.FakeExec) {
+		e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}} // the connection the read goes to
+		p := e
+		var opts []velox.Option
+		if replicas {
+			p = &velox.FakeExec{}
+			opts = append(opts, velox.WithReplicas(velox.FakeConn(e), velox.FakeConn(&velox.FakeExec{Rows: [][]any{invoiceRow(1)}})))
+		}
+		db := velox.OpenFake(velox.Postgres, p, opts...)
+		run := func() {
+			if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		run() // fill the render cache
+		allocs := testing.AllocsPerRun(200, run)
+		if replicas && p.Calls != 0 {
+			t.Fatalf("the primary read %d times", p.Calls)
+		}
+		return allocs, e
+	}
+	plain, _ := measure(false)
+	routed, r0 := measure(true)
+	t.Logf("a one-row read makes %.0f allocations with two replicas, %.0f without", routed, plain)
+	if r0.Calls == 0 {
+		t.Fatal("no read reached replica 0")
+	}
+	if routed != plain {
+		t.Errorf("replicas change a cached one-row read's allocations from %.0f to %.0f (routing design §8)", plain, routed)
+	}
+}

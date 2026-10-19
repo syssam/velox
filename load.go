@@ -101,6 +101,20 @@ func keyOf(v any) (any, bool) {
 	return v, true
 }
 
+// pinnedTo returns the DB a query's With loads run on: db, or on a DB with
+// replicas a copy whose reads go to t, the connection the query ran on
+// (Ruling 3). Parents and children are then read from one replica, with one
+// replication lag: children read from a replica further behind could be
+// missing for a parent read from one further ahead.
+func (db *DB) pinnedTo(t target) *DB {
+	if db.rt == nil || db.inTx || t.ex == nil {
+		return db // every read runs on one connection already
+	}
+	p := *db
+	p.pin = t
+	return &p
+}
+
 // loadRelations loads each spec's relation for the owners at ptrs. maxRows is
 // the owner query's MaxRows, which its loads, nested ones too, share; 0 is the
 // DB's cap.

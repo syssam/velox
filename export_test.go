@@ -141,6 +141,14 @@ func (t fakeTx) rollback(ctx context.Context) error {
 	return t.e.RollbackErr
 }
 
+// FakeConn returns a Conn that runs statements on e.
+func FakeConn(e *FakeExec) Conn { return Conn{ex: e} }
+
+// SetReplicaDown puts db's replica i in back-off until until.
+func SetReplicaDown(db *DB, i int, until time.Time) {
+	db.rt.one.replicas[i].downUntil.Store(until.UnixNano())
+}
+
 // OpenFake returns a DB of dialect d that runs statements on e.
 func OpenFake(d Dialect, e *FakeExec, opts ...Option) *DB { return newDB(d, e, opts) }
 

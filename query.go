@@ -313,14 +313,15 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	}
 	var out []E
 	var ran []int // the columns the statement was run with, as the hooks left it
+	var at target // the connection it ran on
 	if q.db.hooked() {
 		a := &allRun[E]{st: st, m: q.meta}
 		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) }, nil)
-		out, ran = a.out, a.st.Columns
+		out, ran, at = a.out, a.st.Columns, a.st.ran
 	} else {
 		a := allRun[E]{st: st, m: q.meta}
 		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) }, nil)
-		out, ran = a.out, a.st.Columns
+		out, ran, at = a.out, a.st.Columns, a.st.ran
 	}
 	if err != nil {
 		return nil, err
@@ -336,7 +337,7 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 		for i := range out {
 			ptrs[i] = unsafe.Pointer(&out[i])
 		}
-		if err := loadRelations(ctx, q.db, q.meta.info, ptrs, q.loads, q.st.MaxRows); err != nil {
+		if err := loadRelations(ctx, q.db.pinnedTo(at), q.meta.info, ptrs, q.loads, q.st.MaxRows); err != nil {
 			return nil, err
 		}
 	}

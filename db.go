@@ -16,9 +16,15 @@ import (
 // that does: generic methods cannot be in an interface, and one concrete type
 // means every function taking a *DB works in a transaction unchanged.
 type DB struct {
-	d     Dialect
-	ex    executor
-	cfg   *config
+	d Dialect
+	// ex runs the statements of a DB without replicas, and of a transaction;
+	// nil on a DB with replicas outside a transaction, whose rt chooses.
+	ex  executor
+	rt  *router // WithReplicas's; nil without replicas
+	cfg *config
+	// pin is, on the DB a query's With loads run on, the connection the
+	// query ran on: their reads go there too (Ruling 3). Zero otherwise.
+	pin   target
 	inTx  bool
 	depth int // savepoint nesting inside a transaction
 	// txDeadline is, in a transaction, its deadline: velox's or the
@@ -39,6 +45,7 @@ type config struct {
 	callers   *callers   // WithCallers; nil: off
 	comment   *commenter // WithSQLComment; nil: off
 	txArounds []TxAround
+	replicas  []Conn // WithReplicas
 }
 
 // Option configures a DB's pipeline.
@@ -113,6 +120,9 @@ func newDB(d Dialect, ex executor, opts []Option) *DB {
 	for _, o := range opts {
 		o(cfg)
 	}
+	if len(cfg.replicas) > 0 {
+		return &DB{d: d, rt: newRouter(d, ex, cfg.replicas), cfg: cfg}
+	}
 	return &DB{d: d, ex: ex, cfg: cfg}
 }
 
@@ -136,7 +146,7 @@ func dbErr(info *EntityInfo, err error) error {
 func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
 
 // plain runs a statement on a DB with no hooks: resolving relations, guard,
-// scope, rendering (the SQL comment included) and execution.
+// scope, rendering (the SQL comment included), routing and execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
@@ -160,15 +170,19 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	if db.cfg.comment != nil {
 		st.SQL += db.cfg.comment.text(st)
 	}
+	t, err := db.route(ctx, st)
+	if err != nil {
+		return err
+	}
 	if !db.timed() {
-		return db.exec(ctx, st, read, res)
+		return db.exec(ctx, st, t, read, res)
 	}
 	tctx, cancel := db.bound(ctx)
 	if cancel == nil {
-		return db.exec(ctx, st, read, res)
+		return db.exec(ctx, st, t, read, res)
 	}
 	defer cancel()
-	if err := db.exec(tctx, st, read, res); err != nil {
+	if err := db.exec(tctx, st, t, read, res); err != nil {
 		if timedOut(tctx) {
 			return errTimeout(st.Entity.Name)
 		}
@@ -177,21 +191,25 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	return nil
 }
 
-// run takes a statement through the pipeline: prepare's stages, then the
-// around hooks wrapping execution, which is sending the statement and
-// reading its rows. read reads them; it is called once per execution (an
-// around hook that retries runs it again) and must not close them: run does,
-// before it returns, on every path. Hooks may keep the statement, and next
-// (which holds read), so both escape; a statement with no hooks of either
-// kind uses plain.
+// run takes a statement through the pipeline: prepare's stages, the route
+// stage, then the around hooks wrapping execution, which is sending the
+// statement and reading its rows. read reads them; it is called once per
+// execution (an around hook that retries runs it again) and must not close
+// them: run does, before it returns, on every path. Hooks may keep the
+// statement, and next (which holds read), so both escape; a statement with
+// no hooks of either kind uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
 	if err := db.prepare(ctx, st); err != nil {
+		return err
+	}
+	t, err := db.route(ctx, st)
+	if err != nil {
 		return err
 	}
 	if db.timed() {
 		if tctx, cancel := db.bound(ctx); cancel != nil {
 			defer cancel()
-			if err := db.execute(tctx, st, read, res); err != nil {
+			if err := db.execute(tctx, st, t, read, res); err != nil {
 				if timedOut(tctx) {
 					return errTimeout(st.Entity.Name)
 				}
@@ -200,7 +218,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 			return nil
 		}
 	}
-	return db.execute(ctx, st, read, res)
+	return db.execute(ctx, st, t, read, res)
 }
 
 // prepare takes a statement through every stage before execution, for run
@@ -304,12 +322,15 @@ func (db *DB) observe(ctx context.Context, st *Statement) {
 	}
 }
 
-// dryRun prepares st, with DryRun set, and returns what run would send, or
-// the error it would fail with before sending: the SQL(ctx) methods' work. It
-// never executes st, so no Around hook runs.
+// dryRun prepares and routes st, with DryRun set, and returns what run would
+// send, or the error it would fail with before sending: the SQL(ctx) methods'
+// work. It never executes st, so no Around hook runs.
 func (db *DB) dryRun(ctx context.Context, st *Statement) (string, []any, error) {
 	st.DryRun = true
 	if err := db.prepare(ctx, st); err != nil {
+		return "", nil, err
+	}
+	if _, err := db.route(ctx, st); err != nil {
 		return "", nil, err
 	}
 	if err := checkParams(db.d, st); err != nil {
@@ -318,10 +339,11 @@ func (db *DB) dryRun(ctx context.Context, st *Statement) (string, []any, error) 
 	return st.SQL, st.Args, nil
 }
 
-// execute runs a rendered statement through the around hooks.
-func (db *DB) execute(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+// execute runs a rendered, routed statement through the around hooks; t is
+// where the route stage sent it.
+func (db *DB) execute(ctx context.Context, st *Statement, t target, read func(rows) error, res *result) error {
 	if len(db.cfg.arounds) == 0 {
-		return db.exec(ctx, st, read, res)
+		return db.exec(ctx, st, t, read, res)
 	}
 	// Reset here as well as in exec: a hook that returns before calling
 	// next must leave the outer hooks no stale Result.
@@ -330,7 +352,7 @@ func (db *DB) execute(ctx context.Context, st *Statement, read func(rows) error,
 	var last error // what the innermost next last returned
 	next := func(ctx context.Context) error {
 		called = true
-		last = db.exec(ctx, st, read, res)
+		last = db.exec(ctx, st, t, read, res)
 		return last
 	}
 	for i := len(db.cfg.arounds) - 1; i >= 0; i-- {
@@ -488,17 +510,19 @@ func (c *countedRows) Next() bool {
 	return true
 }
 
-// exec sends a rendered statement, reads its rows with read and closes them;
-// with a nil read it sends a statement that returns no rows and fills *res.
-// Either way it sets st.Result. Errors from the database, the driver or read
-// name the entity.
-func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, res *result) (err error) {
+// exec sends a rendered statement to t, the connection the route stage
+// chose, reads its rows with read and closes them; with a nil read it sends a
+// statement that returns no rows and fills *res. Either way it sets
+// st.Result, and records t in st.ran. Errors from the database, the driver or
+// read name the entity.
+func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows) error, res *result) (err error) {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db.d, st); err != nil {
 		return err
 	}
+	st.ran = t
 	if read == nil {
-		r, err := db.ex.exec(ctx, st.SQL, st.Args)
+		r, err := t.ex.exec(ctx, st.SQL, st.Args)
 		if err != nil {
 			return dbErr(st.Entity, err)
 		}
@@ -508,7 +532,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, read func(rows) error, re
 		}
 		return nil
 	}
-	r, err := db.ex.query(ctx, st.SQL, st.Args)
+	r, err := t.ex.query(ctx, st.SQL, st.Args)
 	if err != nil {
 		return dbErr(st.Entity, err)
 	}

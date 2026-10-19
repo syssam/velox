@@ -124,7 +124,11 @@ func ended(err error) bool {
 // deadline, Tx's, ends the transaction as ctx's would, even when a TxAround
 // hook passed on a context without it: past it, nothing commits.
 func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo) error {
-	ex, ctl, err := db.ex.begin(ctx, o)
+	primary := db.ex
+	if db.rt != nil {
+		primary = db.rt.one.primary // a transaction runs on the primary
+	}
+	ex, ctl, err := primary.begin(ctx, o)
 	if err != nil {
 		info.end(TxError)
 		return fmt.Errorf("velox: begin: %w", err)
@@ -137,7 +141,7 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: ex, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info}); err != nil {
+	if err := fn(&DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info}); err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
 			info.end(TxError)
@@ -222,7 +226,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: db.ex, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx}); err != nil {
+	if err := fn(&DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx}); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
