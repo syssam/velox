@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgproto3"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
@@ -59,6 +60,45 @@ func connectError(t *testing.T) error {
 	return fmt.Errorf("acquire: %w", err)
 }
 
+// refusedConnectError returns the *pgconn.ConnectError pgx makes when the
+// server answers its startup message with an error, code: a server on a Unix
+// socket in a temporary directory that refuses every connection so.
+func refusedConnectError(t *testing.T, code string) error {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vx") // short: a socket path has a length limit
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	l, err := net.Listen("unix", dir+"/.s.PGSQL.5432")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	go func() {
+		c, err := l.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.Close() }()
+		be := pgproto3.NewBackend(c, c)
+		if _, err := be.ReceiveStartupMessage(); err != nil {
+			return
+		}
+		be.Send(&pgproto3.ErrorResponse{Severity: "FATAL", Code: code, Message: "sorry, too many clients already"})
+		_ = be.Flush()
+	}()
+	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = pgconn.Connect(cctx, "host="+dir+" user=u dbname=db sslmode=disable")
+	var ce *pgconn.ConnectError
+	var pg *pgconn.PgError
+	if !errors.As(err, &ce) || !errors.As(err, &pg) || pg.Code != code {
+		t.Fatalf("connecting to a refusing server returned %T %v, want a *pgconn.ConnectError wrapping PgError %s", err, err, code)
+	}
+	return fmt.Errorf("acquire: %w", err)
+}
+
 // safeToRetry is an error pgx marks as raised before anything was sent.
 type safeToRetry struct{}
 
@@ -96,9 +136,12 @@ func TestFailoverClasses(t *testing.T) {
 		"mysql.ErrInvalidConn":  func(*testing.T) error { return fmt.Errorf("query: %w", mysql.ErrInvalidConn) },
 		"pgconn.SafeToRetry":    func(*testing.T) error { return fmt.Errorf("send: %w", safeToRetry{}) },
 		"a pgconn.ConnectError": connectError,
-		"sql.ErrConnDone":       func(*testing.T) error { return fmt.Errorf("query: %w", sql.ErrConnDone) },
-		"net.ErrClosed":         func(*testing.T) error { return net.ErrClosed },
-		"pgconn.ErrConnClosed":  func(*testing.T) error { return pgconn.ErrConnClosed },
+		"a pgconn.ConnectError wrapping PgError 53300": func(t *testing.T) error {
+			return refusedConnectError(t, "53300")
+		},
+		"sql.ErrConnDone":      func(*testing.T) error { return fmt.Errorf("query: %w", sql.ErrConnDone) },
+		"net.ErrClosed":        func(*testing.T) error { return net.ErrClosed },
+		"pgconn.ErrConnClosed": func(*testing.T) error { return pgconn.ErrConnClosed },
 	}
 	for name, mk := range classes {
 		t.Run(name, func(t *testing.T) {
@@ -125,6 +168,8 @@ func TestFailoverClasses(t *testing.T) {
 func TestNoFailoverOnQueryErrors(t *testing.T) {
 	for _, qerr := range []error{
 		&pgconn.PgError{Code: "42601", Message: "syntax error"},
+		// too many connections, but from a statement, not a connect
+		&pgconn.PgError{Severity: "FATAL", Code: "53300", Message: "too many connections"},
 		&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'a' for key 'p.p_code_uq'"},
 		errors.New("something else"),
 		// a net timeout that is not a dial's: maybe a slow query

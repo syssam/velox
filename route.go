@@ -410,14 +410,17 @@ func failoverable(err error) bool {
 		mysqlInvalidConn(err) {
 		return true
 	}
+	var ce *pgconn.ConnectError
+	if errors.As(err, &ce) {
+		// Whatever the server said while connecting, such as too many
+		// connections (53300) or a failed login: pgx wraps its PgError in
+		// the ConnectError, so this comes before the PgError check.
+		return true
+	}
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) {
 		// admin_shutdown, crash_shutdown, cannot_connect_now
 		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
-	}
-	var ce *pgconn.ConnectError
-	if errors.As(err, &ce) {
-		return true
 	}
 	var ne net.Error
 	if !errors.As(err, &ne) {
