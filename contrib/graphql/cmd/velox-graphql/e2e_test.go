@@ -83,14 +83,21 @@ func (Group) Edges() []schema.Edge {
 // row is set on create only, a key on other rows gets no input at all.
 type Category struct{ schema.Schema }
 
-func (Category) Fields() []schema.Field { return []schema.Field{field.String("title")} }
+// mentor_id is the mentee/mentor pair's key, on the mentee's row: mentor,
+// declared second, owns it, so its where predicates are mentorID….
+func (Category) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("title"),
+		field.Int64("mentor_id").Optional().Immutable().Annotations(graphql.WhereOps(graphql.OpsEquality)),
+	}
+}
 
 func (Category) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.To("children", Category.Type),
 		edge.From("parent", Category.Type).Ref("children").Unique().Immutable(),
 		edge.To("mentee", Category.Type).Unique(),
-		edge.From("mentor", Category.Type).Ref("mentee").Unique().Immutable(),
+		edge.From("mentor", Category.Type).Ref("mentee").Unique().Immutable().Field("mentor_id"),
 		edge.To("twin", Category.Type).Unique().Immutable(),
 	}
 }
@@ -216,12 +223,14 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		// immutable keys, so they have no input.
 		"input CreateCategoryInput {\n  title: String!\n  parentID: ID\n  mentorID: ID\n  twinID: ID\n}\n",
 		"input UpdateCategoryInput {\n  title: String\n}\n",
+		// The key's where predicates are named after the edge that owns it.
+		"  or: [CategoryWhereInput!]\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n}\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in\n%s", want, got)
 		}
 	}
-	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "draft", "Secret", "UserGroup", "type User", "AccountRole"} {
+	for _, absent := range []string{"orgID", "passwordHash", "authorID: Int", "menteeID", "mentorID: Int", "draft", "Secret", "UserGroup", "type User", "AccountRole"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("%q is in\n%s", absent, got)
 		}

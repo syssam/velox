@@ -217,11 +217,14 @@ func (g *graph) whereOf(o *object) error {
 }
 
 // keyEdge is the index in o.ent.Edges of the unique edge that f, a foreign
-// key of o, stands for, and that GraphQL can name: -1 for none.
+// key on o's rows, stands for, and that GraphQL can name: -1 for none. It is
+// the edge that owns the key (OwnsKey). FieldOn cannot tell: on an edge
+// from o to itself both edges of a pair name f on o, and only the owner's
+// target is the row f points to.
 func (g *graph) keyEdge(o *object, f *plugin.Field) int {
 	for i, ed := range o.ent.Edges {
 		t := g.byName[ed.Target]
-		if ed.Unique && ed.Field == f.Name && ed.FieldOn == o.ent.Name && t != nil && t.node && o.eanns[i].Skip&graphql.SkipWhereInput == 0 {
+		if ed.Unique && ed.OwnsKey && ed.Field == f.Name && t != nil && t.node && o.eanns[i].Skip&graphql.SkipWhereInput == 0 {
 			return i
 		}
 	}
