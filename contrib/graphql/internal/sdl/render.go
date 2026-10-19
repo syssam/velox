@@ -63,8 +63,9 @@ type graph struct {
 	byName   map[string]*object // by entity name
 	goEnums  map[string]bool    // the enum types velox-gen declares
 	types    typeNames
-	query    []gqlField // the QueryFields, in entity name order
-	mutation []gqlField // the mutations, in entity name order
+	ents     map[string]*plugin.Entity // every entity, by name, join entities too
+	query    []gqlField                // the QueryFields, in entity name order
+	mutation []gqlField                // the mutations, in entity name order
 }
 
 // object is an entity's type.
@@ -116,7 +117,10 @@ func build(m *plugin.Model) (*graph, error) {
 	if m == nil {
 		return nil, errors.New("no model")
 	}
-	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, types: newTypeNames()}
+	g := &graph{byName: map[string]*object{}, goEnums: map[string]bool{}, types: newTypeNames(), ents: map[string]*plugin.Entity{}}
+	for _, e := range m.Entities {
+		g.ents[e.Name] = e
+	}
 	for _, en := range m.Enums {
 		g.goEnums[en.Type] = true
 	}

@@ -64,6 +64,12 @@ func TestAnnotationMisuse(t *testing.T) {
 		{"UpdateInput(true) on an immutable field", anns{handle: graphql.UpdateInput(true)}, []string{"schema User, field handle", "graphql.UpdateInput", "immutable"}},
 		{"an unknown mutation", anns{user: graphql.Mutations("upsert")}, []string{"schema User", `"upsert"`}},
 		{"create with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipMutationCreateInput}}, []string{"schema User", "create", "SkipMutationCreateInput"}},
+		{"QueryField on a skipped type", anns{user: graphql.Annotation{QueryField: "users", Skip: graphql.SkipType}}, []string{"schema User", "graphql.QueryField", "Skip"}},
+		{"Mutations on a skipped type", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipType}}, []string{"schema User", "graphql.Mutations", "Skip"}},
+		{"OrderField on a field out of the type", anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.OrderField", "cursors"}},
+		{"CreateInput(false) on the tenant", anns{org: graphql.CreateInput(false)}, []string{"schema User, field org_id", "graphql.CreateInput", "tenant"}},
+		{"UpdateInput(false) on the tenant", anns{org: graphql.UpdateInput(false)}, []string{"schema User, field org_id", "graphql.UpdateInput", "tenant"}},
+		{"UpdateInput(true) on the tenant", anns{org: graphql.UpdateInput(true)}, []string{"schema User, field org_id", "graphql.UpdateInput", "tenant"}},
 		{"update with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"update"}, Skip: graphql.SkipMutationUpdateInput}}, []string{"schema User", "update", "SkipMutationUpdateInput"}},
 	} {
 		t.Run(c.name, func(t *testing.T) { renderErr(t, build(c.a), c.wants...) })
@@ -74,6 +80,54 @@ func TestAnnotationMisuse(t *testing.T) {
 	if s, _ := load(t, m); typeOf(s, "Mutation", "createUser") != "User!" {
 		t.Error("no createUser")
 	}
+
+	// OrderField with the order skipped too, on a hidden field: no order, no
+	// cursor, no leak.
+	load(t, build(anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType | graphql.SkipOrderField}}))
+
+	t.Run("CreateInput or UpdateInput on a foreign key", func(t *testing.T) {
+		for _, a := range []graphql.Annotation{graphql.CreateInput(false), graphql.CreateInput(true), graphql.UpdateInput(false), graphql.UpdateInput(true)} {
+			aid := field("author_id", "int64")
+			aid.Annotations = ann(t, a)
+			post := entity("Post", aid)
+			author := edge("author", "M2O", "User")
+			author.Field, author.FieldOn = "author_id", "Post"
+			post.Edges = []*plugin.Edge{author}
+			renderErr(t, model(post, entity("User")), "schema Post, field author_id", "foreign key")
+		}
+	})
+
+	t.Run("a required edge create cannot set", func(t *testing.T) {
+		// Its target is skipped, or is not a Node: createPost could never
+		// give the key.
+		for _, target := range []*plugin.Entity{
+			func() *plugin.Entity { u := entity("User"); u.Annotations = ann(t, graphql.Skip()); return u }(),
+			{Name: "User", Tenant: -1, PrimaryKey: []int{0, 1}, Fields: []*plugin.Field{field("a", "string"), field("b", "string")}},
+		} {
+			post := entity("Post", field("title", "string"))
+			author := edge("author", "M2O", "User")
+			author.Required = true
+			post.Edges = []*plugin.Edge{author}
+			post.Annotations = ann(t, graphql.Mutations(graphql.Create()))
+			renderErr(t, model(post, target), "schema Post, edge author", "required", "createPost")
+			// The user may leave it to a hook.
+			author.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
+			load(t, model(post, target))
+		}
+	})
+
+	t.Run("a key the caller supplies", func(t *testing.T) {
+		code := entity("Country", field("name", "string"))
+		code.Fields[0] = &plugin.Field{Name: "id", GoName: "ID", Type: "string"}
+		code.Annotations = ann(t, graphql.Mutations(graphql.Create()))
+		renderErr(t, model(code), "schema Country", "create", "supplied by the caller", "v1")
+		code.Fields[0].HasDefault = true
+		load(t, model(code))
+		// Update and delete need no new key.
+		code.Fields[0].HasDefault = false
+		code.Annotations = ann(t, graphql.Mutations(graphql.Update(), graphql.Delete()))
+		load(t, model(code))
+	})
 
 	t.Run("QueryField on a join entity", func(t *testing.T) {
 		join := &plugin.Entity{Name: "UserGroup", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},

@@ -342,7 +342,7 @@
     - no `Mutation` type when no entity has mutations.
   - **Input rules:**
     - immutable fields are left out of `UpdateXInput`;
-    - fields with a default or an update default are optional in `CreateXInput`;
+    - fields with a default (Default or DefaultFunc) are optional in `CreateXInput`;
     - a field with `UpdateDefault` and no create-time default is left out of both;
     - `CreateInput(false)`/`UpdateInput(false)` leave a field out;
     - the tenant column and implicit foreign keys are never inputs; their edges stand for them;

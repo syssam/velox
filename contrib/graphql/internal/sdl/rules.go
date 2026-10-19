@@ -57,12 +57,19 @@ func article(kind string) string {
 
 // checkSchema checks the annotation of an entity. A join entity has no
 // type, so nothing that needs one applies to it; a schema whose type is
-// skipped drops all of its surface, so its other annotations are let be.
+// skipped has no root field and no mutation, so asking for one is an error.
 func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 	if err := misplaced(a, onSchema, where); err != nil {
 		return err
 	}
 	if !e.Join {
+		switch {
+		case a.Skip&graphql.SkipType == 0:
+		case a.QueryField != "":
+			return fmt.Errorf("%s: graphql.QueryField on a schema whose type graphql.Skip leaves out", where)
+		case len(a.Mutations) > 0:
+			return fmt.Errorf("%s: graphql.Mutations on a schema whose type graphql.Skip leaves out", where)
+		}
 		return nil
 	}
 	for _, p := range []struct {
@@ -88,15 +95,17 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return err
 	}
 	f := e.Fields[i]
-	var never string // why the field is never an input
+	// The tenant and a foreign key are never inputs, so CreateInput and
+	// UpdateInput say nothing on them, whatever their value; the primary key
+	// is never one either, and CreateInput(true) on it asks for it.
+	var never string
 	switch {
 	case i == e.Tenant:
 		never = "the tenant is never an input: the tenant scope fills it"
-	case len(e.PrimaryKey) == 1 && i == e.PrimaryKey[0]:
-		never = "the primary key is never an input"
 	case fk || f.Implicit != "":
 		never = "a foreign key is never an input: its edge stands for it"
 	}
+	pk := len(e.PrimaryKey) == 1 && i == e.PrimaryKey[0]
 	isTrue := func(p *bool) bool { return p != nil && *p }
 	switch {
 	case len(a.EnumValues) > 0 && f.Type != "enum":
@@ -107,14 +116,18 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.OrderField on a sensitive field: its values would be in the cursors", where)
 	case a.OrderField != "" && f.Type == "json":
 		return fmt.Errorf("%s: graphql.OrderField on a json field, which has no order", where)
+	case a.OrderField != "" && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipOrderField == 0:
+		return fmt.Errorf("%s: graphql.OrderField on a field graphql.Skip leaves out of the type: its values would be in the cursors", where)
 	case a.WhereOps != 0 && f.Sensitive:
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
 	case a.WhereOps != 0 && i == e.Tenant:
 		return fmt.Errorf("%s: graphql.WhereOps on the tenant: the tenant scope filters on it", where)
-	case isTrue(a.CreateInput) && never != "":
-		return fmt.Errorf("%s: graphql.CreateInput(true): %s", where, never)
-	case isTrue(a.UpdateInput) && never != "":
-		return fmt.Errorf("%s: graphql.UpdateInput(true): %s", where, never)
+	case a.CreateInput != nil && never != "":
+		return fmt.Errorf("%s: graphql.CreateInput: %s", where, never)
+	case a.UpdateInput != nil && never != "":
+		return fmt.Errorf("%s: graphql.UpdateInput: %s", where, never)
+	case (isTrue(a.CreateInput) || isTrue(a.UpdateInput)) && pk:
+		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
 	}

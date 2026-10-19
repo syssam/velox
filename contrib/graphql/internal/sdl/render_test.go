@@ -476,7 +476,10 @@ func TestSkip(t *testing.T) {
 		name := field("name", "string")
 		name.Annotations = ann(t, nameAnn)
 		user := entity("User", name, field("email", "string"))
-		user.Annotations = ann(t, userAnn, graphql.QueryField("users"))
+		user.Annotations = ann(t, userAnn)
+		if userAnn.Skip&graphql.SkipType == 0 {
+			user.Annotations = ann(t, userAnn, graphql.QueryField("users"))
+		}
 		posts := edge("posts", "O2M", "Post")
 		posts.Annotations = ann(t, postsAnn)
 		user.Edges = []*plugin.Edge{posts, edge("groups", "M2M", "Group")}

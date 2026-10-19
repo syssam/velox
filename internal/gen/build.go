@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/syssam/velox2/plugin"
 	"github.com/syssam/velox2/schema/load"
 )
 
@@ -273,7 +274,7 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 		// The assoc edge's owner's column, then its target's.
 		c1, c2 := t.ent.Label+"_id", e.Label+"_id"
 		if c1 == c2 {
-			c2 = singular(le.Name) + "_id"
+			c2 = plugin.Singular(le.Name) + "_id"
 		}
 		cols = []string{c1, c2}
 	}
@@ -309,7 +310,7 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 	case !le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "M2M", true
 		ed.Rel.Table = n.ent.Label + "_" + le.Name
-		cols = []string{n.ent.Label + "_id", singular(le.Name) + "_id"}
+		cols = []string{n.ent.Label + "_id", plugin.Singular(le.Name) + "_id"}
 	case le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "O2O", true
 		ed.Rel.Table = n.ent.Table

@@ -380,7 +380,7 @@ func (ClItem) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("tags", ClTag.Type).Ref("links").StorageKey(edge.Table("cl_joins"))}
 }
 
-// ClJoin has the name pascal(singular("cl_joins")).
+// ClJoin has the name pascal(plugin.Singular("cl_joins")).
 type ClJoin struct{ schema.Schema }
 
 func (ClJoin) Annotations() []schema.Annotation {

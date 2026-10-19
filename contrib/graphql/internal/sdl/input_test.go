@@ -56,7 +56,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	creator := edge("creator", "M2O", "User")
 	creator.Immutable = true
 	post.Edges = []*plugin.Edge{author, creator}
-	post.Annotations = ann(t, graphql.Mutations(graphql.Create()))
+	post.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
 
 	like := &plugin.Entity{
 		Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
@@ -86,7 +86,8 @@ func TestInputs(t *testing.T) {
 		{"UpdateUserInput", []string{
 			"name: String", "nickname: String", "clearNickname: Boolean", "role: UserRole", "updatedAt: Time",
 			"secret: String", "views: Int", "hidden: String",
-			"addPostIDs: [ID!]", "removePostIDs: [ID!]", "clearPosts: Boolean",
+			// Post.author_id is required: posts can be added, not removed.
+			"addPostIDs: [ID!]",
 			"addMembershipIDs: [ID!]", "removeMembershipIDs: [ID!]", "clearMemberships: Boolean",
 			"profileID: ID", "clearProfile: Boolean",
 			"addCategoryIDs: [ID!]", "removeCategoryIDs: [ID!]", "clearCategories: Boolean",
@@ -95,6 +96,7 @@ func TestInputs(t *testing.T) {
 		// author_id is the author edge's: authorID, required on create; the
 		// immutable creator edge is set on create only.
 		{"CreatePostInput", []string{"title: String!", "authorID: ID!", "creatorID: ID"}},
+		{"UpdatePostInput", []string{"title: String", "authorID: ID"}},
 		// A composite key's foreign keys are its edges' IDs.
 		{"CreateLikeInput", []string{"day: String!", "userID: ID!"}},
 	} {
@@ -117,6 +119,7 @@ func TestInputs(t *testing.T) {
 	want := []string{
 		"createLike(input: CreateLikeInput!): Like!",
 		"createPost(input: CreatePostInput!): Post!",
+		"updatePost(id: ID!, input: UpdatePostInput!): Post!",
 		"createUser(input: CreateUserInput!): User!",
 		"updateUser(id: ID!, input: UpdateUserInput!): User!",
 		"deleteUser(id: ID!): ID!",
@@ -124,7 +127,7 @@ func TestInputs(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("Mutation:\n got %v\nwant %v", got, want)
 	}
-	for _, absent := range []string{"UpdatePostInput", "UpdateLikeInput", "CreateGroupInput"} {
+	for _, absent := range []string{"UpdateLikeInput", "CreateGroupInput"} {
 		if s.Types[absent] != nil {
 			t.Errorf("%s is declared", absent)
 		}
@@ -175,8 +178,110 @@ func TestInputs(t *testing.T) {
 		u := entity("User", by)
 		u.Annotations = ann(t, graphql.Mutations(graphql.Create()))
 		s, _ := load(t, model(u))
-		if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, []string{"editedBy: String"}) {
+		// Only a Default makes a create field optional: velox fills an
+		// UpdateDefault on update only.
+		if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, []string{"editedBy: String!"}) {
 			t.Errorf("CreateUserInput: %v", got)
 		}
 	})
+}
+
+// An edge's inputs offer only what a write of its foreign key may do, on
+// whichever entity holds the key.
+func TestEdgeInputsFollowTheKey(t *testing.T) {
+	// blog is User and Post, both with create and update, Post.author_id as
+	// key; flags sets the key's flags.
+	blog := func(flags func(f *plugin.Field)) *plugin.Model {
+		aid := field("author_id", "int64")
+		flags(aid)
+		post := entity("Post", aid, field("title", "string"))
+		author := edge("author", "M2O", "User")
+		author.Field, author.FieldOn, author.Inverse, author.Ref = "author_id", "Post", true, "posts"
+		author.Required, author.Immutable = !aid.Nullable, aid.Immutable
+		post.Edges = []*plugin.Edge{author}
+		user := entity("User", field("name", "string"))
+		posts := edge("posts", "O2M", "Post")
+		posts.Field, posts.FieldOn = "author_id", "Post"
+		user.Edges = []*plugin.Edge{posts}
+		for _, e := range []*plugin.Entity{post, user} {
+			e.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
+		}
+		return model(post, user)
+	}
+	for _, c := range []struct {
+		name                   string
+		flags                  func(f *plugin.Field)
+		userCreate, userUpdate []string
+		postCreate, postUpdate []string
+	}{
+		{"nullable", func(f *plugin.Field) { f.Nullable, f.Optional = true, true },
+			[]string{"name: String!", "postIDs: [ID!]"},
+			[]string{"name: String", "addPostIDs: [ID!]", "removePostIDs: [ID!]", "clearPosts: Boolean"},
+			[]string{"title: String!", "authorID: ID"},
+			[]string{"title: String", "authorID: ID", "clearAuthor: Boolean"}},
+		{"required", func(f *plugin.Field) {},
+			[]string{"name: String!", "postIDs: [ID!]"},
+			[]string{"name: String", "addPostIDs: [ID!]"},
+			[]string{"title: String!", "authorID: ID!"},
+			[]string{"title: String", "authorID: ID"}},
+		// The reviewer's example: an immutable author_id moves on no write,
+		// so User's posts edge has no input; Post sets it on create only.
+		{"immutable", func(f *plugin.Field) { f.Immutable = true },
+			[]string{"name: String!"},
+			[]string{"name: String"},
+			[]string{"title: String!", "authorID: ID!"},
+			[]string{"title: String"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, sdl := load(t, blog(c.flags))
+			for typ, want := range map[string][]string{
+				"CreateUserInput": c.userCreate, "UpdateUserInput": c.userUpdate,
+				"CreatePostInput": c.postCreate, "UpdatePostInput": c.postUpdate,
+			} {
+				if got := fieldsOf(s, typ); !slices.Equal(got, want) {
+					t.Errorf("%s:\n got %v\nwant %v\n%s", typ, got, want, sdl)
+				}
+			}
+		})
+	}
+
+	// An O2O whose key the other entity holds: User.profile, with the key
+	// Profile.user_id.
+	o2o := func(flags func(f *plugin.Field)) *plugin.Model {
+		uid := field("user_id", "int64")
+		flags(uid)
+		profile := entity("Profile", uid, field("bio", "string"))
+		owner := edge("user", "O2O", "User")
+		owner.Field, owner.FieldOn, owner.Inverse, owner.Ref = "user_id", "Profile", true, "profile"
+		owner.Required, owner.Immutable = !uid.Nullable, uid.Immutable
+		profile.Edges = []*plugin.Edge{owner}
+		user := entity("User", field("name", "string"))
+		pe := edge("profile", "O2O", "Profile")
+		pe.Field, pe.FieldOn = "user_id", "Profile"
+		user.Edges = []*plugin.Edge{pe}
+		user.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
+		return model(profile, user)
+	}
+	for _, c := range []struct {
+		name           string
+		flags          func(f *plugin.Field)
+		create, update []string
+	}{
+		{"O2O nullable", func(f *plugin.Field) { f.Nullable, f.Optional = true, true },
+			[]string{"name: String!", "profileID: ID"}, []string{"name: String", "profileID: ID", "clearProfile: Boolean"}},
+		{"O2O required", func(f *plugin.Field) {},
+			[]string{"name: String!", "profileID: ID"}, []string{"name: String", "profileID: ID"}},
+		{"O2O immutable", func(f *plugin.Field) { f.Immutable = true },
+			[]string{"name: String!"}, []string{"name: String"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, sdl := load(t, o2o(c.flags))
+			if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, c.create) {
+				t.Errorf("CreateUserInput:\n got %v\nwant %v\n%s", got, c.create, sdl)
+			}
+			if got := fieldsOf(s, "UpdateUserInput"); !slices.Equal(got, c.update) {
+				t.Errorf("UpdateUserInput:\n got %v\nwant %v\n%s", got, c.update, sdl)
+			}
+		})
+	}
 }

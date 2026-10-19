@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/plugin"
 )
 
 // mutationsOf computes o's mutation inputs, CreateXInput and UpdateXInput,
@@ -47,6 +48,12 @@ func (g *graph) mutationsOf(o *object) error {
 		}
 	}
 
+	if create && o.node {
+		pk := e.Fields[e.PrimaryKey[0]]
+		if !pk.AutoID && !pk.HasDefault {
+			return fmt.Errorf("%s: graphql.Mutations lists create, and its key %s is supplied by the caller (no auto ID, no default): v1 does not generate createX for such a schema, as the key is never an input", where, pk.Name)
+		}
+	}
 	if create {
 		in := "Create" + o.name + "Input"
 		fs, err := g.inputFields(o, in, true)
@@ -101,10 +108,13 @@ func (g *graph) mutationsOf(o *object) error {
 //     UpdateInput(true) brings it in;
 //   - the update input has no immutable field or edge;
 //   - on create, a field is required unless it is nullable or has a Default
-//     or an UpdateDefault; a unique edge's ID is required when the edge is;
-//   - on update, every field is optional, and a nullable field or an edge
-//     that is not required can be cleared;
-//   - an edge to a type that is not a Node has no ID and is in neither.
+//     (or DefaultFunc): an UpdateDefault fills on update only; a unique
+//     edge's ID is required when the edge is;
+//   - on update, every field is optional, and a nullable field can be
+//     cleared;
+//   - an edge to a type that is not a Node has no ID and is in neither;
+//   - an edge's inputs follow its foreign key's flags, on whichever entity
+//     holds it (see edgeInputs).
 func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, error) {
 	e := o.ent
 	skip, explicit := graphql.SkipMutationUpdateInput, func(a graphql.Annotation) *bool { return a.UpdateInput }
@@ -134,7 +144,7 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		if err != nil {
 			return nil, err
 		}
-		if create && !f.Nullable && !f.HasDefault && !f.UpdateDefault {
+		if create && !f.Nullable && !f.HasDefault {
 			t += "!"
 		}
 		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, where: where}); err != nil {
@@ -146,44 +156,152 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 			}
 		}
 	}
-	for i, ed := range e.Edges {
-		a, t := o.eanns[i], g.byName[ed.Target]
-		if t == nil || !t.node || a.Skip&skip != 0 || !create && ed.Immutable {
+	for i := range e.Edges {
+		if o.eanns[i].Skip&skip != 0 {
 			continue
 		}
-		where := "schema " + e.Name + ", edge " + ed.Name
-		name, err := o.edgeName(i)
+		add, err := g.edgeInputs(o, i, create)
 		if err != nil {
 			return nil, err
 		}
-		var add []gqlField
-		switch {
-		case ed.Unique && create && ed.Required:
-			add = []gqlField{{name: name + "ID", typ: "ID!"}}
-		case ed.Unique && create:
-			add = []gqlField{{name: name + "ID", typ: "ID"}}
-		case ed.Unique:
-			add = []gqlField{{name: name + "ID", typ: "ID"}}
-			if !ed.Required {
-				add = append(add, gqlField{name: "clear" + upper(name), typ: "Boolean"})
-			}
-		case create:
-			add = []gqlField{{name: singular(name) + "IDs", typ: "[ID!]"}}
-		default:
-			add = []gqlField{
-				{name: "add" + upper(singular(name)) + "IDs", typ: "[ID!]"},
-				{name: "remove" + upper(singular(name)) + "IDs", typ: "[ID!]"},
-				{name: "clear" + upper(name), typ: "Boolean"},
-			}
-		}
 		for _, f := range add {
-			f.where = where
 			if err := fs.add(f); err != nil {
 				return nil, err
 			}
 		}
 	}
 	return fs.list, nil
+}
+
+// edgeInputs are the input fields of o's edge i, on create or on update.
+// An edge stands for a foreign key, and its inputs only offer what a write
+// of that key may do:
+//   - a unique edge whose key is on o's row sets it: <edge>ID, and on update
+//     clear<Edge> when the key is nullable;
+//   - an edge whose key is on the target's rows (O2M, and an O2O whose key
+//     the other entity holds) re-points those rows: <edge>IDs, or
+//     add/remove/clear on update; an O2O sets <edge>ID, and clears it on
+//     update. A required (non-null) key cannot be cleared, so remove and
+//     clear are left out; an immutable key cannot be moved, so the edge has
+//     no input at all, on create too, where it would re-point existing rows;
+//   - an immutable key on o's row is set on create only;
+//   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
+//   - an edge to a type that is not a Node has no ID and no input. When that
+//     edge is required on create, createX could never succeed: an error.
+func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
+	ed := o.ent.Edges[i]
+	t := g.byName[ed.Target]
+	where := "schema " + o.ent.Name + ", edge " + ed.Name
+	if t == nil || !t.node {
+		if create && ed.Unique && ed.Required {
+			why := "is skipped"
+			if t != nil {
+				why = "is not a Node"
+			}
+			return nil, fmt.Errorf("%s: a required edge whose target %s %s: create%s could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput) if a hook sets it", where, ed.Target, why, o.name)
+		}
+		return nil, nil
+	}
+	name, err := o.edgeName(i)
+	if err != nil {
+		return nil, err
+	}
+	fk := g.keyField(ed)
+	immutable := ed.Immutable || fk != nil && fk.Immutable
+	nullable := fk == nil || fk.Nullable
+	own := ownKey(o.ent, ed)
+	one, many := upper(plugin.Singular(name)), plugin.Singular(name)
+	var out []gqlField
+	switch {
+	case ed.Kind == "M2M":
+		if immutable && !create {
+			break
+		}
+		if create {
+			out = []gqlField{{name: many + "IDs", typ: "[ID!]"}}
+		} else {
+			out = []gqlField{{name: "add" + one + "IDs", typ: "[ID!]"}, {name: "remove" + one + "IDs", typ: "[ID!]"}, {name: "clear" + upper(name), typ: "Boolean"}}
+		}
+	case ed.Unique && own:
+		switch {
+		case create && ed.Required:
+			out = []gqlField{{name: name + "ID", typ: "ID!"}}
+		case create:
+			out = []gqlField{{name: name + "ID", typ: "ID"}}
+		case immutable:
+		default:
+			out = []gqlField{{name: name + "ID", typ: "ID"}}
+			if !ed.Required && nullable {
+				out = append(out, gqlField{name: "clear" + upper(name), typ: "Boolean"})
+			}
+		}
+	case immutable: // the key is on the target's rows, and cannot move
+	case ed.Unique:
+		typ := "ID"
+		if create && ed.Required {
+			typ = "ID!"
+		}
+		out = []gqlField{{name: name + "ID", typ: typ}}
+		if !create && nullable {
+			out = append(out, gqlField{name: "clear" + upper(name), typ: "Boolean"})
+		}
+	case create:
+		out = []gqlField{{name: many + "IDs", typ: "[ID!]"}}
+	default:
+		out = []gqlField{{name: "add" + one + "IDs", typ: "[ID!]"}}
+		if nullable {
+			out = append(out, gqlField{name: "remove" + one + "IDs", typ: "[ID!]"}, gqlField{name: "clear" + upper(name), typ: "Boolean"})
+		}
+	}
+	for j := range out {
+		out[j].where = where
+	}
+	return out, nil
+}
+
+// keyField is the foreign-key field ed stands for, on whichever entity holds
+// it; nil for an M2M edge, or a field the model does not have.
+func (g *graph) keyField(ed *plugin.Edge) *plugin.Field {
+	if ed.Field == "" {
+		return nil
+	}
+	h := g.ents[ed.FieldOn]
+	if h == nil {
+		return nil
+	}
+	for _, f := range h.Fields {
+		if f.Name == ed.Field {
+			return f
+		}
+	}
+	return nil
+}
+
+// ownKey reports whether e's own rows hold the foreign key of its edge ed,
+// as velox-gen decides it: an M2O edge's, an inverse O2O edge's, and a
+// bidirectional O2O edge's (one to e itself with no inverse edge naming it).
+// FieldOn alone cannot tell for an edge from e to e.
+func ownKey(e *plugin.Entity, ed *plugin.Edge) bool {
+	switch {
+	case ed.Field == "": // a model without its key fields: the kind tells
+		return ed.Kind == "M2O" || ed.Kind == "O2O" && ed.Inverse
+	case ed.FieldOn != e.Name:
+		return false
+	case ed.Target != e.Name:
+		return true
+	case ed.Kind == "M2O":
+		return true
+	case ed.Kind == "O2O" && ed.Inverse:
+		return true
+	case ed.Kind == "O2O":
+		for _, x := range e.Edges {
+			if x.Inverse && x.Ref == ed.Name {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // inputDesc is the description of o's create or update input.

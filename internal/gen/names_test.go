@@ -13,11 +13,6 @@ func TestNames(t *testing.T) {
 			t.Errorf("plural(snake(%q)) = %q, want %q", in, got, want)
 		}
 	}
-	for in, want := range map[string]string{"friends": "friend", "categories": "category", "boxes": "box", "matches": "match", "following": "following"} {
-		if got := singular(in); got != want {
-			t.Errorf("singular(%q) = %q, want %q", in, got, want)
-		}
-	}
 	// ent's snake's own outputs (entc/gen/func.go, run as is).
 	for in, want := range map[string]string{
 		"User": "user", "Username": "username", "FullName": "full_name", "HTTPCode": "http_code",

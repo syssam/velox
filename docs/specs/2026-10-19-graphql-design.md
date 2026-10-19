@@ -195,7 +195,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
 
 #### Mutations
 - **Create:** `createX(input: CreateXInput!): X!`.
-  - Every field not marked out of the create input. Fields with a default are optional.
+  - Every field not marked out of the create input. Fields with a Default or DefaultFunc are optional.
   - `<edge>ID: ID` for a unique edge, and `<edge>IDs: [ID!]` for a to-many edge.
 - **Update:** `updateX(id: ID!, input: UpdateXInput!): X!`.
   - Every field optional. Immutable fields are left out.

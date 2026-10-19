@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/syssam/velox2/plugin"
 	"github.com/syssam/velox2/schema/load"
 )
 
@@ -694,7 +695,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	}
 	j := l.joins[ed.Rel.Table]
 	if j == nil {
-		name := pascal(singular(ed.Rel.Table))
+		name := pascal(plugin.Singular(ed.Rel.Table))
 		if !ident(name) {
 			s.fail(where, "join table %s has no Go name for its entity", ed.Rel.Table)
 			name = "Join"

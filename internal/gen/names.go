@@ -74,20 +74,5 @@ func plural(s string) string {
 	return s + "s"
 }
 
-// singular inverts plural: categories → category, boxes → box, friends →
-// friend. A word that does not end in "s" is returned unchanged.
-func singular(s string) string {
-	switch {
-	case strings.HasSuffix(s, "ies") && len(s) > 3:
-		return s[:len(s)-3] + "y"
-	case strings.HasSuffix(s, "ses"), strings.HasSuffix(s, "xes"), strings.HasSuffix(s, "zes"),
-		strings.HasSuffix(s, "ches"), strings.HasSuffix(s, "shes"):
-		return s[:len(s)-2]
-	case strings.HasSuffix(s, "s") && len(s) > 1:
-		return s[:len(s)-1]
-	}
-	return s
-}
-
 // ident reports whether s can name a Go declaration.
 func ident(s string) bool { return token.IsIdentifier(s) && !token.IsKeyword(s) }

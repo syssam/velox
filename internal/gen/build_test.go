@@ -645,7 +645,7 @@ func (immutableField) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", immutableField.Type).Unique().Field("parent_id")}
 }
 
-// loop's edge "loops" names its second join column, singular("loops")_id,
+// loop's edge "loops" names its second join column, Singular("loops")_id,
 // after the schema itself: loop_id twice.
 type loop struct{ schema.Schema }
 
