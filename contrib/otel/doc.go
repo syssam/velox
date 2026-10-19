@@ -39,12 +39,18 @@
 // transaction's duration with the outcome rollback, and goes on: the adapter
 // never recovers one. runtime.Goexit is reported the same way.
 //
+// A statement's span says where it ran: velox.route.replica (whether a
+// replica ran it), velox.route.shard on a sharded DB, and velox.route.fallback
+// when a replica failed and the primary ran the read.
+//
 // The metrics are three histograms: db.client.operation.duration (seconds)
 // and db.client.response.returned_rows (reads that succeeded) per
-// statement, and velox.tx.duration (seconds) per transaction. Their attributes are bounded:
-// the database system, operation, table, entity and error type for a
-// statement, and the outcome, read-only flag and whether it retried for a
-// transaction. Tags, the tenant, the SQL text and the call site are on spans
+// statement, and velox.tx.duration (seconds) per transaction; and a counter,
+// velox.route.fallbacks, of the reads that fell over to the primary. Their
+// attributes are bounded: the database system, operation, table, entity,
+// error type and, on a sharded DB, shard for a statement, and the outcome,
+// read-only flag and whether it retried for a transaction; the fallback
+// counter has the shard only. Tags, the tenant, the SQL text and the call site are on spans
 // only; the fingerprint is added to the statement metrics only with
 // Config.MetricFingerprint.
 //

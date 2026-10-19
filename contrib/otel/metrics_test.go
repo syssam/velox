@@ -319,3 +319,96 @@ func TestTxDurationMetric(t *testing.T) {
 		}
 	}
 }
+
+// TestShardedMetrics: a sharded DB's statement metrics carry the shard, and
+// an unsharded DB's do not.
+func TestShardedMetrics(t *testing.T) {
+	a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+	db, _, r := shardedTraced(t, map[string]*fakeDB{"a": a1, "b": b1})
+	for _, n := range []int64{1, 2, 2} {
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := map[string]uint64{}
+	for _, dp := range points(t, r, "db.client.operation.duration", "s", wantDurationBounds) {
+		sh, ok := dp.Attributes.Value("velox.route.shard")
+		if !ok || !slices.Equal(keys(dp.Attributes), slices.Insert(slices.Clone(statementKeys), 4, "velox.route.shard")) {
+			t.Errorf("attributes %v", dp.Attributes.ToSlice())
+		}
+		got[sh.AsString()] += dp.Count
+	}
+	if got["a"] != 1 || got["b"] != 2 || len(got) != 2 {
+		t.Errorf("durations by shard %v", got)
+	}
+	for _, dp := range intPoints(t, r, "db.client.response.returned_rows", "{row}", wantRowBounds) {
+		if _, ok := dp.Attributes.Value("velox.route.shard"); !ok {
+			t.Errorf("returned_rows attributes %v", dp.Attributes.ToSlice())
+		}
+	}
+}
+
+// fallbackPoints returns the points of the counter velox.route.fallbacks.
+func fallbackPoints(t *testing.T, r *sdkmetric.ManualReader) []metricdata.DataPoint[int64] {
+	t.Helper()
+	m, ok := collect(t, r)["velox.route.fallbacks"]
+	if !ok {
+		return nil
+	}
+	if m.Unit != "{fallback}" {
+		t.Errorf("unit %q", m.Unit)
+	}
+	sum, ok := m.Data.(metricdata.Sum[int64])
+	if !ok || !sum.IsMonotonic {
+		t.Fatalf("velox.route.fallbacks is a %T, monotonic %v", m.Data, ok && sum.IsMonotonic)
+	}
+	return sum.DataPoints
+}
+
+func TestFallbackCounter(t *testing.T) {
+	p, rep := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{errs: badConn(), rows: [][]driver.Value{invoiceRow(1)}}
+	db, r := metered(t, p, veloxotel.Config{}, velox.WithReplicas(velox.SQLConn(rep.open())))
+	if pts := fallbackPoints(t, r); len(pts) != 0 {
+		t.Fatalf("points before any fallback: %v", pts)
+	}
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	pts := fallbackPoints(t, r)
+	if len(pts) != 1 || pts[0].Value != 1 || pts[0].Attributes.Len() != 0 {
+		t.Fatalf("points %v, want one of 1 with no attributes (unsharded)", pts)
+	}
+	// A read the replica serves does not count.
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if pts := fallbackPoints(t, r); len(pts) != 1 || pts[0].Value != 1 {
+		t.Errorf("points after a replica read %v", pts)
+	}
+}
+
+// TestFallbackCounterShard: a sharded fallback counts under its shard.
+func TestFallbackCounterShard(t *testing.T) {
+	rep := &fakeDB{errs: badConn()}
+	pa, pb := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+	r := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
+	db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+		"a": {Primary: velox.SQLConn(pa.open()), Replicas: []velox.Conn{velox.SQLConn(rep.open())}},
+		"b": {Primary: velox.SQLConn(pb.open())},
+	}, append(veloxotel.Options(veloxotel.Config{MeterProvider: mp}),
+		velox.WithShardFor(shardOf))...)
+	for _, n := range []int64{1, 2} {
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tenant(n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pts := fallbackPoints(t, r)
+	if len(pts) != 1 || pts[0].Value != 1 {
+		t.Fatalf("points %v", pts)
+	}
+	if sh, ok := pts[0].Attributes.Value("velox.route.shard"); !ok || sh.AsString() != "a" || pts[0].Attributes.Len() != 1 {
+		t.Errorf("attributes %v", pts[0].Attributes.ToSlice())
+	}
+}

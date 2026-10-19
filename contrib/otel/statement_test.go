@@ -5,12 +5,14 @@ import (
 	"database/sql/driver"
 	"errors"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -438,4 +440,124 @@ func TestIterPanicEndsTheSpan(t *testing.T) {
 	if s.Status.Code != codes.Error || s.Status.Description != "panic" {
 		t.Errorf("status %v", s.Status)
 	}
+}
+
+// shardOf maps the tenants 1 and 2 to the shards "a" and "b".
+func shardOf(_ context.Context, tenant any) (string, error) {
+	if tenant == int64(1) {
+		return "a", nil
+	}
+	return "b", nil
+}
+
+// tenant returns a context for the org with id n, which shardOf maps to a shard.
+func tenant(n int64) context.Context { return velox.WithTenant(context.Background(), n) }
+
+// shardedTraced returns a DB over shards "a" and "b" traced and measured.
+func shardedTraced(t *testing.T, shards map[string]*fakeDB) (*velox.DB, *tracetest.InMemoryExporter, *sdkmetric.ManualReader) {
+	t.Helper()
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	r := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+	t.Cleanup(func() {
+		_ = tp.Shutdown(context.Background())
+		_ = mp.Shutdown(context.Background())
+	})
+	m := map[string]velox.Shard{}
+	for name, f := range shards {
+		m[name] = velox.Shard{Primary: velox.SQLConn(f.open())}
+	}
+	opts := append(veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp}),
+		velox.WithShardFor(shardOf))
+	return velox.OpenShards(velox.Postgres, m, opts...), exp, r
+}
+
+// badConn is the errors a replica returns to fail every attempt
+// database/sql makes (it retries driver.ErrBadConn), so that velox falls over.
+func badConn() []error {
+	return []error{driver.ErrBadConn, driver.ErrBadConn, driver.ErrBadConn}
+}
+
+// TestRouteAttributes: every span says whether a replica ran it; a shard and
+// a fallback are said only when there are any.
+func TestRouteAttributes(t *testing.T) {
+	read := func(c context.Context, db *velox.DB) {
+		t.Helper()
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	absent := func(t *testing.T, a map[attribute.Key]attribute.Value, ks ...attribute.Key) {
+		t.Helper()
+		for _, k := range ks {
+			if _, ok := a[k]; ok {
+				t.Errorf("unexpected %s", k)
+			}
+		}
+	}
+	t.Run("unrouted", func(t *testing.T) {
+		db, exp, _ := traced(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, veloxotel.Config{})
+		read(ctx, db)
+		a := attrs(only(t, exp))
+		if v, ok := a["velox.route.replica"]; !ok || v != attribute.BoolValue(false) {
+			t.Errorf("velox.route.replica = %v", v.String())
+		}
+		absent(t, a, "velox.route.shard", "velox.route.fallback")
+	})
+	t.Run("replica", func(t *testing.T) {
+		p, r := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+		db, exp, _ := traced(t, p, veloxotel.Config{}, velox.WithReplicas(velox.SQLConn(r.open())))
+		read(ctx, db)
+		a := attrs(only(t, exp))
+		if a["velox.route.replica"] != attribute.BoolValue(true) {
+			t.Errorf("velox.route.replica = %v", a["velox.route.replica"].String())
+		}
+		absent(t, a, "velox.route.shard", "velox.route.fallback")
+		if len(p.log) != 0 || len(r.log) != 1 {
+			t.Errorf("primary %d calls, replica %d", len(p.log), len(r.log))
+		}
+	})
+	t.Run("primary read", func(t *testing.T) {
+		p, r := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+		db, exp, _ := traced(t, p, veloxotel.Config{}, velox.WithReplicas(velox.SQLConn(r.open())))
+		read(velox.Primary(ctx), db)
+		a := attrs(only(t, exp))
+		if a["velox.route.replica"] != attribute.BoolValue(false) {
+			t.Errorf("velox.route.replica = %v", a["velox.route.replica"].String())
+		}
+		absent(t, a, "velox.route.shard", "velox.route.fallback")
+	})
+	t.Run("fallback", func(t *testing.T) {
+		p, r := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{errs: badConn()}
+		db, exp, _ := traced(t, p, veloxotel.Config{}, velox.WithReplicas(velox.SQLConn(r.open())))
+		read(ctx, db)
+		s := only(t, exp)
+		a := attrs(s)
+		if a["velox.route.replica"] != attribute.BoolValue(false) || a["velox.route.fallback"] != attribute.BoolValue(true) {
+			t.Errorf("replica = %v, fallback = %v", a["velox.route.replica"].String(), a["velox.route.fallback"].String())
+		}
+		absent(t, a, "velox.route.shard")
+		if s.Status.Code != codes.Unset || len(p.log) != 1 {
+			t.Errorf("status %v, primary %d calls", s.Status, len(p.log))
+		}
+	})
+	t.Run("shard", func(t *testing.T) {
+		a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+		db, exp, _ := shardedTraced(t, map[string]*fakeDB{"a": a1, "b": b1})
+		read(tenant(2), db)
+		read(velox.OnShard(velox.AllTenants(context.Background(), "otel tests"), "a"), db)
+		var got []string
+		for _, s := range exp.GetSpans() {
+			a := attrs(s)
+			got = append(got, a["velox.route.shard"].AsString())
+			if a["velox.route.replica"] != attribute.BoolValue(false) {
+				t.Errorf("velox.route.replica = %v", a["velox.route.replica"].String())
+			}
+			absent(t, a, "velox.route.fallback")
+		}
+		if !slices.Equal(got, []string{"b", "a"}) {
+			t.Errorf("shards %q", got)
+		}
+	})
 }

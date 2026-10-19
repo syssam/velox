@@ -30,6 +30,10 @@ const (
 	attrTenantBypass = "velox.tenant_bypass"
 	attrPolicyBypass = "velox.policy_bypass"
 
+	attrRouteShard    = "velox.route.shard"    // only on a sharded DB
+	attrRouteReplica  = "velox.route.replica"  // whether a replica ran the statement
+	attrRouteFallback = "velox.route.fallback" // only when a replica failed and the primary ran it
+
 	attrTxIsolation = "velox.tx.isolation"
 	attrTxReadOnly  = "velox.tx.read_only"
 	attrTxAttempts  = "velox.tx.attempts"
@@ -45,6 +49,7 @@ const (
 	metricDuration     = "db.client.operation.duration"
 	metricReturnedRows = "db.client.response.returned_rows"
 	metricTxDuration   = "velox.tx.duration"
+	metricFallbacks    = "velox.route.fallbacks"
 )
 
 // dbSystem is db.system.name's value for d.

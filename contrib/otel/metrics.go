@@ -33,6 +33,10 @@ func (a *adapter) instruments(m metric.Meter) {
 		metric.WithDescription("Duration of velox transactions, every attempt and the commit included."),
 		metric.WithUnit("s"), metric.WithExplicitBucketBoundaries(durationBounds...))
 	handle(err)
+	a.fallbacks, err = m.Int64Counter(metricFallbacks,
+		metric.WithDescription("Reads that fell over from a failed replica to the primary."),
+		metric.WithUnit("{fallback}"))
+	handle(err)
 }
 
 func handle(err error) {
@@ -46,13 +50,16 @@ func handle(err error) {
 // tenant, SQL or call site, and the fingerprint only with
 // Config.MetricFingerprint.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error) {
-	kv := make([]attribute.KeyValue, 0, 6)
+	kv := make([]attribute.KeyValue, 0, 7)
 	kv = append(kv,
 		attribute.String(attrDBSystem, dbSystem(st.Dialect)),
 		attribute.String(attrDBOperation, operation(st)),
 		attribute.String(attrDBCollection, collection(st)),
 		attribute.String(attrEntity, st.Entity.Name),
 	)
+	if st.Route.Shard != "" {
+		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
+	}
 	if err != nil {
 		kv = append(kv, attribute.String(attrErrorType, errorType(ctx, err)))
 	}
@@ -61,7 +68,18 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float
 	}
 	set := metric.WithAttributeSet(attribute.NewSet(kv...))
 	a.duration.Record(ctx, seconds, set)
+	if st.Route.Fallback {
+		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
+	}
 	if st.Op == velox.OpSelect && err == nil {
 		a.returned.Record(ctx, st.Result.Rows, set)
 	}
+}
+
+// shardSet is the attributes of a fallback count: the shard, when there is one.
+func shardSet(shard string) metric.AddOption {
+	if shard == "" {
+		return metric.WithAttributeSet(attribute.NewSet())
+	}
+	return metric.WithAttributes(attribute.String(attrRouteShard, shard))
 }

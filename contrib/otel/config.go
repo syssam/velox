@@ -61,6 +61,7 @@ type adapter struct {
 	duration   metric.Float64Histogram // db.client.operation.duration, s
 	returned   metric.Int64Histogram   // db.client.response.returned_rows, {row}
 	txDuration metric.Float64Histogram // velox.tx.duration, s
+	fallbacks  metric.Int64Counter     // velox.route.fallbacks, {fallback}
 }
 
 func newAdapter(cfg Config) *adapter {

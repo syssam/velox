@@ -39,14 +39,18 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	start := time.Now()
 	err := next(sctx)
 	seconds := time.Since(start).Seconds()
+	// The route is read after next returns: a fallback happens during it.
+	var buf [4]attribute.KeyValue
+	kv := routeAttributes(buf[:0], st)
 	switch st.Op {
 	case velox.OpSelect:
-		span.SetAttributes(attribute.Int64(attrReturnedRows, st.Result.Rows))
+		kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
 	default:
 		if st.Result.Affected >= 0 {
-			span.SetAttributes(attribute.Int64(attrAffectedRows, st.Result.Affected))
+			kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
 		}
 	}
+	span.SetAttributes(kv...)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		span.SetAttributes(attribute.String(attrErrorType, errorType(ctx, err)))
@@ -56,6 +60,20 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	span.End()
 	a.record(sctx, st, seconds, err)
 	return err
+}
+
+// routeAttributes appends to kv the span attributes of where st ran: the
+// shard when there is one, whether a replica ran it, and a fallback when
+// there was one.
+func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
+	if st.Route.Shard != "" {
+		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
+	}
+	kv = append(kv, attribute.Bool(attrRouteReplica, st.Route.Replica >= 0))
+	if st.Route.Fallback {
+		kv = append(kv, attribute.Bool(attrRouteFallback, true))
+	}
+	return kv
 }
 
 // attributes are a statement's span attributes known before it runs.
