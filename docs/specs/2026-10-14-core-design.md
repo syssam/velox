@@ -823,3 +823,30 @@ The service binary and the link memory now grow with N (23.6 MB at N=500, 14.5
 MB at N=250, 9.1 MB at N=100), which the per-domain layout did not; §3 rules 2
 and 5 describe the old layout. The CI thresholds for N=500 were re-baselined
 from these runs.
+
+**Note, 2026-10-19: a service's binary is independent of N again.** The growth
+above had one cause. A Desc listed each relation with `EdgeTo[T]`, which kept
+a closure that called T's `VeloxMeta`, so linking an entity linked every
+entity reachable through relations; every schema has an inverse edge, so the
+500 schemas are one connected component. Since this date `EdgeTo` carries no
+target (it keeps the holder types, which are type descriptors only). The
+target comes from where the relation is used: `Rel[E, T]`'s `spec`, `Where`,
+`Has` and `HasWhere` put `T`'s metadata getter in the load or the condition,
+and `velox.CheckRelation(gen.Users.Posts)` resolves one relation, which
+`velox-gen verify` calls for every relation (`CheckEntity` no longer resolves
+the relations of generated code). `EdgeThrough` keeps its join entity's
+getter; a join entity has no relations of its own, so that is one hop and does
+not depend on N. Measured the same way, N=500, S=100, three runs (the largest
+of each):
+
+| | One generated package, before (2026-10-16) | After |
+|---|---|---|
+| Cold build | 29.4 s | 25.3 s |
+| Rebuild after a schema edit | 27.1 s | 22.4 s |
+| One service's binary | 23.6 MB (9.1 MB at N=100) | 5.66 MB (5.66 MB at N=100) |
+| Linker peak memory | 404 MB | 279 MB (185 MB at N=100) |
+
+The binary is flat. The linker's peak still grows with N (185 MB at N=100,
+279 MB at N=500): it reads the whole `gen` package's object file, though it
+keeps only what the service reaches. The CI thresholds for N=500 were
+re-baselined from the 2026-10-19 runs.

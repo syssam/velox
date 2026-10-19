@@ -1,9 +1,9 @@
 {
   "500": {
-    "_measured": "2026-10-16 on darwin/arm64, Apple M3 Max (14 cores), n=500 schemas in one generated gen package, s=100 services, three runs on an idle machine (1-minute load average before each run: 3.25, 3.75, 3.94). Cold build 29.4, 28.8, 28.5 s; schema edit + regenerate + rebuild 27.1, 27.1, 26.5 s; service binary 23.61 MB in all three; link peak 403.5, 400.6, 400.0 MB. The largest of each: cold 29.43 s, schema edit 27.14 s, service 23.61 MB, link 403.5 MB. Times are 4x (CI runners have fewer, slower cores; recalibrate from the first GitHub run), sizes and memory 2x (they barely depend on the machine)",
-    "cold_build_s": 117.7,
-    "schema_edit_rebuild_s": 108.6,
-    "service_binary_mb": 47.22,
-    "link_peak_mb": 807.1
+    "_measured": "2026-10-19 on darwin/arm64, Apple M3 Max (14 cores), n=500 schemas in one generated gen package, s=100 services, three runs after relations stopped naming their target's metadata in the Desc (the use site names it). 1-minute load average before each run: 2.57, 6.00, 11.37 (only the first was under 4: the machine was busy with other work for the 30 minutes the harness waited, so runs 2 and 3 are recorded at that load and the times are, if anything, high). Cold build 23.7, 22.7, 25.3 s; schema edit + regenerate + rebuild 20.2, 20.6, 22.4 s; service binary 5.66 MB in all three (and at n=100); link peak 278.6, 273.7, 279.3 MB. The largest of each: cold 25.27 s, schema edit 22.44 s, service 5.66 MB, link 279.3 MB. Times are 4x (CI runners have fewer, slower cores; recalibrate from the first GitHub run), sizes and memory 2x (they barely depend on the machine)",
+    "cold_build_s": 101.1,
+    "schema_edit_rebuild_s": 89.8,
+    "service_binary_mb": 11.33,
+    "link_peak_mb": 558.6
   }
 }
