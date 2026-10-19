@@ -81,7 +81,7 @@ type Route struct {
 ## 4. Failover
 
 A read sent to a replica that fails before any row was returned falls over:
-- **Which errors count:** a connection or send error, meaning `driver.ErrBadConn`, a `net.Error`, a pgx connect error, or a closed connection.
+- **Which errors count:** a connection or send error, meaning `driver.ErrBadConn`, a `net.Error`, a pgx connect error, a MySQL error that is the server refusing or ending the connection (1040, 1045, 1053, 1129, 1130, 1203, 1226, 1927), or a closed connection.
 - **What happens:** the read is retried once on the primary, and `Route.Fallback` is set. The replica is skipped for `WithReplicaBackoff(d)`, 5 s by default, and then tried again.
 
 Nothing else falls over:

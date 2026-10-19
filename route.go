@@ -605,6 +605,8 @@ func (db *DB) fallBack(st *Statement, t target) target {
 // context before asking (Ruling 5), and context.DeadlineExceeded, itself a
 // net.Error, is ruled out here too. A net.Error that is a timeout counts only
 // from a dial: a read that timed out may be a slow query, not a dead replica.
+// A MySQL error that is the server refusing or ending the connection counts
+// (mysqlConnectError), as a pgx ConnectError does.
 func failoverable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
@@ -631,12 +633,30 @@ func failoverable(err error) bool {
 		// admin_shutdown, crash_shutdown, cannot_connect_now
 		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
 	}
+	if n, _, ok := mysqlError(err); ok {
+		return mysqlConnectError(n)
+	}
 	var ne net.Error
 	if !errors.As(err, &ne) {
 		return false
 	}
 	var op *net.OpError
 	return !ne.Timeout() || errors.As(err, &op) && op.Op == "dial"
+}
+
+// mysqlConnectError reports whether MySQL error number n is the server
+// refusing or ending a connection, as PostgreSQL's connect errors are: the
+// way the server says that it cannot take the client now, not a fault of the
+// statement. The numbers are too many connections (1040), the user's
+// connection limits (1203, 1226), access denied (1045), host blocked (1129),
+// host not allowed (1130), shutdown in progress (1053) and connection killed
+// (1927).
+func mysqlConnectError(n int) bool {
+	switch n {
+	case 1040, 1203, 1226, 1045, 1129, 1130, 1053, 1927:
+		return true
+	}
+	return false
 }
 
 // mysqlInvalidConn reports whether err's tree holds go-sql-driver/mysql's

@@ -2,13 +2,15 @@
 // and MySQL when VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name them
 // (scripts/ci-local.sh starts both and sets the variables). The routing tests
 // also make databases beside the CI one, and MySQL needs a root DSN for that:
-// VELOX_TEST_MYSQL_ADMIN.
+// VELOX_TEST_MYSQL_ADMIN. With CI=true, a missing variable fails the run
+// instead of skipping its tests.
 package itest
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -24,6 +26,25 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
 )
+
+// TestMain refuses to run the itests on a CI runner (CI=true) that was not
+// given every database: a missing variable there would skip the PostgreSQL
+// and MySQL tests without a failure.
+func TestMain(m *testing.M) {
+	if os.Getenv("CI") == "true" {
+		var missing []string
+		for _, v := range []string{"VELOX_TEST_POSTGRES", "VELOX_TEST_MYSQL", "VELOX_TEST_MYSQL_ADMIN"} {
+			if os.Getenv(v) == "" {
+				missing = append(missing, v)
+			}
+		}
+		if len(missing) > 0 {
+			fmt.Fprintf(os.Stderr, "itest: CI=true but %s unset: the PostgreSQL and MySQL tests would be skipped\n", strings.Join(missing, ", "))
+			os.Exit(1)
+		}
+	}
+	os.Exit(m.Run())
+}
 
 var (
 	ctx = velox.AllTenants(context.Background(), "velox tests")

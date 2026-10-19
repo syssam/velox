@@ -112,6 +112,13 @@ func (netTimeout) Error() string   { return "read: i/o timeout" }
 func (netTimeout) Timeout() bool   { return true }
 func (netTimeout) Temporary() bool { return true }
 
+// mysqlErr returns a class that is a real driver error with number n.
+func mysqlErr(n uint16, msg string) func(*testing.T) error {
+	return func(*testing.T) error {
+		return &mysql.MySQLError{Number: n, SQLState: [5]byte{'H', 'Y', '0', '0', '0'}, Message: msg}
+	}
+}
+
 // TestFailoverClasses: a read whose replica fails with a connection error is
 // retried on the primary, and the replica is skipped until its back-off ends.
 func TestFailoverClasses(t *testing.T) {
@@ -138,6 +145,17 @@ func TestFailoverClasses(t *testing.T) {
 		"a pgconn.ConnectError": connectError,
 		"a pgconn.ConnectError wrapping PgError 53300": func(t *testing.T) error {
 			return refusedConnectError(t, "53300")
+		},
+		"MySQL 1040 too many connections":  mysqlErr(1040, "Too many connections"),
+		"MySQL 1203 user connection limit": mysqlErr(1203, "User velox already has more than 'max_user_connections' active connections"),
+		"MySQL 1226 user resource limit":   mysqlErr(1226, "User 'velox' has exceeded the 'max_user_connections' resource"),
+		"MySQL 1045 access denied":         mysqlErr(1045, "Access denied for user 'velox'@'10.0.0.1' (using password: YES)"),
+		"MySQL 1129 host blocked":          mysqlErr(1129, "Host '10.0.0.1' is blocked because of many connection errors"),
+		"MySQL 1130 host not allowed":      mysqlErr(1130, "Host '10.0.0.1' is not allowed to connect to this MySQL server"),
+		"MySQL 1053 shutdown in progress":  mysqlErr(1053, "Server shutdown in progress"),
+		"MySQL 1927 connection killed":     mysqlErr(1927, "Connection was killed"),
+		"a wrapped MySQL 1040": func(*testing.T) error {
+			return fmt.Errorf("query: %w", &mysql.MySQLError{Number: 1040, Message: "Too many connections"})
 		},
 		"sql.ErrConnDone":      func(*testing.T) error { return fmt.Errorf("query: %w", sql.ErrConnDone) },
 		"net.ErrClosed":        func(*testing.T) error { return net.ErrClosed },
@@ -171,6 +189,8 @@ func TestNoFailoverOnQueryErrors(t *testing.T) {
 		// too many connections, but from a statement, not a connect
 		&pgconn.PgError{Severity: "FATAL", Code: "53300", Message: "too many connections"},
 		&mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'a' for key 'p.p_code_uq'"},
+		&mysql.MySQLError{Number: 1146, Message: "Table 'velox.invoices' doesn't exist"},
+		&mysql.MySQLError{Number: 1064, Message: "You have an error in your SQL syntax"},
 		errors.New("something else"),
 		// a net timeout that is not a dial's: maybe a slow query
 		&net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded},

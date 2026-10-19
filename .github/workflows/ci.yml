@@ -28,6 +28,8 @@ jobs:
       VELOX_TEST_MYSQL: velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true
       # The root DSN: the routing tests make databases beside the CI one (PostgreSQL's velox can; MySQL's cannot).
       VELOX_TEST_MYSQL_ADMIN: root:velox@tcp(127.0.0.1:53306)/?parseTime=true&clientFoundRows=true
+      # The itests fail, rather than skip, on a database whose variable is unset.
+      CI: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

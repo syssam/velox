@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,12 +36,16 @@ type routingDriver struct {
 	d    velox.Dialect
 	pgx  bool
 	base string // the CI database's DSN; the others are the same server
-	skip string // why the driver's tests do not run; "" when they do
+	// primary is the database that DSN names; the replica and the second
+	// shard are made beside it.
+	primary string
+	skip    string // why the driver's tests do not run; "" when they do
 }
 
 // routingDrivers lists the three drivers, each with its reason to skip when
 // the environment does not name its server.
-func routingDrivers() []routingDriver {
+func routingDrivers(t *testing.T) []routingDriver {
+	t.Helper()
 	pg, my, admin := os.Getenv("VELOX_TEST_POSTGRES"), os.Getenv("VELOX_TEST_MYSQL"), os.Getenv("VELOX_TEST_MYSQL_ADMIN")
 	var pgSkip, mySkip string
 	if pg == "" {
@@ -52,17 +57,32 @@ func routingDrivers() []routingDriver {
 	case admin == "":
 		mySkip = "VELOX_TEST_MYSQL_ADMIN is unset: it is the root DSN that creates the databases the routing tests use"
 	}
+	var pgName, myName string
+	if pg != "" {
+		u, err := url.Parse(pg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pgName = strings.TrimPrefix(u.Path, "/")
+	}
+	if my != "" {
+		cfg, err := mysql.ParseDSN(my)
+		if err != nil {
+			t.Fatal(err)
+		}
+		myName = cfg.DBName
+	}
 	return []routingDriver{
-		{name: "postgres-pgx", d: velox.Postgres, pgx: true, base: pg, skip: pgSkip},
-		{name: "postgres-sql", d: velox.Postgres, base: pg, skip: pgSkip},
-		{name: "mysql", d: velox.MySQL, base: my, skip: mySkip},
+		{name: "postgres-pgx", d: velox.Postgres, pgx: true, base: pg, primary: pgName, skip: pgSkip},
+		{name: "postgres-sql", d: velox.Postgres, base: pg, primary: pgName, skip: pgSkip},
+		{name: "mysql", d: velox.MySQL, base: my, primary: myName, skip: mySkip},
 	}
 }
 
 // eachRouting runs f on every driver whose server the environment names, with
 // the databases made.
 func eachRouting(t *testing.T, f func(t *testing.T, r routingDriver)) {
-	for _, r := range routingDrivers() {
+	for _, r := range routingDrivers(t) {
 		t.Run(r.name, func(t *testing.T) {
 			if r.skip != "" {
 				t.Skip(r.skip)
@@ -74,7 +94,6 @@ func eachRouting(t *testing.T, f func(t *testing.T, r routingDriver)) {
 }
 
 const (
-	primaryDB = "velox"
 	replicaDB = "velox_replica"
 	shard2DB  = "velox_shard2"
 )
@@ -134,7 +153,7 @@ func (r routingDriver) admin(t *testing.T) *sql.DB {
 	if r.d == velox.MySQL {
 		return r.open(t, os.Getenv("VELOX_TEST_MYSQL_ADMIN"))
 	}
-	return r.open(t, r.dsn(t, primaryDB, ""))
+	return r.open(t, r.dsn(t, r.primary, ""))
 }
 
 // handle is a pool on one database: a Conn to give velox, and a way to open
@@ -168,12 +187,21 @@ func (r routingDriver) handle(t *testing.T, db, addr string) handle {
 func (r routingDriver) databases(t *testing.T) {
 	t.Helper()
 	admin := r.admin(t)
+	dropSuffix, grants := "", func(string) []string { return nil }
+	if r.d == velox.Postgres {
+		dropSuffix = " WITH (FORCE)" // sessions left by an earlier run
+	} else {
+		cfg, err := mysql.ParseDSN(r.base)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The CI user may not touch a database it did not make: the root
+		// connection grants it these.
+		grants = func(db string) []string { return []string{"GRANT ALL ON " + db + ".* TO '" + cfg.User + "'@'%'"} }
+	}
 	drop := func() {
 		for _, db := range []string{replicaDB, shard2DB} {
-			q := "DROP DATABASE IF EXISTS " + db
-			if r.d == velox.Postgres {
-				q += " WITH (FORCE)" // sessions left by an earlier run
-			}
+			q := "DROP DATABASE IF EXISTS " + db + dropSuffix
 			if _, err := admin.ExecContext(ctx, q); err != nil {
 				t.Errorf("%s: %v", q, err)
 			}
@@ -182,10 +210,7 @@ func (r routingDriver) databases(t *testing.T) {
 	drop()
 	t.Cleanup(drop) // registered first, so it runs after the pools are closed
 	for _, db := range []string{replicaDB, shard2DB} {
-		for _, q := range []string{"CREATE DATABASE " + db, "GRANT ALL ON " + db + ".* TO 'velox'@'%'"} {
-			if r.d == velox.Postgres && q[0] == 'G' {
-				continue
-			}
+		for _, q := range append([]string{"CREATE DATABASE " + db}, grants(db)...) {
 			if _, err := admin.ExecContext(ctx, q); err != nil {
 				t.Fatalf("%s: %v", q, err)
 			}
@@ -195,7 +220,7 @@ func (r routingDriver) databases(t *testing.T) {
 	if r.d == velox.MySQL {
 		ddl = []string{mysqlDDL, mysqlItems, mysqlTickets}
 	}
-	for _, db := range []string{primaryDB, replicaDB, shard2DB} {
+	for _, db := range []string{r.primary, replicaDB, shard2DB} {
 		d := r.direct(t, db)
 		for _, table := range []string{"tickets", "items", "invoices"} {
 			if _, err := d.ExecContext(ctx, "DROP TABLE IF EXISTS "+table); err != nil {
@@ -207,6 +232,7 @@ func (r routingDriver) databases(t *testing.T) {
 				t.Fatalf("%s: %v", db, err)
 			}
 		}
+		_ = d.Close() // no session of ours is left on the database
 	}
 }
 
@@ -313,11 +339,11 @@ func insertInvoice(t *testing.T, db *velox.DB, c context.Context, org int64, num
 // database. Each claim is checked by reading the databases themselves.
 func TestRoutingSendsWhereItSays(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
-		primary, replica, shard2 := r.direct(t, primaryDB), r.direct(t, replicaDB), r.direct(t, shard2DB)
+		primary, replica, shard2 := r.direct(t, r.primary), r.direct(t, replicaDB), r.direct(t, shard2DB)
 		r.seed(t, primary, 1, 1, "PRIMARY-SEED")
 		r.seed(t, replica, 1, 1, "REPLICA-SEED")
 		var log routeLog
-		db := r.handle(t, primaryDB, "").open(
+		db := r.handle(t, r.primary, "").open(
 			velox.WithReplicas(r.handle(t, replicaDB, "").conn), velox.WithPinWindow(100*time.Millisecond), log.option())
 
 		insertInvoice(t, db, ctx, 1, "WRITTEN")
@@ -353,10 +379,10 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 // statement whose context names no shard, sending nothing.
 func TestRoutingShardsByTenant(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
-		one, two := r.direct(t, primaryDB), r.direct(t, shard2DB)
+		one, two := r.direct(t, r.primary), r.direct(t, shard2DB)
 		var log routeLog
 		db := velox.OpenShards(r.d, map[string]velox.Shard{
-			"one": {Primary: r.handle(t, primaryDB, "").conn},
+			"one": {Primary: r.handle(t, r.primary, "").conn},
 			"two": {Primary: r.handle(t, shard2DB, "").conn},
 		}, velox.WithShardFor(func(_ context.Context, tenant any) (string, error) {
 			switch tenant {
@@ -400,10 +426,10 @@ func TestRoutingShardsByTenant(t *testing.T) {
 // replica is then in back-off, and the next read goes straight to the primary.
 func TestFailoverToPrimary(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
-		r.seed(t, r.direct(t, primaryDB), 1, 1, "PRIMARY-SEED")
+		r.seed(t, r.direct(t, r.primary), 1, 1, "PRIMARY-SEED")
 		r.seed(t, r.direct(t, replicaDB), 1, 1, "REPLICA-SEED")
 		var log routeLog
-		db := r.handle(t, primaryDB, "").open(velox.WithReplicas(r.handle(t, replicaDB, "127.0.0.1:1").conn), log.option())
+		db := r.handle(t, r.primary, "").open(velox.WithReplicas(r.handle(t, replicaDB, "127.0.0.1:1").conn), log.option())
 
 		wantNumbers(t, "read from a dead replica", readNumbers(t, db, ctx), []string{"PRIMARY-SEED"})
 		wantRoute(t, "read from a dead replica", log.last(t), velox.Route{Replica: -1, Fallback: true})
@@ -415,29 +441,31 @@ func TestFailoverToPrimary(t *testing.T) {
 // TestFailoverAfterBackendTerminated: the server ends the replica's pooled
 // connections, as a restarted or failed-over replica does to a warm pool, and
 // the next read still succeeds. What it reaches depends on the driver, which
-// the test observes (the PostgreSQL and MySQL drivers' errors are in the
-// task report):
+// the test observes (the drivers' errors are in the task report):
 //   - pgx's pool does not notice until it sends, and gets SQLSTATE 57P01
 //     (admin_shutdown): the read falls over to the primary, strictly.
 //   - database/sql with either driver finds the connection dead before
-//     sending (ErrBadConn) and reconnects to the replica itself, so the read
-//     succeeds on the replica with no error for velox to classify. If the
-//     driver does send and fail first, the read falls over instead. Either
-//     way the rows must match the route.
+//     sending (ErrBadConn) and reconnects to the replica itself, so no error
+//     escapes (the driver heals the connection). That is all the test claims
+//     for them: it reads the replica's rows with Route {Replica: 0}, or, if
+//     the driver sends and fails first, falls over; the rows must match the
+//     route.
 //
 // TestFailoverWhenReplicaGoesAway makes the fall over certain for every
 // driver.
 func TestFailoverAfterBackendTerminated(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
-		r.seed(t, r.direct(t, primaryDB), 1, 1, "PRIMARY-SEED")
-		r.seed(t, r.direct(t, replicaDB), 1, 1, "REPLICA-SEED")
+		r.seed(t, r.direct(t, r.primary), 1, 1, "PRIMARY-SEED")
+		seeder := r.direct(t, replicaDB)
+		r.seed(t, seeder, 1, 1, "REPLICA-SEED")
+		_ = seeder.Close() // so the sessions counted below are velox's pool's
 		var log routeLog
-		db := r.handle(t, primaryDB, "").open(velox.WithReplicas(r.handle(t, replicaDB, "").conn), log.option())
+		db := r.handle(t, r.primary, "").open(velox.WithReplicas(r.handle(t, replicaDB, "").conn), log.option())
 
 		wantNumbers(t, "the warming read", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
 		wantRoute(t, "the warming read", log.last(t), velox.Route{Replica: 0})
 		if n := r.endSessions(t, replicaDB); n == 0 {
-			t.Fatal("no session on the replica database to end: the pool was not warm")
+			t.Fatal("velox's pool holds no session on the replica database to end: it was not warm")
 		}
 
 		got := readNumbers(t, db, ctx)
@@ -449,9 +477,9 @@ func TestFailoverAfterBackendTerminated(t *testing.T) {
 		case r.pgx:
 			t.Errorf("pgx read after the backends ended: %v on route %+v, want the primary's rows with Fallback", got, route)
 		default:
-			t.Logf("%s reconnected to the replica itself", r.name)
-			wantNumbers(t, "reconnected", got, []string{"REPLICA-SEED"})
-			wantRoute(t, "reconnected", route, velox.Route{Replica: 0})
+			t.Logf("%s: no error escaped; the driver healed the connection", r.name)
+			wantNumbers(t, "healed", got, []string{"REPLICA-SEED"})
+			wantRoute(t, "healed", route, velox.Route{Replica: 0})
 		}
 	})
 }
@@ -462,11 +490,11 @@ func TestFailoverAfterBackendTerminated(t *testing.T) {
 // fails, and the read falls over to the primary.
 func TestFailoverWhenReplicaGoesAway(t *testing.T) {
 	eachRouting(t, func(t *testing.T, r routingDriver) {
-		r.seed(t, r.direct(t, primaryDB), 1, 1, "PRIMARY-SEED")
+		r.seed(t, r.direct(t, r.primary), 1, 1, "PRIMARY-SEED")
 		r.seed(t, r.direct(t, replicaDB), 1, 1, "REPLICA-SEED")
 		addr, stop := tcpProxy(t, r.serverAddr(t))
 		var log routeLog
-		db := r.handle(t, primaryDB, "").open(velox.WithReplicas(r.handle(t, replicaDB, addr).conn), log.option())
+		db := r.handle(t, r.primary, "").open(velox.WithReplicas(r.handle(t, replicaDB, addr).conn), log.option())
 
 		wantNumbers(t, "the warming read", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
 		wantRoute(t, "the warming read", log.last(t), velox.Route{Replica: 0})
@@ -565,6 +593,7 @@ func (r routingDriver) endSessions(t *testing.T, db string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = rows.Close() }()
 	var idsToKill []int64
 	for rows.Next() {
 		var id int64
@@ -576,7 +605,6 @@ func (r routingDriver) endSessions(t *testing.T, db string) int {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	_ = rows.Close()
 	for _, id := range idsToKill {
 		if _, err := admin.ExecContext(ctx, fmt.Sprintf("KILL %d", id)); err != nil {
 			t.Fatal(err)

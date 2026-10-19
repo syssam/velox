@@ -17,6 +17,8 @@ export VELOX_TEST_POSTGRES='postgres://velox:velox@127.0.0.1:55432/velox?sslmode
 export VELOX_TEST_MYSQL='velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true'
 # The root DSN: the routing tests make databases beside the CI one (PostgreSQL's velox can; MySQL's cannot).
 export VELOX_TEST_MYSQL_ADMIN='root:velox@tcp(127.0.0.1:53306)/?parseTime=true&clientFoundRows=true'
+# As on a CI runner: the itests fail, rather than skip, on a database whose variable is unset.
+export CI=true
 
 unformatted=$(gofmt -l .)
 if [ -n "$unformatted" ]; then
